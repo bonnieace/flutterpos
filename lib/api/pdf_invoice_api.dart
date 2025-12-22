@@ -11,7 +11,7 @@ import '../utils.dart';
 import 'pdf_api.dart';
 
 class PdfInvoiceApi {
-  static Future<File> generate(Invoice invoice) async {
+  static Future<dynamic> generate(Invoice invoice) async {
     final pdf = Document();
 
     pdf.addPage(MultiPage(

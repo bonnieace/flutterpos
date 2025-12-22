@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_application_1/api/pdf_invoice_api.dart';
 import 'package:flutter_application_1/constants/colors.dart';
 import 'package:flutter_application_1/model/customer.dart';
@@ -7,10 +8,11 @@ import 'package:flutter_application_1/model/supplier.dart';
 import 'package:flutter_application_1/pdf_preview_screen.dart';
 import 'package:flutter_application_1/pos/nav_menu.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:lottie/lottie.dart';
 
 import 'package:flutter_typeahead/flutter_typeahead.dart';
-
-
+import '../screens/main_hub_screen.dart';
+import '../login_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +26,11 @@ import 'package:printing/printing.dart';
 import 'package:toast/toast.dart';
 import 'package:intl/intl.dart';
 
+import 'package:flutter_esc_pos_network/flutter_esc_pos_network.dart';
+import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 class pos extends StatefulWidget {
   const pos({super.key});
   
@@ -31,147 +38,605 @@ class pos extends StatefulWidget {
   @override
   _posState createState() => _posState();
 }
-
+class ProductInfo {
+  final String name;
+  final double price;
+  final String category;
+  final String imageUrl;
+  final String sku;
+  ProductInfo({required this.name, required this.price, required this.category, required this.imageUrl, required this.sku});
+}
 class _posState extends State<pos> {
   List<ItemInfo> items = [];
+  List<ProductInfo> inventoryItems = [];
+  Map<String, double> productPrices = {};
+  List<String> categories = ['All Products'];
+
   final TextEditingController _salesName = TextEditingController();
   final TextEditingController _customerName = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   final TextEditingController _customerNumber = TextEditingController();
   final TextEditingController _customerAddress = TextEditingController();
   final TextEditingController _customerKRA = TextEditingController();
 
-  final TextEditingController _productName = TextEditingController();
-  final TextEditingController _quantity = TextEditingController();
-  final TextEditingController _price = TextEditingController();
-   final TextEditingController _customerpay= TextEditingController();
+  final TextEditingController _customerpay = TextEditingController();
 
   final String _pdfPath = '';
   final String _selectedPaymentMethod = 'Cash'; // Default value
+
+  String _selectedCategory = 'All Products';
+  String _searchQuery = '';
+  int _currentPage = 1;
+  final int _itemsPerPage = 20;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeFirebase();
+    _fetchProductData();
+    _fetchCategories();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+        _currentPage = 1;
+      });
+    });
+  }
+Future<List<int>> buildTestReceipt() async {
+  final profile = await CapabilityProfile.load();
+  final generator = Generator(PaperSize.mm80, profile);
+
+  List<int> bytes = [];
+
+  // Title
+  bytes += generator.text(
+    'Test Store',
+    styles: PosStyles(align: PosAlign.center, bold: true),
+  );
+
+  bytes += generator.hr();
+
+  // Items
+  bytes += generator.text('Item 1    100');
+  bytes += generator.text('Item 2    200');
+
+  bytes += generator.hr();
+
+  // Total
+  bytes += generator.text(
+    'TOTAL    300',
+    styles: PosStyles(bold: true),
+  );
+
+  bytes += generator.feed(2);
+  bytes += generator.cut();
+  print('Receipt Bytes: $bytes');
+  
+   try{
+    final printer = PrinterNetworkManager('0.0.0.0', port: 1234);
+    await printer.connect();
+
+  await printer.printTicket(bytes);
+   } catch (e){
+    print('Error printing receipt: $e');  
+   }
+  return bytes;
+                               
+
+}
+
+  Future<void> _fetchCategories() async {
+    try {
+      QuerySnapshot catSnapshot = await FirebaseFirestore.instance.collection('categories').get();
+      List<String> fetchedCategories = ['All Products'];
+      for (var doc in catSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        String? name = data['name']?.toString();
+        if (name != null && name.isNotEmpty) {
+          fetchedCategories.add(name);
+        }
+      }
+      setState(() {
+        categories = fetchedCategories;
+      });
+    } catch (e) {
+      print('Error fetching categories: $e');
+    }
+  }
+
+  Future<void> _initializeFirebase() async {
+    await Firebase.initializeApp();
+  }
+
+  Future<void> _fetchProductData() async {
+    try {
+      QuerySnapshot productSnapshot =
+          await FirebaseFirestore.instance.collection('alcohol').get();
+
+      List<ProductInfo> products = [];
+      Map<String, double> prices = {};
+
+      for (QueryDocumentSnapshot doc in productSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        String name = data['name'] ?? ''  ;
+        String sku =  data['SKU'] ?? ''  ;
+        String category = data['category']?.toString() ?? 'Others';
+        double price = double.tryParse(data['price']?.toString() ?? '') ?? 0.0;
+        String imageUrl = data['image']?.toString() ?? '';
+        if (name.isNotEmpty) {
+          products.add(ProductInfo(name: name, price: price, category: category, imageUrl: imageUrl,sku:sku));
+          prices[name] = price;
+          print(imageUrl);
+        }
+      }
+
+      setState(() {
+        inventoryItems = products;
+        productPrices = prices;
+      });
+    } catch (e) {
+      print('Error fetching products: $e');
+    }
+  }
+
+  List<ProductInfo> _getFilteredProducts() {
+    return inventoryItems.where((product) {
+      final matchesSearch = product.name.toLowerCase().contains(_searchQuery);
+      final matchesCategory = _selectedCategory == 'All Products' ||
+          product.category == _selectedCategory;
+      return matchesSearch && matchesCategory;
+    }).toList();
+  }
+
+  List<ProductInfo> _getPaginatedProducts() {
+    List<ProductInfo> filtered = _getFilteredProducts();
+    int startIndex = (_currentPage - 1) * _itemsPerPage;
+    int endIndex = startIndex + _itemsPerPage;
+    if (startIndex >= filtered.length) {
+      _currentPage = 1;
+      startIndex = 0;
+      endIndex = _itemsPerPage;
+    }
+    return filtered.sublist(startIndex, endIndex > filtered.length ? filtered.length : endIndex);
+  }
+
+  int _getTotalPages() {
+    List<ProductInfo> filtered = _getFilteredProducts();
+    return (filtered.length / _itemsPerPage).ceil();
+  }
 
 
 
   @override
   Widget build(BuildContext context) {
     
+    double totalAmount = calculateItemsTotal(items);
+    double taxAmount = totalAmount * 0.0825;
+    double grandTotal = totalAmount + taxAmount;
+    List<ProductInfo> paginatedProducts = _getPaginatedProducts();
+    int totalProducts = _getFilteredProducts().length;
+    int totalPages = _getTotalPages();
+    
     return Scaffold(
-      backgroundColor: TColors.white,
-      body: 
-      GestureDetector(
-        onHorizontalDragEnd: (details) {
-
-        },
-        onTap: () {
-          // Optional: Handle tap if needed
-        },
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 15.0),
-                Align(
-                  child: Image.asset(
-                    'images/pos.gif',
-                    width: 150.0,
-                    height: 150.0,
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: Row(
+        children: [
+          // Left Side - Products
+          Expanded(
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Sales Transaction',
+                                style: TextStyle(
+                                  fontSize: 24.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              //logout icon
+                              
+                              const SizedBox(width: 8.0),
+                              IconButton(
+                                icon: const Icon(Icons.logout),
+                                color: Colors.teal[800],
+                                onPressed: () {
+                                  Navigator.push(context, MaterialPageRoute(
+                                    builder: (context) => const MainHubScreen(),
+                                  ));
+                                },
+                              ),
+                            ],
+                          ),
+                          Text(
+                            DateFormat('MMMM dd, yyyy - EEEE').format(DateTime.now()),
+                            style: TextStyle(
+                              fontSize: 13.0,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 6.0),
-                const Text(
-                  'Record Sales:',
-                  style: TextStyle(
-                    fontSize: 18.0,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                  const SizedBox(height: 4.0),
+                  
+                  // Search Bar
+                  // TextField(
+                  //   controller: _searchController,
+                  //   decoration: InputDecoration(
+                  //     hintText: 'Search products...',
+                  //     prefixIcon: const Icon(Icons.search),
+                  //     border: OutlineInputBorder(
+                  //       borderRadius: BorderRadius.circular(8.0),
+                  //       borderSide: BorderSide(color: Colors.grey[300]!),
+                  //     ),
+                  //     contentPadding: const EdgeInsets.symmetric(vertical: 12.0),
+                  //   ),
+                  // ),
+                  // const SizedBox(height: 20.0),
+                  
+                  // Category Tabs
+                  Wrap(
+                    spacing: 8.0,
+                    runSpacing: 8.0,
+                    children: categories.map((category) {
+                      bool isSelected = _selectedCategory == category;
+                      return FilterChip(
+                        label: Text(category),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedCategory = category;
+                          });
+                        },
+                        backgroundColor: Colors.white,
+                        selectedColor: Colors.teal,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800
+                        ),
+                      );
+                    }).toList(),
                   ),
-                ),
-              const SizedBox(height: 8.0),
-
-              const SizedBox(height: 18.0),
-
-
-  
-              const SizedBox(height: 8.0),
-              for (int i = 0; i < items.length; i++)
-                ItemForm(
-                  itemInfo: items[i],
-                  onRemove: () {
-                    setState(() {
-                      items.removeAt(i);
-                    });
-                  },
-                ),
-              const SizedBox(height: 16.0),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    items.add(ItemInfo(
-                      productName: _productName.text,
-                      quantity: double.tryParse(_quantity.text) ?? 0,
-                      price: double.tryParse(_price.text) ?? 0.0,
-                    ));
-                    _productName.clear();
-                    _quantity.clear();
-                    _price.clear();
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                ),
-                child: const Text('    Add Item    ',style: TextStyle(color: TColors.white),),
+                  const SizedBox(height: 14.0),
+                  
+                  // Product Grid (scrollable)
+                  Expanded(
+                    child: inventoryItems.isEmpty
+                        ?    Center(
+                                  child: Lottie.asset(
+                                    'images/SandyLoading.json',
+                                    fit: BoxFit.scaleDown,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Icon(
+                                        Icons.shopping_bag,
+                                        color: Colors.grey[400],
+                                        size: 48,
+                                      );
+                                    },
+                                  )
+                        )
+                              
+                        : GridView.builder(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 4,
+                              childAspectRatio: 1.1,
+                              crossAxisSpacing: 16.0,
+                              mainAxisSpacing: 16.0,
+                            ),
+                            itemCount: paginatedProducts.length,
+                            itemBuilder: (context, index) {
+                              final product = paginatedProducts[index];
+                              bool hasDiscount = index % 4 == 2;
+                              return ProductCardWithImage(
+                                productName: product.name +' '+product.sku,
+                                price: product.price,
+                                hasDiscount: hasDiscount,
+                                discountPercent: 20,
+                                imageUrl: product.imageUrl,
+                                onAddTap: () => _showQuantityDialog(product.name, product.price),
+                              );
+                            },
+                          ),
+                  ),
+                  // Helper class for product info
+            
+                  
+                  const SizedBox(height: 24.0),
+                  
+                  // Pagination
+                  if (totalPages > 1)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Showing ${(_currentPage - 1) * _itemsPerPage + 1} to ${(_currentPage - 1) * _itemsPerPage + paginatedProducts.length} of $totalProducts entries',
+                          style: TextStyle(
+                            fontSize: 12.0,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left),
+                          color: _currentPage > 1 ? Colors.teal : Colors.grey,
+                          onPressed: _currentPage > 1
+                              ? () {
+                                  setState(() => _currentPage--);
+                                }
+                              : null,
+                        ),
+                        ...[
+                          for (int i = 1; i <= totalPages; i++)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                              child: GestureDetector(
+                                onTap: () => setState(() => _currentPage = i),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8.0,
+                                    vertical: 4.0,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _currentPage == i ? Colors.teal : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(4.0),
+                                  ),
+                                  child: Text(
+                                    '$i',
+                                    style: TextStyle(
+                                      color: _currentPage == i ? Colors.white : Colors.grey,
+                                      fontWeight: _currentPage == i ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right),
+                          color: _currentPage < totalPages ? Colors.teal : Colors.grey,
+                          onPressed: _currentPage < totalPages
+                              ? () {
+                                  setState(() => _currentPage++);
+                                }
+                              : null,
+                        ),
+                      ],
+                    ),
+                ],
               ),
-              const SizedBox(height: 24.0),
-              if (items.isNotEmpty)
-                ElevatedButton(
-                  
-                  onPressed: () {
-                    setState(() {
-                      items.removeLast();
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    
-                    backgroundColor: Colors.red,
-                  ),
-                  child: const Text('Remove Item',style: TextStyle(color: Colors.white)),
-                ),
-              const SizedBox(height: 24.0),
-              ElevatedButton(
-                onPressed: () {
-                  try{
-                  someFunction();
-                 // _invoicegen();
-
-                   //_checkPermission(Permission.storage);
-                  }
-                  catch(e){
-                    Toast.show("error creating invoice");
-                  }
-
-
-                  
-                  
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                ),
-                child: const Text('   Save Sale    ',style: TextStyle(color: TColors.white)),
-              ),
-              const SizedBox(height: 24.0),
-
-              ],
             ),
           ),
-        ),
+          
+          // Right Side - Order Detail
+          Container(
+            width: 380,
+            height: MediaQuery.of(context).size.height,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(-5, 0),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Order Detail',
+                    style: TextStyle(
+                      fontSize: 18.0,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 16.0),
+                  // Customer Dropdown
+                  DropdownButtonFormField<String>(
+                    decoration: InputDecoration(
+                      labelText: 'Select Customer',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                    ),
+                    value: 'Walk-in',
+                    hint: const Text('Select Customer'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Walk-in',
+                        child: Text('Walk-in'),
+                      ),
+                    ],
+                    onChanged: (value) {},
+                  ),
+                  const SizedBox(height: 20.0),
+                  // Selected Items (scrollable)
+                  Expanded(
+                    child: items.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 40.0),
+                              child: 
+                                Center(
+                                  child: Lottie.asset(
+                                    'images/empty.json',
+                                    fit: BoxFit.scaleDown,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Icon(
+                                        Icons.shopping_bag,
+                                        color: Colors.grey[400],
+                                        size: 48,
+                                      );
+                                    },
+                                  ),
+                              )
+                            ),
+                          )
+                        : ListView(
+                            children: items.asMap().entries.map((entry) {
+                              int idx = entry.key;
+                              ItemInfo item = entry.value;
+                              double itemSubtotal = item.quantity * item.price;
+                              return OrderItemCard(
+                                item: item,
+                                subtotal: itemSubtotal,
+                                onQuantityChange: (newQuantity) {
+                                  setState(() {
+                                    item.quantity = newQuantity;
+                                  });
+                                },
+                                onRemove: () {
+                                  setState(() {
+                                    items.removeAt(idx);
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                  ),
+                  if (items.isNotEmpty) ...[
+                    const SizedBox(height: 20.0),
+                    const Divider(),
+                    const SizedBox(height: 16.0),
+                    // // Subtotal
+                    // Row(
+                    //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    //   children: [
+                    //     const Text('Subtotal'),
+                    //     Text(
+                    //       'Ksh ${totalAmount.toStringAsFixed(2)}',
+                    //       style: const TextStyle(fontWeight: FontWeight.w600),
+                    //     ),
+                    //   ],
+                    // ),
+                    // const SizedBox(height: 8.0),
+                    // // Tax
+                    // Row(
+                    //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    //   children: [
+                    //     const Text('Tax (8.25%)'),
+                    //     Text(
+                    //       'Ksh ${taxAmount.toStringAsFixed(2)}',
+                    //       style: const TextStyle(fontWeight: FontWeight.w600),
+                    //     ),
+                    //   ],
+                    // ),
+                    // const SizedBox(height: 12.0),
+                    // const Divider(),
+                    const SizedBox(height: 12.0),
+                    // Total
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total',
+                          style: TextStyle(
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        Text(
+                           'Ksh ${totalAmount.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 18.0,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20.0),
+                    // Payment Method
+                    DropdownButtonFormField<String>(
+                      decoration: InputDecoration(
+                        labelText: 'Payment Method',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                      ),
+                      value: 'Cash',
+                      items: ['Cash', 'Mpesa', 'Debt', 'Split'].map((method) {
+                        return DropdownMenuItem(
+                          value: method,
+                          child: Text(method),
+                        );
+                      }).toList(),
+                      onChanged: (value) {},
+                    ),
+                    const SizedBox(height: 20.0),
+                    // Make Order Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                              await someFunction();
+
+                          } catch (e) {
+                            Toast.show("error creating invoice");
+                          }
+                        },
+                        icon: const Icon(Icons.shopping_cart),
+                        label: const Text('Make Order'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12.0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  void _showQuantityDialog(String productName, double price) {
+    setState(() {
+      // Check if product already exists in items
+      int existingIndex = items.indexWhere((item) => item.productName == productName);
+      if (existingIndex != -1) {
+        items[existingIndex].quantity += 1;
+      } else {
+        items.add(ItemInfo(
+          productName: productName,
+          quantity: 1,
+          price: price,
+        ));
+      }
+    });
+  }
   
 Future<void> storeInvoice() async {
-  bool isInOperation = false; // Add this variable at the beginning
-
   // Retrieve item data from the list
   List<InvoiceItem> invoiceItems = items
       .map((item) => InvoiceItem(
@@ -193,7 +658,9 @@ if (invoiceItems.isEmpty) {
         actions: <Widget>[
           TextButton(
             onPressed: () {
+
               Navigator.of(context).pop(); // Close the dialog
+              
             },
             child: const Text('OK'),
           ),
@@ -233,11 +700,12 @@ if (invoiceItems.isEmpty) {
   Timestamp timestamp = Timestamp.fromDate(now);
   double mpesaAmount = 0.0; // Declare mpesaAmount variable
   double cashAmount = 0.0;
+  bool isInOperation = false; // Declare isInOperation here
 
   try {
     FirebaseFirestore db = FirebaseFirestore.instance;
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (BuildContext context) {
         String selectedPaymentMethod = 'Cash';
@@ -270,42 +738,38 @@ if (invoiceItems.isEmpty) {
                       }).toList(),
                     ),
                     const SizedBox(height: 8.0),
-                    if (selectedPaymentMethod == 'Debt') ...[
-                      TextField(
-                        controller: _customerName,
-                        decoration: const InputDecoration(
-                          labelText: 'Customer Name',
-                          fillColor: Colors.white,
-                          filled: true,
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black),
-                          ),
-                        ),
-                        onChanged: (value) {
-                          _customerName.text = value;
-                        },
-                      ),
-                      TextField(
-                        decoration: const InputDecoration(
-                          labelText: 'Amount Paid',
-                          fillColor: Colors.white,
-                          filled: true,
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black),
-                          ),
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        onChanged: (value) {
-                          amountPaid = double.tryParse(value) ?? 0.0;
-                        },
-                      ),
-                    ],
-                    // Existing code...
-
- if (selectedPaymentMethod == 'Split') ...[
-
+if (selectedPaymentMethod == 'Debt') ...[
   TextField(
-    // Mpesa amount
+    controller: _customerName,
+    decoration: const InputDecoration(
+      labelText: 'Customer Name',
+      fillColor: Colors.white,
+      filled: true,
+      enabledBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.black),
+      ),
+    ),
+    onChanged: (value) {
+      _customerName.text = value;
+    },
+  ),
+  TextField(
+    decoration: const InputDecoration(
+      labelText: 'Amount Paid',
+      fillColor: Colors.white,
+      filled: true,
+      enabledBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: Colors.black),
+      ),
+    ),
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    onChanged: (value) {
+      amountPaid = double.tryParse(value) ?? 0.0;
+    },
+  ),
+],
+if (selectedPaymentMethod == 'Split') ...[
+  TextField(
     decoration: const InputDecoration(
       labelText: 'Mpesa Amount',
       fillColor: Colors.white,
@@ -320,7 +784,6 @@ if (invoiceItems.isEmpty) {
     },
   ),
   TextField(
-    // Cash amount
     decoration: const InputDecoration(
       labelText: 'Cash Amount',
       fillColor: Colors.white,
@@ -333,10 +796,8 @@ if (invoiceItems.isEmpty) {
     onChanged: (value) {
       cashAmount = double.tryParse(value) ?? 0.0;
     },
-),
-]
-
-// Existing code...
+  ),
+],
 
                   ],
                 ),
@@ -358,8 +819,8 @@ if (invoiceItems.isEmpty) {
                     // Handle different payment methods
                     if (selectedPaymentMethod == 'Cash') {
                       // Cash payment
-                      await db.collection("hwsales").add({
-                        "customer": customer,
+                      await db.collection("alcoholsales").add({
+                        // "customer": customer,
                         "payment": selectedPaymentMethod,
                         "dateAdded": timestamp,
                         "totalAmount": totalAmount,
@@ -370,7 +831,7 @@ if (invoiceItems.isEmpty) {
                     else                     
                     if (selectedPaymentMethod == 'Mpesa') {
                       // Cash payment
-                      await db.collection("hwsales").add({
+                      await db.collection("alcoholsales").add({
                         "customer": customer,
                         "payment": selectedPaymentMethod,
                         "dateAdded": timestamp,
@@ -381,7 +842,7 @@ if (invoiceItems.isEmpty) {
                     
                     else if (selectedPaymentMethod == 'Debt') {
                       // Debt payment
-                      await db.collection("hwsales").add({
+                      await db.collection("alcoholsales").add({
                         "customer": customer,
                         "payment": selectedPaymentMethod,
                         "debtAmount": debtAmount,
@@ -397,7 +858,7 @@ else if (selectedPaymentMethod == 'Split') {
   double cashQuantity = cashAmount / totalAmount * invoiceItems.length;
 
   // Mpesa payment
-  await db.collection("hwsales").add({
+  await db.collection("alcoholsales").add({
     "customer": customer,
     "payment": "Mpesa",
     "dateAdded": timestamp,
@@ -413,7 +874,7 @@ else if (selectedPaymentMethod == 'Split') {
   });
 
   // Cash payment
-  await db.collection("hwsales").add({
+  await db.collection("alcoholsales").add({
     "customer": customer,
     "payment": "Cash",
     "dateAdded": timestamp,
@@ -435,11 +896,12 @@ else if (selectedPaymentMethod == 'Split') {
                     // Update inventory for each item
                     for (var item in items) {
                       await updateInventory(item.productName, item.quantity);
+                      print("Inventory updated for ${item.productName}");
                     }
 
                     Navigator.of(context).pop(); // Close the dialog
-
-                    showDialog(
+ 
+                     await showDialog(
                       context: context,
                       builder: (BuildContext context) {
                         return AlertDialog(
@@ -460,14 +922,25 @@ else if (selectedPaymentMethod == 'Split') {
                             TextButton(
                               onPressed: () {
                                 Navigator.of(context).pop(); // Close the success dialog
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const NavigationMenu(),
-                                  ),
-                                );
+                                // Navigator.push(
+                                //   context,
+                                //   MaterialPageRoute(
+                                //     builder: (context) => const NavigationMenu(),
+                                //   ),
+                                // );
                               },
                               child: const Text('OK'),
+                            ),
+                            TextButton(
+                              onPressed: () async{
+                                //create invoice file
+                                await _invoicegen();
+                                Navigator.of(context).pop(); // Close the success dialog
+                                
+
+                               
+                              },
+                              child: const Text('PEINT'),
                             ),
                           ],
                         );
@@ -509,10 +982,17 @@ else if (selectedPaymentMethod == 'Split') {
 Future<void> updateInventory(String productName, double quantity) async {
   try {
     FirebaseFirestore db = FirebaseFirestore.instance;
-    await db.collection("hstock").doc(productName).update({
-      "quantity": FieldValue.increment(-quantity),
-    });
-    print("Inventory updated for $productName");
+    // Find the document with the matching name field
+    var query = await db.collection("alcohol").where('name', isEqualTo: productName).limit(1).get();
+    if (query.docs.isNotEmpty) {
+      var docId = query.docs.first.id;
+      await db.collection("alcohol").doc(docId).update({
+        "quantity": FieldValue.increment(-quantity),
+      });
+      print("Inventory updated for $productName");
+    } else {
+      print("Product $productName not found in inventory.");
+    }
   } catch (e) {
     print("Error updating inventory for $productName: $e");
   }
@@ -527,9 +1007,20 @@ double calculateTotal(List<InvoiceItem> items) {
 
   return total;
 }
+
+double calculateItemsTotal(List<ItemInfo> items) {
+  double total = 0.0;
+
+  for (var item in items) {
+    total += item.quantity * item.price;
+  }
+
+  return total;
+}
 Future<void> printPdf(File pdfFile) async {
   try {
     // Read PDF file as bytes
+
     final pdfBytes = await pdfFile.readAsBytes();
 
     // Use the Printing class to print the PDF
@@ -548,12 +1039,11 @@ Future<void> printPdf(File pdfFile) async {
 Future<void> _invoicegen() async {
   try {
     // Retrieve customer data from text fields
-    String KRA= _customerKRA.text;
-
+    String KRA = _customerKRA.text;
     String customerName = _customerName.text.toLowerCase();
     String customerNumber = _customerNumber.text;
     String customerAddress = _customerAddress.text;
-    String salesRep=_salesName.text.toLowerCase().toLowerCase();
+    String salesRep = _salesName.text.toLowerCase();
 
     // Retrieve item data from the list
     List<InvoiceItem> invoiceItems = items
@@ -572,13 +1062,14 @@ Future<void> _invoicegen() async {
       supplier: Supplier(
         name: 'Jamos Solutions',
         address: 'P.O. Box 3158-00506 Nairobi',
-        paymentInfo: 'Paybill - 303030 A/C N0 - 2049380324 Acc. Name: Jamos Solutions ',
-        saler:salesRep,
+        paymentInfo:
+            'Paybill - 303030 A/C N0 - 2049380324 Acc. Name: Jamos Solutions ',
+        saler: salesRep,
       ),
       customer: Customer(
         name: customerName,
         address: customerAddress,
-        number:customerNumber,
+        number: customerNumber,
       ),
       info: InvoiceInfo(
         date: date,
@@ -593,37 +1084,55 @@ Future<void> _invoicegen() async {
     final pdfFile = await PdfInvoiceApi.generate(invoice);
 
     // Define the filename based on customer name and timestamp
-String fileName = '${DateFormat('HH:mm:ss').format(DateTime.now())}_$customerName.pdf';
+    String fileName =
+        '${DateFormat('HH:mm:ss').format(DateTime.now())}_$customerName.pdf';
 
-    // Upload the PDF to Firebase Storage with the dynamic filename
-    final storageReference = FirebaseStorage.instance.ref().child('pdf').child(fileName);
-    await storageReference.putFile(pdfFile);
+    // Upload to Firebase Storage
+    final storageReference =
+        FirebaseStorage.instance.ref().child('pdf').child(fileName);
 
-    // Download the PDF to local storage
-    final Directory appDocDir = await getApplicationDocumentsDirectory();
-    final String localPdfPath = '${appDocDir.path}/downloaded_pdf.pdf';
-    final File localPdfFile = File(localPdfPath);
+    if (kIsWeb) {
+      // Web: pdfFile is already bytes (Uint8List)
+      final pdfBytes = pdfFile as Uint8List;
+      await storageReference.putData(pdfBytes);
 
-    await storageReference.writeToFile(localPdfFile);
+      // Open print dialog for web
+      await Printing.layoutPdf(
+        onLayout: (_) async => pdfBytes,
+        name: fileName,
+      );
+    } else {
+      // Mobile/Desktop: pdfFile is a File object
+      final File pdfFileObj = pdfFile as File;
+      await storageReference.putFile(pdfFileObj);
 
-    // Send the local file path to the Open widget
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => open(pdfPath: localPdfPath),
-      ),
-    );
+      // Save to local storage
+      final Directory appDocDir = await getApplicationDocumentsDirectory();
+      final String localPdfPath = '${appDocDir.path}/downloaded_pdf.pdf';
+      final File localPdfFile = File(localPdfPath);
+      await storageReference.writeToFile(localPdfFile);
+
+      // Navigate to preview page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => open(pdfPath: localPdfPath),
+        ),
+      );
+    }
   } catch (e) {
     print("Error generating, uploading, or downloading PDF: $e");
   }
 }
-
 
  // Example usage with async/await
 Future<void> someFunction() async {
   // ... other code
 
   await storeInvoice();
+  // setState(() {
+  //   items.clear();
+  // });
 
   // Continue with the rest of the code after storeInvoice is complete
 }
@@ -661,161 +1170,6 @@ Future<void> someFunction() async {
   
 
 
-class ItemForm extends StatefulWidget {
-  final ItemInfo itemInfo;
-  final VoidCallback onRemove;
-
-  const ItemForm({super.key, required this.itemInfo, required this.onRemove});
-
-  @override
-  State<ItemForm> createState() => _ItemFormState();
-}
-
-class _ItemFormState extends State<ItemForm> {
-  final TextEditingController _quantityController = TextEditingController();
-  final TextEditingController _productController = TextEditingController();
-
-  final TextEditingController _priceController = TextEditingController();
-  List<String> inventoryItems = [];
-  Map<String, double> productPrices = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeFirebase();
-    _fetchProductData();
-    // Initialize controllers with the values from widget.itemInfo
-    _quantityController.text = widget.itemInfo.quantity.toString();
-    _priceController.text = widget.itemInfo.price.toString();
-    _productController.text = widget.itemInfo.productName;
-
-  }
-
-  Future<void> _initializeFirebase() async {
-    await Firebase.initializeApp();
-  }
-
-  Future<void> _fetchProductData() async {
-  QuerySnapshot productSnapshot =
-      await FirebaseFirestore.instance.collection('hstock').get();
-
-  List<String> productNames = [];
-  Map<String, double> prices = {};
-
-  for (QueryDocumentSnapshot doc in productSnapshot.docs) {
-    String productName = doc.id;
-    double price = double.tryParse(doc['price'].toString()) ?? 0.0;
-
-    productNames.add(productName);
-    prices[productName] = price;
-  }
-
-  setState(() {
-    inventoryItems = productNames;
-    productPrices = prices;
-  });
-}
-
-
-  @override
-  Widget build(BuildContext context) {
-      double screenWidth = MediaQuery.of(context).size.width;
-
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // DropdownButton for Product Name
-TypeAheadFormField<String>(
-  textFieldConfiguration: TextFieldConfiguration(
-    decoration: const InputDecoration(
-      
-      labelText: 'Select Product',
-      fillColor: Colors.white,
-      filled: true,
-      enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.black),
-      ),
-    ),
-    controller: _productController,
-  ),
-  suggestionsCallback: (pattern) async {
-    // Implement a function to filter suggestions based on the pattern
-    return inventoryItems.where((item) => item.toLowerCase().contains(pattern.toLowerCase()));
-  },
-  itemBuilder: (context, suggestion) {
-    // Build the suggestion widget
-    return ListTile(
-      title: Text(suggestion),
-    );
-  },
-  onSuggestionSelected: (suggestion) {
-    // Handle the selected suggestion
-    setState(() {
-      widget.itemInfo.productName = suggestion;
-      _productController.text=suggestion;
-      _priceController.text = productPrices[suggestion].toString();
-      widget.itemInfo.price = productPrices[suggestion] ?? 0.0; // Set default value to 0.0
-      _quantityController.text='';
-
-
-    });
-  },
-),
-
-        const SizedBox(height: 8.0),
-
-        // TextField for Quantity
-        TextField(
-          decoration: const InputDecoration(
-            labelText: 'Quantity',
-            fillColor: Colors.white,
-            filled: true,
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: Colors.black),
-            ),
-          ),
-          keyboardType: TextInputType.number,
-          controller: _quantityController,
-          onChanged: (value) {
-            // Update the corresponding value in the ItemInfo instance
-            widget.itemInfo.quantity = double.tryParse(value) ?? 0;
-          },
-        ),
-        const SizedBox(height: 8.0),
-
-        // TextField for Price
-        TextField(
-          decoration: const InputDecoration(
-            labelText: 'Price',
-            fillColor: Colors.white,
-            filled: true,
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: Colors.black),
-            ),
-          ),
-          controller: _priceController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          onChanged: (value) {
-            // Update the corresponding value in the ItemInfo instance
-            widget.itemInfo.price = double.tryParse(value) ?? 0.0;
-          },
-        ),
-        const SizedBox(height: 8.0),
-        const Divider(),
-      ],
-    );
-  }
-
-  @override
-  void dispose() {
-    // Dispose controllers when the widget is disposed
-    _quantityController.dispose();
-    _priceController.dispose();
-    super.dispose();
-  }
-}
-
 class ItemInfo {
   String productName;
   double quantity;
@@ -833,5 +1187,295 @@ class ItemInfo {
       'quantity': quantity,
       'price': price,
     };
+  }
+}
+
+// Product Card Widget
+// Product Card with Image
+class ProductCardWithImage extends StatelessWidget {
+  final String productName;
+  final double price;
+  final bool hasDiscount;
+  final int discountPercent;
+  final String imageUrl;
+  final VoidCallback? onTap;
+  final VoidCallback? onAddTap;
+
+  const ProductCardWithImage({
+    super.key,
+    required this.productName,
+    required this.price,
+    required this.hasDiscount,
+    required this.discountPercent,
+    required this.imageUrl,
+    this.onTap,
+    this.onAddTap,   
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Card(
+        elevation: 2.0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image Container with Discount Badge
+            Stack(
+              children: [
+                Container(
+                  width: double.infinity,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(8.0),
+                    ),
+                    color: Colors.grey[200],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(0.0),
+                    child: Center(
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Icon(
+                            Icons.shopping_bag,
+                            size: 60,
+                            color: Colors.grey[400],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                if (hasDiscount)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8.0,
+                        vertical: 4.0,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(4.0),
+                      ),
+                      child: Text(
+                        '$discountPercent% OFF',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            
+            // Product Info
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          productName,
+                          style: const TextStyle(
+                            fontSize: 13.0,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Ksh ${price.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 14.0,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black
+                          ),
+                        ),
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.teal,
+                            borderRadius: BorderRadius.circular(6.0),
+                          ),
+                          child: IconButton(
+                            onPressed: onAddTap,
+                            icon: const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 18.0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Order Item Card Widget - for the right sidebar
+class OrderItemCard extends StatelessWidget {
+  final ItemInfo item;
+  final double subtotal;
+  final Function(double) onQuantityChange;
+  final VoidCallback onRemove;
+
+  const OrderItemCard({
+    super.key,
+    required this.item,
+    required this.subtotal,
+    required this.onQuantityChange,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        children: [
+          // Product Image
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6.0),
+              color: Colors.grey[200],
+            ),
+            child: Center(
+              child: Image.asset(
+                'images/pos.gif',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(
+                    Icons.shopping_bag,
+                    color: Colors.grey[400],
+                  );
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 12.0),
+          
+          // Product Details
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.productName,
+                  style: const TextStyle(
+                    fontSize: 13.0,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4.0),
+                Text(
+                  'Ksh ${item.price.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 12.0,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Quantity and Remove
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      if (item.quantity > 1) {
+                        onQuantityChange(item.quantity - 1);
+                      }
+                    },
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(4.0),
+                      ),
+                      child: const Icon(Icons.remove, size:24.0),
+                    ),
+                  ),
+                  Container(
+                    width: 30,
+                    alignment: Alignment.center,
+                    child: Text(
+                      item.quantity.toStringAsFixed(0),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12.0,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      onQuantityChange(item.quantity + 1);
+                    },
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(4.0),
+                      ),
+                      child: const Icon(Icons.add, size: 24.0),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4.0),
+              GestureDetector(
+                onTap: onRemove,
+                child: Icon(
+                  Icons.delete_outline,
+                  color: Colors.red[400],
+                  size: 18.0,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
