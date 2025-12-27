@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Add this import
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
 import 'widgets/pill_input.dart';
@@ -7,6 +8,7 @@ import 'widgets/pos_keyboard.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/pill_button.dart';
 import 'pos/pos.dart';
+import 'screens/main_hub_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -50,16 +52,40 @@ class _LoginScreenState extends State<LoginScreen> {
       errorMessage = null;
     });
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text,
       );
-      // Navigate to POS screen on success
+      
+      // Fetch user role from Firestore
+      final userDoc = await FirebaseFirestore.instance
+          .collection('staff')
+          .doc(credential.user!.uid)
+          .get();
+      
+      if (!userDoc.exists) {
+        setState(() {
+          errorMessage = "User data not found";
+        });
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+      
+      final role = userDoc.data()?['role'] ?? 'cashier';
+      
+      // Navigate based on role
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const pos()),
-        );
+        if (role == 'cashier') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const pos()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainHubScreen()),
+          );
+        }
       }
     } on FirebaseAuthException catch (e) {
       setState(() {

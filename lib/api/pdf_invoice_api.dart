@@ -29,6 +29,140 @@ class PdfInvoiceApi {
     return PdfApi.saveDocument(name: 'my_invoice.pdf', pdf: pdf);
   }
 
+  static Future<dynamic> generateSimple(Invoice invoice) async {
+    final pdf = Document();
+    
+    // 72mm = 2.83 inches = 204 points
+    const receiptWidth = 72 * PdfPageFormat.mm;
+    const lineChar = '*';
+    const dashChar = '-';
+    const lineLength = 42; // Adjusted for 72mm width with padding
+    
+    pdf.addPage(
+      Page(
+        pageFormat: PdfPageFormat(receiptWidth, double.infinity),
+        build: (context) => Container(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Center(
+                child: Text(
+                  'ChillTent POS Club',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Center(
+                child: Text(
+                  'Juja',
+                  style: const TextStyle(fontSize: 8),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              SizedBox(height: 2 * PdfPageFormat.mm),
+              // Text(lineChar * lineLength, style: const TextStyle(fontSize: 8)),
+              SizedBox(height: 2 * PdfPageFormat.mm),
+              
+              // Invoice Info
+              Text('Invoice: ${invoice.info.number}', style: const TextStyle(fontSize: 8)),
+              Text('Date: ${Utils.formatDate(invoice.info.date)}', style: const TextStyle(fontSize: 8)),
+              // Text('Due: ${Utils.formatDate(invoice.info.dueDate)}', style: const TextStyle(fontSize: 8)),
+              SizedBox(height: 1 * PdfPageFormat.mm),
+              Text('Customer: ${invoice.customer.name}', style: const TextStyle(fontSize: 8)),
+              Text('Phone: ${invoice.customer.number}', style: const TextStyle(fontSize: 8)),
+              SizedBox(height: 2 * PdfPageFormat.mm),
+              // Text(lineChar * lineLength, style: const TextStyle(fontSize: 8)),
+              SizedBox(height: 2 * PdfPageFormat.mm),
+              
+              // Items Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Text('Item', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold)),
+                  ),
+                  SizedBox(
+                    width: 25,
+                    child: Text('Qty', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold), textAlign: TextAlign.right),
+                  ),
+                  SizedBox(width: 5),
+                  SizedBox(
+                    width: 40,
+                    child: Text('Total', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold), textAlign: TextAlign.right),
+                  ),
+                ],
+              ),
+              // Text(dashChar * lineLength, style: const TextStyle(fontSize: 8)),
+              
+              // Items
+              ...invoice.items.map((item) {
+                final total = item.unitPrice * item.quantity;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Text(item.description, style: const TextStyle(fontSize: 8)),
+                        ),
+                        SizedBox(
+                          width: 25,
+                          child: Text('${item.quantity}', style: const TextStyle(fontSize: 8), textAlign: TextAlign.right),
+                        ),
+                        SizedBox(width: 5),
+                        SizedBox(
+                          width: 40,
+                          child: Text('${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 8), textAlign: TextAlign.right),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 1 * PdfPageFormat.mm),
+                  ],
+                );
+              }).toList(),
+              
+              // Text(dashChar * lineLength, style: const TextStyle(fontSize: 8)),
+              SizedBox(height: 2 * PdfPageFormat.mm),
+              
+              // Total
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('TOTAL:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text(
+                    ' ${Utils.formatPrice(invoice.items.map((item) => item.unitPrice * item.quantity).reduce((a, b) => a + b))}',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              SizedBox(height: 2 * PdfPageFormat.mm),
+              // Text(lineChar * lineLength, style: const TextStyle(fontSize: 8)),
+              SizedBox(height: 2 * PdfPageFormat.mm),
+              
+              // Footer
+              Center(
+                child: Text(
+                  'Thank you for your business!',
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              SizedBox(height: 2 * PdfPageFormat.mm),
+              // Text(lineChar * lineLength, style: const TextStyle(fontSize: 8)),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return PdfApi.saveDocument(name: 'receipt.pdf', pdf: pdf);
+  }
+
   static Widget buildHeader(Invoice invoice) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

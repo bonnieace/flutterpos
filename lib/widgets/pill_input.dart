@@ -110,7 +110,7 @@ class _PillInputState extends State<PillInput> {
                     controller: widget.controller,
                     focusNode: widget.focusNode,
                     obscureText: widget.obscure ? _obscureText : false,
-                    readOnly: true,
+                    readOnly: false,
                     showCursor: true,
                     enableInteractiveSelection: false, // Prevent selection/highlight
                     decoration: InputDecoration(

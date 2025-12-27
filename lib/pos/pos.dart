@@ -68,7 +68,7 @@ class _posState extends State<pos> {
   String _selectedCategory = 'All Products';
   String _searchQuery = '';
   int _currentPage = 1;
-  final int _itemsPerPage = 20;
+  final int _itemsPerPage = 250;
 
   @override
   void initState() {
@@ -167,7 +167,7 @@ Future<List<int>> buildTestReceipt() async {
         if (name.isNotEmpty) {
           products.add(ProductInfo(name: name, price: price, category: category, imageUrl: imageUrl,sku:sku));
           prices[name] = price;
-          print(imageUrl);
+          
         }
       }
 
@@ -181,12 +181,16 @@ Future<List<int>> buildTestReceipt() async {
   }
 
   List<ProductInfo> _getFilteredProducts() {
-    return inventoryItems.where((product) {
+    final filtered = inventoryItems.where((product) {
       final matchesSearch = product.name.toLowerCase().contains(_searchQuery);
       final matchesCategory = _selectedCategory == 'All Products' ||
           product.category == _selectedCategory;
       return matchesSearch && matchesCategory;
     }).toList();
+    
+    // Sort alphabetically by product name
+    filtered.sort((a, b) => a.name.compareTo(b.name));
+    return filtered;
   }
 
   List<ProductInfo> _getPaginatedProducts() {
@@ -334,8 +338,8 @@ Future<List<int>> buildTestReceipt() async {
                         )
                               
                         : GridView.builder(
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 4,
+                            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 200.0,
                               childAspectRatio: 1.1,
                               crossAxisSpacing: 16.0,
                               mainAxisSpacing: 16.0,
@@ -358,67 +362,68 @@ Future<List<int>> buildTestReceipt() async {
                   // Helper class for product info
             
                   
-                  const SizedBox(height: 24.0),
+                  // const SizedBox(height: 24.0),
                   
                   // Pagination
-                  if (totalPages > 1)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Showing ${(_currentPage - 1) * _itemsPerPage + 1} to ${(_currentPage - 1) * _itemsPerPage + paginatedProducts.length} of $totalProducts entries',
-                          style: TextStyle(
-                            fontSize: 12.0,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        IconButton(
-                          icon: const Icon(Icons.chevron_left),
-                          color: _currentPage > 1 ? Colors.teal : Colors.grey,
-                          onPressed: _currentPage > 1
-                              ? () {
-                                  setState(() => _currentPage--);
-                                }
-                              : null,
-                        ),
-                        ...[
-                          for (int i = 1; i <= totalPages; i++)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                              child: GestureDetector(
-                                onTap: () => setState(() => _currentPage = i),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8.0,
-                                    vertical: 4.0,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _currentPage == i ? Colors.teal : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(4.0),
-                                  ),
-                                  child: Text(
-                                    '$i',
-                                    style: TextStyle(
-                                      color: _currentPage == i ? Colors.white : Colors.grey,
-                                      fontWeight: _currentPage == i ? FontWeight.bold : FontWeight.normal,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                        IconButton(
-                          icon: const Icon(Icons.chevron_right),
-                          color: _currentPage < totalPages ? Colors.teal : Colors.grey,
-                          onPressed: _currentPage < totalPages
-                              ? () {
-                                  setState(() => _currentPage++);
-                                }
-                              : null,
-                        ),
-                      ],
-                    ),
+                  // if (totalPages > 1)
+                  //   Row(
+                  //     mainAxisAlignment: MainAxisAlignment.center,
+                  //     children: [
+                  //       Text(
+                  //         'Showing ${(_currentPage - 1) * _itemsPerPage + 1} to ${(_currentPage - 1) * _itemsPerPage + paginatedProducts.length} of $totalProducts entries',
+                  //         style: TextStyle(
+                  //           fontSize: 12.0,
+                  //           color: Colors.grey[600],
+                  //         ),
+                  //       ),
+                  //       const SizedBox(width: 8.0),
+                  //       IconButton(
+                  //         icon: const Icon(Icons.chevron_left),
+                  //         color: _currentPage > 1 ? Colors.teal : Colors.grey,
+                  //         onPressed: _currentPage > 1
+                  //             ? () {
+                  //                 setState(() => _currentPage--);
+                  //               }
+                  //             : null,
+                  //       ),
+                  //       ...[
+                  //         for (int i = 1; i <= totalPages; i++)
+                  //           Padding(
+                  //             padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  //             child: GestureDetector(
+                  //               onTap: () => setState(() => _currentPage = i),
+                  //               child: Container(
+                  //                 padding: const EdgeInsets.symmetric(
+                  //                   horizontal: 8.0,
+                  //                   vertical: 4.0,
+                  //                 ),
+                  //                 decoration: BoxDecoration(
+                  //                   color: _currentPage == i ? Colors.teal : Colors.transparent,
+                  //                   borderRadius: BorderRadius.circular(4.0),
+                  //                 ),
+                  //                 child: Text(
+                  //                   '$i',
+                  //                   style: TextStyle(
+                  //                     color: _currentPage == i ? Colors.white : Colors.grey,
+                  //                     fontWeight: _currentPage == i ? FontWeight.bold : FontWeight.normal,
+                  //                   ),
+                  //                 ),
+                  //               ),
+                  //             ),
+                  //           ),
+                  //       ],
+                  //       IconButton(
+                  //         icon: const Icon(Icons.chevron_right),
+                  //         color: _currentPage < totalPages ? Colors.teal : Colors.grey,
+                  //         onPressed: _currentPage < totalPages
+                  //             ? () {
+                  //                 setState(() => _currentPage++);
+                  //               }
+                  //             : null,
+                  //       ),
+                  //     ],
+                  //   ),
+               
                 ],
               ),
             ),
@@ -898,8 +903,6 @@ else if (selectedPaymentMethod == 'Split') {
                       await updateInventory(item.productName, item.quantity);
                       print("Inventory updated for ${item.productName}");
                     }
-
-                    Navigator.of(context).pop(); // Close the dialog
  
                      await showDialog(
                       context: context,
@@ -946,6 +949,8 @@ else if (selectedPaymentMethod == 'Split') {
                         );
                       },
                     );
+
+                    Navigator.of(context).pop(); // Close the payment dialog AFTER success dialog
 
                     isInOperation = false; // Set flag back to false after completing the operation
                   },
@@ -1081,7 +1086,7 @@ Future<void> _invoicegen() async {
     );
 
     // Generate the PDF
-    final pdfFile = await PdfInvoiceApi.generate(invoice);
+    final pdfFile = await PdfInvoiceApi.generateSimple(invoice);
 
     // Define the filename based on customer name and timestamp
     String fileName =
@@ -1130,9 +1135,9 @@ Future<void> someFunction() async {
   // ... other code
 
   await storeInvoice();
-  // setState(() {
-  //   items.clear();
-  // });
+  setState(() {
+    items.clear();
+  });
 
   // Continue with the rest of the code after storeInvoice is complete
 }
@@ -1287,32 +1292,39 @@ class ProductCardWithImage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          productName,
-                          style: const TextStyle(
-                            fontSize: 13.0,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            productName,
+                            style: const TextStyle(
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Ksh ${price.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 14.0,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black
+                        Expanded(
+                          child: Text(
+                            'Ksh ${price.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 13.0,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           width: 32,
                           height: 32,

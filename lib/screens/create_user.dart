@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme.dart';
 
 class CreateUserScreen extends StatefulWidget {
   const CreateUserScreen({super.key});
@@ -16,7 +17,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1E22),
+      backgroundColor: bgDark,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,9 +108,9 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF12282E),
+                                    color: bgMid,
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFF1F3A40)),
+                                    border: Border.all(color: mutedGreen),
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -125,7 +126,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                                       ),
                                       Switch(
                                         value: activeUser,
-                                        activeColor: const Color(0xFF1ECAD3),
+                                        activeColor: accentGreen,
                                         onChanged: (v) => setState(() => activeUser = v),
                                       )
                                     ],
@@ -148,7 +149,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                         const SizedBox(width: 16),
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1ECAD3),
+                            backgroundColor: accentGreen,
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
@@ -179,19 +180,18 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: const [
-          Icon(Icons.local_bar, color: Color(0xFF1ECAD3)),
+          Icon(Icons.local_bar, color: accentGreen),
           SizedBox(width: 8),
-          Text('LiquorPOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          Text('ChillTent', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           Spacer(),
-          Text('Dashboard', style: TextStyle(color: Colors.white70)),
+          Text('Home', style: TextStyle(color: Colors.white70)),
           SizedBox(width: 24),
           Text('Inventory', style: TextStyle(color: Colors.white70)),
           SizedBox(width: 24),
-          Text('Sales', style: TextStyle(color: Colors.white70)),
+
+          Text('Staff', style: TextStyle(color: accentGreen)),
           SizedBox(width: 24),
-          Text('Staff', style: TextStyle(color: Color(0xFF1ECAD3))),
-          SizedBox(width: 24),
-          Text('Settings', style: TextStyle(color: Colors.white70)),
+          Text('Reports', style: TextStyle(color: Colors.white70)),
         ],
       ),
     );
@@ -220,9 +220,9 @@ class _Card extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF12282E),
+        color: bgMid,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1F3A40)),
+        border: Border.all(color: mutedGreen),
       ),
       child: child,
     );
@@ -238,7 +238,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: const Color(0xFF1ECAD3)),
+        Icon(icon, color: accentGreen),
         const SizedBox(width: 8),
         Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
       ],
@@ -274,11 +274,11 @@ class _Input extends StatelessWidget {
             hintStyle: const TextStyle(color: Colors.white38),
             suffixIcon: suffix,
             filled: true,
-            fillColor: const Color(0xFF0F1E22),
+            fillColor: bgDark,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF1F3A40)),
+              borderSide: const BorderSide(color: mutedGreen),
             ),
           ),
         ),
@@ -307,14 +307,14 @@ class _Dropdown extends StatelessWidget {
           onChanged: (_) {},
           decoration: InputDecoration(
             filled: true,
-            fillColor: const Color(0xFF0F1E22),
+            fillColor: bgDark,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF1F3A40)),
+              borderSide: const BorderSide(color: mutedGreen),
             ),
           ),
-          dropdownColor: const Color(0xFF12282E),
+          dropdownColor: bgMid,
           style: const TextStyle(color: Colors.white),
         ),
       ],
