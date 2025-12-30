@@ -27,10 +27,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -55,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyClROXZDppYgmMJ0PAy52GsC9gTaAfT_hw',
-    appId: '1:901380694663:android:9b65ad310c97be6bc84e22',
+    appId: '1:901380694663:android:7961a9a27fa528b9c84e22',
     messagingSenderId: '901380694663',
     projectId: 'thamani-23709',
     storageBucket: 'thamani-23709.appspot.com',
@@ -63,19 +60,30 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCn-zV7D0DqpBWXpRRbdYyIY9r_KD05zU0',
-    appId: '1:901380694663:ios:28bb9db2b92dace4c84e22',
+    appId: '1:901380694663:ios:8ebd85716f9c777dc84e22',
     messagingSenderId: '901380694663',
     projectId: 'thamani-23709',
     storageBucket: 'thamani-23709.appspot.com',
-    iosBundleId: 'com.example.pdf',
+    iosBundleId: 'com.example.flutterApplication1',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyCn-zV7D0DqpBWXpRRbdYyIY9r_KD05zU0',
-    appId: '1:901380694663:ios:c0598a7d2d353317c84e22',
+    appId: '1:901380694663:ios:8ebd85716f9c777dc84e22',
     messagingSenderId: '901380694663',
     projectId: 'thamani-23709',
     storageBucket: 'thamani-23709.appspot.com',
-    iosBundleId: 'com.example.pdf.RunnerTests',
+    iosBundleId: 'com.example.flutterApplication1',
   );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyCWi-tPD_LE7Jd19ai_IoA-JZkO5A9hgDA',
+    appId: '1:901380694663:web:4b8e9d6b67e9cacac84e22',
+    messagingSenderId: '901380694663',
+    projectId: 'thamani-23709',
+    authDomain: 'thamani-23709.firebaseapp.com',
+    storageBucket: 'thamani-23709.appspot.com',
+    measurementId: 'G-JKB1LN7JMD',
+  );
+
 }

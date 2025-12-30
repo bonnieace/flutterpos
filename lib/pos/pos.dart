@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter_application_1/api/pdf_invoice_api.dart';
 import 'package:flutter_application_1/constants/colors.dart';
 import 'package:flutter_application_1/model/customer.dart';
@@ -63,7 +65,7 @@ class _posState extends State<pos> {
   final TextEditingController _customerpay = TextEditingController();
 
   final String _pdfPath = '';
-  final String _selectedPaymentMethod = 'Cash'; // Default value
+  String _selectedPaymentMethod = 'Cash'; // Selected payment method
 
   String _selectedCategory = 'All Products';
   String _searchQuery = '';
@@ -83,49 +85,228 @@ class _posState extends State<pos> {
       });
     });
   }
-Future<List<int>> buildTestReceipt() async {
+Future<List<int>> buildTestReceipt({
+  required List<ItemInfo> invoiceItems,
+  required String customerName,
+  required String salesRep,
+  required String paymentMethod,
+  required double totalAmount,
+}) async {
   final profile = await CapabilityProfile.load();
   final generator = Generator(PaperSize.mm80, profile);
 
   List<int> bytes = [];
 
-  // Title
+  // Store Header
   bytes += generator.text(
-    'Test Store',
-    styles: PosStyles(align: PosAlign.center, bold: true),
+    'Chilltent Lounge',
+    styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
   );
+  bytes += generator.text(
+    'Juja,Kiambu',
+    styles: const PosStyles(align: PosAlign.center),
+  );
+  bytes += generator.feed(1);
+
+  // Date and Time
+  final now = DateTime.now();
+  final dateStr = DateFormat('dd/MM/yyyy HH:mm:ss').format(now);
+  bytes += generator.text(
+    dateStr,
+    styles: const PosStyles(align: PosAlign.center),
+  );
+  bytes += generator.feed(1);
+
+  bytes += generator.hr();
+
+  // Customer and Sales Info
+  if (customerName.isNotEmpty) {
+    bytes += generator.text('Customer: $customerName');
+  }
+  if (salesRep.isNotEmpty) {
+    bytes += generator.text('Sales Rep: $salesRep');
+  }
+  bytes += generator.text('Payment: $paymentMethod');
+  
+  bytes += generator.hr();
+
+  // Column Headers
+  bytes += generator.row([
+    PosColumn(
+      text: 'Item',
+      width: 6,
+      styles: const PosStyles(bold: true),
+    ),
+    PosColumn(
+      text: 'Qty',
+      width: 2,
+      styles: const PosStyles(bold: true, align: PosAlign.center),
+    ),
+    PosColumn(
+      text: 'Price',
+      width: 2,
+      styles: const PosStyles(bold: true, align: PosAlign.right),
+    ),
+    PosColumn(
+      text: 'Total',
+      width: 2,
+      styles: const PosStyles(bold: true, align: PosAlign.right),
+    ),
+  ]);
 
   bytes += generator.hr();
 
   // Items
-  bytes += generator.text('Item 1    100');
-  bytes += generator.text('Item 2    200');
+  for (var item in invoiceItems) {
+    double itemTotal = item.quantity * item.price;
+    
+    // Product name (may wrap to multiple lines)
+    bytes += generator.text(
+      item.productName,
+      styles: const PosStyles(align: PosAlign.left),
+    );
+    
+    // Quantity, Price, Total on one line
+    bytes += generator.row([
+      PosColumn(
+        text: '',
+        width: 6,
+      ),
+      PosColumn(
+        text: '${item.quantity.toStringAsFixed(0)}',
+        width: 2,
+        styles: const PosStyles(align: PosAlign.center),
+      ),
+      PosColumn(
+        text: '${item.price.toStringAsFixed(2)}',
+        width: 2,
+        styles: const PosStyles(align: PosAlign.right),
+      ),
+      PosColumn(
+        text: '${itemTotal.toStringAsFixed(2)}',
+        width: 2,
+        styles: const PosStyles(align: PosAlign.right),
+      ),
+    ]);
+  }
 
   bytes += generator.hr();
 
   // Total
+  bytes += generator.row([
+    PosColumn(
+      text: 'TOTAL',
+      width: 8,
+      styles: const PosStyles(bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
+    ),
+    PosColumn(
+      text: 'KSh ${totalAmount.toStringAsFixed(2)}',
+      width: 4,
+      styles: const PosStyles(bold: true, align: PosAlign.right,),
+    ),
+  ]);
+
+  bytes += generator.hr();
+  
+  // Footer
   bytes += generator.text(
-    'TOTAL    300',
-    styles: PosStyles(bold: true),
+    'Thank you for shopping with us',
+    styles: const PosStyles(align: PosAlign.center),
+  );
+  bytes += generator.feed(1);
+  bytes += generator.text(
+    'Paybill: 303030',
+    styles: const PosStyles(align: PosAlign.center),
+  );
+  bytes += generator.text(
+    'A/C: 2049380324',
+    styles: const PosStyles(align: PosAlign.center),
   );
 
   bytes += generator.feed(2);
   bytes += generator.cut();
-  print('Receipt Bytes: $bytes');
   
-   try{
-    final printer = PrinterNetworkManager('0.0.0.0', port: 1234);
-    await printer.connect();
-
-  await printer.printTicket(bytes);
-   } catch (e){
-    print('Error printing receipt: $e');  
-   }
+  print('Receipt Bytes Generated: ${bytes.length} bytes');
+  
+  // Send to Flask printer endpoint
+  const String printerEndpoint = 'http://192.168.100.65:5000/print';
+  
+  try {
+    print('Sending receipt to printer endpoint...');
+    
+    // Send as JSON array of byte values
+    final response = await http.post(
+      Uri.parse(printerEndpoint),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(bytes),
+    ).timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        throw Exception('Request timeout');
+      },
+    );
+    
+    print('Response status: ${response.statusCode}');
+    print('Response body: ${response.body}');
+    
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      
+      if (responseData['success'] == true) {
+        print('Receipt printed successfully via endpoint');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Receipt printed successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        print('Print failed: ${responseData['error']}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Print failed: ${responseData['error']}'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } else {
+      final errorMsg = 'Server error: ${response.statusCode}';
+      print(errorMsg);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  } catch (e) {
+    print('Error sending to printer endpoint: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Print error: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+  
   return bytes;
-                               
-
 }
-
+  
   Future<void> _fetchCategories() async {
     try {
       QuerySnapshot catSnapshot = await FirebaseFirestore.instance.collection('categories').get();
@@ -280,19 +461,19 @@ Future<List<int>> buildTestReceipt() async {
                   const SizedBox(height: 4.0),
                   
                   // Search Bar
-                  // TextField(
-                  //   controller: _searchController,
-                  //   decoration: InputDecoration(
-                  //     hintText: 'Search products...',
-                  //     prefixIcon: const Icon(Icons.search),
-                  //     border: OutlineInputBorder(
-                  //       borderRadius: BorderRadius.circular(8.0),
-                  //       borderSide: BorderSide(color: Colors.grey[300]!),
-                  //     ),
-                  //     contentPadding: const EdgeInsets.symmetric(vertical: 12.0),
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 20.0),
+                  TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search products...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12.0),
+                    ),
+                  ),
+                  const SizedBox(height: 20.0),
                   
                   // Category Tabs
                   Wrap(
@@ -354,7 +535,7 @@ Future<List<int>> buildTestReceipt() async {
                                 hasDiscount: hasDiscount,
                                 discountPercent: 20,
                                 imageUrl: product.imageUrl,
-                                onAddTap: () => _showQuantityDialog(product.name, product.price),
+                                onAddTap: () => _showQuantityDialog(product.name, product.price, product.sku),
                               );
                             },
                           ),
@@ -581,14 +762,18 @@ Future<List<int>> buildTestReceipt() async {
                           borderRadius: BorderRadius.circular(8.0),
                         ),
                       ),
-                      value: 'Cash',
+                      value: _selectedPaymentMethod,
                       items: ['Cash', 'Mpesa', 'Debt', 'Split'].map((method) {
                         return DropdownMenuItem(
                           value: method,
                           child: Text(method),
                         );
                       }).toList(),
-                      onChanged: (value) {},
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedPaymentMethod = value!;
+                        });
+                      },
                     ),
                     const SizedBox(height: 20.0),
                     // Make Order Button
@@ -597,8 +782,17 @@ Future<List<int>> buildTestReceipt() async {
                       child: ElevatedButton.icon(
                         onPressed: () async {
                           try {
-                              await someFunction();
-
+                               await storeInvoice(_selectedPaymentMethod);
+                              // await buildTestReceipt(
+                              //   invoiceItems: items,
+                              //   customerName: _customerName.text,
+                              //   salesRep: _salesName.text,
+                              //   paymentMethod: _selectedPaymentMethod,
+                              //   totalAmount: calculateItemsTotal(items),
+                              // );
+                              setState(() {
+                                items.clear();
+                              });
                           } catch (e) {
                             Toast.show("error creating invoice");
                           }
@@ -625,10 +819,10 @@ Future<List<int>> buildTestReceipt() async {
     );
   }
 
-  void _showQuantityDialog(String productName, double price) {
+  void _showQuantityDialog(String productName, double price, String sku) {
     setState(() {
-      // Check if product already exists in items
-      int existingIndex = items.indexWhere((item) => item.productName == productName);
+      // Check if product already exists in items (by both name AND SKU)
+      int existingIndex = items.indexWhere((item) => item.productName == productName && item.sku == sku);
       if (existingIndex != -1) {
         items[existingIndex].quantity += 1;
       } else {
@@ -636,12 +830,13 @@ Future<List<int>> buildTestReceipt() async {
           productName: productName,
           quantity: 1,
           price: price,
+          sku: sku,
         ));
       }
     });
   }
   
-Future<void> storeInvoice() async {
+Future<void> storeInvoice(String paymentMethod) async {
   // Retrieve item data from the list
   List<InvoiceItem> invoiceItems = items
       .map((item) => InvoiceItem(
@@ -710,258 +905,599 @@ if (invoiceItems.isEmpty) {
   try {
     FirebaseFirestore db = FirebaseFirestore.instance;
 
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        String selectedPaymentMethod = 'Cash';
-        double totalAmount = totalAmounts;
-        double amountPaid = 0.0;
+await showDialog(
+  context: context,
+  barrierDismissible: false,
+  builder: (BuildContext context) {
+    String selectedPaymentMethod = paymentMethod;
+    double totalAmount = totalAmounts;
+    double amountPaid = 0.0;
 
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Choose Payment Method'),
-              contentPadding: const EdgeInsets.all(16.0),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Total Amount: $totalAmount'), // Show total amount
-                    const SizedBox(height: 8.0),
-                    DropdownButton<String>(
-                      value: selectedPaymentMethod,
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          selectedPaymentMethod = newValue!;
-                        });
-                      },
-                      items: <String>['Mpesa', 'Cash', 'Debt','Split'].map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.0),
+          ),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 450),
+            child: Container(
+              padding: const EdgeInsets.all(24.0),
+              
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon
+                Container(
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.receipt_long,
+                    color: Colors.teal,
+                    size: 48.0,
+                  ),
+                ),
+                const SizedBox(height: 20.0),
+                
+                // Title
+                const Text(
+                  'Confirm Order',
+                  style: TextStyle(
+                    fontSize: 24.0,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8.0),
+                
+                // Subtitle
+                Text(
+                  'Please review your transaction details',
+                  style: TextStyle(
+                    fontSize: 14.0,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24.0),
+                
+                // Payment Method Display
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12.0),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.payment, color: Colors.grey[700], size: 20.0),
+                      const SizedBox(width: 12.0),
+                      Text(
+                        'Payment Method:',
+                        style: TextStyle(
+                          fontSize: 14.0,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        selectedPaymentMethod,
+                        style: const TextStyle(
+                          fontSize: 14.0,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16.0),
+
+                // Total Amount
+                Container(
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.teal[400]!, Colors.teal[600]!],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    const SizedBox(height: 8.0),
-if (selectedPaymentMethod == 'Debt') ...[
-  TextField(
-    controller: _customerName,
-    decoration: const InputDecoration(
-      labelText: 'Customer Name',
-      fillColor: Colors.white,
-      filled: true,
-      enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.black),
-      ),
-    ),
-    onChanged: (value) {
-      _customerName.text = value;
-    },
-  ),
-  TextField(
-    decoration: const InputDecoration(
-      labelText: 'Amount Paid',
-      fillColor: Colors.white,
-      filled: true,
-      enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.black),
-      ),
-    ),
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    onChanged: (value) {
-      amountPaid = double.tryParse(value) ?? 0.0;
-    },
-  ),
-],
-if (selectedPaymentMethod == 'Split') ...[
-  TextField(
-    decoration: const InputDecoration(
-      labelText: 'Mpesa Amount',
-      fillColor: Colors.white,
-      filled: true,
-      enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.black),
-      ),
-    ),
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    onChanged: (value) {
-      mpesaAmount = double.tryParse(value) ?? 0.0;
-    },
-  ),
-  TextField(
-    decoration: const InputDecoration(
-      labelText: 'Cash Amount',
-      fillColor: Colors.white,
-      filled: true,
-      enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.black),
-      ),
-    ),
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    onChanged: (value) {
-      cashAmount = double.tryParse(value) ?? 0.0;
-    },
-  ),
-],
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total Amount',
+                        style: TextStyle(
+                          fontSize: 16.0,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        'KSh ${totalAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 20.0,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20.0),
 
+                // Additional fields based on payment method
+                if (selectedPaymentMethod == 'Debt') ...[
+                  TextField(
+                    controller: _customerName,
+                    decoration: InputDecoration(
+                      labelText: 'Customer Name',
+                      prefixIcon: const Icon(Icons.person, color: Colors.teal),
+                      fillColor: Colors.grey[50],
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: const BorderSide(color: Colors.teal, width: 2),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      _customerName.text = value;
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                  TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Amount Paid',
+                      prefixIcon: const Icon(Icons.payments, color: Colors.teal),
+                      fillColor: Colors.grey[50],
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: const BorderSide(color: Colors.teal, width: 2),
+                      ),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (value) {
+                      amountPaid = double.tryParse(value) ?? 0.0;
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                ],
+                
+                if (selectedPaymentMethod == 'Split') ...[
+                  TextField(
+                    decoration: InputDecoration(
+                      labelText: 'M-Pesa Amount',
+                      prefixIcon: const Icon(Icons.phone_android, color: Colors.teal),
+                      fillColor: Colors.grey[50],
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: const BorderSide(color: Colors.teal, width: 2),
+                      ),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (value) {
+                      mpesaAmount = double.tryParse(value) ?? 0.0;
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                  TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Cash Amount',
+                      prefixIcon: const Icon(Icons.money, color: Colors.teal),
+                      fillColor: Colors.grey[50],
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: const BorderSide(color: Colors.teal, width: 2),
+                      ),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (value) {
+                      cashAmount = double.tryParse(value) ?? 0.0;
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                ],
+
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14.0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            side: BorderSide(color: Colors.grey[300]!),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12.0),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          // Prevent duplicate operations
+                          if (isInOperation) {
+                            return;
+                          }
+
+                          isInOperation = true;
+
+                          double debtAmount = selectedPaymentMethod == 'Debt' 
+                              ? totalAmount - amountPaid 
+                              : 0.0;
+                          String customer = _customerName.text.toLowerCase();
+
+                          // Handle different payment methods
+                          if (selectedPaymentMethod == 'Cash') {
+                            await db.collection("alcoholsales").add({
+                              "payment": selectedPaymentMethod,
+                              "dateAdded": timestamp,
+                              "totalAmount": totalAmount,
+                              "items": items.map((item) => item.toMap()).toList(),
+                            });
+                          } else if (selectedPaymentMethod == 'Mpesa') {
+                            await db.collection("alcoholsales").add({
+                              "customer": customer,
+                              "payment": selectedPaymentMethod,
+                              "dateAdded": timestamp,
+                              "totalAmount": totalAmount,
+                              "items": items.map((item) => item.toMap()).toList(),
+                            });
+                          } else if (selectedPaymentMethod == 'Debt') {
+                            await db.collection("alcoholsales").add({
+                              "customer": customer,
+                              "payment": selectedPaymentMethod,
+                              "debtAmount": debtAmount,
+                              "dateAdded": timestamp,
+                              "totalAmount": totalAmount,
+                              "items": items.map((item) => item.toMap()).toList(),
+                            });
+                          } else if (selectedPaymentMethod == 'Split') {
+                            double mpesaQuantity = mpesaAmount / totalAmount * invoiceItems.length;
+                            double cashQuantity = cashAmount / totalAmount * invoiceItems.length;
+
+                            // M-Pesa payment
+                            await db.collection("alcoholsales").add({
+                              "customer": customer,
+                              "payment": "Mpesa",
+                              "dateAdded": timestamp,
+                              "totalAmount": mpesaAmount,
+                              "items": items.map((item) {
+                                double itemQuantity = item.quantity;
+                                return {
+                                  ...item.toMap(),
+                                  'quantity': itemQuantity * mpesaQuantity,
+                                };
+                              }).toList(),
+                            });
+
+                            // Cash payment
+                            await db.collection("alcoholsales").add({
+                              "customer": customer,
+                              "payment": "Cash",
+                              "dateAdded": timestamp,
+                              "totalAmount": cashAmount,
+                              "items": items.map((item) {
+                                double itemQuantity = item.quantity;
+                                return {
+                                  ...item.toMap(),
+                                  'quantity': itemQuantity * cashQuantity,
+                                };
+                              }).toList(),
+                            });
+                          }
+
+                          // Update inventory
+                          for (var item in items) {
+                            await updateInventory(item.productName, item.quantity);
+                            print("Inventory updated for ${item.productName}");
+                          }
+
+                          // Success dialog
+                          await showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (BuildContext context) {
+                              return Dialog(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20.0),
+                                ),
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 400),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(24.0),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(20.0),
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          // padding: const EdgeInsets.all(16.0),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.withOpacity(0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Lottie.asset(
+                                            width: 100,
+                                            height: 100,
+                                            'images/success.json',
+                                            // fit: BoxFit.scaleDown,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return Icon(
+                                                Icons.shopping_bag,
+                                                color: Colors.grey[400],
+                                                size: 64,
+                                              );
+                                            },
+                                          )
+                                        ),
+                                        const SizedBox(height: 20.0),
+                                        const Text(
+                                          'Payment Successful!',
+                                          style: TextStyle(
+                                            fontSize: 24.0,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16.0),
+                                        Container(
+                                          padding: const EdgeInsets.all(16.0),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[50],
+                                            borderRadius: BorderRadius.circular(12.0),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    'Amount:',
+                                                    style: TextStyle(
+                                                      fontSize: 14.0,
+                                                      color: Colors.grey[700],
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    'KSh ${totalAmount.toStringAsFixed(2)}',
+                                                    style: const TextStyle(
+                                                      fontSize: 16.0,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.black87,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const Divider(height: 24.0),
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    'Method:',
+                                                    style: TextStyle(
+                                                      fontSize: 14.0,
+                                                      color: Colors.grey[700],
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    selectedPaymentMethod,
+                                                    style: const TextStyle(
+                                                      fontSize: 16.0,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.teal,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (selectedPaymentMethod == 'Debt') ...[
+                                                const Divider(height: 24.0),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Text(
+                                                      'Paid:',
+                                                      style: TextStyle(
+                                                        fontSize: 14.0,
+                                                        color: Colors.grey[700],
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      'KSh ${amountPaid.toStringAsFixed(2)}',
+                                                      style: const TextStyle(
+                                                        fontSize: 16.0,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const Divider(height: 24.0),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Text(
+                                                      'Debt:',
+                                                      style: TextStyle(
+                                                        fontSize: 14.0,
+                                                        color: Colors.grey[700],
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      'KSh ${debtAmount.toStringAsFixed(2)}',
+                                                      style: const TextStyle(
+                                                        fontSize: 16.0,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.red,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 24.0),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: ElevatedButton(
+                                                onPressed: () {
+                                                  Navigator.of(context).pop();
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.grey[100],
+                                                  foregroundColor: Colors.black87,
+                                                  padding: const EdgeInsets.symmetric(vertical: 14.0),
+                                                  elevation: 0,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(12.0),
+                                                  ),
+                                                ),
+                                                child: const Text(
+                                                  'Done',
+                                                  style: TextStyle(
+                                                    fontSize: 16.0,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12.0),
+                                            Expanded(
+                                              child: ElevatedButton.icon(
+                                                onPressed: () async {
+                                                  await _invoicegen();
+                                                  Navigator.of(context).pop();
+                                                },
+                                                icon: const Icon(Icons.print),
+                                                label: const Text(
+                                                  'Print',
+                                                  style: TextStyle(
+                                                    fontSize: 16.0,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.teal,
+                                                  foregroundColor: Colors.white,
+                                                  padding: const EdgeInsets.symmetric(vertical: 14.0),
+                                                  elevation: 2,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(12.0),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+
+                          Navigator.of(context).pop();
+                          isInOperation = false;
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14.0),
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                          ),
+                        ),
+                        child: const Text(
+                          'Confirm',
+                          style: TextStyle(
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: () async {
-                    // Prevent duplicate operations
-                    if (isInOperation) {
-                      return;
-                    }
-
-                    isInOperation = true; // Set flag to true
-
-                    double debtAmount =
-                        selectedPaymentMethod == 'Debt' ? totalAmount - amountPaid : 0.0;
-                    String customer = _customerName.text.toLowerCase();
-
-                    // Handle different payment methods
-                    if (selectedPaymentMethod == 'Cash') {
-                      // Cash payment
-                      await db.collection("alcoholsales").add({
-                        // "customer": customer,
-                        "payment": selectedPaymentMethod,
-                        "dateAdded": timestamp,
-                        "totalAmount": totalAmount,
-                        "items": items.map((item) => item.toMap()).toList(),
-                      });
-
-                    } 
-                    else                     
-                    if (selectedPaymentMethod == 'Mpesa') {
-                      // Cash payment
-                      await db.collection("alcoholsales").add({
-                        "customer": customer,
-                        "payment": selectedPaymentMethod,
-                        "dateAdded": timestamp,
-                        "totalAmount": totalAmount,
-                        "items": items.map((item) => item.toMap()).toList(),
-                      });
-                    }
-                    
-                    else if (selectedPaymentMethod == 'Debt') {
-                      // Debt payment
-                      await db.collection("alcoholsales").add({
-                        "customer": customer,
-                        "payment": selectedPaymentMethod,
-                        "debtAmount": debtAmount,
-                        "dateAdded": timestamp,
-                        "totalAmount": totalAmount,
-                        "items": items.map((item) => item.toMap()).toList(),
-                      });
-                    }
-                    // Existing code...
-else if (selectedPaymentMethod == 'Split') {
-  // Split payment between Mpesa and Cash
-  double mpesaQuantity = mpesaAmount / totalAmount * invoiceItems.length;
-  double cashQuantity = cashAmount / totalAmount * invoiceItems.length;
-
-  // Mpesa payment
-  await db.collection("alcoholsales").add({
-    "customer": customer,
-    "payment": "Mpesa",
-    "dateAdded": timestamp,
-    "totalAmount": mpesaAmount,
-    "items": items.map((item) {
-      // Update the quantity field in each item
-      double itemQuantity = item.quantity;
-      return {
-        ...item.toMap(),
-        'quantity': itemQuantity * mpesaQuantity,
-      };
-    }).toList(),
-  });
-
-  // Cash payment
-  await db.collection("alcoholsales").add({
-    "customer": customer,
-    "payment": "Cash",
-    "dateAdded": timestamp,
-    "totalAmount": cashAmount,
-    "items": items.map((item) {
-      // Update the quantity field in each item
-      double itemQuantity = item.quantity;
-      return {
-        ...item.toMap(),
-        'quantity': itemQuantity * cashQuantity,
-      };
-    }).toList(),
-  });
-}
-
-// Existing code...
-
-
-                    // Update inventory for each item
-                    for (var item in items) {
-                      await updateInventory(item.productName, item.quantity);
-                      print("Inventory updated for ${item.productName}");
-                    }
- 
-                     await showDialog(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return AlertDialog(
-                          contentPadding: const EdgeInsets.all(16.0),
-                          title: const Text('Success'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Total Amount: $totalAmount'),
-                              Text('Payment Method: $selectedPaymentMethod'),
-                              if (selectedPaymentMethod == 'Debt') Text('Amount Paid: $amountPaid'),
-                              if (selectedPaymentMethod == 'Debt')
-                                Text('Debt Amount: $debtAmount'),
-                            ],
-                          ),
-                          actions: <Widget>[
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pop(); // Close the success dialog
-                                // Navigator.push(
-                                //   context,
-                                //   MaterialPageRoute(
-                                //     builder: (context) => const NavigationMenu(),
-                                //   ),
-                                // );
-                              },
-                              child: const Text('OK'),
-                            ),
-                            TextButton(
-                              onPressed: () async{
-                                //create invoice file
-                                await _invoicegen();
-                                Navigator.of(context).pop(); // Close the success dialog
-                                
-
-                               
-                              },
-                              child: const Text('PEINT'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-
-                    Navigator.of(context).pop(); // Close the payment dialog AFTER success dialog
-
-                    isInOperation = false; // Set flag back to false after completing the operation
-                  },
-                  child: const Text('OK'),
-                ),
               ],
-            );
-          },
-        );
-      },
-    );
+            ),
+          ),
+        ),
+      );
+    },
+  );
+},
+);
 
   } catch (e) {
     showDialog(
@@ -1086,61 +1622,60 @@ Future<void> _invoicegen() async {
     );
 
     // Generate the PDF
-    final pdfFile = await PdfInvoiceApi.generateSimple(invoice);
+    // final pdfFile = await PdfInvoiceApi.generateSimple(invoice);
 
     // Define the filename based on customer name and timestamp
-    String fileName =
-        '${DateFormat('HH:mm:ss').format(DateTime.now())}_$customerName.pdf';
+    // String fileName =
+    //     '${DateFormat('HH:mm:ss').format(DateTime.now())}_$customerName.pdf';
 
     // Upload to Firebase Storage
-    final storageReference =
-        FirebaseStorage.instance.ref().child('pdf').child(fileName);
+    // final storageReference =
+    //     FirebaseStorage.instance.ref().child('pdf').child(fileName);
 
-    if (kIsWeb) {
+    // if (kIsWeb) {
       // Web: pdfFile is already bytes (Uint8List)
-      final pdfBytes = pdfFile as Uint8List;
-      await storageReference.putData(pdfBytes);
+      // final pdfBytes = pdfFile as Uint8List;
+      // await storageReference.putData(pdfBytes);
 
       // Open print dialog for web
-      await Printing.layoutPdf(
-        onLayout: (_) async => pdfBytes,
-        name: fileName,
-      );
-    } else {
+    //   await Printing.layoutPdf(
+    //     onLayout: (_) async => pdfBytes,
+    //     name: fileName,
+    //   );
+    // } else {
       // Mobile/Desktop: pdfFile is a File object
-      final File pdfFileObj = pdfFile as File;
-      await storageReference.putFile(pdfFileObj);
+      // final File pdfFileObj = pdfFile as File;
+      // await storageReference.putFile(pdfFileObj);
 
-      // Save to local storage
-      final Directory appDocDir = await getApplicationDocumentsDirectory();
-      final String localPdfPath = '${appDocDir.path}/downloaded_pdf.pdf';
-      final File localPdfFile = File(localPdfPath);
-      await storageReference.writeToFile(localPdfFile);
+      // // Save to local storage
+      // final Directory appDocDir = await getApplicationDocumentsDirectory();
+      // final String localPdfPath = '${appDocDir.path}/downloaded_pdf.pdf';
+      // final File localPdfFile = File(localPdfPath);
+      // await storageReference.writeToFile(localPdfFile);
 
       // Navigate to preview page
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => open(pdfPath: localPdfPath),
-        ),
-      );
-    }
+      // Navigator.push(
+      //   context,
+      //   MaterialPageRoute(
+      //     builder: (context) => open(pdfPath: localPdfPath),
+      //   ),
+      // );
+    // }
+    
+    // Build and print receipt with actual invoice data
+    await buildTestReceipt(
+      invoiceItems: items,
+      customerName: customerName,
+      salesRep: salesRep,
+      paymentMethod: _selectedPaymentMethod,
+      totalAmount: calculateItemsTotal(items),
+    );
   } catch (e) {
     print("Error generating, uploading, or downloading PDF: $e");
   }
 }
 
- // Example usage with async/await
-Future<void> someFunction() async {
-  // ... other code
 
-  await storeInvoice();
-  setState(() {
-    items.clear();
-  });
-
-  // Continue with the rest of the code after storeInvoice is complete
-}
 
    Future<void> _checkPermission(Permission permission) async {
     AndroidDeviceInfo build = await DeviceInfoPlugin().androidInfo;
@@ -1179,11 +1714,13 @@ class ItemInfo {
   String productName;
   double quantity;
   double price;
+  String sku;
 
   ItemInfo({
     required this.productName,
     required this.quantity,
     required this.price,
+    required this.sku,
   });
 
   Map<String, dynamic> toMap() {
@@ -1191,6 +1728,7 @@ class ItemInfo {
       'productName': productName,
       'quantity': quantity,
       'price': price,
+      'sku': sku,
     };
   }
 }

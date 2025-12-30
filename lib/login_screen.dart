@@ -28,14 +28,27 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String? errorMessage; // For displaying errors
 
+  bool get isMobile {
+    final width = MediaQuery.of(context).size.width;
+    return width < 768; // Mobile/tablet breakpoint
+  }
+
   @override
   void initState() {
     super.initState();
     // Focus email field by default
     WidgetsBinding.instance.addPostFrameCallback((_) {
       emailFocus.requestFocus();
-      keyboard.attach(controller: emailController, focusNode: emailFocus);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Attach keyboard only on desktop
+    if (!isMobile) {
+      keyboard.attach(controller: emailController, focusNode: emailFocus);
+    }
   }
 
   @override
@@ -100,80 +113,84 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loginForm = Padding(
+      padding: EdgeInsets.all(isMobile ? 24 : 64),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isMobile) const SizedBox(height: 60) else const Spacer(),
+          Text(
+            "Welcome Back",
+            style: TextStyle(
+              fontSize: isMobile ? 32 : 40,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            "Sign in to your account.",
+            style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 40),
+          PillInput(
+            label: "EMAIL / USER ID",
+            hint: "example@spiritpos.com",
+            icon: Icons.email_outlined,
+            controller: emailController,
+            focusNode: emailFocus,
+            keyboard: isMobile ? null : keyboard,
+          ),
+          const SizedBox(height: 24),
+          PillInput(
+            label: "PASSWORD",
+            hint: "Enter Password",
+            icon: Icons.lock_outline,
+            obscure: true,
+            controller: passwordController,
+            focusNode: passwordFocus,
+            keyboard: isMobile ? null : keyboard,
+          ),
+          if (errorMessage != null) ...[
+            const SizedBox(height: 16),
+              Text(
+              errorMessage!,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ],
+          const SizedBox(height: 32),
+          PillButton(
+            text: "UNLOCK REGISTER →",
+            filled: true,
+            onTap: _signIn,
+          ),
+          if (isMobile) const SizedBox(height: 40) else const Spacer(),
+        ],
+      ),
+    );
+
     return KeyboardScope(
       keyboard: keyboard,
       child: Scaffold(
-        body: Row(
-          children: [
-            // LEFT PANEL
-            Expanded(
-              flex: 5,
-              child: Padding(
-                padding: const EdgeInsets.all(64),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Spacer(),
-                    const Text(
-                      "Welcome Back",
-                      style: TextStyle(
-                        fontSize: 40,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
+        body: isMobile
+            ? Center(child: SingleChildScrollView(child: loginForm))
+            : Row(
+                children: [
+                  // LEFT PANEL
+                  Expanded(
+                    flex: 5,
+                    child: loginForm,
+                  ),
+                  // RIGHT PANEL (Desktop only)
+                  Expanded(
+                    flex: 4,
+                    child: GlassCard(
+                      margin: const EdgeInsets.all(24),
+                      child: const PosKeyboard(),
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "Sign in to your account.",
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 40),
-                    PillInput(
-                      label: "EMAIL / USER ID",
-                      hint: "example@spiritpos.com",
-                      icon: Icons.email_outlined,
-                      controller: emailController,
-                      focusNode: emailFocus,
-                      keyboard: keyboard,
-                    ),
-                    const SizedBox(height: 24),
-                    PillInput(
-                      label: "PASSWORD",
-                      hint: "Enter Password",
-                      icon: Icons.lock_outline,
-                      obscure: true,
-                      controller: passwordController,
-                      focusNode: passwordFocus,
-                      keyboard: keyboard,
-                    ),
-                    if (errorMessage != null) ...[
-                      const SizedBox(height: 16),
-                        Text(
-                        errorMessage!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
-                    const SizedBox(height: 32),
-                    PillButton(
-                      text: "UNLOCK REGISTER →",
-                      filled: true,
-                      onTap: _signIn,
-                    ),
-                    const Spacer(),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ),
-            // RIGHT PANEL
-            Expanded(
-              flex: 4,
-              child: GlassCard(
-                margin: const EdgeInsets.all(24),
-                child: const PosKeyboard(),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

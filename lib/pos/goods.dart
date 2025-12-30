@@ -974,7 +974,7 @@ class _TopBar extends StatelessWidget {
             },
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text('Inventory', style: TextStyle(color: _goodsState.accentGreen)),
+              child: Text('Inventory', style: TextStyle(color: _goodsState.accentGreen, fontWeight: FontWeight.bold,)),
             ),
           ),
           const SizedBox(width: 24),

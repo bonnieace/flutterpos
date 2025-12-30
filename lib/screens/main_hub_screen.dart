@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/login_screen.dart';
 import 'package:flutter_application_1/pos/goods.dart';
 import 'package:flutter_application_1/pos/inv.dart';
 import 'package:flutter_application_1/pos/pos.dart';
@@ -93,37 +94,83 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 12),
       decoration: BoxDecoration(
         color: bgMid,
         border: Border(
           bottom: BorderSide(color: Colors.white.withOpacity(0.06)),
         ),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.hub, color: Colors.white),
-          const SizedBox(width: 10),
-          const Text(
-            'Main Hub',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 12),
-          _StatusPill(),
-          const Spacer(),
-          _UserPill(userName: userName, userRole: userRole),
-          const SizedBox(width: 12),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {},
-          ),
-        ],
-      ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.hub, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Main Hub',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.settings_outlined, size: 20),
+                      onPressed: () {},
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.logout, size: 20),
+                      onPressed: () {
+                        FirebaseAuth.instance.signOut();
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        );
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _UserPill(userName: userName, userRole: userRole, compact: true),
+              ],
+            )
+          : Row(
+              children: [
+                const Icon(Icons.hub, color: Colors.white),
+                const SizedBox(width: 10),
+                const Text(
+                  'Main Hub',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 12),
+                _StatusPill(),
+                const Spacer(),
+                _UserPill(userName: userName, userRole: userRole),
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () {},
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  onPressed: () {
+                    FirebaseAuth.instance.signOut();
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    );
+                  },
+                ),
+              ],
+            ),
     );
   }
 }
@@ -154,8 +201,9 @@ class _StatusPill extends StatelessWidget {
 class _UserPill extends StatelessWidget {
   final String userName;
   final String userRole;
+  final bool compact;
 
-  const _UserPill({required this.userName, required this.userRole});
+  const _UserPill({required this.userName, required this.userRole, this.compact = false});
 
   String _formatUserName(String name) {
     final parts = name.trim().split(' ');
@@ -173,23 +221,34 @@ class _UserPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12, vertical: compact ? 4 : 6),
       decoration: BoxDecoration(
         color: mutedGreen,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const CircleAvatar(
-            radius: 14,
-            child: Icon(Icons.person, size: 16),
+          CircleAvatar(
+            radius: compact ? 12 : 14,
+            child: Icon(Icons.person, size: compact ? 14 : 16),
           ),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_formatUserName(userName), style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text(userRole, style: const TextStyle(fontSize: 10)),
+              Text(
+                _formatUserName(userName),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: compact ? 12 : 14,
+                ),
+              ),
+              Text(
+                userRole,
+                style: TextStyle(fontSize: compact ? 9 : 10),
+              ),
             ],
           ),
         ],
@@ -212,30 +271,37 @@ class _GreetingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          '${_getGreeting()}, ${userName.split(' ').first}',
-          style: const TextStyle(
-            fontSize: 36,
-            fontWeight: FontWeight.w700,
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0),
+      child: Column(
+        children: [
+          Text(
+            '${_getGreeting()}, ${userName.split(' ').first}',
+            style: TextStyle(
+              fontSize: isMobile ? 24 : 36,
+              fontWeight: FontWeight.w700,
+            ),
+            textAlign: isMobile ? TextAlign.center : TextAlign.start,
           ),
-        ),
-        const SizedBox(height: 8),
-        RichText(
-          text: const TextSpan(
-            style: TextStyle(fontSize: 16, color: Color(0xFFB8D6C5)),
-            children: [
-              TextSpan(text: 'Store performance is up '),
-              TextSpan(
-                text: '12%',
-                style: TextStyle(color: accentGreen, fontWeight: FontWeight.w600),
-              ),
-              TextSpan(text: ' today. Select a module to begin.'),
-            ],
+          const SizedBox(height: 8),
+          RichText(
+            textAlign: isMobile ? TextAlign.center : TextAlign.start,
+            text: TextSpan(
+              style: TextStyle(fontSize: isMobile ? 14 : 16, color: const Color(0xFFB8D6C5)),
+              children: const [
+                TextSpan(text: 'Store performance is up '),
+                TextSpan(
+                  text: '12%',
+                  style: TextStyle(color: accentGreen, fontWeight: FontWeight.w600),
+                ),
+                TextSpan(text: ' today. Select a module to begin.'),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -243,14 +309,25 @@ class _GreetingSection extends StatelessWidget {
 class _ModuleGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+    final isTablet = screenWidth >= 768 && screenWidth < 1024;
+    
+    int crossAxisCount = 4;
+    if (isMobile) {
+      crossAxisCount = 1;
+    } else if (isTablet) {
+      crossAxisCount = 2;
+    }
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 32),
       child: GridView.count(
-        crossAxisCount: 4,
+        crossAxisCount: crossAxisCount,
         shrinkWrap: true,
-        crossAxisSpacing: 20,
-        mainAxisSpacing: 20,
-        childAspectRatio: 1.4,
+        crossAxisSpacing: isMobile ? 12 : 20,
+        mainAxisSpacing: isMobile ? 12 : 20,
+        childAspectRatio: isMobile ? 1.8 : (isTablet ? 1.3 : 1.4),
         physics: const NeverScrollableScrollPhysics(),
         children: const [
              _ModuleCard(
@@ -362,10 +439,12 @@ class _ModuleCard extends StatelessWidget {
 class _StatsBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 32),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
@@ -388,23 +467,35 @@ class _StatsBar extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          children: const [
-            Expanded(child: _StatTile(label: 'TRANSACTIONS', value: '142', icon: Icons.point_of_sale, color: Colors.blue)),
-            SizedBox(width: 16),
-            _Divider(),
-            SizedBox(width: 16),
-            Expanded(child: _StatTile(label: 'TOTAL SALES', value: 'Ksh. 4,289.50', icon: Icons.attach_money, color: Colors.green)),
-            SizedBox(width: 16),
-            _Divider(),
-            SizedBox(width: 16),
-            Expanded(child: _StatTile(label: 'LOW STOCK', value: '12 Items', icon: Icons.warning_amber_rounded, color: Colors.orange)),
-            SizedBox(width: 16),
-            _Divider(),
-            SizedBox(width: 16),
-            Expanded(child: _StatTile(label: 'SHIFT TIME', value: '6h 12m', icon: Icons.access_time, color: Colors.purple)),
-          ],
-        ),
+        child: isMobile
+            ? Column(
+                children: const [
+                  _StatTile(label: 'TRANSACTIONS', value: '142', icon: Icons.point_of_sale, color: Colors.blue),
+                  SizedBox(height: 16),
+                  _StatTile(label: 'TOTAL SALES', value: 'Ksh. 4,289.50', icon: Icons.attach_money, color: Colors.green),
+                  SizedBox(height: 16),
+                  _StatTile(label: 'LOW STOCK', value: '12 Items', icon: Icons.warning_amber_rounded, color: Colors.orange),
+                  SizedBox(height: 16),
+                  _StatTile(label: 'SHIFT TIME', value: '6h 12m', icon: Icons.access_time, color: Colors.purple),
+                ],
+              )
+            : Row(
+                children: const [
+                  Expanded(child: _StatTile(label: 'TRANSACTIONS', value: '142', icon: Icons.point_of_sale, color: Colors.blue)),
+                  SizedBox(width: 16),
+                  _Divider(),
+                  SizedBox(width: 16),
+                  Expanded(child: _StatTile(label: 'TOTAL SALES', value: 'Ksh. 4,289.50', icon: Icons.attach_money, color: Colors.green)),
+                  SizedBox(width: 16),
+                  _Divider(),
+                  SizedBox(width: 16),
+                  Expanded(child: _StatTile(label: 'LOW STOCK', value: '12 Items', icon: Icons.warning_amber_rounded, color: Colors.orange)),
+                  SizedBox(width: 16),
+                  _Divider(),
+                  SizedBox(width: 16),
+                  Expanded(child: _StatTile(label: 'SHIFT TIME', value: '6h 12m', icon: Icons.access_time, color: Colors.purple)),
+                ],
+              ),
       ),
     );
   }
