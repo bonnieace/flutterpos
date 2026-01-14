@@ -1,11 +1,18 @@
 import 'package:flutter_application_1/constants/colors.dart';
+import 'package:flutter_application_1/pos/reports/paymentsfreq.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter_launcher_icons/xml_templates.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../screens/main_hub_screen.dart';
 import '../screens/users.dart';
+import '../services/shift_service.dart';
 import 'goods.dart';
+import 'reports/salesReports.dart';
+import 'reports/profits.dart';
+import 'reports/shift_reports.dart';
+
 class Reports extends StatefulWidget {
   const Reports({super.key});
 
@@ -16,68 +23,436 @@ class Reports extends StatefulWidget {
 class _ReportsState extends State<Reports> {
   String selectedDateRange = 'Last 7 Days';
   String selectedCategory = 'All Categories';
+  String selectedSoldBy = 'All Staff';
+  
+  // Shift service
+  final ShiftService _shiftService = ShiftService();
+  int openShiftsCount = 0;
+  int totalShiftsToday = 0;
+  
+  // Data variables
+  double totalSales = 0.0;
+  double grossProfit = 0.0;
+  int transactionCount = 0;
+  int lowStockCount = 0;
+  List<Map<String, dynamic>> lowStockItems = [];
+  List<Map<String, dynamic>> recentTransactions = [];
+  List<Map<String, dynamic>> topSellingItems = [];
+  Map<int, double> weeklyRevenue = {};
+  List<String> categories = ['All Categories'];
+  List<String> soldByList = ['All Staff'];
+  
+  bool isLoading = true;
+  
+  // Previous week data for comparison
+  double previousWeekSales = 0.0;
+  double previousWeekProfit = 0.0;
+  int previousWeekTransactions = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+    _loadCategories();
+    _loadSoldByList();
+    _loadShiftData();
+  }
+  
+  Future<void> _loadShiftData() async {
+    try {
+      final summary = await _shiftService.getBusinessDaySummary();
+      setState(() {
+        openShiftsCount = summary['openShifts'] ?? 0;
+        totalShiftsToday = summary['totalShifts'] ?? 0;
+      });
+    } catch (e) {
+      debugPrint('Error loading shift data: $e');
+    }
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('alcohol').get();
+      final Set<String> categorySet = {'All Categories'};
+      for (var doc in snapshot.docs) {
+        final category = doc.data()['category'] as String?;
+        if (category != null && category.isNotEmpty) {
+          categorySet.add(category);
+        }
+      }
+      setState(() {
+        categories = categorySet.toList();
+      });
+    } catch (e) {
+      debugPrint('Error loading categories: $e');
+    }
+  }
+
+  Future<void> _loadSoldByList() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('alcoholsales').get();
+      final Set<String> soldBySet = {'All Staff'};
+      for (var doc in snapshot.docs) {
+        final soldBy = doc.data()['soldBy'] as String?;
+        if (soldBy != null && soldBy.isNotEmpty) {
+          soldBySet.add(soldBy);
+        }
+      }
+      setState(() {
+        soldByList = soldBySet.toList();
+      });
+    } catch (e) {
+      debugPrint('Error loading soldBy list: $e');
+    }
+  }
+
+  Future<void> _loadData() async {
+    setState(() => isLoading = true);
+    
+    try {
+      final now = DateTime.now();
+      DateTime startDate;
+      DateTime previousStartDate;
+      DateTime previousEndDate;
+      
+      // Calculate date range based on selection
+      switch (selectedDateRange) {
+        case 'Today':
+          startDate = DateTime(now.year, now.month, now.day);
+          previousStartDate = startDate.subtract(const Duration(days: 1));
+          previousEndDate = startDate;
+          break;
+        case 'Last 7 Days':
+          startDate = now.subtract(const Duration(days: 7));
+          previousStartDate = now.subtract(const Duration(days: 14));
+          previousEndDate = startDate;
+          break;
+        case 'Last 30 Days':
+          startDate = now.subtract(const Duration(days: 30));
+          previousStartDate = now.subtract(const Duration(days: 60));
+          previousEndDate = startDate;
+          break;
+        case 'This Month':
+          startDate = DateTime(now.year, now.month, 1);
+          previousStartDate = DateTime(now.year, now.month - 1, 1);
+          previousEndDate = startDate;
+          break;
+        default:
+          startDate = now.subtract(const Duration(days: 7));
+          previousStartDate = now.subtract(const Duration(days: 14));
+          previousEndDate = startDate;
+      }
+
+      // Fetch current period sales
+      Query salesQuery = FirebaseFirestore.instance
+          .collection('alcoholsales')
+          .where('dateAdded', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+
+      final salesSnapshot = await salesQuery.get();
+      
+      // Fetch previous period sales for comparison
+      final previousSalesSnapshot = await FirebaseFirestore.instance
+          .collection('alcoholsales')
+          .where('dateAdded', isGreaterThanOrEqualTo: Timestamp.fromDate(previousStartDate))
+          .where('dateAdded', isLessThan: Timestamp.fromDate(previousEndDate))
+          .get();
+
+      // Fetch alcohol inventory for profit calculation and low stock
+      final alcoholSnapshot = await FirebaseFirestore.instance.collection('alcohol').get();
+      
+      // Create a map of product prices (buying price) for profit calculation
+      final Map<String, double> buyingPrices = {};
+      final Map<String, Map<String, dynamic>> productInfo = {};
+      
+      for (var doc in alcoholSnapshot.docs) {
+        final data = doc.data();
+        final name = data['name'] as String? ?? '';
+        final buyingPrice = (data['buyingprice'] ?? data['buyingPrice'] ?? 0).toDouble();
+        final quantity = (data['quantity'] ?? 0).toInt();
+        final category = data['category'] as String? ?? '';
+        
+        buyingPrices[name.toLowerCase()] = buyingPrice;
+        productInfo[name.toLowerCase()] = {
+          'name': name,
+          'quantity': quantity,
+          'category': category,
+          'sku': data['SKU'] ?? '',
+          'price': (data['price'] ?? 0).toDouble(),
+        };
+      }
+
+      // Calculate metrics
+      double sales = 0.0;
+      double cost = 0.0;
+      int transactions = 0;
+      Map<String, Map<String, dynamic>> productSales = {};
+      Map<int, double> dailyRevenue = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0};
+      List<Map<String, dynamic>> recentTxns = [];
+
+      for (var doc in salesSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final total = (data['total'] ?? data['totalAmount'] ?? 0).toDouble();
+        final items = data['items'] as List<dynamic>? ?? [];
+        final dateAdded = (data['dateAdded'] as Timestamp?)?.toDate() ?? now;
+        final payment = data['payment'] as String? ?? 'Cash';
+        
+        // Filter by category if selected
+        bool includeTransaction = selectedCategory == 'All Categories';
+        if (!includeTransaction) {
+          for (var item in items) {
+            final productName = (item['productName'] ?? item['name'] ?? '').toString().toLowerCase();
+            final info = productInfo[productName];
+            if (info != null && info['category'] == selectedCategory) {
+              includeTransaction = true;
+              break;
+            }
+          }
+        }
+        
+        if (!includeTransaction) continue;
+        
+        // Filter by soldBy if selected
+        final soldBy = data['soldBy'] as String? ?? '';
+        if (selectedSoldBy != 'All Staff' && soldBy != selectedSoldBy) continue;
+        
+        sales += total;
+        transactions++;
+        
+        // Calculate cost and track product sales
+        for (var item in items) {
+          final productName = (item['productName'] ?? item['name'] ?? '').toString();
+          final quantity = (item['quantity'] ?? 1).toInt();
+          final price = (item['price'] ?? 0).toDouble();
+          final buyingPrice = buyingPrices[productName.toLowerCase()] ?? 0.0;
+          
+          cost += buyingPrice * quantity;
+          
+          // Track for top selling
+          if (productSales.containsKey(productName)) {
+            productSales[productName]!['quantity'] += quantity;
+            productSales[productName]!['revenue'] += price * quantity;
+          } else {
+            final info = productInfo[productName.toLowerCase()];
+            productSales[productName] = {
+              'name': productName,
+              'quantity': quantity,
+              'revenue': price * quantity,
+              'category': info?['category'] ?? 'Other',
+            };
+          }
+        }
+        
+        // Track daily revenue for chart (weekday: 0 = Monday, 6 = Sunday)
+        final weekday = dateAdded.weekday - 1; // Convert to 0-indexed
+        dailyRevenue[weekday] = (dailyRevenue[weekday] ?? 0) + total;
+        
+        // Add to recent transactions
+        recentTxns.add({
+          'id': doc.id,
+          'date': dateAdded,
+          'total': total,
+          'items': items,
+          'payment': payment,
+          'itemCount': items.length,
+        });
+      }
+
+      // Calculate previous period metrics
+      double prevSales = 0.0;
+      double prevCost = 0.0;
+      int prevTransactions = 0;
+
+      for (var doc in previousSalesSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final total = (data['total'] ?? data['totalAmount'] ?? 0).toDouble();
+        final items = data['items'] as List<dynamic>? ?? [];
+        
+        prevSales += total;
+        prevTransactions++;
+        
+        for (var item in items) {
+          final productName = (item['productName'] ?? item['name'] ?? '').toString();
+          final quantity = (item['quantity'] ?? 1).toInt();
+          final buyingPrice = buyingPrices[productName.toLowerCase()] ?? 0.0;
+          prevCost += buyingPrice * quantity;
+        }
+      }
+
+      // Get low stock items (quantity <= 5)
+      List<Map<String, dynamic>> lowStock = [];
+      for (var entry in productInfo.entries) {
+        if (entry.value['quantity'] <= 5) {
+          lowStock.add(entry.value);
+        }
+      }
+
+      // Sort top selling items by quantity
+      List<Map<String, dynamic>> topSelling = productSales.values.toList()
+        ..sort((a, b) => (b['quantity'] as int).compareTo(a['quantity'] as int));
+      topSelling = topSelling.take(5).toList();
+
+      // Sort recent transactions by date
+      recentTxns.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+      recentTxns = recentTxns.take(10).toList();
+
+      setState(() {
+        totalSales = sales;
+        grossProfit = sales - cost;
+        transactionCount = transactions;
+        lowStockCount = lowStock.length;
+        lowStockItems = lowStock;
+        topSellingItems = topSelling;
+        weeklyRevenue = dailyRevenue;
+        recentTransactions = recentTxns;
+        previousWeekSales = prevSales;
+        previousWeekProfit = prevSales - prevCost;
+        previousWeekTransactions = prevTransactions;
+        isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading report data: $e');
+      setState(() => isLoading = false);
+    }
+  }
+
+  String _formatCurrency(double amount) {
+    return NumberFormat.currency(symbol: 'Ksh ', decimalDigits: 2).format(amount);
+  }
+
+  String _calculatePercentageChange(double current, double previous) {
+    if (previous == 0) return current > 0 ? '+100%' : '0%';
+    final change = ((current - previous) / previous) * 100;
+    return '${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)}%';
+  }
+
+  bool _isPositiveChange(double current, double previous) {
+    return current >= previous;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: bgDark,
       body: SafeArea(
-        child: Column(
-          children: [
-            _TopBar(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 32),
-                    _buildMetricsCards(),
-                    const SizedBox(height: 32),
-                    _buildFilters(),
-                    const SizedBox(height: 32),
-                    Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isSmall = constraints.maxWidth < 600;
+            final isMedium = constraints.maxWidth < 900;
+            final padding = isSmall ? 16.0 : 24.0;
+
+            return Column(
+              children: [
+                _TopBar(isSmall: isSmall),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.all(padding),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 2, child: _buildWeeklyRevenue()),
-                        const SizedBox(width: 24),
-                        Expanded(child: _buildTopSellingItems()),
+                        _buildHeader(isSmall: isSmall),
+                        const SizedBox(height: 32),
+                        _buildMetricsCards(isSmall: isSmall, isMedium: isMedium),
+                        const SizedBox(height: 32),
+                        _buildFilters(isSmall: isSmall, isMedium: isMedium),
+                        const SizedBox(height: 32),
+                        _buildChartsSection(isSmall: isSmall, isMedium: isMedium),
+                        const SizedBox(height: 32),
+                        _buildRecentTransactions(),
                       ],
                     ),
-                    const SizedBox(height: 32),
-                    _buildRecentTransactions(),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildChartsSection({required bool isSmall, required bool isMedium}) {
+    if (isSmall || isMedium) {
+      return Column(
+        children: [
+          _buildWeeklyRevenue(),
+          const SizedBox(height: 24),
+          _buildTopSellingItems(),
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 2, child: _buildWeeklyRevenue()),
+        const SizedBox(width: 24),
+        Expanded(child: _buildTopSellingItems()),
+      ],
+    );
+  }
+
+  Widget _buildHeader({required bool isSmall}) {
+    if (isSmall) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Reports & Analytics',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Overview of sales performance, inventory levels, and transaction history.',
+            style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.print,
+                  label: 'Print',
+                  isPrimary: false,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.download,
+                  label: 'Export',
+                  isPrimary: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text(
-              'Reports & Analytics',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text(
+                'Reports & Analytics',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Overview of sales performance, inventory levels, and transaction history.',
-              style: TextStyle(color: Colors.white54, fontSize: 14),
-            ),
-          ],
+              SizedBox(height: 8),
+              Text(
+                'Overview of sales performance, inventory levels, and transaction history.',
+                style: TextStyle(color: Colors.white54, fontSize: 14),
+              ),
+            ],
+          ),
         ),
         Row(
           children: [
@@ -116,50 +491,137 @@ class _ReportsState extends State<Reports> {
     );
   }
 
-  Widget _buildMetricsCards() {
-    return Row(
+  Widget _buildMetricsCards({required bool isSmall, required bool isMedium}) {
+    final salesChange = _calculatePercentageChange(totalSales, previousWeekSales);
+    final profitChange = _calculatePercentageChange(grossProfit, previousWeekProfit);
+    final transactionChange = _calculatePercentageChange(
+      transactionCount.toDouble(), 
+      previousWeekTransactions.toDouble()
+    );
+    
+    final cards = [
+      _buildMetricCard(
+        title: 'TOTAL SALES',
+        value: _formatCurrency(totalSales),
+        percentage: salesChange,
+        isPositive: _isPositiveChange(totalSales, previousWeekSales),
+        icon: Icons.attach_money,
+        iconColor: accentGreen,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SalesReportPage()),
+          );
+        },
+      ),
+      _buildMetricCard(
+        title: 'GROSS PROFIT',
+        value: _formatCurrency(grossProfit),
+        percentage: profitChange,
+        isPositive: _isPositiveChange(grossProfit, previousWeekProfit),
+        icon: Icons.trending_up,
+        iconColor: grossProfit >= 0 ? accentGreen : const Color(0xFFEF4444),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ProfitReportsPage()),
+          );
+        },
+      ),
+      _buildMetricCard(
+        title: 'TRANSACTIONS',
+        value: transactionCount.toString(),
+        percentage: transactionChange,
+        isPositive: _isPositiveChange(transactionCount.toDouble(), previousWeekTransactions.toDouble()),
+        icon: Icons.receipt_long,
+        iconColor: accentGreen,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const PaymentFrequencyPage()),  
+          );
+        },
+
+      ),
+      _buildMetricCard(
+        title: 'LOW STOCK',
+        value: '$lowStockCount Items',
+        subtitle: lowStockCount > 0 ? 'Action Required' : 'All Good',
+        icon: Icons.warning,
+        iconColor: lowStockCount > 0 ? const Color(0xFFF59E0B) : accentGreen,
+      ),
+      _buildMetricCard(
+        title: 'SHIFTS TODAY',
+        value: '$totalShiftsToday Shifts',
+        subtitle: openShiftsCount > 0 ? '$openShiftsCount currently open' : 'All shifts closed',
+        icon: Icons.access_time,
+        iconColor: openShiftsCount > 0 ? Colors.amber : accentGreen,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ShiftReportsPage()),
+          );
+        },
+      ),
+    ];
+
+    if (isSmall) {
+      return Column(
+        children: cards.map((card) => Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: card,
+        )).toList(),
+      );
+    }
+
+    if (isMedium) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: cards[0]),
+              const SizedBox(width: 16),
+              Expanded(child: cards[1]),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: cards[2]),
+              const SizedBox(width: 16),
+              Expanded(child: cards[3]),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: cards[4]),
+              const Expanded(child: SizedBox()),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return Column(
       children: [
-        Expanded(
-          child: _buildMetricCard(
-            title: 'TOTAL SALES',
-            value: '\$12,450.00',
-            percentage: '+12.5%',
-            isPositive: true,
-            icon: Icons.attach_money,
-            iconColor: accentGreen,
-          ),
+        Row(
+          children: [
+            Expanded(child: cards[0]),
+            const SizedBox(width: 16),
+            Expanded(child: cards[1]),
+            const SizedBox(width: 16),
+            Expanded(child: cards[2]),
+            const SizedBox(width: 16),
+            Expanded(child: cards[3]),
+          ],
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildMetricCard(
-            title: 'GROSS PROFIT',
-            value: '\$3,200.00',
-            percentage: '+8.2%',
-            isPositive: true,
-            icon: Icons.trending_up,
-            iconColor: accentGreen,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildMetricCard(
-            title: 'TRANSACTIONS',
-            value: '145',
-            percentage: '-2.1%',
-            isPositive: false,
-            icon: Icons.receipt_long,
-            iconColor: accentGreen,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildMetricCard(
-            title: 'LOW STOCK',
-            value: '5 Items',
-            subtitle: 'Action Required',
-            icon: Icons.warning,
-            iconColor: const Color(0xFFF59E0B),
-          ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: cards[4]),
+            const Expanded(flex: 3, child: SizedBox()),
+          ],
         ),
       ],
     );
@@ -173,81 +635,214 @@ class _ReportsState extends State<Reports> {
     String? subtitle,
     required IconData icon,
     required Color iconColor,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: bgMid,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: mutedGreen),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              Icon(icon, color: iconColor, size: 20),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (percentage != null)
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: bgMid,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: mutedGreen),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(
-                  isPositive! ? Icons.arrow_upward : Icons.arrow_downward,
-                  color: isPositive ? accentGreen : const Color(0xFFEF4444),
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
                 Text(
-                  percentage,
-                  style: TextStyle(
-                    color: isPositive ? accentGreen : const Color(0xFFEF4444),
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white54,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(width: 4),
-                const Text(
-                  'vs last week',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                Row(
+                  children: [
+                    if (onTap != null)
+                      const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 12),
+                    const SizedBox(width: 8),
+                    Icon(icon, color: iconColor, size: 20),
+                  ],
                 ),
               ],
             ),
-          if (subtitle != null)
+            const SizedBox(height: 12),
             Text(
-              subtitle,
+              value,
               style: const TextStyle(
-                color: Color(0xFFF59E0B),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
               ),
             ),
-        ],
+            const SizedBox(height: 8),
+            if (percentage != null)
+              Row(
+                children: [
+                  Icon(
+                    isPositive! ? Icons.arrow_upward : Icons.arrow_downward,
+                    color: isPositive ? accentGreen : const Color(0xFFEF4444),
+                    size: 14,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    percentage,
+                    style: TextStyle(
+                      color: isPositive ? accentGreen : const Color(0xFFEF4444),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'vs last week',
+                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                ],
+              ),
+            if (subtitle != null)
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Color(0xFFF59E0B),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFilters() {
+  Widget _buildFilters({required bool isSmall, required bool isMedium}) {
+    final searchField = TextField(
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: 'Search by SKU or Name...',
+        hintStyle: const TextStyle(color: Colors.white38),
+        prefixIcon: const Icon(Icons.search, color: Colors.white38),
+        filled: true,
+        fillColor: mutedGreen,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+    );
+
+    final dateDropdown = _buildDropdown(
+      
+      value: selectedDateRange,
+      icon: Icons.calendar_today,
+      items: ['Today', 'Last 7 Days', 'Last 30 Days', 'This Month'],
+      onChanged: (value) {
+        setState(() => selectedDateRange = value!);
+        _loadData();
+      },
+    );
+
+    final categoryDropdown = _buildDropdown(
+      value: selectedCategory,
+      icon: null,
+      items: categories,
+      onChanged: (value) {
+        setState(() => selectedCategory = value!);
+        _loadData();
+      },
+    );
+
+    final soldByDropdown = _buildDropdown(
+      value: selectedSoldBy,
+      icon: Icons.person,
+      items: soldByList,
+      onChanged: (value) {
+        setState(() => selectedSoldBy = value!);
+        _loadData();
+      },
+    );
+
+    final generateButton = SizedBox(
+      width: isSmall ? double.infinity : null,
+      child: ElevatedButton(
+        onPressed: isLoading ? null : _loadData,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: accentGreen,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: isLoading 
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+            )
+          : const Text('Refresh', style: TextStyle(fontWeight: FontWeight.w600)),
+      ),
+    );
+
+    if (isSmall) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgMid,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: mutedGreen),
+        ),
+        child: Column(
+          children: [
+            searchField,
+            const SizedBox(height: 16),
+            dateDropdown,
+            const SizedBox(height: 16),
+            categoryDropdown,
+            const SizedBox(height: 16),
+            soldByDropdown,
+            const SizedBox(height: 16),
+            generateButton,
+          ],
+        ),
+      );
+    }
+
+    if (isMedium) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: bgMid,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: mutedGreen),
+        ),
+        child: Column(
+          children: [
+            searchField,
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: dateDropdown),
+                const SizedBox(width: 16),
+                Expanded(child: categoryDropdown),
+                const SizedBox(width: 16),
+                Expanded(child: soldByDropdown),
+              ],
+            ),
+            const SizedBox(height: 16),
+            generateButton,
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -257,79 +852,32 @@ class _ReportsState extends State<Reports> {
       ),
       child: Row(
         children: [
-          Expanded(
-            flex: 2,
-            child: TextField(
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search by SKU or Name...',
-                hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.search, color: Colors.white38),
-                filled: true,
-                fillColor: mutedGreen,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
+          Expanded(flex: 2, child: searchField),
           const SizedBox(width: 16),
-          Expanded(
-            child: _buildDropdown(
-              label: 'DATE RANGE',
-              value: selectedDateRange,
-              icon: Icons.calendar_today,
-              onChanged: (value) => setState(() => selectedDateRange = value!),
-            ),
-          ),
+          Expanded(child: dateDropdown),
           const SizedBox(width: 16),
-          Expanded(
-            child: _buildDropdown(
-              label: 'CATEGORY',
-              value: selectedCategory,
-              icon: null,
-              onChanged: (value) => setState(() => selectedCategory = value!),
-            ),
-          ),
+          Expanded(child: categoryDropdown),
           const SizedBox(width: 16),
-          ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentGreen,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Generate', style: TextStyle(fontWeight: FontWeight.w600)),
-          ),
+          Expanded(child: soldByDropdown),
+          const SizedBox(width: 16),
+          generateButton,
         ],
       ),
     );
   }
 
   Widget _buildDropdown({
-    required String label,
+    
     required String value,
     required IconData? icon,
+    required List<String> items,
     required Function(String?) onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 8),
+
+        
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
@@ -344,13 +892,13 @@ class _ReportsState extends State<Reports> {
               ],
               Expanded(
                 child: DropdownButton<String>(
-                  value: value,
+                  value: items.contains(value) ? value : items.first,
                   isExpanded: true,
                   underline: const SizedBox(),
-                  dropdownColor: mutedGreen,
+                  dropdownColor: bgMid,
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white54),
-                  items: [value].map((String item) {
+                  items: items.map((String item) {
                     return DropdownMenuItem(value: item, child: Text(item));
                   }).toList(),
                   onChanged: onChanged,
@@ -364,6 +912,20 @@ class _ReportsState extends State<Reports> {
   }
 
   Widget _buildWeeklyRevenue() {
+    final maxY = weeklyRevenue.values.isEmpty 
+        ? 1000.0 
+        : (weeklyRevenue.values.reduce((a, b) => a > b ? a : b) * 1.2).clamp(100.0, double.infinity);
+    
+    // Find the day with highest revenue
+    int highlightedDay = 0;
+    double maxRevenue = 0;
+    weeklyRevenue.forEach((day, revenue) {
+      if (revenue > maxRevenue) {
+        maxRevenue = revenue;
+        highlightedDay = day;
+      }
+    });
+    
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -379,8 +941,8 @@ class _ReportsState extends State<Reports> {
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
+                children: [
+                  const Text(
                     'Weekly Revenue',
                     style: TextStyle(
                       color: Colors.white,
@@ -388,17 +950,19 @@ class _ReportsState extends State<Reports> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    'Gross earnings over the last 7 days',
-                    style: TextStyle(color: Colors.white38, fontSize: 13),
+                    'Total: ${_formatCurrency(weeklyRevenue.values.fold(0.0, (a, b) => a + b))}',
+                    style: const TextStyle(color: Colors.white38, fontSize: 13),
                   ),
                 ],
               ),
-              TextButton(
-                onPressed: () {},
-                child: const Text('View Details', style: TextStyle(color: accentGreen)),
-              ),
+              if (isLoading)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(color: accentGreen, strokeWidth: 2),
+                ),
             ],
           ),
           const SizedBox(height: 24),
@@ -407,8 +971,18 @@ class _ReportsState extends State<Reports> {
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
-                maxY: 5000,
-                barTouchData: BarTouchData(enabled: false),
+                maxY: maxY,
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      return BarTooltipItem(
+                        _formatCurrency(rod.toY),
+                        const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      );
+                    },
+                  ),
+                ),
                 titlesData: FlTitlesData(
                   show: true,
                   bottomTitles: AxisTitles(
@@ -416,28 +990,49 @@ class _ReportsState extends State<Reports> {
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
                         const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                        if (value.toInt() >= 0 && value.toInt() < days.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              days[value.toInt()],
+                              style: const TextStyle(color: Colors.white38, fontSize: 12),
+                            ),
+                          );
+                        }
+                        return const SizedBox();
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 60,
+                      getTitlesWidget: (value, meta) {
                         return Text(
-                          days[value.toInt()],
-                          style: const TextStyle(color: Colors.white38, fontSize: 12),
+                          'Ksh ${value.toInt()}',
+                          style: const TextStyle(color: Colors.white38, fontSize: 10),
                         );
                       },
                     ),
                   ),
-                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 ),
-                gridData: const FlGridData(show: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: maxY / 4,
+                  getDrawingHorizontalLine: (value) {
+                    return FlLine(
+                      color: Colors.white10,
+                      strokeWidth: 1,
+                    );
+                  },
+                ),
                 borderData: FlBorderData(show: false),
-                barGroups: [
-                  _buildBarGroup(0, 1500, false),
-                  _buildBarGroup(1, 1000, false),
-                  _buildBarGroup(2, 2000, false),
-                  _buildBarGroup(3, 2500, false),
-                  _buildBarGroup(4, 4000, true),
-                  _buildBarGroup(5, 3500, false),
-                  _buildBarGroup(6, 1500, false),
-                ],
+                barGroups: List.generate(7, (index) {
+                  return _buildBarGroup(index, weeklyRevenue[index] ?? 0, index == highlightedDay && maxRevenue > 0);
+                }),
               ),
             ),
           ),
@@ -471,25 +1066,49 @@ class _ReportsState extends State<Reports> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Top Selling Items',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Top Selling Items',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (isLoading)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(color: accentGreen, strokeWidth: 2),
+                ),
+            ],
           ),
           const SizedBox(height: 20),
-          _buildTopItem('Jack Daniels 750ml', 'Whiskey • 42 sold', '\$1,250', '+12%', Icons.local_bar),
-          _buildTopItem('Kendall Jackson Chard', 'Wine • 35 sold', '\$525', '+5%', Icons.wine_bar),
-          _buildTopItem('Titos Vodka 1.75L', 'Vodka • 28 sold', '\$980', '+9%', Icons.local_bar),
-          _buildTopItem('Corona Extra 12pk', 'Beer • 45 sold', '\$430', '+8%', Icons.sports_bar),
+          if (topSellingItems.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'No sales data available',
+                  style: TextStyle(color: Colors.white38, fontSize: 14),
+                ),
+              ),
+            )
+          else
+            ...topSellingItems.map((item) => _buildTopItem(
+              item['name'] ?? 'Unknown',
+              '${item['category'] ?? 'Other'} • ${item['quantity']} sold',
+              _formatCurrency((item['revenue'] ?? 0).toDouble()),
+              Icons.local_bar,
+            )),
         ],
       ),
     );
   }
 
-  Widget _buildTopItem(String name, String subtitle, String price, String percentage, IconData icon) {
+  Widget _buildTopItem(String name, String subtitle, String price, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -508,29 +1127,26 @@ class _ReportsState extends State<Reports> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                Text(
+                  name,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
                 Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 12)),
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(price, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              Text(
-                percentage,
-                style: const TextStyle(color: accentGreen, fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
+          Text(price, style: const TextStyle(color: accentGreen, fontWeight: FontWeight.bold)),
         ],
       ),
     );
   }
 
   Widget _buildRecentTransactions() {
+    final dateFormat = DateFormat('MMM dd, yyyy • hh:mm a');
+    
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -554,34 +1170,277 @@ class _ReportsState extends State<Reports> {
               ),
               Row(
                 children: [
+                  if (isLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(color: accentGreen, strokeWidth: 2),
+                      ),
+                    ),
                   IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.filter_list, color: Colors.white54),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.sort, color: Colors.white54),
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh, color: Colors.white54),
+                    tooltip: 'Refresh',
                   ),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 16),
-          const Text(
-            'No recent transactions to display',
-            style: TextStyle(color: Colors.white38, fontSize: 14),
-          ),
+          if (recentTransactions.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(Icons.receipt_long, color: Colors.white24, size: 48),
+                    SizedBox(height: 16),
+                    Text(
+                      'No recent transactions',
+                      style: TextStyle(color: Colors.white38, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: recentTransactions.length,
+              separatorBuilder: (context, index) => Divider(color: Colors.white10, height: 24),
+              itemBuilder: (context, index) {
+                final txn = recentTransactions[index];
+                final date = txn['date'] as DateTime;
+                final total = (txn['total'] ?? 0).toDouble();
+                final payment = txn['payment'] as String? ?? 'Cash';
+                final itemCount = txn['itemCount'] as int? ?? 0;
+                final items = txn['items'] as List<dynamic>? ?? [];
+                
+                // Get first item name for display
+                String itemPreview = 'No items';
+                if (items.isNotEmpty) {
+                  final firstItem = items.first;
+                  final name = firstItem['productName'] ?? firstItem['name'] ?? 'Item';
+                  itemPreview = itemCount > 1 ? '$name +${itemCount - 1} more' : name;
+                }
+                
+                return InkWell(
+                  onTap: () => _showTransactionDetails(txn),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: mutedGreen,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            payment.toLowerCase() == 'cash' ? Icons.money : Icons.credit_card,
+                            color: accentGreen,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                itemPreview,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                dateFormat.format(date),
+                                style: const TextStyle(color: Colors.white38, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _formatCurrency(total),
+                              style: const TextStyle(
+                                color: accentGreen,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: payment.toLowerCase() == 'cash' 
+                                    ? accentGreen.withOpacity(0.2) 
+                                    : Colors.blue.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                payment,
+                                style: TextStyle(
+                                  color: payment.toLowerCase() == 'cash' ? accentGreen : Colors.blue,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
         ],
+      ),
+    );
+  }
+
+  void _showTransactionDetails(Map<String, dynamic> txn) {
+    final dateFormat = DateFormat('MMMM dd, yyyy • hh:mm a');
+    final date = txn['date'] as DateTime;
+    final total = (txn['total'] ?? 0).toDouble();
+    final payment = txn['payment'] as String? ?? 'Cash';
+    final items = txn['items'] as List<dynamic>? ?? [];
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: bgMid,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.receipt_long, color: accentGreen),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Transaction Details',
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+            ),
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close, color: Colors.white54),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                dateFormat.format(date),
+                style: const TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 8),
+              ...items.map((item) {
+                final name = item['productName'] ?? item['name'] ?? 'Item';
+                final qty = item['quantity'] ?? 1;
+                final price = (item['price'] ?? 0).toDouble();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$name × $qty',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      Text(
+                        _formatCurrency(price * qty),
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    _formatCurrency(total),
+                    style: const TextStyle(
+                      color: accentGreen,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Payment Method',
+                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: payment.toLowerCase() == 'cash' 
+                          ? accentGreen.withOpacity(0.2) 
+                          : Colors.blue.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      payment,
+                      style: TextStyle(
+                        color: payment.toLowerCase() == 'cash' ? accentGreen : Colors.blue,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
 class _TopBar extends StatelessWidget {
+  final bool isSmall;
+  
+  const _TopBar({this.isSmall = false});
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: EdgeInsets.symmetric(horizontal: isSmall ? 16 : 24, vertical: 16),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: Color(0xFF1F3A40))),
       ),
@@ -591,57 +1450,98 @@ class _TopBar extends StatelessWidget {
           const SizedBox(width: 8),
           const Text('ChillTent', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           const Spacer(),
-          InkWell(
-            onTap: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const MainHubScreen()),
-              );
-            },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text('Home', style: TextStyle(color: Colors.white70)),
+          if (isSmall)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.menu, color: Colors.white70),
+              color: bgMid,
+              onSelected: (value) {
+                switch (value) {
+                  case 'home':
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const MainHubScreen()),
+                    );
+                    break;
+                  case 'inventory':
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const goods()),
+                    );
+                    break;
+                  case 'staff':
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const UsersScreen()),
+                    );
+                    break;
+                  case 'reports':
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const Reports()),
+                    );
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'home', child: Text('Home', style: TextStyle(color: Colors.white70))),
+                const PopupMenuItem(value: 'inventory', child: Text('Inventory', style: TextStyle(color: Colors.white70))),
+                const PopupMenuItem(value: 'staff', child: Text('Staff', style: TextStyle(color: Colors.white70))),
+                const PopupMenuItem(value: 'reports', child: Text('Reports', style: TextStyle(color: accentGreen, fontWeight: FontWeight.bold))),
+              ],
+            )
+          else ...[
+            InkWell(
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MainHubScreen()),
+                );
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('Home', style: TextStyle(color: Colors.white70)),
+              ),
             ),
-          ),
-          const SizedBox(width: 24),
-          InkWell(
-            onTap: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const goods()),
-              );
-            },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text('Inventory', style: TextStyle(color: Colors.white70)),
+            const SizedBox(width: 24),
+            InkWell(
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const goods()),
+                );
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('Inventory', style: TextStyle(color: Colors.white70)),
+              ),
             ),
-          ),
-          const SizedBox(width: 24),
-          InkWell(
-            onTap: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const UsersScreen()),
-              );
-            },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text('Staff', style: TextStyle(color: Colors.white70)),
+            const SizedBox(width: 24),
+            InkWell(
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const UsersScreen()),
+                );
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('Staff', style: TextStyle(color: Colors.white70)),
+              ),
             ),
-          ),
-          const SizedBox(width: 24),
-          InkWell(
-            onTap: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const Reports()),
-              );
-            },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text('Reports', style: TextStyle(color: accentGreen, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 24),
+            InkWell(
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const Reports()),
+                );
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('Reports', style: TextStyle(color: accentGreen, fontWeight: FontWeight.bold)),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

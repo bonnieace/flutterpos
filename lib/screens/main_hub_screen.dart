@@ -4,11 +4,13 @@ import 'package:flutter_application_1/pos/goods.dart';
 import 'package:flutter_application_1/pos/inv.dart';
 import 'package:flutter_application_1/pos/pos.dart';
 import 'package:flutter_application_1/pos/reports.dart';
+import 'package:flutter_application_1/pos/reports/salesReports.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
 import 'create_user.dart';
 import 'users.dart';
+import 'package:flutter_application_1/config.dart';
 class MainHubScreen extends StatefulWidget {
   const MainHubScreen({super.key});
 
@@ -70,10 +72,12 @@ class _MainHubScreenState extends State<MainHubScreen> {
                     const SizedBox(height: 24),
                     _GreetingSection(userName: userName),
                     const SizedBox(height: 40),
-                    _ModuleGrid(),
+                    _ModuleGrid(userName: userName, userRole: userRole),
                     const SizedBox(height: 36),
-                    _StatsBar(),
-                    const SizedBox(height: 24),
+                    if (userRole != 'CASHIER') ...[
+                      _StatsBar(),
+                      const SizedBox(height: 24),
+                    ],
                   ],
                 ),
               ),
@@ -119,7 +123,13 @@ class _TopBar extends StatelessWidget {
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.settings_outlined, size: 20),
-                      onPressed: () {},
+                      onPressed: () {
+                        //NAVIGATE TO CONFIG SCREEN
+                        // Navigator.push(
+                        //   context,
+                        //   MaterialPageRoute(builder: (_) => const SystemConfigurationPage()),
+                        // );
+                      },
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -157,7 +167,12 @@ class _TopBar extends StatelessWidget {
                 const SizedBox(width: 12),
                 IconButton(
                   icon: const Icon(Icons.settings_outlined),
-                  onPressed: () {},
+                  onPressed: () {
+                    // Navigator.push(
+                    //   context,
+                    //   MaterialPageRoute(builder: (_) => const SystemConfigurationPage()),
+                    // );
+                  },
                 ),
                 IconButton(
                   icon: const Icon(Icons.logout),
@@ -307,17 +322,96 @@ class _GreetingSection extends StatelessWidget {
 }
 
 class _ModuleGrid extends StatelessWidget {
+  final String userName;
+  final String userRole;
+  
+  const _ModuleGrid({required this.userName, required this.userRole});
+
+  bool get isCashier => userRole == 'CASHIER';
+  
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
     final isTablet = screenWidth >= 768 && screenWidth < 1024;
     
-    int crossAxisCount = 4;
-    if (isMobile) {
-      crossAxisCount = 1;
-    } else if (isTablet) {
-      crossAxisCount = 2;
+    // Determine grid layout based on role and screen size
+    int crossAxisCount;
+    double aspectRatio;
+    
+    if (isCashier) {
+      // Cashiers have 2 cards (Register + Book Keeping)
+      if (isMobile) {
+        crossAxisCount = 1;
+        aspectRatio = 2.5;
+      } else if (isTablet) {
+        crossAxisCount = 2;
+        aspectRatio = 1.8;
+      } else {
+        crossAxisCount = 2;
+        aspectRatio = 2.5;
+      }
+    } else {
+      // Other roles have all modules
+      if (isMobile) {
+        crossAxisCount = 1;
+        aspectRatio = 1.8;
+      } else if (isTablet) {
+        crossAxisCount = 2;
+        aspectRatio = 1.3;
+      } else {
+        crossAxisCount = 4;
+        aspectRatio = 1.4;
+      }
+    }
+    
+    final List<Widget> modules = [
+      _ModuleCard(
+        title: 'Register',
+        subtitle: 'Process sales, manage orders, and handle customer transactions.',
+        icon: Icons.point_of_sale,
+        iconColor: Colors.blue,
+        module: HubModule.register,
+        userName: userName,
+      ),
+      _ModuleCard(
+        title: 'Book Keeping',
+        subtitle: 'View sales reports, payment breakdowns, and transaction history.',
+        icon: Icons.menu_book,
+        iconColor: Colors.teal,
+        module: HubModule.bookKeeping,
+        userName: userName,
+      ),
+    ];
+
+    // Only add other modules if not a cashier
+    if (!isCashier) {
+      modules.addAll([
+        _ModuleCard(
+          title: 'Inventory',
+          subtitle: 'View all products, manage SKUs, pricing, and categories.',
+          icon: Icons.warehouse,
+          iconColor: Colors.purple,
+          module: HubModule.inventory,
+          userName: userName,
+        ),
+        _ModuleCard(
+          title: 'Staff',
+          subtitle: 'Manage employee profiles, permissions, and access control.',
+          icon: Icons.people,
+          iconColor: Colors.pink,
+          module: HubModule.staff,
+          userName: userName,
+        ),
+        _ModuleCard(
+          title: 'Reports',
+          subtitle: 'Sales analytics, end-of-day reports, and staff performance.',
+          icon: Icons.bar_chart,
+          iconColor: Colors.green,
+          module: HubModule.reports,
+          userName: userName,
+        ),
+      ]);
     }
     
     return Padding(
@@ -327,52 +421,9 @@ class _ModuleGrid extends StatelessWidget {
         shrinkWrap: true,
         crossAxisSpacing: isMobile ? 12 : 20,
         mainAxisSpacing: isMobile ? 12 : 20,
-        childAspectRatio: isMobile ? 1.8 : (isTablet ? 1.3 : 1.4),
+        childAspectRatio: aspectRatio,
         physics: const NeverScrollableScrollPhysics(),
-        children: const [
-             _ModuleCard(
-              title: 'Register',
-              subtitle: 'Process sales, manage orders, and handle customer transactions.',
-              icon: Icons.point_of_sale,
-              iconColor: Colors.blue,
-              module: HubModule.register,
-            ),
-
-            //  _ModuleCard(
-            //   title: 'Stock Update',
-            //   subtitle: 'Receive deliveries, adjust quantities, and manage stock intake.',
-            //   icon: Icons.inventory_2,
-            //   iconColor: Colors.orange,
-            //   module: HubModule.stockUpdate,
-            // ),
-
-             _ModuleCard(
-              title: 'Inventory',
-              subtitle: 'View all products, manage SKUs, pricing, and categories.',
-              icon: Icons.warehouse,
-              iconColor: Colors.purple,
-              module: HubModule.inventory,
-            ),
-
-            _ModuleCard(
-              title: 'Staff',
-              subtitle: 'Manage employee profiles, permissions, and access control.',
-              icon: Icons.people,
-              iconColor: Colors.pink,
-              module: HubModule.staff,
-            ),
-
-             _ModuleCard(
-              title: 'Reports',
-              subtitle: 'Sales analytics, end-of-day reports, and staff performance.',
-              icon: Icons.bar_chart,
-              iconColor: Colors.green,
-              module: HubModule.reports,
-            ),
-
-            
-
-        ],
+        children: modules,
       ),
     );
   }
@@ -384,6 +435,7 @@ class _ModuleCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final HubModule module;
+  final String userName;
 
 
   const _ModuleCard({
@@ -392,13 +444,14 @@ class _ModuleCard extends StatelessWidget {
     required this.icon,
     required this.module,   
     required this.iconColor,
+    required this.userName,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => navigateToModule(context, module),
+      onTap: () => navigateToModule(context, module, userName),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -595,12 +648,12 @@ class _Footer extends StatelessWidget {
     );
   }
 }
-void navigateToModule(BuildContext context, HubModule module) {
+void navigateToModule(BuildContext context, HubModule module, String userName) {
   switch (module) {
     case HubModule.register:
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const pos()),
+        MaterialPageRoute(builder: (_) => pos(soldBy: userName)),
       );
       break;
 
@@ -631,6 +684,13 @@ void navigateToModule(BuildContext context, HubModule module) {
         MaterialPageRoute(builder: (_) => const UsersScreen()),
       );
       break;
+
+    case HubModule.bookKeeping:
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SalesReportPage()),
+      );
+      break;
   }
 }
 enum HubModule {
@@ -639,4 +699,5 @@ enum HubModule {
   inventory,
   staff,
   reports,
+  bookKeeping,
 }

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SpiritPOS Configuration - General Settings</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#36e27b",
+              "primary-hover": "#2bc468",
+              "background-light": "#f6f8f7",
+              "background-dark": "#112117",
+              "surface-dark": "#1a2c22", 
+              "surface-hover": "#22382c",
+              "surface-input": "#254632", 
+              "text-main": "#ffffff",
+              "text-muted": "#95c6a9",
+              "border-color": "#254632",
+              "danger": "#ef4444",
+            },
+            fontFamily: {
+              "display": ["Spline Sans", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "2xl": "2rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }.toggle-checkbox:checked {
+            right: 0;
+            border-color: #36e27b;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #36e27b;
+        }
+    </style>
+</head>
+<body class="font-display bg-background-dark text-text-main h-screen flex overflow-hidden selection:bg-primary selection:text-background-dark">
+<aside class="w-64 bg-surface-dark border-r border-border-color flex flex-col z-20 shrink-0">
+<div class="h-20 flex items-center px-6 border-b border-border-color gap-3">
+<div class="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+<span class="material-symbols-outlined text-lg">local_bar</span>
+</div>
+<span class="text-xl font-bold tracking-tight">SpiritPOS</span>
+</div>
+<nav class="flex-1 overflow-y-auto py-6 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">dashboard</span>
+<span class="font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">point_of_sale</span>
+<span class="font-medium">POS Terminal</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">inventory_2</span>
+<span class="font-medium">Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">people</span>
+<span class="font-medium">Staff &amp; Users</span>
+</a>
+<div class="pt-4 pb-2 px-3">
+<p class="text-xs font-bold text-text-muted/50 uppercase tracking-wider">Configuration Hub</p>
+</div>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/10 shadow-lg shadow-primary/5" href="#">
+<span class="material-symbols-outlined fill-1">settings</span>
+<span class="font-medium">General Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">store</span>
+<span class="font-medium">Locations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">receipt_long</span>
+<span class="font-medium">Taxes &amp; Receipts</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">security</span>
+<span class="font-medium">Security</span>
+</a>
+</nav>
+<div class="p-4 border-t border-border-color bg-[#15241c]">
+<div class="flex items-center gap-3">
+<div class="size-9 rounded-full bg-gradient-to-tr from-primary to-emerald-600 flex items-center justify-center text-background-dark font-bold text-sm">
+                    JD
+                </div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-white">John Doe</span>
+<span class="text-xs text-text-muted">Administrator</span>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col bg-background-dark overflow-hidden relative">
+<div class="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
+<header class="h-20 flex items-center justify-between px-8 border-b border-border-color bg-background-dark/80 backdrop-blur-md z-10 shrink-0">
+<div>
+<nav class="flex items-center text-sm text-text-muted mb-1">
+<span>Configuration Hub</span>
+<span class="material-symbols-outlined text-base mx-2">chevron_right</span>
+<span class="text-white">General Settings</span>
+</nav>
+<h1 class="text-2xl font-bold text-white tracking-tight">System Configuration</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-text-muted hover:text-white transition-colors">
+<span class="material-symbols-outlined text-lg">help</span>
+                    Help
+                </button>
+<button class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-background-dark px-5 py-2 rounded-lg font-bold transition-all shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-lg">save</span>
+                    Save Changes
+                </button>
+</div>
+</header>
+<div class="px-8 pt-6 pb-0 border-b border-border-color bg-surface-dark/30 shrink-0">
+<div class="flex items-center gap-8">
+<button class="pb-4 border-b-2 border-primary text-primary font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-lg fill-1">tune</span>
+                    General
+                </button>
+<button class="pb-4 border-b-2 border-transparent text-text-muted hover:text-white font-medium flex items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-lg">language</span>
+                    Localization
+                </button>
+<button class="pb-4 border-b-2 border-transparent text-text-muted hover:text-white font-medium flex items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-lg">notifications</span>
+                    Notifications
+                </button>
+<button class="pb-4 border-b-2 border-transparent text-text-muted hover:text-white font-medium flex items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-lg">backup</span>
+                    Backup &amp; Data
+                </button>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-8 no-scrollbar">
+<div class="max-w-6xl mx-auto space-y-6">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<section class="lg:col-span-2 bg-surface-dark rounded-2xl border border-border-color p-6 shadow-sm">
+<div class="flex items-center gap-2 mb-6 text-primary">
+<span class="material-symbols-outlined">storefront</span>
+<h2 class="text-lg font-semibold text-white">Store Identity</h2>
+</div>
+<div class="flex flex-col md:flex-row gap-8">
+<div class="shrink-0 flex flex-col gap-2">
+<label class="text-sm font-medium text-text-muted">Company Logo</label>
+<div class="group relative w-32 h-32 rounded-xl bg-surface-input border-2 border-dashed border-[#3a5e46] hover:border-primary hover:bg-[#2b503a] transition-all flex flex-col items-center justify-center cursor-pointer overflow-hidden">
+<span class="material-symbols-outlined text-3xl text-text-muted group-hover:text-primary transition-colors">cloud_upload</span>
+<span class="text-xs text-text-muted mt-2 group-hover:text-white">Upload</span>
+<input accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer" type="file"/>
+</div>
+<p class="text-xs text-text-muted/60 max-w-[128px] text-center">Max 2MB. PNG or SVG preferred.</p>
+</div>
+<div class="flex-1 space-y-4">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="space-y-1">
+<label class="text-sm font-medium text-text-muted">Company Name</label>
+<input class="w-full bg-surface-input border-transparent focus:border-primary focus:ring-0 rounded-lg text-white placeholder-text-muted/50 transition-all h-10 px-3" type="text" value="High Spirits Liquors"/>
+</div>
+<div class="space-y-1">
+<label class="text-sm font-medium text-text-muted">Store ID</label>
+<input class="w-full bg-[#15241c] border-transparent text-text-muted/70 rounded-lg h-10 px-3 cursor-not-allowed" disabled="" type="text" value="STR-8092"/>
+</div>
+</div>
+<div class="space-y-1">
+<label class="text-sm font-medium text-text-muted">Legal Entity Name</label>
+<input class="w-full bg-surface-input border-transparent focus:border-primary focus:ring-0 rounded-lg text-white placeholder-text-muted/50 transition-all h-10 px-3" type="text" value="High Spirits LLC"/>
+</div>
+<div class="space-y-1">
+<label class="text-sm font-medium text-text-muted">Slogan / Tagline (Optional)</label>
+<input class="w-full bg-surface-input border-transparent focus:border-primary focus:ring-0 rounded-lg text-white placeholder-text-muted/50 transition-all h-10 px-3" placeholder="e.g. Premium spirits for premium people" type="text"/>
+</div>
+</div>
+</div>
+</section>
+<section class="bg-surface-dark rounded-2xl border border-border-color p-6 shadow-sm flex flex-col">
+<div class="flex items-center gap-2 mb-6 text-primary">
+<span class="material-symbols-outlined">palette</span>
+<h2 class="text-lg font-semibold text-white">Interface Theme</h2>
+</div>
+<div class="flex-1 flex flex-col gap-6">
+<div class="bg-surface-input/50 p-4 rounded-xl border border-border-color">
+<div class="flex items-center justify-between mb-2">
+<span class="text-sm font-medium text-white">System Mode</span>
+</div>
+<div class="grid grid-cols-2 gap-3 mt-3">
+<label class="relative cursor-pointer group">
+<input checked="" class="peer sr-only" name="theme" type="radio" value="dark"/>
+<div class="flex flex-col items-center gap-2 p-3 rounded-lg border border-border-color bg-background-dark peer-checked:border-primary peer-checked:bg-primary/10 transition-all">
+<span class="material-symbols-outlined text-text-muted peer-checked:text-primary">dark_mode</span>
+<span class="text-xs font-medium text-text-muted peer-checked:text-white">Dark</span>
+</div>
+</label>
+<label class="relative cursor-pointer group">
+<input class="peer sr-only" name="theme" type="radio" value="light"/>
+<div class="flex flex-col items-center gap-2 p-3 rounded-lg border border-border-color bg-[#e0e2e1] peer-checked:border-primary peer-checked:bg-primary/10 transition-all opacity-60 hover:opacity-100">
+<span class="material-symbols-outlined text-gray-600 peer-checked:text-primary">light_mode</span>
+<span class="text-xs font-medium text-gray-600 peer-checked:text-white">Light</span>
+</div>
+</label>
+</div>
+</div>
+<div class="space-y-3">
+<label class="flex items-center justify-between p-3 rounded-lg bg-surface-input/30 hover:bg-surface-input/50 cursor-pointer transition-colors">
+<span class="text-sm text-text-muted">Compact Mode</span>
+<div class="relative inline-block w-10 h-5 align-middle select-none transition duration-200 ease-in">
+<input class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-surface-input checked:right-0 checked:border-primary" id="compact" name="compact" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-5 rounded-full bg-surface-input cursor-pointer" for="compact"></label>
+</div>
+</label>
+<label class="flex items-center justify-between p-3 rounded-lg bg-surface-input/30 hover:bg-surface-input/50 cursor-pointer transition-colors">
+<span class="text-sm text-text-muted">High Contrast</span>
+<div class="relative inline-block w-10 h-5 align-middle select-none transition duration-200 ease-in">
+<input class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-surface-input checked:right-0 checked:border-primary" id="contrast" name="contrast" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-5 rounded-full bg-surface-input cursor-pointer" for="contrast"></label>
+</div>
+</label>
+</div>
+</div>
+</section>
+</div>
+<section class="bg-surface-dark rounded-2xl border border-border-color p-6 shadow-sm">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">contacts</span>
+<div class="flex flex-col">
+<h2 class="text-lg font-semibold text-white leading-tight">Key Contact Persons</h2>
+<p class="text-xs text-text-muted font-normal">Manage authorized contacts for system alerts and billing.</p>
+</div>
+</div>
+<button class="flex items-center gap-2 bg-surface-input hover:bg-surface-input/80 text-primary border border-primary/20 hover:border-primary px-4 py-2 rounded-lg text-sm font-bold transition-all">
+<span class="material-symbols-outlined text-lg">add</span>
+                            Add Contact
+                        </button>
+</div>
+<div class="w-full overflow-hidden rounded-xl border border-border-color">
+<table class="w-full text-left text-sm">
+<thead class="bg-surface-input/50 text-text-muted uppercase text-xs tracking-wider font-semibold">
+<tr>
+<th class="px-6 py-3">Name</th>
+<th class="px-6 py-3">Role</th>
+<th class="px-6 py-3">Contact Info</th>
+<th class="px-6 py-3 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-color bg-surface-dark">
+<tr class="group hover:bg-surface-hover transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs border border-purple-500/30">
+                                                MS
+                                            </div>
+<span class="font-medium text-white">Michael Scott</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-muted">
+                                        Regional Manager
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5 text-white">
+<span class="material-symbols-outlined text-xs text-primary">mail</span>
+                                                michael@highspirits.com
+                                            </div>
+<div class="flex items-center gap-1.5 text-text-muted text-xs">
+<span class="material-symbols-outlined text-xs">call</span>
+                                                +1 (555) 019-2834
+                                            </div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<div class="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 rounded-lg hover:bg-surface-input text-text-muted hover:text-white transition-colors" title="Edit">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+<button class="p-1.5 rounded-lg hover:bg-danger/10 text-text-muted hover:text-danger transition-colors" title="Delete">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="group hover:bg-surface-hover transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs border border-blue-500/30">
+                                                JH
+                                            </div>
+<span class="font-medium text-white">Jim Halpert</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-muted">
+                                        Sales Lead
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5 text-white">
+<span class="material-symbols-outlined text-xs text-primary">mail</span>
+                                                jim.h@highspirits.com
+                                            </div>
+<div class="flex items-center gap-1.5 text-text-muted text-xs">
+<span class="material-symbols-outlined text-xs">call</span>
+                                                +1 (555) 012-3456
+                                            </div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<div class="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 rounded-lg hover:bg-surface-input text-text-muted hover:text-white transition-colors" title="Edit">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+<button class="p-1.5 rounded-lg hover:bg-danger/10 text-text-muted hover:text-danger transition-colors" title="Delete">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="group hover:bg-surface-hover transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-xs border border-orange-500/30">
+                                                DB
+                                            </div>
+<span class="font-medium text-white">Dwight B.</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-muted">
+                                        Inventory Specialist
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5 text-white">
+<span class="material-symbols-outlined text-xs text-primary">mail</span>
+                                                beets@highspirits.com
+                                            </div>
+<div class="flex items-center gap-1.5 text-text-muted text-xs">
+<span class="material-symbols-outlined text-xs">call</span>
+                                                +1 (555) 999-8888
+                                            </div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<div class="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 rounded-lg hover:bg-surface-input text-text-muted hover:text-white transition-colors" title="Edit">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+<button class="p-1.5 rounded-lg hover:bg-danger/10 text-text-muted hover:text-danger transition-colors" title="Delete">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<div class="flex justify-end pt-4 pb-8">
+<span class="text-xs text-text-muted/40 font-mono">Configuration ID: CFG-2023-X99 • Last modified by Admin</span>
+</div>
+</div>
+</div>
+</main>
+
+</body></html>

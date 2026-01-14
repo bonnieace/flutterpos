@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final passwordFocus = FocusNode();
 
   String? errorMessage; // For displaying errors
+  bool isLoading = false; // For button loading state
 
   bool get isMobile {
     final width = MediaQuery.of(context).size.width;
@@ -61,8 +62,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signIn() async {
+    if (isLoading) return; // Prevent multiple clicks
     setState(() {
       errorMessage = null;
+      isLoading = true;
     });
     try {
       final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -91,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (role == 'cashier') {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const pos()),
+            MaterialPageRoute(builder: (context) => const MainHubScreen()),
           );
         } else {
           Navigator.pushReplacement(
@@ -103,10 +106,12 @@ class _LoginScreenState extends State<LoginScreen> {
     } on FirebaseAuthException catch (e) {
       setState(() {
         errorMessage = e.message ?? "Login failed";
+        isLoading = false;
       });
     } catch (e) {
       setState(() {
         errorMessage = "An unexpected error occurred";
+        isLoading = false;
       });
     }
   }
@@ -162,7 +167,8 @@ class _LoginScreenState extends State<LoginScreen> {
           PillButton(
             text: "UNLOCK REGISTER →",
             filled: true,
-            onTap: _signIn,
+            onTap: isLoading ? null : _signIn,
+            isLoading: isLoading,
           ),
           if (isMobile) const SizedBox(height: 40) else const Spacer(),
         ],

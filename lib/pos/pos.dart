@@ -12,14 +12,13 @@ import 'package:flutter_application_1/pos/nav_menu.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:lottie/lottie.dart';
 
-import 'package:flutter_typeahead/flutter_typeahead.dart';
+// import 'package:flutter_typeahead/flutter_typeahead.dart';
 import '../screens/main_hub_screen.dart';
 import '../login_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 
 import 'package:path_provider/path_provider.dart';
 
@@ -32,23 +31,36 @@ import 'package:flutter_esc_pos_network/flutter_esc_pos_network.dart';
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/shift_service.dart';
 
 class pos extends StatefulWidget {
-  const pos({super.key});
-  
+  final String soldBy;
+
+  const pos({super.key, required this.soldBy});
 
   @override
   _posState createState() => _posState();
 }
+
 class ProductInfo {
   final String name;
   final double price;
   final String category;
   final String imageUrl;
   final String sku;
-  ProductInfo({required this.name, required this.price, required this.category, required this.imageUrl, required this.sku});
+  ProductInfo({
+    required this.name,
+    required this.price,
+    required this.category,
+    required this.imageUrl,
+    required this.sku,
+  });
 }
+
 class _posState extends State<pos> {
+  String get soldBy => widget.soldBy;
+
   List<ItemInfo> items = [];
   List<ProductInfo> inventoryItems = [];
   Map<String, double> productPrices = {};
@@ -72,12 +84,18 @@ class _posState extends State<pos> {
   int _currentPage = 1;
   final int _itemsPerPage = 250;
 
+  // Shift management
+  final ShiftService _shiftService = ShiftService();
+  Map<String, dynamic>? _currentShift;
+  bool _isCheckingShift = true;
+
   @override
   void initState() {
     super.initState();
     _initializeFirebase();
     _fetchProductData();
     _fetchCategories();
+    _checkAndInitializeShift();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.toLowerCase();
@@ -85,231 +103,817 @@ class _posState extends State<pos> {
       });
     });
   }
-Future<List<int>> buildTestReceipt({
-  required List<ItemInfo> invoiceItems,
-  required String customerName,
-  required String salesRep,
-  required String paymentMethod,
-  required double totalAmount,
-}) async {
-  final profile = await CapabilityProfile.load();
-  final generator = Generator(PaperSize.mm80, profile);
 
-  List<int> bytes = [];
+  Future<void> _checkAndInitializeShift() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _isCheckingShift = false);
+      return;
+    }
 
-  // Store Header
-  bytes += generator.text(
-    'Chilltent Lounge',
-    styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
-  );
-  bytes += generator.text(
-    'Juja,Kiambu',
-    styles: const PosStyles(align: PosAlign.center),
-  );
-  bytes += generator.feed(1);
+    final openShift = await _shiftService.getOpenShift(user.uid);
 
-  // Date and Time
-  final now = DateTime.now();
-  final dateStr = DateFormat('dd/MM/yyyy HH:mm:ss').format(now);
-  bytes += generator.text(
-    dateStr,
-    styles: const PosStyles(align: PosAlign.center),
-  );
-  bytes += generator.feed(1);
-
-  bytes += generator.hr();
-
-  // Customer and Sales Info
-  if (customerName.isNotEmpty) {
-    bytes += generator.text('Customer: $customerName');
+    if (openShift != null) {
+      setState(() {
+        _currentShift = openShift;
+        _isCheckingShift = false;
+      });
+    } else {
+      setState(() => _isCheckingShift = false);
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showStartShiftDialog();
+        });
+      }
+    }
   }
-  if (salesRep.isNotEmpty) {
-    bytes += generator.text('Sales Rep: $salesRep');
-  }
-  bytes += generator.text('Payment: $paymentMethod');
-  
-  bytes += generator.hr();
 
-  // Column Headers
-  bytes += generator.row([
-    PosColumn(
-      text: 'Item',
-      width: 6,
-      styles: const PosStyles(bold: true),
-    ),
-    PosColumn(
-      text: 'Qty',
-      width: 2,
-      styles: const PosStyles(bold: true, align: PosAlign.center),
-    ),
-    PosColumn(
-      text: 'Price',
-      width: 2,
-      styles: const PosStyles(bold: true, align: PosAlign.right),
-    ),
-    PosColumn(
-      text: 'Total',
-      width: 2,
-      styles: const PosStyles(bold: true, align: PosAlign.right),
-    ),
-  ]);
+  void _showStartShiftDialog() {
+    final openingCashController = TextEditingController();
 
-  bytes += generator.hr();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header with icon and title
+              Center(
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.access_time,
+                        color: Colors.teal,
+                        size: 38,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Start Your Shift',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              // Business Date
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_today,
+                      size: 18,
+                      color: Colors.teal,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Business Date: ${_shiftService.getBusinessDate()}',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.grey[800],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+              // Opening Cash Input
+              Text(
+                'Enter Opening Cash (Optional)',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.teal[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: openingCashController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Opening Cash',
+                  prefixIcon: const Icon(Icons.money),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const MainHubScreen(),
+                          ),
+                        );
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.teal,
+                        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user == null) return;
 
-  // Items
-  for (var item in invoiceItems) {
-    double itemTotal = item.quantity * item.price;
-    
-    // Product name (may wrap to multiple lines)
-    bytes += generator.text(
-      item.productName,
-      styles: const PosStyles(align: PosAlign.left),
+                        final openingCash =
+                            double.tryParse(openingCashController.text) ?? 0.0;
+
+                        final shift = await _shiftService.startShift(
+                          staffId: user.uid,
+                          staffName: soldBy,
+                          openingCash: openingCash,
+                        );
+
+                        if (shift != null) {
+                          setState(() => _currentShift = shift);
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Shift started successfully!'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Start Shift'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
-    
-    // Quantity, Price, Total on one line
+  }
+
+  // Replace the existing _handleExitToHub method
+
+  Future<void> _handleExitToHub() async {
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          width: 360,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.exit_to_app_rounded,
+                  color: Colors.orange,
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Title
+              const Text(
+                'Leaving Register',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Subtitle
+              Text(
+                'What would you like to do?',
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+
+              // Option Cards
+              // Just Leaving Option
+              InkWell(
+                onTap: () => Navigator.pop(context, 'leave'),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.teal.withOpacity(0.05),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.pause_circle_outline,
+                          color: Colors.teal,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Just Stepping Away',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.teal,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Keep shift open, go to main menu',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: Colors.teal[300]),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Close Shift Option
+              InkWell(
+                onTap: () => Navigator.pop(context, 'close'),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.red.withOpacity(0.05),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.stop_circle_outlined,
+                          color: Colors.red,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'End My Shift',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.red,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Close out and view summary',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: Colors.red[300]),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Cancel Button
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, 'cancel'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result == 'close') {
+      await _showCloseShiftDialog();
+    } else if (result == 'leave') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainHubScreen()),
+      );
+    }
+  }
+
+  Future<void> _showCloseShiftDialog() async {
+    if (_currentShift == null) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainHubScreen()),
+      );
+      return;
+    }
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Get shift summary
+    final summary = await _shiftService.getShiftSummary(
+      _currentShift!['shiftId'],
+    );
+    final closingCashController = TextEditingController();
+
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Close Shift Summary'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.receipt_long, size: 48, color: Colors.teal[700]),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Shift Summary',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                color: Colors.grey[50],
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSummaryRow(
+                        'Business Date',
+                        _currentShift!['businessDate'] ?? 'N/A',
+                      ),
+                      _buildSummaryRow(
+                        'Total Sales',
+                        'Ksh ${(summary?['totalSales'] ?? 0).toStringAsFixed(2)}',
+                      ),
+                      _buildSummaryRow(
+                        'Transactions',
+                        '${summary?['transactionCount'] ?? 0}',
+                      ),
+                      const Divider(height: 24),
+                      const Text(
+                        'Payment Breakdown:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (summary?['paymentBreakdown'] != null)
+                        ...((summary!['paymentBreakdown']
+                                as Map<String, double>)
+                            .entries
+                            .map(
+                              (e) => _buildSummaryRow(
+                                e.key,
+                                'Ksh ${e.value.toStringAsFixed(2)}',
+                                isPayment: true,
+                              ),
+                            )),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Enter Closing Cash Count',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.teal[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: closingCashController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Closing Cash Count',
+                  prefixIcon: const Icon(Icons.money),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user == null) return;
+
+              final closingCash =
+                  double.tryParse(closingCashController.text) ?? 0.0;
+
+              final success = await _shiftService.closeShift(
+                staffId: user.uid,
+                shiftId: _currentShift!['shiftId'],
+                closingCash: closingCash,
+              );
+
+              if (success) {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MainHubScreen()),
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Shift closed successfully!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+            child: const Text(
+              'Close Shift',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(
+    String label,
+    String value, {
+    bool isPayment = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isPayment ? Colors.teal[700] : Colors.grey[700],
+              fontWeight: isPayment ? FontWeight.w500 : FontWeight.normal,
+              fontSize: isPayment ? 15 : 14,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isPayment ? Colors.teal[900] : Colors.black,
+              fontSize: isPayment ? 15 : 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<int>> buildTestReceipt({
+    required List<ItemInfo> invoiceItems,
+    required String customerName,
+    required String salesRep,
+    required String paymentMethod,
+    required double totalAmount,
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+
+    List<int> bytes = [];
+
+    // Store Header
+    bytes += generator.text(
+      'Acacia-Chilltent Lounge',
+      styles: const PosStyles(
+        align: PosAlign.center,
+        bold: true,
+        height: PosTextSize.size2,
+        width: PosTextSize.size2,
+      ),
+    );
+    bytes += generator.text(
+      'Juja,Kalimoni',
+      styles: const PosStyles(align: PosAlign.center),
+    );
+    bytes += generator.feed(1);
+
+    // Date and Time
+    final now = DateTime.now();
+    final dateStr = DateFormat('dd/MM/yyyy HH:mm:ss').format(now);
+    bytes += generator.text(
+      dateStr,
+      styles: const PosStyles(align: PosAlign.center),
+    );
+    bytes += generator.feed(1);
+
+    bytes += generator.hr();
+
+    // Served by
+    bytes += generator.text(
+      'Served by: $soldBy',
+      styles: const PosStyles(align: PosAlign.center),
+    );
+    bytes += generator.feed(1);
+
+    // Column Headers
     bytes += generator.row([
+      PosColumn(text: 'Item', width: 6, styles: const PosStyles(bold: true)),
       PosColumn(
-        text: '',
-        width: 6,
+        text: 'Qty',
+        width: 2,
+        styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
       PosColumn(
-        text: '${item.quantity.toStringAsFixed(0)}',
+        text: 'Price',
         width: 2,
-        styles: const PosStyles(align: PosAlign.center),
+        styles: const PosStyles(bold: true, align: PosAlign.right),
       ),
       PosColumn(
-        text: '${item.price.toStringAsFixed(2)}',
+        text: 'Total',
         width: 2,
-        styles: const PosStyles(align: PosAlign.right),
-      ),
-      PosColumn(
-        text: '${itemTotal.toStringAsFixed(2)}',
-        width: 2,
-        styles: const PosStyles(align: PosAlign.right),
+        styles: const PosStyles(bold: true, align: PosAlign.right),
       ),
     ]);
-  }
 
-  bytes += generator.hr();
+    bytes += generator.hr();
 
-  // Total
-  bytes += generator.row([
-    PosColumn(
-      text: 'TOTAL',
-      width: 8,
-      styles: const PosStyles(bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
-    ),
-    PosColumn(
-      text: 'KSh ${totalAmount.toStringAsFixed(2)}',
-      width: 4,
-      styles: const PosStyles(bold: true, align: PosAlign.right,),
-    ),
-  ]);
+    // Items
+    for (var item in invoiceItems) {
+      double itemTotal = item.quantity * item.price;
 
-  bytes += generator.hr();
-  
-  // Footer
-  bytes += generator.text(
-    'Thank you for shopping with us',
-    styles: const PosStyles(align: PosAlign.center),
-  );
-  bytes += generator.feed(1);
-  bytes += generator.text(
-    'Paybill: 303030',
-    styles: const PosStyles(align: PosAlign.center),
-  );
-  bytes += generator.text(
-    'A/C: 2049380324',
-    styles: const PosStyles(align: PosAlign.center),
-  );
+      // Product name (may wrap to multiple lines)
+      bytes += generator.text(
+        item.productName,
+        styles: const PosStyles(align: PosAlign.left),
+      );
 
-  bytes += generator.feed(2);
-  bytes += generator.cut();
-  
-  print('Receipt Bytes Generated: ${bytes.length} bytes');
-  
-  // Send to Flask printer endpoint
-  const String printerEndpoint = 'http://192.168.100.65:5000/print';
-  
-  try {
-    print('Sending receipt to printer endpoint...');
-    
-    // Send as JSON array of byte values
-    final response = await http.post(
-      Uri.parse(printerEndpoint),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(bytes),
-    ).timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {
-        throw Exception('Request timeout');
-      },
+      // Quantity, Price, Total on one line
+      bytes += generator.row([
+        PosColumn(text: '', width: 6),
+        PosColumn(
+          text: '${item.quantity.toStringAsFixed(0)}',
+          width: 2,
+          styles: const PosStyles(align: PosAlign.center),
+        ),
+        PosColumn(
+          text: '${item.price.toStringAsFixed(2)}',
+          width: 2,
+          styles: const PosStyles(align: PosAlign.right),
+        ),
+        PosColumn(
+          text: '${itemTotal.toStringAsFixed(2)}',
+          width: 2,
+          styles: const PosStyles(align: PosAlign.right),
+        ),
+      ]);
+    }
+
+    bytes += generator.hr();
+
+    // Total
+    bytes += generator.row([
+      PosColumn(
+        text: 'TOTAL',
+        width: 8,
+        styles: const PosStyles(
+          bold: true,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+        ),
+      ),
+      PosColumn(
+        text: 'KSh ${totalAmount.toStringAsFixed(2)}',
+        width: 4,
+        styles: const PosStyles(bold: true, align: PosAlign.right),
+      ),
+    ]);
+
+    bytes += generator.hr();
+
+    // Footer
+
+    bytes += generator.feed(1);
+
+    bytes += generator.text(
+      'Till No: 6 2 4 5 0 7 7',
+      styles: const PosStyles(align: PosAlign.center),
     );
-    
-    print('Response status: ${response.statusCode}');
-    print('Response body: ${response.body}');
-    
-    if (response.statusCode == 200) {
-      final responseData = jsonDecode(response.body);
-      
-      if (responseData['success'] == true) {
-        print('Receipt printed successfully via endpoint');
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Receipt printed successfully'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
+    bytes += generator.feed(1);
+    bytes += generator.text(
+      'Name: CHILLTENT LOUNGE',
+      styles: const PosStyles(align: PosAlign.center),
+    );
+
+    bytes += generator.feed(2);
+    bytes += generator.cut();
+
+    print('Receipt Bytes Generated: ${bytes.length} bytes');
+
+    // Send to Flask printer endpoint
+    const String printerEndpoint = 'http://192.168.100.65:5000/print';
+
+    try {
+      print('Sending receipt to printer endpoint...');
+
+      // Send as JSON array of byte values
+      final response = await http
+          .post(
+            Uri.parse(printerEndpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(bytes),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Request timeout');
+            },
           );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        if (responseData['success'] == true) {
+          print('Receipt printed successfully via endpoint');
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Receipt printed successfully'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          print('Print failed: ${responseData['error']}');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Print failed: ${responseData['error']}'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
         }
       } else {
-        print('Print failed: ${responseData['error']}');
+        final errorMsg = 'Server error: ${response.statusCode}';
+        print(errorMsg);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Print failed: ${responseData['error']}'),
-              backgroundColor: Colors.orange,
+              content: Text(errorMsg),
+              backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
           );
         }
       }
-    } else {
-      final errorMsg = 'Server error: ${response.statusCode}';
-      print(errorMsg);
+    } catch (e) {
+      print('Error sending to printer endpoint: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMsg),
+            content: Text('Print error: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
         );
       }
     }
-  } catch (e) {
-    print('Error sending to printer endpoint: $e');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Print error: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
+
+    return bytes;
   }
-  
-  return bytes;
-}
-  
+
   Future<void> _fetchCategories() async {
     try {
-      QuerySnapshot catSnapshot = await FirebaseFirestore.instance.collection('categories').get();
+      QuerySnapshot catSnapshot = await FirebaseFirestore.instance
+          .collection('categories')
+          .get();
       List<String> fetchedCategories = ['All Products'];
       for (var doc in catSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
@@ -332,23 +936,31 @@ Future<List<int>> buildTestReceipt({
 
   Future<void> _fetchProductData() async {
     try {
-      QuerySnapshot productSnapshot =
-          await FirebaseFirestore.instance.collection('alcohol').get();
+      QuerySnapshot productSnapshot = await FirebaseFirestore.instance
+          .collection('alcohol')
+          .get();
 
       List<ProductInfo> products = [];
       Map<String, double> prices = {};
 
       for (QueryDocumentSnapshot doc in productSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
-        String name = data['name'] ?? ''  ;
-        String sku =  data['SKU'] ?? ''  ;
+        String name = data['name'] ?? '';
+        String sku = data['SKU'] ?? '';
         String category = data['category']?.toString() ?? 'Others';
         double price = double.tryParse(data['price']?.toString() ?? '') ?? 0.0;
         String imageUrl = data['image']?.toString() ?? '';
         if (name.isNotEmpty) {
-          products.add(ProductInfo(name: name, price: price, category: category, imageUrl: imageUrl,sku:sku));
+          products.add(
+            ProductInfo(
+              name: name,
+              price: price,
+              category: category,
+              imageUrl: imageUrl,
+              sku: sku,
+            ),
+          );
           prices[name] = price;
-          
         }
       }
 
@@ -364,11 +976,12 @@ Future<List<int>> buildTestReceipt({
   List<ProductInfo> _getFilteredProducts() {
     final filtered = inventoryItems.where((product) {
       final matchesSearch = product.name.toLowerCase().contains(_searchQuery);
-      final matchesCategory = _selectedCategory == 'All Products' ||
+      final matchesCategory =
+          _selectedCategory == 'All Products' ||
           product.category == _selectedCategory;
       return matchesSearch && matchesCategory;
     }).toList();
-    
+
     // Sort alphabetically by product name
     filtered.sort((a, b) => a.name.compareTo(b.name));
     return filtered;
@@ -383,7 +996,10 @@ Future<List<int>> buildTestReceipt({
       startIndex = 0;
       endIndex = _itemsPerPage;
     }
-    return filtered.sublist(startIndex, endIndex > filtered.length ? filtered.length : endIndex);
+    return filtered.sublist(
+      startIndex,
+      endIndex > filtered.length ? filtered.length : endIndex,
+    );
   }
 
   int _getTotalPages() {
@@ -391,18 +1007,433 @@ Future<List<int>> buildTestReceipt({
     return (filtered.length / _itemsPerPage).ceil();
   }
 
-
+  // Responsive breakpoint
+  static const double _mobileBreakpoint = 768.0;
 
   @override
   Widget build(BuildContext context) {
-    
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isMobile = constraints.maxWidth < _mobileBreakpoint;
+
+        if (isMobile) {
+          return _buildMobileLayout(context);
+        } else {
+          return _buildDesktopLayout(context);
+        }
+      },
+    );
+  }
+
+  // Mobile Layout with Bottom Sheet Cart
+  Widget _buildMobileLayout(BuildContext context) {
+    double totalAmount = calculateItemsTotal(items);
+    List<ProductInfo> paginatedProducts = _getPaginatedProducts();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header - Compact for mobile
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Sales',
+                          style: TextStyle(
+                            fontSize: 20.0,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        Text(
+                          DateFormat('MMM dd, yyyy').format(DateTime.now()),
+                          style: TextStyle(
+                            fontSize: 11.0,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Cart Pill Button
+                  GestureDetector(
+                    onTap: () => _showCartBottomSheet(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12.0,
+                        vertical: 8.0,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.teal,
+                        borderRadius: BorderRadius.circular(20.0),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Badge(
+                            label: Text(
+                              items.length.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                            ),
+                            isLabelVisible: items.isNotEmpty,
+                            child: const Icon(
+                              Icons.shopping_cart,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 8.0),
+                          Text(
+                            'Ksh ${totalAmount.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8.0),
+                  IconButton(
+                    icon: const Icon(Icons.logout),
+                    color: Colors.teal[800],
+                    onPressed: () => _handleExitToHub(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8.0),
+
+              // Search Bar - Compact
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search products...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8.0),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8.0),
+
+              // Category Chips - Horizontal Scroll
+              SizedBox(
+                height: 36,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: categories.map((category) {
+                    bool isSelected = _selectedCategory == category;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: FilterChip(
+                        label: Text(category),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedCategory = category;
+                          });
+                        },
+                        backgroundColor: Colors.white,
+                        selectedColor: Colors.teal,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 8.0),
+
+              // Product Grid - 2 columns for mobile
+              Expanded(
+                child: inventoryItems.isEmpty
+                    ? Center(
+                        child: Lottie.asset(
+                          'images/SandyLoading.json',
+                          fit: BoxFit.scaleDown,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(
+                              Icons.shopping_bag,
+                              color: Colors.grey[400],
+                              size: 48,
+                            );
+                          },
+                        ),
+                      )
+                    : GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 0.85,
+                              crossAxisSpacing: 8.0,
+                              mainAxisSpacing: 8.0,
+                            ),
+                        itemCount: paginatedProducts.length,
+                        itemBuilder: (context, index) {
+                          final product = paginatedProducts[index];
+                          bool hasDiscount = index % 4 == 2;
+                          return ProductCardWithImage(
+                            productName: product.name + ' ' + product.sku,
+                            price: product.price,
+                            hasDiscount: hasDiscount,
+                            discountPercent: 20,
+                            imageUrl: product.imageUrl,
+                            onAddTap: () => _showQuantityDialog(
+                              product.name,
+                              product.price,
+                              product.sku,
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Bottom Sheet for Cart (Mobile)
+  void _showCartBottomSheet(BuildContext context) {
+    double totalAmount = calculateItemsTotal(items);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          totalAmount = calculateItemsTotal(items);
+
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.75,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Order Detail',
+                        style: TextStyle(
+                          fontSize: 18.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                // Items List
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(
+                          child: Lottie.asset(
+                            'images/empty.json',
+                            width: 150,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.shopping_cart_outlined,
+                                    size: 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Cart is empty',
+                                    style: TextStyle(color: Colors.grey[600]),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: items.length,
+                          itemBuilder: (context, idx) {
+                            ItemInfo item = items[idx];
+                            double itemSubtotal = item.quantity * item.price;
+                            return OrderItemCard(
+                              item: item,
+                              subtotal: itemSubtotal,
+                              onQuantityChange: (newQuantity) {
+                                setState(() {
+                                  item.quantity = newQuantity;
+                                });
+                                setModalState(() {});
+                              },
+                              onRemove: () {
+                                setState(() {
+                                  items.removeAt(idx);
+                                });
+                                setModalState(() {});
+                              },
+                            );
+                          },
+                        ),
+                ),
+                // Bottom Section
+                if (items.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, -5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Total
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Total',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Ksh ${totalAmount.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Payment Method
+                        DropdownButtonFormField<String>(
+                          decoration: InputDecoration(
+                            labelText: 'Payment Method',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          value: _selectedPaymentMethod,
+                          items: ['Cash', 'Mpesa', 'Bank', 'Debt', 'Split'].map(
+                            (method) {
+                              return DropdownMenuItem(
+                                value: method,
+                                child: Text(method),
+                              );
+                            },
+                          ).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedPaymentMethod = value!;
+                            });
+                            setModalState(() {});
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        // Make Order Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              Navigator.pop(context); // Close bottom sheet
+                              try {
+                                await storeInvoice(_selectedPaymentMethod);
+                                setState(() {
+                                  items.clear();
+                                });
+                              } catch (e) {
+                                Toast.show("error creating invoice");
+                              }
+                            },
+                            icon: const Icon(Icons.shopping_cart),
+                            label: const Text('Make Order'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Desktop Layout (Original)
+  Widget _buildDesktopLayout(BuildContext context) {
     double totalAmount = calculateItemsTotal(items);
     double taxAmount = totalAmount * 0.0825;
     double grandTotal = totalAmount + taxAmount;
     List<ProductInfo> paginatedProducts = _getPaginatedProducts();
     int totalProducts = _getFilteredProducts().length;
     int totalPages = _getTotalPages();
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: Row(
@@ -433,22 +1464,20 @@ Future<List<int>> buildTestReceipt({
                                   color: Colors.black,
                                 ),
                               ),
+
                               //logout icon
-                              
                               const SizedBox(width: 8.0),
                               IconButton(
                                 icon: const Icon(Icons.logout),
                                 color: Colors.teal[800],
-                                onPressed: () {
-                                  Navigator.push(context, MaterialPageRoute(
-                                    builder: (context) => const MainHubScreen(),
-                                  ));
-                                },
+                                onPressed: () => _handleExitToHub(),
                               ),
                             ],
                           ),
                           Text(
-                            DateFormat('MMMM dd, yyyy - EEEE').format(DateTime.now()),
+                            DateFormat(
+                              'MMMM dd, yyyy - EEEE',
+                            ).format(DateTime.now()),
                             style: TextStyle(
                               fontSize: 13.0,
                               color: Colors.grey[600],
@@ -459,7 +1488,7 @@ Future<List<int>> buildTestReceipt({
                     ],
                   ),
                   const SizedBox(height: 4.0),
-                  
+
                   // Search Bar
                   TextField(
                     controller: _searchController,
@@ -470,11 +1499,13 @@ Future<List<int>> buildTestReceipt({
                         borderRadius: BorderRadius.circular(8.0),
                         borderSide: BorderSide(color: Colors.grey[300]!),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12.0),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 12.0,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20.0),
-                  
+
                   // Category Tabs
                   Wrap(
                     spacing: 8.0,
@@ -494,57 +1525,61 @@ Future<List<int>> buildTestReceipt({
                         labelStyle: TextStyle(
                           color: isSelected ? Colors.white : Colors.black,
                           fontSize: 10,
-                          fontWeight: FontWeight.w800
+                          fontWeight: FontWeight.w800,
                         ),
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 14.0),
-                  
+
                   // Product Grid (scrollable)
                   Expanded(
                     child: inventoryItems.isEmpty
-                        ?    Center(
-                                  child: Lottie.asset(
-                                    'images/SandyLoading.json',
-                                    fit: BoxFit.scaleDown,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Icon(
-                                        Icons.shopping_bag,
-                                        color: Colors.grey[400],
-                                        size: 48,
-                                      );
-                                    },
-                                  )
-                        )
-                              
-                        : GridView.builder(
-                            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 200.0,
-                              childAspectRatio: 1.1,
-                              crossAxisSpacing: 16.0,
-                              mainAxisSpacing: 16.0,
+                        ? Center(
+                            child: Lottie.asset(
+                              'images/SandyLoading.json',
+                              fit: BoxFit.scaleDown,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Icon(
+                                  Icons.shopping_bag,
+                                  color: Colors.grey[400],
+                                  size: 48,
+                                );
+                              },
                             ),
+                          )
+                        : GridView.builder(
+                            gridDelegate:
+                                SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 200.0,
+                                  childAspectRatio: 1.1,
+                                  crossAxisSpacing: 16.0,
+                                  mainAxisSpacing: 16.0,
+                                ),
                             itemCount: paginatedProducts.length,
                             itemBuilder: (context, index) {
                               final product = paginatedProducts[index];
                               bool hasDiscount = index % 4 == 2;
                               return ProductCardWithImage(
-                                productName: product.name +' '+product.sku,
+                                productName: product.name + ' ' + product.sku,
                                 price: product.price,
                                 hasDiscount: hasDiscount,
                                 discountPercent: 20,
                                 imageUrl: product.imageUrl,
-                                onAddTap: () => _showQuantityDialog(product.name, product.price, product.sku),
+                                onAddTap: () => _showQuantityDialog(
+                                  product.name,
+                                  product.price,
+                                  product.sku,
+                                ),
                               );
                             },
                           ),
                   ),
+
                   // Helper class for product info
-            
-                  
+
                   // const SizedBox(height: 24.0),
-                  
+
                   // Pagination
                   // if (totalPages > 1)
                   //   Row(
@@ -604,12 +1639,11 @@ Future<List<int>> buildTestReceipt({
                   //       ),
                   //     ],
                   //   ),
-               
                 ],
               ),
             ),
           ),
-          
+
           // Right Side - Order Detail
           Container(
             width: 380,
@@ -662,21 +1696,22 @@ Future<List<int>> buildTestReceipt({
                     child: items.isEmpty
                         ? Center(
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 40.0),
-                              child: 
-                                Center(
-                                  child: Lottie.asset(
-                                    'images/empty.json',
-                                    fit: BoxFit.scaleDown,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Icon(
-                                        Icons.shopping_bag,
-                                        color: Colors.grey[400],
-                                        size: 48,
-                                      );
-                                    },
-                                  ),
-                              )
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 40.0,
+                              ),
+                              child: Center(
+                                child: Lottie.asset(
+                                  'images/empty.json',
+                                  fit: BoxFit.scaleDown,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      Icons.shopping_bag,
+                                      color: Colors.grey[400],
+                                      size: 48,
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
                           )
                         : ListView(
@@ -744,7 +1779,7 @@ Future<List<int>> buildTestReceipt({
                           ),
                         ),
                         Text(
-                           'Ksh ${totalAmount.toStringAsFixed(2)}',
+                          'Ksh ${totalAmount.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 18.0,
                             fontWeight: FontWeight.bold,
@@ -763,7 +1798,9 @@ Future<List<int>> buildTestReceipt({
                         ),
                       ),
                       value: _selectedPaymentMethod,
-                      items: ['Cash', 'Mpesa', 'Debt', 'Split'].map((method) {
+                      items: ['Cash', 'Mpesa', 'Bank', 'Debt', 'Split'].map((
+                        method,
+                      ) {
                         return DropdownMenuItem(
                           value: method,
                           child: Text(method),
@@ -782,17 +1819,17 @@ Future<List<int>> buildTestReceipt({
                       child: ElevatedButton.icon(
                         onPressed: () async {
                           try {
-                               await storeInvoice(_selectedPaymentMethod);
-                              // await buildTestReceipt(
-                              //   invoiceItems: items,
-                              //   customerName: _customerName.text,
-                              //   salesRep: _salesName.text,
-                              //   paymentMethod: _selectedPaymentMethod,
-                              //   totalAmount: calculateItemsTotal(items),
-                              // );
-                              setState(() {
-                                items.clear();
-                              });
+                            await storeInvoice(_selectedPaymentMethod);
+                            // await buildTestReceipt(
+                            //   invoiceItems: items,
+                            //   customerName: _customerName.text,
+                            //   salesRep: _salesName.text,
+                            //   paymentMethod: _selectedPaymentMethod,
+                            //   totalAmount: calculateItemsTotal(items),
+                            // );
+                            setState(() {
+                              items.clear();
+                            });
                           } catch (e) {
                             Toast.show("error creating invoice");
                           }
@@ -822,827 +1859,1204 @@ Future<List<int>> buildTestReceipt({
   void _showQuantityDialog(String productName, double price, String sku) {
     setState(() {
       // Check if product already exists in items (by both name AND SKU)
-      int existingIndex = items.indexWhere((item) => item.productName == productName && item.sku == sku);
+      int existingIndex = items.indexWhere(
+        (item) => item.productName == productName && item.sku == sku,
+      );
       if (existingIndex != -1) {
         items[existingIndex].quantity += 1;
       } else {
-        items.add(ItemInfo(
-          productName: productName,
-          quantity: 1,
-          price: price,
-          sku: sku,
-        ));
+        items.add(
+          ItemInfo(
+            productName: productName,
+            quantity: 1,
+            price: price,
+            sku: sku,
+          ),
+        );
       }
     });
   }
-  
-Future<void> storeInvoice(String paymentMethod) async {
-  // Retrieve item data from the list
-  List<InvoiceItem> invoiceItems = items
-      .map((item) => InvoiceItem(
+
+  Future<void> storeInvoice(String paymentMethod) async {
+    // Retrieve item data from the list
+    List<InvoiceItem> invoiceItems = items
+        .map(
+          (item) => InvoiceItem(
             description: item.productName,
             quantity: item.quantity,
             unitPrice: item.price,
             date: DateTime.now(),
-          ))
-      .toList();
-  
-if (invoiceItems.isEmpty) {
-  // Show an error dialog and return without proceeding
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('Error Storing Sale'),
-        content: const Text('No products to add.'),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () {
-
-              Navigator.of(context).pop(); // Close the dialog
-              
-            },
-            child: const Text('OK'),
           ),
-        ],
-      );
-    },
-  );
-  return;
-}
+        )
+        .toList();
 
-   if (invoiceItems.any((item) => item.quantity <= 0)) {
-    // Show an error dialog and return without proceeding
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Error Storing Sale'),
-          content: const Text('Some items have a quantity of 0 .'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
-    );
-    return;
-  }
-
-
-  // Calculate total amount
-  double totalAmounts = calculateTotal(invoiceItems);
-  DateTime now = DateTime.now();
-  Timestamp timestamp = Timestamp.fromDate(now);
-  double mpesaAmount = 0.0; // Declare mpesaAmount variable
-  double cashAmount = 0.0;
-  bool isInOperation = false; // Declare isInOperation here
-
-  try {
-    FirebaseFirestore db = FirebaseFirestore.instance;
-
-await showDialog(
-  context: context,
-  barrierDismissible: false,
-  builder: (BuildContext context) {
-    String selectedPaymentMethod = paymentMethod;
-    double totalAmount = totalAmounts;
-    double amountPaid = 0.0;
-
-    return StatefulBuilder(
-      builder: (context, setState) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.0),
-          ),
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 450),
-            child: Container(
-              padding: const EdgeInsets.all(24.0),
-              
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+    if (invoiceItems.isEmpty) {
+      // Show an error dialog and return without proceeding
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Error Storing Sale'),
+            content: const Text('No products to add.'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close the dialog
+                },
+                child: const Text('OK'),
               ),
-              child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Icon
-                Container(
-                  padding: const EdgeInsets.all(16.0),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.receipt_long,
-                    color: Colors.teal,
-                    size: 48.0,
-                  ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
+    if (invoiceItems.any((item) => item.quantity <= 0)) {
+      // Show an error dialog and return without proceeding
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Error Storing Sale'),
+            content: const Text('Some items have a quantity of 0 .'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close the dialog
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
+    // Calculate total amount
+    double totalAmounts = calculateTotal(invoiceItems);
+    DateTime now = DateTime.now();
+    Timestamp timestamp = Timestamp.fromDate(now);
+    double mpesaAmount = 0.0; // Declare mpesaAmount variable
+    double cashAmount = 0.0;
+    bool isInOperation = false; // Declare isInOperation here
+
+    try {
+      FirebaseFirestore db = FirebaseFirestore.instance;
+
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          String selectedPaymentMethod = paymentMethod;
+          double totalAmount = totalAmounts;
+          double amountPaid = 0.0;
+
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return Dialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20.0),
                 ),
-                const SizedBox(height: 20.0),
-                
-                // Title
-                const Text(
-                  'Confirm Order',
-                  style: TextStyle(
-                    fontSize: 24.0,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 8.0),
-                
-                // Subtitle
-                Text(
-                  'Please review your transaction details',
-                  style: TextStyle(
-                    fontSize: 14.0,
-                    color: Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24.0),
-                
-                // Payment Method Display
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12.0),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.payment, color: Colors.grey[700], size: 20.0),
-                      const SizedBox(width: 12.0),
-                      Text(
-                        'Payment Method:',
-                        style: TextStyle(
-                          fontSize: 14.0,
-                          color: Colors.grey[700],
-                          fontWeight: FontWeight.w500,
+                elevation: 0,
+                backgroundColor: Colors.transparent,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 450),
+                  child: Container(
+                    padding: const EdgeInsets.all(24.0),
+
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20.0),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        selectedPaymentMethod,
-                        style: const TextStyle(
-                          fontSize: 14.0,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16.0),
-
-                // Total Amount
-                Container(
-                  padding: const EdgeInsets.all(16.0),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.teal[400]!, Colors.teal[600]!],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(12.0),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total Amount',
-                        style: TextStyle(
-                          fontSize: 16.0,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        'KSh ${totalAmount.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 20.0,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20.0),
-
-                // Additional fields based on payment method
-                if (selectedPaymentMethod == 'Debt') ...[
-                  TextField(
-                    controller: _customerName,
-                    decoration: InputDecoration(
-                      labelText: 'Customer Name',
-                      prefixIcon: const Icon(Icons.person, color: Colors.teal),
-                      fillColor: Colors.grey[50],
-                      filled: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: const BorderSide(color: Colors.teal, width: 2),
-                      ),
-                    ),
-                    onChanged: (value) {
-                      _customerName.text = value;
-                    },
-                  ),
-                  const SizedBox(height: 16.0),
-                  TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Amount Paid',
-                      prefixIcon: const Icon(Icons.payments, color: Colors.teal),
-                      fillColor: Colors.grey[50],
-                      filled: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: const BorderSide(color: Colors.teal, width: 2),
-                      ),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (value) {
-                      amountPaid = double.tryParse(value) ?? 0.0;
-                    },
-                  ),
-                  const SizedBox(height: 16.0),
-                ],
-                
-                if (selectedPaymentMethod == 'Split') ...[
-                  TextField(
-                    decoration: InputDecoration(
-                      labelText: 'M-Pesa Amount',
-                      prefixIcon: const Icon(Icons.phone_android, color: Colors.teal),
-                      fillColor: Colors.grey[50],
-                      filled: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: const BorderSide(color: Colors.teal, width: 2),
-                      ),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (value) {
-                      mpesaAmount = double.tryParse(value) ?? 0.0;
-                    },
-                  ),
-                  const SizedBox(height: 16.0),
-                  TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Cash Amount',
-                      prefixIcon: const Icon(Icons.money, color: Colors.teal),
-                      fillColor: Colors.grey[50],
-                      filled: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: const BorderSide(color: Colors.teal, width: 2),
-                      ),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (value) {
-                      cashAmount = double.tryParse(value) ?? 0.0;
-                    },
-                  ),
-                  const SizedBox(height: 16.0),
-                ],
-
-                // Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14.0),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            side: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black54,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12.0),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          // Prevent duplicate operations
-                          if (isInOperation) {
-                            return;
-                          }
-
-                          isInOperation = true;
-
-                          double debtAmount = selectedPaymentMethod == 'Debt' 
-                              ? totalAmount - amountPaid 
-                              : 0.0;
-                          String customer = _customerName.text.toLowerCase();
-
-                          // Handle different payment methods
-                          if (selectedPaymentMethod == 'Cash') {
-                            await db.collection("alcoholsales").add({
-                              "payment": selectedPaymentMethod,
-                              "dateAdded": timestamp,
-                              "totalAmount": totalAmount,
-                              "items": items.map((item) => item.toMap()).toList(),
-                            });
-                          } else if (selectedPaymentMethod == 'Mpesa') {
-                            await db.collection("alcoholsales").add({
-                              "customer": customer,
-                              "payment": selectedPaymentMethod,
-                              "dateAdded": timestamp,
-                              "totalAmount": totalAmount,
-                              "items": items.map((item) => item.toMap()).toList(),
-                            });
-                          } else if (selectedPaymentMethod == 'Debt') {
-                            await db.collection("alcoholsales").add({
-                              "customer": customer,
-                              "payment": selectedPaymentMethod,
-                              "debtAmount": debtAmount,
-                              "dateAdded": timestamp,
-                              "totalAmount": totalAmount,
-                              "items": items.map((item) => item.toMap()).toList(),
-                            });
-                          } else if (selectedPaymentMethod == 'Split') {
-                            double mpesaQuantity = mpesaAmount / totalAmount * invoiceItems.length;
-                            double cashQuantity = cashAmount / totalAmount * invoiceItems.length;
-
-                            // M-Pesa payment
-                            await db.collection("alcoholsales").add({
-                              "customer": customer,
-                              "payment": "Mpesa",
-                              "dateAdded": timestamp,
-                              "totalAmount": mpesaAmount,
-                              "items": items.map((item) {
-                                double itemQuantity = item.quantity;
-                                return {
-                                  ...item.toMap(),
-                                  'quantity': itemQuantity * mpesaQuantity,
-                                };
-                              }).toList(),
-                            });
-
-                            // Cash payment
-                            await db.collection("alcoholsales").add({
-                              "customer": customer,
-                              "payment": "Cash",
-                              "dateAdded": timestamp,
-                              "totalAmount": cashAmount,
-                              "items": items.map((item) {
-                                double itemQuantity = item.quantity;
-                                return {
-                                  ...item.toMap(),
-                                  'quantity': itemQuantity * cashQuantity,
-                                };
-                              }).toList(),
-                            });
-                          }
-
-                          // Update inventory
-                          for (var item in items) {
-                            await updateInventory(item.productName, item.quantity);
-                            print("Inventory updated for ${item.productName}");
-                          }
-
-                          // Success dialog
-                          await showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (BuildContext context) {
-                              return Dialog(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20.0),
+                    child: isInOperation
+                        ? const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(height: 20),
+                              CircularProgressIndicator(color: Colors.teal),
+                              SizedBox(height: 20),
+                              Text(
+                                'Processing order...',
+                                style: TextStyle(
+                                  fontSize: 16.0,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
                                 ),
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 400),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(24.0),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(20.0),
+                              ),
+                              SizedBox(height: 20),
+                            ],
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Icon
+                              Container(
+                                padding: const EdgeInsets.all(16.0),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.receipt_long,
+                                  color: Colors.teal,
+                                  size: 48.0,
+                                ),
+                              ),
+                              const SizedBox(height: 20.0),
+
+                              // Title
+                              const Text(
+                                'Confirm Order',
+                                style: TextStyle(
+                                  fontSize: 24.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 8.0),
+
+                              // Subtitle
+                              Text(
+                                'Please review your transaction details',
+                                style: TextStyle(
+                                  fontSize: 14.0,
+                                  color: Colors.grey[600],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 24.0),
+
+                              // Payment Method Display
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                  vertical: 12.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(12.0),
+                                  border: Border.all(color: Colors.grey[300]!),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.payment,
+                                      color: Colors.grey[700],
+                                      size: 20.0,
                                     ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          // padding: const EdgeInsets.all(16.0),
-                                          decoration: BoxDecoration(
-                                            color: Colors.green.withOpacity(0.1),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Lottie.asset(
-                                            width: 100,
-                                            height: 100,
-                                            'images/success.json',
-                                            // fit: BoxFit.scaleDown,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return Icon(
-                                                Icons.shopping_bag,
-                                                color: Colors.grey[400],
-                                                size: 64,
-                                              );
-                                            },
-                                          )
-                                        ),
-                                        const SizedBox(height: 20.0),
-                                        const Text(
-                                          'Payment Successful!',
-                                          style: TextStyle(
-                                            fontSize: 24.0,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 16.0),
-                                        Container(
-                                          padding: const EdgeInsets.all(16.0),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey[50],
-                                            borderRadius: BorderRadius.circular(12.0),
-                                          ),
-                                          child: Column(
-                                            children: [
-                                              Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Text(
-                                                    'Amount:',
-                                                    style: TextStyle(
-                                                      fontSize: 14.0,
-                                                      color: Colors.grey[700],
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    'KSh ${totalAmount.toStringAsFixed(2)}',
-                                                    style: const TextStyle(
-                                                      fontSize: 16.0,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Colors.black87,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const Divider(height: 24.0),
-                                              Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Text(
-                                                    'Method:',
-                                                    style: TextStyle(
-                                                      fontSize: 14.0,
-                                                      color: Colors.grey[700],
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    selectedPaymentMethod,
-                                                    style: const TextStyle(
-                                                      fontSize: 16.0,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Colors.teal,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              if (selectedPaymentMethod == 'Debt') ...[
-                                                const Divider(height: 24.0),
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                  children: [
-                                                    Text(
-                                                      'Paid:',
-                                                      style: TextStyle(
-                                                        fontSize: 14.0,
-                                                        color: Colors.grey[700],
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      'KSh ${amountPaid.toStringAsFixed(2)}',
-                                                      style: const TextStyle(
-                                                        fontSize: 16.0,
-                                                        fontWeight: FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const Divider(height: 24.0),
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                  children: [
-                                                    Text(
-                                                      'Debt:',
-                                                      style: TextStyle(
-                                                        fontSize: 14.0,
-                                                        color: Colors.grey[700],
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      'KSh ${debtAmount.toStringAsFixed(2)}',
-                                                      style: const TextStyle(
-                                                        fontSize: 16.0,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: Colors.red,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 24.0),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: ElevatedButton(
-                                                onPressed: () {
-                                                  Navigator.of(context).pop();
-                                                },
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.grey[100],
-                                                  foregroundColor: Colors.black87,
-                                                  padding: const EdgeInsets.symmetric(vertical: 14.0),
-                                                  elevation: 0,
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(12.0),
-                                                  ),
-                                                ),
-                                                child: const Text(
-                                                  'Done',
-                                                  style: TextStyle(
-                                                    fontSize: 16.0,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12.0),
-                                            Expanded(
-                                              child: ElevatedButton.icon(
-                                                onPressed: () async {
-                                                  await _invoicegen();
-                                                  Navigator.of(context).pop();
-                                                },
-                                                icon: const Icon(Icons.print),
-                                                label: const Text(
-                                                  'Print',
-                                                  style: TextStyle(
-                                                    fontSize: 16.0,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.teal,
-                                                  foregroundColor: Colors.white,
-                                                  padding: const EdgeInsets.symmetric(vertical: 14.0),
-                                                  elevation: 2,
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(12.0),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                    const SizedBox(width: 12.0),
+                                    Text(
+                                      'Payment Method:',
+                                      style: TextStyle(
+                                        fontSize: 14.0,
+                                        color: Colors.grey[700],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      selectedPaymentMethod,
+                                      style: const TextStyle(
+                                        fontSize: 14.0,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.teal,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16.0),
+
+                              // Total Amount
+                              Container(
+                                padding: const EdgeInsets.all(16.0),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.teal[400]!,
+                                      Colors.teal[600]!,
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12.0),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Total Amount',
+                                      style: TextStyle(
+                                        fontSize: 16.0,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      'KSh ${totalAmount.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 20.0,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 20.0),
+
+                              // Additional fields based on payment method
+                              if (selectedPaymentMethod == 'Debt') ...[
+                                TextField(
+                                  controller: _customerName,
+                                  decoration: InputDecoration(
+                                    labelText: 'Customer Name',
+                                    prefixIcon: const Icon(
+                                      Icons.person,
+                                      color: Colors.teal,
+                                    ),
+                                    fillColor: Colors.grey[50],
+                                    filled: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: const BorderSide(
+                                        color: Colors.teal,
+                                        width: 2,
+                                      ),
                                     ),
                                   ),
+                                  onChanged: (value) {
+                                    _customerName.text = value;
+                                  },
                                 ),
-                              );
-                            },
-                          );
+                                const SizedBox(height: 16.0),
+                                TextField(
+                                  decoration: InputDecoration(
+                                    labelText: 'Amount Paid',
+                                    prefixIcon: const Icon(
+                                      Icons.payments,
+                                      color: Colors.teal,
+                                    ),
+                                    fillColor: Colors.grey[50],
+                                    filled: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: const BorderSide(
+                                        color: Colors.teal,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  onChanged: (value) {
+                                    amountPaid = double.tryParse(value) ?? 0.0;
+                                  },
+                                ),
+                                const SizedBox(height: 16.0),
+                              ],
 
-                          Navigator.of(context).pop();
-                          isInOperation = false;
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14.0),
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.0),
+                              if (selectedPaymentMethod == 'Split') ...[
+                                TextField(
+                                  decoration: InputDecoration(
+                                    labelText: 'M-Pesa Amount',
+                                    prefixIcon: const Icon(
+                                      Icons.phone_android,
+                                      color: Colors.teal,
+                                    ),
+                                    fillColor: Colors.grey[50],
+                                    filled: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: const BorderSide(
+                                        color: Colors.teal,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  onChanged: (value) {
+                                    mpesaAmount = double.tryParse(value) ?? 0.0;
+                                  },
+                                ),
+                                const SizedBox(height: 16.0),
+                                TextField(
+                                  decoration: InputDecoration(
+                                    labelText: 'Cash Amount',
+                                    prefixIcon: const Icon(
+                                      Icons.money,
+                                      color: Colors.teal,
+                                    ),
+                                    fillColor: Colors.grey[50],
+                                    filled: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12.0),
+                                      borderSide: const BorderSide(
+                                        color: Colors.teal,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  onChanged: (value) {
+                                    cashAmount = double.tryParse(value) ?? 0.0;
+                                  },
+                                ),
+                                const SizedBox(height: 16.0),
+                              ],
+
+                              // Action Buttons
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextButton(
+                                      onPressed: isInOperation
+                                          ? null
+                                          : () {
+                                              Navigator.of(context).pop();
+                                            },
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14.0,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12.0,
+                                          ),
+                                          side: BorderSide(
+                                            color: Colors.grey[300]!,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Cancel',
+                                        style: TextStyle(
+                                          fontSize: 16.0,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12.0),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: isInOperation
+                                          ? null
+                                          : () async {
+                                              // Prevent duplicate operations
+                                              setState(() {
+                                                isInOperation = true;
+                                              });
+
+                                              try {
+                                                double debtAmount =
+                                                    selectedPaymentMethod ==
+                                                        'Debt'
+                                                    ? totalAmount - amountPaid
+                                                    : 0.0;
+                                                String customer = _customerName
+                                                    .text
+                                                    .toLowerCase();
+
+                                                // Handle different payment methods
+                                                if (selectedPaymentMethod ==
+                                                    'Cash') {
+                                                  await db.collection("adjustments").add({
+                                                    "payment":
+                                                        selectedPaymentMethod,
+                                                    "dateAdded": timestamp,
+                                                    "totalAmount": totalAmount,
+                                                    "soldBy": soldBy,
+                                                    "items": items
+                                                        .map(
+                                                          (item) =>
+                                                              item.toMap(),
+                                                        )
+                                                        .toList(),
+                                                    "businessDate":
+                                                        _currentShift?['businessDate'] ??
+                                                        _shiftService
+                                                            .getBusinessDate(),
+                                                    "shiftId":
+                                                        _currentShift?['shiftId'] ??
+                                                        '',
+                                                    'soldById':
+                                                        FirebaseAuth
+                                                            .instance
+                                                            .currentUser
+                                                            ?.uid ??
+                                                        '',
+                                                  });
+                                                } else if (selectedPaymentMethod ==
+                                                    'Mpesa') {
+                                                  await db.collection("adjustments").add({
+                                                    "customer": customer,
+                                                    "payment":
+                                                        selectedPaymentMethod,
+                                                    "dateAdded": timestamp,
+                                                    "totalAmount": totalAmount,
+                                                    "soldBy": soldBy,
+                                                    "items": items
+                                                        .map(
+                                                          (item) =>
+                                                              item.toMap(),
+                                                        )
+                                                        .toList(),
+                                                    "businessDate":
+                                                        _currentShift?['businessDate'] ??
+                                                        _shiftService
+                                                            .getBusinessDate(),
+                                                    "shiftId":
+                                                        _currentShift?['shiftId'] ??
+                                                        '',
+                                                    'soldById':
+                                                        FirebaseAuth
+                                                            .instance
+                                                            .currentUser
+                                                            ?.uid ??
+                                                        '',
+                                                  });
+                                                } else if (selectedPaymentMethod ==
+                                                    'Debt') {
+                                                } else if (selectedPaymentMethod ==
+                                                    'Bank') {
+                                                  await db.collection("adjustments").add({
+                                                    "customer": customer,
+                                                    "payment":
+                                                        selectedPaymentMethod,
+                                                    "dateAdded": timestamp,
+                                                    "totalAmount": totalAmount,
+                                                    "soldBy": soldBy,
+                                                    "items": items
+                                                        .map(
+                                                          (item) =>
+                                                              item.toMap(),
+                                                        )
+                                                        .toList(),
+                                                    "businessDate":
+                                                        _currentShift?['businessDate'] ??
+                                                        _shiftService
+                                                            .getBusinessDate(),
+                                                    "shiftId":
+                                                        _currentShift?['shiftId'] ??
+                                                        '',
+                                                    'soldById':
+                                                        FirebaseAuth
+                                                            .instance
+                                                            .currentUser
+                                                            ?.uid ??
+                                                        '',
+                                                  });
+                                                } else if (selectedPaymentMethod ==
+                                                    'Debt') {
+                                                  await db.collection("adjustments").add({
+                                                    "customer": customer,
+                                                    "payment":
+                                                        selectedPaymentMethod,
+                                                    "debtAmount": debtAmount,
+                                                    "dateAdded": timestamp,
+                                                    "totalAmount": totalAmount,
+                                                    "soldBy": soldBy,
+                                                    "items": items
+                                                        .map(
+                                                          (item) =>
+                                                              item.toMap(),
+                                                        )
+                                                        .toList(),
+                                                    "businessDate":
+                                                        _currentShift?['businessDate'] ??
+                                                        _shiftService
+                                                            .getBusinessDate(),
+                                                    "shiftId":
+                                                        _currentShift?['shiftId'] ??
+                                                        '',
+                                                    'soldById':
+                                                        FirebaseAuth
+                                                            .instance
+                                                            .currentUser
+                                                            ?.uid ??
+                                                        '',
+                                                  });
+                                                } else if (selectedPaymentMethod ==
+                                                    'Split') {
+                                                  double mpesaQuantity =
+                                                      mpesaAmount /
+                                                      totalAmount *
+                                                      invoiceItems.length;
+                                                  double cashQuantity =
+                                                      cashAmount /
+                                                      totalAmount *
+                                                      invoiceItems.length;
+
+                                                  // M-Pesa payment
+                                                  await db.collection("adjustments").add({
+                                                    "customer": customer,
+                                                    "payment": "Mpesa",
+                                                    "dateAdded": timestamp,
+                                                    "totalAmount": mpesaAmount,
+                                                    "soldBy": soldBy,
+                                                    "items": items.map((item) {
+                                                      double itemQuantity =
+                                                          item.quantity;
+                                                      return {
+                                                        ...item.toMap(),
+                                                        'quantity':
+                                                            itemQuantity *
+                                                            mpesaQuantity,
+                                                      };
+                                                    }).toList(),
+                                                    "businessDate":
+                                                        _currentShift?['businessDate'] ??
+                                                        _shiftService
+                                                            .getBusinessDate(),
+                                                    "shiftId":
+                                                        _currentShift?['shiftId'] ??
+                                                        '',
+                                                    'soldById':
+                                                        FirebaseAuth
+                                                            .instance
+                                                            .currentUser
+                                                            ?.uid ??
+                                                        '',
+                                                  });
+
+                                                  // Cash payment
+                                                  await db.collection("adjustments").add({
+                                                    "customer": customer,
+                                                    "payment": "Cash",
+                                                    "dateAdded": timestamp,
+                                                    "totalAmount": cashAmount,
+                                                    "soldBy": soldBy,
+                                                    "items": items.map((item) {
+                                                      double itemQuantity =
+                                                          item.quantity;
+                                                      return {
+                                                        ...item.toMap(),
+                                                        'quantity':
+                                                            itemQuantity *
+                                                            cashQuantity,
+                                                      };
+                                                    }).toList(),
+                                                    "businessDate":
+                                                        _currentShift?['businessDate'] ??
+                                                        _shiftService
+                                                            .getBusinessDate(),
+                                                    "shiftId":
+                                                        _currentShift?['shiftId'] ??
+                                                        '',
+                                                    'soldById':
+                                                        FirebaseAuth
+                                                            .instance
+                                                            .currentUser
+                                                            ?.uid ??
+                                                        '',
+                                                  });
+                                                }
+
+                                                // Update inventory
+                                                for (var item in items) {
+                                                  await updateInventory(
+                                                    item.productName,
+                                                    item.quantity,
+                                                  );
+                                                  print(
+                                                    "Inventory updated for ${item.productName}",
+                                                  );
+                                                }
+
+                                                // Success dialog
+                                                await showDialog(
+                                                  context: context,
+                                                  barrierDismissible: false,
+                                                  builder: (BuildContext context) {
+                                                    bool isPrinting = false;
+                                                    return StatefulBuilder(
+                                                      builder: (context, setDialogState) {
+                                                        return Dialog(
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  20.0,
+                                                                ),
+                                                          ),
+                                                          child: ConstrainedBox(
+                                                            constraints:
+                                                                const BoxConstraints(
+                                                                  maxWidth: 400,
+                                                                ),
+                                                            child: Container(
+                                                              padding:
+                                                                  const EdgeInsets.all(
+                                                                    24.0,
+                                                                  ),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                    borderRadius:
+                                                                        BorderRadius.circular(
+                                                                          20.0,
+                                                                        ),
+                                                                  ),
+                                                              child: Column(
+                                                                mainAxisSize:
+                                                                    MainAxisSize
+                                                                        .min,
+                                                                children: [
+                                                                  Container(
+                                                                    // padding: const EdgeInsets.all(16.0),
+                                                                    decoration: BoxDecoration(
+                                                                      color: Colors
+                                                                          .green
+                                                                          .withOpacity(
+                                                                            0.1,
+                                                                          ),
+                                                                      shape: BoxShape
+                                                                          .circle,
+                                                                    ),
+                                                                    child: Lottie.asset(
+                                                                      width:
+                                                                          100,
+                                                                      height:
+                                                                          100,
+                                                                      'images/success.json',
+                                                                      // fit: BoxFit.scaleDown,
+                                                                      errorBuilder:
+                                                                          (
+                                                                            context,
+                                                                            error,
+                                                                            stackTrace,
+                                                                          ) {
+                                                                            return Icon(
+                                                                              Icons.shopping_bag,
+                                                                              color: Colors.grey[400],
+                                                                              size: 64,
+                                                                            );
+                                                                          },
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    height:
+                                                                        20.0,
+                                                                  ),
+                                                                  const Text(
+                                                                    'Payment Successful!',
+                                                                    style: TextStyle(
+                                                                      fontSize:
+                                                                          24.0,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .bold,
+                                                                      color: Colors
+                                                                          .black87,
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    height:
+                                                                        16.0,
+                                                                  ),
+                                                                  Container(
+                                                                    padding:
+                                                                        const EdgeInsets.all(
+                                                                          16.0,
+                                                                        ),
+                                                                    decoration: BoxDecoration(
+                                                                      color: Colors
+                                                                          .grey[50],
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                            12.0,
+                                                                          ),
+                                                                    ),
+                                                                    child: Column(
+                                                                      children: [
+                                                                        Row(
+                                                                          mainAxisAlignment:
+                                                                              MainAxisAlignment.spaceBetween,
+                                                                          children: [
+                                                                            Text(
+                                                                              'Amount:',
+                                                                              style: TextStyle(
+                                                                                fontSize: 14.0,
+                                                                                color: Colors.grey[700],
+                                                                              ),
+                                                                            ),
+                                                                            Text(
+                                                                              'KSh ${totalAmount.toStringAsFixed(2)}',
+                                                                              style: const TextStyle(
+                                                                                fontSize: 16.0,
+                                                                                fontWeight: FontWeight.bold,
+                                                                                color: Colors.black87,
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                        ),
+                                                                        const Divider(
+                                                                          height:
+                                                                              24.0,
+                                                                        ),
+                                                                        Row(
+                                                                          mainAxisAlignment:
+                                                                              MainAxisAlignment.spaceBetween,
+                                                                          children: [
+                                                                            Text(
+                                                                              'Method:',
+                                                                              style: TextStyle(
+                                                                                fontSize: 14.0,
+                                                                                color: Colors.grey[700],
+                                                                              ),
+                                                                            ),
+                                                                            Text(
+                                                                              selectedPaymentMethod,
+                                                                              style: const TextStyle(
+                                                                                fontSize: 16.0,
+                                                                                fontWeight: FontWeight.bold,
+                                                                                color: Colors.teal,
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                        ),
+                                                                        if (selectedPaymentMethod ==
+                                                                            'Debt') ...[
+                                                                          const Divider(
+                                                                            height:
+                                                                                24.0,
+                                                                          ),
+                                                                          Row(
+                                                                            mainAxisAlignment:
+                                                                                MainAxisAlignment.spaceBetween,
+                                                                            children: [
+                                                                              Text(
+                                                                                'Paid:',
+                                                                                style: TextStyle(
+                                                                                  fontSize: 14.0,
+                                                                                  color: Colors.grey[700],
+                                                                                ),
+                                                                              ),
+                                                                              Text(
+                                                                                'KSh ${amountPaid.toStringAsFixed(2)}',
+                                                                                style: const TextStyle(
+                                                                                  fontSize: 16.0,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                ),
+                                                                              ),
+                                                                            ],
+                                                                          ),
+                                                                          const Divider(
+                                                                            height:
+                                                                                24.0,
+                                                                          ),
+                                                                          Row(
+                                                                            mainAxisAlignment:
+                                                                                MainAxisAlignment.spaceBetween,
+                                                                            children: [
+                                                                              Text(
+                                                                                'Debt:',
+                                                                                style: TextStyle(
+                                                                                  fontSize: 14.0,
+                                                                                  color: Colors.grey[700],
+                                                                                ),
+                                                                              ),
+                                                                              Text(
+                                                                                'KSh ${debtAmount.toStringAsFixed(2)}',
+                                                                                style: const TextStyle(
+                                                                                  fontSize: 16.0,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                  color: Colors.red,
+                                                                                ),
+                                                                              ),
+                                                                            ],
+                                                                          ),
+                                                                        ],
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    height:
+                                                                        24.0,
+                                                                  ),
+                                                                  Row(
+                                                                    children: [
+                                                                      Expanded(
+                                                                        child: ElevatedButton(
+                                                                          onPressed:
+                                                                              isPrinting
+                                                                              ? null
+                                                                              : () {
+                                                                                  Navigator.of(
+                                                                                    context,
+                                                                                  ).pop();
+                                                                                },
+                                                                          style: ElevatedButton.styleFrom(
+                                                                            backgroundColor:
+                                                                                Colors.grey[100],
+                                                                            foregroundColor:
+                                                                                Colors.black87,
+                                                                            padding: const EdgeInsets.symmetric(
+                                                                              vertical: 14.0,
+                                                                            ),
+                                                                            elevation:
+                                                                                0,
+                                                                            shape: RoundedRectangleBorder(
+                                                                              borderRadius: BorderRadius.circular(
+                                                                                12.0,
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                          child: const Text(
+                                                                            'Done',
+                                                                            style: TextStyle(
+                                                                              fontSize: 16.0,
+                                                                              fontWeight: FontWeight.w600,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            12.0,
+                                                                      ),
+                                                                      Expanded(
+                                                                        child: ElevatedButton.icon(
+                                                                          onPressed:
+                                                                              isPrinting
+                                                                              ? null
+                                                                              : () async {
+                                                                                  setDialogState(
+                                                                                    () {
+                                                                                      isPrinting = true;
+                                                                                    },
+                                                                                  );
+                                                                                  try {
+                                                                                    await _invoicegen();
+                                                                                  } finally {
+                                                                                    setDialogState(
+                                                                                      () {
+                                                                                        isPrinting = false;
+                                                                                      },
+                                                                                    );
+                                                                                  }
+                                                                                  Navigator.of(
+                                                                                    context,
+                                                                                  ).pop();
+                                                                                },
+                                                                          icon:
+                                                                              isPrinting
+                                                                              ? const SizedBox(
+                                                                                  width: 18,
+                                                                                  height: 18,
+                                                                                  child: CircularProgressIndicator(
+                                                                                    strokeWidth: 2,
+                                                                                    color: Colors.white,
+                                                                                  ),
+                                                                                )
+                                                                              : const Icon(
+                                                                                  Icons.print,
+                                                                                ),
+                                                                          label: Text(
+                                                                            isPrinting
+                                                                                ? 'Printing...'
+                                                                                : 'Print',
+                                                                            style: const TextStyle(
+                                                                              fontSize: 16.0,
+                                                                              fontWeight: FontWeight.w600,
+                                                                            ),
+                                                                          ),
+                                                                          style: ElevatedButton.styleFrom(
+                                                                            backgroundColor:
+                                                                                isPrinting
+                                                                                ? Colors.grey
+                                                                                : Colors.teal,
+                                                                            foregroundColor:
+                                                                                Colors.white,
+                                                                            padding: const EdgeInsets.symmetric(
+                                                                              vertical: 14.0,
+                                                                            ),
+                                                                            elevation:
+                                                                                2,
+                                                                            shape: RoundedRectangleBorder(
+                                                                              borderRadius: BorderRadius.circular(
+                                                                                12.0,
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      },
+                                                    );
+                                                  },
+                                                );
+
+                                                Navigator.of(context).pop();
+                                                isInOperation = false;
+                                              } catch (e) {
+                                                // Reset the flag on error
+                                                setState(() {
+                                                  isInOperation = false;
+                                                });
+                                                if (mounted) {
+                                                  ScaffoldMessenger.of(
+                                                    this.context,
+                                                  ).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        'Error processing order: $e',
+                                                      ),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                            },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: isInOperation
+                                            ? Colors.grey
+                                            : Colors.teal,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14.0,
+                                        ),
+                                        elevation: 2,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12.0,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Confirm',
+                                        style: TextStyle(
+                                          fontSize: 16.0,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                        ),
-                        child: const Text(
-                          'Confirm',
-                          style: TextStyle(
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ],
-            ),
-          ),
-        ),
+              );
+            },
+          );
+        },
       );
-    },
-  );
-},
-);
-
-  } catch (e) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Error Storing Invoice'),
-          content: Text('Error: $e'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-Future<void> updateInventory(String productName, double quantity) async {
-  try {
-    FirebaseFirestore db = FirebaseFirestore.instance;
-    // Find the document with the matching name field
-    var query = await db.collection("alcohol").where('name', isEqualTo: productName).limit(1).get();
-    if (query.docs.isNotEmpty) {
-      var docId = query.docs.first.id;
-      await db.collection("alcohol").doc(docId).update({
-        "quantity": FieldValue.increment(-quantity),
-      });
-      print("Inventory updated for $productName");
-    } else {
-      print("Product $productName not found in inventory.");
+    } catch (e) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Error Storing Invoice'),
+            content: Text('Error: $e'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close the dialog
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
     }
-  } catch (e) {
-    print("Error updating inventory for $productName: $e");
-  }
-}
-
-double calculateTotal(List<InvoiceItem> items) {
-  double total = 0.0;
-
-  for (var item in items) {
-    total += item.quantity * item.unitPrice;
   }
 
-  return total;
-}
-
-double calculateItemsTotal(List<ItemInfo> items) {
-  double total = 0.0;
-
-  for (var item in items) {
-    total += item.quantity * item.price;
+  Future<void> updateInventory(String productName, double quantity) async {
+    try {
+      FirebaseFirestore db = FirebaseFirestore.instance;
+      // Find the document with the matching name field
+      var query = await db
+          .collection("alcohol")
+          .where('name', isEqualTo: productName)
+          .limit(1)
+          .get();
+      if (query.docs.isNotEmpty) {
+        var docId = query.docs.first.id;
+        await db.collection("alcohol").doc(docId).update({
+          "quantity": FieldValue.increment(-quantity),
+        });
+        print("Inventory updated for $productName");
+      } else {
+        print("Product $productName not found in inventory.");
+      }
+    } catch (e) {
+      print("Error updating inventory for $productName: $e");
+    }
   }
 
-  return total;
-}
-Future<void> printPdf(File pdfFile) async {
-  try {
-    // Read PDF file as bytes
+  double calculateTotal(List<InvoiceItem> items) {
+    double total = 0.0;
 
-    final pdfBytes = await pdfFile.readAsBytes();
+    for (var item in items) {
+      total += item.quantity * item.unitPrice;
+    }
 
-    // Use the Printing class to print the PDF
-    await Printing.layoutPdf(
-      onLayout: (_) async => pdfBytes,
-    );
-
-    // The PDF has been successfully sent to the printer
-    print('PDF printed successfully');
-  } catch (e) {
-    // Handle any errors that occur during printing
-    print('Error printing PDF: $e');
+    return total;
   }
-}
 
-Future<void> _invoicegen() async {
-  try {
-    // Retrieve customer data from text fields
-    String KRA = _customerKRA.text;
-    String customerName = _customerName.text.toLowerCase();
-    String customerNumber = _customerNumber.text;
-    String customerAddress = _customerAddress.text;
-    String salesRep = _salesName.text.toLowerCase();
+  double calculateItemsTotal(List<ItemInfo> items) {
+    double total = 0.0;
 
-    // Retrieve item data from the list
-    List<InvoiceItem> invoiceItems = items
-        .map((item) => InvoiceItem(
+    for (var item in items) {
+      total += item.quantity * item.price;
+    }
+
+    return total;
+  }
+
+  Future<void> printPdf(File pdfFile) async {
+    try {
+      // Read PDF file as bytes
+
+      final pdfBytes = await pdfFile.readAsBytes();
+
+      // Use the Printing class to print the PDF
+      await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+
+      // The PDF has been successfully sent to the printer
+      print('PDF printed successfully');
+    } catch (e) {
+      // Handle any errors that occur during printing
+      print('Error printing PDF: $e');
+    }
+  }
+
+  Future<void> _invoicegen() async {
+    try {
+      // Retrieve customer data from text fields
+      String KRA = _customerKRA.text;
+      String customerName = _customerName.text.toLowerCase();
+      String customerNumber = _customerNumber.text;
+      String customerAddress = _customerAddress.text;
+      String salesRep = _salesName.text.toLowerCase();
+
+      // Retrieve item data from the list
+      List<InvoiceItem> invoiceItems = items
+          .map(
+            (item) => InvoiceItem(
               description: item.productName,
               quantity: item.quantity,
               unitPrice: item.price,
               date: DateTime.now(),
-            ))
-        .toList();
+            ),
+          )
+          .toList();
 
-    final date = DateTime.now();
-    final dueDate = date.add(const Duration(days: 3));
+      final date = DateTime.now();
+      final dueDate = date.add(const Duration(days: 3));
 
-    final invoice = Invoice(
-      supplier: Supplier(
-        name: 'Jamos Solutions',
-        address: 'P.O. Box 3158-00506 Nairobi',
-        paymentInfo:
-            'Paybill - 303030 A/C N0 - 2049380324 Acc. Name: Jamos Solutions ',
-        saler: salesRep,
-      ),
-      customer: Customer(
-        name: customerName,
-        address: customerAddress,
-        number: customerNumber,
-      ),
-      info: InvoiceInfo(
-        date: date,
-        dueDate: dueDate,
-        description: 'Thank you for shopping with us',
-        number: KRA,
-      ),
-      items: invoiceItems,
-    );
+      final invoice = Invoice(
+        supplier: Supplier(
+          name: 'Jamos Solutions',
+          address: 'P.O. Box 3158-00506 Nairobi',
+          paymentInfo:
+              'Paybill - 303030 A/C N0 - 2049380324 Acc. Name: Jamos Solutions ',
+          saler: salesRep,
+        ),
+        customer: Customer(
+          name: customerName,
+          address: customerAddress,
+          number: customerNumber,
+        ),
+        info: InvoiceInfo(
+          date: date,
+          dueDate: dueDate,
+          description: 'Thank you for shopping with us',
+          number: KRA,
+        ),
+        items: invoiceItems,
+      );
 
-    // Generate the PDF
-    // final pdfFile = await PdfInvoiceApi.generateSimple(invoice);
+      // Generate the PDF
+      // final pdfFile = await PdfInvoiceApi.generateSimple(invoice);
 
-    // Define the filename based on customer name and timestamp
-    // String fileName =
-    //     '${DateFormat('HH:mm:ss').format(DateTime.now())}_$customerName.pdf';
+      // Define the filename based on customer name and timestamp
+      // String fileName =
+      //     '${DateFormat('HH:mm:ss').format(DateTime.now())}_$customerName.pdf';
 
-    // Upload to Firebase Storage
-    // final storageReference =
-    //     FirebaseStorage.instance.ref().child('pdf').child(fileName);
+      // Upload to Firebase Storage
+      // final storageReference =
+      //     FirebaseStorage.instance.ref().child('pdf').child(fileName);
 
-    // if (kIsWeb) {
+      // if (kIsWeb) {
       // Web: pdfFile is already bytes (Uint8List)
       // final pdfBytes = pdfFile as Uint8List;
       // await storageReference.putData(pdfBytes);
 
       // Open print dialog for web
-    //   await Printing.layoutPdf(
-    //     onLayout: (_) async => pdfBytes,
-    //     name: fileName,
-    //   );
-    // } else {
+      //   await Printing.layoutPdf(
+      //     onLayout: (_) async => pdfBytes,
+      //     name: fileName,
+      //   );
+      // } else {
       // Mobile/Desktop: pdfFile is a File object
       // final File pdfFileObj = pdfFile as File;
       // await storageReference.putFile(pdfFileObj);
@@ -1660,55 +3074,55 @@ Future<void> _invoicegen() async {
       //     builder: (context) => open(pdfPath: localPdfPath),
       //   ),
       // );
-    // }
-    
-    // Build and print receipt with actual invoice data
-    await buildTestReceipt(
-      invoiceItems: items,
-      customerName: customerName,
-      salesRep: salesRep,
-      paymentMethod: _selectedPaymentMethod,
-      totalAmount: calculateItemsTotal(items),
-    );
-  } catch (e) {
-    print("Error generating, uploading, or downloading PDF: $e");
+      // }
+
+      // Build and print receipt with actual invoice data (print 2 copies)
+      await buildTestReceipt(
+        invoiceItems: items,
+        customerName: customerName,
+        salesRep: salesRep,
+        paymentMethod: _selectedPaymentMethod,
+        totalAmount: calculateItemsTotal(items),
+      );
+
+      // Print second copy
+      await buildTestReceipt(
+        invoiceItems: items,
+        customerName: customerName,
+        salesRep: salesRep,
+        paymentMethod: _selectedPaymentMethod,
+        totalAmount: calculateItemsTotal(items),
+      );
+    } catch (e) {
+      print("Error generating, uploading, or downloading PDF: $e");
+    }
   }
-}
 
-
-
-   Future<void> _checkPermission(Permission permission) async {
+  Future<void> _checkPermission(Permission permission) async {
     AndroidDeviceInfo build = await DeviceInfoPlugin().androidInfo;
     if (build.version.sdkInt >= 30) {
       var result = await Permission.manageExternalStorage.request();
       if (result.isGranted) {
         _invoicegen();
       } else {
-        
         print('Permission denied.');
-        
       }
-    } 
-
-    else {
+    } else {
       if (await permission.isGranted) {
-       _invoicegen() ;
+        _invoicegen();
       } else {
         var result = await permission.request();
         if (result.isGranted) {
-          _invoicegen() ;
+          _invoicegen();
         } else {
-                  _invoicegen();
+          _invoicegen();
 
           print('Permission denied.');
-          }
         }
       }
     }
-  
+  }
 }
-  
-
 
 class ItemInfo {
   String productName;
@@ -1752,7 +3166,7 @@ class ProductCardWithImage extends StatelessWidget {
     required this.discountPercent,
     required this.imageUrl,
     this.onTap,
-    this.onAddTap,   
+    this.onAddTap,
   });
 
   @override
@@ -1761,9 +3175,7 @@ class ProductCardWithImage extends StatelessWidget {
       onTap: onTap,
       child: Card(
         elevation: 2.0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1821,7 +3233,7 @@ class ProductCardWithImage extends StatelessWidget {
                   ),
               ],
             ),
-            
+
             // Product Info
             Expanded(
               child: Padding(
@@ -1856,7 +3268,7 @@ class ProductCardWithImage extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 13.0,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black
+                              color: Colors.black,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1926,16 +3338,13 @@ class OrderItemCard extends StatelessWidget {
                 'images/pos.gif',
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  return Icon(
-                    Icons.shopping_bag,
-                    color: Colors.grey[400],
-                  );
+                  return Icon(Icons.shopping_bag, color: Colors.grey[400]);
                 },
               ),
             ),
           ),
           const SizedBox(width: 12.0),
-          
+
           // Product Details
           Expanded(
             child: Column(
@@ -1954,15 +3363,12 @@ class OrderItemCard extends StatelessWidget {
                 const SizedBox(height: 4.0),
                 Text(
                   'Ksh ${item.price.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 12.0,
-                    color: Colors.grey[800],
-                  ),
+                  style: TextStyle(fontSize: 12.0, color: Colors.grey[800]),
                 ),
               ],
             ),
           ),
-          
+
           // Quantity and Remove
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -1982,7 +3388,7 @@ class OrderItemCard extends StatelessWidget {
                         border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(4.0),
                       ),
-                      child: const Icon(Icons.remove, size:24.0),
+                      child: const Icon(Icons.remove, size: 24.0),
                     ),
                   ),
                   Container(

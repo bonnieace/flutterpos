@@ -2,7 +2,7 @@ import 'package:flutter_application_1/constants/sizes.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_typeahead/flutter_typeahead.dart';
+// import 'package:flutter_typeahead/flutter_typeahead.dart';
 
 class inv extends StatefulWidget {
   const inv({super.key});
@@ -101,30 +101,30 @@ return Scaffold(
                   ),
                 ),
                 const SizedBox(height: TSizes.spaceBtwItems),
-                TypeAheadFormField<String>(
-                  textFieldConfiguration: TextFieldConfiguration(
-                    decoration: const InputDecoration(
-                      labelText: 'Select Product',
-                      border: OutlineInputBorder(),
-                    ),
-                    controller: _productNameController,
-                  ),
-                  suggestionsCallback: (pattern) async {
-                    return inventoryItems.where((item) => item.toLowerCase().contains(pattern.toLowerCase()));
-                  },
-                  itemBuilder: (context, suggestion) {
-                    return ListTile(
-                      title: Text(suggestion),
-                    );
-                  },
-                  onSuggestionSelected: (suggestion) {
-                    setState(() {
-                      _productNameController.text = suggestion;
-                      _sellingPriceController.text = productSellingPrices[suggestion].toString();
-                      _buyingPriceController.text = productBuyingPrices[suggestion].toString();
-                    });
-                  },
-                ),
+                // TypeAheadFormField<String>(
+                //   textFieldConfiguration: TextFieldConfiguration(
+                //     decoration: const InputDecoration(
+                //       labelText: 'Select Product',
+                //       border: OutlineInputBorder(),
+                //     ),
+                //     controller: _productNameController,
+                //   ),
+                //   suggestionsCallback: (pattern) async {
+                //     return inventoryItems.where((item) => item.toLowerCase().contains(pattern.toLowerCase()));
+                //   },
+                //   itemBuilder: (context, suggestion) {
+                //     return ListTile(
+                //       title: Text(suggestion),
+                //     );
+                //   },
+                //   onSuggestionSelected: (suggestion) {
+                //     setState(() {
+                //       _productNameController.text = suggestion;
+                //       _sellingPriceController.text = productSellingPrices[suggestion].toString();
+                //       _buyingPriceController.text = productBuyingPrices[suggestion].toString();
+                //     });
+                //   },
+                // ),
                
                 const SizedBox(height: 16),
                 TextField(

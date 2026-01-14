@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Dark theme colors
 const Color bgDark = Color(0xFF0D1F16);
 const Color bgMid = Color(0xFF132A1F);
 const Color accentGreen = Color(0xFF45F28D);
