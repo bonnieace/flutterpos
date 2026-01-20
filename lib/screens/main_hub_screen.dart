@@ -12,7 +12,6 @@ import '../theme.dart';
 import 'create_user.dart';
 import 'users.dart';
 import 'package:flutter_application_1/config.dart';
-import 'upload_application_update_screen.dart';
 class MainHubScreen extends StatefulWidget {
   const MainHubScreen({super.key});
 
@@ -329,7 +328,6 @@ class _ModuleGrid extends StatelessWidget {
   const _ModuleGrid({required this.userName, required this.userRole});
 
   bool get isCashier => userRole == 'CASHIER';
-  bool get isAdminOrOwner => userRole == 'ADMIN' || userRole == 'OWNER';
   
   @override
   Widget build(BuildContext context) {
@@ -422,18 +420,6 @@ class _ModuleGrid extends StatelessWidget {
           userName: userName,
         ),
       ]);
-      if (!isCashier) {
-        modules.add(
-          _ModuleCard(
-            title: 'App Update',
-            subtitle: 'Upload new APKs and manage app updates.',
-            icon: Icons.system_update,
-            iconColor: Colors.amber,
-            module: HubModule.appUpdate,
-            userName: userName,
-          ),
-        );
-      }
     }
     
     return Padding(
@@ -717,12 +703,6 @@ void navigateToModule(BuildContext context, HubModule module, String userName) {
         MaterialPageRoute(builder: (_) => const ReturnsScreen()),
       );
       break;
-    case HubModule.appUpdate:
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const UploadApplicationUpdateScreen()),
-      );
-      break;
   }
 }
 enum HubModule {
@@ -733,5 +713,4 @@ enum HubModule {
   reports,
   bookKeeping,
   returns,
-  appUpdate,
 }
