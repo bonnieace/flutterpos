@@ -448,7 +448,7 @@ class _goodsState extends State<goods> {
                                   (status) => DropdownMenuItem(
                                     value: status,
                                     child: Text(status),
-                                  ),
+                                  )
                                 )
                                 .toList(),
                             onChanged: (val) {
@@ -501,11 +501,11 @@ class _goodsState extends State<goods> {
                   // Status filter (example: filter by quantity)
                   if (selectedStatus == 'Low') {
                     displayDocs = displayDocs
-                        .where((doc) => (doc['quantity'] as int) < 20)
+                        .where((doc) => (doc['quantity'] as num) < 20)
                         .toList();
                   } else if (selectedStatus == 'Over') {
                     displayDocs = displayDocs
-                        .where((doc) => (doc['quantity'] as int) > 100)
+                        .where((doc) => (doc['quantity'] as num) > 100)
                         .toList();
                   }
                   // Spoilage/Restock are not direct fields, so you may need to adjust logic
@@ -677,7 +677,7 @@ class _goodsState extends State<goods> {
                                                       MainAxisSize.min,
                                                   children: [
                                                     if ((doc['quantity']
-                                                            as int) <
+                                                            as num) <
                                                         20)
                                                       Container(
                                                         padding:
@@ -703,7 +703,7 @@ class _goodsState extends State<goods> {
                                                         ),
                                                       ),
                                                     if ((doc['quantity']
-                                                            as int) >
+                                                            as num) >
                                                         100)
                                                       Container(
                                                         padding:
@@ -916,7 +916,7 @@ class _goodsState extends State<goods> {
                                                     ],
                                                   ),
                                                 ),
-                                                if ((doc['quantity'] as int) <
+                                                if ((doc['quantity'] as num) <
                                                     20)
                                                   Container(
                                                     margin:
@@ -945,7 +945,7 @@ class _goodsState extends State<goods> {
                                                       ),
                                                     ),
                                                   ),
-                                                if ((doc['quantity'] as int) >
+                                                if ((doc['quantity'] as num) >
                                                     100)
                                                   Container(
                                                     margin:
@@ -2940,7 +2940,7 @@ class _TopBar extends StatelessWidget {
           if (isMobile)
             IconButton(
               icon: const Icon(Icons.menu, color: Colors.white),
-              onPressed: () => Scaffold.of(context).openDrawer(),
+              onPressed:  () => Scaffold.of(context).openDrawer(),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),

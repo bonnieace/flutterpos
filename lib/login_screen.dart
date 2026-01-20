@@ -29,6 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
   String? errorMessage; // For displaying errors
   bool isLoading = false; // For button loading state
 
+  bool rememberMe = true; // Remember Me checkbox state
+
   bool get isMobile {
     final width = MediaQuery.of(context).size.width;
     return width < 768; // Mobile/tablet breakpoint
@@ -68,6 +70,16 @@ class _LoginScreenState extends State<LoginScreen> {
       isLoading = true;
     });
     try {
+      // Set Firebase Auth persistence based on rememberMe
+      // On web, you can set persistence. On mobile, it's always local, but this is safe.
+      try {
+        await FirebaseAuth.instance.setPersistence(
+          rememberMe ? Persistence.LOCAL : Persistence.SESSION,
+        );
+      } catch (_) {
+        // setPersistence is not supported on mobile, ignore error
+      }
+
       final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text,
@@ -156,9 +168,27 @@ class _LoginScreenState extends State<LoginScreen> {
             focusNode: passwordFocus,
             keyboard: isMobile ? null : keyboard,
           ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Checkbox(
+                value: rememberMe,
+                onChanged: (value) {
+                  setState(() {
+                    rememberMe = value ?? true;
+                  });
+                },
+                activeColor: Colors.green,
+              ),
+              const Text(
+                "Remember Me",
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
           if (errorMessage != null) ...[
             const SizedBox(height: 16),
-              Text(
+            Text(
               errorMessage!,
               style: const TextStyle(color: Colors.red),
             ),

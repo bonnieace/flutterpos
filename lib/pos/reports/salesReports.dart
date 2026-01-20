@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_application_1/theme.dart';
+import 'package:flutter_application_1/pos/services/returns_service.dart';
 
 class SalesReportPage extends StatefulWidget {
   const SalesReportPage({super.key});
@@ -12,15 +13,107 @@ class SalesReportPage extends StatefulWidget {
 }
 
 class _SalesReportPageState extends State<SalesReportPage> {
+      // High-level access: not a cashier or is admin cashier
+      bool get hasHighLevelAccess =>
+          currentUserRole.toLowerCase() != 'cashier' || currentUserUid == _adminCashierUid;
+    Future<String?> _promptReturnReason({required BuildContext context, required String title}) async {
+      final TextEditingController controller = TextEditingController();
+      return showDialog<String>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: bgMid,
+            title: Text(title, style: const TextStyle(color: Colors.white)),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Reason for return',
+                labelStyle: TextStyle(color: Colors.white70),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: accentGreen),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: accentGreen),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: accentGreen),
+                onPressed: () {
+                  if (controller.text.trim().isNotEmpty) {
+                    Navigator.of(context).pop(controller.text.trim());
+                  }
+                },
+                child: const Text('Confirm', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      );
+    }
+  final ReturnsService _returnsService = ReturnsService();
+    Future<void> _editPaymentMethod(String docId, String currentMethod) async {
+      final List<String> paymentOptions = ['Cash', 'Mpesa', 'Bank'];
+      String selected = currentMethod;
+      await showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: bgMid,
+            title: const Text('Edit Payment Method', style: TextStyle(color: Colors.white)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: paymentOptions.map((option) {
+                return RadioListTile<String>(
+                  value: option,
+                  groupValue: selected,
+                  onChanged: (value) {
+                    if (value != null) {
+                      selected = value;
+                      setState(() {});
+                      Navigator.of(context).pop(value);
+                    }
+                  },
+                  title: Text(option, style: const TextStyle(color: Colors.white)),
+                  activeColor: accentGreen,
+                  tileColor: Colors.transparent,
+                );
+              }).toList(),
+            ),
+          );
+        },
+      ).then((newValue) async {
+        if (newValue != null && newValue != currentMethod) {
+          // Update Firestore
+          await salesCollection.doc(docId).update({'payment': newValue});
+          setState(() {}); // Refresh UI
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Payment method updated to $newValue'),
+              backgroundColor: accentGreen,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      });
+    }
   late CollectionReference salesCollection;
   String selectedFilter = 'Today';
   final List<String> filterOptions = [
     'Today',
+    'Yesterday',
     'Last 7 Days',
     'Last 30 Days',
     'This Month',
     'Custom',
-    // 'All Time',
+    'All Time',
   ];
 
   // Custom date range
@@ -47,7 +140,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
   @override
   void initState() {
     super.initState();
-    salesCollection = FirebaseFirestore.instance.collection('alcoholsales');
+    salesCollection = FirebaseFirestore.instance.collection('adjustments');
     _loadCurrentUser();
   }
 
@@ -171,10 +264,11 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }
   }
 
-  Future<Map<String, List<Map<String, dynamic>>>> _fetchSalesData() async {
+  // New: Group by day, then by transaction (document ID)
+  Future<Map<String, Map<String, Map<String, dynamic>>>> _fetchSalesData() async {
     Query query = salesCollection;
 
-    // Apply date filter
+    // Apply date filter (fetch one day before and after the selected range)
     final now = DateTime.now();
     DateTime? startDate;
     DateTime? endDate;
@@ -184,14 +278,22 @@ class _SalesReportPageState extends State<SalesReportPage> {
         startDate = DateTime(now.year, now.month, now.day);
         endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
+      case 'Yesterday':
+        final yesterday = now.subtract(const Duration(days: 1));
+        startDate = DateTime(yesterday.year, yesterday.month, yesterday.day);
+        endDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
+        break;
       case 'Last 7 Days':
         startDate = now.subtract(const Duration(days: 7));
+        endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case 'Last 30 Days':
         startDate = now.subtract(const Duration(days: 30));
+        endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case 'This Month':
         startDate = DateTime(now.year, now.month, 1);
+        endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case 'Custom':
         if (customStartDate != null) {
@@ -214,27 +316,39 @@ class _SalesReportPageState extends State<SalesReportPage> {
         break;
       default:
         startDate = null;
+        endDate = null;
     }
 
-    if (startDate != null) {
+    // Expand the fetch range by one day before and after
+    DateTime? fetchStartDate = startDate != null ? startDate.subtract(const Duration(days: 1)) : null;
+    DateTime? fetchEndDate = endDate != null ? endDate.add(const Duration(days: 1)) : null;
+
+    if (fetchStartDate != null) {
       query = query.where(
         'dateAdded',
-        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+        isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStartDate),
       );
     }
-    if (endDate != null) {
+    if (fetchEndDate != null) {
       query = query.where(
         'dateAdded',
-        isLessThanOrEqualTo: Timestamp.fromDate(endDate),
+        isLessThanOrEqualTo: Timestamp.fromDate(fetchEndDate),
       );
     }
 
     QuerySnapshot salesSnapshot = await query.get();
 
-    Map<String, List<Map<String, dynamic>>> dailySales = {};
+    // Structure: {date: {transactionId: { ...transactionData, 'items': [...] }}}
+    Map<String, Map<String, Map<String, dynamic>>> dailyTransactions = {};
 
     for (var saleDoc in salesSnapshot.docs) {
       final data = saleDoc.data() as Map<String, dynamic>;
+      final docId = saleDoc.id;
+
+      // Debug: print type and value of dateAdded and businessDate
+      debugPrint('docId: $docId');
+      debugPrint('dateAdded: \\${data['dateAdded']} (type: \\${data['dateAdded']?.runtimeType})');
+      debugPrint('businessDate: \\${data['businessDate']}');
 
       // Filter by soldBy if selected
       String soldBy = data['soldBy'] as String? ?? '';
@@ -242,8 +356,36 @@ class _SalesReportPageState extends State<SalesReportPage> {
         continue;
       }
 
-      Timestamp documentTimestamp = data['dateAdded'] as Timestamp;
-      DateTime date = documentTimestamp.toDate();
+      // Use businessDate if present, else fall back to dateAdded
+      String? businessDateStr = data['businessDate'] as String?;
+      DateTime? businessDate;
+      if (businessDateStr != null && businessDateStr.isNotEmpty) {
+        try {
+          businessDate = DateTime.parse(businessDateStr);
+        } catch (_) {
+          businessDate = null;
+        }
+      }
+      Timestamp? documentTimestamp = data['dateAdded'] is Timestamp ? data['dateAdded'] as Timestamp : null;
+      DateTime date = businessDate ?? (documentTimestamp != null ? documentTimestamp.toDate() : DateTime.now());
+
+      // After fetching wider range, filter by businessDate (if present) or dateAdded to be within the original range
+      bool inRange = true;
+      if (startDate != null) {
+        if (businessDate != null) {
+          if (businessDate.isBefore(startDate)) inRange = false;
+        } else if (documentTimestamp != null) {
+          if (documentTimestamp.toDate().isBefore(startDate)) inRange = false;
+        }
+      }
+      if (endDate != null) {
+        if (businessDate != null) {
+          if (businessDate.isAfter(endDate)) inRange = false;
+        } else if (documentTimestamp != null) {
+          if (documentTimestamp.toDate().isAfter(endDate)) inRange = false;
+        }
+      }
+      if (!inRange) continue;
 
       String formattedDate =
           "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
@@ -254,39 +396,24 @@ class _SalesReportPageState extends State<SalesReportPage> {
           .toDouble();
 
       if (items != null) {
-        for (var item in items) {
-          String productName = item['productName'] ?? item['name'] ?? 'Unknown';
-          double quantity = (item['quantity'] as num?)?.toDouble() ?? 1.0;
-          double price = (item['price'] as num?)?.toDouble() ?? 0.0;
+        // Prepare transaction data
+        Map<String, dynamic> transactionData = {
+          'transactionId': docId,
+          'items': items,
+          'paymentMethod': paymentMethod,
+          'transactionTotal': totalAmount,
+          'dateAdded': documentTimestamp,
+          'soldBy': soldBy,
+        };
 
-          Map<String, dynamic> saleInfo = {
-            'productName': productName,
-            'quantity': quantity,
-            'price': price,
-            'totalAmount': price * quantity,
-            'paymentMethod': paymentMethod,
-            'dateAdded': documentTimestamp,
-            'transactionTotal': totalAmount,
-            'soldBy': soldBy,
-          };
-
-          if (dailySales.containsKey(formattedDate)) {
-            dailySales[formattedDate]!.add(saleInfo);
-          } else {
-            dailySales[formattedDate] = [saleInfo];
-          }
+        if (!dailyTransactions.containsKey(formattedDate)) {
+          dailyTransactions[formattedDate] = {};
         }
-
-        // Sort products within a day based on timestamp
-        dailySales[formattedDate]?.sort(
-          (a, b) => (b['dateAdded'] as Timestamp).compareTo(
-            a['dateAdded'] as Timestamp,
-          ),
-        );
+        dailyTransactions[formattedDate]![docId] = transactionData;
       }
     }
 
-    return dailySales;
+    return dailyTransactions;
   }
 
   String _formatCurrency(double amount) {
@@ -505,7 +632,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
           ),
           // Sales Data
           Expanded(
-            child: FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+            child: FutureBuilder<Map<String, Map<String, Map<String, dynamic>>>>(
               future: _fetchSalesData(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -562,415 +689,692 @@ class _SalesReportPageState extends State<SalesReportPage> {
                   );
                 }
 
-                Map<String, List<Map<String, dynamic>>> dailySales =
-                    snapshot.data!;
+                Map<String, Map<String, Map<String, dynamic>>> dailyTransactions = snapshot.data!;
 
                 // Sort the dates in descending order
-                List<String> sortedDates = dailySales.keys.toList()
-                  ..sort(
-                    (a, b) => DateTime.parse(b).compareTo(DateTime.parse(a)),
-                  );
+                List<String> sortedDates = dailyTransactions.keys.toList()
+                  ..sort((a, b) => DateTime.parse(b).compareTo(DateTime.parse(a)));
 
                 // Calculate totals by payment type
                 Map<String, double> paymentTotals = {};
                 double grandTotal = 0;
                 int totalItems = 0;
 
-                for (var sales in dailySales.values) {
-                  for (var sale in sales) {
-                    double amount = (sale['totalAmount'] as double);
-                    String paymentMethod =
-                        sale['paymentMethod'] as String? ?? 'Cash';
+                for (var transactions in dailyTransactions.values) {
+                  for (var transaction in transactions.values) {
+                    double amount = (transaction['transactionTotal'] as double);
+                    String paymentMethod = transaction['paymentMethod'] as String? ?? 'Cash';
 
                     // Normalize payment method
                     if (paymentMethod.toLowerCase() == 'cash') {
                       paymentMethod = 'Cash';
-                    } else if (paymentMethod.toLowerCase() == 'mpesa' ||
-                        paymentMethod.toLowerCase() == 'm-pesa') {
+                    } else if (paymentMethod.toLowerCase() == 'mpesa' || paymentMethod.toLowerCase() == 'm-pesa') {
                       paymentMethod = 'Mpesa';
-                    } else if (paymentMethod.toLowerCase() == 'card' ||
-                        paymentMethod.toLowerCase() == 'credit') {
+                    } else if (paymentMethod.toLowerCase() == 'card' || paymentMethod.toLowerCase() == 'credit') {
                       paymentMethod = 'Card';
                     }
 
-                    paymentTotals[paymentMethod] =
-                        (paymentTotals[paymentMethod] ?? 0) + amount;
+                    paymentTotals[paymentMethod] = (paymentTotals[paymentMethod] ?? 0) + amount;
                     grandTotal += amount;
                     totalItems++;
                   }
                 }
 
-                return ListView.builder(
+                return ListView(
                   padding: const EdgeInsets.all(16),
-                  itemCount: sortedDates.length + 1, // +1 for the summary card
-                  itemBuilder: (context, index) {
-                    // First item is the Summary Card
-                    if (index == 0) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: bgMid,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: mutedGreen),
-                        ),
-                        child: Column(
-                          children: [
-                            // Grand Total Row
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: accentGreen.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.attach_money,
-                                    color: accentGreen,
-                                    size: 28,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Grand Total',
-                                        style: TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _formatCurrency(grandTotal),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      '${sortedDates.length} days',
-                                      style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '$totalItems items',
-                                      style: const TextStyle(
-                                        color: accentGreen,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Divider(color: Colors.white.withOpacity(0.1)),
-                            const SizedBox(height: 12),
-                            // Payment Type Breakdown
-                            ...paymentTotals.entries.map((entry) {
-                              Color paymentColor;
-                              IconData paymentIcon;
-
-                              switch (entry.key.toLowerCase()) {
-                                case 'cash':
-                                  paymentColor = accentGreen;
-                                  paymentIcon = Icons.money;
-                                  break;
-                                case 'mpesa':
-                                  paymentColor = Colors.green;
-                                  paymentIcon = Icons.phone_android;
-                                  break;
-                                case 'card':
-                                  paymentColor = Colors.blue;
-                                  paymentIcon = Icons.credit_card;
-                                  break;
-                                default:
-                                  paymentColor = Colors.orange;
-                                  paymentIcon = Icons.payment;
-                              }
-
-                              double percentage = grandTotal > 0
-                                  ? (entry.value / grandTotal) * 100
-                                  : 0;
-
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: paymentColor.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Icon(
-                                        paymentIcon,
-                                        color: paymentColor,
-                                        size: 20,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            entry.key,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                            child: LinearProgressIndicator(
-                                              value: percentage / 100,
-                                              backgroundColor: Colors.white
-                                                  .withOpacity(0.1),
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                    paymentColor,
-                                                  ),
-                                              minHeight: 4,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          _formatCurrency(entry.value),
-                                          style: TextStyle(
-                                            color: paymentColor,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${percentage.toStringAsFixed(1)}%',
-                                          style: const TextStyle(
-                                            color: Colors.white54,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                          ],
-                        ),
-                      );
-                    }
-
-                    // Daily Sales Items (index - 1 because first item is summary card)
-                    final dateIndex = index - 1;
-                    var date = sortedDates[dateIndex];
-                    var salesForDay = dailySales[date]!;
-
-                    double totalSalesForDay = salesForDay.fold(
-                      0.0,
-                      (previous, sale) =>
-                          previous + (sale['totalAmount'] as double),
-                    );
-
-                    return Container(
+                  children: [
+                    // Summary Card
+                    Container(
                       margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: bgMid,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: mutedGreen),
                       ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Date Header
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: mutedGreen.withOpacity(0.3),
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(11),
+                          // Grand Total Row
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: accentGreen.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.attach_money,
+                                  color: accentGreen,
+                                  size: 28,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(
-                                      Icons.calendar_today,
-                                      color: accentGreen,
-                                      size: 18,
+                                    const Text(
+                                      'Grand Total',
+                                      style: TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 14,
+                                      ),
                                     ),
-                                    const SizedBox(width: 8),
+                                    const SizedBox(height: 4),
                                     Text(
-                                      _formatDate(date),
+                                      _formatCurrency(grandTotal),
                                       style: const TextStyle(
                                         color: Colors.white,
+                                        fontSize: 24,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 16,
                                       ),
                                     ),
                                   ],
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '${sortedDates.length} days',
+                                    style: const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: accentGreen.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    _formatCurrency(totalSalesForDay),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '$totalItems transactions',
                                     style: const TextStyle(
                                       color: accentGreen,
-                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                            ],
                           ),
-                          // Items List
-                          ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: salesForDay.length,
-                            separatorBuilder: (context, i) => Divider(
-                              color: Colors.white10,
-                              height: 1,
-                              indent: 16,
-                              endIndent: 16,
-                            ),
-                            itemBuilder: (context, i) {
-                              var sale = salesForDay[i];
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: mutedGreen,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Icon(
-                                        Icons.local_bar,
-                                        color: Colors.white54,
-                                        size: 20,
-                                      ),
+                          const SizedBox(height: 16),
+                          Divider(color: Colors.white.withOpacity(0.1)),
+                          const SizedBox(height: 12),
+                          // Payment Type Breakdown
+                          ...paymentTotals.entries.map((entry) {
+                            Color paymentColor;
+                            IconData paymentIcon;
+
+                            switch (entry.key.toLowerCase()) {
+                              case 'cash':
+                                paymentColor = accentGreen;
+                                paymentIcon = Icons.money;
+                                break;
+                              case 'mpesa':
+                                paymentColor = Colors.green;
+                                paymentIcon = Icons.phone_android;
+                                break;
+                              case 'card':
+                                paymentColor = Colors.blue;
+                                paymentIcon = Icons.credit_card;
+                                break;
+                              default:
+                                paymentColor = Colors.orange;
+                                paymentIcon = Icons.payment;
+                            }
+
+                            double percentage = grandTotal > 0 ? (entry.value / grandTotal) * 100 : 0;
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: paymentColor.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            sale['productName'],
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            'Qty: ${sale['quantity'].toInt()} × ${_formatCurrency(sale['price'])}',
-                                            style: const TextStyle(
-                                              color: Colors.white38,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                    child: Icon(
+                                      paymentIcon,
+                                      color: paymentColor,
+                                      size: 20,
                                     ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          _formatCurrency(sale['totalAmount']),
+                                          entry.key,
                                           style: const TextStyle(
                                             color: Colors.white,
-                                            fontWeight: FontWeight.bold,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                sale['paymentMethod']
-                                                        .toLowerCase() ==
-                                                    'cash'
-                                                ? accentGreen.withOpacity(0.2)
-                                                : Colors.blue.withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            sale['paymentMethod'],
-                                            style: TextStyle(
-                                              color:
-                                                  sale['paymentMethod']
-                                                          .toLowerCase() ==
-                                                      'cash'
-                                                  ? accentGreen
-                                                  : Colors.blue,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                            ),
+                                        const SizedBox(height: 4),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value: percentage / 100,
+                                            backgroundColor: Colors.white.withOpacity(0.1),
+                                            valueColor: AlwaysStoppedAnimation<Color>(paymentColor),
+                                            minHeight: 4,
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        _formatCurrency(entry.value),
+                                        style: TextStyle(
+                                          color: paymentColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${percentage.toStringAsFixed(1)}%',
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
                         ],
                       ),
-                    );
-                  },
+                    ),
+                    // Day and Transaction breakdown
+                    ...sortedDates.expand((date) {
+                      final transactions = dailyTransactions[date]!;
+                      // Sort transactions by time descending
+                      final sortedTransactionList = transactions.values.toList()
+                        ..sort((a, b) {
+                          final t1 = a['dateAdded'];
+                          final t2 = b['dateAdded'];
+                          if (t1 is Timestamp && t2 is Timestamp) {
+                            return t2.compareTo(t1);
+                          }
+                          return 0;
+                        });
+                      return [
+                        // Day label
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16, bottom: 8),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_today, color: accentGreen, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                _formatDate(date),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Transaction tables/cards
+                        ...sortedTransactionList.map((transaction) {
+                          final items = transaction['items'] as List<dynamic>;
+                          final paymentMethod = transaction['paymentMethod'] as String? ?? 'Cash';
+                          final transactionTotal = transaction['transactionTotal'] as double? ?? 0.0;
+                          final soldBy = transaction['soldBy'] as String? ?? '';
+                          final transactionId = transaction['transactionId'] as String? ?? '';
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: bgMid,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: mutedGreen),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // ...existing code...
+                                // Transaction header
+                                Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.receipt, color: accentGreen, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            transaction['dateAdded'] is Timestamp
+                                                ? DateFormat('hh:mm a').format((transaction['dateAdded'] as Timestamp).toDate())
+                                                : '',
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: accentGreen.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          _formatCurrency(transactionTotal),
+                                          style: const TextStyle(
+                                            color: accentGreen,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Items table
+                                ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: items.length,
+                                  separatorBuilder: (context, i) => Divider(
+                                    color: Colors.white10,
+                                    height: 1,
+                                    indent: 16,
+                                    endIndent: 16,
+                                  ),
+                                  itemBuilder: (context, i) {
+                                    final item = items[i] as Map<String, dynamic>;
+                                    final productName = item['productName'] ?? item['name'] ?? 'Unknown';
+                                    final quantity = (item['quantity'] as num?)?.toDouble() ?? 1.0;
+                                    final price = (item['price'] as num?)?.toDouble() ?? 0.0;
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              color: mutedGreen,
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: const Icon(
+                                              Icons.local_bar,
+                                              color: Colors.white54,
+                                              size: 20,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  productName,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  'Qty: ${quantity.toInt()} × ${_formatCurrency(price)}',
+                                                  style: const TextStyle(
+                                                    color: Colors.white38,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                _formatCurrency(price * quantity),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          // Partial return button (high-level access only)
+                                          if (hasHighLevelAccess)
+                                            IconButton(
+                                              icon: const Icon(Icons.undo, color: Colors.orange, size: 20),
+                                              tooltip: 'Partial Return',
+                                              onPressed: () async {
+                                                final int maxQty = (item['quantity'] as num?)?.toInt() ?? 1;
+                                                int selectedQty = 1;
+                                                if (maxQty > 1) {
+                                                  final result = await showDialog<int>(
+                                                    context: context,
+                                                    builder: (context) {
+                                                      return AlertDialog(
+                                                        backgroundColor: bgMid,
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(20),
+                                                        ),
+                                                        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                                                        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                                                        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                                        title: Row(
+                                                          children: [
+                                                            Container(
+                                                              decoration: BoxDecoration(
+                                                                color: accentGreen.withOpacity(0.15),
+                                                                borderRadius: BorderRadius.circular(8),
+                                                              ),
+                                                              padding: const EdgeInsets.all(8),
+                                                              child: const Icon(Icons.undo, color: accentGreen, size: 24),
+                                                            ),
+                                                            const SizedBox(width: 12),
+                                                            const Text(
+                                                              'Partial Return',
+                                                              style: TextStyle(
+                                                                color: Colors.white,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 20,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        content: Column(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                                          children: [
+                                                            const SizedBox(height: 8),
+                                                            Text(
+                                                              'Select quantity to return:',
+                                                              style: TextStyle(
+                                                                color: Colors.white70,
+                                                                fontSize: 16,
+                                                                fontWeight: FontWeight.w500,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(height: 18),
+                                                            StatefulBuilder(
+                                                              builder: (context, setState) {
+                                                                return Container(
+                                                                  decoration: BoxDecoration(
+                                                                    color: bgDark,
+                                                                    borderRadius: BorderRadius.circular(12),
+                                                                    border: Border.all(color: accentGreen.withOpacity(0.2)),
+                                                                  ),
+                                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                                  child: Row(
+                                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                                    children: [
+                                                                      IconButton(
+                                                                        icon: Icon(Icons.remove_circle, color: selectedQty > 1 ? accentGreen : Colors.white24, size: 28),
+                                                                        splashRadius: 22,
+                                                                        onPressed: selectedQty > 1
+                                                                            ? () => setState(() => selectedQty--)
+                                                                            : null,
+                                                                      ),
+                                                                      Container(
+                                                                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                                        decoration: BoxDecoration(
+                                                                          color: accentGreen.withOpacity(0.12),
+                                                                          borderRadius: BorderRadius.circular(8),
+                                                                        ),
+                                                                        child: Text(
+                                                                          '$selectedQty',
+                                                                          style: const TextStyle(
+                                                                            color: Colors.white,
+                                                                            fontSize: 22,
+                                                                            fontWeight: FontWeight.bold,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      IconButton(
+                                                                        icon: Icon(Icons.add_circle, color: selectedQty < maxQty ? accentGreen : Colors.white24, size: 28),
+                                                                        splashRadius: 22,
+                                                                        onPressed: selectedQty < maxQty
+                                                                            ? () => setState(() => selectedQty++)
+                                                                            : null,
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                );
+                                                              },
+                                                            ),
+                                                            const SizedBox(height: 10),
+                                                            Text(
+                                                              'Max: $maxQty',
+                                                              style: const TextStyle(color: Colors.white38, fontSize: 13),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        actions: [
+                                                          TextButton(
+                                                            style: TextButton.styleFrom(
+                                                              foregroundColor: Colors.white70,
+                                                              textStyle: const TextStyle(fontWeight: FontWeight.w500),
+                                                            ),
+                                                            child: const Padding(
+                                                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                              child: Text('Cancel'),
+                                                            ),
+                                                            onPressed: () => Navigator.of(context).pop(),
+                                                          ),
+                                                          ElevatedButton(
+                                                            style: ElevatedButton.styleFrom(
+                                                              backgroundColor: accentGreen,
+                                                              foregroundColor: Colors.white,
+                                                              shape: RoundedRectangleBorder(
+                                                                borderRadius: BorderRadius.circular(8),
+                                                              ),
+                                                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                                                              textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                                                            ),
+                                                            child: const Text('Return'),
+                                                            onPressed: () => Navigator.of(context).pop(selectedQty),
+                                                          ),
+                                                        ],
+                                                      );
+                                                    },
+                                                  );
+                                                  if (result == null) return;
+                                                  selectedQty = result;
+                                                } else {
+                                                  // Only 1 item, confirm with user before proceeding
+                                                  final confirm = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (context) => AlertDialog(
+                                                      backgroundColor: bgMid,
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(20),
+                                                      ),
+                                                      title: Row(
+                                                        children: [
+                                                          Container(
+                                                            decoration: BoxDecoration(
+                                                              color: accentGreen.withOpacity(0.15),
+                                                              borderRadius: BorderRadius.circular(8),
+                                                            ),
+                                                            padding: const EdgeInsets.all(8),
+                                                            child: const Icon(Icons.undo, color: accentGreen, size: 24),
+                                                          ),
+                                                          const SizedBox(width: 12),
+                                                          const Text(
+                                                            'Confirm Return',
+                                                            style: TextStyle(
+                                                              color: Colors.white,
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 20,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      content: Text(
+                                                        'Are you sure you want to return this item?',
+                                                        style: const TextStyle(color: Colors.white70, fontSize: 16),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          style: TextButton.styleFrom(
+                                                            foregroundColor: Colors.white70,
+                                                            textStyle: const TextStyle(fontWeight: FontWeight.w500),
+                                                          ),
+                                                          child: const Padding(
+                                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                            child: Text('Cancel'),
+                                                          ),
+                                                          onPressed: () => Navigator.of(context).pop(false),
+                                                        ),
+                                                        ElevatedButton(
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor: accentGreen,
+                                                            foregroundColor: Colors.white,
+                                                            shape: RoundedRectangleBorder(
+                                                              borderRadius: BorderRadius.circular(8),
+                                                            ),
+                                                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                                                            textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                                                          ),
+                                                          child: const Text('Return'),
+                                                          onPressed: () => Navigator.of(context).pop(true),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (confirm != true) return;
+                                                }
+                                                // Call the service
+                                                final reason = await _promptReturnReason(context: context, title: 'Reason for Partial Return');
+                                                if (reason == null || reason.isEmpty) return;
+                                                await _returnsService.processPartialReturn(
+                                                  saleId: transactionId,
+                                                  saleData: transaction,
+                                                  itemToReturn: item,
+                                                  quantityToReturn: selectedQty,
+                                                  reason: reason,
+                                                );
+                                                setState(() {});
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text('Returned $selectedQty of ${(item['productName'] ?? item['name'] ?? 'item')}'),
+                                                    backgroundColor: Colors.orange,
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                                // Transaction footer
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.person, color: Colors.white38, size: 16),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            soldBy,
+                                            style: const TextStyle(color: Colors.white38, fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        children: [
+                                          GestureDetector(
+                                            onTap: () async {
+                                              await _editPaymentMethod(transactionId, paymentMethod);
+                                            },
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.payment, color: Colors.white38, size: 16),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  paymentMethod,
+                                                  style: const TextStyle(
+                                                    color: accentGreen,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    decoration: TextDecoration.underline,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                const Icon(Icons.edit, color: accentGreen, size: 14),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          // Void return button (high-level access only)
+                                          if (currentUserRole.toLowerCase() != 'cashier')
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_forever, color: Colors.red, size: 20),
+                                              tooltip: 'Void Sale',
+                                              onPressed: () async {
+                                                final confirm = await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (context) => AlertDialog(
+                                                    backgroundColor: bgMid,
+                                                    title: const Text('Void Sale', style: TextStyle(color: Colors.white)),
+                                                    content: const Text('Are you sure you want to void this sale? This cannot be undone.', style: TextStyle(color: Colors.white70)),
+                                                    actions: [
+                                                      TextButton(
+                                                        child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                                                        onPressed: () => Navigator.of(context).pop(false),
+                                                      ),
+                                                      ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                                        child: const Text('Void', style: TextStyle(color: Colors.white)),
+                                                        onPressed: () => Navigator.of(context).pop(true),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                                if (confirm == true) {
+                                                  final reason = await _promptReturnReason(context: context, title: 'Reason for Void');
+                                                  if (reason == null || reason.isEmpty) return;
+                                                  await _returnsService.processVoidReturn(
+                                                    saleId: transactionId,
+                                                    saleData: transaction,
+                                                    reason: reason,
+                                                  );
+                                                  setState(() {});
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text('Sale voided.'),
+                                                      backgroundColor: Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ];
+                    }),
+                  ],
                 );
               },
             ),

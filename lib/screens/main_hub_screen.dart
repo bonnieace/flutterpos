@@ -5,12 +5,14 @@ import 'package:flutter_application_1/pos/inv.dart';
 import 'package:flutter_application_1/pos/pos.dart';
 import 'package:flutter_application_1/pos/reports.dart';
 import 'package:flutter_application_1/pos/reports/salesReports.dart';
+import 'returns_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
 import 'create_user.dart';
 import 'users.dart';
 import 'package:flutter_application_1/config.dart';
+import 'upload_application_update_screen.dart';
 class MainHubScreen extends StatefulWidget {
   const MainHubScreen({super.key});
 
@@ -109,47 +111,46 @@ class _TopBar extends StatelessWidget {
         ),
       ),
       child: isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          ? Row(
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.hub, color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Main Hub',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.settings_outlined, size: 20),
-                      onPressed: () {
-                        //NAVIGATE TO CONFIG SCREEN
-                        // Navigator.push(
-                        //   context,
-                        //   MaterialPageRoute(builder: (_) => const SystemConfigurationPage()),
-                        // );
-                      },
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.logout, size: 20),
-                      onPressed: () {
-                        FirebaseAuth.instance.signOut();
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        );
-                      },
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
+                const Icon(Icons.hub, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Main Hub',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
-                _UserPill(userName: userName, userRole: userRole, compact: true),
+                const Spacer(),
+                // Show avatar only (no name/role) on small screens
+                CircleAvatar(
+                  radius: 14,
+                  child: Icon(Icons.person, size: 14),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined, size: 20),
+                  onPressed: () {
+                    //NAVIGATE TO CONFIG SCREEN
+                    // Navigator.push(
+                    //   context,
+                    //   MaterialPageRoute(builder: (_) => const SystemConfigurationPage()),
+                    // );
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.logout, size: 20),
+                  onPressed: () {
+                    FirebaseAuth.instance.signOut();
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    );
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
               ],
             )
           : Row(
@@ -166,7 +167,7 @@ class _TopBar extends StatelessWidget {
                 _UserPill(userName: userName, userRole: userRole),
                 const SizedBox(width: 12),
                 IconButton(
-                  icon: const Icon(Icons.settings_outlined),
+                  icon: const Icon(Icons.settings_outlined,color: Colors.white,),
                   onPressed: () {
                     // Navigator.push(
                     //   context,
@@ -175,7 +176,7 @@ class _TopBar extends StatelessWidget {
                   },
                 ),
                 IconButton(
-                  icon: const Icon(Icons.logout),
+                  icon: const Icon(Icons.logout,color: Colors.white,),
                   onPressed: () {
                     FirebaseAuth.instance.signOut();
                     Navigator.pushReplacement(
@@ -328,6 +329,7 @@ class _ModuleGrid extends StatelessWidget {
   const _ModuleGrid({required this.userName, required this.userRole});
 
   bool get isCashier => userRole == 'CASHIER';
+  bool get isAdminOrOwner => userRole == 'ADMIN' || userRole == 'OWNER';
   
   @override
   Widget build(BuildContext context) {
@@ -388,6 +390,14 @@ class _ModuleGrid extends StatelessWidget {
     if (!isCashier) {
       modules.addAll([
         _ModuleCard(
+          title: 'Returns',
+          subtitle: 'Manage product returns and process refunds.',
+          icon: Icons.assignment_return,
+          iconColor: Colors.orange,
+          module: HubModule.returns,
+          userName: userName,
+        ),
+        _ModuleCard(
           title: 'Inventory',
           subtitle: 'View all products, manage SKUs, pricing, and categories.',
           icon: Icons.warehouse,
@@ -412,6 +422,18 @@ class _ModuleGrid extends StatelessWidget {
           userName: userName,
         ),
       ]);
+      if (!isCashier) {
+        modules.add(
+          _ModuleCard(
+            title: 'App Update',
+            subtitle: 'Upload new APKs and manage app updates.',
+            icon: Icons.system_update,
+            iconColor: Colors.amber,
+            module: HubModule.appUpdate,
+            userName: userName,
+          ),
+        );
+      }
     }
     
     return Padding(
@@ -521,14 +543,17 @@ class _StatsBar extends StatelessWidget {
           ],
         ),
         child: isMobile
-            ? Column(
+            ? GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 1.7,
                 children: const [
                   _StatTile(label: 'TRANSACTIONS', value: '142', icon: Icons.point_of_sale, color: Colors.blue),
-                  SizedBox(height: 16),
-                  _StatTile(label: 'TOTAL SALES', value: 'Ksh. 4,289.50', icon: Icons.attach_money, color: Colors.green),
-                  SizedBox(height: 16),
+                  _StatTile(label: 'TOTAL SALES', value: 'Ksh. 4,289', icon: Icons.attach_money, color: Colors.green),
                   _StatTile(label: 'LOW STOCK', value: '12 Items', icon: Icons.warning_amber_rounded, color: Colors.orange),
-                  SizedBox(height: 16),
                   _StatTile(label: 'SHIFT TIME', value: '6h 12m', icon: Icons.access_time, color: Colors.purple),
                 ],
               )
@@ -656,39 +681,46 @@ void navigateToModule(BuildContext context, HubModule module, String userName) {
         MaterialPageRoute(builder: (_) => pos(soldBy: userName)),
       );
       break;
-
     case HubModule.stockUpdate:
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const inv()),
       );
       break;
-
     case HubModule.inventory:
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const goods()),
       );
       break;
-
     case HubModule.reports:
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const Reports()),
       );
       break;
-
     case HubModule.staff:
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const UsersScreen()),
       );
       break;
-
     case HubModule.bookKeeping:
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const SalesReportPage()),
+      );
+      break;
+    case HubModule.returns:
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ReturnsScreen()),
+      );
+      break;
+    case HubModule.appUpdate:
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const UploadApplicationUpdateScreen()),
       );
       break;
   }
@@ -700,4 +732,6 @@ enum HubModule {
   staff,
   reports,
   bookKeeping,
+  returns,
+  appUpdate,
 }

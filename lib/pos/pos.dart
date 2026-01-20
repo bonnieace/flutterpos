@@ -1878,19 +1878,33 @@ class _posState extends State<pos> {
   }
 
   Future<void> storeInvoice(String paymentMethod) async {
-    // Retrieve item data from the list
-    List<InvoiceItem> invoiceItems = items
-        .map(
-          (item) => InvoiceItem(
-            description: item.productName,
-            quantity: item.quantity,
-            unitPrice: item.price,
-            date: DateTime.now(),
-          ),
-        )
-        .toList();
+    // Retrieve item data from the list and include itemid (alcohol doc id)
+    FirebaseFirestore db = FirebaseFirestore.instance;
+    List<Map<String, dynamic>> salesItems = [];
+    for (var item in items) {
+      String? itemId;
+      try {
+        var query = await db
+            .collection("alcohol")
+            .where('name', isEqualTo: item.productName)
+            .limit(1)
+            .get();
+        if (query.docs.isNotEmpty) {
+          itemId = query.docs.first.id;
+        }
+      } catch (e) {
+        print("Error finding itemid for  24{item.productName}:  24e");
+      }
+      salesItems.add({
+        'productName': item.productName,
+        'quantity': item.quantity,
+        'price': item.price,
+        'sku': item.sku,
+        'itemid': itemId ?? '',
+      });
+    }
 
-    if (invoiceItems.isEmpty) {
+    if (salesItems.isEmpty) {
       // Show an error dialog and return without proceeding
       showDialog(
         context: context,
@@ -1912,7 +1926,7 @@ class _posState extends State<pos> {
       return;
     }
 
-    if (invoiceItems.any((item) => item.quantity <= 0)) {
+    if (salesItems.any((item) => (item['quantity'] ?? 0) <= 0)) {
       // Show an error dialog and return without proceeding
       showDialog(
         context: context,
@@ -1935,7 +1949,7 @@ class _posState extends State<pos> {
     }
 
     // Calculate total amount
-    double totalAmounts = calculateTotal(invoiceItems);
+    double totalAmounts = calculateItemsTotal(items);
     DateTime now = DateTime.now();
     Timestamp timestamp = Timestamp.fromDate(now);
     double mpesaAmount = 0.0; // Declare mpesaAmount variable
@@ -1943,7 +1957,7 @@ class _posState extends State<pos> {
     bool isInOperation = false; // Declare isInOperation here
 
     try {
-      FirebaseFirestore db = FirebaseFirestore.instance;
+      // db already defined above
 
       await showDialog(
         context: context,
@@ -2319,196 +2333,174 @@ class _posState extends State<pos> {
 
                                                 // Handle different payment methods
                                                 if (selectedPaymentMethod ==
-                                                    'Cash') {
+                                                  'Cash') {
                                                   await db.collection("adjustments").add({
-                                                    "payment":
-                                                        selectedPaymentMethod,
-                                                    "dateAdded": timestamp,
-                                                    "totalAmount": totalAmount,
-                                                    "soldBy": soldBy,
-                                                    "items": items
-                                                        .map(
-                                                          (item) =>
-                                                              item.toMap(),
-                                                        )
-                                                        .toList(),
-                                                    "businessDate":
-                                                        _currentShift?['businessDate'] ??
-                                                        _shiftService
-                                                            .getBusinessDate(),
-                                                    "shiftId":
-                                                        _currentShift?['shiftId'] ??
-                                                        '',
-                                                    'soldById':
-                                                        FirebaseAuth
-                                                            .instance
-                                                            .currentUser
-                                                            ?.uid ??
-                                                        '',
+                                                  "payment":
+                                                    selectedPaymentMethod,
+                                                  "dateAdded": timestamp,
+                                                  "totalAmount": totalAmount,
+                                                  "soldBy": soldBy,
+                                                  "items": salesItems,
+                                                  "businessDate":
+                                                    _currentShift?['businessDate'] ??
+                                                    _shiftService
+                                                      .getBusinessDate(),
+                                                  "shiftId":
+                                                    _currentShift?['shiftId'] ??
+                                                    '',
+                                                  'soldById':
+                                                    FirebaseAuth
+                                                      .instance
+                                                      .currentUser
+                                                      ?.uid ??
+                                                    '',
                                                   });
                                                 } else if (selectedPaymentMethod ==
-                                                    'Mpesa') {
+                                                  'Mpesa') {
                                                   await db.collection("adjustments").add({
-                                                    "customer": customer,
-                                                    "payment":
-                                                        selectedPaymentMethod,
-                                                    "dateAdded": timestamp,
-                                                    "totalAmount": totalAmount,
-                                                    "soldBy": soldBy,
-                                                    "items": items
-                                                        .map(
-                                                          (item) =>
-                                                              item.toMap(),
-                                                        )
-                                                        .toList(),
-                                                    "businessDate":
-                                                        _currentShift?['businessDate'] ??
-                                                        _shiftService
-                                                            .getBusinessDate(),
-                                                    "shiftId":
-                                                        _currentShift?['shiftId'] ??
-                                                        '',
-                                                    'soldById':
-                                                        FirebaseAuth
-                                                            .instance
-                                                            .currentUser
-                                                            ?.uid ??
-                                                        '',
+                                                  "customer": customer,
+                                                  "payment":
+                                                    selectedPaymentMethod,
+                                                  "dateAdded": timestamp,
+                                                  "totalAmount": totalAmount,
+                                                  "soldBy": soldBy,
+                                                  "items": salesItems,
+                                                  "businessDate":
+                                                    _currentShift?['businessDate'] ??
+                                                    _shiftService
+                                                      .getBusinessDate(),
+                                                  "shiftId":
+                                                    _currentShift?['shiftId'] ??
+                                                    '',
+                                                  'soldById':
+                                                    FirebaseAuth
+                                                      .instance
+                                                      .currentUser
+                                                      ?.uid ??
+                                                    '',
                                                   });
                                                 } else if (selectedPaymentMethod ==
-                                                    'Debt') {
-                                                } else if (selectedPaymentMethod ==
-                                                    'Bank') {
+                                                  'Debt') {
                                                   await db.collection("adjustments").add({
-                                                    "customer": customer,
-                                                    "payment":
-                                                        selectedPaymentMethod,
-                                                    "dateAdded": timestamp,
-                                                    "totalAmount": totalAmount,
-                                                    "soldBy": soldBy,
-                                                    "items": items
-                                                        .map(
-                                                          (item) =>
-                                                              item.toMap(),
-                                                        )
-                                                        .toList(),
-                                                    "businessDate":
-                                                        _currentShift?['businessDate'] ??
-                                                        _shiftService
-                                                            .getBusinessDate(),
-                                                    "shiftId":
-                                                        _currentShift?['shiftId'] ??
-                                                        '',
-                                                    'soldById':
-                                                        FirebaseAuth
-                                                            .instance
-                                                            .currentUser
-                                                            ?.uid ??
-                                                        '',
+                                                  "customer": customer,
+                                                  "payment":
+                                                    selectedPaymentMethod,
+                                                  "debtAmount": debtAmount,
+                                                  "dateAdded": timestamp,
+                                                  "totalAmount": totalAmount,
+                                                  "soldBy": soldBy,
+                                                  "items": salesItems,
+                                                  "businessDate":
+                                                    _currentShift?['businessDate'] ??
+                                                    _shiftService
+                                                      .getBusinessDate(),
+                                                  "shiftId":
+                                                    _currentShift?['shiftId'] ??
+                                                    '',
+                                                  'soldById':
+                                                    FirebaseAuth
+                                                      .instance
+                                                      .currentUser
+                                                      ?.uid ??
+                                                    '',
                                                   });
                                                 } else if (selectedPaymentMethod ==
-                                                    'Debt') {
+                                                  'Bank') {
                                                   await db.collection("adjustments").add({
-                                                    "customer": customer,
-                                                    "payment":
-                                                        selectedPaymentMethod,
-                                                    "debtAmount": debtAmount,
-                                                    "dateAdded": timestamp,
-                                                    "totalAmount": totalAmount,
-                                                    "soldBy": soldBy,
-                                                    "items": items
-                                                        .map(
-                                                          (item) =>
-                                                              item.toMap(),
-                                                        )
-                                                        .toList(),
-                                                    "businessDate":
-                                                        _currentShift?['businessDate'] ??
-                                                        _shiftService
-                                                            .getBusinessDate(),
-                                                    "shiftId":
-                                                        _currentShift?['shiftId'] ??
-                                                        '',
-                                                    'soldById':
-                                                        FirebaseAuth
-                                                            .instance
-                                                            .currentUser
-                                                            ?.uid ??
-                                                        '',
+                                                  "customer": customer,
+                                                  "payment":
+                                                    selectedPaymentMethod,
+                                                  "dateAdded": timestamp,
+                                                  "totalAmount": totalAmount,
+                                                  "soldBy": soldBy,
+                                                  "items": salesItems,
+                                                  "businessDate":
+                                                    _currentShift?['businessDate'] ??
+                                                    _shiftService
+                                                      .getBusinessDate(),
+                                                  "shiftId":
+                                                    _currentShift?['shiftId'] ??
+                                                    '',
+                                                  'soldById':
+                                                    FirebaseAuth
+                                                      .instance
+                                                      .currentUser
+                                                      ?.uid ??
+                                                    '',
                                                   });
                                                 } else if (selectedPaymentMethod ==
-                                                    'Split') {
+                                                  'Split') {
                                                   double mpesaQuantity =
-                                                      mpesaAmount /
-                                                      totalAmount *
-                                                      invoiceItems.length;
+                                                    mpesaAmount /
+                                                    totalAmount *
+                                                    salesItems.length;
                                                   double cashQuantity =
-                                                      cashAmount /
-                                                      totalAmount *
-                                                      invoiceItems.length;
+                                                    cashAmount /
+                                                    totalAmount *
+                                                    salesItems.length;
 
                                                   // M-Pesa payment
                                                   await db.collection("adjustments").add({
-                                                    "customer": customer,
-                                                    "payment": "Mpesa",
-                                                    "dateAdded": timestamp,
-                                                    "totalAmount": mpesaAmount,
-                                                    "soldBy": soldBy,
-                                                    "items": items.map((item) {
-                                                      double itemQuantity =
-                                                          item.quantity;
-                                                      return {
-                                                        ...item.toMap(),
-                                                        'quantity':
-                                                            itemQuantity *
-                                                            mpesaQuantity,
-                                                      };
-                                                    }).toList(),
-                                                    "businessDate":
-                                                        _currentShift?['businessDate'] ??
-                                                        _shiftService
-                                                            .getBusinessDate(),
-                                                    "shiftId":
-                                                        _currentShift?['shiftId'] ??
-                                                        '',
-                                                    'soldById':
-                                                        FirebaseAuth
-                                                            .instance
-                                                            .currentUser
-                                                            ?.uid ??
-                                                        '',
+                                                  "customer": customer,
+                                                  "payment": "Mpesa",
+                                                  "dateAdded": timestamp,
+                                                  "totalAmount": mpesaAmount,
+                                                  "soldBy": soldBy,
+                                                  "items": salesItems.map((item) {
+                                                    double itemQuantity =
+                                                      item['quantity'] ?? 0.0;
+                                                    return {
+                                                    ...item,
+                                                    'quantity':
+                                                      itemQuantity *
+                                                      mpesaQuantity,
+                                                    };
+                                                  }).toList(),
+                                                  "businessDate":
+                                                    _currentShift?['businessDate'] ??
+                                                    _shiftService
+                                                      .getBusinessDate(),
+                                                  "shiftId":
+                                                    _currentShift?['shiftId'] ??
+                                                    '',
+                                                  'soldById':
+                                                    FirebaseAuth
+                                                      .instance
+                                                      .currentUser
+                                                      ?.uid ??
+                                                    '',
                                                   });
 
                                                   // Cash payment
                                                   await db.collection("adjustments").add({
-                                                    "customer": customer,
-                                                    "payment": "Cash",
-                                                    "dateAdded": timestamp,
-                                                    "totalAmount": cashAmount,
-                                                    "soldBy": soldBy,
-                                                    "items": items.map((item) {
-                                                      double itemQuantity =
-                                                          item.quantity;
-                                                      return {
-                                                        ...item.toMap(),
-                                                        'quantity':
-                                                            itemQuantity *
-                                                            cashQuantity,
-                                                      };
-                                                    }).toList(),
-                                                    "businessDate":
-                                                        _currentShift?['businessDate'] ??
-                                                        _shiftService
-                                                            .getBusinessDate(),
-                                                    "shiftId":
-                                                        _currentShift?['shiftId'] ??
-                                                        '',
-                                                    'soldById':
-                                                        FirebaseAuth
-                                                            .instance
-                                                            .currentUser
-                                                            ?.uid ??
-                                                        '',
+                                                  "customer": customer,
+                                                  "payment": "Cash",
+                                                  "dateAdded": timestamp,
+                                                  "totalAmount": cashAmount,
+                                                  "soldBy": soldBy,
+                                                  "items": salesItems.map((item) {
+                                                    double itemQuantity =
+                                                      item['quantity'] ?? 0.0;
+                                                    return {
+                                                    ...item,
+                                                    'quantity':
+                                                      itemQuantity *
+                                                      cashQuantity,
+                                                    };
+                                                  }).toList(),
+                                                  "businessDate":
+                                                    _currentShift?['businessDate'] ??
+                                                    _shiftService
+                                                      .getBusinessDate(),
+                                                  "shiftId":
+                                                    _currentShift?['shiftId'] ??
+                                                    '',
+                                                  'soldById':
+                                                    FirebaseAuth
+                                                      .instance
+                                                      .currentUser
+                                                      ?.uid ??
+                                                    '',
                                                   });
                                                 }
 
