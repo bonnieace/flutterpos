@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:lottie/lottie.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_application_1/login_screen.dart';
 import 'package:flutter_application_1/pos/goods.dart';
 import 'package:flutter_application_1/pos/inv.dart';
@@ -12,6 +15,7 @@ import '../theme.dart';
 import 'create_user.dart';
 import 'users.dart';
 import 'package:flutter_application_1/config.dart';
+import 'update_screen.dart';
 class MainHubScreen extends StatefulWidget {
   const MainHubScreen({super.key});
 
@@ -23,6 +27,11 @@ class _MainHubScreenState extends State<MainHubScreen> {
   String userName = 'User';
   String userRole = 'STAFF';
   bool isLoading = true;
+
+  // Update check state
+  bool showUpdateScreen = false;
+  String? updateMessage;
+  String? downloadUrl;
 
   @override
   void initState() {
@@ -39,13 +48,32 @@ class _MainHubScreenState extends State<MainHubScreen> {
             .doc(user.uid)
             .get();
         if (doc.exists) {
-          setState(() {
-            userName = doc.data()?['name'] ?? 'User';
-            userRole = (doc.data()?['role'] ?? 'staff').toString().toUpperCase();
-            isLoading = false;
-          });
+          userName = doc.data()?['name'] ?? 'User';
+          userRole = (doc.data()?['role'] ?? 'staff').toString().toUpperCase();
         }
       }
+      // --- Update check logic ---
+      // Replace 'YOUR_STORE_ID' with your actual store document ID or logic
+      final storeDoc = await FirebaseFirestore.instance.collection('store').doc('KBLqOv6LyJfOJjI9sEcm').get();
+      if (storeDoc.exists) {
+        final latestVersion = storeDoc.data()?['latest_version'] as String?;
+        final message = storeDoc.data()?['update_message'] as String?;
+        final url = storeDoc.data()?['download_url'] as String?;
+        final info = await PackageInfo.fromPlatform();
+        debugPrint('Current version: ${info.version}, Latest version: $latestVersion');
+        if (latestVersion != null && info.version != latestVersion) {
+          setState(() {
+            updateMessage = message ?? "A new update is available!";
+            downloadUrl = url;
+            showUpdateScreen = true;
+            isLoading = false;
+          });
+          return;
+        }
+      }
+      setState(() {
+        isLoading = false;
+      });
     } catch (e) {
       setState(() {
         isLoading = false;
@@ -58,6 +86,14 @@ class _MainHubScreenState extends State<MainHubScreen> {
     if (isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Show update screen overlay if needed
+    if (showUpdateScreen) {
+      return UpdateScreen(
+        message: updateMessage ?? '',
+        downloadUrl: downloadUrl,
       );
     }
 
