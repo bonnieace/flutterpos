@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/pos/services/returns_service.dart';
 
+import 'package:flutter_application_1/services/Receipt_service.dart' show buildTestReceiptService, ItemInfo;
 class SalesReportPage extends StatefulWidget {
   const SalesReportPage({super.key});
 
@@ -106,15 +107,28 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }
   late CollectionReference salesCollection;
   String selectedFilter = 'Today';
-  final List<String> filterOptions = [
-    'Today',
-    'Yesterday',
-    'Last 7 Days',
-    'Last 30 Days',
-    'This Month',
-    'Custom',
-    'All Time',
-  ];
+
+  // Only admins can see all filters, others see only Today and Yesterday
+  bool get isAdmin => currentUserRole.toLowerCase() == 'admin';
+
+  List<String> get filterOptions {
+    if (isAdmin) {
+      return [
+        'Today',
+        'Yesterday',
+        'Last 7 Days',
+        'Last 30 Days',
+        'This Month',
+        'Custom',
+        'All Time',
+      ];
+    } else {
+      return [
+        'Today',
+        'Yesterday',
+      ];
+    }
+  }
 
   // Custom date range
   DateTime? customStartDate;
@@ -1363,6 +1377,89 @@ class _SalesReportPageState extends State<SalesReportPage> {
                                                 }
                                               },
                                             ),
+// ...existing code...
+if (hasHighLevelAccess)
+  IconButton(
+    icon: const Icon(Icons.print, color: Colors.white70, size: 20),
+    tooltip: 'Print Receipt',
+    onPressed: () async {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: bgMid,
+          title: const Text('Print Receipt', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Are you sure you want to print this receipt?',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: accentGreen),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Print', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) return;
+
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          backgroundColor: bgMid,
+          content: Row(
+            children: const [
+              CircularProgressIndicator(color: accentGreen),
+              SizedBox(width: 16),
+              Text('Printing...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+
+      final List<ItemInfo> receiptItems = (items as List)
+          .map((item) => ItemInfo(
+                productName: item['productName'] ?? item['name'] ?? 'Unknown',
+                quantity: (item['quantity'] as num?)?.toDouble() ?? 1.0,
+                price: (item['price'] as num?)?.toDouble() ?? 0.0,
+                sku: item['sku'] ?? '',
+              ))
+          .toList();
+
+      await buildTestReceiptService(
+        invoiceItems: receiptItems,
+        customerName: '',
+        salesRep: soldBy,
+        paymentMethod: paymentMethod,
+        totalAmount: transactionTotal,
+      );
+      await buildTestReceiptService(
+        invoiceItems: receiptItems,
+        customerName: '',
+        salesRep: soldBy,
+        paymentMethod: paymentMethod,
+        totalAmount: transactionTotal,
+      );
+
+      // Dismiss loading dialog
+      if (context.mounted) Navigator.of(context).pop();
+
+      // Optionally show a success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Receipt sent to printer'),
+          backgroundColor: accentGreen,
+        ),
+      );
+    },
+  ),
+// ...existing code...
                                         ],
                                       ),
                                     ],

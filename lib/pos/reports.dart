@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:lottie/lottie.dart';
 import '../screens/main_hub_screen.dart';
 import '../screens/users.dart';
 import '../services/shift_service.dart';
@@ -108,48 +109,67 @@ class _ReportsState extends State<Reports> {
 
   Future<void> _loadData() async {
     setState(() => isLoading = true);
-    
+
     try {
       final now = DateTime.now();
       DateTime startDate;
+      DateTime endDate;
       DateTime previousStartDate;
       DateTime previousEndDate;
-      
+
       // Calculate date range based on selection
       switch (selectedDateRange) {
         case 'Today':
           startDate = DateTime(now.year, now.month, now.day);
+          endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
           previousStartDate = startDate.subtract(const Duration(days: 1));
           previousEndDate = startDate;
           break;
         case 'Last 7 Days':
-          startDate = now.subtract(const Duration(days: 7));
-          previousStartDate = now.subtract(const Duration(days: 14));
-          previousEndDate = startDate;
-          break;
-        case 'Last 30 Days':
-          startDate = now.subtract(const Duration(days: 30));
-          previousStartDate = now.subtract(const Duration(days: 60));
+        case 'This Week':
+          // Start of this week (Monday)
+          int daysFromMonday = now.weekday - DateTime.monday;
+          startDate = DateTime(now.year, now.month, now.day).subtract(Duration(days: daysFromMonday));
+          endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+          // Previous week (Monday to Sunday)
+          previousStartDate = startDate.subtract(const Duration(days: 7));
           previousEndDate = startDate;
           break;
         case 'This Month':
           startDate = DateTime(now.year, now.month, 1);
-          previousStartDate = DateTime(now.year, now.month - 1, 1);
-          previousEndDate = startDate;
+          endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+          // Previous month: careful with January
+          int prevMonth = now.month - 1;
+          int prevYear = now.year;
+          if (prevMonth == 0) {
+            prevMonth = 12;
+            prevYear -= 1;
+          }
+          previousStartDate = DateTime(prevYear, prevMonth, 1);
+          previousEndDate = DateTime(now.year, now.month, 1);
           break;
         default:
-          startDate = now.subtract(const Duration(days: 7));
-          previousStartDate = now.subtract(const Duration(days: 14));
+          // Default to 'This Week' logic
+          int daysFromMonday = now.weekday - DateTime.monday;
+          startDate = DateTime(now.year, now.month, now.day).subtract(Duration(days: daysFromMonday));
+          endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+          previousStartDate = startDate.subtract(const Duration(days: 7));
           previousEndDate = startDate;
       }
 
-      // Fetch current period sales
+
+      // For all date ranges, fetch a buffer of one day before and after
+      DateTime fetchStartDate = startDate.subtract(const Duration(days: 1));
+      DateTime fetchEndDate = endDate.add(const Duration(days: 1));
+
+      // Fetch current period sales (with buffer for all ranges)
       Query salesQuery = FirebaseFirestore.instance
           .collection('alcoholsales')
-          .where('dateAdded', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+          .where('dateAdded', isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStartDate))
+          .where('dateAdded', isLessThanOrEqualTo: Timestamp.fromDate(fetchEndDate));
 
       final salesSnapshot = await salesQuery.get();
-      
+
       // Fetch previous period sales for comparison
       final previousSalesSnapshot = await FirebaseFirestore.instance
           .collection('alcoholsales')
@@ -193,9 +213,25 @@ class _ReportsState extends State<Reports> {
         final data = doc.data() as Map<String, dynamic>;
         final total = (data['total'] ?? data['totalAmount'] ?? 0).toDouble();
         final items = data['items'] as List<dynamic>? ?? [];
-        final dateAdded = (data['dateAdded'] as Timestamp?)?.toDate() ?? now;
+        // Use businessDate if present, else fallback to dateAdded
+        String? businessDateStr = data['businessDate'] as String?;
+        DateTime? businessDate;
+        if (businessDateStr != null && businessDateStr.isNotEmpty) {
+          try {
+            businessDate = DateTime.parse(businessDateStr);
+          } catch (_) {
+            businessDate = null;
+          }
+        }
+        Timestamp? documentTimestamp = data['dateAdded'] is Timestamp ? data['dateAdded'] as Timestamp : null;
+        DateTime txnDate = businessDate ?? (documentTimestamp != null ? documentTimestamp.toDate() : now);
         final payment = data['payment'] as String? ?? 'Cash';
-        
+
+        // In-memory filter by date range (use txnDate)
+        bool inRange = true;
+        if (txnDate.isBefore(startDate) || txnDate.isAfter(endDate)) inRange = false;
+        if (!inRange) continue;
+
         // Filter by category if selected
         bool includeTransaction = selectedCategory == 'All Categories';
         if (!includeTransaction) {
@@ -208,25 +244,24 @@ class _ReportsState extends State<Reports> {
             }
           }
         }
-        
         if (!includeTransaction) continue;
-        
+
         // Filter by soldBy if selected
         final soldBy = data['soldBy'] as String? ?? '';
         if (selectedSoldBy != 'All Staff' && soldBy != selectedSoldBy) continue;
-        
+
         sales += total;
         transactions++;
-        
+
         // Calculate cost and track product sales
         for (var item in items) {
           final productName = (item['productName'] ?? item['name'] ?? '').toString();
           final quantity = (item['quantity'] ?? 1).toInt();
           final price = (item['price'] ?? 0).toDouble();
           final buyingPrice = buyingPrices[productName.toLowerCase()] ?? 0.0;
-          
+
           cost += buyingPrice * quantity;
-          
+
           // Track for top selling
           if (productSales.containsKey(productName)) {
             productSales[productName]!['quantity'] += quantity;
@@ -241,15 +276,15 @@ class _ReportsState extends State<Reports> {
             };
           }
         }
-        
+
         // Track daily revenue for chart (weekday: 0 = Monday, 6 = Sunday)
-        final weekday = dateAdded.weekday - 1; // Convert to 0-indexed
+        final weekday = txnDate.weekday - 1; // Convert to 0-indexed
         dailyRevenue[weekday] = (dailyRevenue[weekday] ?? 0) + total;
-        
+
         // Add to recent transactions
         recentTxns.add({
           'id': doc.id,
-          'date': dateAdded,
+          'date': txnDate,
           'total': total,
           'items': items,
           'payment': payment,
@@ -334,37 +369,53 @@ class _ReportsState extends State<Reports> {
     return Scaffold(
       backgroundColor: bgDark,
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isSmall = constraints.maxWidth < 600;
-            final isMedium = constraints.maxWidth < 900;
-            final padding = isSmall ? 16.0 : 24.0;
+        child: Stack(
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isSmall = constraints.maxWidth < 600;
+                final isMedium = constraints.maxWidth < 900;
+                final padding = isSmall ? 16.0 : 24.0;
 
-            return Column(
-              children: [
-                _TopBar(isSmall: isSmall),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(padding),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(isSmall: isSmall),
-                        const SizedBox(height: 32),
-                        _buildMetricsCards(isSmall: isSmall, isMedium: isMedium),
-                        const SizedBox(height: 32),
-                        _buildFilters(isSmall: isSmall, isMedium: isMedium),
-                        const SizedBox(height: 32),
-                        _buildChartsSection(isSmall: isSmall, isMedium: isMedium),
-                        const SizedBox(height: 32),
-                        _buildRecentTransactions(),
-                      ],
+                return Column(
+                  children: [
+                    _TopBar(isSmall: isSmall),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.all(padding),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildHeader(isSmall: isSmall),
+                            const SizedBox(height: 32),
+                            _buildMetricsCards(isSmall: isSmall, isMedium: isMedium),
+                            const SizedBox(height: 32),
+                            _buildFilters(isSmall: isSmall, isMedium: isMedium),
+                            const SizedBox(height: 32),
+                            _buildChartsSection(isSmall: isSmall, isMedium: isMedium),
+                            const SizedBox(height: 32),
+                            _buildRecentTransactions(),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
+                );
+              },
+            ),
+            if (isLoading)
+              Container(
+                color: Colors.black.withOpacity(0.7),
+                alignment: Alignment.center,
+                child: Lottie.asset(
+                  'images/SandyLoading.json',
+                  width: 180,
+                  height: 180,
+                  fit: BoxFit.contain,
+                  repeat: true,
                 ),
-              ],
-            );
-          },
+              ),
+          ],
         ),
       ),
     );
@@ -739,10 +790,9 @@ class _ReportsState extends State<Reports> {
     );
 
     final dateDropdown = _buildDropdown(
-      
-      value: selectedDateRange,
+      value: selectedDateRange == 'Last 7 Days' ? 'This Week' : selectedDateRange,
       icon: Icons.calendar_today,
-      items: ['Today', 'Last 7 Days', 'Last 30 Days', 'This Month'],
+      items: ['Today', 'This Week', 'This Month'],
       onChanged: (value) {
         setState(() => selectedDateRange = value!);
         _loadData();

@@ -110,7 +110,7 @@ class ShiftService {
       
       // Calculate shift totals
       final salesSnapshot = await _firestore
-          .collection('adjustments')
+          .collection('alcoholsales')
           .where('shiftId', isEqualTo: shiftId)
           .get();
       
@@ -152,7 +152,7 @@ class ShiftService {
       if (!shiftDoc.exists) return null;
       
       final salesSnapshot = await _firestore
-          .collection('adjustments')
+          .collection('alcoholsales')
           .where('shiftId', isEqualTo: shiftId)
           .get();
       
@@ -198,9 +198,9 @@ class ShiftService {
           .where('businessDate', isEqualTo: targetDate)
           .get();
       
-      // Get all sales for this business date from adjustments collection
+      // Get all sales for this business date from alcoholsales collection
       final salesSnapshot = await _firestore
-          .collection('adjustments')
+          .collection('alcoholsales')
           .where('businessDate', isEqualTo: targetDate)
           .get();
       
@@ -311,9 +311,9 @@ class ShiftService {
         final shiftData = doc.data();
         final shiftId = doc.id;
         
-        // Query adjustments for this shift to get real-time stats
+        // Query alcoholsales for this shift to get real-time stats
         final salesSnapshot = await _firestore
-            .collection('adjustments')
+            .collection('alcoholsales')
             .where('shiftId', isEqualTo: shiftId)
             .get();
         

@@ -139,7 +139,7 @@ class _goodsState extends State<goods> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Manage inventory levels and adjustments',
+                            'Manage inventory levels and alcoholsales',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: isMobile ? 14 : 16,

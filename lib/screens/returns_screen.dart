@@ -18,6 +18,26 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   final List<String> typeOptions = ['All Types', 'Partial', 'Void'];
   String selectedVerified = 'Unverified';
   final List<String> verifiedOptions = [ 'All','Verified', 'Unverified'];
+  String selectedStaff = 'All Staff';
+  List<String> staffOptions = ['All Staff'];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchStaffOptions();
+  }
+
+  Future<void> _fetchStaffOptions() async {
+    final staffSnapshot = await FirebaseFirestore.instance.collection('staff').get();
+    final names = staffSnapshot.docs
+        .map((doc) => doc.data()['name'] as String?)
+        .where((name) => name != null && name.isNotEmpty)
+        .cast<String>()
+        .toList();
+    setState(() {
+      staffOptions = ['All Staff', ...names];
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,101 +64,136 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
               color: bgMid,
               border: Border(bottom: BorderSide(color: mutedGreen)),
             ),
-            child: Row(
-              children: [
-                // Date Filter Dropdown
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: selectedFilter,
-                    decoration: InputDecoration(
-                      labelText: 'Date',
-                      labelStyle: const TextStyle(color: Colors.white54),
-                      filled: true,
-                      fillColor: bgMid,
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: mutedGreen),
-                        borderRadius: BorderRadius.circular(8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                
+                children: [
+                  SizedBox(
+                    width: 180,
+                    child: DropdownButtonFormField<String>(
+                      value: selectedFilter,
+                      decoration: InputDecoration(
+                        labelText: 'Date',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        filled: true,
+                        fillColor: bgMid,
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: mutedGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: accentGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: accentGreen),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      dropdownColor: bgMid,
+                      icon: const Icon(Icons.calendar_today, color: Colors.white54, size: 20),
+                      style: const TextStyle(color: Colors.white),
+                      items: filterOptions.map((filter) => DropdownMenuItem(
+                        value: filter,
+                        child: Text(filter, style: const TextStyle(color: Colors.white)),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) setState(() => selectedFilter = value);
+                      },
                     ),
-                    dropdownColor: bgMid,
-                    icon: const Icon(Icons.calendar_today, color: Colors.white54, size: 20),
-                    style: const TextStyle(color: Colors.white),
-                    items: filterOptions.map((filter) => DropdownMenuItem(
-                      value: filter,
-                      child: Text(filter, style: const TextStyle(color: Colors.white)),
-                    )).toList(),
-                    onChanged: (value) {
-                      if (value != null) setState(() => selectedFilter = value);
-                    },
                   ),
-                ),
-                const SizedBox(width: 12),
-                // Type Filter Dropdown
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: selectedType,
-                    decoration: InputDecoration(
-                      labelText: 'Type',
-                      labelStyle: const TextStyle(color: Colors.white54),
-                      filled: true,
-                      fillColor: bgMid,
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: mutedGreen),
-                        borderRadius: BorderRadius.circular(8),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 140,
+                    child: DropdownButtonFormField<String>(
+                      value: selectedType,
+                      decoration: InputDecoration(
+                        labelText: 'Type',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        filled: true,
+                        fillColor: bgMid,
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: mutedGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: accentGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: accentGreen),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      dropdownColor: bgMid,
+                      icon: const Icon(Icons.filter_alt, color: Colors.white54, size: 20),
+                      style: const TextStyle(color: Colors.white),
+                      items: typeOptions.map((type) => DropdownMenuItem(
+                        value: type,
+                        child: Text(type, style: const TextStyle(color: Colors.white)),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) setState(() => selectedType = value);
+                      },
                     ),
-                    dropdownColor: bgMid,
-                    icon: const Icon(Icons.filter_alt, color: Colors.white54, size: 20),
-                    style: const TextStyle(color: Colors.white),
-                    items: typeOptions.map((type) => DropdownMenuItem(
-                      value: type,
-                      child: Text(type, style: const TextStyle(color: Colors.white)),
-                    )).toList(),
-                    onChanged: (value) {
-                      if (value != null) setState(() => selectedType = value);
-                    },
                   ),
-                ),
-                const SizedBox(width: 12),
-                // Verified Filter Dropdown
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: selectedVerified,
-                    decoration: InputDecoration(
-                      labelText: 'Verified',
-                      labelStyle: const TextStyle(color: Colors.white54),
-                      filled: true,
-                      fillColor: bgMid,
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: mutedGreen),
-                        borderRadius: BorderRadius.circular(8),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 140,
+                    child: DropdownButtonFormField<String>(
+                      value: selectedVerified,
+                      decoration: InputDecoration(
+                        labelText: 'Verified',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        filled: true,
+                        fillColor: bgMid,
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: mutedGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: accentGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: accentGreen),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      dropdownColor: bgMid,
+                      icon: const Icon(Icons.verified, color: Colors.white54, size: 20),
+                      style: const TextStyle(color: Colors.white),
+                      items: verifiedOptions.map((option) => DropdownMenuItem(
+                        value: option,
+                        child: Text(option, style: const TextStyle(color: Colors.white)),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) setState(() => selectedVerified = value);
+                      },
                     ),
-                    dropdownColor: bgMid,
-                    icon: const Icon(Icons.verified, color: Colors.white54, size: 20),
-                    style: const TextStyle(color: Colors.white),
-                    items: verifiedOptions.map((option) => DropdownMenuItem(
-                      value: option,
-                      child: Text(option, style: const TextStyle(color: Colors.white)),
-                    )).toList(),
-                    onChanged: (value) {
-                      if (value != null) setState(() => selectedVerified = value);
-                    },
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 160,
+                    child: DropdownButtonFormField<String>(
+                      value: selectedStaff,
+                      decoration: InputDecoration(
+                        labelText: 'Staff',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        filled: true,
+                        fillColor: bgMid,
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: mutedGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: accentGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      dropdownColor: bgMid,
+                      icon: const Icon(Icons.person, color: Colors.white54, size: 20),
+                      style: const TextStyle(color: Colors.white),
+                      items: staffOptions.map((staff) => DropdownMenuItem(
+                        value: staff,
+                        child: Text(staff, style: const TextStyle(color: Colors.white)),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) setState(() => selectedStaff = value);
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           // Summary Card and Grouped Returns
@@ -163,7 +218,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                       ),
                     );
                   }
-                  // Apply type and verified filters in Dart
+                  // Apply type, verified, and staff filters in Dart
                   List<DocumentSnapshot> returns = snapshot.data!.docs;
                   if (selectedType == 'Partial' || selectedType == 'Void') {
                     final typeValue = selectedType.toLowerCase();
@@ -181,6 +236,12 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                     returns = returns.where((doc) {
                       final data = doc.data() as Map<String, dynamic>;
                       return data['verified'] != true;
+                    }).toList();
+                  }
+                  if (selectedStaff != 'All Staff') {
+                    returns = returns.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return (data['soldBy'] ?? '') == selectedStaff;
                     }).toList();
                   }
 
@@ -240,8 +301,14 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                   Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Number of Returns', style: TextStyle(color: Colors.white54, fontSize: 15)),
-                                      Text(returns.length.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22)),
+                                      // const Text('Number of Returns', style: TextStyle(color: Colors.white54, fontSize: 15)),
+                                      // Text(returns.length.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22)),
+                                      // const SizedBox(height: 8),
+                                      const Text('Total Returned Amount', style: TextStyle(color: Colors.white54, fontSize: 15)),
+                                      Text(
+                                        'Ksh ${totalReturned.toStringAsFixed(2)}',
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+                                      ),                                  
                                     ],
                                   ),
                                 ],
