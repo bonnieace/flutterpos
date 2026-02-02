@@ -2334,7 +2334,7 @@ class _posState extends State<pos> {
                                                 // Handle different payment methods
                                                 if (selectedPaymentMethod ==
                                                   'Cash') {
-                                                   db.collection("alcoholsales").add({
+                                                   db.collection("adjustments").add({
                                                   "payment":
                                                     selectedPaymentMethod,
                                                   "dateAdded": timestamp,
@@ -2357,7 +2357,7 @@ class _posState extends State<pos> {
                                                   });
                                                 } else if (selectedPaymentMethod ==
                                                   'Mpesa') {
-                                                   db.collection("alcoholsales").add({
+                                                   db.collection("adjustments").add({
                                                   "customer": customer,
                                                   "payment":
                                                     selectedPaymentMethod,
@@ -2381,7 +2381,7 @@ class _posState extends State<pos> {
                                                   });
                                                 } else if (selectedPaymentMethod ==
                                                   'Debt') {
-                                                   db.collection("alcoholsales").add({
+                                                   db.collection("adjustments").add({
                                                   "customer": customer,
                                                   "payment":
                                                     selectedPaymentMethod,
@@ -2406,7 +2406,7 @@ class _posState extends State<pos> {
                                                   });
                                                 } else if (selectedPaymentMethod ==
                                                   'Bank') {
-                                                   db.collection("alcoholsales").add({
+                                                   db.collection("adjustments").add({
                                                   "customer": customer,
                                                   "payment":
                                                     selectedPaymentMethod,
@@ -2440,7 +2440,7 @@ class _posState extends State<pos> {
                                                     salesItems.length;
 
                                                   // M-Pesa payment
-                                                   db.collection("alcoholsales").add({
+                                                   db.collection("adjustments").add({
                                                   "customer": customer,
                                                   "payment": "Mpesa",
                                                   "dateAdded": timestamp,
@@ -2472,7 +2472,7 @@ class _posState extends State<pos> {
                                                   });
 
                                                   // Cash payment
-                                                   db.collection("alcoholsales").add({
+                                                   db.collection("adjustments").add({
                                                   "customer": customer,
                                                   "payment": "Cash",
                                                   "dateAdded": timestamp,
