@@ -2334,7 +2334,7 @@ class _posState extends State<pos> {
                                                 // Handle different payment methods
                                                 if (selectedPaymentMethod ==
                                                   'Cash') {
-                                                  await db.collection("alcoholsales").add({
+                                                   db.collection("alcoholsales").add({
                                                   "payment":
                                                     selectedPaymentMethod,
                                                   "dateAdded": timestamp,
@@ -2357,7 +2357,7 @@ class _posState extends State<pos> {
                                                   });
                                                 } else if (selectedPaymentMethod ==
                                                   'Mpesa') {
-                                                  await db.collection("alcoholsales").add({
+                                                   db.collection("alcoholsales").add({
                                                   "customer": customer,
                                                   "payment":
                                                     selectedPaymentMethod,
@@ -2381,7 +2381,7 @@ class _posState extends State<pos> {
                                                   });
                                                 } else if (selectedPaymentMethod ==
                                                   'Debt') {
-                                                  await db.collection("alcoholsales").add({
+                                                   db.collection("alcoholsales").add({
                                                   "customer": customer,
                                                   "payment":
                                                     selectedPaymentMethod,
@@ -2406,7 +2406,7 @@ class _posState extends State<pos> {
                                                   });
                                                 } else if (selectedPaymentMethod ==
                                                   'Bank') {
-                                                  await db.collection("alcoholsales").add({
+                                                   db.collection("alcoholsales").add({
                                                   "customer": customer,
                                                   "payment":
                                                     selectedPaymentMethod,
@@ -2440,7 +2440,7 @@ class _posState extends State<pos> {
                                                     salesItems.length;
 
                                                   // M-Pesa payment
-                                                  await db.collection("alcoholsales").add({
+                                                   db.collection("alcoholsales").add({
                                                   "customer": customer,
                                                   "payment": "Mpesa",
                                                   "dateAdded": timestamp,
@@ -2472,7 +2472,7 @@ class _posState extends State<pos> {
                                                   });
 
                                                   // Cash payment
-                                                  await db.collection("alcoholsales").add({
+                                                   db.collection("alcoholsales").add({
                                                   "customer": customer,
                                                   "payment": "Cash",
                                                   "dateAdded": timestamp,
@@ -2929,10 +2929,10 @@ class _posState extends State<pos> {
           .collection("alcohol")
           .where('name', isEqualTo: productName)
           .limit(1)
-          .get();
+          .get(const GetOptions(source: Source.cache));
       if (query.docs.isNotEmpty) {
         var docId = query.docs.first.id;
-        await db.collection("alcohol").doc(docId).update({
+         db.collection("alcohol").doc(docId).update({
           "quantity": FieldValue.increment(-quantity),
         });
         print("Inventory updated for $productName");

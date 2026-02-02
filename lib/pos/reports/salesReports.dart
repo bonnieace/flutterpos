@@ -154,7 +154,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
   @override
   void initState() {
     super.initState();
-    salesCollection = FirebaseFirestore.instance.collection('adjustments');
+    salesCollection = FirebaseFirestore.instance.collection('alcoholsales');
     _loadCurrentUser();
   }
 
@@ -196,7 +196,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
         final soldBy = data['soldBy'] as String? ?? '';
-        if (soldBy.isNotEmpty) {
+        if (soldBy.isNotEmpty && soldBy != 'Evarlyn waithera') {
           soldBySet.add(soldBy);
         }
       }
