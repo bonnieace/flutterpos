@@ -24,8 +24,8 @@ class MainHubScreen extends StatefulWidget {
 }
 
 class _MainHubScreenState extends State<MainHubScreen> {
-  String userName = 'User';
-  String userRole = 'STAFF';
+  String? userName;
+  String? userRole;
   bool isLoading = true;
 
   // Update check state
@@ -48,8 +48,33 @@ class _MainHubScreenState extends State<MainHubScreen> {
             .doc(user.uid)
             .get(const GetOptions(source: Source.cache));
         if (doc.exists) {
-          userName = doc.data()?['name'] ?? 'User';
-          userRole = (doc.data()?['role'] ?? 'staff').toString().toUpperCase();
+          final name = doc.data()?['name'];
+          final role = doc.data()?['role'];
+          
+          // Logout user if critical data is missing
+          if (name == null || role == null) {
+            await FirebaseAuth.instance.signOut();
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            }
+            return;
+          }
+          
+          userName = name;
+          userRole = role.toString().toUpperCase();
+        } else {
+          // Document doesn't exist, logout user
+          await FirebaseAuth.instance.signOut();
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+          }
+          return;
         }
       }
       // --- Update check logic ---
@@ -89,6 +114,13 @@ class _MainHubScreenState extends State<MainHubScreen> {
       );
     }
 
+    // Prevent rendering if user data is invalid
+    if (userName == null || userRole == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     // Show update screen overlay if needed
     if (showUpdateScreen) {
       return UpdateScreen(
@@ -101,15 +133,15 @@ class _MainHubScreenState extends State<MainHubScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _TopBar(userName: userName, userRole: userRole),
+            _TopBar(userName: userName!, userRole: userRole!),
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
                   children: [
                     const SizedBox(height: 24),
-                    _GreetingSection(userName: userName),
+                    _GreetingSection(userName: userName!),
                     const SizedBox(height: 40),
-                    _ModuleGrid(userName: userName, userRole: userRole),
+                    _ModuleGrid(userName: userName!, userRole: userRole!),
                     const SizedBox(height: 36),
                     if (userRole != 'CASHIER') ...[
                       _StatsBar(),
