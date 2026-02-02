@@ -158,7 +158,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
     _loadCurrentUser();
   }
 
-  Future<void> _loadCurrentUser() async {
+  Future<void> _loadCurrentUser({bool fromServer = false}) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
@@ -166,7 +166,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
         final doc = await FirebaseFirestore.instance
             .collection('staff')
             .doc(user.uid)
-            .get();
+            .get(GetOptions(source: fromServer ? Source.serverAndCache : Source.cache));
         if (doc.exists) {
           setState(() {
             currentUserName = doc.data()?['name'] ?? '';
@@ -184,13 +184,13 @@ class _SalesReportPageState extends State<SalesReportPage> {
       setState(() {
         isLoading = false;
       });
-      _loadSoldByOptions();
+      _loadSoldByOptions(fromServer: fromServer);
     }
   }
 
-  Future<void> _loadSoldByOptions() async {
+  Future<void> _loadSoldByOptions({bool fromServer = false}) async {
     try {
-      final snapshot = await salesCollection.get();
+      final snapshot = await salesCollection.get(GetOptions(source: fromServer ? Source.serverAndCache : Source.cache));
       final Set<String> soldBySet = {'All'};
 
       for (var doc in snapshot.docs) {
@@ -278,8 +278,39 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }
   }
 
+  // Sync all data from server - used by refresh icon
+  Future<void> _syncFromServer() async {
+  
+    try {
+      await _loadCurrentUser(fromServer: true);
+      await _loadSoldByOptions(fromServer: true);
+      setState(() {}); // Trigger rebuild with fresh data
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Data synced from server'),
+          backgroundColor: accentGreen,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error syncing from server: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Failed to sync from server'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } 
+  }
+
   // New: Group by day, then by transaction (document ID)
-  Future<Map<String, Map<String, Map<String, dynamic>>>> _fetchSalesData() async {
+  Future<Map<String, Map<String, Map<String, dynamic>>>> _fetchSalesData({bool fromServer = false}) async {
+    // High-level access users always fetch from server
+if (currentUserRole.isNotEmpty && hasHighLevelAccess) {
+  fromServer = true;
+}
+
     Query query = salesCollection;
 
     // Apply date filter (fetch one day before and after the selected range)
@@ -350,7 +381,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
       );
     }
 
-    QuerySnapshot salesSnapshot = await query.get();
+    QuerySnapshot salesSnapshot = await query.get(GetOptions(source: fromServer ? Source.serverAndCache : Source.cache));
 
     // Structure: {date: {transactionId: { ...transactionData, 'items': [...] }}}
     Map<String, Map<String, Map<String, dynamic>>> dailyTransactions = {};
@@ -455,7 +486,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white70),
-            onPressed: () => setState(() {}),
+            onPressed: _syncFromServer,
           ),
         ],
       ),

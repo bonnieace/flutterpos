@@ -32,7 +32,7 @@ class _ProfitReportsPageState extends State<ProfitReportsPage> {
 
   Future<void> _loadSoldByList() async {
     try {
-      final snapshot = await FirebaseFirestore.instance.collection('alcoholsales').get();
+      final snapshot = await FirebaseFirestore.instance.collection('adjustments').get();
       final Set<String> soldBySet = {'All Staff'};
       for (var doc in snapshot.docs) {
         final soldBy = doc.data()['soldBy'] as String?;
@@ -89,7 +89,7 @@ class _ProfitReportsPageState extends State<ProfitReportsPage> {
       }
 
       // Fetch sales data
-      Query salesQuery = FirebaseFirestore.instance.collection('alcoholsales');
+      Query salesQuery = FirebaseFirestore.instance.collection('adjustments');
       if (startDate != null) {
         salesQuery = salesQuery.where('dateAdded', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
       }

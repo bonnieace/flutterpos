@@ -46,7 +46,7 @@ class _MainHubScreenState extends State<MainHubScreen> {
         final doc = await FirebaseFirestore.instance
             .collection('staff')
             .doc(user.uid)
-            .get();
+            .get(const GetOptions(source: Source.cache));
         if (doc.exists) {
           userName = doc.data()?['name'] ?? 'User';
           userRole = (doc.data()?['role'] ?? 'staff').toString().toUpperCase();
@@ -54,7 +54,7 @@ class _MainHubScreenState extends State<MainHubScreen> {
       }
       // --- Update check logic ---
       // Replace 'YOUR_STORE_ID' with your actual store document ID or logic
-      final storeDoc = await FirebaseFirestore.instance.collection('store').doc('KBLqOv6LyJfOJjI9sEcm').get();
+      final storeDoc = await FirebaseFirestore.instance.collection('store').doc('KBLqOv6LyJfOJjI9sEcm').get(const GetOptions(source: Source.cache));
       if (storeDoc.exists) {
         final latestVersion = storeDoc.data()?['latest_version'] as String?;
         final message = storeDoc.data()?['update_message'] as String?;
