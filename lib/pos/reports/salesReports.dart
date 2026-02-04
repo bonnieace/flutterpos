@@ -150,11 +150,13 @@ class _SalesReportPageState extends State<SalesReportPage> {
   bool get isCashier =>
       currentUserRole.toLowerCase() == 'cashier' &&
       currentUserUid != _adminCashierUid;
+  late Future<Map<String, Map<String, Map<String, dynamic>>>> _salesDataFuture;
 
   @override
   void initState() {
     super.initState();
     salesCollection = FirebaseFirestore.instance.collection('alcoholsales');
+    _salesDataFuture = _fetchSalesData();
     _loadCurrentUser();
   }
 
@@ -188,29 +190,38 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }
   }
 
-  Future<void> _loadSoldByOptions() async {
-    try {
-      final snapshot = await salesCollection.get();
-      final Set<String> soldBySet = {'All'};
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final soldBy = data['soldBy'] as String? ?? '';
-        if (soldBy.isNotEmpty && soldBy != 'Evarlyn waithera') {
-          soldBySet.add(soldBy);
-        }
+Future<void> _loadSoldByOptions() async {
+  try {
+    debugPrint('[Firestore] Fetching staff collection for soldBy options');
+    final snapshot = await FirebaseFirestore.instance.collection('staff').get();
+    debugPrint('[Firestore] Completed read: ${snapshot.docs.length} documents retrieved');
+    
+    final Set<String> soldBySet = {'All'};
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      final name = data?['name'] as String? ?? '';
+      final status = data?['status'] as String? ?? '';
+      final role = data?['role'] as String? ?? '';
+      
+      // Skip deactivated staff and admins
+      if (status.toLowerCase() == 'deactivated' || role.toLowerCase() == 'admin') {
+        continue;
       }
-
-      setState(() {
-        soldByOptions = soldBySet.toList()..sort();
-        soldByOptions.remove('All');
-        soldByOptions.insert(0, 'All');
-      });
-    } catch (e) {
-      debugPrint('Error loading soldBy options: $e');
+      
+      if (name.isNotEmpty &&  name != 'FDSF') {
+        soldBySet.add(name);
+      }
     }
+    
+    setState(() {
+      soldByOptions = soldBySet.toList()..sort();
+      soldByOptions.remove('All');
+      soldByOptions.insert(0, 'All');
+    });
+  } catch (e) {
+    debugPrint('Error loading soldBy options: $e');
   }
-
+}
   Future<void> _selectDateRange() async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
@@ -333,24 +344,43 @@ class _SalesReportPageState extends State<SalesReportPage> {
         endDate = null;
     }
 
-    // Expand the fetch range by one day before and after
-    DateTime? fetchStartDate = startDate != null ? startDate.subtract(const Duration(days: 1)) : null;
-    DateTime? fetchEndDate = endDate != null ? endDate.add(const Duration(days: 1)) : null;
+    // For non-admin users, use businessDate without buffer. For admins, use dateAdded with buffer
+    if (isAdmin) {
+      // Admin: Expand the fetch range by one day before and after
+      DateTime? fetchStartDate = startDate != null ? startDate.subtract(const Duration(days: 1)) : null;
+      DateTime? fetchEndDate = endDate != null ? endDate.add(const Duration(days: 1)) : null;
 
-    if (fetchStartDate != null) {
-      query = query.where(
-        'dateAdded',
-        isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStartDate),
-      );
-    }
-    if (fetchEndDate != null) {
-      query = query.where(
-        'dateAdded',
-        isLessThanOrEqualTo: Timestamp.fromDate(fetchEndDate),
-      );
+      if (fetchStartDate != null) {
+        query = query.where(
+          'dateAdded',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStartDate),
+        );
+      }
+      if (fetchEndDate != null) {
+        query = query.where(
+          'dateAdded',
+          isLessThanOrEqualTo: Timestamp.fromDate(fetchEndDate),
+        );
+      }
+    } else {
+      // Non-admin: Use businessDate with exact range
+      if (startDate != null) {
+        query = query.where(
+          'businessDate',
+          isGreaterThanOrEqualTo: "${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}",
+        );
+      }
+      if (endDate != null) {
+        query = query.where(
+          'businessDate',
+          isLessThanOrEqualTo: "${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}",
+        );
+      }
     }
 
     QuerySnapshot salesSnapshot = await query.get();
+    debugPrint('[Firestore] Completed sales snapshot read: ${salesSnapshot.docs.length} documents retrieved');
+
 
     // Structure: {date: {transactionId: { ...transactionData, 'items': [...] }}}
     Map<String, Map<String, Map<String, dynamic>>> dailyTransactions = {};
@@ -436,7 +466,11 @@ class _SalesReportPageState extends State<SalesReportPage> {
       decimalDigits: 2,
     ).format(amount);
   }
-
+  void _refreshSalesData() {
+    setState(() {
+      _salesDataFuture = _fetchSalesData();
+    });
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -498,6 +532,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
                                       customStartDate = null;
                                       customEndDate = null;
                                     });
+                                    _refreshSalesData();
                                   }
                                 },
                                 backgroundColor: mutedGreen,
@@ -647,7 +682,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
           // Sales Data
           Expanded(
             child: FutureBuilder<Map<String, Map<String, Map<String, dynamic>>>>(
-              future: _fetchSalesData(),
+              future:_salesDataFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
