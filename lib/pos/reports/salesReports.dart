@@ -6,6 +6,7 @@ import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/pos/services/returns_service.dart';
 
 import 'package:flutter_application_1/services/Receipt_service.dart' show buildTestReceiptService, ItemInfo;
+import 'package:lottie/lottie.dart';
 class SalesReportPage extends StatefulWidget {
   const SalesReportPage({super.key});
 
@@ -255,6 +256,7 @@ Future<void> _loadSoldByOptions() async {
         customEndDate = picked.end;
         selectedFilter = 'Custom';
       });
+      _refreshSalesData();
     }
   }
 
@@ -286,11 +288,17 @@ Future<void> _loadSoldByOptions() async {
         customEndDate = picked;
         selectedFilter = 'Custom';
       });
+      _refreshSalesData();
     }
   }
 
   // New: Group by day, then by transaction (document ID)
   Future<Map<String, Map<String, Map<String, dynamic>>>> _fetchSalesData() async {
+    debugPrint('[_fetchSalesData] selectedFilter: $selectedFilter');
+    debugPrint('[_fetchSalesData] customStartDate: $customStartDate');
+    debugPrint('[_fetchSalesData] customEndDate: $customEndDate');
+    debugPrint('[_fetchSalesData] isAdmin: $isAdmin');
+    
     Query query = salesCollection;
 
     // Apply date filter (fetch one day before and after the selected range)
@@ -343,6 +351,8 @@ Future<void> _loadSoldByOptions() async {
         startDate = null;
         endDate = null;
     }
+
+    debugPrint('[_fetchSalesData] After switch - startDate: $startDate, endDate: $endDate');
 
     // For non-admin users, use businessDate without buffer. For admins, use dateAdded with buffer
     if (isAdmin) {
@@ -636,6 +646,7 @@ Future<void> _loadSoldByOptions() async {
                                       setState(() {
                                         selectedSoldBy = soldBy;
                                       });
+                                      _refreshSalesData();
                                     },
                                     backgroundColor: mutedGreen,
                                     selectedColor: Colors.teal,
@@ -685,9 +696,23 @@ Future<void> _loadSoldByOptions() async {
               future:_salesDataFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: accentGreen),
-                  );
+                    return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                      Lottie.asset(
+                        'images/SandyLoading.json',
+                        width: 150,
+                        height: 150,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Loading sales data...',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      ],
+                    ),
+                    );
                 }
 
                 if (snapshot.hasError) {

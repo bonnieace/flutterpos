@@ -411,7 +411,7 @@ class _ModuleGrid extends StatelessWidget {
       // Cashiers have 2 cards (Register + Book Keeping)
       if (isMobile) {
         crossAxisCount = 1;
-        aspectRatio = 2.5;
+        aspectRatio = 1.8;
       } else if (isTablet) {
         crossAxisCount = 2;
         aspectRatio = 1.8;
