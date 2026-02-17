@@ -49,12 +49,14 @@ class ProductInfo {
   final String category;
   final String imageUrl;
   final String sku;
+  final String itemId;
   ProductInfo({
     required this.name,
     required this.price,
     required this.category,
     required this.imageUrl,
     required this.sku,
+    required this.itemId,
   });
 }
 
@@ -950,6 +952,7 @@ class _posState extends State<pos> {
         String category = data['category']?.toString() ?? 'Others';
         double price = double.tryParse(data['price']?.toString() ?? '') ?? 0.0;
         String imageUrl = data['image']?.toString() ?? '';
+        String itemId = doc.id;
         if (name.isNotEmpty) {
           products.add(
             ProductInfo(
@@ -958,6 +961,7 @@ class _posState extends State<pos> {
               category: category,
               imageUrl: imageUrl,
               sku: sku,
+              itemId: itemId,
             ),
           );
           prices[name] = price;
@@ -1204,6 +1208,7 @@ class _posState extends State<pos> {
                               product.name,
                               product.price,
                               product.sku,
+                              product.itemId,
                             ),
                           );
                         },
@@ -1570,6 +1575,7 @@ class _posState extends State<pos> {
                                   product.name,
                                   product.price,
                                   product.sku,
+                                  product.itemId,
                                 ),
                               );
                             },
@@ -1856,7 +1862,7 @@ class _posState extends State<pos> {
     );
   }
 
-  void _showQuantityDialog(String productName, double price, String sku) {
+  void _showQuantityDialog(String productName, double price, String sku, String itemId) {
     setState(() {
       // Check if product already exists in items (by both name AND SKU)
       int existingIndex = items.indexWhere(
@@ -1871,6 +1877,7 @@ class _posState extends State<pos> {
             quantity: 1,
             price: price,
             sku: sku,
+            itemId: itemId,
           ),
         );
       }
@@ -1882,26 +1889,15 @@ class _posState extends State<pos> {
     FirebaseFirestore db = FirebaseFirestore.instance;
     List<Map<String, dynamic>> salesItems = [];
     for (var item in items) {
-      String? itemId;
-      try {
-        var query = await db
-            .collection("alcohol")
-            .where('name', isEqualTo: item.productName)
-            .limit(1)
-            .get();
-        if (query.docs.isNotEmpty) {
-          itemId = query.docs.first.id;
-        }
-      } catch (e) {
-        print("Error finding itemid for  24{item.productName}:  24e");
-      }
+      
       salesItems.add({
         'productName': item.productName,
         'quantity': item.quantity,
         'price': item.price,
         'sku': item.sku,
-        'itemid': itemId ?? '',
+        'itemid': item.itemId, 
       });
+      print('FIRESTORE UPDATE for ${item.itemId}');
     }
 
     if (salesItems.isEmpty) {
@@ -2509,6 +2505,7 @@ class _posState extends State<pos> {
                                                   await updateInventory(
                                                     item.productName,
                                                     item.quantity,
+                                                    item.itemId,
                                                   );
                                                   print(
                                                     "Inventory updated for ${item.productName}",
@@ -2921,24 +2918,16 @@ class _posState extends State<pos> {
     }
   }
 
-  Future<void> updateInventory(String productName, double quantity) async {
+  Future<void> updateInventory(String productName, double quantity, String itemId) async {
+    print("FIRESTORE UPDATE inventory for $productName, quantity: $quantity, itemId: $itemId");
+    
     try {
       FirebaseFirestore db = FirebaseFirestore.instance;
       // Find the document with the matching name field
-      var query = await db
-          .collection("alcohol")
-          .where('name', isEqualTo: productName)
-          .limit(1)
-          .get(const GetOptions(source: Source.cache));
-      if (query.docs.isNotEmpty) {
-        var docId = query.docs.first.id;
-         db.collection("alcohol").doc(docId).update({
-          "quantity": FieldValue.increment(-quantity),
-        });
-        print("Inventory updated for $productName");
-      } else {
-        print("Product $productName not found in inventory.");
-      }
+      db.collection("alcohol").doc(itemId).update({
+      "quantity": FieldValue.increment(-quantity),
+    });
+    print("FIRESTORE UPDATE for $itemId, quantity decremented by $quantity");
     } catch (e) {
       print("Error updating inventory for $productName: $e");
     }
@@ -3121,12 +3110,14 @@ class ItemInfo {
   double quantity;
   double price;
   String sku;
+  String itemId;
 
   ItemInfo({
     required this.productName,
     required this.quantity,
     required this.price,
     required this.sku,
+    required this.itemId,
   });
 
   Map<String, dynamic> toMap() {
