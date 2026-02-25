@@ -87,7 +87,7 @@ class ShiftService {
         'lastShiftStart': Timestamp.fromDate(now),
       });
       
-      await batch.commit();
+      batch.commit();
       
       return {
         'shiftId': shiftRef.id,
@@ -136,7 +136,7 @@ class ShiftService {
         'currentShiftId': null,
       });
       
-      await batch.commit();
+       batch.commit();
       
       return true;
     } catch (e) {
