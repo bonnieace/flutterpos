@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
 import 'return_detail_screen.dart';
+import '../services/fraud_detection_service.dart';
+import '../model/return_analysis.dart';
 
 class ReturnsScreen extends StatefulWidget {
   const ReturnsScreen({Key? key}) : super(key: key);
@@ -12,7 +14,7 @@ class ReturnsScreen extends StatefulWidget {
 
 
 class _ReturnsScreenState extends State<ReturnsScreen> {
-  String selectedFilter = 'All Time';
+  String selectedFilter = 'Last 7 Days';
   final List<String> filterOptions = ['Today', 'Last 7 Days', 'Last 30 Days', 'This Month', 'All Time'];
   String selectedType = 'All Types';
   final List<String> typeOptions = ['All Types', 'Partial', 'Void'];
@@ -20,6 +22,10 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   final List<String> verifiedOptions = [ 'All','Verified', 'Unverified'];
   String selectedStaff = 'All Staff';
   List<String> staffOptions = ['All Staff'];
+  String selectedRisk = 'All';
+  final List<String> riskOptions = ['All', 'High Risk', 'Medium Risk', 'Low Risk'];
+  final FraudDetectionService _fraudService = FraudDetectionService();
+  final Map<String, ReturnRiskAnalysis> _riskCache = {};
 
   @override
   void initState() {
@@ -192,6 +198,37 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                       },
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 150,
+                    child: DropdownButtonFormField<String>(
+                      value: selectedRisk,
+                      decoration: InputDecoration(
+                        labelText: 'Risk Level',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        filled: true,
+                        fillColor: bgMid,
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: mutedGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: accentGreen),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      dropdownColor: bgMid,
+                      icon: const Icon(Icons.warning, color: Colors.white54, size: 20),
+                      style: const TextStyle(color: Colors.white),
+                      items: riskOptions.map((risk) => DropdownMenuItem(
+                        value: risk,
+                        child: Text(risk, style: const TextStyle(color: Colors.white)),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) setState(() => selectedRisk = value);
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -207,6 +244,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                     return const Center(child: CircularProgressIndicator(color: accentGreen));
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    print('[ReturnsScreen] Stream read: 0 documents');
                     return const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -220,6 +258,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                   }
                   // Apply type, verified, and staff filters in Dart
                   List<DocumentSnapshot> returns = snapshot.data!.docs;
+                  print('[ReturnsScreen] Stream read: ${returns.length} documents from Firestore');
                   if (selectedType == 'Partial' || selectedType == 'Void') {
                     final typeValue = selectedType.toLowerCase();
                     returns = returns.where((doc) {
@@ -243,6 +282,47 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                       final data = doc.data() as Map<String, dynamic>;
                       return (data['soldBy'] ?? '') == selectedStaff;
                     }).toList();
+                  }
+
+                  // Analyze fraud risk for each return using full unfiltered dataset
+                  // Fetch all returns for analysis context to ensure consistent scoring
+                  _fetchAllReturnsForAnalysis().then((allReturns) {
+                    for (var doc in returns) {
+                      if (!_riskCache.containsKey(doc.id)) {
+                        _fraudService
+                            .analyzeReturn(doc, allReturns)
+                            .then((analysis) {
+                          _riskCache[doc.id] = analysis;
+                        });
+                      }
+                    }
+                  });
+
+                  // Apply risk level filter
+                  if (selectedRisk != 'All') {
+                    returns = returns.where((doc) {
+                      final analysis = _riskCache[doc.id];
+                      if (analysis == null) return true; // Show while analyzing
+                      switch (selectedRisk) {
+                        case 'High Risk':
+                          return analysis.riskLevel == ReturnRiskLevel.high;
+                        case 'Medium Risk':
+                          return analysis.riskLevel == ReturnRiskLevel.medium;
+                        case 'Low Risk':
+                          return analysis.riskLevel == ReturnRiskLevel.low;
+                        default:
+                          return true;
+                      }
+                    }).toList();
+                  }
+
+                  // Sort by risk score if filtering by risk
+                  if (selectedRisk != 'All') {
+                    returns.sort((a, b) {
+                      final scoreA = _riskCache[a.id]?.overallRiskScore ?? 0;
+                      final scoreB = _riskCache[b.id]?.overallRiskScore ?? 0;
+                      return scoreB.compareTo(scoreA); // Descending
+                    });
                   }
 
                   // Calculate total returned amount
@@ -333,132 +413,119 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4),
+                              padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 4),
                               child: Text(dayLabel, style: const TextStyle(color: accentGreen, fontWeight: FontWeight.bold, fontSize: 16)),
                             ),
-                            Card(
-                              color: bgMid,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              margin: const EdgeInsets.only(bottom: 20),
-                              child: ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: docs.length,
-                                separatorBuilder: (context, i) => Divider(
-                                  color: Colors.white10,
-                                  height: 1,
-                                  indent: 16,
-                                  endIndent: 16,
+                            ...docs.map((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              final isVerified = data['verified'] == true;
+                              final adjustedBy = data['soldBy'] ?? '';
+                              final timestamp = data['timestamp'] != null && data['timestamp'] is Timestamp
+                                  ? (data['timestamp'] as Timestamp).toDate()
+                                  : null;
+                              final type = (data['type'] ?? '').toString().toLowerCase();
+                              final typeIcon = type == 'partial'
+                                  ? Icons.undo
+                                  : type == 'void'
+                                      ? Icons.cancel
+                                      : Icons.assignment_return;
+                              final typeColor = type == 'partial'
+                                  ? Colors.orange
+                                  : type == 'void'
+                                      ? Colors.redAccent
+                                      : accentGreen;
+                              
+                              return Card(
+                                color: bgMid,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: typeColor.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          typeIcon,
+                                          color: typeColor,
+                                          size: 22,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            // Row(
+                                            //   children: [
+                                            //     // Icon(
+                                            //     //   Icons.verified,
+                                            //     //   color: isVerified ? accentGreen : Colors.redAccent,
+                                            //     //   size: 16,
+                                            //     // ),
+                                            //     const SizedBox(width: 4),
+                                            //     const SizedBox(width: 10),
+                                            //     if (type.isNotEmpty)
+                                            //       Container(
+                                            //         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            //         decoration: BoxDecoration(
+                                            //           color: typeColor.withOpacity(0.18),
+                                            //           borderRadius: BorderRadius.circular(6),
+                                            //         ),
+                                            //         child: Text(
+                                            //           type[0].toUpperCase() + type.substring(1),
+                                            //           style: TextStyle(
+                                            //             color: typeColor,
+                                            //             fontWeight: FontWeight.w600,
+                                            //             fontSize: 12,
+                                            //           ),
+                                            //         ),
+                                            //       ),
+                                            //   ],
+                                            // ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'By: $adjustedBy',
+                                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              timestamp != null
+                                                  ? "Time: ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}"
+                                                  : '',
+                                              style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Risk Badge
+                                      if (_riskCache.containsKey(doc.id))
+                                        Padding(
+                                          padding: const EdgeInsets.only(right: 8.0),
+                                          child: _buildRiskBadge(_riskCache[doc.id]!),
+                                        ),
+                                      IconButton(
+                                        icon: const Icon(Icons.visibility, color: accentGreen),
+                                        tooltip: 'View Details',
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ReturnDetailScreen(returnDoc: doc),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                itemBuilder: (context, i) {
-                                  final doc = docs[i];
-                                  final data = doc.data() as Map<String, dynamic>;
-                                  final isVerified = data['verified'] == true;
-                                  final adjustedBy = data['adjustedBy'] ?? '';
-                                  final timestamp = data['timestamp'] != null && data['timestamp'] is Timestamp
-                                      ? (data['timestamp'] as Timestamp).toDate()
-                                      : null;
-                                  final type = (data['type'] ?? '').toString().toLowerCase();
-                                  final typeIcon = type == 'partial'
-                                      ? Icons.undo
-                                      : type == 'void'
-                                          ? Icons.cancel
-                                          : Icons.assignment_return;
-                                  final typeColor = type == 'partial'
-                                      ? Colors.orange
-                                      : type == 'void'
-                                          ? Colors.redAccent
-                                          : accentGreen;
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 40,
-                                          height: 40,
-                                          decoration: BoxDecoration(
-                                            color: typeColor.withOpacity(0.15),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Icon(
-                                            typeIcon,
-                                            color: typeColor,
-                                            size: 22,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                    Icons.verified,
-                                                    color: isVerified ? accentGreen : Colors.redAccent,
-                                                    size: 16,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    isVerified ? 'Verified' : 'Unverified',
-                                                    style: TextStyle(
-                                                      color: isVerified ? accentGreen : Colors.redAccent,
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 13,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  if (type.isNotEmpty)
-                                                    Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                      decoration: BoxDecoration(
-                                                        color: typeColor.withOpacity(0.18),
-                                                        borderRadius: BorderRadius.circular(6),
-                                                      ),
-                                                      child: Text(
-                                                        type[0].toUpperCase() + type.substring(1),
-                                                        style: TextStyle(
-                                                          color: typeColor,
-                                                          fontWeight: FontWeight.w600,
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                'By: $adjustedBy',
-                                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                timestamp != null
-                                                    ? "Time: ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}"
-                                                    : '',
-                                                style: const TextStyle(color: Colors.white54, fontSize: 12),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.visibility, color: accentGreen),
-                                          tooltip: 'View Details',
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => ReturnDetailScreen(returnDoc: doc),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
+                              );
+                            }).toList(),
                           ],
                         );
                       }),
@@ -529,6 +596,48 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
     }
     // Do NOT filter by type in Firestore query; filter in Dart after fetching
     // Do NOT filter by verified in Firestore query; filter in Dart after fetching
-    return query.orderBy('timestamp', descending: true).limit(30).snapshots();
+    return query.orderBy('timestamp', descending: true).snapshots();
+  }
+
+  // Fetch all returns (unfiltered) for consistent fraud analysis
+  Future<List<DocumentSnapshot>> _fetchAllReturnsForAnalysis() async {
+    final snapshot = await FirebaseFirestore.instance.collection('returns').get();
+    return snapshot.docs;
+  }
+
+  Widget _buildRiskBadge(ReturnRiskAnalysis analysis) {
+    final color = analysis.riskLevel.colorValue;
+    final icon = analysis.riskLevel == ReturnRiskLevel.high
+        ? Icons.error
+        : analysis.riskLevel == ReturnRiskLevel.medium
+            ? Icons.warning
+            : Icons.check_circle;
+
+    return Tooltip(
+      message: analysis.riskSummary,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Color(color).withOpacity(0.15),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Color(color), width: 0.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Color(color), size: 16),
+            const SizedBox(width: 4),
+            Text(
+              '${analysis.overallRiskScore}',
+              style: TextStyle(
+                color: Color(color),
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
