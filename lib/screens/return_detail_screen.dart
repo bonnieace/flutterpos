@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
+import '../services/fraud_detection_service.dart';
+import '../model/return_analysis.dart';
 
 class ReturnDetailScreen extends StatelessWidget {
   final DocumentSnapshot returnDoc;
@@ -112,7 +114,7 @@ class ReturnDetailScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            isVerified ? 'STATUS: VERIFIED' : 'STATUS: UNVERIFIED',
+                            isVerified ? 'VERIFIED' : 'UNVERIFIED',
                             style: TextStyle(
                               color: isVerified ? accentGreen : Colors.redAccent,
                               fontWeight: FontWeight.bold,
@@ -123,10 +125,131 @@ class ReturnDetailScreen extends StatelessWidget {
                                   : [Shadow(color: Colors.black45, offset: Offset(0, 1), blurRadius: 2)],
                             ),
                           ),
-                          Text('Timestamp: [${timestamp != null ? '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}' : ''}', style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                          Text(' ${timestamp != null ? '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}' : ''}', style: const TextStyle(color: Colors.white54, fontSize: 13)),
                         ],
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Risk Analysis
+                  FutureBuilder<ReturnRiskAnalysis>(
+                    future: _analyzeReturnRisk(returnDoc),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: bgMid.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: const SizedBox(
+                            height: 40,
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation(accentGreen),
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      if (snapshot.hasData) {
+                        final analysis = snapshot.data!;
+                        final color = analysis.riskLevel.colorValue;
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Color(color).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Color(color).withOpacity(0.5)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    analysis.riskLevel == ReturnRiskLevel.high
+                                        ? Icons.error
+                                        : analysis.riskLevel == ReturnRiskLevel.medium
+                                            ? Icons.warning
+                                            : Icons.check_circle,
+                                    color: Color(color),
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Fraud Risk: ${analysis.riskLevel.displayName}',
+                                          style: TextStyle(
+                                            color: Color(color),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Risk Score: ${analysis.overallRiskScore}/100',
+                                          style: TextStyle(
+                                            color: Color(color).withOpacity(0.8),
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (analysis.flags.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Risk Factors:',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ...analysis.flags.map((flag) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          Icons.circle,
+                                          size: 4,
+                                          color: Color(color),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            flag,
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(0.8),
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ],
+                            ],
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
                   ),
                   const SizedBox(height: 32),
                   Center(
@@ -217,6 +340,9 @@ class ReturnDetailScreen extends StatelessWidget {
                                 icon: const Icon(Icons.verified, color: Colors.white54, size: 32),
                                 tooltip: 'Mark as Verified',
                                 onPressed: () async {
+                                  // Get risk analysis first
+                                  final riskAnalysis = await _analyzeReturnRisk(returnDoc);
+                                  
                                   final itemsReturned = data['itemsReturned'] as List<dynamic>?;
                                   bool? adjustStock;
                                   if (itemsReturned != null && itemsReturned.isNotEmpty) {
@@ -226,60 +352,95 @@ class ReturnDetailScreen extends StatelessWidget {
                                       builder: (context) => Dialog(
                                         backgroundColor: bgMid,
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.inventory_2, color: accentGreen, size: 48),
-                                              const SizedBox(height: 16),
-                                              const Text(
-                                                'Adjust Stock?',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 22,
+                                        child: SingleChildScrollView(
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.center,
+                                              children: [
+                                                // Risk Summary in Dialog
+                                                if (riskAnalysis.riskLevel != ReturnRiskLevel.low)
+                                                  Container(
+                                                    padding: const EdgeInsets.all(12),
+                                                    decoration: BoxDecoration(
+                                                      color: Color(riskAnalysis.riskLevel.colorValue).withOpacity(0.1),
+                                                      borderRadius: BorderRadius.circular(10),
+                                                      border: Border.all(
+                                                        color: Color(riskAnalysis.riskLevel.colorValue).withOpacity(0.5),
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons.warning_amber_rounded,
+                                                          color: Color(riskAnalysis.riskLevel.colorValue),
+                                                          size: 20,
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Expanded(
+                                                          child: Text(
+                                                            '⚠️ This return flagged as ${riskAnalysis.riskLevel.displayName}',
+                                                            style: TextStyle(
+                                                              color: Color(riskAnalysis.riskLevel.colorValue),
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 13,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                const SizedBox(height: 16),
+                                                Icon(Icons.inventory_2, color: accentGreen, size: 48),
+                                                const SizedBox(height: 16),
+                                                const Text(
+                                                  'Adjust Stock?',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 22,
+                                                  ),
                                                 ),
-                                              ),
-                                              const SizedBox(height: 12),
-                                              const Text(
-                                                'Do you want to return the stock for the items in this return? This will increase the inventory for each item.',
-                                                style: TextStyle(color: Colors.white70, fontSize: 15),
-                                                textAlign: TextAlign.center,
-                                              ),
-                                              const SizedBox(height: 28),
-                                              Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                                children: [
-                                                  Expanded(
-                                                    child: OutlinedButton(
-                                                      style: OutlinedButton.styleFrom(
-                                                        foregroundColor: Colors.white70,
-                                                        side: const BorderSide(color: Colors.white24),
-                                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                const SizedBox(height: 12),
+                                                const Text(
+                                                  'Do you want to return the stock for the items in this return? This will increase the inventory for each item.',
+                                                  style: TextStyle(color: Colors.white70, fontSize: 15),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                                const SizedBox(height: 28),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                                  children: [
+                                                    Expanded(
+                                                      child: OutlinedButton(
+                                                        style: OutlinedButton.styleFrom(
+                                                          foregroundColor: Colors.white70,
+                                                          side: const BorderSide(color: Colors.white24),
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        onPressed: () => Navigator.of(context).pop(false),
+                                                        child: const Text('No', style: TextStyle(fontWeight: FontWeight.bold)),
                                                       ),
-                                                      onPressed: () => Navigator.of(context).pop(false),
-                                                      child: const Text('No', style: TextStyle(fontWeight: FontWeight.bold)),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 16),
-                                                  Expanded(
-                                                    child: ElevatedButton.icon(
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor: accentGreen,
-                                                        foregroundColor: Colors.white,
-                                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                                    const SizedBox(width: 16),
+                                                    Expanded(
+                                                      child: ElevatedButton.icon(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: accentGreen,
+                                                          foregroundColor: Colors.white,
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                                        ),
+                                                        icon: const Icon(Icons.check_circle_outline),
+                                                        onPressed: () => Navigator.of(context).pop(true),
+                                                        label: const Text('Proceed', style: TextStyle(fontWeight: FontWeight.bold)),
                                                       ),
-                                                      icon: const Icon(Icons.check_circle_outline),
-                                                      onPressed: () => Navigator.of(context).pop(true),
-                                                      label: const Text('Proceed', style: TextStyle(fontWeight: FontWeight.bold)),
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -301,6 +462,7 @@ class ReturnDetailScreen extends StatelessWidget {
                                     // If No or dialog dismissed, do nothing
                                   } else {
                                     // If there are no itemsReturned, allow direct verification
+                                    // Still check risk and show warning
                                     await returnDoc.reference.update({'verified': true});
                                     // ignore: use_build_context_synchronously
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -467,5 +629,12 @@ class ReturnDetailScreen extends StatelessWidget {
       ],
     );
   }
-  }
 
+  Future<ReturnRiskAnalysis> _analyzeReturnRisk(DocumentSnapshot returnDoc) async {
+    final fraudService = FraudDetectionService();
+    // Fetch all returns for context
+    final returnsSnapshot = await FirebaseFirestore.instance.collection('returns').get();
+    
+    return fraudService.analyzeReturn(returnDoc, returnsSnapshot.docs);
+  }
+}
