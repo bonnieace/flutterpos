@@ -73,7 +73,7 @@ class _ProfitReportsPageState extends State<ProfitReportsPage> {
       }
 
       // Fetch alcohol inventory for buying prices
-      final alcoholSnapshot = await FirebaseFirestore.instance.collection('alcohol').get();
+      final alcoholSnapshot = await FirebaseFirestore.instance.collection("dev_alcohol").get();
       
       final Map<String, double> buyingPrices = {};
       final Map<String, String> productCategories = {};

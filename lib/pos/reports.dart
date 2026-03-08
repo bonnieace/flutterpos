@@ -73,7 +73,7 @@ class _ReportsState extends State<Reports> {
 
   Future<void> _loadCategories() async {
     try {
-      final snapshot = await FirebaseFirestore.instance.collection('alcohol').get();
+      final snapshot = await FirebaseFirestore.instance.collection("dev_alcohol").get();
       final Set<String> categorySet = {'All Categories'};
       for (var doc in snapshot.docs) {
         final category = doc.data()['category'] as String?;
@@ -178,7 +178,7 @@ class _ReportsState extends State<Reports> {
           .get();
 
       // Fetch alcohol inventory for profit calculation and low stock
-      final alcoholSnapshot = await FirebaseFirestore.instance.collection('alcohol').get();
+      final alcoholSnapshot = await FirebaseFirestore.instance.collection("dev_alcohol").get();
       
       // Create a map of product prices (buying price) for profit calculation
       final Map<String, double> buyingPrices = {};
