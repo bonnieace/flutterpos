@@ -6,9 +6,20 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../screens/main_hub_screen.dart';
 import '../screens/users.dart';
+import '../theme.dart';
+import '../services/bulk_upload_service.dart';
+import '../services/bulk_update_service.dart';
 import 'reports.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:media_store_plus/media_store_plus.dart';
 
 class goods extends StatefulWidget {
   const goods({super.key});
@@ -106,11 +117,11 @@ class _goodsState extends State<goods> {
       // ),
       body: Container(
         width: double.infinity,
-        height: double.infinity,
         color: darkBg,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             _TopBar(isMobile: isMobile),
             Padding(
               padding: EdgeInsets.fromLTRB(
@@ -122,49 +133,175 @@ class _goodsState extends State<goods> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Inventory Manager',
-                            style: TextStyle(
-                              fontSize: isMobile ? 22 : 28,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF7B8AFF),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Manage inventory levels and alcoholsales',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.7),
-                              fontSize: isMobile ? 14 : 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => _showAddProductDialog(),
-                        icon: const Icon(Icons.add, size: 20),
-                        label: Text(isMobile ? 'Add' : 'New Product'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accentGreen,
-                          foregroundColor: Colors.black,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isMobile ? 12 : 20,
-                            vertical: isMobile ? 10 : 14,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                  if (isMobile) ...[
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Inventory Manager',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Manage inventory levels and alcoholsales',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showAddProductDialog(),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('New Product'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: bgMid,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _showBulkUploadDialog,
+                                icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                                label: const Text('Bulk Upload'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: bgMid,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _showBulkUpdateDialog,
+                                icon: const Icon(Icons.edit_note, size: 16),
+                                label: const Text('Bulk Update'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF45F28D),
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Inventory Manager',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                              
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Manage inventory levels and alcoholsales',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.7),
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                                 
+                            ElevatedButton.icon(
+                              onPressed: () => _showAddProductDialog(),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('New Product'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: bgMid,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: _showBulkUploadDialog,
+                              icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                              label: const Text('Bulk Upload'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: bgMid,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: _showBulkUpdateDialog,
+                              icon: const Icon(Icons.edit_note, size: 16),
+                              label: const Text('Bulk Update'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: accentGreen,
+                                foregroundColor: Colors.black,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                       
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
                   SizedBox(height: isMobile ? 16 : 24),
                   // Responsive search and filters
                   if (isMobile) ...[
@@ -470,12 +607,11 @@ class _goodsState extends State<goods> {
                 ],
               ),
             ),
-            Expanded(
-              child: StreamBuilder(
-                stream: FirebaseFirestore.instance
-                    .collection('alcohol')
-                    .snapshots(),
-                builder: (context, snapshot) {
+            StreamBuilder(
+              stream: FirebaseFirestore.instance
+                  .collection("alcohol")
+                  .snapshots(),
+              builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(
                       child: Text(
@@ -517,7 +653,8 @@ class _goodsState extends State<goods> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: midBg,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: mutedGreen.withOpacity(0.3)),
                       ),
                       child: Column(
                         children: [
@@ -525,65 +662,91 @@ class _goodsState extends State<goods> {
                           if (!isMobile)
                             Container(
                               padding: EdgeInsets.symmetric(
+                                horizontal: isTablet ? 16 : 24,
                                 vertical: 16,
-                                horizontal: isTablet ? 12 : 8,
+                              ),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: mutedGreen.withOpacity(0.3),
+                                  ),
+                                ),
                               ),
                               child: Row(
                                 children: [
-                                  const Expanded(
+                                  Expanded(
+                                    flex: 3,
                                     child: Text(
                                       'PRODUCT',
                                       style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white54,
+                                        fontSize: isTablet ? 10 : 11,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.8,
                                       ),
                                     ),
                                   ),
                                   if (!isTablet)
-                                    const SizedBox(
-                                      width: 160,
+                                    Expanded(
+                                      flex: 2,
                                       child: Text(
                                         'CATEGORY',
                                         style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white54,
+                                          fontSize: isTablet ? 10 : 11,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0.8,
                                         ),
                                       ),
                                     ),
-                                  SizedBox(
-                                    width: isTablet ? 100 : 140,
-                                    child: const Text(
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
                                       'IN STOCK',
                                       style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white54,
+                                        fontSize: isTablet ? 10 : 11,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.8,
                                       ),
                                     ),
                                   ),
                                   SizedBox(
                                     width: isTablet ? 80 : 100,
-                                    child: const Text(
+                                    child: Text(
                                       'ACTIONS',
                                       style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white54,
+                                        fontSize: isTablet ? 10 : 11,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.8,
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          Expanded(
-                            child: ListView.builder(
+                          if (displayDocs.isEmpty && !isMobile)
+                            const Padding(
+                              padding: EdgeInsets.all(40),
+                              child: Text(
+                                'No products found',
+                                style: TextStyle(color: Colors.white54, fontSize: 14),
+                              ),
+                            )
+                          else
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
                               itemCount: displayDocs.length,
                               itemBuilder: (context, idx) {
-                                final doc = displayDocs[idx];
-                                int adjustment = 0;
-                                String reason = '';
-                                return StatefulBuilder(
-                                  builder: (context, setStateRow) {
-                                    // Mobile card layout
-                                    if (isMobile) {
+                                  final doc = displayDocs[idx];
+                                  int adjustment = 0;
+                                  String reason = '';
+                                  return StatefulBuilder(
+                                    builder: (context, setStateRow) {
+                                      // Mobile card layout
+                                      if (isMobile) {
                                       return Container(
                                         margin: const EdgeInsets.symmetric(
                                           vertical: 6,
@@ -825,265 +988,16 @@ class _goodsState extends State<goods> {
                                       );
                                     }
                                     // Desktop/Tablet row layout
-                                    return Container(
-                                      margin: const EdgeInsets.symmetric(
-                                        vertical: 4,
-                                        horizontal: 8,
-                                      ),
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 8,
-                                        horizontal: isTablet ? 12 : 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: darkBg,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Row(
-                                              children: [
-                                                doc['image'] != null &&
-                                                        doc['image']
-                                                            .toString()
-                                                            .isNotEmpty
-                                                    ? ClipRRect(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              8,
-                                                            ),
-                                                        child: Image.network(
-                                                          doc['image'],
-                                                          width: 40,
-                                                          height: 40,
-                                                          fit: BoxFit.cover,
-                                                          errorBuilder:
-                                                              (
-                                                                context,
-                                                                error,
-                                                                stackTrace,
-                                                              ) {
-                                                                return Container(
-                                                                  width: 40,
-                                                                  height: 40,
-                                                                  color:
-                                                                      mutedGreen,
-                                                                );
-                                                              },
-                                                        ),
-                                                      )
-                                                    : Container(
-                                                        width: 40,
-                                                        height: 40,
-                                                        color: mutedGreen,
-                                                      ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      Text(
-                                                        doc['name'],
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                      Text(
-                                                        'SKU: ${doc['SKU']}',
-                                                        style: TextStyle(
-                                                          color: Colors.white
-                                                              .withOpacity(0.7),
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                      if (isTablet)
-                                                        Text(
-                                                          doc['category'],
-                                                          style: TextStyle(
-                                                            color: Colors.white
-                                                                .withOpacity(
-                                                                  0.7,
-                                                                ),
-                                                            fontSize: 11,
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                if ((doc['quantity'] as num) <
-                                                    20)
-                                                  Container(
-                                                    margin:
-                                                        const EdgeInsets.only(
-                                                          left: 8,
-                                                        ),
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 2,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.red,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            4,
-                                                          ),
-                                                    ),
-                                                    child: const Text(
-                                                      'LOW',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                if ((doc['quantity'] as num) >
-                                                    100)
-                                                  Container(
-                                                    margin:
-                                                        const EdgeInsets.only(
-                                                          left: 8,
-                                                        ),
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 2,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.blue,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            4,
-                                                          ),
-                                                    ),
-                                                    child: const Text(
-                                                      'OVER',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (!isTablet)
-                                            SizedBox(
-                                              width: 160,
-                                              child: Text(
-                                                doc['category'],
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
-                                          SizedBox(
-                                            width: isTablet ? 100 : 140,
-                                            child: Text(
-                                              doc['quantity'].toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                          // SizedBox(
-                                          //   width: 140,
-                                          //   child: Row(
-                                          //     children: [
-                                          //       IconButton(
-                                          //         icon: const Icon(Icons.remove, color: Colors.white),
-                                          //         onPressed: () {
-                                          //           setStateRow(() {
-                                          //             adjustment--;
-                                          //           });
-                                          //         },
-                                          //       ),
-                                          //       Container(
-                                          //         width: 40,
-                                          //         alignment: Alignment.center,
-                                          //         child: Text(
-                                          //           adjustment.toString(),
-                                          //           style: TextStyle(
-                                          //             color: adjustment < 0 ? Colors.red : Colors.white,
-                                          //             fontWeight: FontWeight.bold,
-                                          //             fontSize: 16,
-                                          //           ),
-                                          //         ),
-                                          //       ),
-                                          //       IconButton(
-                                          //         icon: const Icon(Icons.add, color: Colors.white),
-                                          //         onPressed: () {
-                                          //           setStateRow(() {
-                                          //             adjustment++;
-                                          //           });
-                                          //         },
-                                          //       ),
-                                          //     ],
-                                          //   ),
-                                          // ),
-                                          // SizedBox(
-                                          //   width: 150,
-                                          //   child: DropdownButton<String>(
-                                          //     value: reason.isEmpty ? null : reason,
-                                          //     hint: const Text('Select', style: TextStyle(color: Colors.white)),
-                                          //     dropdownColor: midBg,
-                                          //     style: const TextStyle(color: Colors.white),
-                                          //     items: ['Restock', 'Spoilage', 'Sale', 'Other'].map((r) => DropdownMenuItem(
-                                          //       value: r,
-                                          //       child: Text(r),
-                                          //     )).toList(),
-                                          //     onChanged: (val) {
-                                          //       setStateRow(() {
-                                          //         reason = val ?? '';
-                                          //       });
-                                          //     },
-                                          //   ),
-                                          // ),
-                                          SizedBox(
-                                            width: isTablet ? 40 : 50,
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.edit_note_outlined,
-                                                color: Colors.white,
-                                              ),
-                                              onPressed: () {
-                                                _showUpdateDialog(doc);
-                                              },
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: isTablet ? 40 : 50,
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.delete,
-                                                color: Colors.redAccent,
-                                              ),
-                                              onPressed: () {
-                                                _showDeleteConfirmDialog(
-                                                  doc.id,
-                                                  doc['name'] ?? 'Unknown Product',
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                    return _buildProductTableRow(
+                                      doc,
+                                      idx == displayDocs.length - 1,
+                                      isTablet,
+                                      mutedGreen,
                                     );
                                   },
                                 );
                               },
                             ),
-                          ),
 
                           // Container(
                           //   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
@@ -1113,10 +1027,10 @@ class _goodsState extends State<goods> {
                   );
                 },
               ),
-            ),
-          ],
+            ],
         ),
       ),
+    ),
     );
   }
 
@@ -1511,7 +1425,179 @@ class _goodsState extends State<goods> {
   }
 
   void _deleteProduct(String productId) {
-    FirebaseFirestore.instance.collection('alcohol').doc(productId).delete();
+    FirebaseFirestore.instance.collection("alcohol").doc(productId).delete();
+  }
+
+  Widget _buildProductTableRow(
+    DocumentSnapshot doc,
+    bool isLast,
+    bool isTablet,
+    Color mutedGreen,
+  ) {
+    final darkBg = const Color(0xFF0D1F16);
+    
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isTablet ? 16 : 24,
+        vertical: isTablet ? 14 : 18,
+      ),
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : Border(bottom: BorderSide(color: mutedGreen.withOpacity(0.2))),
+      ),
+      child: Row(
+        children: [
+          // Product Info
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                doc['image'] != null && doc['image'].toString().isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          doc['image'],
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 40,
+                              height: 40,
+                              color: mutedGreen,
+                            );
+                          },
+                        ),
+                      )
+                    : Container(
+                        width: 40,
+                        height: 40,
+                        color: mutedGreen,
+                      ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        doc['name'] ?? '',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'SKU: ${doc['SKU'] ?? ''}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if ((doc['quantity'] as num) < 20)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'LOW',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                if ((doc['quantity'] as num) > 100)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'OVER',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Category (hidden on tablet)
+          if (!isTablet)
+            Expanded(
+              flex: 2,
+              child: Text(
+                doc['category'] ?? '',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          // In Stock
+          Expanded(
+            flex: 2,
+            child: Text(
+              doc['quantity'].toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          // Actions
+          SizedBox(
+            width: isTablet ? 80 : 100,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.edit_note_outlined,
+                    color: Colors.white,
+                  ),
+                  onPressed: () => _showUpdateDialog(doc),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.delete,
+                    color: Colors.redAccent,
+                  ),
+                  onPressed: () => _showDeleteConfirmDialog(
+                    doc.id,
+                    doc['name'] ?? 'Unknown Product',
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showDeleteConfirmDialog(String productId, String productName) {
@@ -2446,6 +2532,9 @@ class _goodsState extends State<goods> {
                                               skuController.text,
                                               newQuantity,
                                               imageUrl,
+                                              // double.tryParse(
+                                              //   buyingPriceController.text,
+                                              // ),
                                             );
                                             Navigator.pop(context);
                                           },
@@ -2514,7 +2603,7 @@ class _goodsState extends State<goods> {
   ) async {
     try {
       await FirebaseFirestore.instance
-          .collection('alcohol')
+          .collection("alcohol")
           .doc(productId)
           .update({
             'name': name,
@@ -2549,7 +2638,7 @@ class _goodsState extends State<goods> {
     String imageUrl,
   ) async {
     try {
-      await FirebaseFirestore.instance.collection('alcohol').add({
+      await FirebaseFirestore.instance.collection("alcohol").add({
         'name': name,
         'price': price,
         'category': category,
@@ -2918,6 +3007,1403 @@ class _goodsState extends State<goods> {
       },
     );
   }
+
+  void _showBulkUploadDialog() async {
+    final darkBg = const Color(0xFF0D1F16);
+    final midBg = const Color(0xFF132A1F);
+    final accentGreen = const Color(0xFF45F28D);
+
+    try {
+      // File picker for CSV files
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        dialogTitle: 'Select CSV File for Bulk Upload',
+      );
+
+      if (result == null) {
+        // User cancelled the picker
+        return;
+      }
+
+      // Read file content
+      final file = result.files.first;
+      String csvContent;
+
+      if (kIsWeb) {
+        // Web platform
+        csvContent = String.fromCharCodes(file.bytes!);
+      } else {
+        // Mobile/Desktop platform
+        csvContent = await File(file.path!).readAsString();
+      }
+
+      // Validate CSV content
+      final bulkService = BulkUploadService();
+      final validation = await bulkService.validateCsvContent(
+        csvContent,
+        categories,
+      );
+
+      if (!mounted) return;
+
+      // Show preview dialog
+      _showBulkPreviewDialog(validation, bulkService);
+    } catch (e) {
+      print('Error in bulk upload: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting file: $e')),
+        );
+      }
+    }
+  }
+
+  void _showBulkPreviewDialog(
+    BulkUploadValidation validation,
+    BulkUploadService bulkService,
+  ) {
+    final midBg = const Color(0xFF132A1F);
+    final accentGreen = const Color(0xFF45F28D);
+    final darkBg = const Color(0xFF0D1F16);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: midBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: SingleChildScrollView(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.85,
+              constraints: BoxConstraints(
+                maxWidth: 600,
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title
+                  Text(
+                    'Bulk Upload Preview',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Statistics
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildStatCard(
+                        'Valid',
+                        validation.validProducts.length.toString(),
+                        Colors.green,
+                      ),
+                      _buildStatCard(
+                        'Errors',
+                        validation.errors.length.toString(),
+                        Colors.red,
+                      ),
+                      _buildStatCard(
+                        'Total',
+                        validation.totalRows.toString(),
+                        Colors.blue,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Errors section
+                  if (validation.errors.isNotEmpty) ...[
+                    Text(
+                      'Validation Errors',
+                      style: TextStyle(
+                        color: Colors.red.shade300,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: darkBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      constraints: BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: validation.errors.length,
+                        itemBuilder: (context, index) {
+                          final error = validation.errors[index];
+                          return Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        error.toString(),
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.9),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (index < validation.errors.length - 1)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Divider(
+                                      color: Colors.white.withOpacity(0.1),
+                                      height: 1,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Success message
+                  if (validation.validProducts.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green.shade400,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '${validation.validProducts.length} product${validation.validProducts.length != 1 ? 's' : ''} ready to upload',
+                              style: TextStyle(
+                                color: Colors.green.shade200,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+
+                  // Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: validation.validProducts.isEmpty
+                            ? null
+                            : () => _confirmBulkUpload(
+                              validation.validProducts,
+                              bulkService,
+                            ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentGreen,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Upload Products'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.7),
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmBulkUpload(
+    List<BulkProduct> products,
+    BulkUploadService bulkService,
+  ) async {
+    final midBg = const Color(0xFF132A1F);
+    final accentGreen = const Color(0xFF45F28D);
+
+    // Close preview dialog
+    Navigator.pop(context);
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: midBg,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF45F28D)),
+              const SizedBox(height: 16),
+              Text(
+                'Uploading ${products.length} products...',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Perform bulk upload
+      await bulkService.uploadProducts(products);
+
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✓ Successfully uploaded ${products.length} product${products.length != 1 ? 's' : ''}',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Refresh product list
+      setState(() {
+        searchController.clear();
+        filteredDocuments = [];
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error uploading products: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _showBulkUpdateDialog() async {
+    final darkBg = const Color(0xFF0D1F16);
+    final midBg = const Color(0xFF132A1F);
+    final accentGreen = const Color(0xFF45F28D);
+
+    // Show two-option dialog: Download Template or Upload CSV
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: midBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.85,
+            constraints: BoxConstraints(
+              maxWidth: 600,
+            ),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bulk Update Products',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Select an option to get started:',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Download Template Option
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showTemplateDownloadDialog();
+                  },
+                  icon: const Icon(Icons.download, size: 20),
+                  label: const Text('Download Template'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accentGreen,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                    minimumSize: const Size(double.infinity, 0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Upload CSV Option
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _performBulkUpdateUpload();
+                  },
+                  icon: const Icon(Icons.cloud_upload_outlined, size: 20),
+                  label: const Text('Upload CSV for Update'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2D4A3D),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                    minimumSize: const Size(double.infinity, 0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showTemplateDownloadDialog() async {
+    final midBg = const Color(0xFF132A1F);
+    final darkBg = const Color(0xFF0D1F16);
+    final accentGreen = const Color(0xFF45F28D);
+
+    try {
+      final bulkUpdateService = BulkUpdateService();
+      final productsByCategory = await bulkUpdateService.getProductsByCategory();
+
+      if (!mounted) return;
+
+      final selectedProducts = <String>{};
+      final expandedCategories = <String>{};
+
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (BuildContext context) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return Dialog(
+                backgroundColor: midBg,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Container(
+                  width: MediaQuery.of(context).size.width * 0.85,
+                  constraints: BoxConstraints(
+                    maxWidth: 600,
+                    maxHeight: MediaQuery.of(context).size.height * 0.75,
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select Products for Template',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Choose which products to include in the download template',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Products list grouped by category
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            children: productsByCategory.entries.map((entry) {
+                              final category = entry.key;
+                              final products = entry.value;
+                              final isCategoryExpanded = expandedCategories.contains(category);
+                              final allSelectedInCategory = products.every(
+                                (p) => selectedProducts.contains(p['docId']),
+                              );
+
+                              return Card(
+                                color: darkBg,
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: Column(
+                                  children: [
+                                    // Category header with checkbox
+                                    ListTile(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                                      title: Text(
+                                        category,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Checkbox(
+                                            value: allSelectedInCategory && products.isNotEmpty,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                if (value == true) {
+                                                  for (final product in products) {
+                                                    selectedProducts.add(product['docId']);
+                                                  }
+                                                } else {
+                                                  for (final product in products) {
+                                                    selectedProducts.remove(product['docId']);
+                                                  }
+                                                }
+                                              });
+                                            },
+                                          ),
+                                          IconButton(
+                                            icon: Icon(
+                                              isCategoryExpanded ? Icons.expand_less : Icons.expand_more,
+                                              color: accentGreen,
+                                            ),
+                                            onPressed: () {
+                                              setState(() {
+                                                if (isCategoryExpanded) {
+                                                  expandedCategories.remove(category);
+                                                } else {
+                                                  expandedCategories.add(category);
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Products in category
+                                    if (isCategoryExpanded)
+                                      ...products.map((product) {
+                                        final isSelected = selectedProducts.contains(product['docId']);
+                                        return ListTile(
+                                          contentPadding: const EdgeInsets.only(left: 48, right: 16),
+                                          title: Text(
+                                            product['name'] ?? 'Unknown',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          subtitle: Text(
+                                            'SKU: ${product['sku']}',
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(0.5),
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                          trailing: Checkbox(
+                                            value: isSelected,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                if (value == true) {
+                                                  selectedProducts.add(product['docId']);
+                                                } else {
+                                                  selectedProducts.remove(product['docId']);
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        );
+                                      }).toList(),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                        Text(
+                            '${selectedProducts.length} product${selectedProducts.length != 1 ? 's' : ''} selected',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                        
+                          Row(
+                            children: [
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(context),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.grey.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                              const SizedBox(width: 12),
+                              ElevatedButton.icon(
+                                onPressed: selectedProducts.isEmpty
+                                    ? null
+                                    : () => _downloadUpdateTemplate(selectedProducts.toList(), bulkUpdateService),
+                                icon: const Icon(Icons.download, size: 16),
+                                label: const Text('Download'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: accentGreen,
+                                  foregroundColor: Colors.black,
+                                  disabledBackgroundColor: Colors.grey.shade600,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                              
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+    } catch (e) {
+      print('Error fetching products: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading products: $e')),
+        );
+      }
+    }
+  }
+
+  void _downloadUpdateTemplate(List<String> selectedDocIds, BulkUpdateService bulkUpdateService) async {
+    final accentGreen = const Color(0xFF45F28D);
+
+    try {
+      // Close the selection dialog
+      Navigator.pop(context);
+
+      // Generate CSV content
+      final csvContent = await bulkUpdateService.generateUpdateTemplate(
+        selectedDocIds: selectedDocIds,
+      );
+
+      if (!mounted) return;
+
+      // Show success message with CSV preview
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (BuildContext context) {
+          return Dialog(
+            backgroundColor: const Color(0xFF132A1F),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.85,
+              constraints: BoxConstraints(
+                maxWidth: 600,
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Download Template',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green.shade400, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Template prepared for ${selectedDocIds.length} product${selectedDocIds.length != 1 ? 's' : ''}',
+                            style: TextStyle(
+                              color: Colors.green.shade200,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Preview (first few lines):',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D1F16),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    child: SingleChildScrollView(
+                      child: Text(
+                        csvContent.split('\n').take(6).join('\n'),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontFamily: 'Courier',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Close'),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: () => _downloadCsvFile(
+                          csvContent,
+                          'bulk_update_template_${DateTime.now().millisecondsSinceEpoch}.csv',
+                        ),
+                        icon: const Icon(Icons.download, size: 16),
+                        label: const Text('Download CSV'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentGreen,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      print('Error generating template: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating template: $e')),
+        );
+      }
+    }
+  }
+
+  void _performBulkUpdateUpload() async {
+    final accentGreen = const Color(0xFF45F28D);
+
+    try {
+      // File picker for CSV files
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        dialogTitle: 'Select CSV File for Bulk Update',
+      );
+
+      if (result == null) {
+        return;
+      }
+
+      // Read file content
+      final file = result.files.first;
+      String csvContent;
+
+      if (kIsWeb) {
+        csvContent = String.fromCharCodes(file.bytes!);
+      } else {
+        csvContent = await File(file.path!).readAsString();
+      }
+
+      // Validate CSV content
+      final bulkUpdateService = BulkUpdateService();
+      final validation = await bulkUpdateService.validateCsvForUpdate(
+        csvContent,
+        categories,
+      );
+
+      if (!mounted) return;
+
+      // Show preview dialog
+      _showBulkUpdatePreviewDialog(validation, bulkUpdateService);
+    } catch (e) {
+      print('Error in bulk update: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting file: $e')),
+        );
+      }
+    }
+  }
+
+  void _showBulkUpdatePreviewDialog(
+    BulkUpdateValidation validation,
+    BulkUpdateService bulkUpdateService,
+  ) {
+    final midBg = const Color(0xFF132A1F);
+    final accentGreen = const Color(0xFF45F28D);
+    final darkBg = const Color(0xFF0D1F16);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: midBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: SingleChildScrollView(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.85,
+              constraints: BoxConstraints(
+                maxWidth: 600,
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title
+                  Text(
+                    'Bulk Update Preview',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Statistics
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildStatCard(
+                        'Valid',
+                        validation.validProducts.length.toString(),
+                        Colors.green,
+                      ),
+                      _buildStatCard(
+                        'Errors',
+                        validation.errors.length.toString(),
+                        Colors.red,
+                      ),
+                      _buildStatCard(
+                        'Skipped',
+                        validation.skippedCount.toString(),
+                        Colors.orange,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Errors section
+                  if (validation.errors.isNotEmpty) ...[
+                    Text(
+                      'Validation Errors',
+                      style: TextStyle(
+                        color: Colors.red.shade300,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: darkBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      constraints: const BoxConstraints(maxHeight: 150),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: validation.errors.length,
+                        itemBuilder: (context, index) {
+                          final error = validation.errors[index];
+                          return Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        error.toString(),
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.9),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (index < validation.errors.length - 1)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Divider(
+                                      color: Colors.white.withOpacity(0.1),
+                                      height: 1,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Skipped section
+                  if (validation.skipped.isNotEmpty) ...[
+                    Text(
+                      'Skipped Products',
+                      style: TextStyle(
+                        color: Colors.orange.shade300,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: darkBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                      ),
+                      constraints: const BoxConstraints(maxHeight: 120),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: validation.skipped.length,
+                        itemBuilder: (context, index) {
+                          final skipped = validation.skipped[index];
+                          return Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.skip_next,
+                                      color: Colors.orange,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        skipped.toString(),
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.9),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (index < validation.skipped.length - 1)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Divider(
+                                      color: Colors.white.withOpacity(0.1),
+                                      height: 1,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Success message
+                  if (validation.validProducts.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green.shade400,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '${validation.validProducts.length} product${validation.validProducts.length != 1 ? 's' : ''} ready to update',
+                              style: TextStyle(
+                                color: Colors.green.shade200,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+
+                  // Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: validation.validProducts.isEmpty
+                            ? null
+                            : () => _confirmBulkUpdate(
+                              validation.validProducts,
+                              bulkUpdateService,
+                            ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentGreen,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Update Products'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _confirmBulkUpdate(
+    List<BulkProductUpdate> products,
+    BulkUpdateService bulkUpdateService,
+  ) async {
+    final midBg = const Color(0xFF132A1F);
+    final accentGreen = const Color(0xFF45F28D);
+
+    // Close preview dialog
+    Navigator.pop(context);
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: midBg,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF45F28D)),
+              const SizedBox(height: 16),
+              Text(
+                'Updating ${products.length} products...',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Perform bulk update
+      await bulkUpdateService.updateProducts(products);
+
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✓ Successfully updated ${products.length} product${products.length != 1 ? 's' : ''}',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Refresh product list
+      setState(() {
+        searchController.clear();
+        filteredDocuments = [];
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating products: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  /// Download CSV file - works on web and mobile platforms
+  Future<void> _downloadCsvFile(String csvContent, String filename) async {
+    try {
+      if (kIsWeb) {
+        // Web platform - create downloadable blob
+        _downloadCsvWeb(csvContent, filename);
+        // For web, show success message immediately
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✓ CSV downloaded: $filename'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          Navigator.pop(context);
+        }
+      } else {
+        // Mobile/Desktop - save to file system and share
+        // on mobile, the native method handles feedback via share sheet
+        await _downloadCsvNative(context, csvContent, filename);
+        // Only dismiss dialog if not already dismissed by user canceling share
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      print('Error downloading CSV: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error preparing file: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Download CSV for web platform using Blob (more reliable than data URIs)
+
+
+Future<void> _downloadCsvWeb(String csvContent, String filename) async {
+  try {
+    if (!kIsWeb) return;
+
+    // Encode CSV for browser download
+    final encodedContent = Uri.encodeComponent(csvContent);
+    final dataUrl = 'data:text/csv;charset=utf-8,$encodedContent';
+
+    final uri = Uri.parse(dataUrl);
+
+    // Trigger browser download
+    if (!await launchUrl(uri)) {
+      throw Exception('Could not launch download');
+    }
+
+    // User feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ CSV downloaded: $filename'),
+          backgroundColor: const Color(0xFF45F28D),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
+    // Debug log
+    print('CSV download initiated: $filename (${csvContent.length} bytes)');
+  } catch (e) {
+    throw Exception('Failed to download on web: $e');
+  }
+}
+
+  /// Download CSV for native platforms (mobile/desktop)
+  /// Creates a temporary file and opens the system share sheet
+
+
+
+ Future<void> _downloadCsvNative(
+  BuildContext context,
+  String csvContent,
+  String filename,
+) async {
+  try {
+    final tempDir = await getTemporaryDirectory();
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final csvFilename = '${filename.replaceAll('.csv', '')}_$timestamp.csv';
+
+    final file = File('${tempDir.path}/$csvFilename');
+
+    await file.writeAsString(csvContent, encoding: utf8);
+
+    print('CSV file created at: ${file.path}');
+
+    final result = await Share.shareXFiles(
+      [XFile(file.path,mimeType: 'application/vnd.ms-excel')],
+      text: 'Bulk Update Template - Edit and upload back to update products',
+      subject: 'Bulk Update Template',
+    );
+
+    if (result.status == ShareResultStatus.unavailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No apps available to share files'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else if (result.status == ShareResultStatus.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ CSV template ready: $csvFilename'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
+  } catch (e) {
+    print('Error in mobile CSV download: $e');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error preparing file: $e'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+
+    rethrow;
+  }
+}
+
 }
 
 class _TopBar extends StatelessWidget {

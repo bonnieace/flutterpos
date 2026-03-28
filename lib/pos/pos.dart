@@ -939,7 +939,7 @@ class _posState extends State<pos> {
   Future<void> _fetchProductData() async {
     try {
       QuerySnapshot productSnapshot = await FirebaseFirestore.instance
-          .collection('alcohol')
+          .collection("alcohol")
           .get();
 
       List<ProductInfo> products = [];

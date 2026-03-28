@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Allows sharing files from the app's temporary directory -->
+    <cache-path name="cache" path="/" />
+    <!-- Allows sharing files from the app's external cache directory -->
+    <external-cache-path name="external_cache" path="/" />
+    <!-- Allows sharing files from app documents (if needed) -->
+    <files-path name="documents" path="/" />
+</paths>

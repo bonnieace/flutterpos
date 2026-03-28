@@ -28,18 +28,18 @@ class _invState extends State<inv> {
     super.initState();
     _initializeFirebase();
     _fetchProductData();
-        _productStream = FirebaseFirestore.instance.collection('alcohol').snapshots();
+        _productStream = FirebaseFirestore.instance.collection("alcohol").snapshots();
 
   }
 
   Future<void> _initializeFirebase() async {
     await Firebase.initializeApp();
-    _productStream = FirebaseFirestore.instance.collection('alcohol').snapshots();
+    _productStream = FirebaseFirestore.instance.collection("alcohol").snapshots();
   }
 
 Future<void> _fetchProductData() async {
   QuerySnapshot productSnapshot =
-      await FirebaseFirestore.instance.collection('alcohol').get();
+      await FirebaseFirestore.instance.collection("alcohol").get();
 
   List<String> productNames = [];
   Map<String, double> sellingPrices = {};

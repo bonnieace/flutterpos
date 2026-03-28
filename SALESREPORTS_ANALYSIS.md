@@ -80,14 +80,14 @@ await buildTestReceiptService(  // Exact duplicate call
 ### 2. **Magic String Values**
 - Hard-coded payment method names: `'Cash'`, `'Mpesa'`, `'Bank'`, `'Card'`
 - Hard-coded admin cashier UID: `'JycGklQ22wYXArvTWCxdaFqPz9C2'` scattered throughout
-- Hard-coded collection name: `'alcoholsales'`
+- Hard-coded collection name: `"alcoholsales"`
 - Staff status values: `'deactivated'`, `'admin'`
 
 Should be extracted to constants file:
 ```dart
 // constants/firestore_constants.dart
 class FirestoreConstants {
-  static const String salesCollection = 'alcoholsales';
+  static const String salesCollection = "alcoholsales";
   static const String staffCollection = 'staff';
   static const String adminCashierUid = 'JycGklQ22wYXArvTWCxdaFqPz9C2';
   

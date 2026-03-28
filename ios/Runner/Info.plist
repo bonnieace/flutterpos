@@ -47,5 +47,25 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- File sharing configuration for share_plus package -->
+		<key>LSSupportsOpeningDocumentsInPlace</key>
+		<true/>
+		<key>UIFileSharingEnabled</key>
+		<true/>
+		<!-- Document types for CSV files -->
+		<key>CFBundleDocumentTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeName</key>
+				<string>CSV File</string>
+				<key>LSHandlerRank</key>
+				<string>Alternate</string>
+				<key>LSItemContentTypes</key>
+				<array>
+					<string>public.comma-separated-values-text</string>
+					<string>public.plain-text</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>

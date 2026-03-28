@@ -156,7 +156,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
   @override
   void initState() {
     super.initState();
-    salesCollection = FirebaseFirestore.instance.collection('alcoholsales');
+    salesCollection = FirebaseFirestore.instance.collection("alcoholsales");
     _salesDataFuture = _fetchSalesData();
     _loadCurrentUser();
   }

@@ -37,7 +37,7 @@ class _PaymentFrequencyPageState extends State<PaymentFrequencyPage> {
   @override
   void initState() {
     super.initState();
-    salesCollection = FirebaseFirestore.instance.collection('alcoholsales');
+    salesCollection = FirebaseFirestore.instance.collection("alcoholsales");
     selectedDate = DateTime.now();
     _loadSoldByOptions();
     _updateDataForSelectedDate(selectedDate);
