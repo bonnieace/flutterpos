@@ -73,7 +73,7 @@ class _ReportsState extends State<Reports> {
 
   Future<void> _loadCategories() async {
     try {
-      final snapshot = await FirebaseFirestore.instance.collection("dev_alcohol").get();
+      final snapshot = await FirebaseFirestore.instance.collection("alcohol").get();
       final Set<String> categorySet = {'All Categories'};
       for (var doc in snapshot.docs) {
         final category = doc.data()['category'] as String?;
@@ -91,7 +91,7 @@ class _ReportsState extends State<Reports> {
 
   Future<void> _loadSoldByList() async {
     try {
-      final snapshot = await FirebaseFirestore.instance.collection('alcoholsales').get();
+      final snapshot = await FirebaseFirestore.instance.collection("alcoholsales").get();
       final Set<String> soldBySet = {'All Staff'};
       for (var doc in snapshot.docs) {
         final soldBy = doc.data()['soldBy'] as String?;
@@ -164,7 +164,7 @@ class _ReportsState extends State<Reports> {
 
       // Fetch current period sales (with buffer for all ranges)
       Query salesQuery = FirebaseFirestore.instance
-          .collection('alcoholsales')
+          .collection("alcoholsales")
           .where('dateAdded', isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStartDate))
           .where('dateAdded', isLessThanOrEqualTo: Timestamp.fromDate(fetchEndDate));
 
@@ -172,13 +172,13 @@ class _ReportsState extends State<Reports> {
 
       // Fetch previous period sales for comparison
       final previousSalesSnapshot = await FirebaseFirestore.instance
-          .collection('alcoholsales')
+          .collection("alcoholsales")
           .where('dateAdded', isGreaterThanOrEqualTo: Timestamp.fromDate(previousStartDate))
           .where('dateAdded', isLessThan: Timestamp.fromDate(previousEndDate))
           .get();
 
       // Fetch alcohol inventory for profit calculation and low stock
-      final alcoholSnapshot = await FirebaseFirestore.instance.collection("dev_alcohol").get();
+      final alcoholSnapshot = await FirebaseFirestore.instance.collection("alcohol").get();
       
       // Create a map of product prices (buying price) for profit calculation
       final Map<String, double> buyingPrices = {};

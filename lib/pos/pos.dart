@@ -939,7 +939,7 @@ class _posState extends State<pos> {
   Future<void> _fetchProductData() async {
     try {
       QuerySnapshot productSnapshot = await FirebaseFirestore.instance
-          .collection("dev_alcohol")
+          .collection("alcohol")
           .get();
 
       List<ProductInfo> products = [];
@@ -2924,7 +2924,7 @@ class _posState extends State<pos> {
     try {
       FirebaseFirestore db = FirebaseFirestore.instance;
       // Find the document with the matching name field
-      db.collection("dev_alcohol").doc(itemId).update({
+      db.collection("alcohol").doc(itemId).update({
       "quantity": FieldValue.increment(-quantity),
     });
     print("FIRESTORE UPDATE for $itemId, quantity decremented by $quantity");

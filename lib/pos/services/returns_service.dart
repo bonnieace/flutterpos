@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ReturnsService {
-  final CollectionReference salesCollection = FirebaseFirestore.instance.collection('alcoholsales');
+  final CollectionReference salesCollection = FirebaseFirestore.instance.collection("alcoholsales");
   final CollectionReference returnsCollection = FirebaseFirestore.instance.collection('returns');
 
   Future<String> getCurrentUserName() async {

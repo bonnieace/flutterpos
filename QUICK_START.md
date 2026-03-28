@@ -1,4 +1,38 @@
-# Bulk Upload - Quick Start
+# Bulk Upload & Update - Quick Start
+
+## 🆕 Mobile Bulk Update (NEW!)
+
+### Quick Overview
+1. **Download Template** → Select products
+2. **Share via System** → Mail, Drive, Files, etc.
+3. **Edit Externally** → Modify prices/quantities
+4. **Upload Back** → Re-import edited file
+5. **Confirm Update** → Firestore updates instantly
+
+### Setup Required (First Time Only)
+```bash
+cd d:\flutter_application_1
+flutter pub get
+flutter clean
+```
+
+### Testing the New Feature
+1. Open app → Goods/Inventory
+2. Click "Bulk Update" → "Download Template"
+3. Check products you want to update
+4. Click "Download" → Share sheet appears
+5. Choose app (Mail, Drive, Files, etc.)
+6. Edit CSV and upload back
+7. Verify Firestore updates ✅
+
+### Supported on
+✅ Android (system share sheet)
+✅ iOS (when configured)
+✅ Web (browser download)
+
+---
+
+## Bulk Upload - Quick Start
 
 ## TL;DR
 

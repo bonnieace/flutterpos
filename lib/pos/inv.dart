@@ -28,18 +28,18 @@ class _invState extends State<inv> {
     super.initState();
     _initializeFirebase();
     _fetchProductData();
-        _productStream = FirebaseFirestore.instance.collection("dev_alcohol").snapshots();
+        _productStream = FirebaseFirestore.instance.collection("alcohol").snapshots();
 
   }
 
   Future<void> _initializeFirebase() async {
     await Firebase.initializeApp();
-    _productStream = FirebaseFirestore.instance.collection("dev_alcohol").snapshots();
+    _productStream = FirebaseFirestore.instance.collection("alcohol").snapshots();
   }
 
 Future<void> _fetchProductData() async {
   QuerySnapshot productSnapshot =
-      await FirebaseFirestore.instance.collection("dev_alcohol").get();
+      await FirebaseFirestore.instance.collection("alcohol").get();
 
   List<String> productNames = [];
   Map<String, double> sellingPrices = {};
@@ -184,10 +184,10 @@ return Scaffold(
     } else {
       FirebaseFirestore db = FirebaseFirestore.instance;
 
-      db.collection("dev_alcohol").doc(productName).get().then((documentSnapshot) {
+      db.collection("alcohol").doc(productName).get().then((documentSnapshot) {
         if (!documentSnapshot.exists) {
           // Add new product
-          db.collection("dev_alcohol").doc(productName).set({
+          db.collection("alcohol").doc(productName).set({
             "price": sellingPrice,
             "buyingPrice": buyingPrice,
             "quantity": int.parse(quantity),
@@ -201,7 +201,7 @@ return Scaffold(
           int? existingQuantity = documentSnapshot.data()?["quantity"];
           //double? existingBuyingPrice = documentSnapshot.data()?["buyingPrice"];
 
-          db.collection("dev_alcohol").doc(productName).update({
+          db.collection("alcohol").doc(productName).update({
             "price": sellingPrice,
             "buyingPrice": buyingPrice,
             "quantity": (existingQuantity ?? 0) + int.parse(quantity),

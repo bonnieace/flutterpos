@@ -259,7 +259,7 @@ class BulkUploadService {
       final batchProducts = products.sublist(i, endIndex);
 
       for (final product in batchProducts) {
-        final docRef = _firestore.collection('dev_alcohol').doc();
+        final docRef = _firestore.collection("alcohol").doc();
         batch.set(docRef, product.toFirestoreMap());
       }
 
@@ -270,7 +270,7 @@ class BulkUploadService {
   /// Get all existing SKUs from Firestore
   Future<Set<String>> _getExistingSkus() async {
     try {
-      final snapshot = await _firestore.collection('dev_alcohol').get();
+      final snapshot = await _firestore.collection("alcohol").get();
       return snapshot.docs
           .map((doc) => doc['SKU']?.toString() ?? '')
           .where((sku) => sku.isNotEmpty)

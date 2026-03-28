@@ -14,7 +14,7 @@ class ReturnDetailScreen extends StatelessWidget {
       final itemId = item['itemId'];
       final qty = (item['quantity'] as num?)?.toInt() ?? 0;
       if (itemId != null && qty > 0) {
-        final docRef = firestore.collection("dev_alcohol").doc(itemId);
+        final docRef = firestore.collection("alcohol").doc(itemId);
         final doc = await docRef.get();
         if (doc.exists) {
           final data = doc.data() as Map<String, dynamic>;
