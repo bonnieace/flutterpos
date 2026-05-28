@@ -35,13 +35,19 @@ class _goodsState extends State<goods> {
   String selectedCategory = 'All';
   String selectedStatus = 'All';
   List<DocumentSnapshot> filteredDocuments = [];
-  late List<DocumentSnapshot> documents;
+  List<DocumentSnapshot> documents = [];
   List<String> categories = ['All'];
 
   @override
   void initState() {
     super.initState();
     _fetchCategories();
+  }
+    int _parseQuantity(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    return double.tryParse(value.toString())?.toInt() ?? 0;
   }
 
   Future<void> _fetchCategories() async {
@@ -310,8 +316,11 @@ class _goodsState extends State<goods> {
                       controller: searchController,
                       style: const TextStyle(color: Colors.white),
                       onChanged: (value) {
+                        if (documents.isEmpty) return;
                         setState(() {
-                          filteredDocuments = documents
+                          filteredDocuments = value.isEmpty
+                          ? [] // clear filter when search is empty
+                          : documents
                               .where(
                                 (doc) =>
                                     doc['name']
@@ -464,8 +473,11 @@ class _goodsState extends State<goods> {
                             controller: searchController,
                             style: const TextStyle(color: Colors.white),
                             onChanged: (value) {
+                              if (documents.isEmpty) return; // guard
                               setState(() {
-                                filteredDocuments = documents
+                                filteredDocuments = value.isEmpty
+                                ? [] // clear filter when search is empty
+                                :documents
                                     .where(
                                       (doc) =>
                                           doc['name']
@@ -637,11 +649,11 @@ class _goodsState extends State<goods> {
                   // Status filter (example: filter by quantity)
                   if (selectedStatus == 'Low') {
                     displayDocs = displayDocs
-                        .where((doc) => (doc['quantity'] as num) < 20)
+                        .where((doc) => _parseQuantity(doc['quantity']) < 5)
                         .toList();
                   } else if (selectedStatus == 'Over') {
                     displayDocs = displayDocs
-                        .where((doc) => (doc['quantity'] as num) > 100)
+                        .where((doc) => _parseQuantity(doc['quantity']) > 100)
                         .toList();
                   }
                   // Spoilage/Restock are not direct fields, so you may need to adjust logic
@@ -839,9 +851,9 @@ class _goodsState extends State<goods> {
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
-                                                    if ((doc['quantity']
-                                                            as num) <
-                                                        20)
+                                                    if ((_parseQuantity(doc['quantity']
+                                                          ) <
+                                                        5))
                                                       Container(
                                                         padding:
                                                             const EdgeInsets.symmetric(
@@ -865,8 +877,8 @@ class _goodsState extends State<goods> {
                                                           ),
                                                         ),
                                                       ),
-                                                    if ((doc['quantity']
-                                                            as num) >
+                                                    if ((_parseQuantity(doc['quantity']
+                                                            ) )>
                                                         100)
                                                       Container(
                                                         padding:
@@ -935,8 +947,7 @@ class _goodsState extends State<goods> {
                                                       ),
                                                     ),
                                                     Text(
-                                                      doc['quantity']
-                                                          .toString(),
+                                                     _parseQuantity(doc['quantity']).toString(),
                                                       style: const TextStyle(
                                                         color: Colors.white,
                                                         fontSize: 13,
@@ -1374,49 +1385,179 @@ class _goodsState extends State<goods> {
           ),
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: quantityController,
-          style: TextStyle(color: isUpdateMode ? Colors.white.withOpacity(0.5) : Colors.white),
-          keyboardType: TextInputType.number,
-          readOnly: isUpdateMode,
-          decoration: InputDecoration(
-            labelText: isUpdateMode ? 'Current Stock (Read Only)' : 'Quantity',
-            labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-            prefixIcon: const Icon(Icons.inventory_2, color: Color(0xFF7B8AFF)),
-            filled: true,
-            fillColor: isUpdateMode ? darkBg.withOpacity(0.5) : darkBg,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF7B8AFF)),
-            ),
-          ),
-        ),
+     
         if (isUpdateMode && addStockController != null) ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: addStockController,
-            style: const TextStyle(color: Colors.white),
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'Add Stock',
-              hintText: 'Enter quantity to add',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
-              labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-              prefixIcon: const Icon(Icons.add_circle_outline, color: Color(0xFF45F28D)),
-              filled: true,
-              fillColor: darkBg,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: const Color(0xFF45F28D).withOpacity(0.5)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFF45F28D)),
-              ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFF45F28D).withOpacity(0.5)),
+              borderRadius: BorderRadius.circular(8),
+              color: darkBg,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Adjust Stock',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Display current and final values
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: addStockController!,
+                  builder: (context, value, child) {
+                    final current = _parseQuantity(quantityController.text);
+                    final final_ = _parseQuantity(value.text);
+                    final delta = final_ - current;
+                    final isPositive = delta >= 0;
+
+                    return Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: darkBg.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Column(
+                            children: [
+                              Text(
+                                'Current',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.6),
+                                  fontSize: 10,
+                                ),
+                              ),
+                              Text(
+                                current.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Icon(
+                            Icons.arrow_forward,
+                            color: Colors.white.withOpacity(0.5),
+                            size: 16,
+                          ),
+                          Column(
+                            children: [
+                              Text(
+                                'Final',
+                                style: TextStyle(
+                                  color: const Color(0xFF45F28D).withOpacity(0.8),
+                                  fontSize: 10,
+                                ),
+                              ),
+                              Text(
+                                final_.toString(),
+                                style: const TextStyle(
+                                  color: Color(0xFF45F28D),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              Text(
+                                'Change',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.6),
+                                  fontSize: 10,
+                                ),
+                              ),
+                              Text(
+                                '${isPositive ? '+' : ''}$delta',
+                                style: TextStyle(
+                                  color: isPositive
+                                      ? const Color(0xFF45F28D)
+                                      : Colors.red,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                // Minus/Plus buttons
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: addStockController!,
+                  builder: (context, value, child) {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.remove_circle_outline,
+                              color: Colors.redAccent,
+                              size: 28,
+                            ),
+                            onPressed: () {
+                             int currentValue = _parseQuantity(addStockController!.text);
+                            addStockController!.text = (currentValue - 1).toString();
+                            },
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF45F28D).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: const Color(0xFF45F28D).withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            value.text,
+                            style: const TextStyle(
+                              color: Color(0xFF45F28D),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF45F28D).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.add_circle_outline,
+                              color: Color(0xFF45F28D),
+                              size: 28,
+                            ),
+                            onPressed: () {
+                             int currentValue = _parseQuantity(addStockController!.text);
+                            addStockController!.text = (currentValue + 1).toString();
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         ],
@@ -1498,7 +1639,7 @@ class _goodsState extends State<goods> {
                     ],
                   ),
                 ),
-                if ((doc['quantity'] as num) < 20)
+                if (_parseQuantity(doc['quantity']) < 5)
                   Container(
                     margin: const EdgeInsets.only(left: 8),
                     padding: const EdgeInsets.symmetric(
@@ -1518,7 +1659,7 @@ class _goodsState extends State<goods> {
                       ),
                     ),
                   ),
-                if ((doc['quantity'] as num) > 100)
+                if (_parseQuantity(doc['quantity']) > 100)
                   Container(
                     margin: const EdgeInsets.only(left: 8),
                     padding: const EdgeInsets.symmetric(
@@ -1558,7 +1699,7 @@ class _goodsState extends State<goods> {
           Expanded(
             flex: 2,
             child: Text(
-              doc['quantity'].toString(),
+              _parseQuantity(doc['quantity']).toString(),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 13,
@@ -1746,11 +1887,12 @@ class _goodsState extends State<goods> {
     final TextEditingController skuController = TextEditingController(
       text: doc['SKU'] ?? '',
     );
+    final int currentQty = _parseQuantity(doc['quantity']);
     final TextEditingController quantityController = TextEditingController(
-      text: doc['quantity']?.toString() ?? '',
+      text: currentQty.toString(),
     );
     final TextEditingController addStockController = TextEditingController(
-      text: '0',
+      text: currentQty.toString(),
     );
 
     String selectedCategory = doc['category'] ?? 'Categories';
@@ -1876,9 +2018,9 @@ class _goodsState extends State<goods> {
                                                 selectedImage!,
                                               );
                                         }
-                                        int currentQty = int.tryParse(quantityController.text) ?? 0;
-                                        int addStock = int.tryParse(addStockController.text) ?? 0;
-                                        int newQuantity = currentQty + addStock;
+                                        int newQuantity =
+                                             _parseQuantity(addStockController.text);
+
                                         _updateProduct(
                                           doc.id,
                                           nameController.text,
@@ -2438,46 +2580,183 @@ class _goodsState extends State<goods> {
                                     ),
                                     const SizedBox(height: 16),
 
-                                    // Add Stock
-                                    TextField(
-                                      controller: addStockController,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                    // Adjust Stock - Desktop Version
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: const Color(0xFF45F28D).withOpacity(0.5)),
+                                        borderRadius: BorderRadius.circular(8),
+                                        color: darkBg,
                                       ),
-                                      keyboardType: TextInputType.number,
-                                      decoration: InputDecoration(
-                                        labelText: 'Add Stock',
-                                        hintText: 'Enter quantity to add',
-                                        hintStyle: TextStyle(
-                                          color: Colors.white.withOpacity(0.3),
-                                        ),
-                                        labelStyle: TextStyle(
-                                          color: Colors.white.withOpacity(0.7),
-                                        ),
-                                        prefixIcon: const Icon(
-                                          Icons.add_circle_outline,
-                                          color: Color(0xFF45F28D),
-                                        ),
-                                        filled: true,
-                                        fillColor: darkBg,
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          borderSide: BorderSide(
-                                            color: const Color(0xFF45F28D).withOpacity(
-                                              0.5,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Adjust Stock',
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(0.7),
+                                              fontSize: 12,
                                             ),
                                           ),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                                          const SizedBox(height: 12),
+                                          // Display current and final values
+                                          ValueListenableBuilder<TextEditingValue>(
+                                            valueListenable: addStockController!,
+                                            builder: (context, value, child) {
+                                                final current =
+                                                  _parseQuantity(quantityController.text);
+                                                final final_ =
+                                                  _parseQuantity(value.text);
+                                              final delta = final_ - current;
+                                              final isPositive = delta >= 0;
+
+                                              return Container(
+                                                padding: const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: darkBg.withOpacity(0.5),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                                  children: [
+                                                    Column(
+                                                      children: [
+                                                        Text(
+                                                          'Current',
+                                                          style: TextStyle(
+                                                            color: Colors.white.withOpacity(0.6),
+                                                            fontSize: 10,
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          current.toString(),
+                                                          style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 14,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    Icon(
+                                                      Icons.arrow_forward,
+                                                      color: Colors.white.withOpacity(0.5),
+                                                      size: 16,
+                                                    ),
+                                                    Column(
+                                                      children: [
+                                                        Text(
+                                                          'Final',
+                                                          style: TextStyle(
+                                                            color: const Color(0xFF45F28D).withOpacity(0.8),
+                                                            fontSize: 10,
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          final_.toString(),
+                                                          style: const TextStyle(
+                                                            color: Color(0xFF45F28D),
+                                                            fontSize: 14,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    Column(
+                                                      children: [
+                                                        Text(
+                                                          'Change',
+                                                          style: TextStyle(
+                                                            color: Colors.white.withOpacity(0.6),
+                                                            fontSize: 10,
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          '${isPositive ? '+' : ''}$delta',
+                                                          style: TextStyle(
+                                                            color: isPositive
+                                                                ? const Color(0xFF45F28D)
+                                                                : Colors.red,
+                                                            fontSize: 14,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
                                           ),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFF45F28D),
+                                          const SizedBox(height: 12),
+                                          // Minus/Plus buttons
+                                          ValueListenableBuilder<TextEditingValue>(
+                                            valueListenable: addStockController!,
+                                            builder: (context, value, child) {
+                                              return Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Container(
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.red.withOpacity(0.2),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: IconButton(
+                                                      icon: const Icon(
+                                                        Icons.remove_circle_outline,
+                                                        color: Colors.redAccent,
+                                                        size: 28,
+                                                      ),
+                                                      onPressed: () {
+                                                        int currentValue =
+                                                          _parseQuantity(addStockController!.text);
+                                                        addStockController!.text =
+                                                          (currentValue - 1).toString();
+                                                      },
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                        horizontal: 20, vertical: 10),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFF45F28D).withOpacity(0.1),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      border: Border.all(
+                                                          color: const Color(0xFF45F28D).withOpacity(0.3)),
+                                                    ),
+                                                    child: Text(
+                                                      value.text,
+                                                      style: const TextStyle(
+                                                        color: Color(0xFF45F28D),
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 18,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFF45F28D).withOpacity(0.2),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: IconButton(
+                                                      icon: const Icon(
+                                                        Icons.add_circle_outline,
+                                                        color: Color(0xFF45F28D),
+                                                        size: 28,
+                                                      ),
+                                                      onPressed: () {
+                                                        int currentValue =
+                                                          _parseQuantity(addStockController!.text);
+                                                        addStockController!.text =
+                                                          (currentValue + 1).toString();
+                                                      },
+                                                    ),
+                                                  ),
+                                                ],
+                                              );
+                                            },
                                           ),
-                                        ),
+                                        ],
                                       ),
                                     ),
                                     SizedBox(height: isDialogTablet ? 60 : 120),
@@ -2518,9 +2797,9 @@ class _goodsState extends State<goods> {
                                                     selectedImage!,
                                                   );
                                             }
-                                            int currentQty = int.tryParse(quantityController.text) ?? 0;
-                                            int addStock = int.tryParse(addStockController.text) ?? 0;
-                                            int newQuantity = currentQty + addStock;
+                                            int newQuantity =
+                                              _parseQuantity(addStockController.text);
+
                                             _updateProduct(
                                               doc.id,
                                               nameController.text,
