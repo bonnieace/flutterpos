@@ -6,7 +6,7 @@ import 'package:flutter_application_1/screens/create_user.dart';
 import '../screens/main_hub_screen.dart';
 import '../screens/users.dart';
 import '../pos/reports.dart';
-
+import 'package:cloud_functions/cloud_functions.dart';
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
 
@@ -1839,68 +1839,88 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  void _showDeleteConfirmation(Map<String, dynamic> user) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: bgMid,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text(
-          'Deactivate User',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          'Are you sure you want to deactivate ${user['name']}? You can reactivate them later.',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await _firestore.collection('users').doc(user['id']).update({
-                  'status': user['status'] == 'Active' ? 'Inactive' : 'Active',
-                  'updatedAt': FieldValue.serverTimestamp(),
-                });
+void _showDeleteConfirmation(Map<String, dynamic> user) {
+  final bool isActive = user['status'] == 'Active';
+  // Capture messenger from the parent screen context, not the dialog context
+  final messenger = ScaffoldMessenger.of(context);
 
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: bgMid,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Text(
+        isActive ? 'Deactivate User' : 'Activate User',
+        style: const TextStyle(color: Colors.white),
+      ),
+      content: Text(
+        isActive
+            ? 'Are you sure you want to deactivate ${user['name']}? You can reactivate them later.'
+            : 'Are you sure you want to activate ${user['name']}?',
+        style: const TextStyle(color: Colors.white70),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            Navigator.pop(context);
+            try {
+              final callable = FirebaseFunctions.instance
+                  .httpsCallable('toggleStaffStatus');
+              final result = await callable.call({'uid': user['id']});
+              final newStatus = result.data['newStatus'] as String;
+              if (mounted) {
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text(
-                      user['status'] == 'Active'
-                          ? 'User deactivated successfully'
-                          : 'User activated successfully',
+                      newStatus == 'Inactive'
+                          ? '${user['name']} deactivated successfully'
+                          : '${user['name']} activated successfully',
                     ),
-                    backgroundColor: const Color(0xFFEF4444),
+                    backgroundColor: newStatus == 'Inactive'
+                        ? const Color(0xFFEF4444)
+                        : accentGreen,
                   ),
                 );
-              } catch (e) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+              }
+            } on FirebaseFunctionsException catch (e) {
+              if (mounted) {
+                messenger.showSnackBar(
                   SnackBar(
-                    content: Text('Error: $e'),
+                    content: Text(e.message ?? 'Failed to update user status'),
                     backgroundColor: const Color(0xFFEF4444),
                   ),
                 );
               }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-            ),
-            child: Text(user['status'] == 'Active' ? 'Deactivate' : 'Activate'),
+            } catch (e) {
+              if (mounted) {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Unexpected error: $e'),
+                    backgroundColor: const Color(0xFFEF4444),
+                  ),
+                );
+              }
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isActive
+                ? const Color(0xFFEF4444)
+                : accentGreen,
+            foregroundColor: Colors.white,
           ),
-        ],
-      ),
-    );
-  }
-}
+          child: Text(isActive ? 'Deactivate' : 'Activate'),
+        ),
+      ],
+    ),
+  );
+}}
 
 class _buildTopBar extends StatelessWidget {
   @override

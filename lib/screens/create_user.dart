@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
-
+import 'package:cloud_functions/cloud_functions.dart';
 class CreateUserScreen extends StatefulWidget {
   const CreateUserScreen({super.key});
 
@@ -43,101 +43,105 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
     return name.length >= 2 ? name.substring(0, 2).toUpperCase() : name.toUpperCase();
   }
 
-  Future<void> _createUser() async {
-    // Validate fields
-    if (_nameController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty) {
+Future<void> _createUser() async {
+  // Validate fields
+  if (_nameController.text.isEmpty ||
+      _emailController.text.isEmpty ||
+      _passwordController.text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please fill in all required fields'),
+        backgroundColor: Color(0xFFEF4444),
+      ),
+    );
+    return;
+  }
+
+  if (_passwordController.text != _confirmPasswordController.text) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Passwords do not match'),
+        backgroundColor: Color(0xFFEF4444),
+      ),
+    );
+    return;
+  }
+
+  if (_passwordController.text.length < 6) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Password must be at least 6 characters'),
+        backgroundColor: Color(0xFFEF4444),
+      ),
+    );
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  try {
+    final callable = FirebaseFunctions.instance.httpsCallable('createStaffUser');
+
+    await callable.call({
+      'name': _nameController.text.trim(),
+      'email': _emailController.text.trim(),
+      'password': _passwordController.text,
+      'phone': _phoneController.text.trim(),
+      'role': _selectedRole,
+      'status': activeUser ? 'Active' : 'Inactive',
+    });
+
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please fill in all required fields'),
-          backgroundColor: Color(0xFFEF4444),
+          content: Text('User created successfully'),
+          backgroundColor: accentGreen,
         ),
       );
-      return;
+      Navigator.pop(context);
     }
-
-    if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Passwords do not match'),
-          backgroundColor: Color(0xFFEF4444),
-        ),
-      );
-      return;
-    }
-
-    if (_passwordController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password must be at least 6 characters'),
-          backgroundColor: Color(0xFFEF4444),
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      // Create user in Firebase Auth
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-
-      // Store additional user data in Firestore
-      await _firestore.collection('staff').doc(userCredential.user!.uid).set({
-        'name': _nameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'role': _selectedRole.substring(0, 1).toUpperCase() + _selectedRole.substring(1),
-        'status': activeUser ? 'Active' : 'Inactive',
-        'lastLogin': 'Never',
-        'avatar': _getInitials(_nameController.text),
-        'createdAt': FieldValue.serverTimestamp(),
-        'uid': userCredential.user!.uid,
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User created successfully'),
-            backgroundColor: accentGreen,
-          ),
-        );
-        Navigator.pop(context);
-      }
-    } on FirebaseAuthException catch (e) {
-      String message = 'An error occurred';
-      if (e.code == 'weak-password') {
-        message = 'The password is too weak';
-      } else if (e.code == 'email-already-in-use') {
+  } on FirebaseFunctionsException catch (e) {
+    String message = 'An error occurred';
+    switch (e.code) {
+      case 'already-exists':
         message = 'An account already exists for this email';
-      } else if (e.code == 'invalid-email') {
-        message = 'Invalid email address';
-      }
+        break;
+      case 'invalid-argument':
+        message = e.message ?? 'Invalid input provided';
+        break;
+      case 'permission-denied':
+        message = e.message ?? 'You do not have permission to do this';
+        break;
+      case 'unauthenticated':
+        message = 'You must be logged in to create staff users';
+        break;
+      default:
+        message = e.message ?? 'Failed to create user';
+    }
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
           backgroundColor: const Color(0xFFEF4444),
         ),
       );
-    } catch (e) {
+    }
+  } catch (e) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error creating user: $e'),
+          content: Text('Unexpected error: $e'),
           backgroundColor: const Color(0xFFEF4444),
         ),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+    }
+  } finally {
+    if (mounted) {
+      setState(() => _isLoading = false);
     }
   }
-
-  @override
+}
+ @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
