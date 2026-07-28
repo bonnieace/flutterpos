@@ -16,6 +16,28 @@ class ReturnsService {
     return '';
   }
 
+  Future<void> _updateShiftTotalsForReturn(Map<String, dynamic> saleData, double returnAmount, {bool isVoid = false}) async {
+    final shiftId = saleData['shiftId'] as String?;
+    print('_updateShiftTotalsForReturn: shiftId=$shiftId, amount=$returnAmount, isVoid=$isVoid');
+    if (shiftId == null || shiftId.isEmpty) {
+      print('_updateShiftTotalsForReturn: skipped — no shiftId on sale document');
+      return;
+    }
+    try {
+      print('returnAmount: $returnAmount');
+print('isVoid: $isVoid');
+      await FirebaseFirestore.instance
+          .collection('shifts')
+          .doc(shiftId)
+          .update({
+        'totalSales': FieldValue.increment(-returnAmount),
+        if (isVoid) 'transactionCount': FieldValue.increment(-1),
+      });
+    } catch (e) {
+      print('Error updating shift totals for return: $e');
+    }
+  }
+
   Future<void> processPartialReturn({
     required String saleId,
     required Map<String, dynamic> saleData,
@@ -23,6 +45,8 @@ class ReturnsService {
     required int quantityToReturn,
     required String reason,
   }) async {
+    print('saleData keys: ${saleData.keys.toList()}');
+print('saleData shiftId: ${saleData['shiftId']}');
     // Remove or adjust the item in the sale
     List<dynamic> items = List.from(saleData['items'] ?? []);
     final int itemIndex = items.indexWhere((item) => item['productName'] == itemToReturn['productName']);
@@ -66,6 +90,10 @@ class ReturnsService {
           }
         ],
       });
+      final rawTotal = saleData['totalAmount'] ?? saleData['transactionTotal'];
+      final fullTotal = (rawTotal as num?)?.toDouble() ?? 0.0;
+      await _updateShiftTotalsForReturn(saleData, fullTotal, isVoid: true);
+
     } else {
       // Partial return
       await salesCollection.doc(saleId).update({
@@ -90,14 +118,19 @@ class ReturnsService {
         'timestamp': FieldValue.serverTimestamp(),
         'returnReason': reason,
       });
+      final returnedAmount = quantityToReturn * pricePerUnit;
+      await _updateShiftTotalsForReturn(saleData, returnedAmount);
     }
   }
 
   Future<void> processVoidReturn({
+    
     required String saleId,
     required Map<String, dynamic> saleData,
     required String reason,
   }) async {
+    print('saleData keys: ${saleData.keys.toList()}');
+print('saleData shiftId: ${saleData['shiftId']}');
     // Delete the sale document
     await salesCollection.doc(saleId).delete();
     // Log the void
@@ -120,5 +153,8 @@ class ReturnsService {
       'voidReason': reason,
       'itemsReturned': itemsReturned,
     });
+      final rawTotal = saleData['totalAmount'] ?? saleData['transactionTotal'];
+      final fullTotal = (rawTotal as num?)?.toDouble() ?? 0.0;
+      await _updateShiftTotalsForReturn(saleData, fullTotal, isVoid: true);
   }
 }

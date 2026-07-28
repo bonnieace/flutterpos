@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sentry/sentry.dart';
 
 /// Product model for bulk update
 class BulkProductUpdate {
@@ -313,8 +314,9 @@ class BulkUpdateService {
             } as Map<String, dynamic>;
           })
           .toList();
-    } catch (e) {
+    } catch (e, st) {
       print('Error fetching existing documents: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return [];
     }
   }
@@ -380,8 +382,9 @@ class BulkUpdateService {
       }
 
       return buffer.toString();
-    } catch (e) {
+    } catch (e, st) {
       print('Error generating update template: $e');
+      await Sentry.captureException(e, stackTrace: st);
       throw Exception('Failed to generate template: $e');
     }
   }
@@ -413,8 +416,9 @@ class BulkUpdateService {
       );
 
       return sorted;
-    } catch (e) {
+    } catch (e, st) {
       print('Error fetching products by category: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return {};
     }
   }

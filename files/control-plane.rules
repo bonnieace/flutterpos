@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Browser clients use callable functions. Keeping these documents private
+    // prevents tenant configs and provisioning errors from being enumerated.
+    match /tenants/{tenantCode} {
+      allow read, write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

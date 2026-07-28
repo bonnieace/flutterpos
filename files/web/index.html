@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Tenant Control Plane</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Internal operations</p>
+          <h1>Tenant Control Plane</h1>
+        </div>
+        <div class="session">
+          <span id="signed-in-email"></span>
+          <button id="sign-out" class="secondary hidden" type="button">Sign out</button>
+        </div>
+      </header>
+
+      <div id="notice" class="notice hidden" role="status"></div>
+
+      <section id="login-panel" class="panel narrow">
+        <h2>Admin sign in</h2>
+        <p>Use a control-plane account with the <code>superAdmin</code> custom claim.</p>
+        <form id="login-form" class="form-stack">
+          <label>Email <input id="login-email" type="email" autocomplete="username" required /></label>
+          <label>Password <input id="login-password" type="password" autocomplete="current-password" required /></label>
+          <button type="submit">Sign in</button>
+        </form>
+      </section>
+
+      <div id="dashboard" class="dashboard hidden">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">New client</p>
+              <h2>Onboard a tenant</h2>
+            </div>
+          </div>
+          <form id="onboard-form" class="form-grid">
+            <label>Tenant code <input id="tenant-code" pattern="[a-z][a-z0-9-]{2,19}" placeholder="acme-nairobi" required /></label>
+            <label>Business name <input id="business-name" maxlength="100" placeholder="Acme Nairobi" required /></label>
+            <label>Owner email <input id="owner-email" type="email" maxlength="254" required /></label>
+            <label>Firestore region <input id="firestore-region" value="africa-south1" required /></label>
+            <div class="form-action"><button id="onboard-submit" type="submit">Start onboarding</button></div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Provisioning</p>
+              <h2>Tenants</h2>
+            </div>
+            <button id="refresh" class="secondary" type="button">Refresh</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tenant</th><th>Project</th><th>Status</th><th>Current step</th><th>Updated</th><th></th></tr></thead>
+              <tbody id="tenant-rows"><tr><td colspan="6" class="empty">No tenants loaded.</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

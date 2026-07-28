@@ -1,7 +1,180 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { getFirestore, Query, DocumentData } from "firebase-admin/firestore";
 admin.initializeApp();
+// ── Request / response types ─────────────────────────────────────────────────
 
+interface ComparisonRequest {
+  previousStartDate: string;  // "yyyy-MM-dd", inclusive
+  previousEndDate: string;    // "yyyy-MM-dd", inclusive
+  soldBy?: string;            // staff name, or "All Staff" / omitted
+  category?: string;          // category name, or "All Categories" / omitted
+}
+
+interface PeriodMetrics {
+  sales: number;
+  profit: number;
+  transactions: number;
+}
+
+interface ComparisonResponse {
+  previous: PeriodMetrics;
+}
+
+// ── Firestore document shapes ────────────────────────────────────────────────
+
+interface SaleItem {
+  productName?: string;
+  name?: string;
+  quantity?: number;
+  price?: number;
+}
+
+interface SaleDocument {
+  total?: number;
+  totalAmount?: number;
+  businessDate?: string;
+  soldBy?: string;
+  items?: SaleItem[];
+}
+
+interface AlcoholDocument {
+  name?: string;
+  buyingprice?: number;
+  buyingPrice?: number;
+  category?: string;
+}
+
+// ── Validation helper ────────────────────────────────────────────────────────
+
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function validateDates(start: string, end: string): void {
+  if (!DATE_REGEX.test(start) || !DATE_REGEX.test(end)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Dates must be in yyyy-MM-dd format."
+    );
+  }
+  if (start > end) {
+    throw new HttpsError(
+      "invalid-argument",
+      "previousStartDate must not be after previousEndDate."
+    );
+  }
+}
+
+// ── Cloud function ───────────────────────────────────────────────────────────
+
+/**
+ * getSalesComparison
+ *
+ * Computes previous-period sales, profit, and transaction count for the
+ * Flutter Reports page metric-card percentage-change comparisons.
+ *
+ * Runs server-side so the heavy aggregation loop doesn't block the device.
+ */
+export const getSalesComparison = onCall(
+  async (request: CallableRequest<ComparisonRequest>): Promise<ComparisonResponse> => {
+    const {
+      previousStartDate,
+      previousEndDate,
+      soldBy = "",
+      category = "",
+    } = request.data;
+
+    // ── Validate ─────────────────────────────────────────────────────────────
+    if (!previousStartDate || !previousEndDate) {
+      throw new HttpsError(
+        "invalid-argument",
+        "previousStartDate and previousEndDate are required."
+      );
+    }
+
+    validateDates(previousStartDate, previousEndDate);
+
+    const db = getFirestore();
+
+    // ── Build sales query ─────────────────────────────────────────────────────
+    // businessDate is a "yyyy-MM-dd" string field — lexicographic comparison
+    // works correctly for ISO dates, so no Timestamp conversion needed.
+    let salesQuery: Query<DocumentData> = db
+      .collection("alcoholsales")
+      .where("businessDate", ">=", previousStartDate)
+      .where("businessDate", "<=", previousEndDate);
+
+    // Push soldBy to Firestore when possible to reduce transferred documents.
+    const filterBySoldBy = soldBy !== "" && soldBy !== "All Staff";
+    if (filterBySoldBy) {
+      salesQuery = salesQuery.where("soldBy", "==", soldBy);
+    }
+
+    // ── Fetch sales + inventory concurrently ──────────────────────────────────
+    const [salesSnapshot, alcoholSnapshot] = await Promise.all([
+      salesQuery.get(),
+      db.collection("alcohol").get(),
+    ]);
+
+    // ── Build lookup maps from the alcohol collection ─────────────────────────
+    const buyingPrices = new Map<string, number>();   // lowercase name → buying price
+    const productCategory = new Map<string, string>(); // lowercase name → category
+
+    for (const doc of alcoholSnapshot.docs) {
+      const d = doc.data() as AlcoholDocument;
+      const name = (d.name ?? "").toLowerCase().trim();
+      if (!name) continue;
+
+      buyingPrices.set(name, Number(d.buyingprice ?? d.buyingPrice ?? 0));
+      productCategory.set(name, d.category ?? "");
+    }
+
+    // ── Aggregate metrics ─────────────────────────────────────────────────────
+    const filterByCategory = category !== "" && category !== "All Categories";
+
+    let sales = 0;
+    let cost = 0;
+    let transactions = 0;
+
+    for (const doc of salesSnapshot.docs) {
+      const data = doc.data() as SaleDocument;
+      const total = Number(data.total ?? data.totalAmount ?? 0);
+      const items: SaleItem[] = Array.isArray(data.items) ? data.items : [];
+
+      // Category filter — include the transaction only if ≥1 item matches.
+      if (filterByCategory) {
+        const hasCategory = items.some((item) => {
+          const pName = (item.productName ?? item.name ?? "")
+            .toString()
+            .toLowerCase()
+            .trim();
+          return productCategory.get(pName) === category;
+        });
+        if (!hasCategory) continue;
+      }
+
+      sales += total;
+      transactions++;
+
+      for (const item of items) {
+        const productName = (item.productName ?? item.name ?? "")
+          .toString()
+          .toLowerCase()
+          .trim();
+        const quantity = Number(item.quantity ?? 1);
+        const buyingPrice = buyingPrices.get(productName) ?? 0;
+        cost += buyingPrice * quantity;
+      }
+    }
+
+    return {
+      previous: {
+        sales,
+        profit: sales - cost,
+        transactions,
+      },
+    };
+  }
+);
 export const createStaffUser = onCall(async (request) => {
     // Ensure caller is authenticated
     if (!request.auth) {

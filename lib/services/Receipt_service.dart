@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:sentry/sentry.dart';
 
 /// Data class for receipt items (copy from pos.dart if not globally available)
 class ItemInfo {
@@ -100,15 +101,8 @@ Future<List<int>> buildTestReceiptService({
   for (var item in invoiceItems) {
     double itemTotal = item.quantity * item.price;
 
-    // Product name (may wrap to multiple lines)
-    bytes += generator.text(
-      item.productName,
-      styles: const PosStyles(align: PosAlign.left),
-    );
-
-    // Quantity, Price, Total on one line
     bytes += generator.row([
-      PosColumn(text: '', width: 6),
+      PosColumn(text: item.productName, width: 6),
       PosColumn(
         text: '${item.quantity.toStringAsFixed(0)}',
         width: 2,
@@ -126,7 +120,6 @@ Future<List<int>> buildTestReceiptService({
       ),
     ]);
   }
-
   bytes += generator.hr();
 
   // Total
@@ -202,8 +195,9 @@ Future<List<int>> buildTestReceiptService({
       final errorMsg = 'Server error: ${response.statusCode}';
       print(errorMsg);
     }
-  } catch (e) {
+  } catch (e, st) {
     print('Error sending to printer endpoint: $e');
+    await Sentry.captureException(e, stackTrace: st);
   }
 
   return bytes;

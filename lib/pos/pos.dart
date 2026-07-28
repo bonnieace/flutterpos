@@ -660,7 +660,20 @@ class _posState extends State<pos> {
       ),
     );
   }
-
+  Future<void> _updateShiftTotals(double saleAmount) async {
+  if (_currentShift == null) return;
+  try {
+     FirebaseFirestore.instance
+        .collection('shifts')
+        .doc(_currentShift!['shiftId'])
+        .update({
+      'totalSales': FieldValue.increment(saleAmount),
+      'transactionCount': FieldValue.increment(1),
+    });
+  } catch (e) {
+    print('Error updating shift totals: $e');
+  }
+}
   Widget _buildSummaryRow(
     String label,
     String value, {
@@ -1885,7 +1898,7 @@ class _posState extends State<pos> {
   }
 
   Future<void> storeInvoice(String paymentMethod) async {
-    // Retrieve item data from the list and include itemid (alcohol doc id)
+    // Retrieve item data from the list and include itemid (dev_alcohol doc id)
     FirebaseFirestore db = FirebaseFirestore.instance;
     List<Map<String, dynamic>> salesItems = [];
     for (var item in items) {
@@ -2511,6 +2524,8 @@ class _posState extends State<pos> {
                                                     "Inventory updated for ${item.productName}",
                                                   );
                                                 }
+                                                // Update shift totals
+                                                await _updateShiftTotals(totalAmount);
 
                                                 // Success dialog
                                                 await showDialog(

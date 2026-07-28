@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import '../theme.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 class CreateUserScreen extends StatefulWidget {
@@ -100,7 +101,8 @@ Future<void> _createUser() async {
       );
       Navigator.pop(context);
     }
-  } on FirebaseFunctionsException catch (e) {
+  } on FirebaseFunctionsException catch (e, st) {
+    await Sentry.captureException(e, stackTrace: st);
     String message = 'An error occurred';
     switch (e.code) {
       case 'already-exists':
@@ -126,7 +128,8 @@ Future<void> _createUser() async {
         ),
       );
     }
-  } catch (e) {
+  } catch (e, st) {
+    await Sentry.captureException(e, stackTrace: st);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

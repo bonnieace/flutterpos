@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sentry/sentry.dart';
 
 /// Product model for bulk upload
 class BulkProduct {
@@ -275,8 +276,9 @@ class BulkUploadService {
           .map((doc) => doc['SKU']?.toString() ?? '')
           .where((sku) => sku.isNotEmpty)
           .toSet();
-    } catch (e) {
+    } catch (e, st) {
       print('Error fetching existing SKUs: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return {};
     }
   }

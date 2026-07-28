@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sentry/sentry.dart';
 
 class ShiftService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -44,8 +45,9 @@ class ShiftService {
       }
       
       return null;
-    } catch (e) {
+    } catch (e, st) {
       print('Error checking open shift: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return null;
     }
   }
@@ -93,8 +95,9 @@ class ShiftService {
         'shiftId': shiftRef.id,
         ...shiftData,
       };
-    } catch (e) {
+    } catch (e, st) {
       print('Error starting shift: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return null;
     }
   }
@@ -139,8 +142,9 @@ class ShiftService {
        batch.commit();
       
       return true;
-    } catch (e) {
+    } catch (e, st) {
       print('Error closing shift: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return false;
     }
   }
@@ -180,11 +184,13 @@ class ShiftService {
         'transactionCount': salesSnapshot.docs.length,
         'paymentBreakdown': paymentBreakdown,
       };
-    } catch (e) {
+    } catch (e, st) {
       print('Error getting shift summary: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return null;
     }
   }
+  
   
   /// Get business day summary across all staff shifts
   /// Aggregates data from all shifts on a given business date
@@ -272,8 +278,9 @@ class ShiftService {
         'openShifts': shiftsSnapshot.docs.where((d) => d.data()['status'] == 'open').length,
         'closedShifts': shiftsSnapshot.docs.where((d) => d.data()['status'] == 'closed').length,
       };
-    } catch (e) {
+    } catch (e, st) {
       print('Error getting business day summary: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return {
         'businessDate': businessDate ?? getBusinessDate(),
         'error': e.toString(),
@@ -335,8 +342,9 @@ class ShiftService {
       }
       
       return shiftsWithStats;
-    } catch (e) {
+    } catch (e, st) {
       print('Error getting shifts for business date: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return [];
     }
   }

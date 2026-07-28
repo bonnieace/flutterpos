@@ -126,7 +126,7 @@ class _PaymentFrequencyPageState extends State<PaymentFrequencyPage> {
   }
 
   String _formatCurrency(double amount) {
-    return NumberFormat.currency(symbol: 'KSH ', decimalDigits: 2).format(amount);
+    return NumberFormat.currency(symbol: 'KSH ', decimalDigits: 0).format(amount);
   }
 
   Future<void> generateAndPrintPaymentFrequencyReport() async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
 import 'widgets/pill_input.dart';
@@ -115,12 +116,14 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
       }
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       setState(() {
         errorMessage = e.message ?? "Login failed";
         isLoading = false;
       });
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       setState(() {
         errorMessage = "An unexpected error occurred";
         isLoading = false;

@@ -207,11 +207,11 @@ When `initialValue` is non-null, the method creates a brand-new `TextEditingCont
 
 | # | Issue | File | Severity |
 |---|-------|------|----------|
-| 1 | `createUserWithEmailAndPassword` logs out admin | `create_user.dart` | 🔴 Critical |
-| 2 | Deactivation has no real effect on auth access | `users.dart` | 🔴 Critical |
-| 3 | Edit and deactivate write to wrong Firestore collection | `users.dart` | 🔴 Critical |
-| 4 | `_getInitials` crashes on short/empty names | `users.dart` | 🟠 High |
-| 5 | Activation snackbar always shows red | `users.dart` | 🟠 High |
+| 1 | `createUserWithEmailAndPassword` logs out admin | `create_user.dart` | 🔴 Critical | - RESOLVED 🟢
+| 2 | Deactivation has no real effect on auth access | `users.dart` | 🔴 Critical | - RESOLVED 🟢
+| 3 | Edit and deactivate write to wrong Firestore collection | `users.dart` | 🔴 Critical | - RESOLVED 🟢
+| 4 | `_getInitials` crashes on short/empty names | `users.dart` | 🟠 High | 
+| 5 | Activation snackbar always shows red | `users.dart` | 🟠 High | - RESOLVED 🟢
 | 6 | Confirm password field has no visibility toggle | `create_user.dart` | 🟠 High |
 | 7 | Pagination buttons do nothing | `users.dart` | 🟡 Medium |
 | 8 | 5 dead methods (including one with wrong collection) | `users.dart` | 🟡 Medium |
