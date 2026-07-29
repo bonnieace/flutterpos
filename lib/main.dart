@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'login_screen.dart';
-import 'screens/main_hub_screen.dart';
+import 'tenancy/tenancy.dart';
 import 'theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -11,7 +12,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 Future<void> main() async {
   await SentryFlutter.init(
     (options) {
-      options.dsn = 'http://f620ef1faeb840549bc58d8bb3d52ac5@glitchtip-oaeu77z41o045sbhwwdwngfk.5.189.157.23.sslip.io/1';
+      options.dsn =
+          'http://f620ef1faeb840549bc58d8bb3d52ac5@glitchtip-oaeu77z41o045sbhwwdwngfk.5.189.157.23.sslip.io/1';
       options.tracesSampleRate = 1.0;
       options.profilesSampleRate = 1.0;
       options.replay.sessionSampleRate = 1.0;
@@ -21,51 +23,56 @@ Future<void> main() async {
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      await Hive.initFlutter();
+      final tenantSelectionBox = await Hive.openBox<String>(
+        HiveTenantSelectionStore.boxName,
+      );
 
       // Configure Firestore for offline persistence
       FirebaseFirestore firestore = FirebaseFirestore.instance;
 
       // Enable persistence (works on mobile and web)
       firestore.settings = const Settings(
-        persistenceEnabled: true,          // Enable offline cache
-        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // Optional: unlimited cache
+        persistenceEnabled: true, // Enable offline cache
+        cacheSizeBytes:
+            Settings.CACHE_SIZE_UNLIMITED, // Optional: unlimited cache
       );
 
-      runApp(SentryWidget(child: const SpiritPOSApp()));
+      final tenantGateway = FirebaseTenantGateway();
+      final bootstrapService = TenantBootstrapService(
+        rootGateway: tenantGateway,
+        directory: TenantDirectory(tenantGateway),
+        selectionStore: HiveTenantSelectionStore(tenantSelectionBox),
+      );
+
+      runApp(
+        SentryWidget(child: SpiritPOSApp(bootstrapService: bootstrapService)),
+      );
     },
   );
 }
 
 class SpiritPOSApp extends StatelessWidget {
-  const SpiritPOSApp({super.key});
+  const SpiritPOSApp({super.key, required this.bootstrapService});
+
+  final TenantBootstrapService bootstrapService;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: spiritTheme,
-      home: AuthGate(),
-    );
-  }
-}
-
-class AuthGate extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasData) {
-          return const MainHubScreen();
-        }
-        return const LoginScreen();
-      },
+      home: TenantRoutingShell(
+        authUidChanges: FirebaseAuth.instance.authStateChanges().map(
+          (user) => user?.uid,
+        ),
+        bootstrapService: bootstrapService,
+        signOut: FirebaseAuth.instance.signOut,
+        signedOut: const LoginScreen(),
+      ),
     );
   }
 }

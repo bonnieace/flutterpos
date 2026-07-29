@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
@@ -8,8 +7,6 @@ import 'widgets/pill_input.dart';
 import 'widgets/pos_keyboard.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/pill_button.dart';
-import 'pos/pos.dart';
-import 'screens/main_hub_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -81,41 +78,10 @@ class _LoginScreenState extends State<LoginScreen> {
         // setPersistence is not supported on mobile, ignore error
       }
 
-      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text,
       );
-      
-      // Fetch user role from Firestore
-      final userDoc = await FirebaseFirestore.instance
-          .collection('staff')
-          .doc(credential.user!.uid)
-          .get();
-      
-      if (!userDoc.exists) {
-        setState(() {
-          errorMessage = "User data not found";
-        });
-        await FirebaseAuth.instance.signOut();
-        return;
-      }
-      
-      final role = userDoc.data()?['role'] ?? 'cashier';
-      
-      // Navigate based on role
-      if (mounted) {
-        if (role == 'cashier') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const MainHubScreen()),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const MainHubScreen()),
-          );
-        }
-      }
     } on FirebaseAuthException catch (e, st) {
       await Sentry.captureException(e, stackTrace: st);
       setState(() {
@@ -183,18 +149,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 },
                 activeColor: Colors.green,
               ),
-              const Text(
-                "Remember Me",
-                style: TextStyle(color: Colors.white),
-              ),
+              const Text("Remember Me", style: TextStyle(color: Colors.white)),
             ],
           ),
           if (errorMessage != null) ...[
             const SizedBox(height: 16),
-            Text(
-              errorMessage!,
-              style: const TextStyle(color: Colors.red),
-            ),
+            Text(errorMessage!, style: const TextStyle(color: Colors.red)),
           ],
           const SizedBox(height: 32),
           PillButton(
@@ -216,10 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
             : Row(
                 children: [
                   // LEFT PANEL
-                  Expanded(
-                    flex: 5,
-                    child: loginForm,
-                  ),
+                  Expanded(flex: 5, child: loginForm),
                   // RIGHT PANEL (Desktop only)
                   Expanded(
                     flex: 4,

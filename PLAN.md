@@ -1095,3 +1095,63 @@ Implement only the authentication-to-tenant routing shell:
 Keep that chunk out of legacy business repositories. Do not allow `MainHubScreen` to execute its current root `staff`, `store`, or other mono-tenant reads merely because a session exists; either land on a temporary tenant-safe shell or gate the legacy hub until its repositories are migrated. Platform-admin dashboard routing is also not implemented yet and must not be sent into tenant screens.
 
 After that shell is green, use a separate session for route guards and tenant-scoped repository migration. Inventory and replace legacy root collection reads/writes and the old `createStaffUser` / `toggleStaffStatus` call sites before enabling operational screens.
+
+---
+
+## Authentication-to-tenant routing handoff - 2026-07-29
+
+### Completed in this session
+
+The bounded authentication-to-tenant routing shell is implemented as a standalone frontend milestone, and the pre-existing Firebase environment edits remain untouched.
+
+Implemented behavior:
+
+- `main.dart` initializes Hive once and opens `HiveTenantSelectionStore.boxName` before `runApp`.
+- One `TenantSessionController` is owned above authenticated tenant routes. Every Auth UID transition, explicit sign-out, retry, and widget disposal invalidates pending work and clears the session.
+- Auth bootstrap ignores stale root/directory/open completions after a UID transition.
+- Automatic local/default/sole selection and explicit selector choices all pass through `TenantBootstrapService.openTenant`, so a selection is canonically revalidated before the session opens or the device-local choice is saved.
+- The business selector displays every visible membership and labels accessible, pending, inactive, rejected, suspended, and archived states. Inaccessible entries cannot be opened.
+- Disabled, missing, malformed, and transient bootstrap failures land on a retry/sign-out screen without exposing internal error details.
+- Platform identities land on a non-tenant holding screen. No platform identity is routed into tenant UI.
+- `LoginScreen` now performs Firebase Auth sign-in only. Its legacy root `staff/{uid}` lookup and direct `MainHubScreen` navigation were removed.
+- The authenticated destination is a temporary tenant-safe landing screen. `MainHubScreen` and its mono-tenant/root collection reads remain unreachable.
+
+Files in this chunk:
+
+```text
+lib/main.dart
+lib/login_screen.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_routing_shell.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart` reported no issues.
+- `flutter test --no-pub test/tenancy` passed **47/47** tests, including **8** new routing-shell widget tests.
+- The new tests cover UID-local/default/sole routing, multi-business selection, canonical revalidation, inaccessible membership labels, stale completion after sign-out, session clearing, and bootstrap retry/sign-out affordances.
+- `git diff --check` was clean apart from expected Windows line-ending warnings on existing files.
+
+The following user-owned environment changes are still deliberately separate and must not be staged with this frontend chunk without confirmation:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+### Next bounded frontend chunk
+
+Implement only the route-guard and repository-migration foundation:
+
+1. Inventory every Flutter root Firestore collection path and legacy callable use, with the owning screen/service and intended tenant-scoped replacement. Do not migrate the entire app in one session.
+2. Add a reusable tenant route guard that requires a live `TenantSession`, enforces allowed roles, and rejects stale session epochs before an async result can update UI.
+3. Add the minimal tenant-scoped repository base that derives all operational paths from `TenantPaths` and never accepts an arbitrary root collection path.
+4. Migrate one small read-only vertical slice behind the guard (prefer tenant configuration/branding if its schema is present). Keep `MainHubScreen`, checkout, stock mutation, reports, staff mutation, and returns disabled.
+5. Add unit/widget tests proving missing session, wrong role, tenant switch during an async load, and a cross-tenant document/path mismatch all fail closed.
+
+Keep encrypted Hive checkout, switching guards, shift restoration, and operational repository migration for later bounded sessions. Do not enable the legacy hub merely because the route-guard primitives exist.
