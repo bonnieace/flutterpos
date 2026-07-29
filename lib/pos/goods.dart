@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:http/http.dart' as http;
@@ -70,7 +71,8 @@ class _goodsState extends State<goods> {
           selectedCategory = 'All';
         }
       });
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error fetching categories: $e');
     }
   }
@@ -1288,6 +1290,7 @@ class _goodsState extends State<goods> {
     required TextEditingController quantityController,
     required String selectedCategory,
     required Function(String?) onCategoryChanged,
+    TextEditingController? buyingPriceController,
     bool isUpdateMode = false,
     TextEditingController? addStockController,
   }) {
@@ -1340,6 +1343,31 @@ class _goodsState extends State<goods> {
           ),
         ),
         const SizedBox(height: 12),
+        if (buyingPriceController != null)
+          TextField(
+            controller: buyingPriceController,
+            style: const TextStyle(color: Colors.white),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Buying Price',
+              labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+              prefixIcon: const Icon(
+                Icons.shopping_cart,
+                color: Color(0xFF7B8AFF),
+              ),
+              filled: true,
+              fillColor: darkBg,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFF7B8AFF)),
+              ),
+            ),
+          ),
+        if (buyingPriceController != null) const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           value: selectedCategory,
           dropdownColor: darkBg,
@@ -1385,7 +1413,28 @@ class _goodsState extends State<goods> {
           ),
         ),
         const SizedBox(height: 12),
-     
+        TextField(
+          controller: quantityController,
+          style: const TextStyle(color: Colors.white),
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Quantity',
+            labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+            prefixIcon: const Icon(Icons.inventory, color: Color(0xFF7B8AFF)),
+            filled: true,
+            fillColor: darkBg,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF7B8AFF)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
         if (isUpdateMode && addStockController != null) ...[
           const SizedBox(height: 16),
           Container(
@@ -1894,6 +1943,10 @@ class _goodsState extends State<goods> {
     final TextEditingController addStockController = TextEditingController(
       text: currentQty.toString(),
     );
+    final _docData = doc.data() as Map<String, dynamic>;
+    final TextEditingController buyingPriceController = TextEditingController(
+      text: (_docData['buyingPrice'] ?? 0).toString(),
+    );
 
     String selectedCategory = doc['category'] ?? 'Categories';
     String currentImageUrl = doc['image'] ?? '';
@@ -1979,6 +2032,7 @@ class _goodsState extends State<goods> {
                                     selectedCategory = val ?? 'All';
                                   });
                                 },
+                                buyingPriceController: buyingPriceController,
                                 isUpdateMode: true,
                                 addStockController: addStockController,
                               ),
@@ -2032,6 +2086,7 @@ class _goodsState extends State<goods> {
                                           skuController.text,
                                           newQuantity,
                                           imageUrl,
+                                          buyingPrice: double.tryParse(buyingPriceController.text),
                                         );
                                         Navigator.pop(context);
                                       },
@@ -2306,7 +2361,8 @@ class _goodsState extends State<goods> {
                                                         }
                                                       }
                                                     }
-                                                  } catch (e) {
+                                                  } catch (e, st) {
+                                                    await Sentry.captureException(e, stackTrace: st);
                                                     setState(() {
                                                       isRemovingBackground =
                                                           false;
@@ -2447,6 +2503,49 @@ class _goodsState extends State<goods> {
                                     ),
                                     const SizedBox(height: 16),
 
+                                    // Buying Price
+                                    TextField(
+                                      controller: buyingPriceController,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                      ),
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
+                                      decoration: InputDecoration(
+                                        labelText: 'Buying Price',
+                                        labelStyle: TextStyle(
+                                          color: Colors.white.withOpacity(0.7),
+                                        ),
+                                        prefixIcon: const Icon(
+                                          Icons.shopping_cart,
+                                          color: Color(0xFF7B8AFF),
+                                        ),
+                                        filled: true,
+                                        fillColor: darkBg,
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          borderSide: BorderSide(
+                                            color: Colors.white.withOpacity(
+                                              0.3,
+                                            ),
+                                          ),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          borderSide: const BorderSide(
+                                            color: Color(0xFF7B8AFF),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+
                                     // Category
                                     DropdownButtonFormField<String>(
                                       value: selectedCategory,
@@ -2517,47 +2616,6 @@ class _goodsState extends State<goods> {
                                         ),
                                         filled: true,
                                         fillColor: darkBg,
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          borderSide: BorderSide(
-                                            color: Colors.white.withOpacity(
-                                              0.3,
-                                            ),
-                                          ),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFF7B8AFF),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-
-                                    // Quantity (Read Only)
-                                    TextField(
-                                      controller: quantityController,
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.5),
-                                      ),
-                                      keyboardType: TextInputType.number,
-                                      readOnly: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'Current Stock (Read Only)',
-                                        labelStyle: TextStyle(
-                                          color: Colors.white.withOpacity(0.7),
-                                        ),
-                                        prefixIcon: const Icon(
-                                          Icons.inventory_2,
-                                          color: Color(0xFF7B8AFF),
-                                        ),
-                                        filled: true,
-                                        fillColor: darkBg.withOpacity(0.5),
                                         enabledBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(
                                             8,
@@ -2811,9 +2869,7 @@ class _goodsState extends State<goods> {
                                               skuController.text,
                                               newQuantity,
                                               imageUrl,
-                                              // double.tryParse(
-                                              //   buyingPriceController.text,
-                                              // ),
+                                              buyingPrice: double.tryParse(buyingPriceController.text),
                                             );
                                             Navigator.pop(context);
                                           },
@@ -2860,7 +2916,8 @@ class _goodsState extends State<goods> {
 
       print('Image uploaded successfully: $imageUrl');
       return imageUrl;
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error uploading image: $e');
       if (mounted) {
         ScaffoldMessenger.of(
@@ -2878,8 +2935,9 @@ class _goodsState extends State<goods> {
     String category,
     String sku,
     int quantity,
-    String imageUrl,
-  ) async {
+    String imageUrl, {
+    double? buyingPrice,
+  }) async {
     try {
       await FirebaseFirestore.instance
           .collection("alcohol")
@@ -2891,6 +2949,7 @@ class _goodsState extends State<goods> {
             'SKU': sku,
             'quantity': quantity,
             'image': imageUrl,
+            'buyingPrice': buyingPrice ?? 0,
           });
       print('Product updated successfully');
       // Clear search filter to show updated data immediately
@@ -2898,7 +2957,8 @@ class _goodsState extends State<goods> {
         searchController.clear();
         filteredDocuments = [];
       });
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error updating product: $e');
       if (mounted) {
         ScaffoldMessenger.of(
@@ -2914,8 +2974,9 @@ class _goodsState extends State<goods> {
     String category,
     String sku,
     int quantity,
-    String imageUrl,
-  ) async {
+    String imageUrl, {
+    double? buyingPrice,
+  }) async {
     try {
       await FirebaseFirestore.instance.collection("alcohol").add({
         'name': name,
@@ -2924,6 +2985,7 @@ class _goodsState extends State<goods> {
         'SKU': sku,
         'quantity': quantity,
         'image': imageUrl,
+        'buyingPrice': buyingPrice ?? 0,
       });
       print('Product added successfully');
       // Clear search filter to show new data immediately
@@ -2931,7 +2993,8 @@ class _goodsState extends State<goods> {
         searchController.clear();
         filteredDocuments = [];
       });
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error adding product: $e');
       if (mounted) {
         ScaffoldMessenger.of(
@@ -2952,6 +3015,7 @@ class _goodsState extends State<goods> {
     final TextEditingController priceController = TextEditingController();
     final TextEditingController skuController = TextEditingController();
     final TextEditingController quantityController = TextEditingController();
+    final TextEditingController buyingPriceController = TextEditingController();
 
     String selectedCategory = 'All';
     XFile? selectedImage;
@@ -3034,6 +3098,7 @@ class _goodsState extends State<goods> {
                                     selectedCategory = val ?? 'All';
                                   });
                                 },
+                                buyingPriceController: buyingPriceController,
                               ),
                               const SizedBox(height: 24),
                               Row(
@@ -3096,6 +3161,7 @@ class _goodsState extends State<goods> {
                                                     ) ??
                                                     0,
                                                 imageUrl,
+                                                buyingPrice: double.tryParse(buyingPriceController.text),
                                               );
                                               setState(() {
                                                 isLoading = false;
@@ -3170,6 +3236,7 @@ class _goodsState extends State<goods> {
                                           selectedCategory = val ?? 'All';
                                         });
                                       },
+                                      buyingPriceController: buyingPriceController,
                                     ),
                                     SizedBox(
                                       height: isDialogTablet ? 40 : 60,
@@ -3241,6 +3308,7 @@ class _goodsState extends State<goods> {
                                                           ) ??
                                                           0,
                                                       imageUrl,
+                                                      buyingPrice: double.tryParse(buyingPriceController.text),
                                                     );
                                                     setState(() {
                                                       isLoading = false;
@@ -3328,7 +3396,8 @@ class _goodsState extends State<goods> {
 
       // Show preview dialog
       _showBulkPreviewDialog(validation, bulkService);
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error in bulk upload: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3632,7 +3701,8 @@ class _goodsState extends State<goods> {
         searchController.clear();
         filteredDocuments = [];
       });
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       if (!mounted) return;
 
       // Close loading dialog
@@ -3985,7 +4055,8 @@ class _goodsState extends State<goods> {
           );
         },
       );
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error fetching products: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4138,7 +4209,8 @@ class _goodsState extends State<goods> {
           );
         },
       );
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error generating template: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4184,7 +4256,8 @@ class _goodsState extends State<goods> {
 
       // Show preview dialog
       _showBulkUpdatePreviewDialog(validation, bulkUpdateService);
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error in bulk update: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4529,7 +4602,8 @@ class _goodsState extends State<goods> {
         searchController.clear();
         filteredDocuments = [];
       });
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       if (!mounted) return;
 
       // Close loading dialog
@@ -4572,7 +4646,8 @@ class _goodsState extends State<goods> {
           Navigator.pop(context);
         }
       }
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       print('Error downloading CSV: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4617,7 +4692,8 @@ Future<void> _downloadCsvWeb(String csvContent, String filename) async {
 
     // Debug log
     print('CSV download initiated: $filename (${csvContent.length} bytes)');
-  } catch (e) {
+  } catch (e, st) {
+    await Sentry.captureException(e, stackTrace: st);
     throw Exception('Failed to download on web: $e');
   }
 }
@@ -4668,7 +4744,8 @@ Future<void> _downloadCsvWeb(String csvContent, String filename) async {
       );
     }
 
-  } catch (e) {
+  } catch (e, st) {
+    await Sentry.captureException(e, stackTrace: st);
     print('Error in mobile CSV download: $e');
 
     ScaffoldMessenger.of(context).showSnackBar(

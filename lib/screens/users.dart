@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/pos/goods.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:flutter_application_1/screens/create_user.dart';
 import '../screens/main_hub_screen.dart';
 import '../screens/users.dart';
 import '../pos/reports.dart';
-
+import 'package:cloud_functions/cloud_functions.dart';
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
 
@@ -1371,172 +1372,6 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  Future<void> _showAddUserDialog() async {
-    final nameController = TextEditingController();
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-    String selectedRole = 'Cashier';
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Dialog(
-          backgroundColor: bgMid,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Container(
-            width: 500,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Add New User',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildDialogTextField(
-                  'Full Name',
-                  null,
-                  controller: nameController,
-                ),
-                const SizedBox(height: 16),
-                _buildDialogTextField(
-                  'Email Address',
-                  null,
-                  controller: emailController,
-                ),
-                const SizedBox(height: 16),
-                _buildDialogTextField(
-                  'Password',
-                  null,
-                  isPassword: true,
-                  controller: passwordController,
-                ),
-                const SizedBox(height: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Role',
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: mutedGreen,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<String>(
-                        value: selectedRole,
-                        isExpanded: true,
-                        underline: const SizedBox(),
-                        dropdownColor: mutedGreen,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                        ),
-                        items: ['Admin', 'Manager', 'Cashier'].map((
-                          String item,
-                        ) {
-                          return DropdownMenuItem(
-                            value: item,
-                            child: Text(item),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            selectedRole = value!;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: () async {
-                        if (nameController.text.isEmpty ||
-                            emailController.text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Please fill in all required fields',
-                              ),
-                              backgroundColor: Color(0xFFEF4444),
-                            ),
-                          );
-                          return;
-                        }
-
-                        try {
-                          await _firestore.collection('users').add({
-                            'name': nameController.text,
-                            'email': emailController.text,
-                            'role': selectedRole,
-                            'status': 'Active',
-                            'lastLogin': 'Never',
-                            'avatar': _getInitials(nameController.text),
-                            'createdAt': FieldValue.serverTimestamp(),
-                          });
-
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('User added successfully'),
-                              backgroundColor: accentGreen,
-                            ),
-                          );
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error adding user: $e'),
-                              backgroundColor: const Color(0xFFEF4444),
-                            ),
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: accentGreen,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                      ),
-                      child: const Text('Add User'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Future<void> _showEditUserDialog(Map<String, dynamic> user) async {
     final nameController = TextEditingController(text: user['name']);
@@ -1652,7 +1487,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
                         try {
                           await _firestore
-                              .collection('users')
+                              .collection('staff')
                               .doc(user['id'])
                               .update({
                                 'name': nameController.text,
@@ -1669,7 +1504,8 @@ class _UsersScreenState extends State<UsersScreen> {
                               backgroundColor: accentGreen,
                             ),
                           );
-                        } catch (e) {
+                        } catch (e, st) {
+                          await Sentry.captureException(e, stackTrace: st);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Error updating user: $e'),
@@ -1839,68 +1675,90 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  void _showDeleteConfirmation(Map<String, dynamic> user) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: bgMid,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text(
-          'Deactivate User',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          'Are you sure you want to deactivate ${user['name']}? You can reactivate them later.',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await _firestore.collection('users').doc(user['id']).update({
-                  'status': user['status'] == 'Active' ? 'Inactive' : 'Active',
-                  'updatedAt': FieldValue.serverTimestamp(),
-                });
+void _showDeleteConfirmation(Map<String, dynamic> user) {
+  final bool isActive = user['status'] == 'Active';
+  // Capture messenger from the parent screen context, not the dialog context
+  final messenger = ScaffoldMessenger.of(context);
 
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: bgMid,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Text(
+        isActive ? 'Deactivate User' : 'Activate User',
+        style: const TextStyle(color: Colors.white),
+      ),
+      content: Text(
+        isActive
+            ? 'Are you sure you want to deactivate ${user['name']}? You can reactivate them later.'
+            : 'Are you sure you want to activate ${user['name']}?',
+        style: const TextStyle(color: Colors.white70),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            Navigator.pop(context);
+            try {
+              final callable = FirebaseFunctions.instance
+                  .httpsCallable('toggleStaffStatus');
+              final result = await callable.call({'uid': user['id']});
+              final newStatus = result.data['newStatus'] as String;
+              if (mounted) {
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text(
-                      user['status'] == 'Active'
-                          ? 'User deactivated successfully'
-                          : 'User activated successfully',
+                      newStatus == 'Inactive'
+                          ? '${user['name']} deactivated successfully'
+                          : '${user['name']} activated successfully',
                     ),
-                    backgroundColor: const Color(0xFFEF4444),
+                    backgroundColor: newStatus == 'Inactive'
+                        ? const Color(0xFFEF4444)
+                        : accentGreen,
                   ),
                 );
-              } catch (e) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+              }
+            } on FirebaseFunctionsException catch (e, st) {
+              await Sentry.captureException(e, stackTrace: st);
+              if (mounted) {
+                messenger.showSnackBar(
                   SnackBar(
-                    content: Text('Error: $e'),
+                    content: Text(e.message ?? 'Failed to update user status'),
                     backgroundColor: const Color(0xFFEF4444),
                   ),
                 );
               }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-            ),
-            child: Text(user['status'] == 'Active' ? 'Deactivate' : 'Activate'),
+            } catch (e, st) {
+              await Sentry.captureException(e, stackTrace: st);
+              if (mounted) {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Unexpected error: $e'),
+                    backgroundColor: const Color(0xFFEF4444),
+                  ),
+                );
+              }
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isActive
+                ? const Color(0xFFEF4444)
+                : accentGreen,
+            foregroundColor: Colors.white,
           ),
-        ],
-      ),
-    );
-  }
-}
+          child: Text(isActive ? 'Deactivate' : 'Activate'),
+        ),
+      ],
+    ),
+  );
+}}
 
 class _buildTopBar extends StatelessWidget {
   @override

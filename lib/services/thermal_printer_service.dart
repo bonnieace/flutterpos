@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:sentry/sentry.dart';
 
 class ThermalPrinterService {
   final String printerIp;
@@ -155,14 +156,16 @@ class ThermalPrinterService {
 
       print('Print sent successfully to $printerIp:$printerPort');
       return true;
-    } on SocketException catch (e) {
+    } on SocketException catch (e, st) {
       print('Socket error: $e');
       print('Make sure printer IP is correct: $printerIp');
       print('Make sure printer is on the same network');
       print('Make sure printer port is: $printerPort');
+      await Sentry.captureException(e, stackTrace: st);
       return false;
-    } catch (e) {
+    } catch (e, st) {
       print('Error printing: $e');
+      await Sentry.captureException(e, stackTrace: st);
       return false;
     }
   }

@@ -93,9 +93,9 @@ class _SalesReportPageState extends State<SalesReportPage> {
         },
       ).then((newValue) async {
         if (newValue != null && newValue != currentMethod) {
-          // Update Firestore
           await salesCollection.doc(docId).update({'payment': newValue});
-          setState(() {}); // Refresh UI
+          if (!mounted) return;
+          _refreshSalesData();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Payment method updated to $newValue'),
@@ -157,11 +157,10 @@ class _SalesReportPageState extends State<SalesReportPage> {
   void initState() {
     super.initState();
     salesCollection = FirebaseFirestore.instance.collection("alcoholsales");
-    _salesDataFuture = _fetchSalesData();
-    _loadCurrentUser();
+    _salesDataFuture = _loadCurrentUser().then((_) => _fetchSalesData());
   }
 
-  Future<void> _loadCurrentUser() async {
+  Future<void> _loadCurrentUser() async { // no change needed — already returns Future<void>
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
@@ -171,27 +170,24 @@ class _SalesReportPageState extends State<SalesReportPage> {
             .doc(user.uid)
             .get();
         if (doc.exists) {
-          setState(() {
-            currentUserName = doc.data()?['name'] ?? '';
-            currentUserRole = doc.data()?['role'] ?? 'staff';
-            // For cashiers, lock the filter to their own name
-            if (isCashier && currentUserName.isNotEmpty) {
-              selectedSoldBy = currentUserName;
-            }
-          });
+          currentUserName = doc.data()?['name'] ?? '';
+          currentUserRole = doc.data()?['role'] ?? 'staff';
+          // For cashiers, lock the filter to their own name
+          if (isCashier && currentUserName.isNotEmpty) {
+            selectedSoldBy = currentUserName;
+          }
         }
       }
     } catch (e) {
       debugPrint('Error loading current user: $e');
     } finally {
-      setState(() {
-        isLoading = false;
-      });
-      _loadSoldByOptions();
+      isLoading = false;
+      _loadSoldByOptions(); // fire-and-forget is fine — only used for UI chips
     }
   }
 
 Future<void> _loadSoldByOptions() async {
+  if (soldByOptions.length > 1) return;
   try {
     debugPrint('[Firestore] Fetching staff collection for soldBy options');
     final snapshot = await FirebaseFirestore.instance.collection('staff').get();
@@ -354,38 +350,17 @@ Future<void> _loadSoldByOptions() async {
 
     debugPrint('[_fetchSalesData] After switch - startDate: $startDate, endDate: $endDate');
 
-    // For non-admin users, use businessDate without buffer. For admins, use dateAdded with buffer
-    if (isAdmin) {
-      // Admin: Expand the fetch range by one day before and after
-      DateTime? fetchStartDate = startDate != null ? startDate.subtract(const Duration(days: 1)) : null;
-      DateTime? fetchEndDate = endDate != null ? endDate.add(const Duration(days: 1)) : null;
+    if (startDate != null) {
+      query = query.where('businessDate', isGreaterThanOrEqualTo: _toDateStr(startDate));
+    }
+    if (endDate != null) {
+      query = query.where('businessDate', isLessThanOrEqualTo: _toDateStr(endDate));
+    }
 
-      if (fetchStartDate != null) {
-        query = query.where(
-          'dateAdded',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStartDate),
-        );
-      }
-      if (fetchEndDate != null) {
-        query = query.where(
-          'dateAdded',
-          isLessThanOrEqualTo: Timestamp.fromDate(fetchEndDate),
-        );
-      }
-    } else {
-      // Non-admin: Use businessDate with exact range
-      if (startDate != null) {
-        query = query.where(
-          'businessDate',
-          isGreaterThanOrEqualTo: "${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}",
-        );
-      }
-      if (endDate != null) {
-        query = query.where(
-          'businessDate',
-          isLessThanOrEqualTo: "${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}",
-        );
-      }
+    // Push soldBy filter to Firestore — no more fetching everyone's data
+    final String effectiveSoldBy = isCashier ? currentUserName : selectedSoldBy;
+    if (effectiveSoldBy != 'All' && effectiveSoldBy.isNotEmpty) {
+      query = query.where('soldBy', isEqualTo: effectiveSoldBy);
     }
 
     QuerySnapshot salesSnapshot = await query.get();
@@ -404,11 +379,7 @@ Future<void> _loadSoldByOptions() async {
       debugPrint('dateAdded: \\${data['dateAdded']} (type: \\${data['dateAdded']?.runtimeType})');
       debugPrint('businessDate: \\${data['businessDate']}');
 
-      // Filter by soldBy if selected
       String soldBy = data['soldBy'] as String? ?? '';
-      if (selectedSoldBy != 'All' && soldBy != selectedSoldBy) {
-        continue;
-      }
 
       // Use businessDate if present, else fall back to dateAdded
       String? businessDateStr = data['businessDate'] as String?;
@@ -423,23 +394,7 @@ Future<void> _loadSoldByOptions() async {
       Timestamp? documentTimestamp = data['dateAdded'] is Timestamp ? data['dateAdded'] as Timestamp : null;
       DateTime date = businessDate ?? (documentTimestamp != null ? documentTimestamp.toDate() : DateTime.now());
 
-      // After fetching wider range, filter by businessDate (if present) or dateAdded to be within the original range
-      bool inRange = true;
-      if (startDate != null) {
-        if (businessDate != null) {
-          if (businessDate.isBefore(startDate)) inRange = false;
-        } else if (documentTimestamp != null) {
-          if (documentTimestamp.toDate().isBefore(startDate)) inRange = false;
-        }
-      }
-      if (endDate != null) {
-        if (businessDate != null) {
-          if (businessDate.isAfter(endDate)) inRange = false;
-        } else if (documentTimestamp != null) {
-          if (documentTimestamp.toDate().isAfter(endDate)) inRange = false;
-        }
-      }
-      if (!inRange) continue;
+      
 
       String formattedDate =
           "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
@@ -458,6 +413,7 @@ Future<void> _loadSoldByOptions() async {
           'transactionTotal': totalAmount,
           'dateAdded': documentTimestamp,
           'soldBy': soldBy,
+          'shiftId': data['shiftId'],
         };
 
         if (!dailyTransactions.containsKey(formattedDate)) {
@@ -470,10 +426,13 @@ Future<void> _loadSoldByOptions() async {
     return dailyTransactions;
   }
 
+  String _toDateStr(DateTime d) =>
+      "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
+
   String _formatCurrency(double amount) {
     return NumberFormat.currency(
       symbol: 'Ksh ',
-      decimalDigits: 2,
+      decimalDigits: 0,
     ).format(amount);
   }
   void _refreshSalesData() {
@@ -499,7 +458,7 @@ Future<void> _loadSoldByOptions() async {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white70),
-            onPressed: () => setState(() {}),
+            onPressed: _refreshSalesData,
           ),
         ],
       ),
@@ -952,7 +911,7 @@ Future<void> _loadSoldByOptions() async {
                                         ),
                                       ),
                                       Text(
-                                        '${percentage.toStringAsFixed(1)}%',
+                                        '${percentage.toStringAsFixed(0)}%',
                                         style: const TextStyle(
                                           color: Colors.white54,
                                           fontSize: 12,
@@ -1339,7 +1298,8 @@ Future<void> _loadSoldByOptions() async {
                                                   quantityToReturn: selectedQty,
                                                   reason: reason,
                                                 );
-                                                setState(() {});
+                                                if (!mounted) return;
+                                                _refreshSalesData();
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   SnackBar(
                                                     content: Text('Returned $selectedQty of ${(item['productName'] ?? item['name'] ?? 'item')}'),
@@ -1427,7 +1387,8 @@ Future<void> _loadSoldByOptions() async {
                                                     saleData: transaction,
                                                     reason: reason,
                                                   );
-                                                  setState(() {});
+                                                  if (!mounted) return;
+                                                  _refreshSalesData();
                                                   ScaffoldMessenger.of(context).showSnackBar(
                                                     const SnackBar(
                                                       content: Text('Sale voided.'),
@@ -1507,10 +1468,8 @@ if (hasHighLevelAccess)
         totalAmount: transactionTotal,
       );
 
-      // Dismiss loading dialog
-      if (context.mounted) Navigator.of(context).pop();
-
-      // Optionally show a success message
+      if (!mounted) return;
+      Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Receipt sent to printer'),

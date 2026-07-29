@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:lottie/lottie.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,6 +17,7 @@ import 'create_user.dart';
 import 'users.dart';
 import 'package:flutter_application_1/config.dart';
 import 'update_screen.dart';
+import 'dart:async';
 class MainHubScreen extends StatefulWidget {
   const MainHubScreen({super.key});
 
@@ -32,15 +34,42 @@ class _MainHubScreenState extends State<MainHubScreen> {
   bool showUpdateScreen = false;
   String? updateMessage;
   String? downloadUrl;
-
+  StreamSubscription? _statusListener;
+  String? activeBusinessDate;
   @override
   void initState() {
     super.initState();
     _loadUserData();
   }
+  void _startStatusListener(String uid) {
+    _statusListener = FirebaseFirestore.instance
+        .collection('staff')
+        .doc(uid)
+        .snapshots()
+        .listen((doc) async {
+      if (!mounted) return;
+      final status = doc.data()?['status'];
+      if (status == 'Inactive') {
+        await FirebaseAuth.instance.signOut();
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (route) => false,
+          );
+        }
+      }
+    });
+  }
 
+  @override
+  void dispose() {
+    _statusListener?.cancel();
+    super.dispose();
+  }
   Future<void> _loadUserData() async {
     try {
+
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         final doc = await FirebaseFirestore.instance
@@ -65,6 +94,7 @@ class _MainHubScreenState extends State<MainHubScreen> {
           
           userName = name;
           userRole = role.toString().toUpperCase();
+          _startStatusListener(user.uid);
         } else {
           // Document doesn't exist, logout user
           await FirebaseAuth.instance.signOut();
@@ -77,6 +107,9 @@ class _MainHubScreenState extends State<MainHubScreen> {
           return;
         }
       }
+      // --- Resolve active business date (6 AM boundary) ---
+      activeBusinessDate = _activeBusinessDate();
+
       // --- Update check logic ---
       // Replace 'YOUR_STORE_ID' with your actual store document ID or logic
       final storeDoc = await FirebaseFirestore.instance.collection('store').doc('KBLqOv6LyJfOJjI9sEcm').get();
@@ -99,7 +132,8 @@ class _MainHubScreenState extends State<MainHubScreen> {
       setState(() {
         isLoading = false;
       });
-    } catch (e) {
+    } catch (e, st) {
+      await Sentry.captureException(e, stackTrace: st);
       setState(() {
         isLoading = false;
       });
@@ -139,14 +173,14 @@ class _MainHubScreenState extends State<MainHubScreen> {
                 child: Column(
                   children: [
                     const SizedBox(height: 24),
-                    _GreetingSection(userName: userName!),
+                    _GreetingSection(userName: userName!, userRole: userRole!, activeBusinessDate: activeBusinessDate),
                     const SizedBox(height: 40),
                     _ModuleGrid(userName: userName!, userRole: userRole!),
                     const SizedBox(height: 36),
-                    if (userRole != 'CASHIER') ...[
-                      _StatsBar(),
+                   // if (userRole != 'CASHIER') ...[
+                      _StatsBar(userRole: userRole!, activeBusinessDate: activeBusinessDate),
                       const SizedBox(height: 24),
-                    ],
+                  //  ],
                   ],
                 ),
               ),
@@ -340,10 +374,169 @@ class _UserPill extends StatelessWidget {
   }
 }
 
-class _GreetingSection extends StatelessWidget {
+class _GreetingSection extends StatefulWidget {
   final String userName;
+  final String userRole;
+  final String? activeBusinessDate;
 
-  const _GreetingSection({required this.userName});
+  const _GreetingSection({required this.userName, required this.userRole, this.activeBusinessDate});
+
+  @override
+  State<_GreetingSection> createState() => _GreetingSectionState();
+}
+
+class _GreetingSectionState extends State<_GreetingSection> {
+  double? _percentChange;
+  bool _isUp = true;
+  bool _loaded = false;
+  double _todaySales = 0.0;
+  double _yesterdaySales = 0.0;
+
+  // Admin streams
+  StreamSubscription? _todayStream;
+  StreamSubscription? _yesterdayStream;
+  // Non-admin streams
+  StreamSubscription? _staffStream;
+  StreamSubscription? _shiftStream;
+  String? _trackedShiftId;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribePerformance();
+  }
+
+  @override
+  void dispose() {
+    _todayStream?.cancel();
+    _yesterdayStream?.cancel();
+    _staffStream?.cancel();
+    _shiftStream?.cancel();
+    super.dispose();
+  }
+
+  bool get _isAdmin => widget.userRole.toLowerCase() == 'admin';
+
+  void _subscribePerformance() {
+    if (_isAdmin) {
+      _subscribeAdminPerformance();
+    } else {
+      _subscribeNonAdminPerformance();
+    }
+  }
+
+  void _subscribeAdminPerformance() {
+    final todayDate = widget.activeBusinessDate;
+    if (todayDate == null) return;
+
+    final parsed = DateTime.parse(todayDate);
+    final previousDate = parsed.subtract(const Duration(days: 1));
+    final previousDateStr =
+        '${previousDate.year}-${previousDate.month.toString().padLeft(2, '0')}-${previousDate.day.toString().padLeft(2, '0')}';
+
+    _todayStream = FirebaseFirestore.instance
+        .collection('shifts')
+        .where('businessDate', isEqualTo: todayDate)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      double total = 0.0;
+      for (final doc in snapshot.docs) {
+        total += ((doc.data()['totalSales'] as num?)?.toDouble() ?? 0.0);
+      }
+      _todaySales = total;
+      _recomputeChange();
+    }, onError: (e, st) {
+      Sentry.captureException(e, stackTrace: st);
+    });
+
+    _yesterdayStream = FirebaseFirestore.instance
+        .collection('shifts')
+        .where('businessDate', isEqualTo: previousDateStr)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      double total = 0.0;
+      for (final doc in snapshot.docs) {
+        total += ((doc.data()['totalSales'] as num?)?.toDouble() ?? 0.0);
+      }
+      _yesterdaySales = total;
+      _recomputeChange();
+    }, onError: (e, st) {
+      Sentry.captureException(e, stackTrace: st);
+    });
+  }
+
+  void _subscribeNonAdminPerformance() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // One-time fetch for last closed shift (yesterday's baseline)
+    FirebaseFirestore.instance
+        .collection('shifts')
+        .where('staffId', isEqualTo: user.uid)
+        .where('status', isEqualTo: 'closed')
+        .orderBy('startTime', descending: true)
+        .limit(1)
+        .get()
+        .then((snapshot) {
+      if (!mounted) return;
+      _yesterdaySales = snapshot.docs.isNotEmpty
+          ? ((snapshot.docs.first.data()['totalSales'] as num?)?.toDouble() ?? 0.0)
+          : 0.0;
+      _recomputeChange();
+    }).catchError((e, st) {
+      Sentry.captureException(e, stackTrace: st);
+    });
+
+    // Stream staff doc to track currentShiftId changes
+    _staffStream = FirebaseFirestore.instance
+        .collection('staff')
+        .doc(user.uid)
+        .snapshots()
+        .listen((staffDoc) {
+      if (!mounted) return;
+      final shiftId = staffDoc.data()?['currentShiftId'] as String?;
+      if (shiftId == _trackedShiftId) return;
+      _trackedShiftId = shiftId;
+
+      _shiftStream?.cancel();
+      _shiftStream = null;
+
+      if (shiftId == null || shiftId.isEmpty) {
+        _todaySales = 0.0;
+        _recomputeChange();
+        return;
+      }
+
+      _shiftStream = FirebaseFirestore.instance
+          .collection('shifts')
+          .doc(shiftId)
+          .snapshots()
+          .listen((shiftDoc) {
+        if (!mounted) return;
+        _todaySales = (shiftDoc.data()?['totalSales'] as num?)?.toDouble() ?? 0.0;
+        _recomputeChange();
+      }, onError: (e, st) {
+        Sentry.captureException(e, stackTrace: st);
+      });
+    }, onError: (e, st) {
+      Sentry.captureException(e, stackTrace: st);
+    });
+  }
+
+  void _recomputeChange() {
+    final change = (_yesterdaySales == 0 && _todaySales == 0)
+        ? 0.0
+        : _yesterdaySales == 0
+            ? 100.0
+            : ((_todaySales - _yesterdaySales) / _yesterdaySales) * 100;
+    setState(() {
+      _percentChange = change.abs();
+      _isUp = change >= 0;
+      _loaded = true;
+    });
+  }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -355,32 +548,101 @@ class _GreetingSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 768;
-    
+    final subject = _isAdmin ? 'Store performance' : 'Shift performance';
+    final direction = _isUp ? 'up' : 'down';
+    final directionColor = _isUp ? accentGreen : Colors.red;
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0),
       child: Column(
         children: [
           Text(
-            '${_getGreeting()}, ${userName.split(' ').first}',
+            '${_getGreeting()}, ${widget.userName.split(' ').first[0].toUpperCase().toString() + widget.userName.split(' ').first.substring(1).toLowerCase()}',
             style: TextStyle(
               fontSize: isMobile ? 24 : 36,
               fontWeight: FontWeight.w700,
             ),
             textAlign: isMobile ? TextAlign.center : TextAlign.start,
           ),
-          const SizedBox(height: 8),
-          RichText(
-            textAlign: isMobile ? TextAlign.center : TextAlign.start,
-            text: TextSpan(
-              style: TextStyle(fontSize: isMobile ? 14 : 16, color: const Color(0xFFB8D6C5)),
-              children: const [
-                TextSpan(text: 'Store performance is up '),
-                TextSpan(
-                  text: '12%',
-                  style: TextStyle(color: accentGreen, fontWeight: FontWeight.w600),
+const SizedBox(height: 8),
+          // Line 1: performance stat
+          Row(
+            mainAxisAlignment:  MainAxisAlignment.center ,
+            children: [
+              Text(
+                '$subject is $direction ',
+                style: TextStyle(
+                  fontSize: isMobile ? 14 : 16,
+                  color: const Color(0xFFB8D6C5),
                 ),
-                TextSpan(text: ' today. Select a module to begin.'),
-              ],
+              ),
+              ClipRect(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  transitionBuilder: (child, animation) {
+                    final offset = _isUp
+                        ? Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+                        : Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero);
+                    return SlideTransition(
+                      position: offset.animate(
+                        CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                      ),
+                      child: FadeTransition(opacity: animation, child: child),
+                    );
+                  },
+                  child: _loaded && _percentChange != null
+                      ? Row(
+                          key: ValueKey(_percentChange),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _percentChange == 0
+                                  ? Icons.trending_flat
+                                  : _isUp
+                                      ? Icons.trending_up
+                                      : Icons.trending_down,
+                              color: _percentChange == 0 ? Colors.white54 : directionColor,
+                              size: isMobile ? 14 : 16,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${_percentChange!.toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                fontSize: isMobile ? 14 : 16,
+                                color: _percentChange == 0 ? Colors.white54 : directionColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Container(
+                          key: const ValueKey('placeholder'),
+                          width: 40,
+                          height: isMobile ? 14 : 16,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                ),
+              ),
+              Text(
+                ' today.',
+                style: TextStyle(
+                  fontSize: isMobile ? 14 : 16,
+                  color: const Color(0xFFB8D6C5),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Line 2: static subtitle
+          Text(
+            'Select a module to begin.',
+            textAlign: isMobile ? TextAlign.center : TextAlign.start,
+            style: TextStyle(
+              fontSize: isMobile ? 14 : 16,
+              color: const Color(0xFFB8D6C5),
             ),
           ),
         ],
@@ -395,7 +657,9 @@ class _ModuleGrid extends StatelessWidget {
   
   const _ModuleGrid({required this.userName, required this.userRole});
 
-  bool get isCashier => userRole == 'CASHIER';
+  bool get isCashier => userRole.toLowerCase() == 'cashier';
+  bool get isManager => userRole.toLowerCase() == 'manager';
+  bool get isAdmin => userRole.toLowerCase() == 'admin';
   
   @override
   Widget build(BuildContext context) {
@@ -408,7 +672,7 @@ class _ModuleGrid extends StatelessWidget {
     double aspectRatio;
     
     if (isCashier) {
-      // Cashiers have 2 cards (Register + Book Keeping)
+      // Cashiers: 2 cards
       if (isMobile) {
         crossAxisCount = 1;
         aspectRatio = 1.8;
@@ -418,6 +682,18 @@ class _ModuleGrid extends StatelessWidget {
       } else {
         crossAxisCount = 2;
         aspectRatio = 2.5;
+      }
+    } else if (isManager) {
+      // Managers: 3 cards
+      if (isMobile) {
+        crossAxisCount = 1;
+        aspectRatio = 1.8;
+      } else if (isTablet) {
+        crossAxisCount = 3;
+        aspectRatio = 1.5;
+      } else {
+        crossAxisCount = 3;
+        aspectRatio = 2.0;
       }
     } else {
       // Other roles have all modules
@@ -452,17 +728,19 @@ class _ModuleGrid extends StatelessWidget {
       ),
     ];
 
-    // Only add other modules if not a cashier
-    if (!isCashier) {
+    if (isManager || isAdmin) {
+      modules.add(_ModuleCard(
+        title: 'Returns',
+        subtitle: 'Manage product returns and process refunds.',
+        icon: Icons.assignment_return,
+        iconColor: Colors.orange,
+        module: HubModule.returns,
+        userName: userName,
+      ));
+    }
+
+    if (isAdmin) {
       modules.addAll([
-        _ModuleCard(
-          title: 'Returns',
-          subtitle: 'Manage product returns and process refunds.',
-          icon: Icons.assignment_return,
-          iconColor: Colors.orange,
-          module: HubModule.returns,
-          userName: userName,
-        ),
         _ModuleCard(
           title: 'Inventory',
           subtitle: 'View all products, manage SKUs, pricing, and categories.',
@@ -565,29 +843,231 @@ class _ModuleCard extends StatelessWidget {
   }
 }
 
-class _StatsBar extends StatelessWidget {
+class _StatsBar extends StatefulWidget {
+  final String userRole;
+  final String? activeBusinessDate;
+  const _StatsBar({required this.userRole, this.activeBusinessDate});
+  @override
+  State<_StatsBar> createState() => _StatsBarState();
+}
+
+class _StatsBarState extends State<_StatsBar> {
+  int transactions = 0;
+  double totalSales = 0.0;
+  DateTime? shiftStart;
+  Timer? _timer;
+  String shiftTimeDisplay = '--';
+  bool _loaded = false;
+  int _openShiftCount = 0;
+
+  // Streams
+  StreamSubscription? _shiftsSubscription;
+  StreamSubscription? _staffSubscription;
+  StreamSubscription? _shiftDocSubscription;
+  String? _currentShiftId;
+
+  bool get _isAdmin => widget.userRole.toLowerCase() == 'admin';
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isAdmin) {
+      _subscribeAdminStats();
+    } else {
+      _subscribeShiftData();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _shiftsSubscription?.cancel();
+    _staffSubscription?.cancel();
+    _shiftDocSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeAdminStats() {
+    final activeBusinessDate = widget.activeBusinessDate;
+    if (activeBusinessDate == null) return;
+
+    _shiftsSubscription = FirebaseFirestore.instance
+        .collection('shifts')
+        .where('businessDate', isEqualTo: activeBusinessDate)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      int totalTransactions = 0;
+      double totalSalesSum = 0.0;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        totalTransactions += ((data['transactionCount'] as num?)?.toInt() ?? 0);
+        totalSalesSum += ((data['totalSales'] as num?)?.toDouble() ?? 0.0);
+      }
+
+      DateTime? openingTime;
+      if (snapshot.docs.isNotEmpty) {
+        final sorted = snapshot.docs.toList()
+          ..sort((a, b) {
+            final aTs = a.data()['startTime'];
+            final bTs = b.data()['startTime'];
+            if (aTs is Timestamp && bTs is Timestamp) {
+              return aTs.seconds.compareTo(bTs.seconds);
+            }
+            return 0;
+          });
+        final ts = sorted.first.data()['startTime'];
+        openingTime = ts is Timestamp ? ts.toDate() : null;
+      }
+
+      setState(() {
+        transactions = totalTransactions;
+        totalSales = totalSalesSum;
+        _openShiftCount = snapshot.docs.length;
+        shiftStart = openingTime;
+        _loaded = true;
+      });
+    }, onError: (e, st) {
+      debugPrint('Error in admin stats stream: $e');
+      Sentry.captureException(e, stackTrace: st);
+    });
+  }
+
+  void _subscribeShiftData() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Stream staff doc to detect currentShiftId changes
+    _staffSubscription = FirebaseFirestore.instance
+        .collection('staff')
+        .doc(user.uid)
+        .snapshots()
+        .listen((staffDoc) {
+      if (!mounted) return;
+      final shiftId = staffDoc.data()?['currentShiftId'] as String?;
+      if (shiftId == _currentShiftId) return;
+      _currentShiftId = shiftId;
+
+      _shiftDocSubscription?.cancel();
+      _shiftDocSubscription = null;
+
+      if (shiftId == null || shiftId.isEmpty) {
+        _timer?.cancel();
+        setState(() {
+          transactions = 0;
+          totalSales = 0.0;
+          shiftStart = null;
+          shiftTimeDisplay = '--';
+          _loaded = true;
+        });
+        return;
+      }
+
+      // Stream the current shift document
+      _shiftDocSubscription = FirebaseFirestore.instance
+          .collection('shifts')
+          .doc(shiftId)
+          .snapshots()
+          .listen((shiftDoc) {
+        if (!mounted) return;
+        if (!shiftDoc.exists) return;
+
+        final data = shiftDoc.data()!;
+        final ts = data['startTime'];
+        final start = ts is Timestamp ? ts.toDate() : null;
+
+        setState(() {
+          transactions = (data['transactionCount'] as num?)?.toInt() ?? 0;
+          totalSales = (data['totalSales'] as num?)?.toDouble() ?? 0.0;
+          shiftStart = start;
+          _loaded = true;
+        });
+
+        if (start != null) {
+          _updateShiftTime();
+          _timer?.cancel();
+          _timer = Timer.periodic(const Duration(minutes: 1), (_) => _updateShiftTime());
+        }
+      }, onError: (e, st) {
+        debugPrint('Error in shift doc stream: $e');
+        Sentry.captureException(e, stackTrace: st);
+      });
+    }, onError: (e, st) {
+      debugPrint('Error in staff doc stream: $e');
+      Sentry.captureException(e, stackTrace: st);
+    });
+  }
+
+  void _updateShiftTime() {
+    if (shiftStart == null) return;
+    final diff = DateTime.now().difference(shiftStart!);
+    final h = diff.inHours;
+    final m = diff.inMinutes % 60;
+    setState(() {
+      shiftTimeDisplay = '${h}h ${m}m';
+    });
+  }
+
+  String _formatSales(double amount) {
+    if (amount >= 1000) {
+      return 'Ksh ${(amount / 1000).toStringAsFixed(1)}k';
+    }
+    return 'Ksh ${amount.toStringAsFixed(0)}';
+  }
+
+  String _formatStartTime(DateTime? dt) {
+    if (dt == null) return '--';
+    final hour = dt.hour;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+    return '$displayHour:$minute $period';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 768;
-    
+
+    final tiles = [
+      _StatTile(
+        label: 'TRANSACTIONS',
+        value: _loaded ? '$transactions' : '--',
+        icon: Icons.point_of_sale,
+        color: Colors.blue,
+      ),
+      _StatTile(
+        label: 'TOTAL SALES',
+        value: _loaded ? _formatSales(totalSales) : '--',
+        icon: Icons.attach_money,
+        color: Colors.green,
+      ),
+      _StatTile(
+        label: _isAdmin ? 'TOTAL SHIFTS' : 'SHIFT START',
+        value: _isAdmin ? (_loaded ? '$_openShiftCount' : '--') : (_loaded ? _formatStartTime(shiftStart) : '--'),
+        icon: _isAdmin ? Icons.people_outline : Icons.login,
+        color: Colors.orange,
+      ),
+      _StatTile(
+        label: _isAdmin ? 'OPENING TIME' : 'SHIFT TIME',
+        value: _isAdmin ? (_loaded ? _formatStartTime(shiftStart) : '--') : (_loaded ? shiftTimeDisplay : '--'),
+        icon: Icons.access_time,
+        color: Colors.purple,
+      ),
+    ];
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 32),
       child: Container(
         padding: EdgeInsets.all(isMobile ? 16 : 24),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              bgMid,
-              bgMid.withOpacity(0.8),
-            ],
+            colors: [bgMid, bgMid.withOpacity(0.8)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.08),
-            width: 1,
-          ),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.3),
@@ -604,28 +1084,23 @@ class _StatsBar extends StatelessWidget {
                 mainAxisSpacing: 12,
                 physics: const NeverScrollableScrollPhysics(),
                 childAspectRatio: 1.7,
-                children: const [
-                  _StatTile(label: 'TRANSACTIONS', value: '142', icon: Icons.point_of_sale, color: Colors.blue),
-                  _StatTile(label: 'TOTAL SALES', value: 'Ksh. 4,289', icon: Icons.attach_money, color: Colors.green),
-                  _StatTile(label: 'LOW STOCK', value: '12 Items', icon: Icons.warning_amber_rounded, color: Colors.orange),
-                  _StatTile(label: 'SHIFT TIME', value: '6h 12m', icon: Icons.access_time, color: Colors.purple),
-                ],
+                children: tiles,
               )
             : Row(
-                children: const [
-                  Expanded(child: _StatTile(label: 'TRANSACTIONS', value: '142', icon: Icons.point_of_sale, color: Colors.blue)),
-                  SizedBox(width: 16),
-                  _Divider(),
-                  SizedBox(width: 16),
-                  Expanded(child: _StatTile(label: 'TOTAL SALES', value: 'Ksh. 4,289.50', icon: Icons.attach_money, color: Colors.green)),
-                  SizedBox(width: 16),
-                  _Divider(),
-                  SizedBox(width: 16),
-                  Expanded(child: _StatTile(label: 'LOW STOCK', value: '12 Items', icon: Icons.warning_amber_rounded, color: Colors.orange)),
-                  SizedBox(width: 16),
-                  _Divider(),
-                  SizedBox(width: 16),
-                  Expanded(child: _StatTile(label: 'SHIFT TIME', value: '6h 12m', icon: Icons.access_time, color: Colors.purple)),
+                children: [
+                  Expanded(child: tiles[0]),
+                  const SizedBox(width: 16),
+                  const _Divider(),
+                  const SizedBox(width: 16),
+                  Expanded(child: tiles[1]),
+                  const SizedBox(width: 16),
+                  const _Divider(),
+                  const SizedBox(width: 16),
+                  Expanded(child: tiles[2]),
+                  const SizedBox(width: 16),
+                  const _Divider(),
+                  const SizedBox(width: 16),
+                  Expanded(child: tiles[3]),
                 ],
               ),
       ),
@@ -671,10 +1146,12 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
         Row(
+          mainAxisAlignment: isMobile ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: [
             Container(
               padding: const EdgeInsets.all(8),
@@ -685,24 +1162,23 @@ class _StatTile extends StatelessWidget {
               child: Icon(icon, size: 20, color: color),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  letterSpacing: 1.2,
-                  color: Colors.white.withOpacity(0.6),
-                  fontWeight: FontWeight.w500,
-                ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: Colors.white.withOpacity(0.6),
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.only(left: 4),
+        SizedBox(
+          width: double.infinity,
           child: Text(
             value,
+            textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w700,
@@ -716,17 +1192,40 @@ class _StatTile extends StatelessWidget {
   }
 }
 
-class _Footer extends StatelessWidget {
+class _Footer extends StatefulWidget {
   const _Footer();
 
   @override
+  State<_Footer> createState() => _FooterState();
+}
+
+class _FooterState extends State<_Footer> {
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _version = 'v${info.version}');
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const Text(
-      'System v2.1.0  •  Connected to Server US-East-1',
-      style: TextStyle(fontSize: 11, color: Colors.grey),
+    return Text(
+      _version.isEmpty ? '' : 'System $_version  •  Powered by Swahilipro Technologies.',
+      style: const TextStyle(fontSize: 11, color: Colors.grey),
     );
   }
 }
+/// Returns the active business date as a `yyyy-MM-dd` string.
+/// Before 06:00 AM the business day is still considered the previous calendar date.
+String _activeBusinessDate() {
+  final now = DateTime.now();
+  final date = now.hour < 6 ? now.subtract(const Duration(days: 1)) : now;
+  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
 void navigateToModule(BuildContext context, HubModule module, String userName) {
   switch (module) {
     case HubModule.register:

@@ -140,7 +140,7 @@ The Firestore collection name `"alcohol"` appears hardcoded in at least 3 places
 
 ```dart
 class FirestoreCollections {
-  static const String products = 'alcohol';
+  static const String products = "alcohol";
   static const String sales    = 'alcoholsales';
 }
 ```

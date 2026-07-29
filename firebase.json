@@ -1,1 +1,42 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"thamani-23709","appId":"1:901380694663:android:7961a9a27fa528b9c84e22","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"thamani-23709","configurations":{"android":"1:901380694663:android:7961a9a27fa528b9c84e22","ios":"1:901380694663:ios:8ebd85716f9c777dc84e22","macos":"1:901380694663:ios:8ebd85716f9c777dc84e22","web":"1:901380694663:web:48b443512d41c2a2c84e22","windows":"1:901380694663:web:4b8e9d6b67e9cacac84e22"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "thamani-23709",
+          "appId": "1:901380694663:android:7961a9a27fa528b9c84e22",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "thamani-23709",
+          "configurations": {
+            "android": "1:901380694663:android:7961a9a27fa528b9c84e22",
+            "ios": "1:901380694663:ios:8ebd85716f9c777dc84e22",
+            "macos": "1:901380694663:ios:8ebd85716f9c777dc84e22",
+            "web": "1:901380694663:web:48b443512d41c2a2c84e22",
+            "windows": "1:901380694663:web:4b8e9d6b67e9cacac84e22"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
+}

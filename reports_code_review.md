@@ -282,13 +282,13 @@ accentGreen.withValues(alpha: 0.2)
 | 3 | Print and Export buttons are no-ops | 🔴 |
 | 4 | Profit miscalculated silently when product names don't match exactly | 🟠 |
 | 5 | Category filter adds full transaction total, not just matching items | 🟠 |
-| 6 | `_loadSoldByList` scans entire sales collection; should read from `staff` | 🟠 |
+| 6 | `_loadSoldByList` scans entire sales collection; should read from `staff` | 🟠 | - Resolved 🟢
 | 7 | Weekly revenue chart doesn't adapt to selected date range | 🟠 |
 | 8 | Previous period comparison ignores active category and soldBy filters | 🟠 |
 | 9 | "All Good" subtitle renders in amber warning color | 🟡 |
 | 10 | `'Last 7 Days'` switch case is dead code; `default` duplicates `'This Week'` | 🟡 |
 | 11 | No debounce on filter changes; overlapping Firestore reads can race | 🟡 |
-| 12 | ±1 day Firestore buffer applied universally; fetches extra documents | 🟡 |
+| 12 | ±1 day Firestore buffer applied universally; fetches extra documents | 🟡 | - Resolved 🟢
 | 13 | `_TopBar` "Reports" link rebuilds the current screen unnecessarily | 🟢 |
 | 14 | In-card loading spinners hidden behind full-screen Lottie overlay | 🟢 |
 | 15 | `withOpacity` deprecated in Flutter 3.19+ | 🟢 |
