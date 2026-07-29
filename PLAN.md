@@ -1050,3 +1050,48 @@ It had 34 passing tenancy tests and a clean analysis earlier in development, but
 10. Promote the identical versioned release through staging only after development evidence is recorded; production remains a separate explicit decision.
 
 Backend completion in this handoff means implementation plus local automated validation. The remaining work is deployment configuration, integration evidence, Flutter/offline behavior, and staged rollout.
+
+---
+
+## Frontend implementation handoff - 2026-07-29
+
+### Completed in this session
+
+The first bounded Flutter tenancy milestone is committed on `multitenant-main`:
+
+- `30087ad` - typed tenant directory/bootstrap, Firebase callable gateway, UID-scoped Hive routing selection, canonical revalidation before local selection, login precedence, and session epoch controller/scope.
+
+This supersedes the earlier handoff's statement that the tenancy bootstrap files are uncommitted. The user-owned Firebase environment changes remain deliberately uncommitted and were not staged:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+The milestone fails closed when pagination repeats a cursor or tenant ID, a root default tenant ID is malformed, canonical access is inactive, an owner projection is inconsistent, or a requested role is not allowed. Opening a tenant now re-fetches the complete canonically overlaid directory before saving the UID-scoped last selection. Failed switching leaves the current authorized session intact.
+
+Validation after the commit's implementation changes:
+
+- `flutter test --no-pub test/tenancy` passed **39/39** tests.
+- `flutter analyze --no-pub lib/tenancy test/tenancy` reported no issues.
+- `git diff --cached --check` was clean before commit.
+
+No app root, screen, legacy repository, deployment configuration, or offline checkout behavior was changed in this milestone.
+
+### Next bounded frontend chunk
+
+Implement only the authentication-to-tenant routing shell:
+
+1. Initialize Hive once and open `HiveTenantSelectionStore.boxName` before `runApp`.
+2. Own one `TenantSessionController` above authenticated routes and clear it on every Auth UID transition/sign-out.
+3. Replace the current direct `AuthGate -> MainHubScreen` jump with an async bootstrap state machine that ignores stale completions after an Auth UID change.
+4. Add the business selector for all visible memberships, clearly distinguishing accessible, pending, inactive, rejected, suspended, and archived entries.
+5. On selection, call `TenantBootstrapService.openTenant`, then open the returned membership in the session controller. Add retry and sign-out paths for bootstrap failures and disabled/missing roots.
+6. Add widget tests for local/default/sole selection, multi-business selection, inaccessible membership display, stale async completion after sign-out, and session clearing.
+
+Keep that chunk out of legacy business repositories. Do not allow `MainHubScreen` to execute its current root `staff`, `store`, or other mono-tenant reads merely because a session exists; either land on a temporary tenant-safe shell or gate the legacy hub until its repositories are migrated. Platform-admin dashboard routing is also not implemented yet and must not be sent into tenant screens.
+
+After that shell is green, use a separate session for route guards and tenant-scoped repository migration. Inventory and replace legacy root collection reads/writes and the old `createStaffUser` / `toggleStaffStatus` call sites before enabling operational screens.
