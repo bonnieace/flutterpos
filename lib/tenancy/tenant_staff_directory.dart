@@ -6,6 +6,7 @@ import 'tenant_repository.dart';
 import 'tenant_route_guard.dart';
 import 'tenant_session.dart';
 import 'tenant_staff_invitation.dart';
+import 'tenant_staff_update.dart';
 import 'tenant_types.dart';
 
 /// Invitation state safe to expose from a canonical staff summary.
@@ -189,12 +190,13 @@ final class TenantStaffDirectoryRepository extends TenantReadRepository {
   }
 }
 
-/// Temporary management route; only typed invitation issuance is enabled.
+/// Temporary management route with bounded typed invitation and edit actions.
 final class TenantStaffDirectoryScreen extends StatelessWidget {
   const TenantStaffDirectoryScreen({
     super.key,
     required this.reader,
     this.inviteCallable,
+    this.updateCallable,
     this.requestIdFactory,
   });
 
@@ -205,6 +207,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
 
   final TenantDataReader reader;
   final InviteStaffCallable? inviteCallable;
+  final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
 
   @override
@@ -213,22 +216,25 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     body: TenantStaffDirectoryPanel(
       reader: reader,
       inviteCallable: inviteCallable,
+      updateCallable: updateCallable,
       requestIdFactory: requestIdFactory,
     ),
   );
 }
 
-/// Guarded staff content with one owner/admin-only invitation mutation.
+/// Guarded staff content with owner/admin-only invitation and edit mutations.
 final class TenantStaffDirectoryPanel extends StatefulWidget {
   const TenantStaffDirectoryPanel({
     super.key,
     required this.reader,
     this.inviteCallable,
+    this.updateCallable,
     this.requestIdFactory,
   });
 
   final TenantDataReader reader;
   final InviteStaffCallable? inviteCallable;
+  final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
 
   @override
@@ -254,8 +260,9 @@ final class _TenantStaffDirectoryPanelState
       session: session,
       page: page,
       inviteCallable: widget.inviteCallable,
+      updateCallable: widget.updateCallable,
       requestIdFactory: widget.requestIdFactory,
-      onInvitationSuccess: _refreshFirstPage,
+      onMutationSuccess: _refreshFirstPage,
     ),
   );
 }
@@ -265,15 +272,17 @@ final class _StaffContents extends StatefulWidget {
     required this.session,
     required this.page,
     required this.inviteCallable,
+    required this.updateCallable,
     required this.requestIdFactory,
-    required this.onInvitationSuccess,
+    required this.onMutationSuccess,
   });
 
   final TenantSession session;
   final TenantStaffPage page;
   final InviteStaffCallable? inviteCallable;
+  final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
-  final VoidCallback onInvitationSuccess;
+  final VoidCallback onMutationSuccess;
 
   @override
   State<_StaffContents> createState() => _StaffContentsState();
@@ -281,6 +290,7 @@ final class _StaffContents extends StatefulWidget {
 
 final class _StaffContentsState extends State<_StaffContents> {
   bool _showInvitationForm = false;
+  TenantStaffSummary? _editingStaff;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -318,7 +328,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                 callable:
                     widget.inviteCallable ?? FirebaseInviteStaffCallable(),
                 requestIdFactory: widget.requestIdFactory,
-                onSuccess: widget.onInvitationSuccess,
+                onSuccess: widget.onMutationSuccess,
               ),
             ),
           ),
@@ -328,23 +338,57 @@ final class _StaffContentsState extends State<_StaffContents> {
       if (widget.page.items.isEmpty)
         const Text('No staff memberships found.')
       else
-        for (final staff in widget.page.items)
+        for (final staff in widget.page.items) ...[
           Card(
-            child: ListTile(
-              leading: Icon(
-                staff.isOwner
-                    ? Icons.workspace_premium_outlined
-                    : Icons.person_outline,
-              ),
-              title: Text(staff.displayName),
-              subtitle: Text(
-                '${staff.email}\n'
-                '${staff.role.wireValue} - ${staff.status.wireValue}'
-                '${staff.status == MembershipStatus.pending ? ' - ${staff.invitationStatus.wireValue}' : ''}',
-              ),
-              isThreeLine: true,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    staff.isOwner
+                        ? Icons.workspace_premium_outlined
+                        : Icons.person_outline,
+                  ),
+                  title: Text(staff.displayName),
+                  subtitle: Text(
+                    '${staff.email}\n'
+                    '${staff.role.wireValue} - ${staff.status.wireValue}'
+                    '${staff.status == MembershipStatus.pending ? ' - ${staff.invitationStatus.wireValue}' : ''}',
+                  ),
+                  trailing:
+                      widget.session.canAccess(
+                        allowedRoles: TenantStaffUpdateGateway.allowedRoles,
+                      )
+                      ? IconButton(
+                          key: ValueKey('edit-staff-${staff.uid}'),
+                          tooltip: 'Edit ${staff.displayName}',
+                          onPressed: () => setState(() {
+                            _editingStaff = _editingStaff?.uid == staff.uid
+                                ? null
+                                : staff;
+                          }),
+                          icon: const Icon(Icons.edit_outlined),
+                        )
+                      : null,
+                  isThreeLine: true,
+                ),
+                if (_editingStaff?.uid == staff.uid)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: TenantStaffUpdateForm(
+                      session: widget.session,
+                      target: staff,
+                      callable:
+                          widget.updateCallable ??
+                          FirebaseUpdateStaffUserCallable(),
+                      requestIdFactory: widget.requestIdFactory,
+                      onSuccess: widget.onMutationSuccess,
+                      onCancel: () => setState(() => _editingStaff = null),
+                    ),
+                  ),
+              ],
             ),
           ),
+        ],
       if (widget.page.hasMore)
         const Padding(
           padding: EdgeInsets.only(top: 8),
@@ -352,8 +396,8 @@ final class _StaffContentsState extends State<_StaffContents> {
         ),
       const SizedBox(height: 12),
       const Text(
-        'Role changes, status changes, resend, cancellation, and email '
-        'replacement remain unavailable.',
+        'Status changes, resend, cancellation, and email replacement remain '
+        'unavailable.',
       ),
     ],
   );

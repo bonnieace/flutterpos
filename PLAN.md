@@ -1513,3 +1513,99 @@ Keep `setStaffStatus`, resend, cancel, pending-email replacement, and both
 invitation-acceptance routes for later bounded sessions. Checkout/Hive state,
 shifts, reports, returns, subscriptions, and catalog mutations also remain
 outside this scope.
+
+---
+
+## Typed staff update handoff - 2026-07-29
+
+### Completed in this session
+
+The next bounded frontend milestone enables only typed `updateStaffUser`
+editing from the canonical staff directory. The legacy staff screen and every
+other staff lifecycle mutation remain disabled.
+
+Implemented behavior:
+
+- `TenantStaffUpdateGateway` is bound to one captured, canonically valid
+  `TenantSession` and one strictly decoded `TenantStaffSummary`. It accepts no
+  tenant ID, target UID, or path, and permits only owner/admin sessions through
+  the frozen owner-as-admin rule.
+- Edit drafts reuse the frozen name and phone normalization. Non-owner rows may
+  select only admin, manager, or cashier; an owner row remains `owner` while
+  allowing its display fields to change. Backend owner and administrative-
+  principal checks remain authoritative.
+- Each edit intent owns one cryptographically generated request ID. Duplicate
+  taps are single-flight, and a retry without changing fields reuses the same
+  idempotency key.
+- Callable responses are decoded fail-closed with exact fields and exact
+  agreement with the expected tenant, target UID, requested role, and existing
+  membership status.
+- Owner/admin directory rows expose one recoverable inline editor. Managers
+  retain read-only directory access, and cashiers remain route-denied without
+  reads or calls. A successful current-session response refreshes only the
+  bounded first staff page.
+- Success and failure completions are discarded after tenant, actor UID,
+  session epoch, authorization, or selected target UID changes. UI errors are
+  fixed safe messages and never expose raw callable details.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_staff_directory.dart
+lib/tenancy/tenant_staff_update.dart
+test/tenancy/tenant_staff_update_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart`
+  reported no issues.
+- `flutter test --no-pub test/tenancy` passed **87/87** tests; the focused staff
+  update file passed **10/10**.
+- Coverage proves owner edits without demotion, non-owner role changes,
+  normalized tenant/UID-bound payloads, invalid role and response rejection,
+  manager/cashier denial, duplicate-tap single flight, retry idempotency,
+  current-session refresh, safe errors, and stale tenant/target completion
+  rejection.
+
+The five user-owned Firebase environment edits remain separate and must not be
+staged with frontend code without confirming the environment mapping:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `setStaffStatus` activation/deactivation from the
+canonical staff directory:
+
+1. Add a session-bound callable gateway for `setStaffStatus` only. Derive the
+   tenant and target UID from the captured session and decoded staff summary,
+   create one request ID per status intent, and strictly validate the returned
+   tenant, UID, role, and membership status.
+2. Allow only owner/admin callers and only active/inactive transitions for
+   already accepted non-owner memberships. Never expose status changes for the
+   canonical owner or pending invitations. Client checks are UX safeguards;
+   backend owner and last-administrative-principal invariants remain
+   authoritative.
+3. Add an explicit confirmation step, recoverable single-flight submission,
+   stable retry idempotency, safe errors, current-session completion checks, and
+   a bounded first-page refresh only after success. Managers remain read-only.
+4. Test owner protection, pending-member rejection, owner-as-admin operation,
+   manager/cashier denial without calls, exact tenant/UID/status payloads,
+   malformed responses, confirmation cancellation, duplicate taps, retry, and
+   tenant/target switches during an outstanding status change.
+5. Update the inventory while leaving `toggleStaffStatus` and the legacy
+   `lib/screens/users.dart` route unreachable and unchanged.
+
+Keep resend, cancel, pending-email replacement, and both invitation-acceptance
+routes for later bounded sessions. Checkout/Hive state, shifts, reports,
+returns, subscriptions, and catalog mutations also remain outside this scope.
