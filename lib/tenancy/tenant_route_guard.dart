@@ -58,6 +58,10 @@ final class _TenantRouteGuardState<T> extends State<TenantRouteGuard<T>> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.load != widget.load ||
         oldWidget.allowedRoles != widget.allowedRoles) {
+      // The scope itself may have been replaced in the same frame. Re-read it
+      // before synchronizing so a new loader cannot start against the prior
+      // controller's still-authorized session.
+      _controller = TenantSessionScope.of(context);
       _capturedSession = null;
       _synchronize();
     }

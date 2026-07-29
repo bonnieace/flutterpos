@@ -4,6 +4,8 @@ import 'tenant_id.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_route_guard.dart';
+import 'tenant_session.dart';
+import 'tenant_staff_invitation.dart';
 import 'tenant_types.dart';
 
 /// Invitation state safe to expose from a canonical staff summary.
@@ -187,9 +189,14 @@ final class TenantStaffDirectoryRepository extends TenantReadRepository {
   }
 }
 
-/// Temporary management-only route; staff lifecycle actions remain absent.
+/// Temporary management route; only typed invitation issuance is enabled.
 final class TenantStaffDirectoryScreen extends StatelessWidget {
-  const TenantStaffDirectoryScreen({super.key, required this.reader});
+  const TenantStaffDirectoryScreen({
+    super.key,
+    required this.reader,
+    this.inviteCallable,
+    this.requestIdFactory,
+  });
 
   static const allowedRoles = <TenantRole>[
     TenantRole.admin,
@@ -197,37 +204,83 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   ];
 
   final TenantDataReader reader;
+  final InviteStaffCallable? inviteCallable;
+  final TenantStaffRequestIdFactory? requestIdFactory;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Staff directory')),
-    body: TenantStaffDirectoryPanel(reader: reader),
+    body: TenantStaffDirectoryPanel(
+      reader: reader,
+      inviteCallable: inviteCallable,
+      requestIdFactory: requestIdFactory,
+    ),
   );
 }
 
-/// Guarded read-only staff content, split out for access and epoch tests.
-final class TenantStaffDirectoryPanel extends StatelessWidget {
-  const TenantStaffDirectoryPanel({super.key, required this.reader});
+/// Guarded staff content with one owner/admin-only invitation mutation.
+final class TenantStaffDirectoryPanel extends StatefulWidget {
+  const TenantStaffDirectoryPanel({
+    super.key,
+    required this.reader,
+    this.inviteCallable,
+    this.requestIdFactory,
+  });
 
   final TenantDataReader reader;
+  final InviteStaffCallable? inviteCallable;
+  final TenantStaffRequestIdFactory? requestIdFactory;
+
+  @override
+  State<TenantStaffDirectoryPanel> createState() =>
+      _TenantStaffDirectoryPanelState();
+}
+
+final class _TenantStaffDirectoryPanelState
+    extends State<TenantStaffDirectoryPanel> {
+  int _refreshGeneration = 0;
+
+  void _refreshFirstPage() => setState(() => _refreshGeneration++);
 
   @override
   Widget build(BuildContext context) => TenantRouteGuard<TenantStaffPage>(
+    key: ValueKey(_refreshGeneration),
     allowedRoles: TenantStaffDirectoryScreen.allowedRoles,
     load: (session) => TenantStaffDirectoryRepository(
       session: session,
-      reader: reader,
+      reader: widget.reader,
     ).loadPage(),
-    builder: (context, session, page) =>
-        _StaffContents(tenantId: session.tenantId, page: page),
+    builder: (context, session, page) => _StaffContents(
+      session: session,
+      page: page,
+      inviteCallable: widget.inviteCallable,
+      requestIdFactory: widget.requestIdFactory,
+      onInvitationSuccess: _refreshFirstPage,
+    ),
   );
 }
 
-final class _StaffContents extends StatelessWidget {
-  const _StaffContents({required this.tenantId, required this.page});
+final class _StaffContents extends StatefulWidget {
+  const _StaffContents({
+    required this.session,
+    required this.page,
+    required this.inviteCallable,
+    required this.requestIdFactory,
+    required this.onInvitationSuccess,
+  });
 
-  final String tenantId;
+  final TenantSession session;
   final TenantStaffPage page;
+  final InviteStaffCallable? inviteCallable;
+  final TenantStaffRequestIdFactory? requestIdFactory;
+  final VoidCallback onInvitationSuccess;
+
+  @override
+  State<_StaffContents> createState() => _StaffContentsState();
+}
+
+final class _StaffContentsState extends State<_StaffContents> {
+  bool _showInvitationForm = false;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -238,12 +291,44 @@ final class _StaffContents extends StatelessWidget {
         style: Theme.of(context).textTheme.headlineSmall,
       ),
       const SizedBox(height: 4),
-      Text('Business: $tenantId'),
+      Text('Business: ${widget.session.tenantId}'),
       const SizedBox(height: 20),
-      if (page.items.isEmpty)
+      if (widget.session.canAccess(
+        allowedRoles: TenantStaffInvitationGateway.allowedRoles,
+      )) ...[
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            key: const ValueKey('invite-staff-open'),
+            onPressed: () =>
+                setState(() => _showInvitationForm = !_showInvitationForm),
+            icon: const Icon(Icons.person_add_alt_1_outlined),
+            label: Text(
+              _showInvitationForm ? 'Close invitation' : 'Invite staff',
+            ),
+          ),
+        ),
+        if (_showInvitationForm) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: TenantStaffInvitationForm(
+                session: widget.session,
+                callable:
+                    widget.inviteCallable ?? FirebaseInviteStaffCallable(),
+                requestIdFactory: widget.requestIdFactory,
+                onSuccess: widget.onInvitationSuccess,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ],
+      if (widget.page.items.isEmpty)
         const Text('No staff memberships found.')
       else
-        for (final staff in page.items)
+        for (final staff in widget.page.items)
           Card(
             child: ListTile(
               leading: Icon(
@@ -260,15 +345,15 @@ final class _StaffContents extends StatelessWidget {
               isThreeLine: true,
             ),
           ),
-      if (page.hasMore)
+      if (widget.page.hasMore)
         const Padding(
           padding: EdgeInsets.only(top: 8),
           child: Text('More staff memberships are available.'),
         ),
       const SizedBox(height: 12),
       const Text(
-        'Invitations, role changes, status changes, and email replacement '
-        'remain unavailable.',
+        'Role changes, status changes, resend, cancellation, and email '
+        'replacement remain unavailable.',
       ),
     ],
   );

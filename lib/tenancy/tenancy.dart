@@ -15,4 +15,5 @@ export 'tenant_selection.dart';
 export 'tenant_session.dart';
 export 'tenant_session_controller.dart';
 export 'tenant_staff_directory.dart';
+export 'tenant_staff_invitation.dart';
 export 'tenant_types.dart';

@@ -189,7 +189,7 @@ void main() {
       expect(find.text('Staff directory'), findsOneWidget);
       expect(find.text('Owner Person'), findsOneWidget);
       expect(find.textContaining('owner - active'), findsOneWidget);
-      expect(find.text('Invite staff'), findsNothing);
+      expect(find.text('Invite staff'), findsOneWidget);
     });
 
     testWidgets('a cashier is denied without starting any reads', (

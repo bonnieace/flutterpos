@@ -1,0 +1,471 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/material.dart';
+
+import 'tenant_id.dart';
+import 'tenant_session.dart';
+import 'tenant_session_controller.dart';
+import 'tenant_types.dart';
+
+typedef TenantStaffRequestIdFactory = String Function();
+
+/// Narrow callable boundary for the one enabled staff mutation.
+abstract interface class InviteStaffCallable {
+  Future<Object?> call(Map<String, Object?> payload);
+}
+
+/// Firebase adapter for `inviteStaff`; response validation remains above it.
+final class FirebaseInviteStaffCallable implements InviteStaffCallable {
+  FirebaseInviteStaffCallable({FirebaseFunctions? functions})
+    : _functions = functions ?? FirebaseFunctions.instance;
+
+  final FirebaseFunctions _functions;
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    final result = await _functions
+        .httpsCallable('inviteStaff')
+        .call<Object?>(payload);
+    return result.data;
+  }
+}
+
+/// Normalized client input for a new tenant staff invitation.
+final class TenantStaffInviteDraft {
+  TenantStaffInviteDraft({
+    required String email,
+    required String name,
+    required String phone,
+    required this.role,
+  }) : email = normalizeTenantStaffInviteEmail(email),
+       name = normalizeTenantStaffInviteName(name),
+       phone = normalizeTenantStaffInvitePhone(phone) {
+    if (role == TenantRole.owner) {
+      throw const FormatException(
+        'Owners cannot be invited through this form.',
+      );
+    }
+  }
+
+  final String email;
+  final String name;
+  final String phone;
+  final TenantRole role;
+}
+
+/// One user intent and its stable idempotency key.
+final class TenantStaffInviteIntent {
+  const TenantStaffInviteIntent._({
+    required this.draft,
+    required this.requestId,
+  });
+
+  final TenantStaffInviteDraft draft;
+  final String requestId;
+}
+
+/// Strictly decoded result from the `inviteStaff` callable.
+final class TenantStaffInviteResult {
+  const TenantStaffInviteResult._({
+    required this.tenantId,
+    required this.uid,
+    required this.invitationVersion,
+    required this.deliveryId,
+  });
+
+  factory TenantStaffInviteResult.fromCallable(
+    Object? value, {
+    required String expectedTenantId,
+  }) {
+    final data = _strictStringMap(
+      value,
+      label: 'inviteStaff response',
+      keys: const {
+        'tenantId',
+        'uid',
+        'invitationStatus',
+        'invitationVersion',
+        'delivery',
+      },
+    );
+    if (data['tenantId'] != expectedTenantId) {
+      throw const FormatException(
+        'inviteStaff returned a result for another tenant.',
+      );
+    }
+    if (data['invitationStatus'] != 'pending') {
+      throw const FormatException('inviteStaff returned an invalid status.');
+    }
+    final uidValue = data['uid'];
+    if (uidValue is! String) {
+      throw const FormatException('inviteStaff returned an invalid uid.');
+    }
+    late final String uid;
+    try {
+      uid = validateTenantDocumentId(uidValue, fieldName: 'uid');
+    } on ArgumentError {
+      throw const FormatException('inviteStaff returned an invalid uid.');
+    }
+    final invitationVersion = data['invitationVersion'];
+    if (invitationVersion is! int ||
+        invitationVersion < 1 ||
+        invitationVersion > 9007199254740991) {
+      throw const FormatException(
+        'inviteStaff returned an invalid invitation version.',
+      );
+    }
+    final delivery = _strictStringMap(
+      data['delivery'],
+      label: 'inviteStaff delivery',
+      keys: const {'deliveryId', 'status'},
+    );
+    if (delivery['status'] != 'pending_enqueue') {
+      throw const FormatException('inviteStaff returned an invalid delivery.');
+    }
+    final deliveryIdValue = delivery['deliveryId'];
+    if (deliveryIdValue is! String) {
+      throw const FormatException('inviteStaff returned an invalid delivery.');
+    }
+    late final String deliveryId;
+    try {
+      deliveryId = validateTenantDocumentId(
+        deliveryIdValue,
+        fieldName: 'deliveryId',
+      );
+    } on ArgumentError {
+      throw const FormatException('inviteStaff returned an invalid delivery.');
+    }
+    return TenantStaffInviteResult._(
+      tenantId: expectedTenantId,
+      uid: uid,
+      invitationVersion: invitationVersion,
+      deliveryId: deliveryId,
+    );
+  }
+
+  final String tenantId;
+  final String uid;
+  final int invitationVersion;
+  final String deliveryId;
+}
+
+/// Session-bound gateway. Callers cannot provide a tenant ID or raw path.
+final class TenantStaffInvitationGateway {
+  TenantStaffInvitationGateway({
+    required TenantSession session,
+    required InviteStaffCallable callable,
+    TenantStaffRequestIdFactory? requestIdFactory,
+  }) : _session = session,
+       _callable = callable,
+       _requestIdFactory = requestIdFactory ?? _secureInviteRequestId;
+
+  static const allowedRoles = <TenantRole>[TenantRole.admin];
+
+  final TenantSession _session;
+  final InviteStaffCallable _callable;
+  final TenantStaffRequestIdFactory _requestIdFactory;
+
+  TenantStaffInviteIntent createIntent(TenantStaffInviteDraft draft) {
+    _requireAuthorizedSession();
+    final requestId = _requestIdFactory();
+    if (!_requestIdPattern.hasMatch(requestId)) {
+      throw StateError('The invitation request ID generator is invalid.');
+    }
+    return TenantStaffInviteIntent._(draft: draft, requestId: requestId);
+  }
+
+  Future<TenantStaffInviteResult> submit(TenantStaffInviteIntent intent) async {
+    _requireAuthorizedSession();
+    final draft = intent.draft;
+    final response = await _callable.call(<String, Object?>{
+      'tenantId': _session.tenantId,
+      'email': draft.email,
+      'name': draft.name,
+      'phone': draft.phone,
+      'role': draft.role.wireValue,
+      'requestId': intent.requestId,
+    });
+    return TenantStaffInviteResult.fromCallable(
+      response,
+      expectedTenantId: _session.tenantId,
+    );
+  }
+
+  void _requireAuthorizedSession() {
+    if (!_session.canAccess(allowedRoles: allowedRoles)) {
+      throw StateError('An owner or administrator session is required.');
+    }
+  }
+}
+
+/// Recoverable, single-flight invitation form for an already guarded session.
+final class TenantStaffInvitationForm extends StatefulWidget {
+  const TenantStaffInvitationForm({
+    super.key,
+    required this.session,
+    required this.callable,
+    required this.onSuccess,
+    this.requestIdFactory,
+  });
+
+  final TenantSession session;
+  final InviteStaffCallable callable;
+  final VoidCallback onSuccess;
+  final TenantStaffRequestIdFactory? requestIdFactory;
+
+  @override
+  State<TenantStaffInvitationForm> createState() =>
+      _TenantStaffInvitationFormState();
+}
+
+final class _TenantStaffInvitationFormState
+    extends State<TenantStaffInvitationForm> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  TenantRole _role = TenantRole.cashier;
+  TenantStaffInviteIntent? _intent;
+  bool _submitting = false;
+  String? _safeError;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _markIntentChanged() {
+    if (_intent == null && _safeError == null) return;
+    setState(() {
+      _intent = null;
+      _safeError = null;
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_submitting || !(_formKey.currentState?.validate() ?? false)) return;
+    final controller = TenantSessionScope.read(context);
+    if (!_isCurrent(controller)) return;
+    final gateway = TenantStaffInvitationGateway(
+      session: widget.session,
+      callable: widget.callable,
+      requestIdFactory: widget.requestIdFactory,
+    );
+    late final TenantStaffInviteIntent intent;
+    try {
+      intent = _intent ??= gateway.createIntent(
+        TenantStaffInviteDraft(
+          email: _emailController.text,
+          name: _nameController.text,
+          phone: _phoneController.text,
+          role: _role,
+        ),
+      );
+    } catch (_) {
+      if (!mounted || !_isCurrent(controller)) return;
+      setState(
+        () => _safeError = 'Check the invitation details and try again.',
+      );
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _safeError = null;
+    });
+    try {
+      await gateway.submit(intent);
+    } catch (_) {
+      if (!mounted || !_isCurrent(controller)) return;
+      setState(() {
+        _submitting = false;
+        _safeError = 'Invitation could not be sent. Please try again.';
+      });
+      return;
+    }
+    if (!mounted || !_isCurrent(controller)) return;
+    setState(() => _submitting = false);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Staff invitation queued.')));
+    widget.onSuccess();
+  }
+
+  bool _isCurrent(TenantSessionController controller) {
+    final current = controller.session;
+    return current != null &&
+        current.uid == widget.session.uid &&
+        current.tenantId == widget.session.tenantId &&
+        current.epoch == widget.session.epoch &&
+        current.canAccess(
+          allowedRoles: TenantStaffInvitationGateway.allowedRoles,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) => Form(
+    key: _formKey,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          key: const ValueKey('invite-staff-email'),
+          controller: _emailController,
+          enabled: !_submitting,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email'),
+          onChanged: (_) => _markIntentChanged(),
+          validator: (value) {
+            try {
+              normalizeTenantStaffInviteEmail(value ?? '');
+              return null;
+            } on FormatException {
+              return 'Enter a valid email address.';
+            }
+          },
+        ),
+        TextFormField(
+          key: const ValueKey('invite-staff-name'),
+          controller: _nameController,
+          enabled: !_submitting,
+          decoration: const InputDecoration(labelText: 'Name'),
+          onChanged: (_) => _markIntentChanged(),
+          validator: (value) {
+            try {
+              normalizeTenantStaffInviteName(value ?? '');
+              return null;
+            } on FormatException {
+              return 'Enter a name of 100 characters or fewer.';
+            }
+          },
+        ),
+        TextFormField(
+          key: const ValueKey('invite-staff-phone'),
+          controller: _phoneController,
+          enabled: !_submitting,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(labelText: 'Phone (optional)'),
+          onChanged: (_) => _markIntentChanged(),
+          validator: (value) {
+            try {
+              normalizeTenantStaffInvitePhone(value ?? '');
+              return null;
+            } on FormatException {
+              return 'Enter a phone number of 32 characters or fewer.';
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<TenantRole>(
+          key: const ValueKey('invite-staff-role'),
+          initialValue: _role,
+          decoration: const InputDecoration(labelText: 'Role'),
+          items:
+              const [TenantRole.admin, TenantRole.manager, TenantRole.cashier]
+                  .map(
+                    (role) => DropdownMenuItem<TenantRole>(
+                      value: role,
+                      child: Text(role.wireValue),
+                    ),
+                  )
+                  .toList(),
+          onChanged: _submitting
+              ? null
+              : (role) {
+                  if (role == null || role == _role) return;
+                  setState(() {
+                    _role = role;
+                    _intent = null;
+                    _safeError = null;
+                  });
+                },
+        ),
+        if (_safeError != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _safeError!,
+            key: const ValueKey('invite-staff-error'),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          key: const ValueKey('invite-staff-submit'),
+          onPressed: _submitting ? null : _submit,
+          icon: _submitting
+              ? const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.person_add_alt_1_outlined),
+          label: Text(_submitting ? 'Sending...' : 'Send invitation'),
+        ),
+      ],
+    ),
+  );
+}
+
+String normalizeTenantStaffInviteEmail(String value) {
+  final email = value.trim().toLowerCase();
+  if (email.isEmpty || email.length > 320 || !_emailPattern.hasMatch(email)) {
+    throw const FormatException('Invalid staff invitation email.');
+  }
+  return email;
+}
+
+String normalizeTenantStaffInviteName(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty ||
+      trimmed.length > 100 ||
+      _hasControlCharacter(trimmed)) {
+    throw const FormatException('Invalid staff invitation name.');
+  }
+  return trimmed.replaceAll(RegExp(r'\s+'), ' ');
+}
+
+String normalizeTenantStaffInvitePhone(String value) {
+  final phone = value.trim();
+  if (phone.length > 32 || _hasControlCharacter(phone)) {
+    throw const FormatException('Invalid staff invitation phone.');
+  }
+  return phone;
+}
+
+Map<String, Object?> _strictStringMap(
+  Object? value, {
+  required String label,
+  required Set<String> keys,
+}) {
+  if (value is! Map || value.length != keys.length) {
+    throw FormatException('$label must contain the expected fields.');
+  }
+  final result = <String, Object?>{};
+  for (final entry in value.entries) {
+    final key = entry.key;
+    if (key is! String || !keys.contains(key)) {
+      throw FormatException('$label must contain the expected fields.');
+    }
+    result[key] = entry.value;
+  }
+  return result;
+}
+
+String _secureInviteRequestId() {
+  final random = Random.secure();
+  final bytes = List<int>.generate(18, (_) => random.nextInt(256));
+  return 'invite-${base64Url.encode(bytes).replaceAll('=', '')}';
+}
+
+bool _hasControlCharacter(String value) {
+  for (final codeUnit in value.codeUnits) {
+    if (codeUnit < 0x20 || codeUnit == 0x7f) return true;
+  }
+  return false;
+}
+
+final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+final _requestIdPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$');

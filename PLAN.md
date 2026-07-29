@@ -1410,3 +1410,106 @@ Keep `createStaffUser`, `lib/screens/create_user.dart`, and the legacy
 cancel, pending-email replacement, and both invitation-acceptance routes remain
 separate later chunks. Checkout/Hive state, shifts, reports, returns,
 subscriptions, and catalog mutations also remain outside this scope.
+
+---
+
+## Typed staff invitation handoff - 2026-07-29
+
+### Completed in this session
+
+The next bounded frontend milestone enables only typed `inviteStaff` issuance
+from the canonical staff directory. The legacy staff screens and all other
+staff lifecycle mutations remain disabled.
+
+Implemented behavior:
+
+- `TenantStaffInvitationGateway` is bound to one captured, canonically valid
+  `TenantSession`. It accepts no tenant ID or path, derives `tenantId` for the
+  callable payload, and permits only owner/admin sessions through the frozen
+  owner-as-admin rule.
+- A normalized invitation draft validates email, trimmed name and phone, and
+  only `admin`, `manager`, or `cashier` roles. The client checks improve the
+  form experience but do not replace backend authorization or validation.
+- Each user intent owns one cryptographically generated request ID. Duplicate
+  taps are single-flight, and a retry without changing fields reuses the same
+  idempotency key.
+- Callable responses are decoded fail-closed with exact fields, tenant
+  agreement, canonical document IDs, pending invitation state, a positive safe
+  invitation version, and pending delivery metadata.
+- The owner/admin-only form is embedded in the guarded directory. Managers
+  remain read-only and cashiers remain route-denied without reads or calls.
+  A successful current-session response refreshes only the bounded first staff
+  page.
+- Success and failure completions are discarded after UID, tenant, epoch, or
+  authorization changes. UI errors are fixed safe messages and never expose raw
+  callable details.
+- A guard lifecycle regression was closed: when a `TenantSessionScope` and
+  guarded loader change in the same frame, `TenantRouteGuard` now re-reads the
+  current inherited controller before starting work, preventing a load under
+  the prior authorized controller.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_route_guard.dart
+lib/tenancy/tenant_staff_directory.dart
+lib/tenancy/tenant_staff_invitation.dart
+test/tenancy/tenant_staff_directory_test.dart
+test/tenancy/tenant_staff_invitation_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart`
+  reported no issues.
+- `flutter test --no-pub test/tenancy` passed **77/77** tests; the focused staff
+  directory/invitation subset passed **17/17**.
+- Coverage proves normalization, invalid-field and owner-role rejection,
+  tenant-derived payloads, stable per-intent request IDs, strict response
+  decoding, owner-as-admin submission, manager/cashier denial, duplicate-tap
+  single flight, retry behavior, current-session refresh, safe errors, and stale
+  tenant/UID completion rejection.
+
+The five user-owned Firebase environment edits remain separate and must not be
+staged with frontend code without confirming the environment mapping:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `updateStaffUser` editing from the canonical staff
+directory:
+
+1. Add a session-bound callable gateway for `updateStaffUser` only. Derive the
+   tenant from the captured session, bind the target UID from a decoded
+   `TenantStaffSummary`, create one request ID per edit intent, and strictly
+   validate the returned tenant, UID, role, and membership status.
+2. Reuse the frozen name/phone normalization. Allow only owner/admin callers.
+   Preserve an owner's `owner` role while allowing their display fields to be
+   edited, and never offer `owner` as a role for another staff member. Treat all
+   client checks as UX safeguards; canonical backend owner and administrative-
+   principal invariants remain authoritative.
+3. Add a recoverable single-flight edit form for one selected directory row.
+   Managers remain read-only. Refresh only the bounded first page after a
+   successful current-session response, and discard stale success/failure
+   completions without showing raw callable errors.
+4. Test owner profile edits without demotion, non-owner role changes, manager
+   and cashier denial without calls, exact tenant/UID payload derivation,
+   malformed responses, duplicate taps, retry idempotency, and tenant/UID
+   switching during an outstanding update.
+5. Update the inventory while leaving `lib/screens/users.dart` and its legacy
+   mutation paths unreachable and unchanged.
+
+Keep `setStaffStatus`, resend, cancel, pending-email replacement, and both
+invitation-acceptance routes for later bounded sessions. Checkout/Hive state,
+shifts, reports, returns, subscriptions, and catalog mutations also remain
+outside this scope.
