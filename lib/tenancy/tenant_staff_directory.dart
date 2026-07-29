@@ -6,6 +6,7 @@ import 'tenant_repository.dart';
 import 'tenant_route_guard.dart';
 import 'tenant_session.dart';
 import 'tenant_staff_invitation.dart';
+import 'tenant_staff_invitation_cancellation.dart';
 import 'tenant_staff_invitation_resend.dart';
 import 'tenant_staff_status.dart';
 import 'tenant_staff_update.dart';
@@ -197,6 +198,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   const TenantStaffDirectoryScreen({
     super.key,
     required this.reader,
+    this.cancelInvitationCallable,
     this.inviteCallable,
     this.resendCallable,
     this.statusCallable,
@@ -210,6 +212,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   ];
 
   final TenantDataReader reader;
+  final CancelTenantInvitationCallable? cancelInvitationCallable;
   final InviteStaffCallable? inviteCallable;
   final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
@@ -221,6 +224,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Staff directory')),
     body: TenantStaffDirectoryPanel(
       reader: reader,
+      cancelInvitationCallable: cancelInvitationCallable,
       inviteCallable: inviteCallable,
       resendCallable: resendCallable,
       statusCallable: statusCallable,
@@ -235,6 +239,7 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
   const TenantStaffDirectoryPanel({
     super.key,
     required this.reader,
+    this.cancelInvitationCallable,
     this.inviteCallable,
     this.resendCallable,
     this.statusCallable,
@@ -243,6 +248,7 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
   });
 
   final TenantDataReader reader;
+  final CancelTenantInvitationCallable? cancelInvitationCallable;
   final InviteStaffCallable? inviteCallable;
   final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
@@ -271,6 +277,7 @@ final class _TenantStaffDirectoryPanelState
     builder: (context, session, page) => _StaffContents(
       session: session,
       page: page,
+      cancelInvitationCallable: widget.cancelInvitationCallable,
       inviteCallable: widget.inviteCallable,
       resendCallable: widget.resendCallable,
       statusCallable: widget.statusCallable,
@@ -285,6 +292,7 @@ final class _StaffContents extends StatefulWidget {
   const _StaffContents({
     required this.session,
     required this.page,
+    required this.cancelInvitationCallable,
     required this.inviteCallable,
     required this.resendCallable,
     required this.statusCallable,
@@ -295,6 +303,7 @@ final class _StaffContents extends StatefulWidget {
 
   final TenantSession session;
   final TenantStaffPage page;
+  final CancelTenantInvitationCallable? cancelInvitationCallable;
   final InviteStaffCallable? inviteCallable;
   final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
@@ -308,6 +317,7 @@ final class _StaffContents extends StatefulWidget {
 
 final class _StaffContentsState extends State<_StaffContents> {
   bool _showInvitationForm = false;
+  TenantStaffSummary? _cancellingInvitation;
   TenantStaffSummary? _editingStaff;
   TenantStaffSummary? _resendingInvitation;
   TenantStaffSummary? _statusChangingStaff;
@@ -384,6 +394,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                               key: ValueKey('edit-staff-${staff.uid}'),
                               tooltip: 'Edit ${staff.displayName}',
                               onPressed: () => setState(() {
+                                _cancellingInvitation = null;
                                 _resendingInvitation = null;
                                 _statusChangingStaff = null;
                                 _editingStaff = _editingStaff?.uid == staff.uid
@@ -391,7 +402,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                                     : staff;
                               }),
                               icon: const Icon(Icons.edit_outlined),
-                              ),
+                            ),
                             if (TenantStaffInvitationResendGateway.canResendTo(
                               staff,
                             ))
@@ -402,6 +413,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                                 tooltip:
                                     'Resend invitation to ${staff.displayName}',
                                 onPressed: () => setState(() {
+                                  _cancellingInvitation = null;
                                   _editingStaff = null;
                                   _statusChangingStaff = null;
                                   _resendingInvitation =
@@ -413,6 +425,26 @@ final class _StaffContentsState extends State<_StaffContents> {
                                   Icons.forward_to_inbox_outlined,
                                 ),
                               ),
+                            if (TenantStaffInvitationCancellationGateway.canCancel(
+                              staff,
+                            ))
+                              IconButton(
+                                key: ValueKey(
+                                  'cancel-staff-invitation-${staff.uid}',
+                                ),
+                                tooltip:
+                                    'Cancel invitation for ${staff.displayName}',
+                                onPressed: () => setState(() {
+                                  _editingStaff = null;
+                                  _resendingInvitation = null;
+                                  _statusChangingStaff = null;
+                                  _cancellingInvitation =
+                                      _cancellingInvitation?.uid == staff.uid
+                                      ? null
+                                      : staff;
+                                }),
+                                icon: const Icon(Icons.person_remove_outlined),
+                              ),
                             if (TenantStaffStatusGateway.canChangeTarget(staff))
                               IconButton(
                                 key: ValueKey('set-staff-status-${staff.uid}'),
@@ -420,6 +452,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                                     ? 'Deactivate ${staff.displayName}'
                                     : 'Activate ${staff.displayName}',
                                 onPressed: () => setState(() {
+                                  _cancellingInvitation = null;
                                   _editingStaff = null;
                                   _resendingInvitation = null;
                                   _statusChangingStaff =
@@ -482,6 +515,21 @@ final class _StaffContentsState extends State<_StaffContents> {
                           setState(() => _resendingInvitation = null),
                     ),
                   ),
+                if (_cancellingInvitation?.uid == staff.uid)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: TenantStaffInvitationCancellationForm(
+                      session: widget.session,
+                      target: staff,
+                      callable:
+                          widget.cancelInvitationCallable ??
+                          FirebaseCancelTenantInvitationCallable(),
+                      requestIdFactory: widget.requestIdFactory,
+                      onSuccess: widget.onMutationSuccess,
+                      onCancel: () =>
+                          setState(() => _cancellingInvitation = null),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -492,9 +540,7 @@ final class _StaffContentsState extends State<_StaffContents> {
           child: Text('More staff memberships are available.'),
         ),
       const SizedBox(height: 12),
-      const Text(
-        'Invitation cancellation and email replacement remain unavailable.',
-      ),
+      const Text('Pending invitation email replacement remains unavailable.'),
     ],
   );
 }
