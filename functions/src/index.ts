@@ -1,6 +1,8 @@
 import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { getFirestore, Query, DocumentData } from "firebase-admin/firestore";
+export {requestTenant} from "./tenants/onboarding";
+export {listMyTenants, setDefaultTenant} from "./tenants/routing";
 admin.initializeApp();
 // ── Request / response types ─────────────────────────────────────────────────
 
