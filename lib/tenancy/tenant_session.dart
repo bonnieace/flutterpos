@@ -23,7 +23,7 @@ final class TenantSession {
     if (epoch < 0) {
       throw ArgumentError.value(epoch, 'epoch', 'Cannot be negative.');
     }
-    return TenantSession._(uid: uid, access: access, epoch: epoch);
+    return TenantSession._(uid: uid.trim(), access: access, epoch: epoch);
   }
 
   const TenantSession._({
