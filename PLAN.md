@@ -1708,3 +1708,105 @@ Keep invitation cancellation, pending-email replacement, and both
 invitation-acceptance routes for later bounded sessions. Checkout/Hive state,
 shifts, reports, returns, subscriptions, and catalog mutations also remain
 outside this scope.
+
+---
+
+## Typed staff invitation resend handoff - 2026-07-29
+
+### Completed in this session
+
+The next bounded frontend milestone enables only typed
+`resendStaffInvitation` from the canonical staff directory. Invitation
+cancellation, pending-email replacement, and both acceptance routes remain
+disabled.
+
+Implemented behavior:
+
+- `TenantStaffInvitationResendGateway` is bound to one captured, canonically
+  valid `TenantSession` and one strictly decoded `TenantStaffSummary`. It
+  accepts no tenant ID, target UID, or path and permits only owner/admin
+  sessions through the frozen owner-as-admin rule.
+- Resend intents apply only to canonical non-owner pending memberships whose
+  invitation state is pending or sent. Accepted active/inactive memberships
+  and the canonical owner fail before a callable request. Backend canonical
+  invitation, identity-email, and authorization checks remain authoritative.
+- Each resend intent owns one cryptographically generated request ID.
+  Duplicate taps are single-flight, and retrying the same confirmation reuses
+  the same idempotency key.
+- Callable responses are decoded fail-closed with exact fields and exact
+  agreement with the expected tenant and target UID. The pending invitation
+  state, positive JavaScript-safe invitation version, and pending-enqueue
+  delivery metadata are all required.
+- Eligible owner/admin directory rows expose an explicit resend confirmation.
+  Managers remain read-only, cashiers remain route-denied, and cancelling
+  confirmation performs no mutation. A successful current-session response
+  refreshes only the bounded first staff page.
+- Success and failure completions are discarded after tenant, actor UID,
+  session epoch, target UID, membership state, invitation state, or
+  authorization changes. UI errors are fixed safe messages and never expose
+  raw callable details.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_staff_directory.dart
+lib/tenancy/tenant_staff_invitation_resend.dart
+test/tenancy/tenant_staff_invitation_resend_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart`
+  reported no issues.
+- `flutter test --no-pub test/tenancy` passed **109/109** tests; the focused
+  invitation-resend file passed **11/11**.
+- Coverage proves pending/sent eligibility, owner protection, owner-as-admin
+  operation, manager/cashier denial, exact tenant/UID payload derivation,
+  strict invitation and delivery response decoding, explicit cancellation,
+  duplicate-tap single flight, retry idempotency, safe errors,
+  current-session refresh, and stale tenant/target completion rejection.
+
+The five user-owned Firebase environment edits remain separate and must not be
+staged with frontend code without confirming the environment mapping:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `cancelTenantInvitation` from the canonical staff
+directory:
+
+1. Add a session-bound callable gateway for `cancelTenantInvitation` only.
+   Derive the tenant and target UID from the captured session and decoded staff
+   summary, normalize and validate the required 3-500 character cancellation
+   reason, create one request ID per cancel intent, and strictly decode the
+   exact backend result: tenant ID, UID, cancelled invitation state, positive
+   safe invitation version, and null delivery metadata.
+2. Allow only owner/admin callers and only canonical pending non-owner
+   memberships whose invitation state is pending or sent. Keep accepted
+   active/inactive members and the canonical owner ineligible. Client checks
+   are UX safeguards; the backend's canonical invitation, owner, cleanup, and
+   authorization invariants remain authoritative.
+3. Add an explicit destructive confirmation with the required reason,
+   recoverable single-flight submission, stable retry idempotency, safe errors,
+   current-session completion checks, and a bounded first-page refresh only
+   after success. Managers remain read-only.
+4. Test reason normalization and bounds, eligibility rejection without calls,
+   owner-as-admin operation, manager/cashier denial, exact tenant/UID/reason
+   payloads, malformed responses, confirmation cancellation, duplicate taps,
+   retry behavior, and tenant/target switches during an outstanding cancel.
+5. Update the inventory while leaving the legacy `lib/screens/users.dart`
+   mutation paths unreachable and unchanged.
+
+Keep pending-email replacement and both invitation-acceptance routes for later
+bounded sessions. Checkout/Hive state, shifts, reports, returns,
+subscriptions, and catalog mutations also remain outside this scope.

@@ -6,6 +6,7 @@ import 'tenant_repository.dart';
 import 'tenant_route_guard.dart';
 import 'tenant_session.dart';
 import 'tenant_staff_invitation.dart';
+import 'tenant_staff_invitation_resend.dart';
 import 'tenant_staff_status.dart';
 import 'tenant_staff_update.dart';
 import 'tenant_types.dart';
@@ -191,12 +192,13 @@ final class TenantStaffDirectoryRepository extends TenantReadRepository {
   }
 }
 
-/// Temporary management route with bounded typed invitation and edit actions.
+/// Temporary management route with bounded typed staff actions.
 final class TenantStaffDirectoryScreen extends StatelessWidget {
   const TenantStaffDirectoryScreen({
     super.key,
     required this.reader,
     this.inviteCallable,
+    this.resendCallable,
     this.statusCallable,
     this.updateCallable,
     this.requestIdFactory,
@@ -209,6 +211,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
 
   final TenantDataReader reader;
   final InviteStaffCallable? inviteCallable;
+  final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
@@ -219,6 +222,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     body: TenantStaffDirectoryPanel(
       reader: reader,
       inviteCallable: inviteCallable,
+      resendCallable: resendCallable,
       statusCallable: statusCallable,
       updateCallable: updateCallable,
       requestIdFactory: requestIdFactory,
@@ -226,12 +230,13 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   );
 }
 
-/// Guarded staff content with owner/admin-only invitation and edit mutations.
+/// Guarded staff content with owner/admin-only typed mutations.
 final class TenantStaffDirectoryPanel extends StatefulWidget {
   const TenantStaffDirectoryPanel({
     super.key,
     required this.reader,
     this.inviteCallable,
+    this.resendCallable,
     this.statusCallable,
     this.updateCallable,
     this.requestIdFactory,
@@ -239,6 +244,7 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
 
   final TenantDataReader reader;
   final InviteStaffCallable? inviteCallable;
+  final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
@@ -266,6 +272,7 @@ final class _TenantStaffDirectoryPanelState
       session: session,
       page: page,
       inviteCallable: widget.inviteCallable,
+      resendCallable: widget.resendCallable,
       statusCallable: widget.statusCallable,
       updateCallable: widget.updateCallable,
       requestIdFactory: widget.requestIdFactory,
@@ -279,6 +286,7 @@ final class _StaffContents extends StatefulWidget {
     required this.session,
     required this.page,
     required this.inviteCallable,
+    required this.resendCallable,
     required this.statusCallable,
     required this.updateCallable,
     required this.requestIdFactory,
@@ -288,6 +296,7 @@ final class _StaffContents extends StatefulWidget {
   final TenantSession session;
   final TenantStaffPage page;
   final InviteStaffCallable? inviteCallable;
+  final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
@@ -300,6 +309,7 @@ final class _StaffContents extends StatefulWidget {
 final class _StaffContentsState extends State<_StaffContents> {
   bool _showInvitationForm = false;
   TenantStaffSummary? _editingStaff;
+  TenantStaffSummary? _resendingInvitation;
   TenantStaffSummary? _statusChangingStaff;
 
   @override
@@ -374,13 +384,35 @@ final class _StaffContentsState extends State<_StaffContents> {
                               key: ValueKey('edit-staff-${staff.uid}'),
                               tooltip: 'Edit ${staff.displayName}',
                               onPressed: () => setState(() {
+                                _resendingInvitation = null;
                                 _statusChangingStaff = null;
                                 _editingStaff = _editingStaff?.uid == staff.uid
                                     ? null
                                     : staff;
                               }),
                               icon: const Icon(Icons.edit_outlined),
-                            ),
+                              ),
+                            if (TenantStaffInvitationResendGateway.canResendTo(
+                              staff,
+                            ))
+                              IconButton(
+                                key: ValueKey(
+                                  'resend-staff-invitation-${staff.uid}',
+                                ),
+                                tooltip:
+                                    'Resend invitation to ${staff.displayName}',
+                                onPressed: () => setState(() {
+                                  _editingStaff = null;
+                                  _statusChangingStaff = null;
+                                  _resendingInvitation =
+                                      _resendingInvitation?.uid == staff.uid
+                                      ? null
+                                      : staff;
+                                }),
+                                icon: const Icon(
+                                  Icons.forward_to_inbox_outlined,
+                                ),
+                              ),
                             if (TenantStaffStatusGateway.canChangeTarget(staff))
                               IconButton(
                                 key: ValueKey('set-staff-status-${staff.uid}'),
@@ -389,6 +421,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                                     : 'Activate ${staff.displayName}',
                                 onPressed: () => setState(() {
                                   _editingStaff = null;
+                                  _resendingInvitation = null;
                                   _statusChangingStaff =
                                       _statusChangingStaff?.uid == staff.uid
                                       ? null
@@ -434,6 +467,21 @@ final class _StaffContentsState extends State<_StaffContents> {
                           setState(() => _statusChangingStaff = null),
                     ),
                   ),
+                if (_resendingInvitation?.uid == staff.uid)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: TenantStaffInvitationResendForm(
+                      session: widget.session,
+                      target: staff,
+                      callable:
+                          widget.resendCallable ??
+                          FirebaseResendStaffInvitationCallable(),
+                      requestIdFactory: widget.requestIdFactory,
+                      onSuccess: widget.onMutationSuccess,
+                      onCancel: () =>
+                          setState(() => _resendingInvitation = null),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -445,8 +493,7 @@ final class _StaffContentsState extends State<_StaffContents> {
         ),
       const SizedBox(height: 12),
       const Text(
-        'Invitation resend, cancellation, and email replacement remain '
-        'unavailable.',
+        'Invitation cancellation and email replacement remain unavailable.',
       ),
     ],
   );
