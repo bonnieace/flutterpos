@@ -14,7 +14,7 @@ unreachable until each row is migrated and tested behind a live
 | `lib/pos/goods.dart` | `categories`, `alcohol` | `categories`, `products` below `TenantPaths` | Legacy screen and all mutations remain disabled. A separate guarded, paginated read-only catalog now uses the tenant paths. |
 | `lib/services/bulk_update_service.dart` | `alcohol` | `products` below `TenantPaths` | Disabled mutation/import workflow. |
 | `lib/services/bulk_upload_service.dart` | `alcohol` | `products` below `TenantPaths` | Disabled mutation/import workflow. |
-| `lib/screens/users.dart` | `staff` | `staff` below `TenantPaths` | Legacy screen and mutations remain disabled. A separate owner/admin/manager-guarded, paginated directory uses canonical tenant paths, with typed owner/admin `inviteStaff` issuance and `updateStaffUser` editing enabled. |
+| `lib/screens/users.dart` | `staff` | `staff` below `TenantPaths` | Legacy screen and mutations remain disabled. A separate owner/admin/manager-guarded, paginated directory uses canonical tenant paths, with typed owner/admin `inviteStaff` issuance, `updateStaffUser` editing, and accepted non-owner `setStaffStatus` changes enabled. |
 | `lib/services/shift_service.dart` | `staff`, `shifts`, `alcoholsales` | `staff`, `shifts`, `sales` below `TenantPaths` | Disabled shift and sales workflow. |
 | `lib/screens/return_detail_screen.dart` | `alcohol`, `returns` | `products`, `returns` below `TenantPaths`; stock restoration through `verifyReturnAndRestoreStock` | Disabled mutation workflow. |
 | `lib/screens/returns_screen.dart` | `staff`, `returns` | `staff`, `returns` below `TenantPaths` | Disabled returns workflow. |
@@ -46,6 +46,7 @@ repository may accept a raw root collection or arbitrary document path.
 | `lib/tenancy/firebase_tenant_gateway.dart` | `listMyTenants`, `setDefaultTenant` | No replacement | Current tenant-routing APIs. |
 | `lib/tenancy/tenant_staff_invitation.dart` | `inviteStaff` | No replacement | Current owner/admin-only form. The gateway derives the tenant from its captured live session, creates one request ID per intent, and strictly decodes the response. |
 | `lib/tenancy/tenant_staff_update.dart` | `updateStaffUser` | No replacement | Current owner/admin-only editor. The gateway derives the tenant and target UID from its captured session and decoded staff summary, preserves the owner role, and strictly decodes the response. |
+| `lib/tenancy/tenant_staff_status.dart` | `setStaffStatus` | No replacement | Current owner/admin-only confirmation flow for accepted non-owner memberships. The gateway derives the tenant and target UID, permits only active/inactive transitions, creates one request ID per intent, and strictly decodes the response. |
 
 Before enabling an operational route, search again for both direct Firestore
 calls and collection references initialized in constructors. This inventory is

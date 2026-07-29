@@ -6,6 +6,7 @@ import 'tenant_repository.dart';
 import 'tenant_route_guard.dart';
 import 'tenant_session.dart';
 import 'tenant_staff_invitation.dart';
+import 'tenant_staff_status.dart';
 import 'tenant_staff_update.dart';
 import 'tenant_types.dart';
 
@@ -196,6 +197,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     super.key,
     required this.reader,
     this.inviteCallable,
+    this.statusCallable,
     this.updateCallable,
     this.requestIdFactory,
   });
@@ -207,6 +209,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
 
   final TenantDataReader reader;
   final InviteStaffCallable? inviteCallable;
+  final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
 
@@ -216,6 +219,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     body: TenantStaffDirectoryPanel(
       reader: reader,
       inviteCallable: inviteCallable,
+      statusCallable: statusCallable,
       updateCallable: updateCallable,
       requestIdFactory: requestIdFactory,
     ),
@@ -228,12 +232,14 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
     super.key,
     required this.reader,
     this.inviteCallable,
+    this.statusCallable,
     this.updateCallable,
     this.requestIdFactory,
   });
 
   final TenantDataReader reader;
   final InviteStaffCallable? inviteCallable;
+  final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
 
@@ -260,6 +266,7 @@ final class _TenantStaffDirectoryPanelState
       session: session,
       page: page,
       inviteCallable: widget.inviteCallable,
+      statusCallable: widget.statusCallable,
       updateCallable: widget.updateCallable,
       requestIdFactory: widget.requestIdFactory,
       onMutationSuccess: _refreshFirstPage,
@@ -272,6 +279,7 @@ final class _StaffContents extends StatefulWidget {
     required this.session,
     required this.page,
     required this.inviteCallable,
+    required this.statusCallable,
     required this.updateCallable,
     required this.requestIdFactory,
     required this.onMutationSuccess,
@@ -280,6 +288,7 @@ final class _StaffContents extends StatefulWidget {
   final TenantSession session;
   final TenantStaffPage page;
   final InviteStaffCallable? inviteCallable;
+  final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
   final TenantStaffRequestIdFactory? requestIdFactory;
   final VoidCallback onMutationSuccess;
@@ -291,6 +300,7 @@ final class _StaffContents extends StatefulWidget {
 final class _StaffContentsState extends State<_StaffContents> {
   bool _showInvitationForm = false;
   TenantStaffSummary? _editingStaff;
+  TenantStaffSummary? _statusChangingStaff;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -358,15 +368,39 @@ final class _StaffContentsState extends State<_StaffContents> {
                       widget.session.canAccess(
                         allowedRoles: TenantStaffUpdateGateway.allowedRoles,
                       )
-                      ? IconButton(
-                          key: ValueKey('edit-staff-${staff.uid}'),
-                          tooltip: 'Edit ${staff.displayName}',
-                          onPressed: () => setState(() {
-                            _editingStaff = _editingStaff?.uid == staff.uid
-                                ? null
-                                : staff;
-                          }),
-                          icon: const Icon(Icons.edit_outlined),
+                      ? Wrap(
+                          children: [
+                            IconButton(
+                              key: ValueKey('edit-staff-${staff.uid}'),
+                              tooltip: 'Edit ${staff.displayName}',
+                              onPressed: () => setState(() {
+                                _statusChangingStaff = null;
+                                _editingStaff = _editingStaff?.uid == staff.uid
+                                    ? null
+                                    : staff;
+                              }),
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
+                            if (TenantStaffStatusGateway.canChangeTarget(staff))
+                              IconButton(
+                                key: ValueKey('set-staff-status-${staff.uid}'),
+                                tooltip: staff.status == MembershipStatus.active
+                                    ? 'Deactivate ${staff.displayName}'
+                                    : 'Activate ${staff.displayName}',
+                                onPressed: () => setState(() {
+                                  _editingStaff = null;
+                                  _statusChangingStaff =
+                                      _statusChangingStaff?.uid == staff.uid
+                                      ? null
+                                      : staff;
+                                }),
+                                icon: Icon(
+                                  staff.status == MembershipStatus.active
+                                      ? Icons.person_off_outlined
+                                      : Icons.person_add_alt_outlined,
+                                ),
+                              ),
+                          ],
                         )
                       : null,
                   isThreeLine: true,
@@ -385,6 +419,21 @@ final class _StaffContentsState extends State<_StaffContents> {
                       onCancel: () => setState(() => _editingStaff = null),
                     ),
                   ),
+                if (_statusChangingStaff?.uid == staff.uid)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: TenantStaffStatusForm(
+                      session: widget.session,
+                      target: staff,
+                      callable:
+                          widget.statusCallable ??
+                          FirebaseSetStaffStatusCallable(),
+                      requestIdFactory: widget.requestIdFactory,
+                      onSuccess: widget.onMutationSuccess,
+                      onCancel: () =>
+                          setState(() => _statusChangingStaff = null),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -396,7 +445,7 @@ final class _StaffContentsState extends State<_StaffContents> {
         ),
       const SizedBox(height: 12),
       const Text(
-        'Status changes, resend, cancellation, and email replacement remain '
+        'Invitation resend, cancellation, and email replacement remain '
         'unavailable.',
       ),
     ],
