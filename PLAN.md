@@ -1310,3 +1310,103 @@ Use a later separate session for the typed `inviteStaff`, `updateStaffUser`,
 `setStaffStatus`, pending-email replacement, resend, cancel, and invitation
 acceptance workflows. Checkout/Hive state, shifts, reports, returns, subscription
 surfaces, and all catalog mutations also remain outside this chunk.
+
+---
+
+## Read-only tenant staff-directory handoff - 2026-07-29
+
+### Completed in this session
+
+The next bounded frontend milestone implements only a canonical, read-only
+tenant staff directory. The legacy staff screens and every staff mutation remain
+disabled.
+
+Implemented behavior:
+
+- `TenantStaffSummary` strictly decodes canonical
+  `tenants/{tenantId}/staff/{uid}` records. The server-controlled `uid` must
+  exactly equal the document ID; email must already be normalized; role,
+  membership status, and invitation status must be known values; optional name
+  and phone values must be trimmed and control-character-free.
+- Membership/invitation combinations fail closed: pending staff may be pending
+  or sent, while active/inactive staff must be accepted. Cancelled or expired
+  invitations cannot remain as canonical staff projections.
+- Every page reads the canonical tenant root and the exact owner staff document.
+  `ownerUid` must be a valid document ID, the owner document must exist, and the
+  owner must be active with role `owner` and invitation state `accepted`. Any
+  other staff document projecting role `owner` is rejected.
+- `TenantReadRepository.readTenantRoot()` derives and validates the exact tenant
+  root path. Staff pages reuse the existing 1-50 item, document-ID-ordered query
+  contract and reject malformed, duplicate, unordered, nested, or cross-tenant
+  results.
+- A temporary staff-directory route is available only to owner/admin/manager.
+  Owner access uses the frozen owner-as-admin inheritance rule. Cashiers do not
+  see the landing action and the route guard starts no reads for them.
+- The route renders active, pending, and inactive summaries read-only. It exposes
+  no invite, resend, cancel, role, status, or email-replacement action.
+- Tenant switches invalidate outstanding directory loads through the existing
+  session epoch guard.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_repository.dart
+lib/tenancy/tenant_routing_shell.dart
+lib/tenancy/tenant_staff_directory.dart
+test/tenancy/tenant_staff_directory_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart`
+  reported no issues.
+- `flutter test --no-pub test/tenancy` passed **68/68** tests.
+- Eight staff-directory tests cover strict state decoding, exact UID checks,
+  malformed owner projections, normalized fields, bounded cursor progression,
+  cross-tenant/root rejection, real owner navigation, cashier denial without
+  reads, and tenant-switch stale-query rejection.
+- `git diff --check` was clean apart from expected Windows line-ending warnings
+  on existing files.
+
+The five user-owned Firebase environment edits remain separate and must not be
+staged with frontend code without confirming the environment mapping:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `inviteStaff` issuance from the new staff-directory
+foundation:
+
+1. Add a session-bound staff callable gateway for `inviteStaff` only. It must
+   derive `tenantId` from the captured `TenantSession`, accept no arbitrary
+   tenant/path input, generate one request ID per user intent, and strictly
+   decode the callable response.
+2. Freeze client validation for normalized email, trimmed name/phone, and the
+   allowed invite roles (`admin`, `manager`, `cashier`; never `owner`). Do not
+   infer that a client-side check replaces backend authorization.
+3. Add an owner/admin-only invitation form from the guarded staff directory.
+   Managers retain read-only directory access. Use single-flight submission,
+   keep the form recoverable after transient failures, and refresh the bounded
+   first page only after a successful current-session response.
+4. Reject stale success/failure completions after tenant or UID changes, and
+   never show raw callable/internal error details.
+5. Test owner-as-admin submission, manager/cashier denial without calls,
+   tenant-derived request payloads, invalid roles/fields, duplicate taps,
+   retry behavior, strict response decoding, and a tenant switch during an
+   outstanding invitation.
+
+Keep `createStaffUser`, `lib/screens/create_user.dart`, and the legacy
+`lib/screens/users.dart` unreachable. `updateStaffUser`, `setStaffStatus`, resend,
+cancel, pending-email replacement, and both invitation-acceptance routes remain
+separate later chunks. Checkout/Hive state, shifts, reports, returns,
+subscriptions, and catalog mutations also remain outside this scope.

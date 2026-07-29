@@ -131,6 +131,19 @@ abstract base class TenantReadRepository {
   final TenantDocumentReader reader;
   final TenantPaths paths;
 
+  /// Reads the canonical tenant root derived from this repository's session.
+  Future<Map<String, Object?>?> readTenantRoot() async {
+    final expectedPath = paths.root;
+    final snapshot = await reader.getDocument(expectedPath);
+    if (snapshot == null) return null;
+    if (snapshot.path != expectedPath) {
+      throw TenantScopeViolation(
+        'Expected $expectedPath but received ${snapshot.path}.',
+      );
+    }
+    return snapshot.data;
+  }
+
   Future<Map<String, Object?>?> readDocument(
     TenantCollection collection,
     String documentId,

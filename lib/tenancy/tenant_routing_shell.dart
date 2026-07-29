@@ -8,6 +8,7 @@ import 'tenant_catalog.dart';
 import 'tenant_membership.dart';
 import 'tenant_repository.dart';
 import 'tenant_session_controller.dart';
+import 'tenant_staff_directory.dart';
 import 'tenant_types.dart';
 
 typedef TenantRouteBuilder =
@@ -420,20 +421,45 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               ),
             ),
           ),
-          FilledButton.icon(
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: TenantCatalogScreen(reader: reader),
-                  ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: [
+              FilledButton.icon(
+                onPressed: () {
+                  final controller = TenantSessionScope.of(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => TenantSessionScope(
+                        controller: controller,
+                        child: TenantCatalogScreen(reader: reader),
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: const Text('View read-only catalog'),
+              ),
+              if (membership.role.canAccess(
+                TenantStaffDirectoryScreen.allowedRoles,
+              ))
+                OutlinedButton.icon(
+                  onPressed: () {
+                    final controller = TenantSessionScope.of(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TenantSessionScope(
+                          controller: controller,
+                          child: TenantStaffDirectoryScreen(reader: reader),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.people_outline),
+                  label: const Text('View staff directory'),
                 ),
-              );
-            },
-            icon: const Icon(Icons.inventory_2_outlined),
-            label: const Text('View read-only catalog'),
+            ],
           ),
         ],
       ),

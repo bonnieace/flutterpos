@@ -13,7 +13,7 @@ until each row is migrated and tested behind a live `TenantSession`.
 | `lib/pos/goods.dart` | `categories`, `alcohol` | `categories`, `products` below `TenantPaths` | Legacy screen and all mutations remain disabled. A separate guarded, paginated read-only catalog now uses the tenant paths. |
 | `lib/services/bulk_update_service.dart` | `alcohol` | `products` below `TenantPaths` | Disabled mutation/import workflow. |
 | `lib/services/bulk_upload_service.dart` | `alcohol` | `products` below `TenantPaths` | Disabled mutation/import workflow. |
-| `lib/screens/users.dart` | `staff` | `staff` below `TenantPaths` | Disabled staff read/mutation screen. |
+| `lib/screens/users.dart` | `staff` | `staff` below `TenantPaths` | Legacy screen and all mutations remain disabled. A separate owner/admin/manager-guarded, paginated read-only staff directory now uses canonical tenant paths. |
 | `lib/services/shift_service.dart` | `staff`, `shifts`, `alcoholsales` | `staff`, `shifts`, `sales` below `TenantPaths` | Disabled shift and sales workflow. |
 | `lib/screens/return_detail_screen.dart` | `alcohol`, `returns` | `products`, `returns` below `TenantPaths`; stock restoration through `verifyReturnAndRestoreStock` | Disabled mutation workflow. |
 | `lib/screens/returns_screen.dart` | `staff`, `returns` | `staff`, `returns` below `TenantPaths` | Disabled returns workflow. |
