@@ -68,6 +68,27 @@ test("tenant authorization checks the tenant-local role", () => {
   ));
 });
 
+test("owners inherit admin permission only when the owner invariant is valid", () => {
+  const context = assertTenantMemberDocuments(
+    "owner-1",
+    "tenant-1",
+    {accountType: "tenant_user", globalStatus: "active"},
+    {status: "active", ownerUid: "owner-1"},
+    {uid: "owner-1", role: "owner", status: "active"},
+    ["admin"]
+  );
+  assert.equal(context.staff.role, "owner");
+
+  expectHttpsCode("permission-denied", () => assertTenantMemberDocuments(
+    "owner-1",
+    "tenant-1",
+    {accountType: "tenant_user", globalStatus: "active"},
+    {status: "active", ownerUid: "different-user"},
+    {uid: "owner-1", role: "owner", status: "active"},
+    ["admin"]
+  ));
+});
+
 test("identity transitions block tenant applications", () => {
   expectHttpsCode("aborted", () => assertVerifiedTenantApplicant("user-1", {
     accountType: "tenant_user",

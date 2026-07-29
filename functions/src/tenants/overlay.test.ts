@@ -87,3 +87,20 @@ test("canAccess requires an active root, tenant, and exact canonical staff recor
   assert.equal(mismatchedItem.canAccess, false);
   assert.equal(mismatchedItem.canonicalMembershipExists, false);
 });
+
+test("an inconsistent canonical owner fails closed but remains visible", () => {
+  const item = overlayCanonicalTenantState("owner-1", "tenant-1", {}, ACTIVE_USER, {
+    status: "active",
+    ownerUid: "different-user",
+  }, {
+    uid: "owner-1",
+    role: "owner",
+    status: "active",
+  });
+
+  assert.equal(item.role, "owner");
+  assert.equal(item.isOwner, false);
+  assert.equal(item.canAccess, false);
+  assert.equal(item.tenantName, "tenant-1");
+  assert.equal(item.tenantSlug, "tenant-1");
+});

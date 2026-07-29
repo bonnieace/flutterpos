@@ -78,7 +78,13 @@ export function assertTenantMemberDocuments(
   if (!rawStaff || rawStaff.uid !== uid || rawStaff.status !== "active" || !isTenantRole(rawStaff.role)) {
     throw new HttpsError("permission-denied", "An active tenant membership is required.");
   }
-  if (allowedRoles && !allowedRoles.includes(rawStaff.role)) {
+  if (rawStaff.role === "owner" && rawTenant.ownerUid !== uid) {
+    throw new HttpsError("permission-denied", "The tenant owner invariant is invalid.");
+  }
+  const satisfiesAllowedRole = !allowedRoles ||
+    allowedRoles.includes(rawStaff.role) ||
+    (rawStaff.role === "owner" && allowedRoles.includes("admin"));
+  if (!satisfiesAllowedRole) {
     throw new HttpsError("permission-denied", "Your tenant role cannot perform this operation.");
   }
   return {

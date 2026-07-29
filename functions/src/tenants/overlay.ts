@@ -133,20 +133,26 @@ export function overlayCanonicalTenantState(
     membershipStatus(staff.status) ?? "inactive" :
     membershipStatus(mirror.membershipStatus) ?? "inactive";
   const currentRole = canonicalRole ?? mirrorRole(mirror.role);
+  const ownerInvariantValid = canonicalRole !== "owner" || tenant?.ownerUid === uid;
   const canAccess = user?.globalStatus === "active" &&
     user.accountType === "tenant_user" &&
     canonicalTenantExists &&
     currentTenantStatus === "active" &&
     canonicalMembershipExists &&
     currentMembershipStatus === "active" &&
-    canonicalRole !== undefined;
+    canonicalRole !== undefined &&
+    ownerInvariantValid;
 
   return {
     // The mirror document ID is authoritative for routing. A stale field cannot
     // redirect canonical lookups to a different tenant.
     tenantId,
-    tenantName: nonEmptyString(tenant?.name) ?? nonEmptyString(mirror.tenantName) ?? "",
-    tenantSlug: nonEmptyString(tenant?.slug) ?? nonEmptyString(mirror.tenantSlug) ?? "",
+    tenantName: nonEmptyString(tenant?.name) ??
+      nonEmptyString(mirror.tenantName) ??
+      tenantId,
+    tenantSlug: nonEmptyString(tenant?.slug) ??
+      nonEmptyString(mirror.tenantSlug) ??
+      tenantId,
     role: currentRole,
     membershipStatus: currentMembershipStatus,
     tenantStatus: currentTenantStatus,
