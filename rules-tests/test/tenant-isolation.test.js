@@ -211,6 +211,32 @@ test("an inactive canonical staff record revokes tenant access", async () => {
   );
 });
 
+test("reactivation requires a token minted at or after the root auth cutoff", async () => {
+  await seedDocuments(testEnvironment, {
+    ...activeTenantDocuments({uid: "reactivated-user"}),
+    "users/reactivated-user": {
+      accountType: "tenant_user",
+      globalStatus: "active",
+      authValidAfterSeconds: 1_000,
+    },
+    "tenants/tenant-a/products/product-a": {quantity: 2},
+  });
+
+  const staleDb = authenticatedFirestore(
+    testEnvironment,
+    "reactivated-user",
+    {auth_time: 999},
+  );
+  const freshDb = authenticatedFirestore(
+    testEnvironment,
+    "reactivated-user",
+    {auth_time: 1_000},
+  );
+
+  await assertFails(getDoc(doc(staleDb, "tenants/tenant-a/products/product-a")));
+  await assertSucceeds(getDoc(doc(freshDb, "tenants/tenant-a/products/product-a")));
+});
+
 test("a platform identity cannot gain tenant access from a canonical staff record", async () => {
   await seedDocuments(testEnvironment, {
     ...activeTenantDocuments({

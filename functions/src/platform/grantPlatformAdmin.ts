@@ -69,6 +69,68 @@ export function mergeSuperAdminClaim(
   };
 }
 
+export function removePlatformRoleClaim(
+  existingClaims: Readonly<Record<string, unknown>> | undefined
+): Record<string, unknown> {
+  const claims = {...(existingClaims ?? {})};
+  delete claims.platformRole;
+  return claims;
+}
+
+export class PlatformGrantCompletionCompensationError extends Error {
+  constructor(
+    readonly completionError: unknown,
+    readonly claimCompensated: boolean,
+    readonly compensationError?: unknown
+  ) {
+    super(claimCompensated ?
+      "The platform grant completion failed and its Auth claim was removed." :
+      "The platform grant completion and Auth claim rollback both failed."
+    );
+    this.name = "PlatformGrantCompletionCompensationError";
+  }
+}
+
+/**
+ * Completes the Firestore half of an already-applied claim change. If the
+ * guarded completion loses its race, the claim is removed so a later account
+ * reactivation cannot turn the stale Auth state into platform access.
+ */
+export async function completeGrantWithClaimCompensation(
+  auth: CustomClaimsClient,
+  targetUid: string,
+  complete: () => Promise<void>
+): Promise<void> {
+  try {
+    await complete();
+  } catch (completionError) {
+    try {
+      const authUser = await auth.getUser(targetUid);
+      const currentClaims = authUser.customClaims;
+      if (currentClaims &&
+        Object.prototype.hasOwnProperty.call(currentClaims, "platformRole")) {
+        await auth.setCustomUserClaims(
+          targetUid,
+          removePlatformRoleClaim(currentClaims)
+        );
+      }
+      throw new PlatformGrantCompletionCompensationError(
+        completionError,
+        true
+      );
+    } catch (compensationError) {
+      if (compensationError instanceof PlatformGrantCompletionCompensationError) {
+        throw compensationError;
+      }
+      throw new PlatformGrantCompletionCompensationError(
+        completionError,
+        false,
+        compensationError
+      );
+    }
+  }
+}
+
 interface EligibilityAuditSummary {
   canonicalScans: readonly string[];
   canonicalEvidenceCounts: {
@@ -233,7 +295,6 @@ export async function grantPlatformAdmin(
       targetUid: input.targetUid,
       expectedTransition: "granting_platform",
       expectedAccountTypes: ["tenant_user", "platform_admin"],
-      rootUpdates: {accountType: "platform_admin"},
       audit: {
         documentPath: auditPath,
         data: {
@@ -270,25 +331,40 @@ export async function grantPlatformAdmin(
   }
 
   try {
-    await clearIdentityTransition(db, {
-      targetUid: input.targetUid,
-      expectedTransition: "granting_platform",
-      expectedAccountTypes: ["platform_admin"],
-      audit: {
-        documentPath: auditPath,
-        data: {
-          status: "completed",
-          recoverable: false,
-          completedAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
+    await completeGrantWithClaimCompensation(auth, input.targetUid, async () => {
+      await clearIdentityTransition(db, {
+        targetUid: input.targetUid,
+        expectedTransition: "granting_platform",
+        // `platform_admin` supports safe resumption of operations prepared by
+        // the previous saga ordering. New grants remain tenant_user until this
+        // completion commits atomically with the transition clear.
+        expectedAccountTypes: ["tenant_user", "platform_admin"],
+        rootUpdates: {accountType: "platform_admin"},
+        audit: {
+          documentPath: auditPath,
+          data: {
+            status: "completed",
+            recoverable: false,
+            completedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
         },
-      },
+      });
     });
   } catch (error) {
-    await recordRecoverableFailure(db, auditPath, "firestore_completion", error);
+    const compensated = error instanceof PlatformGrantCompletionCompensationError &&
+      error.claimCompensated;
+    await recordRecoverableFailure(
+      db,
+      auditPath,
+      compensated ? "firestore_completion_claim_rolled_back" : "custom_claims_rollback",
+      error
+    );
     throw new PlatformAdminGrantError(
       "grant-completion-failed",
-      "The Auth claim was applied but completion is pending; retry the grant.",
+      compensated ?
+        "The grant did not complete and its Auth claim was removed; retry the grant." :
+        "The grant and Auth claim rollback did not complete; retry remediation is required.",
       true,
       error
     );

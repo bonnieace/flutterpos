@@ -38,19 +38,32 @@ export function requireAuthenticatedUser<T>(
 
 export function assertActiveRootUser(
   uid: string,
-  rawUser: RootUserRecord | undefined
+  rawUser: RootUserRecord | undefined,
+  authTime?: unknown
 ): RootUserRecord {
   if (!rawUser || rawUser.globalStatus !== "active") {
     throw new HttpsError("permission-denied", "This account is not active.");
+  }
+  if (rawUser.authValidAfterSeconds !== undefined && (
+    !Number.isSafeInteger(rawUser.authValidAfterSeconds) ||
+    typeof authTime !== "number" ||
+    !Number.isSafeInteger(authTime) ||
+    authTime < rawUser.authValidAfterSeconds
+  )) {
+    throw new HttpsError(
+      "permission-denied",
+      "A new sign-in is required for this account."
+    );
   }
   return rawUser;
 }
 
 export function assertVerifiedTenantApplicant(
   uid: string,
-  rawUser: RootUserRecord | undefined
+  rawUser: RootUserRecord | undefined,
+  authTime?: unknown
 ): RootUserRecord {
-  const user = assertActiveRootUser(uid, rawUser);
+  const user = assertActiveRootUser(uid, rawUser, authTime);
   if (user.identityTransition) {
     throw new HttpsError("aborted", "An identity transition is currently in progress.");
   }
@@ -66,9 +79,10 @@ export function assertTenantMemberDocuments(
   rawUser: RootUserRecord | undefined,
   rawTenant: TenantRecord | undefined,
   rawStaff: CanonicalStaffRecord | undefined,
-  allowedRoles?: readonly TenantRole[]
+  allowedRoles?: readonly TenantRole[],
+  authTime?: unknown
 ): TenantAuthorizationContext {
-  const user = assertActiveRootUser(uid, rawUser);
+  const user = assertActiveRootUser(uid, rawUser, authTime);
   if (user.accountType !== "tenant_user") {
     throw new HttpsError("permission-denied", "Platform identities cannot access tenant data.");
   }
@@ -99,9 +113,10 @@ export function assertTenantMemberDocuments(
 export function assertPlatformAdminDocuments(
   uid: string,
   platformRole: unknown,
-  rawUser: RootUserRecord | undefined
+  rawUser: RootUserRecord | undefined,
+  authTime?: unknown
 ): PlatformAuthorizationContext {
-  const user = assertActiveRootUser(uid, rawUser);
+  const user = assertActiveRootUser(uid, rawUser, authTime);
   if (platformRole !== "superAdmin" || user.accountType !== "platform_admin") {
     throw new HttpsError("permission-denied", "Platform administrator access is required.");
   }
@@ -120,7 +135,8 @@ export async function requireVerifiedTenantApplicant<T>(
     uid: auth.uid,
     user: assertVerifiedTenantApplicant(
       auth.uid,
-      userSnapshot.exists ? userSnapshot.data() as RootUserRecord : undefined
+      userSnapshot.exists ? userSnapshot.data() as RootUserRecord : undefined,
+      auth.token.auth_time
     ),
   };
 }
@@ -147,7 +163,8 @@ export async function requireTenantMember<T>(
     userSnapshot.exists ? userSnapshot.data() as RootUserRecord : undefined,
     tenantSnapshot.exists ? tenantSnapshot.data() as TenantRecord : undefined,
     staffSnapshot.exists ? staffSnapshot.data() as CanonicalStaffRecord : undefined,
-    allowedRoles
+    allowedRoles,
+    auth.token.auth_time
   );
 }
 
@@ -162,6 +179,7 @@ export async function requirePlatformAdmin<T>(
   return assertPlatformAdminDocuments(
     auth.uid,
     auth.token.platformRole,
-    userSnapshot.exists ? userSnapshot.data() as RootUserRecord : undefined
+    userSnapshot.exists ? userSnapshot.data() as RootUserRecord : undefined,
+    auth.token.auth_time
   );
 }

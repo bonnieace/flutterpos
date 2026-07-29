@@ -115,3 +115,33 @@ test("platform access requires both claim and active platform record", () => {
     {accountType: "platform_admin", globalStatus: "active"}
   ));
 });
+
+test("a reactivated root rejects tokens minted before its auth cutoff", () => {
+  expectHttpsCode("permission-denied", () => assertTenantMemberDocuments(
+    "user-1",
+    "tenant-1",
+    {
+      accountType: "tenant_user",
+      globalStatus: "active",
+      authValidAfterSeconds: 1_000,
+    },
+    {status: "active", ownerUid: "owner-1"},
+    {uid: "user-1", role: "manager", status: "active"},
+    undefined,
+    999
+  ));
+  const fresh = assertTenantMemberDocuments(
+    "user-1",
+    "tenant-1",
+    {
+      accountType: "tenant_user",
+      globalStatus: "active",
+      authValidAfterSeconds: 1_000,
+    },
+    {status: "active", ownerUid: "owner-1"},
+    {uid: "user-1", role: "manager", status: "active"},
+    undefined,
+    1_000
+  );
+  assert.equal(fresh.uid, "user-1");
+});

@@ -3,6 +3,9 @@ import * as admin from "firebase-admin";
 import { getFirestore, Query, DocumentData } from "firebase-admin/firestore";
 export {requestTenant} from "./tenants/onboarding";
 export {listMyTenants, setDefaultTenant} from "./tenants/routing";
+export {setTenantLifecycle} from "./lifecycle/tenantLifecycle";
+export {setGlobalUserStatus} from "./lifecycle/globalStatus";
+export {retryGlobalUserStatusOperations} from "./lifecycle/retryWorker";
 admin.initializeApp();
 // ── Request / response types ─────────────────────────────────────────────────
 

@@ -148,7 +148,8 @@ export const listMyTenants = onCall<ListMyTenantsRequest, Promise<ListMyTenantsR
       [];
     const user = assertActiveRootUser(
       auth.uid,
-      userSnapshot.exists ? userSnapshot.data() as RootUserRecord : undefined
+      userSnapshot.exists ? userSnapshot.data() as RootUserRecord : undefined,
+      auth.token.auth_time
     );
     if (user.accountType !== "tenant_user") {
       throw new HttpsError(

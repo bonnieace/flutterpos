@@ -26,6 +26,7 @@ export interface RootUserRecord {
   identityOrigin?: "self_signup" | "staff_invitation" | "platform_bootstrap";
   identityTransition?: "granting_platform" | "cleanup_pending";
   globalStatus?: GlobalStatus;
+  authValidAfterSeconds?: number;
   defaultTenantId?: string;
   membershipCount?: number;
   ownedTenantCount?: number;

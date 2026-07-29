@@ -21,7 +21,16 @@ service cloud.firestore {
     function globallyActive() {
       return signedIn()
         && exists(rootUserPath(request.auth.uid))
-        && get(rootUserPath(request.auth.uid)).data.globalStatus == 'active';
+        && get(rootUserPath(request.auth.uid)).data.globalStatus == 'active'
+        && (
+          !('authValidAfterSeconds' in get(rootUserPath(request.auth.uid)).data)
+          || (
+            get(rootUserPath(request.auth.uid)).data.authValidAfterSeconds is int
+            && request.auth.token.auth_time is int
+            && request.auth.token.auth_time
+              >= get(rootUserPath(request.auth.uid)).data.authValidAfterSeconds
+          )
+        );
     }
 
     function tenantIdentity() {
