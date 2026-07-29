@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
+import 'tenant_catalog.dart';
 import 'tenant_membership.dart';
 import 'tenant_repository.dart';
 import 'tenant_session_controller.dart';
@@ -396,7 +397,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   });
 
   final TenantMembership membership;
-  final TenantDocumentReader reader;
+  final TenantDataReader reader;
   final Future<void> Function() onSignOut;
 
   @override
@@ -407,13 +408,34 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         TextButton(onPressed: onSignOut, child: const Text('Sign out')),
       ],
     ),
-    body: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: TenantBrandingPanel(
-          reader: reader,
-          fallbackName: membership.tenantName,
-        ),
+    body: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: TenantBrandingPanel(
+                reader: reader,
+                fallbackName: membership.tenantName,
+              ),
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: TenantCatalogScreen(reader: reader),
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('View read-only catalog'),
+          ),
+        ],
       ),
     ),
   );

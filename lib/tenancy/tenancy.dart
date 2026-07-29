@@ -1,6 +1,7 @@
 export 'tenant_access.dart';
 export 'tenant_branding.dart';
 export 'tenant_bootstrap.dart';
+export 'tenant_catalog.dart';
 export 'tenant_directory.dart';
 export 'firebase_tenant_gateway.dart';
 export 'hive_tenant_selection_store.dart';

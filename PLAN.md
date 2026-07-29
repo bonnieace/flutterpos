@@ -1217,3 +1217,96 @@ Implement only a read-only tenant product/category catalog foundation:
 5. Test missing/wrong-role access, malformed documents, cross-tenant query results, pagination boundaries, and a tenant switch during an outstanding query.
 
 Keep the legacy hub disabled. Staff lifecycle migration, checkout/Hive state, shifts, reports, returns, and mutation workflows remain separate later chunks.
+
+---
+
+## Read-only tenant catalog handoff - 2026-07-29
+
+### Completed in this session
+
+The next bounded frontend milestone implements only the tenant product/category
+catalog foundation. The legacy hub and every operational mutation remain
+disabled.
+
+Implemented behavior:
+
+- Strict category and product read models validate exact tenant document paths,
+  non-empty names and SKUs, finite non-negative prices, signed safe-integer
+  quantities, HTTPS image URLs, and category document IDs. Product reads accept
+  the legacy `category` alias during migration, but reject it when it conflicts
+  with `categoryId`.
+- The repository boundary now supports collection queries that can only be
+  constructed from `TenantPaths`. Firebase orders by document ID, pages are
+  limited to 1-50 items, one look-ahead document determines `hasMore`, and the
+  cursor is the last returned document ID.
+- Collection reads reject cross-tenant paths, nested/non-exact document paths,
+  duplicate documents, unordered results, and readers that exceed the requested
+  bound.
+- The tenant-safe landing screen links to a temporary guarded read-only catalog.
+  The pushed route receives the same live `TenantSessionController`, so missing,
+  wrong-role, switched-tenant, and stale-epoch states continue to fail closed.
+- The catalog renders only bounded category/product results and explicitly
+  exposes no add, edit, delete, stock, checkout, return, or report action.
+- The migration inventory now distinguishes this safe catalog from the still
+  disabled `goods.dart` and `pos.dart` legacy screens.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_catalog.dart
+lib/tenancy/tenant_repository.dart
+lib/tenancy/tenant_routing_shell.dart
+test/tenancy/tenant_catalog_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart`
+  reported no issues.
+- `flutter test --no-pub test/tenancy` passed **60/60** tests.
+- Seven catalog tests cover strict current/legacy decoding, malformed paths and
+  fields, bounded cursor progression, invalid page sizes, cross-tenant results,
+  real safe-landing navigation, missing/wrong-role denial, and tenant-switch
+  stale-query rejection.
+- `git diff --check` was clean apart from expected Windows line-ending warnings
+  on existing files.
+
+The five user-owned Firebase environment edits remain separate and must not be
+staged with frontend code without confirming the environment mapping:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+### Next bounded frontend chunk
+
+Implement only a read-only tenant staff-directory foundation:
+
+1. Freeze a strict canonical staff summary model from
+   `tenants/{tenantId}/staff/{uid}`, including exact agreement between the
+   document ID and server-controlled `uid`, known roles/statuses, and the
+   invitation fields that are safe to display.
+2. Reuse the tenant-derived bounded collection boundary and deterministic
+   document-ID pagination. Reject cross-tenant responses and duplicate or
+   malformed staff identities.
+3. Add a management-only route guarded for owner/admin/manager. Render active,
+   pending, and inactive staff read-only; do not expose invitations, role
+   changes, status changes, email replacement, or cancellation actions yet.
+4. Test owner-as-admin access, cashier denial without reads, malformed owner or
+   UID projections, page boundaries, and a tenant switch during an outstanding
+   staff query.
+5. Update the inventory, but leave `lib/screens/users.dart`,
+   `lib/screens/create_user.dart`, `createStaffUser`, and `toggleStaffStatus`
+   unreachable and unchanged.
+
+Use a later separate session for the typed `inviteStaff`, `updateStaffUser`,
+`setStaffStatus`, pending-email replacement, resend, cancel, and invitation
+acceptance workflows. Checkout/Hive state, shifts, reports, returns, subscription
+surfaces, and all catalog mutations also remain outside this chunk.

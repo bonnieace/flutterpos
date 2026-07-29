@@ -1,0 +1,362 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  group('strict catalog models', () {
+    test('decodes current and legacy category references without coercion', () {
+      final current = TenantProduct.fromSnapshot(
+        _productSnapshot('tenant-a', 'product-a'),
+      );
+      final legacy = TenantProduct.fromSnapshot(
+        _productSnapshot(
+          'tenant-a',
+          'product-b',
+          data: _productData()
+            ..remove('categoryId')
+            ..['category'] = 'drinks',
+        ),
+      );
+
+      expect(current.id, 'product-a');
+      expect(current.price, 120.5);
+      expect(current.quantity, -2);
+      expect(current.categoryId, 'drinks');
+      expect(legacy.categoryId, 'drinks');
+    });
+
+    test('rejects malformed paths, quantities, prices, and categories', () {
+      expect(
+        () => TenantProduct.fromSnapshot(
+          TenantQueryDocumentSnapshot(
+            path: 'tenants/bad/path/products/product-a',
+            data: _productData(),
+          ),
+        ),
+        throwsFormatException,
+      );
+
+      for (final invalidQuantity in <Object?>[1.5, '2', 9007199254740992]) {
+        expect(
+          () => TenantProduct.fromSnapshot(
+            _productSnapshot(
+              'tenant-a',
+              'product-a',
+              data: _productData()..['quantity'] = invalidQuantity,
+            ),
+          ),
+          throwsFormatException,
+        );
+      }
+
+      for (final invalidPrice in <Object?>['120.5', -1, double.nan]) {
+        expect(
+          () => TenantProduct.fromSnapshot(
+            _productSnapshot(
+              'tenant-a',
+              'product-a',
+              data: _productData()..['price'] = invalidPrice,
+            ),
+          ),
+          throwsFormatException,
+        );
+      }
+
+      expect(
+        () => TenantProduct.fromSnapshot(
+          _productSnapshot(
+            'tenant-a',
+            'product-a',
+            data: _productData()..['categoryId'] = 'escape/path',
+          ),
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => TenantProduct.fromSnapshot(
+          _productSnapshot(
+            'tenant-a',
+            'product-a',
+            data: _productData()
+              ..['categoryId'] = 'drinks'
+              ..['category'] = 'food',
+          ),
+        ),
+        throwsFormatException,
+      );
+    });
+  });
+
+  group('tenant collection pagination', () {
+    test(
+      'derives the path, bounds pages, and advances a stable cursor',
+      () async {
+        final reader = _CatalogReader(
+          handler: (query) async => [
+            _productSnapshot('tenant-a', 'product-a'),
+            _productSnapshot('tenant-a', 'product-b'),
+            _productSnapshot('tenant-a', 'product-c'),
+          ],
+        );
+        final repository = TenantCatalogRepository(
+          session: _session('tenant-a'),
+          reader: reader,
+        );
+
+        final page = await repository.loadProducts(pageSize: 2);
+
+        expect(
+          reader.queries.single.collectionPath,
+          'tenants/tenant-a/products',
+        );
+        expect(reader.queries.single.limit, 3);
+        expect(page.items.map((item) => item.id), ['product-a', 'product-b']);
+        expect(page.hasMore, isTrue);
+        expect(page.nextCursor, 'product-b');
+
+        reader.handler = (query) async {
+          expect(query.startAfterDocumentId, 'product-b');
+          return [_productSnapshot('tenant-a', 'product-c')];
+        };
+        final finalPage = await repository.loadProducts(
+          pageSize: 2,
+          cursor: page.nextCursor,
+        );
+        expect(finalPage.items.single.id, 'product-c');
+        expect(finalPage.hasMore, isFalse);
+        expect(finalPage.nextCursor, isNull);
+      },
+    );
+
+    test('rejects invalid page sizes and cross-tenant query results', () async {
+      final reader = _CatalogReader(
+        handler: (_) async => [_productSnapshot('tenant-b', 'product-a')],
+      );
+      final repository = TenantCatalogRepository(
+        session: _session('tenant-a'),
+        reader: reader,
+      );
+
+      await expectLater(repository.loadProducts(pageSize: 0), throwsRangeError);
+      await expectLater(
+        repository.loadProducts(pageSize: 51),
+        throwsRangeError,
+      );
+      await expectLater(
+        repository.loadProducts(),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+      expect(
+        () => TenantSession.active(
+          uid: 'user-a',
+          tenantId: 'bad/tenant',
+          role: TenantRole.admin,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('guarded catalog route', () {
+    testWidgets('safe landing opens the guarded read-only route', (
+      tester,
+    ) async {
+      final controller = TenantSessionController()
+        ..open(uid: 'user-a', membership: _membership('tenant-a'));
+      final reader = _CatalogReader(
+        handler: (query) async => query.collectionPath.endsWith('/categories')
+            ? [_categorySnapshot('tenant-a', 'drinks')]
+            : [_productSnapshot('tenant-a', 'product-a')],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TenantSessionScope(
+            controller: controller,
+            child: TenantSafeLandingScreen(
+              membership: _membership('tenant-a'),
+              reader: reader,
+              onSignOut: () async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('View read-only catalog'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Product catalog'), findsOneWidget);
+      expect(find.text('Cold lager'), findsOneWidget);
+      expect(find.text('Catalog changes'), findsNothing);
+      expect(find.textContaining('Catalog changes'), findsOneWidget);
+      expect(find.text('Add product'), findsNothing);
+    });
+
+    testWidgets('missing and wrong-role sessions never start a query', (
+      tester,
+    ) async {
+      final reader = _CatalogReader(handler: (_) async => const []);
+      final missing = TenantSessionController();
+      await tester.pumpWidget(_catalogApp(controller: missing, reader: reader));
+      expect(find.text('Tenant access unavailable.'), findsOneWidget);
+      expect(reader.queries, isEmpty);
+
+      final cashier = TenantSessionController()
+        ..open(
+          uid: 'user-a',
+          membership: _membership('tenant-a', role: TenantRole.cashier),
+        );
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: cashier,
+          reader: reader,
+          allowedRoles: const [TenantRole.manager],
+        ),
+      );
+      expect(find.text('Tenant access unavailable.'), findsOneWidget);
+      expect(reader.queries, isEmpty);
+    });
+
+    testWidgets('a tenant switch discards outstanding catalog queries', (
+      tester,
+    ) async {
+      final controller = TenantSessionController()
+        ..open(uid: 'user-a', membership: _membership('tenant-a'));
+      final pending = <String, Completer<List<TenantQueryDocumentSnapshot>>>{};
+      final reader = _CatalogReader(
+        handler: (query) {
+          final completer = Completer<List<TenantQueryDocumentSnapshot>>();
+          pending[query.collectionPath] = completer;
+          return completer.future;
+        },
+      );
+      await tester.pumpWidget(
+        _catalogApp(controller: controller, reader: reader),
+      );
+      expect(
+        pending.keys,
+        containsAll(<String>[
+          'tenants/tenant-a/categories',
+          'tenants/tenant-a/products',
+        ]),
+      );
+
+      controller.open(uid: 'user-a', membership: _membership('tenant-b'));
+      await tester.pump();
+      expect(
+        pending.keys,
+        containsAll(<String>[
+          'tenants/tenant-b/categories',
+          'tenants/tenant-b/products',
+        ]),
+      );
+
+      pending['tenants/tenant-a/categories']!.complete([
+        _categorySnapshot('tenant-a', 'drinks'),
+      ]);
+      pending['tenants/tenant-a/products']!.complete([
+        _productSnapshot('tenant-a', 'stale-product', name: 'Stale lager'),
+      ]);
+      await tester.pump();
+      expect(find.text('Stale lager'), findsNothing);
+
+      pending['tenants/tenant-b/categories']!.complete([
+        _categorySnapshot('tenant-b', 'drinks'),
+      ]);
+      pending['tenants/tenant-b/products']!.complete([
+        _productSnapshot('tenant-b', 'current-product', name: 'Current soda'),
+      ]);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Business: tenant-b'), findsOneWidget);
+      expect(find.text('Current soda'), findsOneWidget);
+      expect(find.text('Stale lager'), findsNothing);
+    });
+  });
+}
+
+final class _CatalogReader implements TenantDataReader {
+  _CatalogReader({required this.handler});
+
+  Future<List<TenantQueryDocumentSnapshot>> Function(TenantCollectionQuery)
+  handler;
+  final List<TenantCollectionQuery> queries = [];
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) {
+    queries.add(query);
+    return handler(query);
+  }
+}
+
+Widget _catalogApp({
+  required TenantSessionController controller,
+  required TenantDataReader reader,
+  Iterable<TenantRole>? allowedRoles,
+}) => MaterialApp(
+  home: TenantSessionScope(
+    controller: controller,
+    child: Scaffold(
+      body: TenantCatalogPanel(reader: reader, allowedRoles: allowedRoles),
+    ),
+  ),
+);
+
+TenantSession _session(String tenantId) => TenantSession.active(
+  uid: 'user-a',
+  tenantId: tenantId,
+  role: TenantRole.admin,
+);
+
+TenantQueryDocumentSnapshot _productSnapshot(
+  String tenantId,
+  String productId, {
+  String name = 'Cold lager',
+  Map<String, Object?>? data,
+}) => TenantQueryDocumentSnapshot(
+  path: 'tenants/$tenantId/products/$productId',
+  data: data ?? (_productData()..['name'] = name),
+);
+
+Map<String, Object?> _productData() => <String, Object?>{
+  'name': 'Cold lager',
+  'SKU': 'LAGER-001',
+  'price': 120.5,
+  'quantity': -2,
+  'categoryId': 'drinks',
+  'image': 'https://example.test/lager.png',
+};
+
+TenantQueryDocumentSnapshot _categorySnapshot(
+  String tenantId,
+  String categoryId,
+) => TenantQueryDocumentSnapshot(
+  path: 'tenants/$tenantId/categories/$categoryId',
+  data: const {'name': 'Drinks'},
+);
+
+TenantMembership _membership(
+  String tenantId, {
+  TenantRole role = TenantRole.admin,
+}) => TenantMembership(
+  tenantId: tenantId,
+  tenantName: tenantId,
+  tenantSlug: tenantId,
+  role: role,
+  membershipStatus: MembershipStatus.active,
+  tenantStatus: TenantStatus.active,
+  isOwner: role == TenantRole.owner,
+  mirrorVersion: 1,
+  createdAt: DateTime.utc(2026, 7, 29),
+  updatedAt: DateTime.utc(2026, 7, 29),
+  serverCanAccess: true,
+  canonicalTenantExists: true,
+  canonicalMembershipExists: true,
+);
