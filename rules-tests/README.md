@@ -1,0 +1,31 @@
+# Firestore rules tests
+
+This package runs only against the Firestore emulator. The harness requires
+`FIRESTORE_EMULATOR_HOST` and hard-codes the `demo-multitenant-rules` project so
+it cannot fall back to a real Firebase project.
+
+Prerequisites: Node.js 20 or newer and JDK 21 or newer.
+
+From the repository root:
+
+```powershell
+npm --prefix rules-tests install
+npm --prefix rules-tests run test:emulator
+```
+
+`firebase emulators:exec` supplies `FIRESTORE_EMULATOR_HOST` to the test
+process. To run against an emulator that is already listening on port 8180:
+
+```powershell
+$env:FIRESTORE_EMULATOR_HOST = '127.0.0.1:8180'
+npm --prefix rules-tests test
+```
+
+## Rules-language boundary
+
+Firestore Rules do not provide a general loop or `every` operation for lists.
+Sale-line validation is therefore capped at 16 items and explicitly checks all
+16 positions to stay within Firestore's expression limit. Rules can enforce
+that an immutable sale document ID equals its `checkoutId`, but cannot prove
+how a client generated that ID or recompute its payload hash; the checkout
+coordinator owns those deterministic algorithms.

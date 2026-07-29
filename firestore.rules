@@ -1,0 +1,294 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function rootUserPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function tenantPath(tenantId) {
+      return /databases/$(database)/documents/tenants/$(tenantId);
+    }
+
+    function staffPath(tenantId, uid) {
+      return /databases/$(database)/documents/tenants/$(tenantId)/staff/$(uid);
+    }
+
+    function globallyActive() {
+      return signedIn()
+        && exists(rootUserPath(request.auth.uid))
+        && get(rootUserPath(request.auth.uid)).data.globalStatus == 'active';
+    }
+
+    function tenantIdentity() {
+      return globallyActive()
+        && get(rootUserPath(request.auth.uid)).data.accountType == 'tenant_user';
+    }
+
+    function activeTenant(tenantId) {
+      return exists(tenantPath(tenantId))
+        && get(tenantPath(tenantId)).data.status == 'active';
+    }
+
+    function activeStaff(tenantId) {
+      return tenantIdentity()
+        && activeTenant(tenantId)
+        && exists(staffPath(tenantId, request.auth.uid))
+        && get(staffPath(tenantId, request.auth.uid)).data.uid == request.auth.uid
+        && get(staffPath(tenantId, request.auth.uid)).data.status == 'active'
+        && get(staffPath(tenantId, request.auth.uid)).data.role
+          in ['owner', 'admin', 'manager', 'cashier']
+        && (
+          get(staffPath(tenantId, request.auth.uid)).data.role != 'owner'
+          || get(tenantPath(tenantId)).data.ownerUid == request.auth.uid
+        );
+    }
+
+    function tenantRole(tenantId) {
+      return get(staffPath(tenantId, request.auth.uid)).data.role;
+    }
+
+    function hasTenantRole(tenantId, roles) {
+      return activeStaff(tenantId) && tenantRole(tenantId) in roles;
+    }
+
+    function platformAdmin() {
+      return globallyActive()
+        && request.auth.token.platformRole == 'superAdmin'
+        && get(rootUserPath(request.auth.uid)).data.accountType == 'platform_admin';
+    }
+
+    function validSaleLine(line) {
+      return line is map
+        && line.productId is string
+        && line.productId.size() > 0
+        && line.quantity is int
+        && line.quantity > 0;
+    }
+
+    function validSaleLines(lines) {
+      return lines is list
+        && lines.size() > 0
+        && lines.size() <= 16
+        && (lines.size() <= 0 || validSaleLine(lines[0]))
+        && (lines.size() <= 1 || validSaleLine(lines[1]))
+        && (lines.size() <= 2 || validSaleLine(lines[2]))
+        && (lines.size() <= 3 || validSaleLine(lines[3]))
+        && (lines.size() <= 4 || validSaleLine(lines[4]))
+        && (lines.size() <= 5 || validSaleLine(lines[5]))
+        && (lines.size() <= 6 || validSaleLine(lines[6]))
+        && (lines.size() <= 7 || validSaleLine(lines[7]))
+        && (lines.size() <= 8 || validSaleLine(lines[8]))
+        && (lines.size() <= 9 || validSaleLine(lines[9]))
+        && (lines.size() <= 10 || validSaleLine(lines[10]))
+        && (lines.size() <= 11 || validSaleLine(lines[11]))
+        && (lines.size() <= 12 || validSaleLine(lines[12]))
+        && (lines.size() <= 13 || validSaleLine(lines[13]))
+        && (lines.size() <= 14 || validSaleLine(lines[14]))
+        && (lines.size() <= 15 || validSaleLine(lines[15]));
+    }
+
+    match /users/{uid} {
+      allow get: if (signedIn() && request.auth.uid == uid) || platformAdmin();
+      allow list: if platformAdmin();
+      allow create, update, delete: if false;
+
+      match /tenant_memberships/{tenantId} {
+        allow read: if tenantIdentity() && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      match /tenant_request_events/{eventId} {
+        allow read, write: if false;
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if activeStaff(tenantId) || platformAdmin();
+      allow write: if false;
+
+      match /staff/{uid} {
+        allow read: if activeStaff(tenantId) || platformAdmin();
+        allow write: if false;
+      }
+
+      match /staff_invitations/{uid} {
+        allow read, write: if false;
+      }
+
+      match /products/{productId} {
+        allow read: if activeStaff(tenantId);
+
+        allow create: if hasTenantRole(tenantId, ['owner', 'admin', 'manager'])
+          && request.resource.data.quantity is int;
+
+        allow update: if activeStaff(tenantId)
+          && resource.data.quantity is int
+          && request.resource.data.quantity is int
+          && request.resource.data.quantity < resource.data.quantity
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['quantity', 'updatedAt'])
+          && request.resource.data.updatedAt == request.time;
+
+        allow delete: if hasTenantRole(tenantId, ['owner', 'admin']);
+      }
+
+      match /categories/{categoryId} {
+        allow read: if activeStaff(tenantId);
+        allow create, update, delete: if hasTenantRole(
+          tenantId,
+          ['owner', 'admin', 'manager']
+        );
+      }
+
+      match /sales/{saleId} {
+        allow read: if activeStaff(tenantId);
+        allow create: if activeStaff(tenantId)
+          && saleId == request.resource.data.checkoutId
+          && request.resource.data.tenantId == tenantId
+          && request.resource.data.soldById == request.auth.uid
+          && request.resource.data.payloadHash is string
+          && request.resource.data.payloadHash.size() > 0
+          && request.resource.data.createdAt == request.time
+          && validSaleLines(request.resource.data.items);
+        allow update, delete: if false;
+      }
+
+      match /shifts/{shiftId} {
+        allow read: if activeStaff(tenantId);
+        allow create: if activeStaff(tenantId)
+          && request.resource.data.staffId == request.auth.uid
+          && request.resource.data.status == 'open';
+        allow update: if activeStaff(tenantId)
+          && resource.data.staffId == request.auth.uid
+          && request.resource.data.staffId == resource.data.staffId
+          && request.resource.data.businessDate == resource.data.businessDate
+          && request.resource.data.startTime == resource.data.startTime
+          && resource.data.status == 'open'
+          && request.resource.data.status == 'closed';
+        allow delete: if false;
+      }
+
+      match /returns/{returnId} {
+        allow read: if activeStaff(tenantId);
+        allow create: if activeStaff(tenantId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.status == 'pending';
+        allow update, delete: if false;
+      }
+
+      match /configuration/{documentId} {
+        allow read: if activeStaff(tenantId);
+        allow write: if hasTenantRole(tenantId, ['owner', 'admin']);
+      }
+
+      match /subscription/{documentId} {
+        allow read: if activeStaff(tenantId) || platformAdmin();
+        allow write: if false;
+      }
+
+      match /audit_logs/{documentId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin']) || platformAdmin();
+        allow write: if false;
+      }
+
+      match /lifecycle_history/{documentId} {
+        allow read: if platformAdmin();
+        allow write: if false;
+      }
+
+      match /{serverCollection}/{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /platform_config/{documentId} {
+      allow read: if platformAdmin();
+      allow write: if false;
+    }
+
+    match /platform_audit_logs/{documentId} {
+      allow read: if platformAdmin();
+      allow write: if false;
+    }
+
+    match /platform_user_operations/{documentId} {
+      allow read: if platformAdmin();
+      allow write: if false;
+    }
+
+    match /platform_membership_repair_runs/{documentId} {
+      allow read: if platformAdmin();
+      allow write: if false;
+    }
+
+    match /owner_recovery_cases/{documentId} {
+      allow read: if platformAdmin();
+      allow write: if false;
+    }
+
+    match /email_deliveries/{documentId} {
+      allow read, write: if false;
+    }
+
+    match /email_suppressions/{documentId} {
+      allow read, write: if false;
+    }
+
+    match /tenant_slugs/{slug} {
+      allow read, write: if false;
+    }
+
+    match /operation_idempotency/{documentId} {
+      allow read, write: if false;
+    }
+
+    match /staff/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /alcohol/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /alcoholsales/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /returns/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /shifts/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /categories/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /store/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /hwsales/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /hstock/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
