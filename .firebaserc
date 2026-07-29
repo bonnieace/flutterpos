@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "thamani-23709"
-  }
+    "default": "multitenant-pos-b8326",
+    "control": "multitenant-pos-b8326"
+  },
+  "targets": {},
+  "etags": {}
 }

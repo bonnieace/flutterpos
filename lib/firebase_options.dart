@@ -41,49 +41,49 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCjmWtt4d3BCfePumBf9wGLYd8_CdlhTfg',
-    appId: '1:901380694663:web:48b443512d41c2a2c84e22',
-    messagingSenderId: '901380694663',
-    projectId: 'thamani-23709',
-    authDomain: 'thamani-23709.firebaseapp.com',
-    storageBucket: 'thamani-23709.appspot.com',
-    measurementId: 'G-2ELT3KCKJW',
+    apiKey: 'AIzaSyB27ZN88BNkErKnt9aZWACiwfDrN68scTY',
+    appId: '1:299444269776:web:eab14d29ab5cc5a50ea4d5',
+    messagingSenderId: '299444269776',
+    projectId: 'multitenant-pos-b8326',
+    authDomain: 'multitenant-pos-b8326.firebaseapp.com',
+    storageBucket: 'multitenant-pos-b8326.firebasestorage.app',
+    measurementId: 'G-HPPCSHVHFL',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyClROXZDppYgmMJ0PAy52GsC9gTaAfT_hw',
-    appId: '1:901380694663:android:7961a9a27fa528b9c84e22',
-    messagingSenderId: '901380694663',
-    projectId: 'thamani-23709',
-    storageBucket: 'thamani-23709.appspot.com',
+    apiKey: 'AIzaSyBz0J7TdtMer-rsYH9GtaLotx5rNSyc0bQ',
+    appId: '1:299444269776:android:f1cfbad329eb5a790ea4d5',
+    messagingSenderId: '299444269776',
+    projectId: 'multitenant-pos-b8326',
+    storageBucket: 'multitenant-pos-b8326.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCn-zV7D0DqpBWXpRRbdYyIY9r_KD05zU0',
-    appId: '1:901380694663:ios:8ebd85716f9c777dc84e22',
-    messagingSenderId: '901380694663',
-    projectId: 'thamani-23709',
-    storageBucket: 'thamani-23709.appspot.com',
+    apiKey: 'AIzaSyCG1XtUnr5QGPR1TvjA7FktOygR3CWdb-k',
+    appId: '1:299444269776:ios:0725ebe12011f8750ea4d5',
+    messagingSenderId: '299444269776',
+    projectId: 'multitenant-pos-b8326',
+    storageBucket: 'multitenant-pos-b8326.firebasestorage.app',
     iosBundleId: 'com.example.flutterApplication1',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCn-zV7D0DqpBWXpRRbdYyIY9r_KD05zU0',
-    appId: '1:901380694663:ios:8ebd85716f9c777dc84e22',
-    messagingSenderId: '901380694663',
-    projectId: 'thamani-23709',
-    storageBucket: 'thamani-23709.appspot.com',
+    apiKey: 'AIzaSyCG1XtUnr5QGPR1TvjA7FktOygR3CWdb-k',
+    appId: '1:299444269776:ios:0725ebe12011f8750ea4d5',
+    messagingSenderId: '299444269776',
+    projectId: 'multitenant-pos-b8326',
+    storageBucket: 'multitenant-pos-b8326.firebasestorage.app',
     iosBundleId: 'com.example.flutterApplication1',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyCWi-tPD_LE7Jd19ai_IoA-JZkO5A9hgDA',
-    appId: '1:901380694663:web:4b8e9d6b67e9cacac84e22',
-    messagingSenderId: '901380694663',
-    projectId: 'thamani-23709',
-    authDomain: 'thamani-23709.firebaseapp.com',
-    storageBucket: 'thamani-23709.appspot.com',
-    measurementId: 'G-JKB1LN7JMD',
+    apiKey: 'AIzaSyB27ZN88BNkErKnt9aZWACiwfDrN68scTY',
+    appId: '1:299444269776:web:bbc0203b5a76348e0ea4d5',
+    messagingSenderId: '299444269776',
+    projectId: 'multitenant-pos-b8326',
+    authDomain: 'multitenant-pos-b8326.firebaseapp.com',
+    storageBucket: 'multitenant-pos-b8326.firebasestorage.app',
+    measurementId: 'G-54YS2KRWXD',
   );
 
 }

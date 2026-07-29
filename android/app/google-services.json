@@ -1,32 +1,13 @@
 {
   "project_info": {
-    "project_number": "901380694663",
-    "project_id": "thamani-23709",
-    "storage_bucket": "thamani-23709.appspot.com"
+    "project_number": "299444269776",
+    "project_id": "multitenant-pos-b8326",
+    "storage_bucket": "multitenant-pos-b8326.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:901380694663:android:106d2ae9e27390cec84e22",
-        "android_client_info": {
-          "package_name": "com.example.expense_tracker"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyClROXZDppYgmMJ0PAy52GsC9gTaAfT_hw"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:901380694663:android:7961a9a27fa528b9c84e22",
+        "mobilesdk_app_id": "1:299444269776:android:f1cfbad329eb5a790ea4d5",
         "android_client_info": {
           "package_name": "com.example.flutter_application_1"
         }
@@ -34,26 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyClROXZDppYgmMJ0PAy52GsC9gTaAfT_hw"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:901380694663:android:9b65ad310c97be6bc84e22",
-        "android_client_info": {
-          "package_name": "com.example.pdf"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyClROXZDppYgmMJ0PAy52GsC9gTaAfT_hw"
+          "current_key": "AIzaSyBz0J7TdtMer-rsYH9GtaLotx5rNSyc0bQ"
         }
       ],
       "services": {
