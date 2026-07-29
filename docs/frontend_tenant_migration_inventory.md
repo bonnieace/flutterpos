@@ -1,0 +1,49 @@
+# Flutter tenant migration inventory
+
+This inventory freezes the remaining root Firestore and callable migration
+surface as of 2026-07-29. A row is not authorization to enable its screen. The
+legacy hub, checkout, mutations, reports, staff, and returns remain unreachable
+until each row is migrated and tested behind a live `TenantSession`.
+
+## Root Firestore paths
+
+| Owner | Current root collections | Tenant-scoped replacement | State |
+| --- | --- | --- | --- |
+| `lib/config.dart` | `store` | `tenants/{tenantId}/configuration/branding` | Old page is commented out; read-only branding is now migrated separately. |
+| `lib/pos/goods.dart` | `categories`, `alcohol` | `categories`, `products` below `TenantPaths` | Disabled. Includes reads and product/category mutations. |
+| `lib/services/bulk_update_service.dart` | `alcohol` | `products` below `TenantPaths` | Disabled mutation/import workflow. |
+| `lib/services/bulk_upload_service.dart` | `alcohol` | `products` below `TenantPaths` | Disabled mutation/import workflow. |
+| `lib/screens/users.dart` | `staff` | `staff` below `TenantPaths` | Disabled staff read/mutation screen. |
+| `lib/services/shift_service.dart` | `staff`, `shifts`, `alcoholsales` | `staff`, `shifts`, `sales` below `TenantPaths` | Disabled shift and sales workflow. |
+| `lib/screens/return_detail_screen.dart` | `alcohol`, `returns` | `products`, `returns` below `TenantPaths`; stock restoration through `verifyReturnAndRestoreStock` | Disabled mutation workflow. |
+| `lib/screens/returns_screen.dart` | `staff`, `returns` | `staff`, `returns` below `TenantPaths` | Disabled returns workflow. |
+| `lib/screens/main_hub_screen.dart` | `staff`, `store`, `shifts` | `staff`, `configuration/branding`, `shifts` below `TenantPaths` | Entire legacy hub remains unreachable. |
+| `lib/pos/inv.dart` | `alcohol` | `products` below `TenantPaths` | Disabled stock mutation screen. |
+| `lib/pos/pos.dart` | `shifts`, `categories`, `alcohol`, `alcoholsales` | `shifts`, `categories`, `products`, `sales` below `TenantPaths` | Disabled checkout; must use the later Hive single-flight state machine. |
+| `lib/pos/services/returns_service.dart` | `alcoholsales`, `returns`, `staff`, `shifts` | `sales`, `returns`, `staff`, `shifts` below `TenantPaths` | Disabled returns workflow. |
+| `lib/pos/reports.dart` | `categories`, `staff`, `alcoholsales`, `alcohol` | `categories`, `staff`, `sales`, `products` below `TenantPaths` | Disabled report screen. |
+| `lib/pos/reports/debtpayment.dart` | `hwsales` | normalized `sales` snapshots below `TenantPaths` | Disabled legacy report; schema normalization required. |
+| `lib/pos/reports/monthlyreports.dart` | `hwsales`, `hstock` | normalized `sales` and `products`/daily metrics below `TenantPaths` | Disabled legacy report; schema normalization required. |
+| `lib/pos/reports/productreport.dart` | `hwsales` | normalized `sales` snapshots below `TenantPaths` | Disabled legacy report. |
+| `lib/pos/reports/paymentsfreq.dart` | `alcoholsales` | `sales` snapshots below `TenantPaths` | Disabled legacy report. |
+| `lib/pos/reports/shift_reports.dart` | `shifts` | `shifts` below `TenantPaths` | Disabled report. |
+| `lib/pos/reports/profits.dart` | `alcoholsales`, `alcohol` | `sales`, `products` below `TenantPaths` | Disabled report. |
+| `lib/pos/reports/salesReports.dart` | `alcoholsales`, `staff` | `sales`, `staff` below `TenantPaths` | Disabled report. |
+| `lib/tenancy/firebase_tenant_gateway.dart` | `users/{uid}` | Remains the caller's root routing profile | Current and intentional; Rules restrict it to the caller. |
+
+`lib/main.dart` configures `FirebaseFirestore` but does not select a collection.
+All operational replacements above must be constructed from `TenantPaths`; no
+repository may accept a raw root collection or arbitrary document path.
+
+## Callable usage
+
+| Owner | Current callable | Replacement | State |
+| --- | --- | --- | --- |
+| `lib/screens/create_user.dart` | `createStaffUser` | `inviteStaff({tenantId, ...})` | Legacy and disabled. |
+| `lib/screens/users.dart` | `toggleStaffStatus` | `setStaffStatus({tenantId, uid, status, requestId})` | Legacy and disabled. |
+| `lib/pos/reports.dart` | `getSalesComparison` | Same callable with tenant ID from the guarded session | Current backend API, frontend screen still disabled. |
+| `lib/tenancy/firebase_tenant_gateway.dart` | `listMyTenants`, `setDefaultTenant` | No replacement | Current tenant-routing APIs. |
+
+Before enabling an operational route, search again for both direct Firestore
+calls and collection references initialized in constructors. This inventory is
+a migration checklist, not a substitute for a final adversarial path audit.

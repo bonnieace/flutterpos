@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'tenant_bootstrap.dart';
+import 'tenant_branding.dart';
 import 'tenant_membership.dart';
+import 'tenant_repository.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_types.dart';
 
@@ -262,7 +264,11 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     if (builder != null) {
       return builder(context, _sessionController, membership);
     }
-    return TenantSafeLandingScreen(membership: membership, onSignOut: _signOut);
+    return TenantSafeLandingScreen(
+      membership: membership,
+      reader: FirebaseTenantDocumentReader(),
+      onSignOut: _signOut,
+    );
   }
 }
 
@@ -385,10 +391,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   const TenantSafeLandingScreen({
     super.key,
     required this.membership,
+    required this.reader,
     required this.onSignOut,
   });
 
   final TenantMembership membership;
+  final TenantDocumentReader reader;
   final Future<void> Function() onSignOut;
 
   @override
@@ -402,24 +410,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     body: Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.verified_user_outlined, size: 52),
-            const SizedBox(height: 16),
-            Text(
-              membership.tenantName,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text('Signed in as ${membership.role.wireValue}'),
-            const SizedBox(height: 16),
-            const Text(
-              'Operational screens remain locked until their data access is '
-              'migrated to tenant-scoped repositories.',
-              textAlign: TextAlign.center,
-            ),
-          ],
+        child: TenantBrandingPanel(
+          reader: reader,
+          fallbackName: membership.tenantName,
         ),
       ),
     ),

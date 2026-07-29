@@ -1155,3 +1155,65 @@ Implement only the route-guard and repository-migration foundation:
 5. Add unit/widget tests proving missing session, wrong role, tenant switch during an async load, and a cross-tenant document/path mismatch all fail closed.
 
 Keep encrypted Hive checkout, switching guards, shift restoration, and operational repository migration for later bounded sessions. Do not enable the legacy hub merely because the route-guard primitives exist.
+
+---
+
+## Route-guard and tenant repository foundation handoff - 2026-07-29
+
+### Completed in this session
+
+The authentication-to-tenant routing shell was revalidated and committed first:
+
+- `b1ac73b` - authenticated UID routing, business selector, stale-bootstrap rejection, session ownership, and the tenant-safe landing route.
+
+The next bounded frontend foundation is implemented as a separate milestone:
+
+- `TenantRouteGuard<T>` requires a live canonical `TenantSession`, applies optional role checks, captures UID/tenant/epoch, and discards stale async completions before they can update UI.
+- `TenantReadRepository` derives document paths only from the session's `TenantPaths`, exposes no arbitrary root-path input, and rejects a returned path that differs from the exact requested tenant document.
+- `FirebaseTenantDocumentReader` is the narrow Firestore adapter behind that repository boundary.
+- The first read-only vertical slice loads `tenants/{tenantId}/configuration/branding` and renders it inside the existing tenant-safe landing route. A missing branding document falls back to the canonically overlaid tenant name. Malformed branding fails closed through the guarded error state.
+- `docs/frontend_tenant_migration_inventory.md` records every currently detected Flutter root Firestore collection and callable owner, its intended tenant-scoped replacement, and whether it is legacy or current.
+- `MainHubScreen`, checkout, stock mutation, reports, staff mutation, returns, and all other legacy operational routes remain unreachable.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_branding.dart
+lib/tenancy/tenant_repository.dart
+lib/tenancy/tenant_route_guard.dart
+lib/tenancy/tenant_routing_shell.dart
+test/tenancy/tenant_repository_test.dart
+test/tenancy/tenant_route_guard_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- `flutter test --no-pub test/tenancy` passed **53/53** tests.
+- New coverage proves missing sessions and wrong roles do not start loads, a tenant switch rejects the prior epoch's async completion, an exact tenant branding path is derived from the session, and a cross-tenant response path fails closed.
+- `git diff --check` was clean apart from expected Windows line-ending warnings on existing files.
+
+The five user-owned Firebase environment edits remain separate and must not be staged with frontend code without confirming the environment mapping:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+### Next bounded frontend chunk
+
+Implement only a read-only tenant product/category catalog foundation:
+
+1. Freeze strict product and category read models from the legacy fields that are still required by the UI; reject malformed tenant IDs, document IDs, quantities, prices, and category references.
+2. Extend the repository boundary with tenant-derived collection queries and exact returned-path validation. Do not accept raw collection paths.
+3. Add bounded pagination and deterministic ordering for the catalog instead of attaching the legacy unbounded root streams.
+4. Render a temporary read-only catalog route behind `TenantRouteGuard`; do not expose add, update, delete, stock adjustment, checkout, returns, or report actions.
+5. Test missing/wrong-role access, malformed documents, cross-tenant query results, pagination boundaries, and a tenant switch during an outstanding query.
+
+Keep the legacy hub disabled. Staff lifecycle migration, checkout/Hive state, shifts, reports, returns, and mutation workflows remain separate later chunks.
