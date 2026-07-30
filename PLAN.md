@@ -2024,3 +2024,100 @@ tenant-routing surface:
 
 Checkout/Hive state, shifts, reports, returns, subscriptions, and catalog
 mutations remain outside this scope.
+
+---
+
+## Typed visible invitation acceptance handoff - 2026-07-30
+
+### Completed in this session
+
+The next bounded frontend milestone enables only typed
+`acceptVisibleTenantInvitation` from the authenticated tenant-routing selector.
+Email-link token acceptance remains disabled.
+
+Implemented behavior:
+
+- `TenantVisibleInvitationAcceptanceGateway` is bound to the current verified,
+  globally active identity and one decoded visible pending `TenantMembership`.
+  It accepts no arbitrary tenant path or caller UID input.
+- Acceptance intents apply only to visible non-owner pending memberships whose
+  invitation state is pending or sent, whose canonical tenant and membership
+  mirrors are present, and whose tenant lifecycle is active. Token-proof
+  acceptance, password setup, unverified identity handling, auth-time checks,
+  email-match checks, and canonical authorization remain backend-authoritative.
+- Each acceptance intent owns one cryptographically generated request ID.
+  Duplicate taps are single-flight, and retrying the same confirmation reuses
+  the same idempotency key.
+- Callable responses are decoded fail-closed with exact fields and exact
+  agreement with the expected tenant, current caller UID, preserved role,
+  active membership state, accepted invitation state, and active tenant state.
+- Eligible verified selector rows expose an explicit confirmation showing the
+  business name and invited role. Unverified users and ineligible memberships
+  remain locked. A successful current-auth/current-routing response refreshes
+  the bounded membership routing data.
+- Success and failure completions are discarded after user, tenant membership,
+  routing, or current-check changes. UI errors are fixed safe messages and
+  never expose raw callable details.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/main.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_routing_shell.dart
+lib/tenancy/tenant_visible_invitation_acceptance.dart
+test/tenancy/tenant_routing_shell_test.dart
+test/tenancy/tenant_visible_invitation_acceptance_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- `flutter test --no-pub test/tenancy` passed **142/142** tests; the focused
+  visible-invitation-acceptance file passed **10/10**.
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart`
+  still reports the pre-existing `lib/main.dart` experimental
+  `profilesSampleRate` warning; this chunk did not introduce it.
+- Coverage proves exact tenant/current-UID binding, pending/sent eligibility,
+  unverified and globally inactive denial without calls, accepted/suspended and
+  owner-membership rejection, strict active/accepted response decoding,
+  explicit cancellation, duplicate-tap single flight, retry idempotency, safe
+  errors, bounded membership refresh after success, and stale user/tenant
+  completion rejection.
+
+The existing user-owned local edits remain separate and must not be staged with
+frontend code:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `acceptTenantInvitation` email-link token acceptance:
+
+1. Add a callable gateway for `acceptTenantInvitation` that derives tenant ID,
+   invitation version, and invitation token from a parsed, validated invitation
+   link object, binds the current authenticated identity, creates one request ID
+   per acceptance intent, and strictly decodes the active membership/accepted
+   invitation response.
+2. Allow only authenticated users whose visible route cannot use
+   `acceptVisibleTenantInvitation`, such as new identities, unverified
+   identities after verification, password-setup/direct email-link flows, or
+   users requiring versioned token proof. Backend auth-time, token hash, email
+   match, expiry, unused-token, canonical membership, and tenant lifecycle
+   checks remain authoritative.
+3. Add explicit confirmation for the parsed tenant name/role when available,
+   recoverable single-flight submission, stable retry idempotency, safe errors,
+   stale-completion checks, and a bounded membership refresh only after
+   success.
+4. Test invitation-link parsing and validation, exact tenant/version/token
+   payload derivation, malformed responses, confirmation dismissal, duplicate
+   taps, retry behavior, and user/link switches during an outstanding
+   acceptance.
+5. Update the inventory while leaving checkout/Hive state, shifts, reports,
+   returns, subscriptions, and catalog mutations outside this scope.

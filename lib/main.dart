@@ -69,6 +69,10 @@ class SpiritPOSApp extends StatelessWidget {
         authUidChanges: FirebaseAuth.instance.authStateChanges().map(
           (user) => user?.uid,
         ),
+        isEmailVerified: (uid) {
+          final user = FirebaseAuth.instance.currentUser;
+          return user != null && user.uid == uid && user.emailVerified;
+        },
         bootstrapService: bootstrapService,
         signOut: FirebaseAuth.instance.signOut,
         signedOut: const LoginScreen(),
