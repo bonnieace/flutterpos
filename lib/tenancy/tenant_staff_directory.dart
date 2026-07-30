@@ -7,6 +7,7 @@ import 'tenant_route_guard.dart';
 import 'tenant_session.dart';
 import 'tenant_staff_invitation.dart';
 import 'tenant_staff_invitation_cancellation.dart';
+import 'tenant_staff_invitation_email_replacement.dart';
 import 'tenant_staff_invitation_resend.dart';
 import 'tenant_staff_status.dart';
 import 'tenant_staff_update.dart';
@@ -200,6 +201,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
     required this.reader,
     this.cancelInvitationCallable,
     this.inviteCallable,
+    this.replaceEmailCallable,
     this.resendCallable,
     this.statusCallable,
     this.updateCallable,
@@ -214,6 +216,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   final TenantDataReader reader;
   final CancelTenantInvitationCallable? cancelInvitationCallable;
   final InviteStaffCallable? inviteCallable;
+  final ReplacePendingStaffEmailCallable? replaceEmailCallable;
   final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
@@ -226,6 +229,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
       reader: reader,
       cancelInvitationCallable: cancelInvitationCallable,
       inviteCallable: inviteCallable,
+      replaceEmailCallable: replaceEmailCallable,
       resendCallable: resendCallable,
       statusCallable: statusCallable,
       updateCallable: updateCallable,
@@ -241,6 +245,7 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
     required this.reader,
     this.cancelInvitationCallable,
     this.inviteCallable,
+    this.replaceEmailCallable,
     this.resendCallable,
     this.statusCallable,
     this.updateCallable,
@@ -250,6 +255,7 @@ final class TenantStaffDirectoryPanel extends StatefulWidget {
   final TenantDataReader reader;
   final CancelTenantInvitationCallable? cancelInvitationCallable;
   final InviteStaffCallable? inviteCallable;
+  final ReplacePendingStaffEmailCallable? replaceEmailCallable;
   final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
@@ -279,6 +285,7 @@ final class _TenantStaffDirectoryPanelState
       page: page,
       cancelInvitationCallable: widget.cancelInvitationCallable,
       inviteCallable: widget.inviteCallable,
+      replaceEmailCallable: widget.replaceEmailCallable,
       resendCallable: widget.resendCallable,
       statusCallable: widget.statusCallable,
       updateCallable: widget.updateCallable,
@@ -294,6 +301,7 @@ final class _StaffContents extends StatefulWidget {
     required this.page,
     required this.cancelInvitationCallable,
     required this.inviteCallable,
+    required this.replaceEmailCallable,
     required this.resendCallable,
     required this.statusCallable,
     required this.updateCallable,
@@ -305,6 +313,7 @@ final class _StaffContents extends StatefulWidget {
   final TenantStaffPage page;
   final CancelTenantInvitationCallable? cancelInvitationCallable;
   final InviteStaffCallable? inviteCallable;
+  final ReplacePendingStaffEmailCallable? replaceEmailCallable;
   final ResendStaffInvitationCallable? resendCallable;
   final SetStaffStatusCallable? statusCallable;
   final UpdateStaffUserCallable? updateCallable;
@@ -319,6 +328,7 @@ final class _StaffContentsState extends State<_StaffContents> {
   bool _showInvitationForm = false;
   TenantStaffSummary? _cancellingInvitation;
   TenantStaffSummary? _editingStaff;
+  TenantStaffSummary? _replacingInvitationEmail;
   TenantStaffSummary? _resendingInvitation;
   TenantStaffSummary? _statusChangingStaff;
 
@@ -395,6 +405,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                               tooltip: 'Edit ${staff.displayName}',
                               onPressed: () => setState(() {
                                 _cancellingInvitation = null;
+                                _replacingInvitationEmail = null;
                                 _resendingInvitation = null;
                                 _statusChangingStaff = null;
                                 _editingStaff = _editingStaff?.uid == staff.uid
@@ -415,6 +426,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                                 onPressed: () => setState(() {
                                   _cancellingInvitation = null;
                                   _editingStaff = null;
+                                  _replacingInvitationEmail = null;
                                   _statusChangingStaff = null;
                                   _resendingInvitation =
                                       _resendingInvitation?.uid == staff.uid
@@ -436,6 +448,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                                     'Cancel invitation for ${staff.displayName}',
                                 onPressed: () => setState(() {
                                   _editingStaff = null;
+                                  _replacingInvitationEmail = null;
                                   _resendingInvitation = null;
                                   _statusChangingStaff = null;
                                   _cancellingInvitation =
@@ -444,6 +457,30 @@ final class _StaffContentsState extends State<_StaffContents> {
                                       : staff;
                                 }),
                                 icon: const Icon(Icons.person_remove_outlined),
+                              ),
+                            if (TenantStaffInvitationEmailReplacementGateway.canReplaceEmailFor(
+                              staff,
+                            ))
+                              IconButton(
+                                key: ValueKey(
+                                  'replace-staff-email-${staff.uid}',
+                                ),
+                                tooltip:
+                                    'Replace invitation email for ${staff.displayName}',
+                                onPressed: () => setState(() {
+                                  _cancellingInvitation = null;
+                                  _editingStaff = null;
+                                  _resendingInvitation = null;
+                                  _statusChangingStaff = null;
+                                  _replacingInvitationEmail =
+                                      _replacingInvitationEmail?.uid ==
+                                          staff.uid
+                                      ? null
+                                      : staff;
+                                }),
+                                icon: const Icon(
+                                  Icons.alternate_email_outlined,
+                                ),
                               ),
                             if (TenantStaffStatusGateway.canChangeTarget(staff))
                               IconButton(
@@ -454,6 +491,7 @@ final class _StaffContentsState extends State<_StaffContents> {
                                 onPressed: () => setState(() {
                                   _cancellingInvitation = null;
                                   _editingStaff = null;
+                                  _replacingInvitationEmail = null;
                                   _resendingInvitation = null;
                                   _statusChangingStaff =
                                       _statusChangingStaff?.uid == staff.uid
@@ -530,6 +568,21 @@ final class _StaffContentsState extends State<_StaffContents> {
                           setState(() => _cancellingInvitation = null),
                     ),
                   ),
+                if (_replacingInvitationEmail?.uid == staff.uid)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: TenantStaffInvitationEmailReplacementForm(
+                      session: widget.session,
+                      target: staff,
+                      callable:
+                          widget.replaceEmailCallable ??
+                          FirebaseReplacePendingStaffEmailCallable(),
+                      requestIdFactory: widget.requestIdFactory,
+                      onSuccess: widget.onMutationSuccess,
+                      onCancel: () =>
+                          setState(() => _replacingInvitationEmail = null),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -540,7 +593,7 @@ final class _StaffContentsState extends State<_StaffContents> {
           child: Text('More staff memberships are available.'),
         ),
       const SizedBox(height: 12),
-      const Text('Pending invitation email replacement remains unavailable.'),
+      const Text('Invitation acceptance routes remain unavailable.'),
     ],
   );
 }

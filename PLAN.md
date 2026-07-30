@@ -1917,3 +1917,110 @@ directory:
 Keep both invitation-acceptance routes for later bounded sessions.
 Checkout/Hive state, shifts, reports, returns, subscriptions, and catalog
 mutations also remain outside this scope.
+
+---
+
+## Typed staff invitation email replacement handoff - 2026-07-30
+
+### Completed in this session
+
+The next bounded frontend milestone enables only typed
+`replacePendingStaffEmail` from the canonical staff directory. Both
+invitation-acceptance routes remain disabled.
+
+Implemented behavior:
+
+- `TenantStaffInvitationEmailReplacementGateway` is bound to one captured,
+  canonically valid `TenantSession` and one strictly decoded
+  `TenantStaffSummary`. It accepts no tenant ID, old target UID, or path and
+  permits only owner/admin sessions through the frozen owner-as-admin rule.
+- Email replacement intents apply only to canonical non-owner pending
+  memberships whose invitation state is pending or sent. Accepted
+  active/inactive memberships and the canonical owner fail before a callable
+  request. Backend canonical invitation, identity ownership,
+  duplicate-membership, cleanup, and authorization checks remain authoritative.
+- The corrected email is trimmed, lowercased, validated with the existing staff
+  invitation email normalizer, and rejected when it matches the pending row's
+  normalized email. Each replacement intent owns one cryptographically
+  generated request ID. Duplicate taps are single-flight, and retrying without
+  changing the email reuses the same idempotency key.
+- Callable responses are decoded fail-closed with exact fields and exact tenant
+  agreement. A valid replacement UID distinct from the old UID, pending
+  invitation state, positive JavaScript-safe invitation version, and
+  pending-enqueue delivery metadata are all required.
+- Eligible owner/admin directory rows expose an explicit confirmation explaining
+  that the old pending membership is replaced. Managers remain read-only,
+  cashiers remain route-denied, and dismissing confirmation performs no
+  mutation. A successful current-session response refreshes only the bounded
+  first staff page.
+- Success and failure completions are discarded after tenant, actor UID,
+  session epoch, target UID, target email, membership state, invitation state,
+  or authorization changes. UI errors are fixed safe messages and never expose
+  raw callable details.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_staff_directory.dart
+lib/tenancy/tenant_staff_invitation_email_replacement.dart
+test/tenancy/tenant_staff_invitation_email_replacement_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- `flutter test --no-pub test/tenancy` passed **132/132** tests; the focused
+  invitation-email-replacement file passed **12/12**.
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart`
+  still reports the pre-existing `lib/main.dart` experimental
+  `profilesSampleRate` warning; this chunk did not touch that file.
+- Coverage proves email normalization and unchanged-email rejection,
+  pending/sent eligibility, owner protection, owner-as-admin operation,
+  manager/cashier denial, exact tenant/old-UID/email payload derivation,
+  distinct replacement UID validation, strict delivery response decoding,
+  explicit dismissal, duplicate-tap single flight, retry idempotency, safe
+  errors, current-session refresh, and stale tenant/target completion
+  rejection.
+
+The five user-owned Firebase environment edits remain separate and must not be
+staged with frontend code without confirming the environment mapping:
+
+```text
+.firebaserc
+android/app/google-services.json
+files/web/src/firebase-config.js
+firebase.json
+lib/firebase_options.dart
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `acceptVisibleTenantInvitation` from the authenticated
+tenant-routing surface:
+
+1. Add a session/user-bound callable gateway for `acceptVisibleTenantInvitation`
+   only. Derive the tenant ID from a decoded visible pending membership and the
+   current verified identity, create one request ID per acceptance intent, and
+   strictly decode the exact backend result: tenant ID, caller UID, active
+   membership state, accepted invitation state, role, and current tenant status.
+2. Allow only the exact invited, verified, globally active caller to accept a
+   visible pending membership whose invitation state is pending or sent. Keep
+   token-proof acceptance, password setup, and unverified identity handling out
+   of scope. Client checks are UX safeguards; backend auth-time, email-match,
+   canonical membership, and tenant lifecycle checks remain authoritative.
+3. Add an explicit in-app confirmation showing the business name and invited
+   role, recoverable single-flight submission, stable retry idempotency, safe
+   errors, stale-completion checks, and a bounded membership refresh only after
+   success.
+4. Test exact tenant/UID payload derivation, pending/sent eligibility,
+   non-invited and unverified denial without calls, malformed responses,
+   confirmation dismissal, duplicate taps, retry behavior, and user/tenant
+   membership switches during an outstanding acceptance.
+5. Update the inventory while leaving email-link token acceptance and legacy
+   `lib/screens/users.dart` mutation paths unreachable and unchanged.
+
+Checkout/Hive state, shifts, reports, returns, subscriptions, and catalog
+mutations remain outside this scope.
