@@ -46,11 +46,6 @@ final class TenantListPage {
 
 abstract interface class TenantDirectoryGateway {
   Future<TenantListPage> listMyTenants({required int pageSize, String? cursor});
-
-  Future<void> setDefaultTenant({
-    required String tenantId,
-    required String requestId,
-  });
 }
 
 /// Loads every page before applying sole-tenant or selector routing logic.
@@ -103,9 +98,4 @@ final class TenantDirectory {
     }
     throw StateError('Tenant pagination exceeded the safety limit.');
   }
-
-  Future<void> setDefaultTenant({
-    required String tenantId,
-    required String requestId,
-  }) => _gateway.setDefaultTenant(tenantId: tenantId, requestId: requestId);
 }

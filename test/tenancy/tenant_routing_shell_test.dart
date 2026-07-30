@@ -54,6 +54,46 @@ void main() {
     await fixture.dispose(tester);
   });
 
+  testWidgets(
+    'refreshes the routing profile only after making a tenant default',
+    (tester) async {
+      late final _ShellFixture fixture;
+      final callable = _ShellDefaultCallable((tenantId) {
+        fixture.gateway.profile = RootRoutingProfile(
+          accountType: RootAccountType.tenantUser,
+          globalStatus: 'active',
+          defaultTenantId: tenantId,
+        );
+      });
+      fixture = _ShellFixture(
+        memberships: [_membership('tenant-a')],
+        useDefaultRoute: true,
+        setDefaultTenantCallable: callable,
+      );
+      await fixture.pump(tester);
+
+      fixture.auth.add('user-a');
+      await _pumpRouting(tester);
+      expect(fixture.gateway.rootCalls, 1);
+
+      await tester.tap(find.byKey(const ValueKey('make-default-tenant')));
+      await tester.pumpAndSettle();
+      expect(fixture.gateway.rootCalls, 1);
+      await tester.tap(
+        find.byKey(const ValueKey('set-default-tenant-confirm')),
+      );
+      await _pumpRouting(tester);
+
+      expect(callable.payloads.single, {
+        'tenantId': 'tenant-a',
+        'requestId': 'routing-default-request',
+      });
+      expect(fixture.gateway.rootCalls, 2);
+      expect(find.text('Default business'), findsOneWidget);
+      await fixture.dispose(tester);
+    },
+  );
+
   testWidgets('shows a selector and revalidates the chosen business', (
     tester,
   ) async {
@@ -248,6 +288,8 @@ final class _ShellFixture {
     int rootFailures = 0,
     this.invitationLink,
     this.acceptTenantInvitationCallable,
+    this.useDefaultRoute = false,
+    this.setDefaultTenantCallable,
   }) : gateway = _FakeGateway(
          memberships: memberships,
          profile: profile,
@@ -267,6 +309,8 @@ final class _ShellFixture {
   final _MemorySelectionStore store;
   final TenantInvitationLink? invitationLink;
   final AcceptTenantInvitationCallable? acceptTenantInvitationCallable;
+  final bool useDefaultRoute;
+  final SetDefaultTenantCallable? setDefaultTenantCallable;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -280,10 +324,15 @@ final class _ShellFixture {
         invitationLink: invitationLink,
         acceptTenantInvitationCallable: acceptTenantInvitationCallable,
         invitationAcceptanceRequestIdFactory: () => 'routing-accept-request',
-        tenantRouteBuilder: (context, controller, membership) {
-          openedController = controller;
-          return Scaffold(body: Text('Business ${membership.tenantId}'));
-        },
+        setDefaultTenantCallable: setDefaultTenantCallable,
+        defaultTenantRequestIdFactory: () => 'routing-default-request',
+        tenantDataReader: useDefaultRoute ? _RoutingReader() : null,
+        tenantRouteBuilder: useDefaultRoute
+            ? null
+            : (context, controller, membership) {
+                openedController = controller;
+                return Scaffold(body: Text('Business ${membership.tenantId}'));
+              },
       ),
     ),
   );
@@ -303,13 +352,15 @@ final class _FakeGateway implements TenantDirectoryGateway, RootRoutingGateway {
   });
 
   final List<TenantMembership> memberships;
-  final RootRoutingProfile profile;
+  RootRoutingProfile profile;
   final Future<RootRoutingProfile>? profileFuture;
   int rootFailures;
   int listCalls = 0;
+  int rootCalls = 0;
 
   @override
   Future<RootRoutingProfile> getRootRoutingProfile(String uid) async {
+    rootCalls++;
     if (rootFailures > 0) {
       rootFailures--;
       throw StateError('Temporary bootstrap failure.');
@@ -325,12 +376,31 @@ final class _FakeGateway implements TenantDirectoryGateway, RootRoutingGateway {
     listCalls++;
     return TenantListPage(items: memberships, nextCursor: null, hasMore: false);
   }
+}
+
+final class _ShellDefaultCallable implements SetDefaultTenantCallable {
+  _ShellDefaultCallable(this.onCall);
+
+  final void Function(String tenantId) onCall;
+  final List<Map<String, Object?>> payloads = [];
 
   @override
-  Future<void> setDefaultTenant({
-    required String tenantId,
-    required String requestId,
-  }) async {}
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(Map<String, Object?>.from(payload));
+    final tenantId = payload['tenantId']! as String;
+    onCall(tenantId);
+    return {'tenantId': tenantId, 'defaultTenantId': tenantId};
+  }
+}
+
+final class _RoutingReader implements TenantDataReader {
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const [];
 }
 
 final class _MemorySelectionStore implements TenantSelectionStore {

@@ -46,14 +46,4 @@ final class FirebaseTenantGateway
       ),
     );
   }
-
-  @override
-  Future<void> setDefaultTenant({
-    required String tenantId,
-    required String requestId,
-  }) async {
-    await _functions.httpsCallable('setDefaultTenant').call<Object?>(
-      <String, Object?>{'tenantId': tenantId, 'requestId': requestId},
-    );
-  }
 }

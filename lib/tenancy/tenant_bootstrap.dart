@@ -157,9 +157,4 @@ final class TenantBootstrapService {
     }
     return matches.single;
   }
-
-  Future<void> makeDefaultTenant({
-    required String tenantId,
-    required String requestId,
-  }) => _directory.setDefaultTenant(tenantId: tenantId, requestId: requestId);
 }

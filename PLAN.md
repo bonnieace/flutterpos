@@ -2305,3 +2305,104 @@ callable session-bound, require explicit confirmation, preserve stable retry
 idempotency and session-epoch stale-completion checks, refresh routing only
 after success, and leave general tenant switching and operational POS state
 outside the scope.
+
+---
+
+## Typed default tenant selection handoff - 2026-07-30
+
+### Completed in this session
+
+The next bounded frontend milestone enables only explicit, typed
+`setDefaultTenant` for the currently open canonical tenant session. Opening or
+selecting a tenant still changes only the UID-local device selection.
+
+Implemented behavior:
+
+- `TenantDefaultGateway` captures one active `TenantSession` and exposes no
+  arbitrary tenant or caller input. Owner, admin, manager, and cashier sessions
+  can create an intent; the tenant ID in the callable payload always comes from
+  the captured session.
+- Each explicit confirmation owns one cryptographically generated request ID.
+  Duplicate taps are single-flight, and a recoverable retry reuses the same
+  idempotency key.
+- Callable responses must contain exactly `tenantId` and `defaultTenantId`.
+  Both values must be valid tenant document IDs and must exactly equal the
+  captured session tenant.
+- The tenant-safe landing route shows a distinct `Make default` action and an
+  explicit business-name confirmation. A profile that already names the open
+  tenant renders a disabled `Default business` state instead of submitting
+  again.
+- Success and failure completions are discarded after a UID, tenant, or session
+  epoch change. Errors are fixed safe text. The routing shell reloads the root
+  profile and bounded membership directory only after a successful current
+  response.
+- The former untyped directory/bootstrap mutation helper, which accepted an
+  arbitrary tenant ID, was removed. The session-bound gateway is now the sole
+  enabled Flutter mutation path for this callable.
+- The local Auth + Firestore + Functions fixture now exports the real compiled
+  `setDefaultTenant` handler. Its integration test signs in through the Auth
+  emulator, asserts the exact two-field response, and verifies the committed
+  root `defaultTenantId` and server timestamp.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+functions/integration/index.js
+lib/tenancy/firebase_tenant_gateway.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_bootstrap.dart
+lib/tenancy/tenant_default_tenant.dart
+lib/tenancy/tenant_directory.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/test/invitation-acceptance.integration.test.js
+test/tenancy/tenant_bootstrap_test.dart
+test/tenancy/tenant_default_tenant_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- `flutter test --no-pub test/tenancy` passed **165/165** tests; the focused
+  default-tenant file passed **11/11**, and focused default/routing coverage
+  passed **21/21**.
+- `npm --prefix functions test` passed **152/152** Functions tests.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules suite
+  **18/18** using the portable Node.js 24 and JDK 21 runtimes.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **3/3** real
+  callable tests against Auth, Firestore, and Functions emulators, including
+  the new persisted default-tenant contract.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `requestTenant` from authenticated tenant routing:
+
+1. Add an identity-bound callable gateway for `requestTenant` that accepts no
+   caller UID, normalizes the proposed business name and slug, creates one
+   request ID per submission intent, and strictly decodes exact
+   tenant/name/slug agreement with pending lifecycle state.
+2. Expose the request form from selector and no-accessible-tenant routing states
+   for eligible verified tenant users. Do not expose it to platform identities,
+   globally disabled roots, or as an automatic side effect of sign-in.
+3. Use recoverable single-flight submission, stable retry idempotency, safe
+   limit/conflict errors, Auth/routing stale-completion checks, and a bounded
+   routing refresh only after success so the new pending membership becomes
+   visible without being opened.
+4. Test exact validation and payload derivation, response mismatches,
+   confirmation/submission behavior, duplicate taps, retry, UID changes, and
+   success refresh without granting operational access.
+5. Extend the local callable emulator boundary for the real `requestTenant`
+   transaction while leaving lifecycle approval, general tenant switching,
+   checkout/Hive state, shifts, reports, returns, subscriptions, and catalog
+   mutations outside this scope.

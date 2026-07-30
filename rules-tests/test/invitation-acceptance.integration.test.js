@@ -80,6 +80,28 @@ test("acceptVisibleTenantInvitation returns the same five-field contract", async
   await assertAcceptedDocuments(fixture, "visible");
 });
 
+test("setDefaultTenant updates the authenticated user's routing profile", async () => {
+  const fixture = await seedActiveMembership("default");
+  const idToken = await signIn(fixture.email);
+
+  const response = await callFunction("setDefaultTenant", idToken, {
+    tenantId: fixture.tenantId,
+    requestId: "default-emulator-request-1",
+  });
+
+  assert.deepEqual(Object.keys(response).sort(), [
+    "defaultTenantId",
+    "tenantId",
+  ]);
+  assert.deepEqual(response, {
+    tenantId: fixture.tenantId,
+    defaultTenantId: fixture.tenantId,
+  });
+  const root = await firestore.doc(`users/${fixture.uid}`).get();
+  assert.equal(root.get("defaultTenantId"), fixture.tenantId);
+  assert.ok(root.get("updatedAt") instanceof Timestamp);
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
@@ -209,6 +231,65 @@ async function seedPendingInvitation({
     invitationVersion,
     invitationToken: proof.token,
   };
+}
+
+async function seedActiveMembership(suffix) {
+  const uid = `user-${suffix}`;
+  const tenantId = `tenant-${suffix}`;
+  const email = `${suffix}@integration.example.test`;
+  const now = Timestamp.now();
+  await auth.createUser({
+    uid,
+    email,
+    password: PASSWORD,
+    emailVerified: true,
+    disabled: false,
+  });
+  const batch = firestore.batch();
+  batch.set(firestore.doc(`users/${uid}`), {
+    email,
+    accountType: "tenant_user",
+    identityOrigin: "self_signup",
+    globalStatus: "active",
+    membershipCount: 1,
+    ownedTenantCount: 1,
+    ownedActiveTenantCount: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}`), {
+    name: `Business ${suffix}`,
+    slug: tenantId,
+    ownerUid: uid,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}/staff/${uid}`), {
+    uid,
+    role: "owner",
+    status: "active",
+    invitationStatus: "accepted",
+    createdAt: now,
+    joinedAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`users/${uid}/tenant_memberships/${tenantId}`), {
+    tenantId,
+    tenantName: `Business ${suffix}`,
+    tenantSlug: tenantId,
+    role: "owner",
+    membershipStatus: "active",
+    tenantStatus: "active",
+    invitationStatus: "accepted",
+    isOwner: true,
+    mirrorVersion: 1,
+    createdAt: now,
+    joinedAt: now,
+    updatedAt: now,
+  });
+  await batch.commit();
+  return { uid, tenantId, email };
 }
 
 async function signIn(email) {

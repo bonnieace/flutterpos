@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
+import 'tenant_default_tenant.dart';
 import 'tenant_invitation_acceptance.dart';
 import 'tenant_membership.dart';
 import 'tenant_repository.dart';
@@ -38,6 +39,9 @@ final class TenantRoutingShell extends StatefulWidget {
     this.invitationAcceptanceRequestIdFactory,
     this.acceptVisibleInvitationCallable,
     this.visibleInvitationRequestIdFactory,
+    this.setDefaultTenantCallable,
+    this.defaultTenantRequestIdFactory,
+    this.tenantDataReader,
     this.tenantRouteBuilder,
   });
 
@@ -54,6 +58,9 @@ final class TenantRoutingShell extends StatefulWidget {
   final AcceptVisibleTenantInvitationCallable? acceptVisibleInvitationCallable;
   final TenantVisibleInvitationRequestIdFactory?
   visibleInvitationRequestIdFactory;
+  final SetDefaultTenantCallable? setDefaultTenantCallable;
+  final TenantDefaultRequestIdFactory? defaultTenantRequestIdFactory;
+  final TenantDataReader? tenantDataReader;
   final TenantRouteBuilder? tenantRouteBuilder;
 
   @override
@@ -380,8 +387,13 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     }
     return TenantSafeLandingScreen(
       membership: membership,
-      reader: FirebaseTenantDocumentReader(),
+      reader: widget.tenantDataReader ?? FirebaseTenantDocumentReader(),
       onSignOut: _signOut,
+      isDefaultTenant:
+          _bootstrapResult?.profile.defaultTenantId == membership.tenantId,
+      setDefaultTenantCallable: widget.setDefaultTenantCallable,
+      defaultTenantRequestIdFactory: widget.defaultTenantRequestIdFactory,
+      onDefaultTenantChanged: _retry,
     );
   }
 }
@@ -679,11 +691,19 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     required this.membership,
     required this.reader,
     required this.onSignOut,
+    this.isDefaultTenant = false,
+    this.setDefaultTenantCallable,
+    this.defaultTenantRequestIdFactory,
+    this.onDefaultTenantChanged,
   });
 
   final TenantMembership membership;
   final TenantDataReader reader;
   final Future<void> Function() onSignOut;
+  final bool isDefaultTenant;
+  final SetDefaultTenantCallable? setDefaultTenantCallable;
+  final TenantDefaultRequestIdFactory? defaultTenantRequestIdFactory;
+  final VoidCallback? onDefaultTenantChanged;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -710,6 +730,19 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
+              if (isDefaultTenant)
+                OutlinedButton.icon(
+                  onPressed: null,
+                  icon: Icon(Icons.star),
+                  label: Text('Default business'),
+                )
+              else
+                OutlinedButton.icon(
+                  key: const ValueKey('make-default-tenant'),
+                  onPressed: () => _showDefaultConfirmation(context),
+                  icon: const Icon(Icons.star_outline),
+                  label: const Text('Make default'),
+                ),
               FilledButton.icon(
                 onPressed: () {
                   final controller = TenantSessionScope.of(context);
@@ -749,6 +782,38 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       ),
     ),
   );
+
+  Future<void> _showDefaultConfirmation(BuildContext context) async {
+    final controller = TenantSessionScope.read(context);
+    final session = controller.session;
+    if (session == null ||
+        !session.canAccess() ||
+        session.tenantId != membership.tenantId) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => TenantSessionScope(
+        controller: controller,
+        child: AlertDialog(
+          content: TenantDefaultForm(
+            session: session,
+            membership: membership,
+            callable:
+                setDefaultTenantCallable ?? FirebaseSetDefaultTenantCallable(),
+            requestIdFactory: defaultTenantRequestIdFactory,
+            onCancel: () => Navigator.of(dialogContext).pop(),
+            onSuccess: () {
+              navigator.pop();
+              onDefaultTenantChanged?.call();
+            },
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 final class TenantBootstrapFailure extends StatelessWidget {

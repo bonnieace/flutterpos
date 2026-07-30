@@ -142,39 +142,28 @@ void main() {
     expect(gateway.requestedCursors, isEmpty);
   });
 
-  test(
-    'tenant opening revalidates canonical access and default is explicit',
-    () async {
-      final gateway = _FakeGateway(
-        pages: <String?, TenantListPage>{
-          null: TenantListPage(
-            items: [_membership('tenant-a')],
-            nextCursor: null,
-            hasMore: false,
-          ),
-        },
-      );
-      final bootstrap = TenantBootstrapService(
-        rootGateway: gateway,
-        directory: TenantDirectory(gateway),
-        selectionStore: _MemorySelectionStore(null),
-      );
+  test('tenant opening revalidates canonical access', () async {
+    final gateway = _FakeGateway(
+      pages: <String?, TenantListPage>{
+        null: TenantListPage(
+          items: [_membership('tenant-a')],
+          nextCursor: null,
+          hasMore: false,
+        ),
+      },
+    );
+    final bootstrap = TenantBootstrapService(
+      rootGateway: gateway,
+      directory: TenantDirectory(gateway),
+      selectionStore: _MemorySelectionStore(null),
+    );
 
-      expect(
-        (await bootstrap.revalidateTenant('tenant-a')).tenantId,
-        'tenant-a',
-      );
-      await expectLater(
-        bootstrap.revalidateTenant('tenant-missing'),
-        throwsStateError,
-      );
-      await bootstrap.makeDefaultTenant(
-        tenantId: 'tenant-a',
-        requestId: 'request-0001',
-      );
-      expect(gateway.defaultRequests, [('tenant-a', 'request-0001')]);
-    },
-  );
+    expect((await bootstrap.revalidateTenant('tenant-a')).tenantId, 'tenant-a');
+    await expectLater(
+      bootstrap.revalidateTenant('tenant-missing'),
+      throwsStateError,
+    );
+  });
 
   test('tenant opening never remembers inaccessible routing state', () async {
     final gateway = _FakeGateway(
@@ -230,7 +219,6 @@ final class _FakeGateway implements TenantDirectoryGateway, RootRoutingGateway {
   final RootRoutingProfile profile;
   final Map<String?, TenantListPage> pages;
   final List<String?> requestedCursors = <String?>[];
-  final List<(String, String)> defaultRequests = <(String, String)>[];
 
   @override
   Future<RootRoutingProfile> getRootRoutingProfile(String uid) async => profile;
@@ -244,14 +232,6 @@ final class _FakeGateway implements TenantDirectoryGateway, RootRoutingGateway {
     final page = pages[cursor];
     if (page == null) throw StateError('Missing fake page for $cursor');
     return page;
-  }
-
-  @override
-  Future<void> setDefaultTenant({
-    required String tenantId,
-    required String requestId,
-  }) async {
-    defaultRequests.add((tenantId, requestId));
   }
 }
 

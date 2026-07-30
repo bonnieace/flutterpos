@@ -43,7 +43,8 @@ repository may accept a raw root collection or arbitrary document path.
 | `lib/screens/create_user.dart` | `createStaffUser` | `inviteStaff({tenantId, ...})` | Legacy and disabled. |
 | `lib/screens/users.dart` | `toggleStaffStatus` | `setStaffStatus({tenantId, uid, status, requestId})` | Legacy and disabled. |
 | `lib/pos/reports.dart` | `getSalesComparison` | Same callable with tenant ID from the guarded session | Current backend API, frontend screen still disabled. |
-| `lib/tenancy/firebase_tenant_gateway.dart` | `listMyTenants`, `setDefaultTenant` | No replacement | Current tenant-routing APIs. |
+| `lib/tenancy/firebase_tenant_gateway.dart` | `listMyTenants` | No replacement | Current read-only tenant-routing API. The former arbitrary-tenant default mutation helper was removed. |
+| `lib/tenancy/tenant_default_tenant.dart` | `setDefaultTenant` | No replacement | Current all-active-role landing action. The gateway derives the tenant and caller binding from one captured active session, creates one request ID per confirmation intent, and strictly decodes exact tenant/default-tenant agreement. |
 | `lib/tenancy/tenant_staff_invitation.dart` | `inviteStaff` | No replacement | Current owner/admin-only form. The gateway derives the tenant from its captured live session, creates one request ID per intent, and strictly decodes the response. |
 | `lib/tenancy/tenant_staff_update.dart` | `updateStaffUser` | No replacement | Current owner/admin-only editor. The gateway derives the tenant and target UID from its captured session and decoded staff summary, preserves the owner role, and strictly decodes the response. |
 | `lib/tenancy/tenant_staff_status.dart` | `setStaffStatus` | No replacement | Current owner/admin-only confirmation flow for accepted non-owner memberships. The gateway derives the tenant and target UID, permits only active/inactive transitions, creates one request ID per intent, and strictly decodes the response. |
