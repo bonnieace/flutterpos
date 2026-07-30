@@ -102,6 +102,49 @@ test("setDefaultTenant updates the authenticated user's routing profile", async 
   assert.ok(root.get("updatedAt") instanceof Timestamp);
 });
 
+test("requestTenant creates a pending canonical tenant and routing mirror", async () => {
+  const fixture = await seedTenantApplicant("request");
+  const idToken = await signIn(fixture.email);
+
+  const response = await callFunction("requestTenant", idToken, {
+    name: "  Chilltent   Emulator  ",
+    slug: "CHILLTENT-EMULATOR",
+    requestId: "tenant-emulator-request-1",
+  });
+
+  assert.deepEqual(Object.keys(response).sort(), [
+    "name",
+    "slug",
+    "status",
+    "tenantId",
+  ]);
+  assert.equal(response.name, "Chilltent Emulator");
+  assert.equal(response.slug, "chilltent-emulator");
+  assert.equal(response.status, "pending");
+  assert.equal(typeof response.tenantId, "string");
+
+  const [tenant, staff, mirror, slug, root] = await Promise.all([
+    firestore.doc(`tenants/${response.tenantId}`).get(),
+    firestore.doc(`tenants/${response.tenantId}/staff/${fixture.uid}`).get(),
+    firestore
+      .doc(`users/${fixture.uid}/tenant_memberships/${response.tenantId}`)
+      .get(),
+    firestore.doc("tenant_slugs/chilltent-emulator").get(),
+    firestore.doc(`users/${fixture.uid}`).get(),
+  ]);
+  assert.equal(tenant.get("status"), "pending");
+  assert.equal(tenant.get("ownerUid"), fixture.uid);
+  assert.equal(staff.get("uid"), fixture.uid);
+  assert.equal(staff.get("role"), "owner");
+  assert.equal(staff.get("status"), "active");
+  assert.equal(mirror.get("tenantStatus"), "pending");
+  assert.equal(mirror.get("membershipStatus"), "active");
+  assert.equal(slug.get("tenantId"), response.tenantId);
+  assert.equal(root.get("membershipCount"), 1);
+  assert.equal(root.get("ownedTenantCount"), 1);
+  assert.equal(root.get("ownedActiveTenantCount"), 0);
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
@@ -290,6 +333,33 @@ async function seedActiveMembership(suffix) {
   });
   await batch.commit();
   return { uid, tenantId, email };
+}
+
+async function seedTenantApplicant(suffix) {
+  const uid = `applicant-${suffix}`;
+  const email = `${suffix}@integration.example.test`;
+  const now = Timestamp.now();
+  await auth.createUser({
+    uid,
+    email,
+    displayName: `Applicant ${suffix}`,
+    password: PASSWORD,
+    emailVerified: true,
+    disabled: false,
+  });
+  await firestore.doc(`users/${uid}`).set({
+    email,
+    displayName: `Applicant ${suffix}`,
+    accountType: "tenant_user",
+    identityOrigin: "self_signup",
+    globalStatus: "active",
+    membershipCount: 0,
+    ownedTenantCount: 0,
+    ownedActiveTenantCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { uid, email };
 }
 
 async function signIn(email) {

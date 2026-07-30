@@ -117,6 +117,85 @@ void main() {
     await fixture.dispose(tester);
   });
 
+  testWidgets(
+    'requests a pending business from no-access routing without opening it',
+    (tester) async {
+      late final _ShellFixture fixture;
+      final callable = _ShellRequestCallable((name, slug) {
+        fixture.gateway.memberships.add(
+          _membership(
+            'tenant-requested',
+            membershipStatus: MembershipStatus.active,
+            tenantStatus: TenantStatus.pending,
+            canAccess: false,
+          ),
+        );
+      });
+      fixture = _ShellFixture(
+        memberships: [],
+        emailVerified: true,
+        requestTenantCallable: callable,
+      );
+      await fixture.pump(tester);
+
+      fixture.auth.add('user-a');
+      await _pumpRouting(tester);
+      expect(find.byKey(const ValueKey('show-tenant-request')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('show-tenant-request')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const ValueKey('tenant-request-name')),
+        '  New   Business ',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('tenant-request-slug')),
+        ' New-Business ',
+      );
+      await tester.tap(find.byKey(const ValueKey('tenant-request-review')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('tenant-request-confirm')));
+      await _pumpRouting(tester);
+
+      expect(callable.payloads.single, {
+        'name': 'New Business',
+        'slug': 'new-business',
+        'requestId': 'routing-tenant-request',
+      });
+      expect(fixture.gateway.rootCalls, 2);
+      expect(fixture.gateway.listCalls, 2);
+      expect(find.text('Business tenant-requested'), findsOneWidget);
+      expect(find.text('admin - Pending'), findsOneWidget);
+      expect(fixture.openedController, isNull);
+      await fixture.dispose(tester);
+    },
+  );
+
+  testWidgets('shows tenant requests only to verified tenant identities', (
+    tester,
+  ) async {
+    final unverified = _ShellFixture(memberships: []);
+    await unverified.pump(tester);
+    unverified.auth.add('user-a');
+    await _pumpRouting(tester);
+    expect(find.byKey(const ValueKey('show-tenant-request')), findsNothing);
+    await unverified.dispose(tester);
+
+    final platform = _ShellFixture(
+      memberships: [],
+      emailVerified: true,
+      profile: const RootRoutingProfile(
+        accountType: RootAccountType.platformAdmin,
+        globalStatus: 'active',
+      ),
+    );
+    await platform.pump(tester);
+    platform.auth.add('platform-user');
+    await _pumpRouting(tester);
+    expect(find.byKey(const ValueKey('show-tenant-request')), findsNothing);
+    await platform.dispose(tester);
+  });
+
   testWidgets('labels every inaccessible membership state', (tester) async {
     final fixture = _ShellFixture(
       memberships: [
@@ -290,6 +369,8 @@ final class _ShellFixture {
     this.acceptTenantInvitationCallable,
     this.useDefaultRoute = false,
     this.setDefaultTenantCallable,
+    this.emailVerified = false,
+    this.requestTenantCallable,
   }) : gateway = _FakeGateway(
          memberships: memberships,
          profile: profile,
@@ -311,6 +392,8 @@ final class _ShellFixture {
   final AcceptTenantInvitationCallable? acceptTenantInvitationCallable;
   final bool useDefaultRoute;
   final SetDefaultTenantCallable? setDefaultTenantCallable;
+  final bool emailVerified;
+  final RequestTenantCallable? requestTenantCallable;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -321,11 +404,14 @@ final class _ShellFixture {
         bootstrapService: service,
         signOut: () async => auth.add(null),
         signedOut: const Scaffold(body: Center(child: Text('Signed out'))),
+        isEmailVerified: (_) => emailVerified,
         invitationLink: invitationLink,
         acceptTenantInvitationCallable: acceptTenantInvitationCallable,
         invitationAcceptanceRequestIdFactory: () => 'routing-accept-request',
         setDefaultTenantCallable: setDefaultTenantCallable,
         defaultTenantRequestIdFactory: () => 'routing-default-request',
+        requestTenantCallable: requestTenantCallable,
+        tenantRequestIdFactory: () => 'routing-tenant-request',
         tenantDataReader: useDefaultRoute ? _RoutingReader() : null,
         tenantRouteBuilder: useDefaultRoute
             ? null
@@ -390,6 +476,27 @@ final class _ShellDefaultCallable implements SetDefaultTenantCallable {
     final tenantId = payload['tenantId']! as String;
     onCall(tenantId);
     return {'tenantId': tenantId, 'defaultTenantId': tenantId};
+  }
+}
+
+final class _ShellRequestCallable implements RequestTenantCallable {
+  _ShellRequestCallable(this.onCall);
+
+  final void Function(String name, String slug) onCall;
+  final List<Map<String, Object?>> payloads = [];
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(Map<String, Object?>.from(payload));
+    final name = payload['name']! as String;
+    final slug = payload['slug']! as String;
+    onCall(name, slug);
+    return {
+      'tenantId': 'tenant-requested',
+      'name': name,
+      'slug': slug,
+      'status': 'pending',
+    };
   }
 }
 

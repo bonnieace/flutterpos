@@ -9,6 +9,7 @@ import 'tenant_default_tenant.dart';
 import 'tenant_invitation_acceptance.dart';
 import 'tenant_membership.dart';
 import 'tenant_repository.dart';
+import 'tenant_request.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_types.dart';
@@ -41,6 +42,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.visibleInvitationRequestIdFactory,
     this.setDefaultTenantCallable,
     this.defaultTenantRequestIdFactory,
+    this.requestTenantCallable,
+    this.tenantRequestIdFactory,
     this.tenantDataReader,
     this.tenantRouteBuilder,
   });
@@ -60,6 +63,8 @@ final class TenantRoutingShell extends StatefulWidget {
   visibleInvitationRequestIdFactory;
   final SetDefaultTenantCallable? setDefaultTenantCallable;
   final TenantDefaultRequestIdFactory? defaultTenantRequestIdFactory;
+  final RequestTenantCallable? requestTenantCallable;
+  final TenantRequestIdFactory? tenantRequestIdFactory;
   final TenantDataReader? tenantDataReader;
   final TenantRouteBuilder? tenantRouteBuilder;
 
@@ -218,6 +223,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   void _refreshAfterVisibleInvitationAcceptance() => _retry();
 
+  void _refreshAfterTenantRequest(TenantRequestResult _) => _retry();
+
   void _completeTokenInvitationAcceptance() {
     setState(() => _pendingInvitationLink = null);
     _retry();
@@ -301,6 +308,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
         _RoutingPhase.selector ||
         _RoutingPhase.noAccessibleTenant => TenantBusinessSelector(
           identity: _visibleInvitationIdentity(),
+          requestIdentity: _tenantRequestIdentity(),
           memberships: _bootstrapResult?.selection.visible ?? const [],
           onOpen: _selectTenant,
           onAccepted: _refreshAfterVisibleInvitationAcceptance,
@@ -310,7 +318,15 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
               widget.acceptVisibleInvitationCallable,
           visibleInvitationRequestIdFactory:
               widget.visibleInvitationRequestIdFactory,
-          isCurrent: () => mounted && _uid != null && _bootstrapResult != null,
+          requestTenantCallable: widget.requestTenantCallable,
+          tenantRequestIdFactory: widget.tenantRequestIdFactory,
+          onTenantRequested: _refreshAfterTenantRequest,
+          isCurrent: () =>
+              mounted &&
+              _uid != null &&
+              _bootstrapResult != null &&
+              (_phase == _RoutingPhase.selector ||
+                  _phase == _RoutingPhase.noAccessibleTenant),
         ),
         _RoutingPhase.tenant => _buildTenantRoute(context),
         _RoutingPhase.platform => PlatformRouteUnavailable(onSignOut: _signOut),
@@ -376,6 +392,17 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       uid: uid,
       emailVerified: widget.isEmailVerified?.call(uid) ?? false,
       globallyActive: profile.isActive,
+    );
+  }
+
+  TenantRequestIdentity? _tenantRequestIdentity() {
+    final uid = _uid;
+    final profile = _bootstrapResult?.profile;
+    if (uid == null || profile == null) return null;
+    return TenantRequestIdentity(
+      uid: uid,
+      emailVerified: widget.isEmailVerified?.call(uid) ?? false,
+      profile: profile,
     );
   }
 
@@ -505,25 +532,33 @@ final class TenantBusinessSelector extends StatefulWidget {
   const TenantBusinessSelector({
     super.key,
     required this.identity,
+    required this.requestIdentity,
     required this.memberships,
     required this.onOpen,
     required this.onAccepted,
     required this.onRetry,
     required this.onSignOut,
+    required this.onTenantRequested,
     this.acceptVisibleInvitationCallable,
     this.visibleInvitationRequestIdFactory,
+    this.requestTenantCallable,
+    this.tenantRequestIdFactory,
     this.isCurrent,
   });
 
   final TenantVisibleInvitationIdentity? identity;
+  final TenantRequestIdentity? requestIdentity;
   final List<TenantMembership> memberships;
   final ValueChanged<TenantMembership> onOpen;
   final VoidCallback onAccepted;
   final VoidCallback onRetry;
   final Future<void> Function() onSignOut;
+  final ValueChanged<TenantRequestResult> onTenantRequested;
   final AcceptVisibleTenantInvitationCallable? acceptVisibleInvitationCallable;
   final TenantVisibleInvitationRequestIdFactory?
   visibleInvitationRequestIdFactory;
+  final RequestTenantCallable? requestTenantCallable;
+  final TenantRequestIdFactory? tenantRequestIdFactory;
   final TenantVisibleInvitationCurrentCheck? isCurrent;
 
   @override
@@ -532,6 +567,16 @@ final class TenantBusinessSelector extends StatefulWidget {
 
 final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
   String? _acceptingTenantId;
+  bool _requestingTenant = false;
+
+  @override
+  void didUpdateWidget(covariant TenantBusinessSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.requestIdentity?.uid != widget.requestIdentity?.uid ||
+        widget.requestIdentity?.canRequestTenant != true) {
+      _requestingTenant = false;
+    }
+  }
 
   void _toggleAcceptance(TenantMembership membership) {
     setState(() {
@@ -546,87 +591,134 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
     widget.onAccepted();
   }
 
+  void _tenantRequested(TenantRequestResult result) {
+    setState(() => _requestingTenant = false);
+    widget.onTenantRequested(result);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Choose a business'),
         actions: [
+          if (widget.requestIdentity?.canRequestTenant == true)
+            TextButton.icon(
+              key: const ValueKey('show-tenant-request'),
+              onPressed: () =>
+                  setState(() => _requestingTenant = !_requestingTenant),
+              icon: const Icon(Icons.add_business_outlined),
+              label: const Text('Request business'),
+            ),
           TextButton(
             onPressed: widget.onSignOut,
             child: const Text('Sign out'),
           ),
         ],
       ),
-      body: widget.memberships.isEmpty
-          ? _EmptyBusinessList(onRetry: widget.onRetry)
-          : ListView.separated(
-              padding: const EdgeInsets.all(20),
-              itemCount: widget.memberships.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final membership = widget.memberships[index];
-                final status = tenantMembershipDisplayStatus(membership);
-                final identity = widget.identity;
-                final canAccept =
-                    identity != null &&
-                    TenantVisibleInvitationAcceptanceGateway.canAccept(
-                      identity: identity,
-                      membership: membership,
-                    );
-                return Card(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: Text(membership.tenantName),
-                        subtitle: Text(
-                          '${membership.role.wireValue} - ${status.label}',
-                        ),
-                        trailing: membership.canAccess()
-                            ? const Icon(Icons.chevron_right)
-                            : canAccept
-                            ? IconButton(
-                                key: ValueKey(
-                                  'accept-visible-invitation-${membership.tenantId}',
-                                ),
-                                tooltip:
-                                    'Accept invitation to ${membership.tenantName}',
-                                onPressed: () => _toggleAcceptance(membership),
-                                icon: const Icon(
-                                  Icons.mark_email_read_outlined,
-                                ),
-                              )
-                            : const Icon(Icons.lock_outline),
-                        enabled: membership.canAccess() || canAccept,
-                        onTap: membership.canAccess()
-                            ? () => widget.onOpen(membership)
-                            : canAccept
-                            ? () => _toggleAcceptance(membership)
-                            : null,
-                      ),
-                      if (_acceptingTenantId == membership.tenantId &&
-                          identity != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          child: TenantVisibleInvitationAcceptanceForm(
+      body: Column(
+        children: [
+          if (_requestingTenant && widget.requestIdentity != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: TenantRequestForm(
+                      identity: widget.requestIdentity!,
+                      callable:
+                          widget.requestTenantCallable ??
+                          FirebaseRequestTenantCallable(),
+                      requestIdFactory: widget.tenantRequestIdFactory,
+                      isCurrent: widget.isCurrent,
+                      onSuccess: _tenantRequested,
+                      onCancel: () => setState(() => _requestingTenant = false),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: widget.memberships.isEmpty
+                ? _EmptyBusinessList(onRetry: widget.onRetry)
+                : ListView.separated(
+                    padding: const EdgeInsets.all(20),
+                    itemCount: widget.memberships.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final membership = widget.memberships[index];
+                      final status = tenantMembershipDisplayStatus(membership);
+                      final identity = widget.identity;
+                      final canAccept =
+                          identity != null &&
+                          TenantVisibleInvitationAcceptanceGateway.canAccept(
                             identity: identity,
                             membership: membership,
-                            callable:
-                                widget.acceptVisibleInvitationCallable ??
-                                FirebaseAcceptVisibleTenantInvitationCallable(),
-                            requestIdFactory:
-                                widget.visibleInvitationRequestIdFactory,
-                            isCurrent: widget.isCurrent,
-                            onSuccess: _accepted,
-                            onCancel: () =>
-                                setState(() => _acceptingTenantId = null),
-                          ),
+                          );
+                      return Card(
+                        child: Column(
+                          children: [
+                            ListTile(
+                              title: Text(membership.tenantName),
+                              subtitle: Text(
+                                '${membership.role.wireValue} - ${status.label}',
+                              ),
+                              trailing: membership.canAccess()
+                                  ? const Icon(Icons.chevron_right)
+                                  : canAccept
+                                  ? IconButton(
+                                      key: ValueKey(
+                                        'accept-visible-invitation-${membership.tenantId}',
+                                      ),
+                                      tooltip:
+                                          'Accept invitation to ${membership.tenantName}',
+                                      onPressed: () =>
+                                          _toggleAcceptance(membership),
+                                      icon: const Icon(
+                                        Icons.mark_email_read_outlined,
+                                      ),
+                                    )
+                                  : const Icon(Icons.lock_outline),
+                              enabled: membership.canAccess() || canAccept,
+                              onTap: membership.canAccess()
+                                  ? () => widget.onOpen(membership)
+                                  : canAccept
+                                  ? () => _toggleAcceptance(membership)
+                                  : null,
+                            ),
+                            if (_acceptingTenantId == membership.tenantId &&
+                                identity != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  16,
+                                  16,
+                                ),
+                                child: TenantVisibleInvitationAcceptanceForm(
+                                  identity: identity,
+                                  membership: membership,
+                                  callable:
+                                      widget.acceptVisibleInvitationCallable ??
+                                      FirebaseAcceptVisibleTenantInvitationCallable(),
+                                  requestIdFactory:
+                                      widget.visibleInvitationRequestIdFactory,
+                                  isCurrent: widget.isCurrent,
+                                  onSuccess: _accepted,
+                                  onCancel: () =>
+                                      setState(() => _acceptingTenantId = null),
+                                ),
+                              ),
+                          ],
                         ),
-                    ],
+                      );
+                    },
                   ),
-                );
-              },
-            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -637,18 +729,20 @@ final class _EmptyBusinessList extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.storefront_outlined, size: 48),
-          const SizedBox(height: 16),
-          const Text('No business memberships are available.'),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: onRetry, child: const Text('Retry')),
-        ],
+  Widget build(BuildContext context) => SingleChildScrollView(
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.storefront_outlined, size: 48),
+            const SizedBox(height: 16),
+            const Text('No business memberships are available.'),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+          ],
+        ),
       ),
     ),
   );

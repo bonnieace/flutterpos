@@ -39,7 +39,7 @@ npm --prefix rules-tests run test:emulator:invitations
 
 The runner uses `firebase.invitation-test.json`, copies the current compiled
 Functions output into an ignored fixture, and exports only the two real
-invitation handlers plus `setDefaultTenant`. It supplies a deterministic
+invitation handlers plus `setDefaultTenant` and `requestTenant`. It supplies a deterministic
 local-only HMAC secret in a temporary ignored file, removes it after the
 emulator exits, and refuses to overwrite existing local configuration. It also
 refuses non-`demo-*` projects or missing localhost emulator hosts. It does not

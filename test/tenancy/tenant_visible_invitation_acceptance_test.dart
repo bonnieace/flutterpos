@@ -353,11 +353,13 @@ Widget _selectorApp({
 }) => MaterialApp(
   home: TenantBusinessSelector(
     identity: identity,
+    requestIdentity: null,
     memberships: memberships,
     onOpen: (_) {},
     onAccepted: onAccepted ?? () {},
     onRetry: () {},
     onSignOut: () async {},
+    onTenantRequested: (_) {},
     acceptVisibleInvitationCallable: callable,
     visibleInvitationRequestIdFactory: () => 'accept-widget-request',
   ),

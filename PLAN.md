@@ -2406,3 +2406,116 @@ Implement only typed `requestTenant` from authenticated tenant routing:
    transaction while leaving lifecycle approval, general tenant switching,
    checkout/Hive state, shifts, reports, returns, subscriptions, and catalog
    mutations outside this scope.
+
+---
+
+## Typed tenant request handoff - 2026-07-30
+
+### Completed in this session
+
+The next bounded frontend milestone enables only explicit, typed
+`requestTenant` from authenticated tenant routing. Successful requests remain
+pending and are never opened as operational tenant sessions.
+
+Implemented behavior:
+
+- `TenantRequestGateway` captures the current verified, globally active tenant
+  identity and accepts no caller UID. Platform identities, disabled roots, and
+  unverified users fail closed before a callable request.
+- Business names are trimmed, internal whitespace is collapsed, control
+  characters are rejected, and the backend's 2-100 character boundary is
+  enforced. Slugs are trimmed, lower-cased, bounded to 3-48 characters, and
+  limited to lower-case letters, numbers, and non-repeated internal hyphens.
+- Each reviewed submission owns one cryptographically generated request ID.
+  Duplicate confirmation taps are single-flight, and a recoverable retry of
+  the unchanged reviewed name/slug reuses the same idempotency key.
+- Callable responses must contain exactly `tenantId`, `name`, `slug`, and a
+  pending `status`. Tenant IDs are validated and the normalized name/slug must
+  exactly match the captured intent.
+- The business selector and no-accessible-tenant route expose an explicit
+  request form only to eligible verified tenant users. Review and confirmation
+  are separate actions; cancellation performs no mutation.
+- Known slug conflicts and request-limit failures receive fixed safe guidance.
+  Other backend, decoding, and eligibility failures use a generic safe error
+  and never expose callable details.
+- Auth UID and routing-state changes discard outstanding success or failure
+  completions. Only a successful current response triggers the bounded root
+  profile and membership-directory refresh; the resulting pending owner mirror
+  is visible with a lock and is not opened.
+- The local Auth + Firestore + Functions fixture exports the real compiled
+  `requestTenant` handler. Its integration test signs in a verified applicant,
+  submits normalized input, asserts the exact response, and verifies the
+  canonical tenant, owner staff, membership mirror, slug reservation, and root
+  counters committed by the transaction.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+functions/integration/index.js
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_request.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/test/invitation-acceptance.integration.test.js
+test/tenancy/tenant_request_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+test/tenancy/tenant_visible_invitation_acceptance_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- `flutter test --no-pub test/tenancy` passed **177/177** tests; the focused
+  tenant-request file passed **10/10**.
+- `npm --prefix functions test` passed **152/152** Functions tests.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules suite
+  **18/18** using portable Node.js 24 and JDK 21 runtimes.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **4/4** real
+  callable tests against Auth, Firestore, and Functions emulators, including
+  the new persisted pending-tenant contract.
+- `flutter build apk --debug --no-pub --target-platform android-x64` completed
+  successfully with a single Gradle worker after the unconstrained cold build
+  exceeded the workstation's worker-thread capacity.
+- The fresh debug APK installed on a newly provisioned API 35 Android emulator.
+  Android reported boot completion, package
+  `com.example.flutter_application_1` remained running as PID 2302, and
+  `.MainActivity` was the top resumed activity with no fatal exception.
+
+The Android 15 emulator SDK and AVD live under `D:\android-emulator-sdk` and
+`D:\android-avds`; they are machine-local validation tooling, not repository
+artifacts.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only the platform pending-tenant review slice backed by typed
+`setTenantLifecycle` transitions:
+
+1. Replace the platform placeholder with a claim-and-root-gated, read-only,
+   paginated pending-tenant queue that derives canonical tenant IDs and owner
+   metadata from Firestore. Do not enable general platform user management.
+2. Add a tenant-record-bound gateway for pending-to-active and
+   pending-to-rejected `setTenantLifecycle` transitions. Derive the tenant ID
+   and current status from the decoded queue item, create one request ID per
+   review intent, require a reason for rejection, and strictly decode exact
+   tenant/previous/target status plus the fan-out operation ID.
+3. Require explicit approve/reject confirmation, recoverable single-flight
+   submission, stable retry idempotency, safe capacity/invariant errors, and
+   Auth/platform/routing stale-completion checks. Refresh only the bounded
+   pending queue after success.
+4. Test strict queue decoding and pagination, unsupported transitions,
+   response mismatches, confirmation dismissal, duplicate taps, retry,
+   platform identity changes, and stale tenant records.
+5. Extend the local callable emulator fixture for real pending approval and
+   rejection transactions while leaving suspension/reactivation/archival,
+   global-user status, tenant switching, checkout/Hive state, and operational
+   POS screens outside this scope.

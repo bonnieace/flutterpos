@@ -11,6 +11,7 @@ export 'tenant_invitation_acceptance.dart';
 export 'tenant_membership.dart';
 export 'tenant_paths.dart';
 export 'tenant_repository.dart';
+export 'tenant_request.dart';
 export 'tenant_route_guard.dart';
 export 'tenant_routing_shell.dart';
 export 'tenant_selection.dart';
