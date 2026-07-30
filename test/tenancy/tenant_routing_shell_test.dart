@@ -196,6 +196,47 @@ void main() {
     await platform.dispose(tester);
   });
 
+  testWidgets('gates the platform queue on both root and superAdmin claim', (
+    tester,
+  ) async {
+    final deniedSource = _ShellPlatformDataSource();
+    final denied = _ShellFixture(
+      memberships: [],
+      profile: const RootRoutingProfile(
+        accountType: RootAccountType.platformAdmin,
+        globalStatus: 'active',
+      ),
+      platformDataSource: deniedSource,
+    );
+    await denied.pump(tester);
+    denied.auth.add('platform-user');
+    await _pumpRouting(tester);
+    expect(
+      find.text('Platform administrator access is not available.'),
+      findsOneWidget,
+    );
+    expect(deniedSource.pageCalls, 0);
+    await denied.dispose(tester);
+
+    final allowedSource = _ShellPlatformDataSource();
+    final allowed = _ShellFixture(
+      memberships: [],
+      profile: const RootRoutingProfile(
+        accountType: RootAccountType.platformAdmin,
+        globalStatus: 'active',
+      ),
+      platformClaim: true,
+      platformDataSource: allowedSource,
+    );
+    await allowed.pump(tester);
+    allowed.auth.add('platform-user');
+    await _pumpRouting(tester);
+    expect(find.text('Pending business reviews'), findsOneWidget);
+    expect(find.text('Routing Review Business'), findsOneWidget);
+    expect(allowedSource.pageCalls, 1);
+    await allowed.dispose(tester);
+  });
+
   testWidgets('labels every inaccessible membership state', (tester) async {
     final fixture = _ShellFixture(
       memberships: [
@@ -371,6 +412,8 @@ final class _ShellFixture {
     this.setDefaultTenantCallable,
     this.emailVerified = false,
     this.requestTenantCallable,
+    this.platformClaim = false,
+    this.platformDataSource,
   }) : gateway = _FakeGateway(
          memberships: memberships,
          profile: profile,
@@ -394,6 +437,8 @@ final class _ShellFixture {
   final SetDefaultTenantCallable? setDefaultTenantCallable;
   final bool emailVerified;
   final RequestTenantCallable? requestTenantCallable;
+  final bool platformClaim;
+  final PlatformPendingTenantDataSource? platformDataSource;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -412,6 +457,10 @@ final class _ShellFixture {
         defaultTenantRequestIdFactory: () => 'routing-default-request',
         requestTenantCallable: requestTenantCallable,
         tenantRequestIdFactory: () => 'routing-tenant-request',
+        hasPlatformSuperAdminClaim: (_) async => platformClaim,
+        platformPendingTenantDataSource: platformDataSource,
+        setTenantLifecycleCallable: _ShellLifecycleCallable(),
+        platformTenantReviewRequestIdFactory: () => 'routing-platform-review',
         tenantDataReader: useDefaultRoute ? _RoutingReader() : null,
         tenantRouteBuilder: useDefaultRoute
             ? null
@@ -498,6 +547,54 @@ final class _ShellRequestCallable implements RequestTenantCallable {
       'status': 'pending',
     };
   }
+}
+
+final class _ShellPlatformDataSource
+    implements PlatformPendingTenantDataSource {
+  int pageCalls = 0;
+
+  @override
+  Future<List<PlatformTenantDocument>> loadPendingTenantDocuments({
+    required int limit,
+    PlatformPendingTenantCursor? cursor,
+  }) async {
+    pageCalls++;
+    if (cursor != null) return const [];
+    return [
+      PlatformTenantDocument(
+        id: 'routing-review-tenant',
+        data: {
+          'name': 'Routing Review Business',
+          'slug': 'routing-review-tenant',
+          'ownerUid': 'routing-review-owner',
+          'status': 'pending',
+          'createdAt': DateTime.utc(2026, 7, 30),
+        },
+      ),
+    ];
+  }
+
+  @override
+  Future<PlatformTenantDocument?> loadRootUser(String uid) async =>
+      PlatformTenantDocument(
+        id: uid,
+        data: const {
+          'email': 'routing-owner@example.test',
+          'displayName': 'Routing Owner',
+          'accountType': 'tenant_user',
+          'globalStatus': 'active',
+        },
+      );
+}
+
+final class _ShellLifecycleCallable implements SetTenantLifecycleCallable {
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async => {
+    'tenantId': payload['tenantId'],
+    'previousStatus': 'pending',
+    'status': payload['status'],
+    'fanoutOperationId': 'routing-fanout-operation',
+  };
 }
 
 final class _RoutingReader implements TenantDataReader {

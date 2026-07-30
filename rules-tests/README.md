@@ -21,13 +21,14 @@ $env:FIRESTORE_EMULATOR_HOST = '127.0.0.1:8180'
 npm --prefix rules-tests test
 ```
 
-## Routing and invitation callable integration tests
+## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under
 the explicit `demo-multitenant-invitation-integration` project. It seeds Auth
 and canonical Firestore state through the Admin SDK, signs in through the Auth
 emulator, calls the real compiled callable endpoints, and verifies both the
-response contracts and committed membership or routing-profile state.
+response contracts and committed membership, routing-profile, or lifecycle
+state.
 
 Use Node.js 24 and JDK 21 or newer, then run from the repository root:
 
@@ -39,12 +40,12 @@ npm --prefix rules-tests run test:emulator:invitations
 
 The runner uses `firebase.invitation-test.json`, copies the current compiled
 Functions output into an ignored fixture, and exports only the two real
-invitation handlers plus `setDefaultTenant` and `requestTenant`. It supplies a deterministic
-local-only HMAC secret in a temporary ignored file, removes it after the
-emulator exits, and refuses to overwrite existing local configuration. It also
-refuses non-`demo-*` projects or missing localhost emulator hosts. It does not
-read `.firebaserc` and cannot target the configured development, staging, or
-production projects.
+invitation handlers plus `setDefaultTenant`, `requestTenant`, and
+`setTenantLifecycle`. It supplies a deterministic local-only HMAC secret in a
+temporary ignored file, removes it after the emulator exits, and refuses to
+overwrite existing local configuration. It also refuses non-`demo-*` projects
+or missing localhost emulator hosts. It does not read `.firebaserc` and cannot
+target the configured development, staging, or production projects.
 
 ## Rules-language boundary
 

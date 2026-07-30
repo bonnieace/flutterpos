@@ -97,6 +97,12 @@ class SpiritPOSApp extends StatelessWidget {
         invitationLink: invitationLink,
         invalidInvitationLink: invalidInvitationLink,
         bootstrapService: bootstrapService,
+        hasPlatformSuperAdminClaim: (uid) async {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user == null || user.uid != uid) return false;
+          final token = await user.getIdTokenResult();
+          return token.claims?['platformRole'] == 'superAdmin';
+        },
         signOut: FirebaseAuth.instance.signOut,
         signedOut: const LoginScreen(),
       ),

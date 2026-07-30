@@ -2519,3 +2519,121 @@ Implement only the platform pending-tenant review slice backed by typed
    rejection transactions while leaving suspension/reactivation/archival,
    global-user status, tenant switching, checkout/Hive state, and operational
    POS screens outside this scope.
+
+---
+
+## Platform pending-tenant review handoff - 2026-07-30
+
+### Completed in this session
+
+The platform placeholder is replaced by the bounded pending-business review
+slice. No general platform user management or operational tenant route was
+enabled.
+
+Implemented behavior:
+
+- The routing shell now requires both an active canonical
+  `platform_admin` root and the current Auth
+  `platformRole == superAdmin` claim before it constructs the platform queue.
+  A root/claim mismatch starts no queue reads and renders a fixed access state.
+- The Firestore queue reads only canonical `tenants` whose status is `pending`,
+  ordered by request time descending and tenant ID ascending. Pages are bounded
+  to 1-50 items and use the exact timestamp/tenant cursor. A production
+  composite index and a Rules-emulator query contract cover that ordering.
+- Each tenant ID comes from its canonical document. Name, slug, owner UID,
+  request timestamp, and canonical owner root metadata are decoded fail-closed.
+  Disabled owners remain visible so an operator can reject an ineligible
+  request; their status is shown explicitly and backend activation checks stay
+  authoritative.
+- `PlatformTenantReviewGateway` captures one decoded pending tenant and one
+  claim-plus-root-gated operator. It exposes only pending-to-active approval and
+  pending-to-rejected rejection, accepts no arbitrary tenant or current status,
+  requires a normalized rejection reason, and creates one request ID per review
+  intent.
+- Callable responses must contain exactly tenant ID, previous status, target
+  status, and fan-out operation ID. Tenant/status mismatches, extra fields,
+  invalid IDs, stale records, and lost operator eligibility fail closed.
+- Approve and reject each require explicit confirmation. Submission is
+  single-flight, a recoverable retry reuses the same idempotency key, UI errors
+  are fixed safe text, and Auth/routing/queue changes discard stale completions.
+  Only a successful current response reloads the bounded first pending page.
+- The local Auth + Firestore + Functions fixture exports the real compiled
+  `setTenantLifecycle`. Integration coverage signs in a claimed platform
+  operator and verifies both pending approval and rejection, including the
+  exact four-field response, tenant and owner-mirror lifecycle state, owner
+  active count, fan-out job, and privileged rejection reason audit.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.indexes.json
+functions/integration/index.js
+lib/main.dart
+lib/tenancy/platform_tenant_review.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/test/control-plane.test.js
+rules-tests/test/invitation-acceptance.integration.test.js
+test/tenancy/platform_tenant_review_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- The wider analysis including `lib/main.dart` and `lib/login_screen.dart`
+  reported only the pre-existing experimental `profilesSampleRate` warning.
+- `flutter test --no-pub test/tenancy` passed **192/192** tests; focused
+  platform review plus routing coverage passed **27/27**.
+- `npm --prefix functions test` passed **152/152** Functions tests.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules suite
+  **19/19**, including the claimed-platform pending-queue query and denied
+  no-claim query.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **6/6** real
+  callable tests against Auth, Firestore, and Functions emulators, including
+  persisted pending approval and rejection transactions.
+- `flutter build apk --debug --no-pub --target-platform android-x64` completed
+  successfully. The final APK installed on the API 35 emulator; package
+  `com.example.flutter_application_1` remained alive as PID 8264,
+  `.MainActivity` was the top resumed activity, and the post-launch fatal log
+  scan returned zero entries.
+
+Portable Node.js 24 and Temurin JDK 21 under
+`D:\firebase-emulator-tools`, plus the API 35 SDK/AVD under
+`D:\android-emulator-sdk` and `D:\android-avds`, remain machine-local test
+tooling and are not repository artifacts.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only active-tenant suspension and suspended-tenant reactivation on
+the typed platform lifecycle foundation:
+
+1. Add a separate claim-and-root-gated, read-only paginated queue for active
+   and suspended canonical tenants. Keep the pending review queue independent,
+   preserve stable status/time/tenant ordering, and continue deriving tenant
+   IDs and owner metadata only from canonical Firestore documents.
+2. Extend the record-bound lifecycle gateway only for active-to-suspended and
+   suspended-to-active transitions. Require a normalized reason for suspension,
+   derive current/target status from the decoded record and action, and strictly
+   validate the exact lifecycle response and fan-out operation ID.
+3. Require explicit confirmation, stable retry idempotency, single-flight
+   submission, safe invariant/capacity errors, stale Auth/claim/record checks,
+   and refresh only the affected bounded queue after success.
+4. Test status-filtered pagination, transition denial, reason validation,
+   response mismatches, duplicate taps, retry, identity/record switches, and
+   activation-capacity failures. Extend the real callable emulator boundary for
+   one suspension and one reactivation transaction.
+5. Leave archival, global-user status, general platform user management,
+   tenant switching, checkout/Hive state, and operational POS screens outside
+   this next chunk.

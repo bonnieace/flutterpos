@@ -145,6 +145,63 @@ test("requestTenant creates a pending canonical tenant and routing mirror", asyn
   assert.equal(root.get("ownedActiveTenantCount"), 0);
 });
 
+test("setTenantLifecycle approves a pending tenant with an exact contract", async () => {
+  const fixture = await seedPendingTenantReview("approve");
+  const idToken = await signIn(fixture.platformEmail);
+
+  const response = await callFunction("setTenantLifecycle", idToken, {
+    tenantId: fixture.tenantId,
+    status: "active",
+    requestId: "lifecycle-approve-emulator-request-1",
+  });
+
+  assertLifecycleResponse(response, fixture.tenantId, "active");
+  const [tenant, mirror, owner, fanout] = await Promise.all([
+    firestore.doc(`tenants/${fixture.tenantId}`).get(),
+    firestore
+      .doc(`users/${fixture.ownerUid}/tenant_memberships/${fixture.tenantId}`)
+      .get(),
+    firestore.doc(`users/${fixture.ownerUid}`).get(),
+    firestore
+      .doc(
+        `tenants/${fixture.tenantId}/membership_fanout_jobs/` +
+          response.fanoutOperationId,
+      )
+      .get(),
+  ]);
+  assert.equal(tenant.get("status"), "active");
+  assert.equal(mirror.get("tenantStatus"), "active");
+  assert.equal(owner.get("ownedActiveTenantCount"), 1);
+  assert.equal(fanout.get("status"), "pending");
+  assert.equal(fanout.get("toStatus"), "active");
+});
+
+test("setTenantLifecycle rejects a pending tenant and records the reason", async () => {
+  const fixture = await seedPendingTenantReview("reject");
+  const idToken = await signIn(fixture.platformEmail);
+
+  const response = await callFunction("setTenantLifecycle", idToken, {
+    tenantId: fixture.tenantId,
+    status: "rejected",
+    reason: "Owner documentation could not be verified.",
+    requestId: "lifecycle-reject-emulator-request-1",
+  });
+
+  assertLifecycleResponse(response, fixture.tenantId, "rejected");
+  const [tenant, mirror, audit] = await Promise.all([
+    firestore.doc(`tenants/${fixture.tenantId}`).get(),
+    firestore
+      .doc(`users/${fixture.ownerUid}/tenant_memberships/${fixture.tenantId}`)
+      .get(),
+    firestore.doc(`platform_audit_logs/${response.fanoutOperationId}`).get(),
+  ]);
+  assert.equal(tenant.get("status"), "rejected");
+  assert.equal(mirror.get("tenantStatus"), "rejected");
+  assert.equal(audit.get("reason"), "Owner documentation could not be verified.");
+  assert.equal(audit.get("fromStatus"), "pending");
+  assert.equal(audit.get("toStatus"), "rejected");
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
@@ -362,6 +419,96 @@ async function seedTenantApplicant(suffix) {
   return { uid, email };
 }
 
+async function seedPendingTenantReview(suffix) {
+  const platformUid = `platform-${suffix}`;
+  const platformEmail = `${platformUid}@integration.example.test`;
+  const ownerUid = `review-owner-${suffix}`;
+  const tenantId = `review-tenant-${suffix}`;
+  const ownerEmail = `${ownerUid}@integration.example.test`;
+  const now = Timestamp.now();
+  await Promise.all([
+    auth.createUser({
+      uid: platformUid,
+      email: platformEmail,
+      password: PASSWORD,
+      emailVerified: true,
+      disabled: false,
+    }),
+    auth.createUser({
+      uid: ownerUid,
+      email: ownerEmail,
+      password: PASSWORD,
+      emailVerified: true,
+      disabled: false,
+    }),
+  ]);
+  await auth.setCustomUserClaims(platformUid, { platformRole: "superAdmin" });
+  const batch = firestore.batch();
+  batch.set(firestore.doc(`users/${platformUid}`), {
+    email: platformEmail,
+    accountType: "platform_admin",
+    identityOrigin: "platform_bootstrap",
+    globalStatus: "active",
+    membershipCount: 0,
+    ownedTenantCount: 0,
+    ownedActiveTenantCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`users/${ownerUid}`), {
+    email: ownerEmail,
+    displayName: `Review Owner ${suffix}`,
+    accountType: "tenant_user",
+    identityOrigin: "self_signup",
+    globalStatus: "active",
+    membershipCount: 1,
+    ownedTenantCount: 1,
+    ownedActiveTenantCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}`), {
+    name: `Review Business ${suffix}`,
+    slug: tenantId,
+    ownerUid,
+    requestedBy: ownerUid,
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}/staff/${ownerUid}`), {
+    uid: ownerUid,
+    email: ownerEmail,
+    name: `Review Owner ${suffix}`,
+    phone: "",
+    role: "owner",
+    status: "active",
+    invitationStatus: "accepted",
+    createdAt: now,
+    joinedAt: now,
+    updatedAt: now,
+  });
+  batch.set(
+    firestore.doc(`users/${ownerUid}/tenant_memberships/${tenantId}`),
+    {
+      tenantId,
+      tenantName: `Review Business ${suffix}`,
+      tenantSlug: tenantId,
+      role: "owner",
+      membershipStatus: "active",
+      tenantStatus: "pending",
+      invitationStatus: "accepted",
+      isOwner: true,
+      mirrorVersion: 1,
+      createdAt: now,
+      joinedAt: now,
+      updatedAt: now,
+    },
+  );
+  await batch.commit();
+  return { platformEmail, ownerUid, tenantId };
+}
+
 async function signIn(email) {
   const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
   const response = await fetch(
@@ -408,6 +555,20 @@ function assertAcceptedResponse(response, fixture) {
     membershipStatus: "active",
     invitationStatus: "accepted",
   });
+}
+
+function assertLifecycleResponse(response, tenantId, status) {
+  assert.deepEqual(Object.keys(response).sort(), [
+    "fanoutOperationId",
+    "previousStatus",
+    "status",
+    "tenantId",
+  ]);
+  assert.equal(response.tenantId, tenantId);
+  assert.equal(response.previousStatus, "pending");
+  assert.equal(response.status, status);
+  assert.equal(typeof response.fanoutOperationId, "string");
+  assert.ok(response.fanoutOperationId.length > 0);
 }
 
 async function assertAcceptedDocuments(fixture, acceptanceMode) {

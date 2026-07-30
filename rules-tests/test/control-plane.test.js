@@ -1,7 +1,21 @@
+import assert from "node:assert/strict";
 import { after, afterEach, before, test } from "node:test";
 
 import { assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  documentId,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 
 import {
   activeTenantDocuments,
@@ -83,6 +97,51 @@ test("platform reads require both the superAdmin claim and an active platform ro
     await assertFails(getDoc(doc(firestore, "platform_config/current")));
     await assertFails(getDoc(doc(firestore, "users/target-user")));
   }
+});
+
+test("the pending tenant queue is readable only through full platform authorization", async () => {
+  await seedDocuments(testEnvironment, {
+    "users/active-platform": {
+      accountType: "platform_admin",
+      globalStatus: "active",
+    },
+    "users/no-claim": {
+      accountType: "platform_admin",
+      globalStatus: "active",
+    },
+    "tenants/pending-a": {
+      name: "Pending A",
+      ownerUid: "owner-a",
+      status: "pending",
+      createdAt: new Date("2026-07-30T10:00:00Z"),
+    },
+    "tenants/active-a": {
+      name: "Active A",
+      ownerUid: "owner-b",
+      status: "active",
+      createdAt: new Date("2026-07-30T09:00:00Z"),
+    },
+  });
+
+  const queue = (firestore) => query(
+    collection(firestore, "tenants"),
+    where("status", "==", "pending"),
+    orderBy("createdAt", "desc"),
+    orderBy(documentId()),
+    limit(21),
+  );
+  const platform = authenticatedFirestore(
+    testEnvironment,
+    "active-platform",
+    { platformRole: "superAdmin" },
+  );
+  const snapshot = await assertSucceeds(getDocs(queue(platform)));
+  assert.equal(snapshot.docs.length, 1);
+  assert.equal(snapshot.docs[0].id, "pending-a");
+
+  await assertFails(getDocs(queue(
+    authenticatedFirestore(testEnvironment, "no-claim"),
+  )));
 });
 
 test("canonical membership documents are client-readable where intended but always server-write-only", async () => {

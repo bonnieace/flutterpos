@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'platform_tenant_review.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
@@ -44,6 +45,10 @@ final class TenantRoutingShell extends StatefulWidget {
     this.defaultTenantRequestIdFactory,
     this.requestTenantCallable,
     this.tenantRequestIdFactory,
+    this.hasPlatformSuperAdminClaim,
+    this.platformPendingTenantDataSource,
+    this.setTenantLifecycleCallable,
+    this.platformTenantReviewRequestIdFactory,
     this.tenantDataReader,
     this.tenantRouteBuilder,
   });
@@ -65,6 +70,11 @@ final class TenantRoutingShell extends StatefulWidget {
   final TenantDefaultRequestIdFactory? defaultTenantRequestIdFactory;
   final RequestTenantCallable? requestTenantCallable;
   final TenantRequestIdFactory? tenantRequestIdFactory;
+  final Future<bool> Function(String uid)? hasPlatformSuperAdminClaim;
+  final PlatformPendingTenantDataSource? platformPendingTenantDataSource;
+  final SetTenantLifecycleCallable? setTenantLifecycleCallable;
+  final PlatformTenantReviewRequestIdFactory?
+  platformTenantReviewRequestIdFactory;
   final TenantDataReader? tenantDataReader;
   final TenantRouteBuilder? tenantRouteBuilder;
 
@@ -96,6 +106,9 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   Object? _error;
   TenantInvitationLink? _pendingInvitationLink;
   bool _hasInvalidInvitationLink = false;
+  PlatformReviewIdentity? _platformIdentity;
+  PlatformPendingTenantDataSource? _defaultPlatformDataSource;
+  SetTenantLifecycleCallable? _defaultTenantLifecycleCallable;
 
   @override
   void initState() {
@@ -151,6 +164,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     _uid = nextUid;
     _bootstrapResult = null;
     _membership = null;
+    _platformIdentity = null;
     _error = null;
     if (nextUid == null) {
       if (!mounted) return;
@@ -181,6 +195,15 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
           setState(() => _phase = _RoutingPhase.noAccessibleTenant);
           return;
         case TenantBootstrapKind.platform:
+          final hasClaim =
+              await (widget.hasPlatformSuperAdminClaim?.call(uid) ??
+                  Future<bool>.value(false));
+          if (!_isCurrent(uid, token)) return;
+          _platformIdentity = PlatformReviewIdentity(
+            uid: uid,
+            profile: result.profile,
+            hasSuperAdminClaim: hasClaim,
+          );
           setState(() => _phase = _RoutingPhase.platform);
           return;
       }
@@ -245,6 +268,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     setState(() {
       _bootstrapResult = null;
       _membership = null;
+      _platformIdentity = null;
       _error = null;
       _phase = _RoutingPhase.bootstrapping;
     });
@@ -329,7 +353,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
                   _phase == _RoutingPhase.noAccessibleTenant),
         ),
         _RoutingPhase.tenant => _buildTenantRoute(context),
-        _RoutingPhase.platform => PlatformRouteUnavailable(onSignOut: _signOut),
+        _RoutingPhase.platform => _buildPlatformRoute(),
         _RoutingPhase.failure => TenantBootstrapFailure(
           error: _error,
           onRetry: _retry,
@@ -337,6 +361,31 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
         ),
         _RoutingPhase.signedOut => widget.signedOut,
       },
+    );
+  }
+
+  Widget _buildPlatformRoute() {
+    final identity = _platformIdentity;
+    if (identity == null || !identity.canReview) {
+      return PlatformRouteUnavailable(onSignOut: _signOut);
+    }
+    return PlatformPendingTenantReviewScreen(
+      identity: identity,
+      dataSource:
+          widget.platformPendingTenantDataSource ??
+          (_defaultPlatformDataSource ??=
+              FirebasePlatformPendingTenantDataSource()),
+      callable:
+          widget.setTenantLifecycleCallable ??
+          (_defaultTenantLifecycleCallable ??=
+              FirebaseSetTenantLifecycleCallable()),
+      requestIdFactory: widget.platformTenantReviewRequestIdFactory,
+      isCurrent: () =>
+          mounted &&
+          _phase == _RoutingPhase.platform &&
+          _uid == identity.uid &&
+          identical(_platformIdentity, identity),
+      onSignOut: _signOut,
     );
   }
 
@@ -977,7 +1026,7 @@ final class PlatformRouteUnavailable extends StatelessWidget {
           children: [
             const Icon(Icons.admin_panel_settings_outlined, size: 52),
             const SizedBox(height: 16),
-            const Text('Platform administration is not available in this app.'),
+            const Text('Platform administrator access is not available.'),
             const SizedBox(height: 16),
             OutlinedButton(onPressed: onSignOut, child: const Text('Sign out')),
           ],
