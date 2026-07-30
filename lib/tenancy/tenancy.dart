@@ -9,6 +9,7 @@ export 'hive_tenant_selection_store.dart';
 export 'platform_tenant_review.dart';
 export 'platform_tenant_lifecycle.dart';
 export 'platform_tenant_archival.dart';
+export 'platform_global_user_status.dart';
 export 'tenant_id.dart';
 export 'tenant_invitation_acceptance.dart';
 export 'tenant_membership.dart';

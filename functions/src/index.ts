@@ -7,6 +7,7 @@ export {listMyTenants, setDefaultTenant} from "./tenants/routing";
 
 export {setTenantLifecycle} from "./lifecycle/tenantLifecycle";
 export {setGlobalUserStatus} from "./lifecycle/globalStatus";
+export {getGlobalUserStatusReview} from "./lifecycle/globalStatusReview";
 export {retryGlobalUserStatusOperations} from "./lifecycle/retryWorker";
 
 export {

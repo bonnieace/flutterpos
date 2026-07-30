@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'platform_tenant_archival.dart';
+import 'platform_global_user_status.dart';
 import 'platform_tenant_review.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -628,7 +629,9 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
     required this.pendingDataSource,
     required this.lifecycleDataSource,
     required this.rejectedDataSource,
+    required this.globalUserDataSource,
     required this.callable,
+    required this.globalUserCallable,
     required this.onSignOut,
     this.requestIdFactory,
     this.isCurrent,
@@ -638,14 +641,16 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
   final PlatformPendingTenantDataSource pendingDataSource;
   final PlatformLifecycleTenantDataSource lifecycleDataSource;
   final PlatformRejectedTenantDataSource rejectedDataSource;
+  final PlatformGlobalUserDataSource globalUserDataSource;
   final SetTenantLifecycleCallable callable;
+  final SetGlobalUserStatusCallable globalUserCallable;
   final Future<void> Function() onSignOut;
   final PlatformTenantReviewRequestIdFactory? requestIdFactory;
   final PlatformTenantReviewCurrentCheck? isCurrent;
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 3,
+    length: 4,
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Platform tenant management'),
@@ -658,6 +663,7 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
             Tab(text: 'Pending business reviews'),
             Tab(text: 'Active & suspended'),
             Tab(text: 'Rejected archive'),
+            Tab(text: 'Global user status'),
           ],
         ),
       ),
@@ -685,6 +691,14 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
             callable: callable,
             requestIdFactory: requestIdFactory,
             isCurrent: isCurrent,
+          ),
+          PlatformGlobalUserStatusScreen(
+            identity: identity,
+            dataSource: globalUserDataSource,
+            callable: globalUserCallable,
+            requestIdFactory: requestIdFactory,
+            isCurrent: isCurrent,
+            onCurrentOperatorAffected: onSignOut,
           ),
         ],
       ),

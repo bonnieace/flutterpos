@@ -2864,3 +2864,122 @@ recoverable saga boundary:
 5. Leave platform-admin grant/revoke, general platform user management,
    archival of non-rejected tenants, tenant switching, checkout/Hive state,
    and operational POS screens outside this next chunk.
+
+---
+
+## Platform exact-UID global-user status handoff - 2026-07-30
+
+### Completed in this session
+
+The platform tenant-management route now adds only exact-UID global-user
+status review and active/disabled transitions. General user discovery,
+platform-role administration, bulk actions, and operational tenant screens
+remain disabled.
+
+Implemented behavior:
+
+- A fourth claim-and-root-gated platform tab accepts one exact canonical UID.
+  It exposes no directory, search, pagination, bulk action, or role-management
+  surface.
+- `getGlobalUserStatusReview` performs bounded authoritative server scans of
+  the target root, canonical staff memberships, owned tenants, and affected
+  administrative principals. It returns a strict safe projection only after
+  full platform authorization. Keeping this scan behind a callable preserves
+  the frozen deny-by-default legacy root `staff` Rules boundary; a client
+  collection-group query could not safely express that distinction.
+- The Flutter adapter explicitly prepares one exact immutable review and
+  strictly decodes all roots, tenant records, staff records, IDs, statuses,
+  roles, and timestamps. Dependent administrator-root reads cannot replace the
+  target snapshot.
+- Affected-tenant summaries are derived from canonical ownership and staff
+  evidence. The review warns when disabling the target would make an owner
+  unavailable or leave a non-archived tenant without another active canonical
+  tenant-user administrator.
+- `PlatformGlobalUserStatusGateway` binds the decoded target and exposes only
+  active-to-disabled and disabled-to-active. Both actions require a normalized
+  3-1000 character reason; disabling additionally requires the exact target
+  UID as destructive confirmation.
+- Each reviewed intent owns one cryptographically generated request ID.
+  Duplicate taps are single-flight, recoverable retry reuses the same
+  idempotency key, target/identity changes fail closed, and the response must
+  exactly agree on operation ID, UID, target status, saga status, affected
+  tenant IDs, attempt count, and optional safe error code.
+- Completed and partially-failed sagas are handled separately. Only a current
+  completed response refreshes the exact target; a partial response remains
+  retryable. Disabling the current operator signs out and requires a fresh
+  sign-in rather than attempting an in-place refresh.
+- Real emulator coverage proves tenant users cannot call the review, a fully
+  authorized platform operator can, and disable/reactivate updates Auth,
+  token cutoff, root state, operation steps, affected-tenant alert, and audit
+  evidence while leaving advisory membership mirrors non-authoritative.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+functions/integration/index.js
+functions/src/index.ts
+functions/src/lifecycle/globalStatusReview.ts
+lib/tenancy/platform_global_user_status.dart
+lib/tenancy/platform_tenant_lifecycle.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/scripts/run-invitation-emulator-tests.js
+rules-tests/test/invitation-acceptance.integration.test.js
+test/tenancy/platform_global_user_status_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 test/tenancy` passed **233/233**
+  tests; the new global-user coverage passed **16/16** within that suite.
+- `npm --prefix functions test` passed **152/152** Functions tests.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules suite
+  **21/21** using portable Node.js 24 and JDK 21.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **9/9** real
+  callable tests against Auth, Firestore, and Functions emulators, including
+  exact review authorization and the disable/reactivate saga.
+- Android build/emulator validation was intentionally skipped for this chunk
+  at the user's request.
+
+The first Rules-emulator launch selected system JDK 17 and stopped before any
+test ran. The first full Functions-emulator launch also exhausted the default
+worker heap. The final successful runs pinned the machine-local portable JDK
+21 and Node.js 24 toolchain under `D:\firebase-emulator-tools` and set
+`NODE_OPTIONS=--max-old-space-size=512`; these are not repository artifacts.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded backend chunk
+
+Implement only a secure operator entry point for the existing canonical
+`grantPlatformAdmin` service:
+
+1. Prefer a deliberately invoked Admin SDK/CLI workflow with an explicit
+   project allowlist, authenticated actor identity, exact target UID, bounded
+   reason, and destructive target confirmation. Do not expose a general
+   in-app platform-user directory or make the service a broadly callable
+   endpoint.
+2. Preserve the service's authoritative eligibility scan, resumable identity
+   transition, custom-claim compensation, audit evidence, and fail-closed
+   claim-plus-root authorization boundary. Treat advisory counters and routing
+   mirrors as non-authoritative.
+3. Add strict input/project guards, deterministic operator-facing exit states,
+   safe recoverable retry guidance, and tests proving configuration mistakes
+   cannot target staging or production implicitly.
+4. Add a real Auth/Firestore emulator grant transaction covering an eligible
+   identity, an ineligible canonical tenant identity, claim/root completion,
+   transition recovery, and audit evidence.
+5. Leave platform-admin revocation, Flutter role-management UI, general user
+   search, tenant switching, checkout/Hive state, deployment, and operational
+   POS screens outside that chunk.

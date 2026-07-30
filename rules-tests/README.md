@@ -30,6 +30,9 @@ emulator, calls the real compiled callable endpoints, and verifies both the
 response contracts and committed membership, routing-profile, or lifecycle
 state. Lifecycle coverage includes pending approval/rejection, active
 suspension, suspended reactivation, and rejected archival.
+Global-user coverage includes claim-and-root-gated exact-UID review plus the
+real disable/reactivate saga across Auth, root state, operation, alert, and
+audit records.
 
 Use Node.js 24 and JDK 21 or newer, then run from the repository root:
 
@@ -42,11 +45,16 @@ npm --prefix rules-tests run test:emulator:invitations
 The runner uses `firebase.invitation-test.json`, copies the current compiled
 Functions output into an ignored fixture, and exports only the two real
 invitation handlers plus `setDefaultTenant`, `requestTenant`, and
-`setTenantLifecycle`. It supplies a deterministic local-only HMAC secret in a
-temporary ignored file, removes it after the emulator exits, and refuses to
-overwrite existing local configuration. It also refuses non-`demo-*` projects
-or missing localhost emulator hosts. It does not read `.firebaserc` and cannot
-target the configured development, staging, or production projects.
+`setTenantLifecycle`, `getGlobalUserStatusReview`, and `setGlobalUserStatus`.
+It supplies a deterministic local-only HMAC secret in a temporary ignored
+file, removes it after the emulator exits, and refuses to overwrite existing
+local configuration. It also refuses non-`demo-*` projects or missing
+localhost emulator hosts. It does not read `.firebaserc` and cannot target the
+configured development, staging, or production projects.
+
+For focused diagnosis, set `INTEGRATION_TEST_NAME_PATTERN` to a Node test-name
+pattern before launching the runner. On memory-constrained Windows hosts, set
+`NODE_OPTIONS=--max-old-space-size=512` for the Functions emulator workers.
 
 ## Rules-language boundary
 

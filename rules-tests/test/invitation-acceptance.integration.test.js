@@ -298,6 +298,120 @@ test("setTenantLifecycle archives a rejected tenant with exact persisted state",
   assert.equal(audit.get("toStatus"), "archived");
 });
 
+test("setGlobalUserStatus completes disable and reactivation sagas", async () => {
+  const fixture = await seedGlobalStatusFixture("global-status");
+  const targetToken = await signIn(fixture.targetEmail);
+  const idToken = await signIn(fixture.platformEmail);
+
+  await assertCallableError(
+    "getGlobalUserStatusReview",
+    targetToken,
+    { uid: fixture.targetUid },
+    "PERMISSION_DENIED",
+  );
+  const review = await callFunction("getGlobalUserStatusReview", idToken, {
+    uid: fixture.targetUid,
+  });
+  assert.deepEqual(Object.keys(review).sort(), [
+    "administrativeRoots",
+    "administrativeStaff",
+    "found",
+    "ownedTenants",
+    "targetStaff",
+    "tenants",
+    "user",
+  ]);
+  assert.equal(review.found, true);
+  assert.equal(review.user.id, fixture.targetUid);
+  assert.equal(review.user.data.globalStatus, "active");
+  assert.equal(Number.isSafeInteger(review.user.data.updatedAtMillis), true);
+  assert.deepEqual(review.targetStaff.map((staff) => staff.tenantId), [
+    fixture.tenantId,
+  ]);
+  assert.deepEqual(review.ownedTenants.map((tenant) => tenant.id), [
+    fixture.tenantId,
+  ]);
+  assert.deepEqual(review.tenants.map((tenant) => tenant.id), [
+    fixture.tenantId,
+  ]);
+  assert.equal(review.administrativeStaff.length, 1);
+  assert.deepEqual(review.administrativeRoots, []);
+
+  const disabled = await callFunction("setGlobalUserStatus", idToken, {
+    uid: fixture.targetUid,
+    status: "disabled",
+    reason: "Confirmed account security incident.",
+    requestId: "global-disable-emulator-request-1",
+  });
+  assertGlobalStatusResponse(
+    disabled,
+    "global-disable-emulator-request-1",
+    fixture.targetUid,
+    "disabled",
+    [fixture.tenantId],
+  );
+  let [root, operation, authUser, mirror, alerts] = await Promise.all([
+    firestore.doc(`users/${fixture.targetUid}`).get(),
+    firestore.doc(`platform_user_operations/${disabled.operationId}`).get(),
+    auth.getUser(fixture.targetUid),
+    firestore
+      .doc(`users/${fixture.targetUid}/tenant_memberships/${fixture.tenantId}`)
+      .get(),
+    firestore.collection(`tenants/${fixture.tenantId}/alerts`).get(),
+  ]);
+  assert.equal(root.get("globalStatus"), "disabled");
+  assert.equal(root.get("globalStatusOperationId"), undefined);
+  assert.equal(operation.get("status"), "completed");
+  assert.equal(operation.get("authStatus"), "completed");
+  assert.equal(operation.get("tokenStatus"), "completed");
+  assert.deepEqual(operation.get("affectedTenantIds"), [fixture.tenantId]);
+  assert.equal(authUser.disabled, true);
+  assert.equal(typeof authUser.tokensValidAfterTime, "string");
+  assert.ok(Number.isFinite(Date.parse(authUser.tokensValidAfterTime)));
+  assert.equal(mirror.get("tenantStatus"), "active");
+  assert.equal(alerts.size, 1);
+  assert.equal(alerts.docs[0].get("type"), "tenant_owner_unavailable");
+
+  const reactivated = await callFunction("setGlobalUserStatus", idToken, {
+    uid: fixture.targetUid,
+    status: "active",
+    reason: "Support verified the account recovery.",
+    requestId: "global-reactivate-emulator-request-1",
+  });
+  assertGlobalStatusResponse(
+    reactivated,
+    "global-reactivate-emulator-request-1",
+    fixture.targetUid,
+    "active",
+    [],
+  );
+  [root, operation, authUser] = await Promise.all([
+    firestore.doc(`users/${fixture.targetUid}`).get(),
+    firestore.doc(`platform_user_operations/${reactivated.operationId}`).get(),
+    auth.getUser(fixture.targetUid),
+  ]);
+  assert.equal(root.get("globalStatus"), "active");
+  assert.equal(Number.isSafeInteger(root.get("authValidAfterSeconds")), true);
+  assert.ok(root.get("authValidAfterSeconds") > 0);
+  assert.equal(root.get("globalStatusOperationId"), undefined);
+  assert.equal(operation.get("status"), "completed");
+  assert.equal(operation.get("claimStatus"), "not_restored");
+  assert.equal(authUser.disabled, false);
+
+  const audits = await firestore
+    .collection("platform_audit_logs")
+    .where("uid", "==", fixture.targetUid)
+    .get();
+  const globalAudits = audits.docs.filter(
+    (document) => document.get("eventType") === "global_user_status_changed",
+  );
+  assert.equal(globalAudits.length, 2);
+  assert.deepEqual(
+    globalAudits.map((document) => document.get("status")).sort(),
+    ["completed", "completed"],
+  );
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
@@ -605,6 +719,100 @@ async function seedPendingTenantReview(suffix, status = "pending") {
   return { platformEmail, ownerUid, tenantId };
 }
 
+async function seedGlobalStatusFixture(suffix) {
+  const platformUid = `platform-${suffix}`;
+  const platformEmail = `${platformUid}@integration.example.test`;
+  const targetUid = `target-${suffix}`;
+  const targetEmail = `${targetUid}@integration.example.test`;
+  const tenantId = `tenant-${suffix}`;
+  const now = Timestamp.now();
+  await Promise.all([
+    auth.createUser({
+      uid: platformUid,
+      email: platformEmail,
+      password: PASSWORD,
+      emailVerified: true,
+      disabled: false,
+    }),
+    auth.createUser({
+      uid: targetUid,
+      email: targetEmail,
+      password: PASSWORD,
+      emailVerified: true,
+      disabled: false,
+    }),
+  ]);
+  await auth.setCustomUserClaims(platformUid, { platformRole: "superAdmin" });
+  const batch = firestore.batch();
+  batch.set(firestore.doc(`users/${platformUid}`), {
+    email: platformEmail,
+    accountType: "platform_admin",
+    identityOrigin: "platform_bootstrap",
+    globalStatus: "active",
+    membershipCount: 0,
+    ownedTenantCount: 0,
+    ownedActiveTenantCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`users/${targetUid}`), {
+    email: targetEmail,
+    displayName: "Global Status Target",
+    accountType: "tenant_user",
+    identityOrigin: "self_signup",
+    globalStatus: "active",
+    membershipCount: 1,
+    ownedTenantCount: 1,
+    ownedActiveTenantCount: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}`), {
+    name: "Global Status Business",
+    slug: tenantId,
+    ownerUid: targetUid,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}/staff/${targetUid}`), {
+    uid: targetUid,
+    email: targetEmail,
+    role: "owner",
+    status: "active",
+    invitationStatus: "accepted",
+    createdAt: now,
+    joinedAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`staff/${targetUid}`), {
+    uid: targetUid,
+    email: targetEmail,
+    role: "owner",
+    status: "active",
+    legacyOnly: true,
+  });
+  batch.set(
+    firestore.doc(`users/${targetUid}/tenant_memberships/${tenantId}`),
+    {
+      tenantId,
+      tenantName: "Global Status Business",
+      tenantSlug: tenantId,
+      role: "owner",
+      membershipStatus: "active",
+      tenantStatus: "active",
+      invitationStatus: "accepted",
+      isOwner: true,
+      mirrorVersion: 1,
+      createdAt: now,
+      joinedAt: now,
+      updatedAt: now,
+    },
+  );
+  await batch.commit();
+  return { platformEmail, targetUid, targetEmail, tenantId };
+}
+
 async function signIn(email) {
   const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
   const response = await fetch(
@@ -642,6 +850,29 @@ async function callFunction(functionName, idToken, data) {
   return body.result;
 }
 
+async function assertCallableError(
+  functionName,
+  idToken,
+  data,
+  expectedStatus,
+) {
+  const host = process.env.FUNCTIONS_EMULATOR_HOST;
+  const response = await fetch(
+    `http://${host}/${PROJECT_ID}/us-central1/${functionName}`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${idToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ data }),
+    },
+  );
+  const body = await response.json();
+  assert.equal(response.ok, false, JSON.stringify(body));
+  assert.equal(body.error?.status, expectedStatus, JSON.stringify(body));
+}
+
 function assertAcceptedResponse(response, fixture) {
   assert.deepEqual(Object.keys(response).sort(), ACCEPTANCE_FIELDS);
   assert.deepEqual(response, {
@@ -670,6 +901,31 @@ function assertLifecycleResponse(
   assert.equal(response.status, status);
   assert.equal(typeof response.fanoutOperationId, "string");
   assert.ok(response.fanoutOperationId.length > 0);
+}
+
+function assertGlobalStatusResponse(
+  response,
+  operationId,
+  uid,
+  targetStatus,
+  affectedTenantIds,
+) {
+  assert.deepEqual(Object.keys(response).sort(), [
+    "affectedTenantIds",
+    "attemptCount",
+    "operationId",
+    "status",
+    "targetStatus",
+    "uid",
+  ]);
+  assert.deepEqual(response, {
+    operationId,
+    uid,
+    status: "completed",
+    targetStatus,
+    affectedTenantIds,
+    attemptCount: 1,
+  });
 }
 
 async function assertAcceptedDocuments(fixture, acceptanceMode) {

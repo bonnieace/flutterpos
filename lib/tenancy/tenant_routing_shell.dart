@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'platform_tenant_review.dart';
 import 'platform_tenant_lifecycle.dart';
 import 'platform_tenant_archival.dart';
+import 'platform_global_user_status.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
@@ -51,7 +52,9 @@ final class TenantRoutingShell extends StatefulWidget {
     this.platformPendingTenantDataSource,
     this.platformLifecycleTenantDataSource,
     this.platformRejectedTenantDataSource,
+    this.platformGlobalUserDataSource,
     this.setTenantLifecycleCallable,
+    this.setGlobalUserStatusCallable,
     this.platformTenantReviewRequestIdFactory,
     this.tenantDataReader,
     this.tenantRouteBuilder,
@@ -78,7 +81,9 @@ final class TenantRoutingShell extends StatefulWidget {
   final PlatformPendingTenantDataSource? platformPendingTenantDataSource;
   final PlatformLifecycleTenantDataSource? platformLifecycleTenantDataSource;
   final PlatformRejectedTenantDataSource? platformRejectedTenantDataSource;
+  final PlatformGlobalUserDataSource? platformGlobalUserDataSource;
   final SetTenantLifecycleCallable? setTenantLifecycleCallable;
+  final SetGlobalUserStatusCallable? setGlobalUserStatusCallable;
   final PlatformTenantReviewRequestIdFactory?
   platformTenantReviewRequestIdFactory;
   final TenantDataReader? tenantDataReader;
@@ -116,7 +121,9 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   PlatformPendingTenantDataSource? _defaultPlatformDataSource;
   PlatformLifecycleTenantDataSource? _defaultPlatformLifecycleDataSource;
   PlatformRejectedTenantDataSource? _defaultPlatformRejectedDataSource;
+  PlatformGlobalUserDataSource? _defaultPlatformGlobalUserDataSource;
   SetTenantLifecycleCallable? _defaultTenantLifecycleCallable;
+  SetGlobalUserStatusCallable? _defaultGlobalUserStatusCallable;
 
   @override
   void initState() {
@@ -391,10 +398,18 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
           widget.platformRejectedTenantDataSource ??
           (_defaultPlatformRejectedDataSource ??=
               FirebasePlatformRejectedTenantDataSource()),
+      globalUserDataSource:
+          widget.platformGlobalUserDataSource ??
+          (_defaultPlatformGlobalUserDataSource ??=
+              FirebasePlatformGlobalUserDataSource()),
       callable:
           widget.setTenantLifecycleCallable ??
           (_defaultTenantLifecycleCallable ??=
               FirebaseSetTenantLifecycleCallable()),
+      globalUserCallable:
+          widget.setGlobalUserStatusCallable ??
+          (_defaultGlobalUserStatusCallable ??=
+              FirebaseSetGlobalUserStatusCallable()),
       requestIdFactory: widget.platformTenantReviewRequestIdFactory,
       isCurrent: () =>
           mounted &&

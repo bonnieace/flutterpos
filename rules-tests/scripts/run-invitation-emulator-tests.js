@@ -47,12 +47,22 @@ writeFileSync(
   ].join("\n"),
   { encoding: "utf8", flag: "wx" },
 );
-const testCommand = [
+const testCommandParts = [
   process.execPath,
   "--test",
   "--test-concurrency=1",
-  "test/invitation-acceptance.integration.test.js",
-].map((part) => JSON.stringify(part)).join(" ");
+];
+const testNamePattern = process.env.INTEGRATION_TEST_NAME_PATTERN;
+if (testNamePattern) {
+  if (testNamePattern.length > 200 || /[\u0000-\u001f]/.test(testNamePattern)) {
+    throw new Error("The integration test-name pattern is invalid.");
+  }
+  testCommandParts.push(`--test-name-pattern=${testNamePattern}`);
+}
+testCommandParts.push("test/invitation-acceptance.integration.test.js");
+const testCommand = testCommandParts
+  .map((part) => JSON.stringify(part))
+  .join(" ");
 
 let result;
 try {

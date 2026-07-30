@@ -242,6 +242,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Routing Rejected Business'), findsOneWidget);
     expect(allowedSource.archivalCalls, 1);
+    await tester.tap(find.text('Global user status'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('platform-global-user-uid')),
+      'routing-target-user',
+    );
+    await tester.tap(find.byKey(const ValueKey('platform-global-user-lookup')));
+    await tester.pumpAndSettle();
+    expect(find.text('Routing Target User'), findsOneWidget);
+    expect(allowedSource.globalUserStaffCalls, 1);
     await allowed.dispose(tester);
   });
 
@@ -469,7 +479,9 @@ final class _ShellFixture {
         platformPendingTenantDataSource: platformDataSource,
         platformLifecycleTenantDataSource: platformDataSource,
         platformRejectedTenantDataSource: platformDataSource,
+        platformGlobalUserDataSource: platformDataSource,
         setTenantLifecycleCallable: _ShellLifecycleCallable(),
+        setGlobalUserStatusCallable: _ShellGlobalStatusCallable(),
         platformTenantReviewRequestIdFactory: () => 'routing-platform-review',
         tenantDataReader: useDefaultRoute ? _RoutingReader() : null,
         tenantRouteBuilder: useDefaultRoute
@@ -563,10 +575,15 @@ final class _ShellPlatformDataSource
     implements
         PlatformPendingTenantDataSource,
         PlatformLifecycleTenantDataSource,
-        PlatformRejectedTenantDataSource {
+        PlatformRejectedTenantDataSource,
+        PlatformGlobalUserDataSource {
   int pageCalls = 0;
   int lifecycleCalls = 0;
   int archivalCalls = 0;
+  int globalUserStaffCalls = 0;
+
+  @override
+  Future<void> prepareExactReview(String uid) async {}
 
   @override
   Future<List<PlatformTenantDocument>> loadPendingTenantDocuments({
@@ -593,13 +610,37 @@ final class _ShellPlatformDataSource
   Future<PlatformTenantDocument?> loadRootUser(String uid) async =>
       PlatformTenantDocument(
         id: uid,
-        data: const {
-          'email': 'routing-owner@example.test',
-          'displayName': 'Routing Owner',
+        data: {
+          'email': '$uid@example.test',
+          'displayName': uid == 'routing-target-user'
+              ? 'Routing Target User'
+              : 'Routing Owner',
           'accountType': 'tenant_user',
           'globalStatus': 'active',
+          'updatedAt': DateTime.utc(2026, 7, 30),
         },
       );
+
+  @override
+  Future<List<PlatformCanonicalStaffDocument>> loadTargetStaffDocuments(
+    String uid,
+  ) async {
+    globalUserStaffCalls++;
+    return const [];
+  }
+
+  @override
+  Future<List<PlatformTenantDocument>> loadOwnedTenantDocuments(
+    String uid,
+  ) async => const [];
+
+  @override
+  Future<PlatformTenantDocument?> loadTenant(String tenantId) async => null;
+
+  @override
+  Future<List<PlatformCanonicalStaffDocument>> loadAdministrativeStaffDocuments(
+    String tenantId,
+  ) async => const [];
 
   @override
   Future<List<PlatformTenantDocument>> loadLifecycleTenantDocuments({
@@ -651,6 +692,18 @@ final class _ShellLifecycleCallable implements SetTenantLifecycleCallable {
     'previousStatus': 'pending',
     'status': payload['status'],
     'fanoutOperationId': 'routing-fanout-operation',
+  };
+}
+
+final class _ShellGlobalStatusCallable implements SetGlobalUserStatusCallable {
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async => {
+    'operationId': payload['requestId'],
+    'uid': payload['uid'],
+    'status': 'completed',
+    'targetStatus': payload['status'],
+    'affectedTenantIds': <String>[],
+    'attemptCount': 1,
   };
 }
 
