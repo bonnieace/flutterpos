@@ -234,6 +234,10 @@ void main() {
     expect(find.text('Pending business reviews'), findsOneWidget);
     expect(find.text('Routing Review Business'), findsOneWidget);
     expect(allowedSource.pageCalls, 1);
+    await tester.tap(find.text('Active & suspended'));
+    await tester.pumpAndSettle();
+    expect(find.text('Routing Active Business'), findsOneWidget);
+    expect(allowedSource.lifecycleCalls, 1);
     await allowed.dispose(tester);
   });
 
@@ -438,7 +442,7 @@ final class _ShellFixture {
   final bool emailVerified;
   final RequestTenantCallable? requestTenantCallable;
   final bool platformClaim;
-  final PlatformPendingTenantDataSource? platformDataSource;
+  final _ShellPlatformDataSource? platformDataSource;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -459,6 +463,7 @@ final class _ShellFixture {
         tenantRequestIdFactory: () => 'routing-tenant-request',
         hasPlatformSuperAdminClaim: (_) async => platformClaim,
         platformPendingTenantDataSource: platformDataSource,
+        platformLifecycleTenantDataSource: platformDataSource,
         setTenantLifecycleCallable: _ShellLifecycleCallable(),
         platformTenantReviewRequestIdFactory: () => 'routing-platform-review',
         tenantDataReader: useDefaultRoute ? _RoutingReader() : null,
@@ -550,8 +555,11 @@ final class _ShellRequestCallable implements RequestTenantCallable {
 }
 
 final class _ShellPlatformDataSource
-    implements PlatformPendingTenantDataSource {
+    implements
+        PlatformPendingTenantDataSource,
+        PlatformLifecycleTenantDataSource {
   int pageCalls = 0;
+  int lifecycleCalls = 0;
 
   @override
   Future<List<PlatformTenantDocument>> loadPendingTenantDocuments({
@@ -585,6 +593,27 @@ final class _ShellPlatformDataSource
           'globalStatus': 'active',
         },
       );
+
+  @override
+  Future<List<PlatformTenantDocument>> loadLifecycleTenantDocuments({
+    required int limit,
+    PlatformLifecycleTenantCursor? cursor,
+  }) async {
+    lifecycleCalls++;
+    if (cursor != null) return const [];
+    return [
+      PlatformTenantDocument(
+        id: 'routing-active-tenant',
+        data: {
+          'name': 'Routing Active Business',
+          'slug': 'routing-active-tenant',
+          'ownerUid': 'routing-review-owner',
+          'status': 'active',
+          'updatedAt': DateTime.utc(2026, 7, 30),
+        },
+      ),
+    ];
+  }
 }
 
 final class _ShellLifecycleCallable implements SetTenantLifecycleCallable {

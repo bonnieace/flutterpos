@@ -423,7 +423,7 @@ final class PlatformTenantReviewGateway {
   }) : _identity = identity,
        _tenant = tenant,
        _callable = callable,
-       _requestIdFactory = requestIdFactory ?? _securePlatformReviewRequestId;
+       _requestIdFactory = requestIdFactory ?? securePlatformReviewRequestId;
 
   final PlatformReviewIdentity _identity;
   final PlatformPendingTenant _tenant;
@@ -441,7 +441,7 @@ final class PlatformTenantReviewGateway {
         ? normalizeTenantRejectionReason(reason ?? '')
         : null;
     final requestId = _requestIdFactory();
-    if (!_platformReviewRequestIdPattern.hasMatch(requestId)) {
+    if (!platformReviewRequestIdPattern.hasMatch(requestId)) {
       throw StateError('The platform review request ID generator is invalid.');
     }
     return PlatformTenantReviewIntent._(
@@ -694,6 +694,7 @@ final class PlatformPendingTenantReviewScreen extends StatefulWidget {
     this.requestIdFactory,
     this.isCurrent,
     this.pageSize = 20,
+    this.embedded = false,
   });
 
   final PlatformReviewIdentity identity;
@@ -703,6 +704,7 @@ final class PlatformPendingTenantReviewScreen extends StatefulWidget {
   final PlatformTenantReviewRequestIdFactory? requestIdFactory;
   final PlatformTenantReviewCurrentCheck? isCurrent;
   final int pageSize;
+  final bool embedded;
 
   @override
   State<PlatformPendingTenantReviewScreen> createState() =>
@@ -806,21 +808,27 @@ final class _PlatformPendingTenantReviewScreenState
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Pending business reviews'),
-      actions: [
-        IconButton(
-          key: const ValueKey('platform-review-refresh'),
-          tooltip: 'Refresh pending requests',
-          onPressed: _loading ? null : _reload,
-          icon: const Icon(Icons.refresh),
-        ),
-        TextButton(onPressed: widget.onSignOut, child: const Text('Sign out')),
-      ],
-    ),
-    body: _buildBody(context),
-  );
+  Widget build(BuildContext context) {
+    if (widget.embedded) return _buildBody(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Pending business reviews'),
+        actions: [
+          IconButton(
+            key: const ValueKey('platform-review-refresh'),
+            tooltip: 'Refresh pending requests',
+            onPressed: _loading ? null : _reload,
+            icon: const Icon(Icons.refresh),
+          ),
+          TextButton(
+            onPressed: widget.onSignOut,
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+      body: _buildBody(context),
+    );
+  }
 
   Widget _buildBody(BuildContext context) {
     if (_loading && _items.isEmpty) {
@@ -967,12 +975,12 @@ Timestamp _decodeTimestamp(Object? value) {
 bool _hasControl(String value) =>
     value.runes.any((rune) => rune <= 0x1f || (rune >= 0x7f && rune <= 0x9f));
 
-String _securePlatformReviewRequestId() {
+String securePlatformReviewRequestId() {
   final random = Random.secure();
   final bytes = List<int>.generate(18, (_) => random.nextInt(256));
   return 'review-${base64Url.encode(bytes).replaceAll('=', '')}';
 }
 
-final _platformReviewRequestIdPattern = RegExp(
+final platformReviewRequestIdPattern = RegExp(
   r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$',
 );

@@ -2637,3 +2637,112 @@ the typed platform lifecycle foundation:
 5. Leave archival, global-user status, general platform user management,
    tenant switching, checkout/Hive state, and operational POS screens outside
    this next chunk.
+
+---
+
+## Platform tenant suspension/reactivation handoff - 2026-07-30
+
+### Completed in this session
+
+The platform tenant-management route now adds only active-tenant suspension
+and suspended-tenant reactivation on top of the existing pending review slice.
+Archival, global-user administration, tenant switching, and operational tenant
+screens remain disabled.
+
+Implemented behavior:
+
+- A separate claim-and-root-gated Firestore queue reads only canonical active
+  and suspended tenants. It is bounded to 1-50 records and uses stable status,
+  `updatedAt` descending, then tenant-ID ordering with an exact three-part
+  cursor and a production composite index.
+- Tenant IDs, lifecycle status, timestamps, names, slugs, owner UIDs, and owner
+  root metadata are decoded fail-closed from canonical documents. Pending,
+  rejected, archived, malformed, and ownerless records cannot enter this
+  lifecycle queue.
+- `PlatformTenantLifecycleGateway` binds one decoded tenant record and one
+  claim-plus-root-gated operator. It exposes only active-to-suspended and
+  suspended-to-active actions, accepts no arbitrary current status or tenant
+  ID, and requires a normalized 3-1000 character reason for suspension.
+- Each explicit confirmation owns one cryptographically generated request ID.
+  Duplicate taps are single-flight and recoverable retry reuses the same
+  idempotency key. Changing the reason creates a new reviewed intent.
+- Callable responses must contain exactly the tenant ID, previous status,
+  target status, and fan-out operation ID. Tenant/status mismatches, extra
+  fields, malformed IDs, stale records, identity changes, and lost platform
+  eligibility fail closed.
+- Suspension and reactivation have distinct confirmations and fixed safe
+  errors, including active-owner capacity guidance on reactivation. Auth,
+  platform-route, record-status, record-timestamp, and queue-epoch checks
+  discard stale success and failure completions.
+- Pending review and active/suspended management are separate tabbed queues.
+  A successful mutation refreshes only its affected bounded queue and does not
+  open an operational tenant session.
+- Firestore Rules emulator coverage proves the active/suspended query shape is
+  readable only with the full platform claim/root authorization. The real
+  callable integration fixture now verifies persisted suspension and
+  reactivation state, owner counters, mirrors, fan-out responses, and
+  privileged audit reasons.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.indexes.json
+lib/tenancy/platform_tenant_lifecycle.dart
+lib/tenancy/platform_tenant_review.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/test/control-plane.test.js
+rules-tests/test/invitation-acceptance.integration.test.js
+test/tenancy/platform_tenant_lifecycle_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- The wider analysis including `lib/main.dart` and `lib/login_screen.dart`
+  reported only the pre-existing experimental `profilesSampleRate` warning.
+- `flutter test --no-pub test/tenancy` passed **205/205** tests; the focused
+  lifecycle file passed **13/13**.
+- `npm --prefix functions test` passed **152/152** Functions tests.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules suite
+  **20/20** using portable Node.js 24 and JDK 21.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **7/7** real
+  callable tests against Auth, Firestore, and Functions emulators, including
+  the suspension and reactivation transactions.
+- Android build/emulator validation was intentionally skipped for this chunk
+  at the user's request.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only rejected-tenant archival on the typed platform lifecycle
+foundation:
+
+1. Add a separate claim-and-root-gated, read-only paginated queue for rejected
+   canonical tenants, ordered by lifecycle update time and tenant ID. Keep the
+   pending and active/suspended queues independent.
+2. Add a rejected-record-bound gateway for rejected-to-archived
+   `setTenantLifecycle`. Require a normalized archival reason and a destructive
+   confirmation that includes the canonical business name and slug; derive the
+   tenant ID and previous status exclusively from the decoded record.
+3. Preserve stable retry idempotency, single-flight submission, strict exact
+   response decoding, safe invariant errors, and Auth/claim/record/queue stale
+   completion checks. Refresh only the rejected queue after success.
+4. Test rejected-only pagination, all unsupported transitions, reason and
+   confirmation validation, response mismatches, duplicate taps, retry,
+   identity/record switches, and one real rejected-to-archived emulator
+   transaction with owner counters, mirror, fan-out, and audit assertions.
+5. Leave archival of active, suspended, or pending tenants, global-user status,
+   general platform user management, tenant switching, checkout/Hive state,
+   and operational POS screens outside this next chunk.

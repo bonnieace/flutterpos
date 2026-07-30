@@ -28,7 +28,8 @@ the explicit `demo-multitenant-invitation-integration` project. It seeds Auth
 and canonical Firestore state through the Admin SDK, signs in through the Auth
 emulator, calls the real compiled callable endpoints, and verifies both the
 response contracts and committed membership, routing-profile, or lifecycle
-state.
+state. Lifecycle coverage includes pending approval/rejection plus active
+suspension and suspended reactivation.
 
 Use Node.js 24 and JDK 21 or newer, then run from the repository root:
 

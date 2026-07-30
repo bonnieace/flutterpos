@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'platform_tenant_review.dart';
+import 'platform_tenant_lifecycle.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
@@ -47,6 +48,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.tenantRequestIdFactory,
     this.hasPlatformSuperAdminClaim,
     this.platformPendingTenantDataSource,
+    this.platformLifecycleTenantDataSource,
     this.setTenantLifecycleCallable,
     this.platformTenantReviewRequestIdFactory,
     this.tenantDataReader,
@@ -72,6 +74,7 @@ final class TenantRoutingShell extends StatefulWidget {
   final TenantRequestIdFactory? tenantRequestIdFactory;
   final Future<bool> Function(String uid)? hasPlatformSuperAdminClaim;
   final PlatformPendingTenantDataSource? platformPendingTenantDataSource;
+  final PlatformLifecycleTenantDataSource? platformLifecycleTenantDataSource;
   final SetTenantLifecycleCallable? setTenantLifecycleCallable;
   final PlatformTenantReviewRequestIdFactory?
   platformTenantReviewRequestIdFactory;
@@ -108,6 +111,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   bool _hasInvalidInvitationLink = false;
   PlatformReviewIdentity? _platformIdentity;
   PlatformPendingTenantDataSource? _defaultPlatformDataSource;
+  PlatformLifecycleTenantDataSource? _defaultPlatformLifecycleDataSource;
   SetTenantLifecycleCallable? _defaultTenantLifecycleCallable;
 
   @override
@@ -369,12 +373,16 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     if (identity == null || !identity.canReview) {
       return PlatformRouteUnavailable(onSignOut: _signOut);
     }
-    return PlatformPendingTenantReviewScreen(
+    return PlatformTenantManagementScreen(
       identity: identity,
-      dataSource:
+      pendingDataSource:
           widget.platformPendingTenantDataSource ??
           (_defaultPlatformDataSource ??=
               FirebasePlatformPendingTenantDataSource()),
+      lifecycleDataSource:
+          widget.platformLifecycleTenantDataSource ??
+          (_defaultPlatformLifecycleDataSource ??=
+              FirebasePlatformLifecycleTenantDataSource()),
       callable:
           widget.setTenantLifecycleCallable ??
           (_defaultTenantLifecycleCallable ??=

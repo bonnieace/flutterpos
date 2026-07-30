@@ -144,6 +144,59 @@ test("the pending tenant queue is readable only through full platform authorizat
   )));
 });
 
+test("the active and suspended tenant queue preserves status/time/id ordering", async () => {
+  await seedDocuments(testEnvironment, {
+    "users/active-platform": {
+      accountType: "platform_admin",
+      globalStatus: "active",
+    },
+    "users/no-claim": {
+      accountType: "platform_admin",
+      globalStatus: "active",
+    },
+    "tenants/active-new": {
+      status: "active",
+      updatedAt: new Date("2026-07-30T12:00:00Z"),
+    },
+    "tenants/active-old": {
+      status: "active",
+      updatedAt: new Date("2026-07-30T11:00:00Z"),
+    },
+    "tenants/suspended-a": {
+      status: "suspended",
+      updatedAt: new Date("2026-07-30T13:00:00Z"),
+    },
+    "tenants/pending-a": {
+      status: "pending",
+      updatedAt: new Date("2026-07-30T14:00:00Z"),
+    },
+  });
+
+  const queue = (firestore) => query(
+    collection(firestore, "tenants"),
+    where("status", "in", ["active", "suspended"]),
+    orderBy("status"),
+    orderBy("updatedAt", "desc"),
+    orderBy(documentId()),
+    limit(21),
+  );
+  const platform = authenticatedFirestore(
+    testEnvironment,
+    "active-platform",
+    { platformRole: "superAdmin" },
+  );
+  const snapshot = await assertSucceeds(getDocs(queue(platform)));
+  assert.deepEqual(snapshot.docs.map((document) => document.id), [
+    "active-new",
+    "active-old",
+    "suspended-a",
+  ]);
+
+  await assertFails(getDocs(queue(
+    authenticatedFirestore(testEnvironment, "no-claim"),
+  )));
+});
+
 test("canonical membership documents are client-readable where intended but always server-write-only", async () => {
   await seedDocuments(testEnvironment, {
     ...activeTenantDocuments({ uid: "manager", role: "manager" }),

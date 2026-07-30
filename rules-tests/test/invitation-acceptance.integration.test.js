@@ -202,6 +202,60 @@ test("setTenantLifecycle rejects a pending tenant and records the reason", async
   assert.equal(audit.get("toStatus"), "rejected");
 });
 
+test("setTenantLifecycle suspends and reactivates an active tenant", async () => {
+  const fixture = await seedPendingTenantReview("manage", "active");
+  const idToken = await signIn(fixture.platformEmail);
+
+  const suspended = await callFunction("setTenantLifecycle", idToken, {
+    tenantId: fixture.tenantId,
+    status: "suspended",
+    reason: "Repeated compliance failures.",
+    requestId: "lifecycle-suspend-emulator-request-1",
+  });
+  assertLifecycleResponse(
+    suspended,
+    fixture.tenantId,
+    "suspended",
+    "active",
+  );
+  let [tenant, mirror, owner, audit] = await Promise.all([
+    firestore.doc(`tenants/${fixture.tenantId}`).get(),
+    firestore
+      .doc(`users/${fixture.ownerUid}/tenant_memberships/${fixture.tenantId}`)
+      .get(),
+    firestore.doc(`users/${fixture.ownerUid}`).get(),
+    firestore.doc(`platform_audit_logs/${suspended.fanoutOperationId}`).get(),
+  ]);
+  assert.equal(tenant.get("status"), "suspended");
+  assert.equal(mirror.get("tenantStatus"), "suspended");
+  assert.equal(owner.get("ownedActiveTenantCount"), 0);
+  assert.equal(audit.get("reason"), "Repeated compliance failures.");
+
+  const reactivated = await callFunction("setTenantLifecycle", idToken, {
+    tenantId: fixture.tenantId,
+    status: "active",
+    requestId: "lifecycle-reactivate-emulator-request-1",
+  });
+  assertLifecycleResponse(
+    reactivated,
+    fixture.tenantId,
+    "active",
+    "suspended",
+  );
+  [tenant, mirror, owner, audit] = await Promise.all([
+    firestore.doc(`tenants/${fixture.tenantId}`).get(),
+    firestore
+      .doc(`users/${fixture.ownerUid}/tenant_memberships/${fixture.tenantId}`)
+      .get(),
+    firestore.doc(`users/${fixture.ownerUid}`).get(),
+    firestore.doc(`platform_audit_logs/${reactivated.fanoutOperationId}`).get(),
+  ]);
+  assert.equal(tenant.get("status"), "active");
+  assert.equal(mirror.get("tenantStatus"), "active");
+  assert.equal(owner.get("ownedActiveTenantCount"), 1);
+  assert.equal(audit.get("reason"), null);
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
@@ -419,7 +473,7 @@ async function seedTenantApplicant(suffix) {
   return { uid, email };
 }
 
-async function seedPendingTenantReview(suffix) {
+async function seedPendingTenantReview(suffix, status = "pending") {
   const platformUid = `platform-${suffix}`;
   const platformEmail = `${platformUid}@integration.example.test`;
   const ownerUid = `review-owner-${suffix}`;
@@ -451,7 +505,7 @@ async function seedPendingTenantReview(suffix) {
     globalStatus: "active",
     membershipCount: 0,
     ownedTenantCount: 0,
-    ownedActiveTenantCount: 0,
+    ownedActiveTenantCount: status === "active" ? 1 : 0,
     createdAt: now,
     updatedAt: now,
   });
@@ -472,7 +526,7 @@ async function seedPendingTenantReview(suffix) {
     slug: tenantId,
     ownerUid,
     requestedBy: ownerUid,
-    status: "pending",
+    status,
     createdAt: now,
     updatedAt: now,
   });
@@ -496,7 +550,7 @@ async function seedPendingTenantReview(suffix) {
       tenantSlug: tenantId,
       role: "owner",
       membershipStatus: "active",
-      tenantStatus: "pending",
+      tenantStatus: status,
       invitationStatus: "accepted",
       isOwner: true,
       mirrorVersion: 1,
@@ -557,7 +611,12 @@ function assertAcceptedResponse(response, fixture) {
   });
 }
 
-function assertLifecycleResponse(response, tenantId, status) {
+function assertLifecycleResponse(
+  response,
+  tenantId,
+  status,
+  previousStatus = "pending",
+) {
   assert.deepEqual(Object.keys(response).sort(), [
     "fanoutOperationId",
     "previousStatus",
@@ -565,7 +624,7 @@ function assertLifecycleResponse(response, tenantId, status) {
     "tenantId",
   ]);
   assert.equal(response.tenantId, tenantId);
-  assert.equal(response.previousStatus, "pending");
+  assert.equal(response.previousStatus, previousStatus);
   assert.equal(response.status, status);
   assert.equal(typeof response.fanoutOperationId, "string");
   assert.ok(response.fanoutOperationId.length > 0);
