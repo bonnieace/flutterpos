@@ -86,7 +86,6 @@ final class TenantVisibleInvitationAcceptanceResult {
     required this.role,
     required this.membershipStatus,
     required this.invitationStatus,
-    required this.tenantStatus,
   });
 
   factory TenantVisibleInvitationAcceptanceResult.fromCallable(
@@ -104,7 +103,6 @@ final class TenantVisibleInvitationAcceptanceResult {
         'membershipStatus',
         'invitationStatus',
         'role',
-        'tenantStatus',
       },
     );
     if (data['tenantId'] != expectedTenantId) {
@@ -121,13 +119,11 @@ final class TenantVisibleInvitationAcceptanceResult {
     late final String uid;
     late final TenantRole role;
     late final MembershipStatus membershipStatus;
-    late final TenantStatus tenantStatus;
     try {
       tenantId = validateTenantId(data['tenantId']! as String);
       uid = validateTenantDocumentId(data['uid']! as String, fieldName: 'uid');
       role = TenantRole.fromWire(data['role']);
       membershipStatus = MembershipStatus.fromWire(data['membershipStatus']);
-      tenantStatus = TenantStatus.fromWire(data['tenantStatus']);
     } on ArgumentError {
       throw const FormatException(
         'acceptVisibleTenantInvitation returned invalid identifiers.',
@@ -139,7 +135,6 @@ final class TenantVisibleInvitationAcceptanceResult {
       );
     }
     if (membershipStatus != MembershipStatus.active ||
-        tenantStatus != TenantStatus.active ||
         data['invitationStatus'] !=
             TenantStaffInvitationStatus.accepted.wireValue) {
       throw const FormatException(
@@ -152,7 +147,6 @@ final class TenantVisibleInvitationAcceptanceResult {
       role: role,
       membershipStatus: membershipStatus,
       invitationStatus: TenantStaffInvitationStatus.accepted,
-      tenantStatus: tenantStatus,
     );
   }
 
@@ -161,7 +155,6 @@ final class TenantVisibleInvitationAcceptanceResult {
   final TenantRole role;
   final MembershipStatus membershipStatus;
   final TenantStaffInvitationStatus invitationStatus;
-  final TenantStatus tenantStatus;
 }
 
 /// Identity- and membership-bound gateway with no arbitrary tenant input.

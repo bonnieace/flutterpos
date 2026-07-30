@@ -1,0 +1,279 @@
+import assert from "node:assert/strict";
+import { after, before, test } from "node:test";
+
+import { deleteApp, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
+
+import { createInvitationProof } from
+  "../../functions/lib/staff/invitationProof.js";
+
+const PROJECT_ID = "demo-multitenant-invitation-integration";
+const INVITATION_SECRET =
+  "local-emulator-invitation-hmac-secret-at-least-32-bytes";
+const PASSWORD = "Local-emulator-password-123!";
+const ACCEPTANCE_FIELDS = [
+  "invitationStatus",
+  "membershipStatus",
+  "role",
+  "tenantId",
+  "uid",
+];
+
+let app;
+let auth;
+let firestore;
+
+before(async () => {
+  requireEmulator("FIREBASE_AUTH_EMULATOR_HOST");
+  requireEmulator("FIRESTORE_EMULATOR_HOST");
+  requireEmulator("FUNCTIONS_EMULATOR_HOST");
+  assert.equal(process.env.GCLOUD_PROJECT, PROJECT_ID);
+  app = initializeApp({ projectId: PROJECT_ID }, "invitation-integration");
+  auth = getAuth(app);
+  firestore = getFirestore(app);
+});
+
+after(async () => {
+  if (app) await deleteApp(app);
+});
+
+test("acceptTenantInvitation consumes a real versioned proof", async () => {
+  const fixture = await seedPendingInvitation({
+    suffix: "token",
+    emailVerified: false,
+    visibleAcceptanceAllowed: false,
+    tokenByte: 0x11,
+  });
+  const idToken = await signIn(fixture.email);
+
+  const response = await callFunction("acceptTenantInvitation", idToken, {
+    tenantId: fixture.tenantId,
+    invitationVersion: fixture.invitationVersion,
+    invitationToken: fixture.invitationToken,
+    requestId: "token-emulator-request-1",
+  });
+
+  assertAcceptedResponse(response, fixture);
+  await assertAcceptedDocuments(fixture, "token");
+});
+
+test("acceptVisibleTenantInvitation returns the same five-field contract", async () => {
+  const fixture = await seedPendingInvitation({
+    suffix: "visible",
+    emailVerified: true,
+    visibleAcceptanceAllowed: true,
+    tokenByte: 0x22,
+  });
+  const idToken = await signIn(fixture.email);
+
+  const response = await callFunction(
+    "acceptVisibleTenantInvitation",
+    idToken,
+    {
+      tenantId: fixture.tenantId,
+      requestId: "visible-emulator-request-1",
+    },
+  );
+
+  assertAcceptedResponse(response, fixture);
+  await assertAcceptedDocuments(fixture, "visible");
+});
+
+function requireEmulator(name) {
+  const value = process.env[name];
+  if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
+    throw new Error(`${name} must target a local emulator, received ${value}`);
+  }
+}
+
+async function seedPendingInvitation({
+  suffix,
+  emailVerified,
+  visibleAcceptanceAllowed,
+  tokenByte,
+}) {
+  const uid = `user-${suffix}`;
+  const ownerUid = `owner-${suffix}`;
+  const tenantId = `tenant-${suffix}`;
+  const email = `${suffix}@integration.example.test`;
+  const invitationVersion = 4;
+  await auth.createUser({
+    uid,
+    email,
+    password: PASSWORD,
+    emailVerified,
+    disabled: false,
+  });
+  const proof = createInvitationProof(
+    { tenantId, uid, invitedEmail: email, invitationVersion },
+    INVITATION_SECRET,
+    Buffer.alloc(32, tokenByte),
+  );
+  const now = Timestamp.now();
+  const expiresAt = Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000);
+  const batch = firestore.batch();
+  batch.set(firestore.doc(`users/${uid}`), {
+    email,
+    accountType: "tenant_user",
+    identityOrigin: "staff_invitation",
+    globalStatus: "active",
+    membershipCount: 1,
+    ownedTenantCount: 0,
+    ownedActiveTenantCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`users/${ownerUid}`), {
+    email: `${ownerUid}@integration.example.test`,
+    accountType: "tenant_user",
+    identityOrigin: "self_signup",
+    globalStatus: "active",
+    membershipCount: 1,
+    ownedTenantCount: 1,
+    ownedActiveTenantCount: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}`), {
+    name: `Business ${suffix}`,
+    slug: tenantId,
+    ownerUid,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}/staff/${ownerUid}`), {
+    uid: ownerUid,
+    role: "owner",
+    status: "active",
+    invitationStatus: "accepted",
+    createdAt: now,
+    joinedAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}/staff/${uid}`), {
+    uid,
+    email,
+    name: `Invited ${suffix}`,
+    phone: "",
+    role: "cashier",
+    status: "pending",
+    invitationStatus: "sent",
+    createdAt: now,
+    joinedAt: null,
+    updatedAt: now,
+  });
+  batch.set(
+    firestore.doc(`users/${uid}/tenant_memberships/${tenantId}`),
+    {
+      tenantId,
+      tenantName: `Business ${suffix}`,
+      tenantSlug: tenantId,
+      role: "cashier",
+      membershipStatus: "pending",
+      tenantStatus: "active",
+      invitationStatus: "sent",
+      isOwner: false,
+      mirrorVersion: 1,
+      createdAt: now,
+      joinedAt: null,
+      updatedAt: now,
+    },
+  );
+  batch.set(
+    firestore.doc(`tenants/${tenantId}/staff_invitations/${uid}`),
+    {
+      uid,
+      tenantId,
+      invitationVersion,
+      invitationTokenHash: proof.tokenHash,
+      invitationTokenKeyVersion: proof.tokenKeyVersion,
+      invitationIssuedAt: now,
+      invitationExpiresAt: expiresAt,
+      invitationTokenUsedAt: null,
+      invitationStatus: "sent",
+      invitedEmail: email,
+      invitedBy: ownerUid,
+      latestDeliveryId: `delivery-${suffix}`,
+      visibleAcceptanceAllowed,
+      createdAt: now,
+      updatedAt: now,
+    },
+  );
+  await batch.commit();
+  return {
+    uid,
+    tenantId,
+    email,
+    invitationVersion,
+    invitationToken: proof.token,
+  };
+}
+
+async function signIn(email) {
+  const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  const response = await fetch(
+    `http://${host}/identitytoolkit.googleapis.com/v1/` +
+      "accounts:signInWithPassword?key=fake-api-key",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password: PASSWORD, returnSecureToken: true }),
+    },
+  );
+  const body = await response.json();
+  assert.equal(response.ok, true, JSON.stringify(body));
+  assert.equal(typeof body.idToken, "string");
+  return body.idToken;
+}
+
+async function callFunction(functionName, idToken, data) {
+  const host = process.env.FUNCTIONS_EMULATOR_HOST;
+  const response = await fetch(
+    `http://${host}/${PROJECT_ID}/us-central1/${functionName}`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${idToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ data }),
+    },
+  );
+  const body = await response.json();
+  assert.equal(response.ok, true, JSON.stringify(body));
+  assert.equal(body.error, undefined, JSON.stringify(body));
+  assert.equal(typeof body.result, "object", JSON.stringify(body));
+  return body.result;
+}
+
+function assertAcceptedResponse(response, fixture) {
+  assert.deepEqual(Object.keys(response).sort(), ACCEPTANCE_FIELDS);
+  assert.deepEqual(response, {
+    tenantId: fixture.tenantId,
+    uid: fixture.uid,
+    role: "cashier",
+    membershipStatus: "active",
+    invitationStatus: "accepted",
+  });
+}
+
+async function assertAcceptedDocuments(fixture, acceptanceMode) {
+  const [staff, mirror, invitation] = await Promise.all([
+    firestore.doc(`tenants/${fixture.tenantId}/staff/${fixture.uid}`).get(),
+    firestore
+      .doc(`users/${fixture.uid}/tenant_memberships/${fixture.tenantId}`)
+      .get(),
+    firestore
+      .doc(`tenants/${fixture.tenantId}/staff_invitations/${fixture.uid}`)
+      .get(),
+  ]);
+  assert.equal(staff.get("status"), "active");
+  assert.equal(staff.get("invitationStatus"), "accepted");
+  assert.equal(mirror.get("membershipStatus"), "active");
+  assert.equal(mirror.get("invitationStatus"), "accepted");
+  assert.equal(invitation.get("invitationStatus"), "accepted");
+  assert.equal(invitation.get("acceptanceMode"), acceptanceMode);
+  assert.ok(invitation.get("invitationTokenUsedAt") instanceof Timestamp);
+}

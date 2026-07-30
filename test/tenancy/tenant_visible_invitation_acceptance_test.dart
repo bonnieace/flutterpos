@@ -97,7 +97,6 @@ void main() {
         {...valid, 'role': 'manager'},
         {...valid, 'membershipStatus': 'pending'},
         {...valid, 'invitationStatus': 'sent'},
-        {...valid, 'tenantStatus': 'suspended'},
         {...valid, 'unexpected': true},
       ];
 
@@ -335,7 +334,6 @@ Map<String, Object?> _acceptedResponse(String tenantId, String uid) =>
       'membershipStatus': 'active',
       'invitationStatus': 'accepted',
       'role': 'cashier',
-      'tenantStatus': 'active',
     };
 
 TenantVisibleInvitationIdentity _identity({

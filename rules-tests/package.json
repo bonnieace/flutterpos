@@ -7,12 +7,14 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1",
-    "test:emulator": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"npm test\""
+    "test": "node --test --test-concurrency=1 test/control-plane.test.js test/stock-and-sales.test.js test/tenant-isolation.test.js",
+    "test:emulator": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"npm test\"",
+    "test:emulator:invitations": "npm --prefix ../functions run build && node scripts/run-invitation-emulator-tests.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1",
     "firebase": "12.16.0",
+    "firebase-admin": "13.10.0",
     "firebase-tools": "15.24.0"
   }
 }

@@ -21,6 +21,30 @@ $env:FIRESTORE_EMULATOR_HOST = '127.0.0.1:8180'
 npm --prefix rules-tests test
 ```
 
+## Invitation callable integration tests
+
+The invitation integration harness starts Auth, Firestore, and Functions under
+the explicit `demo-multitenant-invitation-integration` project. It seeds Auth
+and canonical Firestore state through the Admin SDK, signs in through the Auth
+emulator, calls the real compiled callable endpoints, and verifies both the
+five-field response contract and committed membership state.
+
+Use Node.js 24 and JDK 21 or newer, then run from the repository root:
+
+```powershell
+npm --prefix functions ci
+npm --prefix rules-tests ci
+npm --prefix rules-tests run test:emulator:invitations
+```
+
+The runner uses `firebase.invitation-test.json`, copies the current compiled
+Functions output into an ignored fixture, and exports only the two real
+invitation handlers. It supplies a deterministic local-only HMAC secret in a
+temporary ignored file, removes it after the emulator exits, and refuses to
+overwrite existing local configuration. It also refuses non-`demo-*` projects
+or missing localhost emulator hosts. It does not read `.firebaserc` and cannot
+target the configured development, staging, or production projects.
+
 ## Rules-language boundary
 
 Firestore Rules do not provide a general loop or `every` operation for lists.

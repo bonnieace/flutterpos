@@ -2219,3 +2219,89 @@ tenant session:
 5. Update the inventory while leaving checkout/Hive state, shifts, reports,
    returns, subscriptions, catalog mutations, and general tenant switching
    outside this scope.
+
+---
+
+## Invitation emulator contract handoff - 2026-07-30
+
+### Completed in this session
+
+The repository now has a repeatable, local-only Auth + Firestore + Functions
+emulator boundary for both invitation-acceptance callables. The Windows
+workstation also has portable Node.js 24.18.1 and Temurin JDK 21.0.12 under
+`D:\firebase-emulator-tools`; those machine-local runtimes are not repository
+artifacts.
+
+Implemented behavior:
+
+- `npm --prefix rules-tests run test:emulator:invitations` first compiles the
+  production Functions source, copies that output into an ignored narrow
+  Functions fixture, and exports only `acceptTenantInvitation` and
+  `acceptVisibleTenantInvitation`. The fixture performs the same Firebase Admin
+  bootstrap as the production entrypoint.
+- The runner always uses the explicit
+  `demo-multitenant-invitation-integration` project and localhost-only Auth,
+  Firestore, and Functions hosts. It creates a deterministic local-only HMAC
+  secret in an ignored temporary file, refuses to overwrite an existing local
+  file, and removes the secret after emulator teardown.
+- The integration tests seed Auth identities plus canonical root, tenant,
+  owner, pending staff, membership mirror, and invitation documents. They sign
+  in through the Auth emulator, invoke the real compiled callable endpoints,
+  and verify both the response and committed staff/mirror/invitation state.
+- Token acceptance proves that an unverified invited identity can consume a
+  real versioned HMAC proof. Visible acceptance proves the verified-email,
+  explicitly visible path. Both assert the backend's exact five-field response.
+- Exercising the real backend exposed that the visible Flutter fake and decoder
+  expected a sixth `tenantStatus` field that the callable never returns. The
+  decoder and fake now enforce the actual five-field contract; canonical active
+  tenant eligibility remains backend-authoritative and the client still checks
+  the routed membership before submission.
+- The default Rules test command now names only the three Rules test files, so
+  it cannot accidentally discover the separate multi-emulator integration
+  suite.
+
+Files in this chunk:
+
+```text
+firebase.invitation-test.json
+functions/integration/.gitignore
+functions/integration/index.js
+functions/integration/package.json
+functions/integration/package-lock.json
+lib/tenancy/tenant_visible_invitation_acceptance.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/package-lock.json
+rules-tests/scripts/run-invitation-emulator-tests.js
+rules-tests/test/invitation-acceptance.integration.test.js
+test/tenancy/tenant_visible_invitation_acceptance_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `npm --prefix rules-tests run test:emulator:invitations` passed **2/2** tests
+  against Auth, Firestore, and Functions emulators using Node.js 24 and JDK 21.
+- `npm --prefix rules-tests run test:emulator` passed the existing Firestore
+  Rules suite **18/18** against the emulator.
+- `npm --prefix functions test` passed **152/152** Functions tests.
+- `flutter test --no-pub test/tenancy` passed **153/153** tests; the focused
+  visible-invitation file passed **10/10**.
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `setDefaultTenant` for the currently open canonical
+tenant session, following the five steps in the preceding handoff. Keep the
+callable session-bound, require explicit confirmation, preserve stable retry
+idempotency and session-epoch stale-completion checks, refresh routing only
+after success, and leave general tenant switching and operational POS state
+outside the scope.
