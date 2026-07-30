@@ -2746,3 +2746,121 @@ foundation:
 5. Leave archival of active, suspended, or pending tenants, global-user status,
    general platform user management, tenant switching, checkout/Hive state,
    and operational POS screens outside this next chunk.
+
+---
+
+## Platform rejected-tenant archival handoff - 2026-07-30
+
+### Completed in this session
+
+The platform tenant-management route now adds only rejected-to-archived
+lifecycle review. Archival of pending, active, or suspended tenants, global
+user administration, tenant switching, and operational tenant screens remain
+disabled.
+
+Implemented behavior:
+
+- A third, independent claim-and-root-gated Firestore queue reads only
+  canonical rejected tenants. It is bounded to 1-50 records and uses stable
+  `updatedAt` descending then tenant-ID ordering with an exact two-part cursor.
+  The existing production `status`/`updatedAt`/document-ID composite index
+  supports this equality-filtered query.
+- Tenant IDs, rejected status, timestamps, names, slugs, owner UIDs, and owner
+  root metadata are decoded fail-closed from canonical documents. Pending,
+  active, suspended, archived, malformed, and ownerless records cannot enter
+  the archival queue.
+- `PlatformTenantArchivalGateway` binds one decoded rejected tenant and one
+  claim-plus-root-gated operator. It exposes only rejected-to-archived,
+  accepts no arbitrary tenant ID or previous/target status, requires a
+  normalized 3-1000 character archival reason, and requires the exact
+  canonical `business name (slug)` confirmation.
+- Each reviewed archival intent owns one cryptographically generated request
+  ID. Duplicate taps are single-flight, recoverable retry reuses the same
+  idempotency key, and editing either confirmation field creates a new intent.
+- Callable responses must contain exactly tenant ID, previous status, target
+  status, and fan-out operation ID. Tenant/status mismatches, extra fields,
+  malformed IDs, stale records, identity changes, and lost platform
+  eligibility fail closed.
+- The destructive form shows both canonical business name and slug, uses fixed
+  safe errors, and discards stale success and failure completions using Auth,
+  claim, record status/time, selected-record, and queue-epoch checks. Only a
+  successful current response refreshes the rejected queue.
+- Firestore Rules emulator coverage proves the rejected-only ordered query is
+  readable only with full platform claim/root authorization. The real callable
+  integration fixture verifies persisted archival status, owner mirror and
+  counters, fan-out state, and privileged audit reason.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/tenancy/platform_tenant_archival.dart
+lib/tenancy/platform_tenant_lifecycle.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/test/control-plane.test.js
+rules-tests/test/invitation-acceptance.integration.test.js
+test/tenancy/platform_tenant_archival_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- The wider analysis including `lib/main.dart` and `lib/login_screen.dart`
+  reported only the pre-existing experimental `profilesSampleRate` warning.
+- `flutter test --no-pub test/tenancy` passed **217/217** tests; focused
+  archival coverage passed **12/12**.
+- `npm --prefix functions test` passed **152/152** Functions tests.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules suite
+  **21/21** using portable Node.js 24 and JDK 21.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **8/8** real
+  callable tests against Auth, Firestore, and Functions emulators, including
+  the rejected-to-archived transaction.
+- Android build/emulator validation was intentionally skipped for this chunk
+  at the user's request.
+
+The first Rules-emulator launch selected system JDK 17 and stopped before
+running tests because current Firebase tooling requires JDK 21. Both emulator
+suites were then rerun successfully with the handover's portable Node.js 24
+and Temurin JDK 21 under `D:\firebase-emulator-tools`; those tools remain
+machine-local and are not repository artifacts.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only exact-UID platform global-user status review on the existing
+recoverable saga boundary:
+
+1. Add a claim-and-root-gated exact-UID lookup for a canonical root user and
+   its authoritative affected tenant/admin-principal summary. Do not add a
+   general user directory, search, pagination, bulk actions, or platform-role
+   management.
+2. Add a decoded-user-bound `setGlobalUserStatus` gateway for active-to-disabled
+   and disabled-to-active only. Require a normalized reason and destructive
+   UID confirmation for disabling, derive the UID and target status from the
+   decoded record/action, and strictly decode operation ID, UID, target status,
+   saga status, affected tenant IDs, attempt count, and optional safe error
+   code.
+3. Require explicit confirmation, stable retry idempotency, single-flight
+   submission, stale Auth/claim/record checks, and safe handling of completed
+   versus partially-failed saga responses. Refresh only the exact target after
+   a current completion; require a new sign-in when the current operator is
+   affected.
+4. Test lookup authorization and decoding, transition/reason/confirmation
+   denial, response mismatches, duplicate taps, retry, identity/target
+   switches, affected-tenant warnings, and one real disable/reactivate emulator
+   saga transaction including Auth disabled state, root state, token cutoff,
+   operation record, and audit assertions.
+5. Leave platform-admin grant/revoke, general platform user management,
+   archival of non-rejected tenants, tenant switching, checkout/Hive state,
+   and operational POS screens outside this next chunk.

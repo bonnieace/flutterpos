@@ -238,6 +238,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Routing Active Business'), findsOneWidget);
     expect(allowedSource.lifecycleCalls, 1);
+    await tester.tap(find.text('Rejected archive'));
+    await tester.pumpAndSettle();
+    expect(find.text('Routing Rejected Business'), findsOneWidget);
+    expect(allowedSource.archivalCalls, 1);
     await allowed.dispose(tester);
   });
 
@@ -464,6 +468,7 @@ final class _ShellFixture {
         hasPlatformSuperAdminClaim: (_) async => platformClaim,
         platformPendingTenantDataSource: platformDataSource,
         platformLifecycleTenantDataSource: platformDataSource,
+        platformRejectedTenantDataSource: platformDataSource,
         setTenantLifecycleCallable: _ShellLifecycleCallable(),
         platformTenantReviewRequestIdFactory: () => 'routing-platform-review',
         tenantDataReader: useDefaultRoute ? _RoutingReader() : null,
@@ -557,9 +562,11 @@ final class _ShellRequestCallable implements RequestTenantCallable {
 final class _ShellPlatformDataSource
     implements
         PlatformPendingTenantDataSource,
-        PlatformLifecycleTenantDataSource {
+        PlatformLifecycleTenantDataSource,
+        PlatformRejectedTenantDataSource {
   int pageCalls = 0;
   int lifecycleCalls = 0;
+  int archivalCalls = 0;
 
   @override
   Future<List<PlatformTenantDocument>> loadPendingTenantDocuments({
@@ -609,6 +616,27 @@ final class _ShellPlatformDataSource
           'slug': 'routing-active-tenant',
           'ownerUid': 'routing-review-owner',
           'status': 'active',
+          'updatedAt': DateTime.utc(2026, 7, 30),
+        },
+      ),
+    ];
+  }
+
+  @override
+  Future<List<PlatformTenantDocument>> loadRejectedTenantDocuments({
+    required int limit,
+    PlatformRejectedTenantCursor? cursor,
+  }) async {
+    archivalCalls++;
+    if (cursor != null) return const [];
+    return [
+      PlatformTenantDocument(
+        id: 'routing-rejected-tenant',
+        data: {
+          'name': 'Routing Rejected Business',
+          'slug': 'routing-rejected-tenant',
+          'ownerUid': 'routing-review-owner',
+          'status': 'rejected',
           'updatedAt': DateTime.utc(2026, 7, 30),
         },
       ),

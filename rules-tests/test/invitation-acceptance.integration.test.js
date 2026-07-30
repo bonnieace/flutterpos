@@ -256,6 +256,48 @@ test("setTenantLifecycle suspends and reactivates an active tenant", async () =>
   assert.equal(audit.get("reason"), null);
 });
 
+test("setTenantLifecycle archives a rejected tenant with exact persisted state", async () => {
+  const fixture = await seedPendingTenantReview("archive", "rejected");
+  const idToken = await signIn(fixture.platformEmail);
+
+  const response = await callFunction("setTenantLifecycle", idToken, {
+    tenantId: fixture.tenantId,
+    status: "archived",
+    reason: "The rejected application is closed permanently.",
+    requestId: "lifecycle-archive-emulator-request-1",
+  });
+  assertLifecycleResponse(
+    response,
+    fixture.tenantId,
+    "archived",
+    "rejected",
+  );
+  const [tenant, mirror, owner, fanout, audit] = await Promise.all([
+    firestore.doc(`tenants/${fixture.tenantId}`).get(),
+    firestore
+      .doc(`users/${fixture.ownerUid}/tenant_memberships/${fixture.tenantId}`)
+      .get(),
+    firestore.doc(`users/${fixture.ownerUid}`).get(),
+    firestore
+      .doc(
+        `tenants/${fixture.tenantId}/membership_fanout_jobs/` +
+          response.fanoutOperationId,
+      )
+      .get(),
+    firestore.doc(`platform_audit_logs/${response.fanoutOperationId}`).get(),
+  ]);
+  assert.equal(tenant.get("status"), "archived");
+  assert.equal(mirror.get("tenantStatus"), "archived");
+  assert.equal(owner.get("ownedTenantCount"), 0);
+  assert.equal(owner.get("ownedActiveTenantCount"), 0);
+  assert.equal(fanout.get("status"), "pending");
+  assert.equal(fanout.get("fromStatus"), "rejected");
+  assert.equal(fanout.get("toStatus"), "archived");
+  assert.equal(audit.get("reason"), "The rejected application is closed permanently.");
+  assert.equal(audit.get("fromStatus"), "rejected");
+  assert.equal(audit.get("toStatus"), "archived");
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {

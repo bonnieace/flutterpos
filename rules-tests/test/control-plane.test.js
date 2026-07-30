@@ -197,6 +197,58 @@ test("the active and suspended tenant queue preserves status/time/id ordering", 
   )));
 });
 
+test("the rejected tenant queue is platform-only and ordered by time and ID", async () => {
+  await seedDocuments(testEnvironment, {
+    "users/active-platform": {
+      accountType: "platform_admin",
+      globalStatus: "active",
+    },
+    "users/no-claim": {
+      accountType: "platform_admin",
+      globalStatus: "active",
+    },
+    "tenants/rejected-new-a": {
+      status: "rejected",
+      updatedAt: new Date("2026-07-30T12:00:00Z"),
+    },
+    "tenants/rejected-new-b": {
+      status: "rejected",
+      updatedAt: new Date("2026-07-30T12:00:00Z"),
+    },
+    "tenants/rejected-old": {
+      status: "rejected",
+      updatedAt: new Date("2026-07-30T11:00:00Z"),
+    },
+    "tenants/archived-a": {
+      status: "archived",
+      updatedAt: new Date("2026-07-30T13:00:00Z"),
+    },
+  });
+
+  const queue = (firestore) => query(
+    collection(firestore, "tenants"),
+    where("status", "==", "rejected"),
+    orderBy("updatedAt", "desc"),
+    orderBy(documentId()),
+    limit(21),
+  );
+  const platform = authenticatedFirestore(
+    testEnvironment,
+    "active-platform",
+    { platformRole: "superAdmin" },
+  );
+  const snapshot = await assertSucceeds(getDocs(queue(platform)));
+  assert.deepEqual(snapshot.docs.map((document) => document.id), [
+    "rejected-new-a",
+    "rejected-new-b",
+    "rejected-old",
+  ]);
+
+  await assertFails(getDocs(queue(
+    authenticatedFirestore(testEnvironment, "no-claim"),
+  )));
+});
+
 test("canonical membership documents are client-readable where intended but always server-write-only", async () => {
   await seedDocuments(testEnvironment, {
     ...activeTenantDocuments({ uid: "manager", role: "manager" }),

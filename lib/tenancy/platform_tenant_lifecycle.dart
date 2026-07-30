@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import 'platform_tenant_archival.dart';
 import 'platform_tenant_review.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -626,6 +627,7 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
     required this.identity,
     required this.pendingDataSource,
     required this.lifecycleDataSource,
+    required this.rejectedDataSource,
     required this.callable,
     required this.onSignOut,
     this.requestIdFactory,
@@ -635,6 +637,7 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
   final PlatformReviewIdentity identity;
   final PlatformPendingTenantDataSource pendingDataSource;
   final PlatformLifecycleTenantDataSource lifecycleDataSource;
+  final PlatformRejectedTenantDataSource rejectedDataSource;
   final SetTenantLifecycleCallable callable;
   final Future<void> Function() onSignOut;
   final PlatformTenantReviewRequestIdFactory? requestIdFactory;
@@ -642,7 +645,7 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 2,
+    length: 3,
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Platform tenant management'),
@@ -654,6 +657,7 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
           tabs: [
             Tab(text: 'Pending business reviews'),
             Tab(text: 'Active & suspended'),
+            Tab(text: 'Rejected archive'),
           ],
         ),
       ),
@@ -671,6 +675,13 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
           PlatformLifecycleTenantScreen(
             identity: identity,
             dataSource: lifecycleDataSource,
+            callable: callable,
+            requestIdFactory: requestIdFactory,
+            isCurrent: isCurrent,
+          ),
+          PlatformRejectedTenantScreen(
+            identity: identity,
+            dataSource: rejectedDataSource,
             callable: callable,
             requestIdFactory: requestIdFactory,
             isCurrent: isCurrent,

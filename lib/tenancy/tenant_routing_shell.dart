@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'platform_tenant_review.dart';
 import 'platform_tenant_lifecycle.dart';
+import 'platform_tenant_archival.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
@@ -49,6 +50,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.hasPlatformSuperAdminClaim,
     this.platformPendingTenantDataSource,
     this.platformLifecycleTenantDataSource,
+    this.platformRejectedTenantDataSource,
     this.setTenantLifecycleCallable,
     this.platformTenantReviewRequestIdFactory,
     this.tenantDataReader,
@@ -75,6 +77,7 @@ final class TenantRoutingShell extends StatefulWidget {
   final Future<bool> Function(String uid)? hasPlatformSuperAdminClaim;
   final PlatformPendingTenantDataSource? platformPendingTenantDataSource;
   final PlatformLifecycleTenantDataSource? platformLifecycleTenantDataSource;
+  final PlatformRejectedTenantDataSource? platformRejectedTenantDataSource;
   final SetTenantLifecycleCallable? setTenantLifecycleCallable;
   final PlatformTenantReviewRequestIdFactory?
   platformTenantReviewRequestIdFactory;
@@ -112,6 +115,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   PlatformReviewIdentity? _platformIdentity;
   PlatformPendingTenantDataSource? _defaultPlatformDataSource;
   PlatformLifecycleTenantDataSource? _defaultPlatformLifecycleDataSource;
+  PlatformRejectedTenantDataSource? _defaultPlatformRejectedDataSource;
   SetTenantLifecycleCallable? _defaultTenantLifecycleCallable;
 
   @override
@@ -383,6 +387,10 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
           widget.platformLifecycleTenantDataSource ??
           (_defaultPlatformLifecycleDataSource ??=
               FirebasePlatformLifecycleTenantDataSource()),
+      rejectedDataSource:
+          widget.platformRejectedTenantDataSource ??
+          (_defaultPlatformRejectedDataSource ??=
+              FirebasePlatformRejectedTenantDataSource()),
       callable:
           widget.setTenantLifecycleCallable ??
           (_defaultTenantLifecycleCallable ??=
