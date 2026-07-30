@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
+import 'tenant_invitation_acceptance.dart';
 import 'tenant_membership.dart';
 import 'tenant_repository.dart';
 import 'tenant_session_controller.dart';
@@ -31,6 +32,10 @@ final class TenantRoutingShell extends StatefulWidget {
     required this.signOut,
     required this.signedOut,
     this.isEmailVerified,
+    this.invitationLink,
+    this.invalidInvitationLink = false,
+    this.acceptTenantInvitationCallable,
+    this.invitationAcceptanceRequestIdFactory,
     this.acceptVisibleInvitationCallable,
     this.visibleInvitationRequestIdFactory,
     this.tenantRouteBuilder,
@@ -41,6 +46,11 @@ final class TenantRoutingShell extends StatefulWidget {
   final Future<void> Function() signOut;
   final Widget signedOut;
   final bool Function(String uid)? isEmailVerified;
+  final TenantInvitationLink? invitationLink;
+  final bool invalidInvitationLink;
+  final AcceptTenantInvitationCallable? acceptTenantInvitationCallable;
+  final TenantInvitationAcceptanceRequestIdFactory?
+  invitationAcceptanceRequestIdFactory;
   final AcceptVisibleTenantInvitationCallable? acceptVisibleInvitationCallable;
   final TenantVisibleInvitationRequestIdFactory?
   visibleInvitationRequestIdFactory;
@@ -72,16 +82,26 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   TenantBootstrapResult? _bootstrapResult;
   TenantMembership? _membership;
   Object? _error;
+  TenantInvitationLink? _pendingInvitationLink;
+  bool _hasInvalidInvitationLink = false;
 
   @override
   void initState() {
     super.initState();
+    _pendingInvitationLink = widget.invitationLink;
+    _hasInvalidInvitationLink = widget.invalidInvitationLink;
     _subscribeToAuth();
   }
 
   @override
   void didUpdateWidget(covariant TenantRoutingShell oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.invitationLink != widget.invitationLink) {
+      _pendingInvitationLink = widget.invitationLink;
+    }
+    if (oldWidget.invalidInvitationLink != widget.invalidInvitationLink) {
+      _hasInvalidInvitationLink = widget.invalidInvitationLink;
+    }
     if (!identical(oldWidget.authUidChanges, widget.authUidChanges)) {
       _authSubscription?.cancel();
       _subscribeToAuth();
@@ -191,6 +211,18 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   void _refreshAfterVisibleInvitationAcceptance() => _retry();
 
+  void _completeTokenInvitationAcceptance() {
+    setState(() => _pendingInvitationLink = null);
+    _retry();
+  }
+
+  void _dismissInvitationLink() {
+    setState(() {
+      _pendingInvitationLink = null;
+      _hasInvalidInvitationLink = false;
+    });
+  }
+
   void _retry() {
     final uid = _uid;
     if (uid == null) return;
@@ -244,6 +276,14 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   Widget build(BuildContext context) {
     if (_phase == _RoutingPhase.signedOut) return widget.signedOut;
 
+    final invitationRoute = _buildInvitationRoute();
+    if (invitationRoute != null) {
+      return TenantSessionScope(
+        controller: _sessionController,
+        child: invitationRoute,
+      );
+    }
+
     return TenantSessionScope(
       controller: _sessionController,
       child: switch (_phase) {
@@ -277,6 +317,50 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     );
   }
 
+  Widget? _buildInvitationRoute() {
+    final uid = _uid;
+    final profile = _bootstrapResult?.profile;
+    final canShow =
+        uid != null &&
+        profile != null &&
+        profile.isActive &&
+        profile.accountType == RootAccountType.tenantUser &&
+        (_phase == _RoutingPhase.selector ||
+            _phase == _RoutingPhase.noAccessibleTenant ||
+            _phase == _RoutingPhase.tenant);
+    if (!canShow) return null;
+    if (_hasInvalidInvitationLink) {
+      return _InvalidTenantInvitationScreen(
+        onContinue: _dismissInvitationLink,
+        onSignOut: _signOut,
+      );
+    }
+    final link = _pendingInvitationLink;
+    if (link == null) return null;
+    final matches = _bootstrapResult!.selection.visible.where(
+      (membership) => membership.tenantId == link.tenantId,
+    );
+    final membership = matches.length == 1 ? matches.single : null;
+    return _TenantInvitationAcceptanceScreen(
+      currentUid: uid,
+      invitationLink: link,
+      tenantName: membership?.tenantName,
+      invitedRole: membership?.role,
+      callable:
+          widget.acceptTenantInvitationCallable ??
+          FirebaseAcceptTenantInvitationCallable(),
+      requestIdFactory: widget.invitationAcceptanceRequestIdFactory,
+      isCurrent: () =>
+          mounted &&
+          _uid == uid &&
+          identical(_pendingInvitationLink, link) &&
+          _bootstrapResult?.profile.isActive == true,
+      onSuccess: _completeTokenInvitationAcceptance,
+      onCancel: _dismissInvitationLink,
+      onSignOut: _signOut,
+    );
+  }
+
   TenantVisibleInvitationIdentity? _visibleInvitationIdentity() {
     final uid = _uid;
     final profile = _bootstrapResult?.profile;
@@ -300,6 +384,101 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       onSignOut: _signOut,
     );
   }
+}
+
+final class _TenantInvitationAcceptanceScreen extends StatelessWidget {
+  const _TenantInvitationAcceptanceScreen({
+    required this.currentUid,
+    required this.invitationLink,
+    required this.callable,
+    required this.onSuccess,
+    required this.onCancel,
+    required this.onSignOut,
+    this.tenantName,
+    this.invitedRole,
+    this.requestIdFactory,
+    this.isCurrent,
+  });
+
+  final String currentUid;
+  final TenantInvitationLink invitationLink;
+  final AcceptTenantInvitationCallable callable;
+  final VoidCallback onSuccess;
+  final VoidCallback onCancel;
+  final Future<void> Function() onSignOut;
+  final String? tenantName;
+  final TenantRole? invitedRole;
+  final TenantInvitationAcceptanceRequestIdFactory? requestIdFactory;
+  final TenantInvitationAcceptanceCurrentCheck? isCurrent;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Business invitation'),
+      actions: [
+        TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+      ],
+    ),
+    body: Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: TenantInvitationAcceptanceForm(
+                currentUid: currentUid,
+                invitationLink: invitationLink,
+                callable: callable,
+                tenantName: tenantName,
+                invitedRole: invitedRole,
+                requestIdFactory: requestIdFactory,
+                isCurrent: isCurrent,
+                onSuccess: onSuccess,
+                onCancel: onCancel,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+final class _InvalidTenantInvitationScreen extends StatelessWidget {
+  const _InvalidTenantInvitationScreen({
+    required this.onContinue,
+    required this.onSignOut,
+  });
+
+  final VoidCallback onContinue;
+  final Future<void> Function() onSignOut;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Business invitation'),
+      actions: [
+        TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+      ],
+    ),
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.link_off_outlined, size: 48),
+            const SizedBox(height: 16),
+            const Text('This invitation link is invalid or incomplete.'),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: onContinue, child: const Text('Continue')),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 final class _RoutingProgress extends StatelessWidget {

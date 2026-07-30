@@ -121,6 +121,49 @@ void main() {
     await fixture.dispose(tester);
   });
 
+  testWidgets('accepts a parsed proof link then refreshes tenant routing', (
+    tester,
+  ) async {
+    final callable = _TokenAcceptCallable();
+    final fixture = _ShellFixture(
+      memberships: [
+        _membership(
+          'tenant-a',
+          membershipStatus: MembershipStatus.pending,
+          canAccess: false,
+          invitationStatus: 'sent',
+        ),
+      ],
+      invitationLink: _tokenInvitationLink(),
+      acceptTenantInvitationCallable: callable,
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(find.text('Business invitation'), findsOneWidget);
+    expect(
+      find.text('Accept invitation to Business tenant-a?'),
+      findsOneWidget,
+    );
+    expect(find.text('Invited role: admin'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('accept-token-invitation-confirm')),
+    );
+    await _pumpRouting(tester);
+
+    expect(callable.payloads.single, {
+      'tenantId': 'tenant-a',
+      'invitationVersion': 4,
+      'invitationToken': _invitationToken,
+      'requestId': 'routing-accept-request',
+    });
+    expect(fixture.gateway.listCalls, 2);
+    expect(find.text('Choose a business'), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
   testWidgets('ignores a stale bootstrap completion after sign-out', (
     tester,
   ) async {
@@ -203,6 +246,8 @@ final class _ShellFixture {
     Future<RootRoutingProfile>? profileFuture,
     String? localTenantId,
     int rootFailures = 0,
+    this.invitationLink,
+    this.acceptTenantInvitationCallable,
   }) : gateway = _FakeGateway(
          memberships: memberships,
          profile: profile,
@@ -220,6 +265,8 @@ final class _ShellFixture {
   final StreamController<String?> auth = StreamController<String?>();
   final _FakeGateway gateway;
   final _MemorySelectionStore store;
+  final TenantInvitationLink? invitationLink;
+  final AcceptTenantInvitationCallable? acceptTenantInvitationCallable;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -230,6 +277,9 @@ final class _ShellFixture {
         bootstrapService: service,
         signOut: () async => auth.add(null),
         signedOut: const Scaffold(body: Center(child: Text('Signed out'))),
+        invitationLink: invitationLink,
+        acceptTenantInvitationCallable: acceptTenantInvitationCallable,
+        invitationAcceptanceRequestIdFactory: () => 'routing-accept-request',
         tenantRouteBuilder: (context, controller, membership) {
           openedController = controller;
           return Scaffold(body: Text('Business ${membership.tenantId}'));
@@ -302,6 +352,7 @@ TenantMembership _membership(
   MembershipStatus membershipStatus = MembershipStatus.active,
   TenantStatus tenantStatus = TenantStatus.active,
   bool canAccess = true,
+  String? invitationStatus,
 }) => TenantMembership(
   tenantId: tenantId,
   tenantName: 'Business $tenantId',
@@ -309,6 +360,7 @@ TenantMembership _membership(
   role: TenantRole.admin,
   membershipStatus: membershipStatus,
   tenantStatus: tenantStatus,
+  invitationStatus: invitationStatus,
   isOwner: false,
   mirrorVersion: 1,
   createdAt: DateTime.utc(2026, 7, 29),
@@ -317,3 +369,29 @@ TenantMembership _membership(
   canonicalTenantExists: true,
   canonicalMembershipExists: true,
 );
+
+final class _TokenAcceptCallable implements AcceptTenantInvitationCallable {
+  final List<Map<String, Object?>> payloads = [];
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(Map<String, Object?>.from(payload));
+    return <String, Object?>{
+      'tenantId': payload['tenantId'],
+      'uid': 'user-a',
+      'role': 'admin',
+      'membershipStatus': 'active',
+      'invitationStatus': 'accepted',
+    };
+  }
+}
+
+TenantInvitationLink _tokenInvitationLink() =>
+    TenantInvitationLink.fromUriIfPresent(
+      Uri.parse(
+        'https://pos.example.test/invitations?tenantId=tenant-a&uid=user-a'
+        '&invitationVersion=4&invitationToken=$_invitationToken',
+      ),
+    )!;
+
+const _invitationToken = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';

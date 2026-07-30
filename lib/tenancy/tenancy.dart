@@ -6,6 +6,7 @@ export 'tenant_directory.dart';
 export 'firebase_tenant_gateway.dart';
 export 'hive_tenant_selection_store.dart';
 export 'tenant_id.dart';
+export 'tenant_invitation_acceptance.dart';
 export 'tenant_membership.dart';
 export 'tenant_paths.dart';
 export 'tenant_repository.dart';

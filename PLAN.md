@@ -2121,3 +2121,101 @@ Implement only typed `acceptTenantInvitation` email-link token acceptance:
    acceptance.
 5. Update the inventory while leaving checkout/Hive state, shifts, reports,
    returns, subscriptions, and catalog mutations outside this scope.
+
+---
+
+## Typed email-link invitation acceptance handoff - 2026-07-30
+
+### Completed in this session
+
+The next bounded frontend milestone enables typed `acceptTenantInvitation`
+from a versioned email invitation proof. The existing visible-invitation route
+remains available for eligible verified users.
+
+Implemented behavior:
+
+- `TenantInvitationLink` parses the four proof fields emitted by the backend:
+  tenant ID, invited UID, positive JavaScript-safe invitation version, and the
+  exact 43-character URL-safe token. Links must be HTTPS. Partial fields,
+  duplicates, unsafe document IDs, insecure schemes, invalid versions, and
+  malformed tokens fail closed without retaining or displaying proof details.
+- `TenantInvitationAcceptanceGateway` is bound to one parsed link and the
+  current authenticated UID. It accepts no arbitrary tenant, target UID,
+  invitation version, or token input. A link for another UID fails before a
+  callable request. Backend recent-authentication, email-match, expiry,
+  unused-token, canonical membership, root status, and tenant lifecycle checks
+  remain authoritative.
+- Each confirmation intent owns one cryptographically generated request ID.
+  Duplicate taps are single-flight, and retrying the same proof reuses the same
+  idempotency key. Callable responses require the exact five backend fields,
+  exact tenant/UID agreement, a non-owner role, active membership, and accepted
+  invitation state.
+- App startup parses `Uri.base` once. Authenticated tenant users with a valid
+  proof see an explicit confirmation; tenant name and invited role are shown
+  when the canonically overlaid routing membership is available. Invalid links
+  get a fixed safe state. Signing in, password setup, verification mechanics,
+  token issuance, and Firebase recent-auth enforcement remain outside this
+  narrow client boundary.
+- Success and failure completions are discarded after Auth UID, proof link, or
+  routing-current checks change. Success consumes the in-memory link and then
+  performs the bounded tenant-routing refresh. Cancellation performs no
+  mutation, and UI errors never expose callable or token details.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/main.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_invitation_acceptance.dart
+lib/tenancy/tenant_routing_shell.dart
+test/tenancy/tenant_invitation_acceptance_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence:
+
+- `dart analyze lib/tenancy test/tenancy` reported no issues.
+- `flutter test --no-pub test/tenancy` passed **153/153** tests; the focused
+  email-link invitation-acceptance file passed **10/10**.
+- Focused routing plus invitation coverage passed **19/19** tests.
+- `dart analyze lib/tenancy test/tenancy lib/main.dart lib/login_screen.dart`
+  reports only the pre-existing `lib/main.dart` experimental
+  `profilesSampleRate` warning; this chunk did not introduce it.
+- Coverage proves strict URI parsing, exact tenant/version/token payload
+  derivation, current-UID binding without calls for another user, exact
+  response decoding, owner/role/membership-state rejection, explicit
+  cancellation, duplicate-tap single flight, retry idempotency, safe errors,
+  routing refresh only after success, and stale user/link completion rejection.
+
+The existing user-owned local edits remain separate and must not be staged with
+frontend code:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only typed `setDefaultTenant` for the currently open canonical
+tenant session:
+
+1. Add a session-bound callable gateway for `setDefaultTenant` that derives
+   the tenant ID from a captured active `TenantSession`, creates one request ID
+   per intent, and strictly decodes exact tenant/default-tenant agreement.
+2. Expose an explicit “Make default” action from the tenant-safe landing route.
+   Do not change the default as a side effect of opening or selecting a tenant,
+   and do not add general tenant switching until the frozen switching blockers
+   and pending-write checks are implemented.
+3. Add explicit confirmation, recoverable single-flight submission, stable
+   retry idempotency, safe errors, session-epoch stale-completion checks, and a
+   bounded routing-profile refresh only after success.
+4. Test owner/admin/manager/cashier active-member operation, exact payload and
+   response validation, confirmation dismissal, duplicate taps, retry behavior,
+   and tenant/session switches during an outstanding update.
+5. Update the inventory while leaving checkout/Hive state, shifts, reports,
+   returns, subscriptions, catalog mutations, and general tenant switching
+   outside this scope.

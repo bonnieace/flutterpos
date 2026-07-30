@@ -48,17 +48,38 @@ Future<void> main() async {
         selectionStore: HiveTenantSelectionStore(tenantSelectionBox),
       );
 
+      TenantInvitationLink? invitationLink;
+      var invalidInvitationLink = false;
+      try {
+        invitationLink = TenantInvitationLink.fromUriIfPresent(Uri.base);
+      } on FormatException {
+        invalidInvitationLink = true;
+      }
+
       runApp(
-        SentryWidget(child: SpiritPOSApp(bootstrapService: bootstrapService)),
+        SentryWidget(
+          child: SpiritPOSApp(
+            bootstrapService: bootstrapService,
+            invitationLink: invitationLink,
+            invalidInvitationLink: invalidInvitationLink,
+          ),
+        ),
       );
     },
   );
 }
 
 class SpiritPOSApp extends StatelessWidget {
-  const SpiritPOSApp({super.key, required this.bootstrapService});
+  const SpiritPOSApp({
+    super.key,
+    required this.bootstrapService,
+    this.invitationLink,
+    this.invalidInvitationLink = false,
+  });
 
   final TenantBootstrapService bootstrapService;
+  final TenantInvitationLink? invitationLink;
+  final bool invalidInvitationLink;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +94,8 @@ class SpiritPOSApp extends StatelessWidget {
           final user = FirebaseAuth.instance.currentUser;
           return user != null && user.uid == uid && user.emailVerified;
         },
+        invitationLink: invitationLink,
+        invalidInvitationLink: invalidInvitationLink,
         bootstrapService: bootstrapService,
         signOut: FirebaseAuth.instance.signOut,
         signedOut: const LoginScreen(),
