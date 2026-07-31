@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'shift_controller.dart';
+import 'shift_history_panel.dart';
 
 /// Builds the shift controller for the session controller owned by the shell.
 typedef TenantShiftControllerFactory =
@@ -16,9 +18,17 @@ typedef TenantShiftControllerFactory =
 /// stale-epoch rejection, and canonical reads all stay in the controller and
 /// the route guard; this widget renders and dispatches only.
 final class TenantShiftPanel extends StatefulWidget {
-  const TenantShiftPanel({super.key, required this.controllerFactory});
+  const TenantShiftPanel({
+    super.key,
+    required this.controllerFactory,
+    this.historyReader,
+  });
 
   final TenantShiftControllerFactory controllerFactory;
+
+  /// Supplied by the composition root to reach the read-only shift history.
+  /// The route stays unreachable while it is absent.
+  final TenantDataReader? historyReader;
 
   @override
   State<TenantShiftPanel> createState() => _TenantShiftPanelState();
@@ -45,6 +55,22 @@ final class _TenantShiftPanelState extends State<TenantShiftPanel> {
     _shifts?.dispose();
     _countedCash.dispose();
     super.dispose();
+  }
+
+  /// Opens the read-only history under the same session scope, so the guard on
+  /// that route sees the exact controller this panel was authorized against.
+  void _openHistory(BuildContext context) {
+    final reader = widget.historyReader;
+    final sessions = _sessions;
+    if (reader == null || sessions == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: sessions,
+          child: TenantShiftHistoryScreen(reader: reader),
+        ),
+      ),
+    );
   }
 
   Future<void> _dispatch(
@@ -77,6 +103,9 @@ final class _TenantShiftPanelState extends State<TenantShiftPanel> {
               : shifts.state,
           busy: _busy,
           countedCash: _countedCash,
+          onViewHistory: widget.historyReader == null
+              ? null
+              : () => _openHistory(context),
           onRefresh: () => _dispatch((shifts) => shifts.restore(session)),
           onOpen: () => _dispatch((shifts) => shifts.openShift()),
           onStartCashCount: () =>
@@ -100,6 +129,7 @@ final class _ShiftContents extends StatelessWidget {
     required this.state,
     required this.busy,
     required this.countedCash,
+    required this.onViewHistory,
     required this.onRefresh,
     required this.onOpen,
     required this.onStartCashCount,
@@ -110,6 +140,7 @@ final class _ShiftContents extends StatelessWidget {
   final TenantShiftState state;
   final bool busy;
   final TextEditingController countedCash;
+  final VoidCallback? onViewHistory;
   final VoidCallback onRefresh;
   final VoidCallback onOpen;
   final VoidCallback onStartCashCount;
@@ -190,6 +221,12 @@ final class _ShiftContents extends StatelessWidget {
             onPressed: busy ? null : onRefresh,
             child: const Text('Refresh shift'),
           ),
+          if (onViewHistory != null)
+            OutlinedButton(
+              key: const ValueKey('view-shift-history'),
+              onPressed: busy ? null : onViewHistory,
+              child: const Text('View shift history'),
+            ),
         ],
       ),
     ],

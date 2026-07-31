@@ -1,0 +1,313 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_application_1/shift/shift.dart';
+import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
+const String _businessDate = '2026-07-31';
+
+void main() {
+  testWidgets('a cashier sees counted cash, recorded sales, and the difference', (
+    tester,
+  ) async {
+    final controller = _controller(TenantRole.cashier);
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-b'),
+        _snapshot(
+          'shift-a',
+          overrides: <String, Object?>{'closingCashMinor': 90000},
+        ),
+      ]);
+
+    await _pumpPanel(tester, controller, reader);
+
+    expect(find.byKey(const ValueKey('shift-history-entry-shift-b')), findsOne);
+    _expectText(tester, 'shift-history-counted-shift-b', 'Counted cash: 1250.00');
+    _expectText(
+      tester,
+      'shift-history-sales-shift-b',
+      'Recorded sales: 987.50 over 3 transactions',
+    );
+    _expectText(
+      tester,
+      'shift-history-variance-shift-b',
+      'Counted cash is over by 262.50.',
+    );
+    _expectText(
+      tester,
+      'shift-history-variance-shift-a',
+      'Counted cash is short by 87.50.',
+    );
+    // Only management may look beyond its own shifts.
+    expect(find.byKey(const ValueKey('shift-history-scope')), findsNothing);
+    expect(
+      reader.queries.single.equalityFilters,
+      <String, Object?>{'status': 'closed', 'staffId': 'user-a'},
+    );
+  });
+
+  testWidgets('a shift closed without a summary states that plainly', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot(
+          'shift-a',
+          overrides: <String, Object?>{
+            'totalSalesMinor': null,
+            'totalSales': null,
+            'transactionCount': null,
+          },
+        ),
+      ]);
+
+    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
+
+    _expectText(
+      tester,
+      'shift-history-no-summary-shift-a',
+      'No closing summary was recorded for this shift.',
+    );
+    expect(
+      find.byKey(const ValueKey('shift-history-variance-shift-a')),
+      findsNothing,
+    );
+    _expectText(tester, 'shift-history-counted-shift-a', 'Counted cash: 1250.00');
+  });
+
+  testWidgets('a manager may page every cashier and label its own shifts', (
+    tester,
+  ) async {
+    final controller = _controller(TenantRole.manager);
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-b', overrides: <String, Object?>{'staffId': 'user-b'}),
+        _snapshot('shift-a'),
+      ]);
+
+    await _pumpPanel(tester, controller, reader);
+    expect(
+      reader.queries.single.equalityFilters,
+      <String, Object?>{'status': 'closed', 'staffId': 'user-a'},
+    );
+
+    await tester.tap(find.text('Every cashier'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(reader.queries.length, 2);
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'status': 'closed',
+    });
+    expect(find.text('2026-07-31 - user-b'), findsOne);
+    expect(find.text('2026-07-31 - You'), findsOne);
+  });
+
+  testWidgets('paging forward asks for the next cursor only', (tester) async {
+    final controller = _controller(TenantRole.cashier);
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-c'),
+        _snapshot('shift-b'),
+        _snapshot('shift-a'),
+      ]);
+
+    await _pumpPanel(tester, controller, reader, pageSize: 2);
+    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
+    expect(find.byKey(const ValueKey('shift-history-previous')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('shift-history-next')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(reader.queries.last.startAfterDocumentId, 'shift-b');
+    expect(reader.queries.last.descending, isTrue);
+    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsOne);
+    expect(find.byKey(const ValueKey('shift-history-previous')), findsOne);
+  });
+
+  testWidgets('a tenant switch discards the outstanding page', (tester) async {
+    final controller = _controller(TenantRole.cashier);
+    final reader = _Reader(deferred: true)
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-a'),
+      ])
+      ..respond('tenants/tenant-b/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-b', tenantId: 'tenant-b'),
+      ]);
+
+    await _pumpPanel(tester, controller, reader, settle: false);
+    await tester.pump();
+    expect(reader.pending.length, 1);
+
+    controller.open(uid: 'user-a', membership: _membership('tenant-b'));
+    await tester.pump();
+    expect(reader.pending.length, 2);
+
+    // The first business answers after the switch; its page must be discarded.
+    reader.completeFirst();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
+
+    reader.completeFirst();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('shift-history-entry-shift-b')), findsOne);
+    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
+  });
+
+  testWidgets('no session renders the denied state and starts no load', (
+    tester,
+  ) async {
+    final controller = TenantSessionController();
+    final reader = _Reader();
+
+    await _pumpPanel(tester, controller, reader);
+
+    expect(find.byKey(const ValueKey('shift-history-denied')), findsOne);
+    expect(reader.queries, isEmpty);
+  });
+
+  testWidgets('a failed page hides the underlying error', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        // A page that answers outside the requested business fails closed.
+        _snapshot('shift-a', responsePath: 'tenants/tenant-b/shifts/shift-a'),
+      ]);
+
+    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
+
+    expect(find.byKey(const ValueKey('shift-history-failure')), findsOne);
+    expect(find.textContaining('tenant-b'), findsNothing);
+  });
+
+}
+
+Future<void> _pumpPanel(
+  WidgetTester tester,
+  TenantSessionController controller,
+  _Reader reader, {
+  int pageSize = 20,
+  bool settle = true,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TenantSessionScope(
+        controller: controller,
+        child: Scaffold(
+          body: TenantShiftHistoryPanel(reader: reader, pageSize: pageSize),
+        ),
+      ),
+    ),
+  );
+  if (!settle) return;
+  await tester.pump();
+  await tester.pump();
+}
+
+TenantSessionController _controller(TenantRole role) =>
+    TenantSessionController()
+      ..open(uid: 'user-a', membership: _membership('tenant-a', role: role));
+
+TenantMembership _membership(String tenantId, {TenantRole role = TenantRole.cashier}) =>
+    TenantMembership(
+      tenantId: tenantId,
+      tenantName: tenantId,
+      tenantSlug: tenantId,
+      role: role,
+      membershipStatus: MembershipStatus.active,
+      tenantStatus: TenantStatus.active,
+      isOwner: false,
+      mirrorVersion: 1,
+      createdAt: DateTime.utc(2026, 7, 31),
+      updatedAt: DateTime.utc(2026, 7, 31),
+      serverCanAccess: true,
+      canonicalTenantExists: true,
+      canonicalMembershipExists: true,
+    );
+
+void _expectText(WidgetTester tester, String key, String value) {
+  expect(tester.widget<Text>(find.byKey(ValueKey(key))).data, value);
+}
+
+TenantQueryDocumentSnapshot _snapshot(
+  String shiftId, {
+  String tenantId = 'tenant-a',
+  String? responsePath,
+  Map<String, Object?>? overrides,
+}) {
+  final data = <String, Object?>{
+    'shiftId': shiftId,
+    'tenantId': tenantId,
+    'staffId': 'user-a',
+    'deviceId': _deviceA,
+    'businessDate': _businessDate,
+    'status': 'closed',
+    'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 6)),
+    'endTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 18)),
+    'closingCashMinor': 125000,
+    'closingCash': 1250,
+    'totalSalesMinor': 98750,
+    'totalSales': 987.5,
+    'transactionCount': 3,
+  };
+  if (overrides != null) data.addAll(overrides);
+  data.removeWhere((key, value) => value == null);
+  return TenantQueryDocumentSnapshot(
+    path: responsePath ?? 'tenants/$tenantId/shifts/$shiftId',
+    data: data,
+  );
+}
+
+final class _Reader implements TenantDataReader {
+  _Reader({this.deferred = false});
+
+  final bool deferred;
+  final Map<String, List<TenantQueryDocumentSnapshot>> _pages =
+      <String, List<TenantQueryDocumentSnapshot>>{};
+  final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
+  final List<Completer<List<TenantQueryDocumentSnapshot>>> pending =
+      <Completer<List<TenantQueryDocumentSnapshot>>>[];
+  final List<List<TenantQueryDocumentSnapshot>> _deferredResults =
+      <List<TenantQueryDocumentSnapshot>>[];
+
+  void respond(String path, List<TenantQueryDocumentSnapshot> page) =>
+      _pages[path] = page;
+
+  /// Completes the oldest outstanding page, mimicking a slow first business.
+  void completeFirst() {
+    if (pending.isEmpty) return;
+    pending.removeAt(0).complete(_deferredResults.removeAt(0));
+  }
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) {
+    queries.add(query);
+    final all = _pages[query.collectionPath] ?? const [];
+    final cursor = query.startAfterDocumentId;
+    final matches = <TenantQueryDocumentSnapshot>[];
+    for (final snapshot in all) {
+      final id = snapshot.path.split('/').last;
+      if (cursor != null && id.compareTo(cursor) >= 0) continue;
+      final matchesFilters = query.equalityFilters.entries.every(
+        (filter) => snapshot.data[filter.key] == filter.value,
+      );
+      if (!matchesFilters) continue;
+      matches.add(snapshot);
+      if (matches.length >= query.limit) break;
+    }
+    if (!deferred) return Future.value(matches);
+    final completer = Completer<List<TenantQueryDocumentSnapshot>>();
+    pending.add(completer);
+    _deferredResults.add(matches);
+    return completer.future;
+  }
+}

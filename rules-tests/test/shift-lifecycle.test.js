@@ -245,8 +245,11 @@ test("an inactive or unknown identity cannot open or read a shift", async () => 
   await assertFails(closeShift(inactive));
   await assertFails(getDoc(doc(inactive, "tenants/tenant-a/shifts/shift-a")));
 
-  const outsider = authenticatedFirestore(testEnvironment, "cashier-b");
-  await assertSucceeds(getDoc(doc(outsider, "tenants/tenant-a/shifts/shift-a")));
+  // A colleague is active in the business but the shift is not theirs. The
+  // read boundary was deliberately narrowed to match the client, which already
+  // refuses a foreign shift; the role boundary is proved in shift-history.
+  const colleague = authenticatedFirestore(testEnvironment, "cashier-b");
+  await assertFails(getDoc(doc(colleague, "tenants/tenant-a/shifts/shift-a")));
 });
 
 test("only the shift's own cashier may close it, exactly once", async () => {

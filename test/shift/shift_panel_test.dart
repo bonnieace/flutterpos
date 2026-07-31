@@ -182,6 +182,46 @@ void main() {
     expect(find.textContaining('malformed_shift_state'), findsNothing);
   });
 
+  testWidgets('reaches the read-only shift history from the panel', (
+    tester,
+  ) async {
+    server.shifts['tenants/tenant-a/shifts/shift-closed'] = _document(
+      overrides: <String, Object?>{
+        'shiftId': 'shift-closed',
+        'status': 'closed',
+        'endTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 18)),
+        'closingCashMinor': 125000,
+        'closingCash': 1250,
+        'totalSalesMinor': 98750,
+        'totalSales': 987.5,
+        'transactionCount': 3,
+      },
+    );
+
+    await _pumpPanel(tester, state, server, history: true);
+    await tester.tap(find.byKey(const ValueKey('view-shift-history')));
+    await _settle(tester);
+
+    expect(find.text('Shift history'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('shift-history-entry-shift-closed')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Counted cash: 1250.00'),
+      findsOneWidget,
+      reason: 'the recorded figures are shown, never recomputed',
+    );
+  });
+
+  testWidgets('the history route stays unreachable without a reader', (
+    tester,
+  ) async {
+    await _pumpPanel(tester, state, server);
+
+    expect(find.byKey(const ValueKey('view-shift-history')), findsNothing);
+  });
+
   testWidgets('a tenant switch replaces the surface instead of updating it', (
     tester,
   ) async {
@@ -213,6 +253,7 @@ Future<TenantSessionController> _pumpPanel(
   HiveTenantShiftState state,
   _Server server, {
   ShiftSalesSummary sales = ShiftSalesSummary.empty,
+  bool history = false,
 }) async {
   final sessions = TenantSessionController()
     ..open(uid: 'user-a', membership: _membership('tenant-a'));
@@ -223,6 +264,7 @@ Future<TenantSessionController> _pumpPanel(
         controller: sessions,
         child: Scaffold(
           body: TenantShiftPanel(
+            historyReader: history ? _Reader(server) : null,
             controllerFactory: (controller) =>
                 _controller(controller, state, server, sales: sales),
           ),
@@ -342,7 +384,11 @@ final class _Reader implements TenantDataReader {
     TenantCollectionQuery query,
   ) async {
     final matches = <TenantQueryDocumentSnapshot>[];
-    for (final path in _server.shifts.keys.toList()..sort()) {
+    final paths = _server.shifts.keys.toList()..sort();
+    if (query.descending) {
+      paths.sort((left, right) => right.compareTo(left));
+    }
+    for (final path in paths) {
       if (!path.startsWith('${query.collectionPath}/')) continue;
       final data = _server.shifts[path]!;
       if (!query.equalityFilters.entries.every(

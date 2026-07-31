@@ -35,12 +35,14 @@ final class TenantQueryDocumentSnapshot {
 ///
 /// [equalityFilters] carries the exact `field == value` conditions the
 /// repository chose. Callers cannot supply them, and the reader may not add,
-/// drop, or reinterpret one.
+/// drop, or reinterpret one. [descending] reverses the document-ID ordering
+/// only; the reader may not order by any other field.
 final class TenantCollectionQuery {
   TenantCollectionQuery._({
     required this.collectionPath,
     required this.limit,
     this.startAfterDocumentId,
+    this.descending = false,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) : equalityFilters = Map<String, Object?>.unmodifiable(equalityFilters);
 
@@ -53,17 +55,22 @@ final class TenantCollectionQuery {
     required String collectionPath,
     required int limit,
     String? startAfterDocumentId,
+    bool descending = false,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) => TenantCollectionQuery._(
     collectionPath: collectionPath,
     limit: limit,
     startAfterDocumentId: startAfterDocumentId,
+    descending: descending,
     equalityFilters: equalityFilters,
   );
 
   final String collectionPath;
   final int limit;
   final String? startAfterDocumentId;
+
+  /// Whether the page is ordered by descending document ID.
+  final bool descending;
   final Map<String, Object?> equalityFilters;
 }
 
@@ -103,7 +110,9 @@ final class FirebaseTenantDocumentReader implements TenantDataReader {
     for (final filter in query.equalityFilters.entries) {
       request = request.where(filter.key, isEqualTo: filter.value);
     }
-    request = request.orderBy(FieldPath.documentId).limit(query.limit);
+    request = request
+        .orderBy(FieldPath.documentId, descending: query.descending)
+        .limit(query.limit);
     final cursor = query.startAfterDocumentId;
     if (cursor != null) request = request.startAfter(<Object>[cursor]);
     final snapshot = await request.get();
@@ -134,11 +143,15 @@ final class TenantDocumentPage {
     required List<TenantQueryDocumentSnapshot> items,
     required this.nextCursor,
     required this.hasMore,
+    this.descending = false,
   }) : items = List<TenantQueryDocumentSnapshot>.unmodifiable(items);
 
   final List<TenantQueryDocumentSnapshot> items;
   final String? nextCursor;
   final bool hasMore;
+
+  /// Whether this page was ordered by descending document ID.
+  final bool descending;
 }
 
 /// Base for read-only repositories bound to one live tenant session.
@@ -191,11 +204,15 @@ abstract base class TenantReadRepository {
   /// Neither callers nor repository subclasses can supply a collection path.
   /// [equalityFilters] narrows the page to exact field values; every returned
   /// document is still proved to be a direct child of this tenant collection.
+  /// [descending] reverses the document-ID ordering so a history surface can
+  /// page from the newest record; the ordering proof reverses with it, and no
+  /// other sort field is reachable from here.
   Future<TenantDocumentPage> readCollectionPage(
     TenantCollection collection, {
     required TenantCollectionReader collectionReader,
     int pageSize = 20,
     String? cursor,
+    bool descending = false,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) async {
     if (pageSize < 1 || pageSize > 50) {
@@ -212,6 +229,7 @@ abstract base class TenantReadRepository {
         collectionPath: expectedCollectionPath,
         limit: requestedLimit,
         startAfterDocumentId: validatedCursor,
+        descending: descending,
         equalityFilters: safeFilters,
       ),
     );
@@ -245,7 +263,11 @@ abstract base class TenantReadRepository {
           'The collection reader returned duplicate document $documentId.',
         );
       }
-      if (previousId != null && previousId.compareTo(documentId) >= 0) {
+      final ordered = previousId == null ||
+          (descending
+              ? previousId.compareTo(documentId) > 0
+              : previousId.compareTo(documentId) < 0);
+      if (!ordered) {
         throw const TenantScopeViolation(
           'Collection results were not ordered by document ID.',
         );
@@ -262,6 +284,7 @@ abstract base class TenantReadRepository {
       items: items,
       nextCursor: nextCursor,
       hasMore: hasMore,
+      descending: descending,
     );
   }
 

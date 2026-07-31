@@ -233,7 +233,14 @@ service cloud.firestore {
       // another business, and both lifecycle instants are server-owned so a
       // device clock can never decide when a shift began or ended.
       match /shifts/{shiftId} {
-        allow read: if activeStaff(tenantId);
+        // A cashier reads only their own shifts; owners, admins, and managers
+        // read every cashier's. A cashier had no reason to read a colleague's
+        // counted cash, and the client already refuses a foreign shift, so the
+        // server now agrees with it. A cashier's list query must therefore
+        // carry `staffId == uid`, which is exactly what the history and
+        // discovery repositories send.
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager'])
+          || (activeStaff(tenantId) && resource.data.staffId == request.auth.uid);
         allow create: if activeStaff(tenantId)
           && shiftId == request.resource.data.shiftId
           && request.resource.data.tenantId == tenantId

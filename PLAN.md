@@ -4678,3 +4678,185 @@ makes meaningful:
    product cost/profit fields, subscription and branding surfaces, server-side
    cross-device shift transfer, deployment, and Android build/emulator
    validation outside that chunk.
+
+---
+
+## Guarded shift-history read surface handoff - 2026-08-01
+
+### Completed in this session
+
+A closed shift is now readable. The tenant-safe landing route reaches a
+read-only history that shows counted cash beside the recorded sale-derived
+totals, and the Firestore shift read boundary was deliberately narrowed to match
+what the client already enforced. This chunk adds no checkout screen or payment
+flow, no receipt printing, no reports, and makes no legacy operational POS route
+reachable.
+
+Implemented behavior and safety decisions:
+
+- `TenantShiftHistoryEntry` is a strict read model for a closed
+  `tenants/{tenantId}/shifts/{shiftId}`. Identity, path, device, business date,
+  and status are still proved by `TenantShift`; the entry adds the close-only
+  fields, refuses a shift that is not `closed`, and refuses a close with no
+  counted cash.
+- The sale-derived summary is present or absent as a whole. All three of
+  `totalSalesMinor`, `totalSales`, and `transactionCount` must appear together,
+  the major-unit mirror must round-trip to the authoritative minor units, and
+  sales without a transaction are refused. A shift closed by an earlier client
+  carries no summary at all, which the surface **names** rather than guesses:
+  only the closing device held the local sale evidence, so inventing a total on
+  a screen used to settle cash would be worse than reporting its absence.
+- `cashVarianceMinor` is a subtraction of two recorded figures. The device
+  deliberately recomputes neither side from local evidence - a shift can span
+  devices and reconciliation is the authority on which figure is wrong - so the
+  screen only names the difference as over, short, or matching.
+- `TenantShiftHistoryRepository` extends the existing guarded
+  `TenantReadRepository`. Pages are bounded and derived from the session's
+  `TenantPaths`, and the exact-child, uniqueness, and ordering proofs still
+  apply. A cashier's page is filtered by `staffId == uid` and `status ==
+  'closed'`; owners, admins, and managers may additionally page every cashier.
+  A cashier that asks for the wider scope is refused as
+  `shift_history_forbidden` **before** any query is issued, and a transport that
+  ignored the filter still fails closed as `foreign_shift`.
+- `TenantReadRepository.readCollectionPage` gained a `descending` option so a
+  history surface can page from the newest record. It reverses the document-ID
+  ordering only - no other sort field is reachable from the boundary - and the
+  ordering proof reverses with it, so a page returned the wrong way round is a
+  `TenantScopeViolation` in both directions. The generated shift ID embeds a
+  fixed-width millisecond timestamp, so descending document order is newest
+  first; the recorded instants are still rendered and the ordering is never
+  presented as proof of time.
+- **The Firestore shift read rule was narrowed.** An active cashier previously
+  read every shift in the business, including a colleague's counted cash. The
+  rule is now `owner/admin/manager, or the shift's own cashier`. A cashier's
+  list query must therefore carry `staffId == uid`, which is exactly what the
+  history and open-shift-discovery repositories already send, so the server and
+  the client now agree on one boundary instead of the client being stricter than
+  the server. The `shift-lifecycle` case that asserted a colleague could read
+  the shift was rewritten as a denial.
+- `firestore.indexes.json` gained the two descending composite indexes those
+  pages need: `staffId`/`status`/`__name__ DESC` and `status`/`__name__ DESC`.
+  The ascending `staffId`/`status`/`__name__` index that open-shift discovery
+  uses is unchanged.
+- The route is rendered by `TenantShiftHistoryPanel` behind `TenantRouteGuard`,
+  so a missing session, a role change, or a tenant switch during an outstanding
+  page discards that page before it can reach the tree. The panel owns only the
+  requested scope and a cursor stack; changing either restarts the guard through
+  a new key, so an earlier page can never complete into the current one.
+- The entry point is the shift panel's `View shift history` action, and it
+  exists only when the composition root supplies a reader. Tenancy code keeps
+  owning routing rather than the shift domain: `main.dart` passes the same
+  `FirebaseTenantDocumentReader` the rest of the landing route uses, and the
+  route opens under the same `TenantSessionScope`.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Another cashier's shift is labelled by UID. Resolving it to a display name
+  needs the canonical staff directory, which is a management-only read, so a
+  manager-scoped history would have to join two guarded repositories.
+- Descending pages are ordered by document ID, not by `endTime`. That is exact
+  for shifts this client opened; a shift imported with a foreign ID scheme would
+  sort by its ID, not its time.
+- Rules still cannot prove that a shift's aggregates match the sales the server
+  holds. The history reports what was recorded; reconciliation reports variance.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.indexes.json
+firestore.rules
+lib/main.dart
+lib/shift/shift.dart
+lib/shift/shift_history.dart
+lib/shift/shift_history_panel.dart
+lib/shift/shift_panel.dart
+lib/tenancy/tenant_repository.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/shift-history.test.js
+rules-tests/test/shift-lifecycle.test.js
+test/shift/shift_history_panel_test.dart
+test/shift/shift_history_test.dart
+test/shift/shift_panel_test.dart
+test/tenancy/tenant_repository_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/shift lib/checkout lib/tenancy test/shift
+  test/checkout test/tenancy` reported no issues. A whole-repository
+  `flutter analyze` still reports the pre-existing legacy POS findings, the
+  stale `test/widget_test.dart` reference to `MyApp`, and the experimental
+  `profilesSampleRate` warning in `main.dart`; none was touched.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/shift
+  test/checkout test/tenancy` passed **482/482** relevant Flutter tests,
+  including **24** new tests: 12 read-model and repository, 7 history-panel
+  widget, 2 shift-panel navigation, and 3 base-repository ordering cases.
+- `npm --prefix rules-tests run test:emulator:shift-history` passed the focused
+  Firestore-only suite **5/5** during development, and
+  `npm --prefix rules-tests run test:emulator:shift-lifecycle` passed **8/8**
+  after the read rule changed.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **56/56** (51 existing plus the 5 new history cases).
+- With portable Node.js and Temurin JDK 21 at
+  `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8`, inherited `DEBUG` removed,
+  and `NODE_OPTIONS=--max-old-space-size=512`, `npm --prefix functions test`
+  passed **166/166** Functions tests. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending
+  warnings, and `firestore.indexes.json` parsed as valid JSON. Android build and
+  Android emulator validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The manager scope test failed to find its own toggle.** The first
+  history-panel fake reader ignored the repository's equality filters, so the
+  own-scope page returned a colleague's shift, the repository correctly failed
+  closed as `foreign_shift`, and the guard rendered the failure state instead of
+  the segmented control. The fake now honours the filters it is given, which is
+  also what makes the wider-scope assertion meaningful; the deliberately
+  unfiltered transport stays in the unit suite, where failing closed is the
+  assertion.
+- No other test assertion failed; the analyzer and every command in the final
+  sequence were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded tenant sales-history read surface that shift history
+now points at:
+
+1. Add a strict read model and guarded repository for
+   `tenants/{tenantId}/sales`: bounded, indexed, ordered pages of the sales
+   recorded during one closed shift, plus a cashier's own recent sales. Reuse
+   the frozen `CheckoutSalePayload` v1 field set, refuse a document whose
+   `shiftId`, `soldById`, `deviceId`, or `businessDate` disagrees with the shift
+   it is claimed to belong to, and keep the exact-child, uniqueness, and
+   ordering proofs.
+2. Decide and test the sale read boundary in Rules exactly as this chunk did for
+   shifts: a cashier currently reads every sale in the business. Narrowing it to
+   `soldById == uid` for cashiers would require every cashier-issued sale query
+   to carry that filter, and management to keep the wider read.
+3. Add the composite indexes those queries need, including the `shiftId` page.
+4. Link a closed shift to its own sales from the history entry, so the recorded
+   `transactionCount` can be inspected rather than trusted, without recomputing
+   the shift's stored totals on the device.
+5. Add unit, widget, and focused Rules emulator coverage for pagination
+   boundaries, a cross-tenant response, a wrong-role read, a tenant switch
+   during an outstanding page, and a sale whose shift attribution disagrees.
+6. Leave the checkout screen and payment flow, receipt printing, returns,
+   product cost/profit fields, subscription and branding surfaces, server-side
+   cross-device shift transfer, deployment, and Android build/emulator
+   validation outside that chunk.

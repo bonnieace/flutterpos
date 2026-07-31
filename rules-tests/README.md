@@ -59,6 +59,20 @@ cannot be borrowed, that a sale must share its shift's device and business day,
 that a closed shift still accepts a late offline sale, and that the largest
 allowed sale still evaluates within the Rules budget.
 
+For the focused shift-history read boundary, run
+`npm --prefix rules-tests run test:emulator:shift-history`. It proves that a
+cashier may page only its own closed shifts, that dropping the `staffId`
+constraint or naming a colleague is denied for both a query and a direct read,
+that owners, admins, and managers page every cashier's closed shifts, that a
+deactivated or non-member identity reads nothing, and that history remains
+read-only for every role.
+
+The shift read rule was deliberately narrowed in that chunk: an active cashier
+used to read every shift in the business. A cashier had no reason to read a
+colleague's counted cash, the client already refused a foreign shift, and a
+cashier's list query must therefore carry `staffId == uid`, which is exactly
+what the history and open-shift-discovery repositories send.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

@@ -127,6 +127,57 @@ void main() {
       expect(reader.query, isNull);
     });
   });
+
+  group('document-ID ordering', () {
+    test('a descending page carries the reversed order to the reader', () async {
+      final reader = _OrderedReader(<String>['shift-c', 'shift-b', 'shift-a']);
+
+      final page = await _FilteredRepository().page(
+        reader,
+        const <String, Object?>{},
+        descending: true,
+      );
+
+      expect(reader.query!.descending, isTrue);
+      expect(
+        page.items.map((item) => item.path.split('/').last),
+        <String>['shift-c', 'shift-b', 'shift-a'],
+      );
+      expect(page.descending, isTrue);
+    });
+
+    test('a page ordered the wrong way fails closed in both directions', () async {
+      final ascendingResult = _OrderedReader(<String>['shift-a', 'shift-b']);
+      final descendingResult = _OrderedReader(<String>['shift-b', 'shift-a']);
+      final repository = _FilteredRepository();
+
+      await expectLater(
+        repository.page(
+          ascendingResult,
+          const <String, Object?>{},
+          descending: true,
+        ),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+      await expectLater(
+        repository.page(descendingResult, const <String, Object?>{}),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+    });
+
+    test('a repeated document ID fails closed in a descending page', () async {
+      final reader = _OrderedReader(<String>['shift-b', 'shift-b']);
+
+      await expectLater(
+        _FilteredRepository().page(
+          reader,
+          const <String, Object?>{},
+          descending: true,
+        ),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+    });
+  });
 }
 
 /// Exposes the guarded collection boundary so its filter contract can be
@@ -144,12 +195,37 @@ final class _FilteredRepository extends TenantReadRepository {
 
   Future<TenantDocumentPage> page(
     TenantCollectionReader reader,
-    Map<String, Object?> filters,
-  ) => readCollectionPage(
+    Map<String, Object?> filters, {
+    bool descending = false,
+  }) => readCollectionPage(
     TenantCollection.shifts,
     collectionReader: reader,
     equalityFilters: filters,
+    descending: descending,
   );
+}
+
+/// Returns exactly the document IDs it was given, in that order, so the
+/// repository's ordering and uniqueness proofs can be exercised directly.
+final class _OrderedReader implements TenantCollectionReader {
+  _OrderedReader(this._documentIds);
+
+  final List<String> _documentIds;
+  TenantCollectionQuery? query;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery request,
+  ) async {
+    query = request;
+    return <TenantQueryDocumentSnapshot>[
+      for (final id in _documentIds)
+        TenantQueryDocumentSnapshot(
+          path: '${request.collectionPath}/$id',
+          data: const <String, Object?>{},
+        ),
+    ];
+  }
 }
 
 final class _FakeCollectionReader implements TenantCollectionReader {

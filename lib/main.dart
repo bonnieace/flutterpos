@@ -202,6 +202,7 @@ class SpiritPOSApp extends StatelessWidget {
         },
         tenantDataReader: tenantDataReader,
         shiftPanel: TenantShiftPanel(
+          historyReader: tenantDataReader,
           controllerFactory: (sessions) => TenantShiftController(
             sessionController: sessions,
             localState: tenantShiftState,

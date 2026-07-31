@@ -1,4 +1,6 @@
 export 'shift_controller.dart';
+export 'shift_history.dart';
+export 'shift_history_panel.dart';
 export 'shift_local_state.dart';
 export 'shift_panel.dart';
 export 'shift_sales_ledger.dart';
