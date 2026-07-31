@@ -41,6 +41,15 @@ devices and business dates, and that a receipt disagreeing with its own sale
 envelope, a malformed or missing receipt, a replayed receipt, and an inactive
 cashier are all denied.
 
+For the focused shift lifecycle, run
+`npm --prefix rules-tests run test:emulator:shift-lifecycle`. It proves that a
+cashier opens and closes exactly one server-timed shift, that the document must
+repeat its own shift, tenant, device, and business-date identity, that a client
+can neither choose the start instant nor pre-close a shift, that only the
+shift's own cashier may close it once, that a closed shift is terminal and
+undeletable, and that closing may not rewrite the envelope, skip the counted
+cash, or smuggle extra fields.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

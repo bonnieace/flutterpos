@@ -294,15 +294,20 @@ final class TenantSwitchCoordinator {
   }
 }
 
-/// Explicit clean sources for the current safe landing route, which exposes no
-/// checkout, mutation queue, cash-close, or editable tenant workflow.
+/// Sources for the current safe landing route.
+///
+/// Checkout and cash-close have real owners once the composition root supplies
+/// them. The remaining areas are explicitly clean because this route exposes no
+/// mutation queue and no editable tenant workflow.
 List<TenantSwitchStateSource> safeLandingTenantSwitchStateSources({
   TenantSwitchStateSource? checkoutStateSource,
+  TenantSwitchStateSource? cashCloseStateSource,
 }) => <TenantSwitchStateSource>[
   checkoutStateSource ??
       const _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.checkout),
   _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.pendingWrites),
-  _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.cashClose),
+  cashCloseStateSource ??
+      const _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.cashClose),
   _ExplicitCleanTenantSwitchSource(TenantSwitchStateArea.workflow),
 ];
 

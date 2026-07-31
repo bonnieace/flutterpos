@@ -4246,3 +4246,219 @@ state sources it owns:
 7. Leave the checkout screen and payment flow, receipts printing, product
    cost/profit fields, returns, reports, subscription and branding surfaces,
    deployment, and Android build/emulator validation outside that chunk.
+
+---
+
+## Guarded tenant shift lifecycle handoff - 2026-07-31
+
+### Completed in this session
+
+The safe landing route now owns a real, canonically authorized shift lifecycle,
+and the tenant-switch coordinator's cash-close area is backed by that owner
+instead of an asserted-clean placeholder. This chunk adds no checkout screen or
+payment flow, no receipt printing, no reports, and makes no legacy operational
+POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `TenantShift` is a strict read model for `tenants/{tenantId}/shifts/{shiftId}`.
+  It requires the document to repeat the tenant and shift identity encoded in
+  its own path, validates `staffId`, `deviceId`, `businessDate`, and `status`
+  exactly, and reuses the checkout device-ID and Africa/Nairobi business-date
+  validators so a shift and the sales recorded during it can never disagree
+  about the business day. `startTime`/`endTime` are server-owned, so they are
+  accepted as absent only while a write is still pending; any other shape is
+  refused.
+- `TenantShiftRepository` extends the existing guarded `TenantReadRepository`.
+  Every path is derived from the session's `TenantPaths`, a returned path that
+  is not the exact requested document still fails closed through
+  `TenantScopeViolation`, and a shift whose `staffId` is not the authenticated
+  cashier is refused as `foreign_shift`. A device therefore cannot restore or
+  close a colleague's shift even if local state names it.
+- Writes go through validated intents that only the repository can build, so no
+  caller can name an arbitrary Firestore path. `FirebaseTenantShiftWriter`
+  re-derives and re-checks the path before writing, adds `startTime`/`endTime`
+  as server timestamps itself, and uses `set` for the open so a reused shift ID
+  becomes a Rules-denied update rather than a silent overwrite. Outcomes are
+  typed committed, rejected, ambiguous, or unavailable, matching the checkout
+  submission contract.
+- `TenantShiftController` owns exactly one shift per selected session. Every
+  operation captures the live session, is serialized by one local lock, and
+  re-checks UID, tenant, and epoch before publishing, so a tenant switch during
+  an in-flight write can never update the new session's surface.
+- Restoration always re-reads the canonical server shift. Durable local state
+  only names the candidate shift; the server decides. A shift that is absent or
+  already closed clears the local record, an open one confirms it, and a read
+  that cannot complete leaves the record untouched and reports `unavailable`.
+- Every write outcome is settled by the same canonical read. Only a successful
+  read may conclude that nothing was written: an unacknowledged create whose
+  settlement read also fails keeps its durable intent for the next attempt
+  rather than being forgotten. The controller refuses to write while offline,
+  so the common failure never leaves a phantom shift claim behind.
+- `HiveTenantShiftState` stores one encrypted record per `{uid}:{tenantId}` in
+  the versioned `tenant-shift-state-v1` box. It shares the checkout **outbox**
+  key rather than taking a new one, because a shift and the sale evidence it
+  contains must share exactly one fate; the derived catalog cache keeps its own
+  separate key. Malformed durable state raises instead of restarting: unlike
+  the derived cache, a shift record is evidence, and silently discarding it
+  could reopen a closed shift or hide an unfinished cash count.
+- `TenantShiftSwitchStateSource` replaces the asserted-clean cash-close source
+  in `safeLandingTenantSwitchStateSources`. A server-confirmed open shift alone
+  reports clean while carrying `hasServerConfirmedOpenShift`, exactly as the
+  frozen baseline requires; only an unfinished cash count or an unsettled close
+  blocks switching, and it keeps blocking across a restart because the flag is
+  durable. Unreadable local state raises so the coordinator fails closed with
+  `stateInspectionUnavailable`.
+- An unsettled close deliberately stays `closing`. The counted cash and the
+  blocked switch both survive until a canonical read proves the server accepted
+  the close, so an ambiguous network outcome never silently releases the guard.
+- The frozen cashier restriction is enforced at both ends. `openShift` refuses
+  a cashier whose identity still holds an open or unsettled shift in another
+  business on this device, and `TenantShiftCheckoutGate` refuses the checkout
+  itself through the new `CheckoutStartGuard` hook on `CheckoutDraftService`.
+  The refusal happens before a receipt sequence is allocated, so a blocked
+  checkout consumes nothing. Owners, admins, and managers may still inspect and
+  transact elsewhere. The restriction is scoped by cashier UID: a different
+  identity's shift on the same device does not block this cashier.
+- A guard that cannot answer refuses the checkout (`checkout_start_unavailable`)
+  rather than allowing it, so unreadable local state can never widen where a
+  cashier may sell.
+- Firestore Rules now bind the shift document to its own identity: create
+  requires the document ID to equal `shiftId`, the `tenantId` to match the path,
+  `staffId` to be the caller, `status` to be `open`, a non-empty `deviceId`, a
+  `yyyy-MM-dd` `businessDate`, `startTime == request.time`, and no `endTime`.
+  Close requires the same cashier, preserves `shiftId`, `tenantId`, `staffId`,
+  `deviceId`, `businessDate`, and `startTime`, allows only `open` to `closed`,
+  requires `endTime == request.time` and a non-negative integer
+  `closingCashMinor`, and restricts the changed keys to exactly the four close
+  fields. Delete stays denied, so a closed shift is terminal.
+- `main.dart` opens the receipt counters and shift-state boxes with the outbox
+  key and resolves the installation device identity once at startup, so every
+  shift and receipt this device records names the same device.
+
+Deliberately outside this chunk, and important for the next session:
+
+- The client writes no `totalSales` or `transactionCount` on close. Nightly
+  reconciliation compares those sale-derived aggregates against the shift
+  document, so shifts closed by this client will be reported as
+  `invalid_or_missing_shift` until the shift-reporting migration writes them.
+  Writing a device-local guess would be worse than an absent value, because one
+  cashier's shift can span devices.
+- Restoration re-reads only a shift named by durable local state. Discovering an
+  open shift that the same cashier created on another device needs an indexed
+  `staffId`/`status` query and a widened repository query boundary.
+- `CheckoutDraftService` is still not composed in `main.dart` because no screen
+  creates a draft. Its new `startGuard` parameter is optional so existing
+  callers are unchanged; the shift-backed gate is exercised end to end through
+  the real draft service in `test/shift/shift_checkout_gate_test.dart`.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/checkout/checkout_draft.dart
+lib/main.dart
+lib/shift/shift.dart
+lib/shift/shift_controller.dart
+lib/shift/shift_local_state.dart
+lib/shift/shift_panel.dart
+lib/shift/tenant_shift.dart
+lib/tenancy/tenant_routing_shell.dart
+lib/tenancy/tenant_switch.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/shift-lifecycle.test.js
+test/shift/shift_checkout_gate_test.dart
+test/shift/shift_controller_test.dart
+test/shift/shift_local_state_test.dart
+test/shift/shift_panel_test.dart
+test/shift/tenant_shift_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/shift lib/checkout lib/tenancy test/shift
+  test/checkout test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=compact test/shift
+  test/checkout test/tenancy` passed **427/427** relevant Flutter tests,
+  including **60** new tests: 16 read-model/repository/writer, 9 durable-state
+  and switch-source, 23 controller, 6 checkout-gate, and 6 panel-widget cases.
+- `npm --prefix rules-tests run test:emulator:shift-lifecycle` passed the
+  focused Firestore-only suite **7/7** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **44/44** (37 existing plus the 7 new shift cases).
+- With portable Node.js 24.18.1, Temurin JDK 21 at
+  `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8`, inherited `DEBUG` removed,
+  and `NODE_OPTIONS=--max-old-space-size=512`, `npm --prefix functions test`
+  passed **166/166** Functions tests. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean before staging. Android build and Android
+  emulator validation were intentionally skipped as requested.
+
+Meaningful failures and resolutions:
+
+- **The first panel widget test hung with no output.** Two causes. Real
+  file-backed Hive I/O never completes inside a `testWidgets` fake-async zone,
+  so every durable operation stalled; and `pumpAndSettle` cannot be used once
+  the counted-cash field has focus, because the blinking cursor keeps
+  scheduling frames. The panel test now opens an in-memory Hive box
+  (`bytes: Uint8List(0)`) and pumps a bounded number of frames through a local
+  `_settle` helper. Unit tests keep using file-backed boxes.
+- **Piping `flutter test` through PowerShell `Select-Object` hid all progress**
+  until the process exited, which made the hang look like a silent failure. Use
+  `Start-Process` with redirected output files and an explicit
+  `WaitForExit(milliseconds)` bound when a Flutter run may hang, then read the
+  tail. Confirm no earlier `flutter_tester` process is still alive first.
+- **A PowerShell `-replace` rewrite corrupted a typographic apostrophe** in the
+  test file into mojibake. The panel message was reworded to plain ASCII, and
+  source edits went back through the editing tools rather than shell text
+  rewrites.
+- **An early test asserted that an ambiguous create keeps its local record while
+  the fake server showed the shift absent.** That was contradictory: a
+  successful canonical read is exactly what may conclude nothing was written.
+  The test now proves settlement by canonical read, and a second test covers the
+  case where the settlement read itself fails and the durable intent survives.
+- No other test assertion failed; the analyzer and every command in the final
+  sequence were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded frontend chunk
+
+Implement only the shift-scoped sale attribution and closing summary that the
+frozen reconciliation contract already expects:
+
+1. Bind a draft to the open shift: `CheckoutDraftService` must take the shift ID
+   from the guarded shift controller instead of a caller-supplied
+   `CheckoutDraftRequest.shiftId`, refuse a checkout with no canonical open
+   shift, and prove the recorded `shiftId` belongs to the same tenant, cashier,
+   and business date as the sale.
+2. Extend the frozen `CheckoutSalePayload` v1 allow-list and the Firestore sale
+   Rules so `shiftId` is required and validated, or explicitly version the
+   payload schema in the same chunk.
+3. Write the sale-derived `totalSales` and `transactionCount` aggregates when a
+   shift closes, computed only from evidence the device can prove, and record
+   how a multi-device shift is reconciled. Nightly reconciliation currently
+   reports `invalid_or_missing_shift` for every shift this client closes, so
+   this row is the reason to do it next.
+4. Add a bounded, indexed open-shift discovery query behind the repository
+   boundary so a cashier who restarts on a second device restores the same
+   canonical shift instead of opening a duplicate.
+5. Add unit, Hive-reopen, session/widget, and focused Firestore Rules emulator
+   coverage for shift-bound sales, denial of an unbound or foreign-shift sale,
+   close-time aggregate agreement, restart discovery, and the existing
+   cash-close switch blocker.
+6. Leave the checkout screen and payment flow, receipt printing, product
+   cost/profit fields, returns, reports, subscription and branding surfaces,
+   deployment, and Android build/emulator validation outside that chunk.

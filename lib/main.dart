@@ -12,6 +12,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'checkout/checkout.dart';
+import 'shift/shift.dart';
 
 Future<void> main() async {
   await SentryFlutter.init(
@@ -49,6 +50,22 @@ Future<void> main() async {
               SecureCheckoutOutboxEncryptionKeyProvider.catalogCacheStorageKey,
         ),
       );
+      // Receipt counters, shift state, and the outbox share one key: a sale,
+      // the receipt numbering it draws from, and the shift it belongs to must
+      // share exactly one fate.
+      final checkoutReceiptCounters = await HiveCheckoutReceiptCounters.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+        ),
+      );
+      final tenantShiftState = await HiveTenantShiftState.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+        ),
+      );
+      // The installation identity is resolved once at startup so every shift
+      // and receipt this device records names the same device.
+      final deviceId = await checkoutReceiptCounters.resolveDeviceId();
       final connectivity = Connectivity();
 
       // Configure Firestore for offline persistence
@@ -82,6 +99,8 @@ Future<void> main() async {
             bootstrapService: bootstrapService,
             checkoutOutbox: checkoutOutbox,
             checkoutCatalogCache: checkoutCatalogCache,
+            tenantShiftState: tenantShiftState,
+            deviceId: deviceId,
             connectivity: connectivity,
             invitationLink: invitationLink,
             invalidInvitationLink: invalidInvitationLink,
@@ -98,6 +117,8 @@ class SpiritPOSApp extends StatelessWidget {
     required this.bootstrapService,
     required this.checkoutOutbox,
     required this.checkoutCatalogCache,
+    required this.tenantShiftState,
+    required this.deviceId,
     required this.connectivity,
     this.invitationLink,
     this.invalidInvitationLink = false,
@@ -106,6 +127,8 @@ class SpiritPOSApp extends StatelessWidget {
   final TenantBootstrapService bootstrapService;
   final HiveCheckoutOutbox checkoutOutbox;
   final HiveCheckoutCatalogCache checkoutCatalogCache;
+  final HiveTenantShiftState tenantShiftState;
+  final String deviceId;
   final Connectivity connectivity;
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
@@ -134,6 +157,7 @@ class SpiritPOSApp extends StatelessWidget {
           checkoutStateSource: CheckoutOutboxTenantSwitchStateSource(
             checkoutOutbox,
           ),
+          cashCloseStateSource: TenantShiftSwitchStateSource(tenantShiftState),
         ),
         tenantSwitchOnlineCheck: () async => isOnline(),
         tenantSessionRecoveryFactory: (sessionController) {
@@ -177,6 +201,19 @@ class SpiritPOSApp extends StatelessWidget {
           return token.claims?['platformRole'] == 'superAdmin';
         },
         tenantDataReader: tenantDataReader,
+        shiftPanel: TenantShiftPanel(
+          controllerFactory: (sessions) => TenantShiftController(
+            sessionController: sessions,
+            localState: tenantShiftState,
+            reader: tenantDataReader,
+            writer: FirebaseTenantShiftWriter(
+              firestore: FirebaseFirestore.instance,
+              isOnline: isOnline,
+            ),
+            deviceId: deviceId,
+            isOnline: isOnline,
+          ),
+        ),
         pendingCheckoutPanel: CheckoutPendingEvidencePanel(
           source: CheckoutOutboxEvidenceSource(checkoutOutbox),
         ),

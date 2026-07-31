@@ -68,6 +68,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.tenantDataReader,
     this.tenantRouteBuilder,
     this.pendingCheckoutPanel,
+    this.shiftPanel,
   });
 
   final Stream<String?> authUidChanges;
@@ -107,6 +108,10 @@ final class TenantRoutingShell extends StatefulWidget {
   /// route. It is supplied by the composition root so tenancy code stays
   /// independent of the checkout domain.
   final Widget? pendingCheckoutPanel;
+
+  /// Optional shift lifecycle surface rendered on the safe landing route. It is
+  /// injected for the same reason: tenancy code owns routing, not operations.
+  final Widget? shiftPanel;
 
   @override
   State<TenantRoutingShell> createState() => _TenantRoutingShellState();
@@ -583,6 +588,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       switchCandidates: _bootstrapResult?.selection.visible ?? const [],
       onSwitchTenant: _switchTenant,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
+      shiftPanel: widget.shiftPanel,
     );
   }
 }
@@ -954,6 +960,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.switchCandidates = const [],
     this.onSwitchTenant,
     this.pendingCheckoutPanel,
+    this.shiftPanel,
   });
 
   final TenantMembership membership;
@@ -967,6 +974,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final Future<TenantSwitchResult> Function(TenantMembership membership)?
   onSwitchTenant;
   final Widget? pendingCheckoutPanel;
+  final Widget? shiftPanel;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -990,6 +998,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                       reader: reader,
                       fallbackName: membership.tenantName,
                     ),
+                    if (shiftPanel != null) ...[
+                      const SizedBox(height: 24),
+                      shiftPanel!,
+                    ],
                     if (pendingCheckoutPanel != null) ...[
                       const SizedBox(height: 24),
                       pendingCheckoutPanel!,

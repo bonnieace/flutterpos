@@ -25,6 +25,16 @@ final class CheckoutDraftException implements Exception {
 typedef CheckoutIdFactory = String Function();
 typedef CheckoutDraftClock = DateTime Function();
 
+/// A tenant-scoped policy consulted before any checkout may start.
+///
+/// The shift lifecycle implements this to enforce the frozen restriction that a
+/// cashier cannot open checkout in a second business while another business
+/// still holds an open shift on the same device.
+abstract interface class CheckoutStartGuard {
+  /// Returns `null` when a checkout may start, or the refusal code otherwise.
+  Future<String?> refuseCheckoutStart(TenantSession session);
+}
+
 /// Resolves the business date recorded on a sale from the current UTC instant.
 typedef CheckoutBusinessDateResolver = String Function(DateTime nowUtc);
 
@@ -73,6 +83,7 @@ final class CheckoutDraftService {
     required HiveCheckoutCatalogCache cache,
     required HiveCheckoutOutbox outbox,
     required HiveCheckoutReceiptCounters receipts,
+    CheckoutStartGuard? startGuard,
     CheckoutIdFactory? checkoutIdFactory,
     CheckoutDraftClock? clock,
     CheckoutBusinessDateResolver? businessDateResolver,
@@ -80,6 +91,7 @@ final class CheckoutDraftService {
        _cache = cache,
        _outbox = outbox,
        _receipts = receipts,
+       _startGuard = startGuard,
        _checkoutIdFactory = checkoutIdFactory ?? _generateCheckoutId,
        _clock = clock ?? _utcNow,
        _businessDateResolver = businessDateResolver ?? checkoutBusinessDate;
@@ -88,6 +100,7 @@ final class CheckoutDraftService {
   final HiveCheckoutCatalogCache _cache;
   final HiveCheckoutOutbox _outbox;
   final HiveCheckoutReceiptCounters _receipts;
+  final CheckoutStartGuard? _startGuard;
   final CheckoutIdFactory _checkoutIdFactory;
   final CheckoutDraftClock _clock;
   final CheckoutBusinessDateResolver _businessDateResolver;
@@ -123,6 +136,7 @@ final class CheckoutDraftService {
     if (!_owns(captured)) {
       throw const CheckoutDraftException('session_changed');
     }
+    await _authorizeCheckoutStart(captured);
 
     final lines = _validatedLines(request.lines);
     final snapshot = await _cache.read(
@@ -247,6 +261,25 @@ final class CheckoutDraftService {
       }
     }
     return lines;
+  }
+
+  /// Applies the tenant-scoped checkout-start policy, if one is composed.
+  ///
+  /// A guard that cannot answer refuses the checkout: an unreadable local shift
+  /// state must never widen where a cashier may sell.
+  Future<void> _authorizeCheckoutStart(TenantSession captured) async {
+    final guard = _startGuard;
+    if (guard == null) return;
+    final String? refusal;
+    try {
+      refusal = await guard.refuseCheckoutStart(captured);
+    } catch (_) {
+      throw const CheckoutDraftException('checkout_start_unavailable');
+    }
+    if (refusal != null) throw CheckoutDraftException(refusal);
+    if (!_owns(captured)) {
+      throw const CheckoutDraftException('session_changed');
+    }
   }
 
   /// Resolves the durable installation identity for this device.

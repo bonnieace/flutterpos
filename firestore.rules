@@ -197,18 +197,40 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // A shift is opened and closed by its own cashier on one device. The
+      // document repeats its identity so a client cannot file a shift under
+      // another business, and both lifecycle instants are server-owned so a
+      // device clock can never decide when a shift began or ended.
       match /shifts/{shiftId} {
         allow read: if activeStaff(tenantId);
         allow create: if activeStaff(tenantId)
+          && shiftId == request.resource.data.shiftId
+          && request.resource.data.tenantId == tenantId
           && request.resource.data.staffId == request.auth.uid
-          && request.resource.data.status == 'open';
+          && request.resource.data.status == 'open'
+          && request.resource.data.deviceId is string
+          && request.resource.data.deviceId.size() > 0
+          && request.resource.data.businessDate is string
+          && request.resource.data.businessDate.matches(
+            '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          )
+          && request.resource.data.startTime == request.time
+          && !('endTime' in request.resource.data);
         allow update: if activeStaff(tenantId)
           && resource.data.staffId == request.auth.uid
           && request.resource.data.staffId == resource.data.staffId
+          && request.resource.data.shiftId == resource.data.shiftId
+          && request.resource.data.tenantId == resource.data.tenantId
+          && request.resource.data.deviceId == resource.data.deviceId
           && request.resource.data.businessDate == resource.data.businessDate
           && request.resource.data.startTime == resource.data.startTime
           && resource.data.status == 'open'
-          && request.resource.data.status == 'closed';
+          && request.resource.data.status == 'closed'
+          && request.resource.data.endTime == request.time
+          && request.resource.data.closingCashMinor is int
+          && request.resource.data.closingCashMinor >= 0
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'endTime', 'closingCashMinor', 'closingCash']);
         allow delete: if false;
       }
 
