@@ -3432,3 +3432,153 @@ Implement only the encrypted Hive checkout-outbox persistence foundation:
    product cache, receipt counters, shift restoration, cashier cross-tenant
    shift restriction, checkout UI, printers, deployment, and Android emulator
    validation outside that chunk.
+
+---
+
+## Encrypted Hive checkout-outbox foundation handoff - 2026-07-31
+
+### Completed in this session
+
+The safe routing shell now inspects a real encrypted checkout outbox. This
+chunk adds local persistence and state transitions only; it does not submit a
+sale to Firestore, mutate stock, expose checkout UI, or read/migrate any legacy
+root POS Hive record.
+
+Implemented behavior and safety decisions:
+
+- The versioned `checkout-outbox-v1` Hive box is encrypted with a 32-byte AES
+  key loaded through a testable provider boundary. Production stores that key
+  in platform secure storage under a versioned name. A missing key is created
+  from `Random.secure`; a malformed stored key fails closed and is never
+  silently replaced.
+- The dependency remains on `flutter_secure_storage` 9.2.4 so the repository's
+  existing Android API 21 baseline is not raised by the version 10 API 23
+  minimum. Generated Linux, macOS, and Windows plugin registration is included.
+- Outbox keys are exactly `{uid}:{tenantId}:{checkoutId}`. UID, tenant, and
+  checkout segments are validated and colons are rejected. Session scans use
+  both UID and tenant prefixes, and the outbox never opens legacy Hive boxes.
+- Payloads accept only finite JSON values, are deep-frozen, canonicalized by
+  sorted map keys, and protected by deterministic SHA-256 hashes. Reusing a
+  checkout key with a different payload is rejected. Stored hash or payload
+  tampering is treated as corruption without deleting the raw evidence.
+- Durable transitions are `saved_offline -> submitting ->
+  awaiting_confirmation -> confirmed | needs_attention`. Submission leases
+  persist owner and expiry, attempts are counted once, retry time is durable,
+  and per-checkout mutations are serialized so duplicate local workers cannot
+  both acquire the lease.
+- An expired submission lease can move only to `awaiting_confirmation`; it
+  never makes the checkout eligible for blind resubmission. Confirmation
+  requires exact hash agreement. A mismatch becomes retained
+  `needs_attention` evidence with the observed hash and bounded reason.
+- Hive crash recovery is explicitly disabled for this evidence box. The first
+  wrong-key test showed that Hive's default recovery can rebuild an encrypted
+  box after a checksum failure, which could erase evidence. The final tests
+  instead prove ciphertext contains no sale plaintext and reopens on Windows
+  with the same key.
+- The production `TenantSwitchCoordinator` checkout source is now backed by
+  this outbox. `saved_offline`, `awaiting_confirmation`, and
+  `needs_attention` block as unsynchronized; `submitting` blocks as in flight;
+  only no records or all-confirmed records are clean. Malformed storage throws
+  into the coordinator's existing fail-closed inspection path. The other
+  safe-landing state owners remain explicit clean placeholders.
+
+Files in this chunk:
+
+```text
+lib/checkout/checkout.dart
+lib/checkout/checkout_outbox.dart
+lib/checkout/secure_checkout_outbox_key.dart
+lib/main.dart
+lib/tenancy/tenant_switch.dart
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugins.cmake
+macos/Flutter/GeneratedPluginRegistrant.swift
+pubspec.lock
+pubspec.yaml
+test/checkout/checkout_outbox_test.dart
+test/checkout/secure_checkout_outbox_key_test.dart
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugins.cmake
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/checkout lib/tenancy test/checkout
+  test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=compact test/checkout
+  test/tenancy` passed **276/276** relevant Flutter tests. Before the final
+  run, the focused checkout and tenant-switch command passed **39/39**.
+- `npm --prefix functions test` passed **166/166** Functions tests using
+  portable Node.js 24.18.1 and `NODE_OPTIONS=--max-old-space-size=512`.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **12/12**
+  real Auth, Firestore, and Functions emulator integration tests using the
+  same Node runtime, Temurin JDK 21, and a 60-second Functions discovery bound.
+- The Firestore Rules emulator suite was not applicable because this chunk
+  changed no Rules, Firestore operation, server authorization, or backend
+  contract. Android build and Android emulator validation were intentionally
+  skipped as requested.
+- `git diff --check` was clean before final validation and final staging.
+
+Meaningful failures and resolutions:
+
+- `flutter pub get` resolved the two new direct dependencies and wrote the
+  lock/plugin metadata, then exited because Windows Developer Mode is disabled
+  and Flutter could not refresh plugin symlinks. The clean generated Linux
+  symlink placeholders removed by that failed refresh were restored exactly;
+  tests and analysis then ran with `--no-pub`. No repository artifact points
+  at a machine-local package path.
+- The first encrypted-reopen test expected a wrong key to be rejected, but
+  Hive's default crash recovery instead printed `Recovering corrupted box` and
+  opened a rebuilt box. Production opening now sets `crashRecovery: false`.
+  Hive also caches failed opens and emits an additional uncaught error when a
+  wrong-key probe is retried in one test process, so that brittle probe was
+  replaced with stable ciphertext/no-plaintext and same-key Windows reopen
+  coverage. The focused suite then passed 39/39.
+- The first final integration launch stopped before loading tests because
+  `JAVA_HOME` named the portable JDK's parent directory rather than its nested
+  `jdk-21.0.12+8` root, leaving Java 17 authoritative. The exact JDK 21 `bin`
+  path was prepended and the unchanged single retry passed 12/12.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+The scoped `pubspec.lock` dependency entries for `crypto` and
+`flutter_secure_storage` are part of this commit; the pre-existing version
+updates listed above remain unstaged in the working tree.
+
+### Next bounded frontend chunk
+
+Implement only confirmation-safe checkout restart recovery; do not submit a
+new Firestore sale in that chunk:
+
+1. Add a typed confirmation gateway that waits for local Firestore pending
+   writes to clear and reads the exact deterministic server sale while online.
+   Return explicit matching, missing, mismatching, unavailable, and malformed
+   results without trusting a tenant mirror.
+2. Add a session/epoch-bound recovery coordinator for `submitting` leases that
+   expired and `awaiting_confirmation` records. A matching server hash confirms
+   the outbox; a mismatch records `needs_attention`; unavailable or pending
+   state remains blocked and retains all evidence.
+3. Add one narrowly authorized outbox transition for a confirmation-proven
+   missing server sale to become retryable with a persisted backoff. Require
+   proof that no local write is pending and no server sale exists; lease expiry
+   alone must never authorize this transition or a submission.
+4. Run recovery on startup/connectivity restoration for only the authenticated
+   UID and selected tenant. Discard stale async results by session epoch and
+   keep tenant switching blocked until the record is confirmed or safely made
+   retryable.
+5. Add unit, Hive-reopen, widget/session, and focused Firestore-emulator
+   coverage for pending writes, matching/mismatching/missing server sales,
+   unavailable connectivity, corrupt results, stale epochs, backoff, duplicate
+   recovery workers, and evidence preservation.
+6. Leave the initial Firestore batch submission, stock increments, checkout UI,
+   product cache, receipt counters, shift restoration, cashier cross-tenant
+   restriction, printers, deployment, and Android emulator validation outside
+   that chunk.

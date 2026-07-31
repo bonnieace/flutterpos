@@ -38,8 +38,10 @@ dependencies:
   firebase_auth: ^6.1.2
   get: ^4.6.5
   iconsax: ^0.0.8 
+  crypto: ^3.0.7
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+  flutter_secure_storage: ^9.2.4
   flutter_native_splash: ^2.3.10
   image_picker: ^1.0.7
   

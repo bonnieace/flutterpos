@@ -9,6 +9,9 @@ import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'checkout/checkout.dart';
 
 Future<void> main() async {
   await SentryFlutter.init(
@@ -30,6 +33,13 @@ Future<void> main() async {
       await Hive.initFlutter();
       final tenantSelectionBox = await Hive.openBox<String>(
         HiveTenantSelectionStore.boxName,
+      );
+      final checkoutOutbox = await HiveCheckoutOutbox.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: const FlutterSecureCheckoutOutboxValueStore(
+            FlutterSecureStorage(),
+          ),
+        ),
       );
 
       // Configure Firestore for offline persistence
@@ -61,6 +71,7 @@ Future<void> main() async {
         SentryWidget(
           child: SpiritPOSApp(
             bootstrapService: bootstrapService,
+            checkoutOutbox: checkoutOutbox,
             invitationLink: invitationLink,
             invalidInvitationLink: invalidInvitationLink,
           ),
@@ -74,11 +85,13 @@ class SpiritPOSApp extends StatelessWidget {
   const SpiritPOSApp({
     super.key,
     required this.bootstrapService,
+    required this.checkoutOutbox,
     this.invitationLink,
     this.invalidInvitationLink = false,
   });
 
   final TenantBootstrapService bootstrapService;
+  final HiveCheckoutOutbox checkoutOutbox;
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
 
@@ -98,7 +111,11 @@ class SpiritPOSApp extends StatelessWidget {
         invitationLink: invitationLink,
         invalidInvitationLink: invalidInvitationLink,
         bootstrapService: bootstrapService,
-        tenantSwitchStateSources: safeLandingTenantSwitchStateSources(),
+        tenantSwitchStateSources: safeLandingTenantSwitchStateSources(
+          checkoutStateSource: CheckoutOutboxTenantSwitchStateSource(
+            checkoutOutbox,
+          ),
+        ),
         tenantSwitchOnlineCheck: () async =>
             await Connectivity().checkConnectivity() != ConnectivityResult.none,
         hasPlatformSuperAdminClaim: (uid) async {
