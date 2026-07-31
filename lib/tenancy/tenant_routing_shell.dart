@@ -67,6 +67,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.platformTenantReviewRequestIdFactory,
     this.tenantDataReader,
     this.tenantRouteBuilder,
+    this.pendingCheckoutPanel,
   });
 
   final Stream<String?> authUidChanges;
@@ -101,6 +102,11 @@ final class TenantRoutingShell extends StatefulWidget {
   platformTenantReviewRequestIdFactory;
   final TenantDataReader? tenantDataReader;
   final TenantRouteBuilder? tenantRouteBuilder;
+
+  /// Optional read-only local-work evidence rendered on the safe landing
+  /// route. It is supplied by the composition root so tenancy code stays
+  /// independent of the checkout domain.
+  final Widget? pendingCheckoutPanel;
 
   @override
   State<TenantRoutingShell> createState() => _TenantRoutingShellState();
@@ -576,6 +582,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       onDefaultTenantChanged: _retry,
       switchCandidates: _bootstrapResult?.selection.visible ?? const [],
       onSwitchTenant: _switchTenant,
+      pendingCheckoutPanel: widget.pendingCheckoutPanel,
     );
   }
 }
@@ -946,6 +953,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.onDefaultTenantChanged,
     this.switchCandidates = const [],
     this.onSwitchTenant,
+    this.pendingCheckoutPanel,
   });
 
   final TenantMembership membership;
@@ -958,6 +966,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final List<TenantMembership> switchCandidates;
   final Future<TenantSwitchResult> Function(TenantMembership membership)?
   onSwitchTenant;
+  final Widget? pendingCheckoutPanel;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -973,9 +982,20 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         children: [
           Expanded(
             child: Center(
-              child: TenantBrandingPanel(
-                reader: reader,
-                fallbackName: membership.tenantName,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TenantBrandingPanel(
+                      reader: reader,
+                      fallbackName: membership.tenantName,
+                    ),
+                    if (pendingCheckoutPanel != null) ...[
+                      const SizedBox(height: 24),
+                      pendingCheckoutPanel!,
+                    ],
+                  ],
+                ),
               ),
             ),
           ),

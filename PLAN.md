@@ -3885,3 +3885,176 @@ checkout draft creation; do not build the checkout screen in that chunk:
    restoration, cashier cross-tenant shift restriction, returns, printers,
    reports, deployment, and Android build/emulator validation outside that
    chunk.
+
+---
+
+## Offline catalog cache and checkout draft handoff - 2026-07-31
+
+### Completed in this session
+
+The encrypted checkout layer can now build a deterministic offline sale from a
+locally cached catalog. This chunk adds only the cache, the draft builder, and
+a read-only evidence panel: it creates no checkout screen or payment flow,
+issues no receipt number, restores no shift, and makes no legacy operational
+POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `HiveCheckoutCatalogCache` stores one snapshot per `{uid}:{tenantId}` key in
+  the versioned, AES-encrypted `checkout-catalog-cache-v1` box. It never opens
+  a legacy Hive box and never shares the outbox key: the derived cache and the
+  sale evidence use two distinct secure-storage key names, so rotating or
+  losing the cache key can never make checkout evidence unreadable. Hive crash
+  recovery stays disabled for the same reason as the outbox.
+- The cache is derived data and is never an authorization source. Only a
+  canonical projection of the fields the strict read models require is written,
+  so no Firestore sentinel, timestamp, or unrelated document field is
+  persisted locally. Every read re-parses each entry through
+  `TenantCategory.fromSnapshot`/`TenantProduct.fromSnapshot` and re-derives the
+  exact `TenantPaths` document path.
+- A record naming another UID or tenant, carrying another tenant's document
+  path, failing the strict models, repeating a document, or using an unknown
+  schema version is reported as a **miss**, not as authority. A malformed
+  snapshot is refused whole rather than partially trusted, so a draft fails
+  closed instead of silently omitting a product.
+- `CheckoutCatalogCacheRefresher` reads only through the guarded
+  `TenantCatalogRepository`, so the existing tenant-path derivation, 1-50 page
+  bound, document-ID ordering, duplicate rejection, and cross-tenant refusal
+  all still apply. It captures the session, re-checks UID, tenant, and epoch
+  after every page and before the local write, bounds the refresh to 500
+  categories and 2000 products, records whether the refresh was complete, and
+  coalesces concurrent triggers into one queued rerun. A scope violation or
+  transport failure leaves the previous cache untouched.
+- `CheckoutDraftService` produces exactly the frozen `CheckoutSalePayload` v1
+  contract: immutable checkout ID, authenticated UID, selected tenant, bounded
+  unique lines, an integer minor-unit monetary snapshot, and a business date.
+  It writes only through `HiveCheckoutOutbox.saveOffline` and touches no
+  Firestore path.
+- The draft is validated against the frozen parser through the new
+  `CheckoutSalePayload.fromLocalPayload` factory **before** it is persisted, so
+  a contract violation is refused while nothing durable exists. That factory is
+  now the single parser; `fromOutboxRecord` delegates to it after checking the
+  record's UID and tenant, and it additionally proves the supplied hash
+  describes the exact payload.
+- Cached major-unit prices are converted to integer minor units only when they
+  are exactly representable. A price such as `120.555` is rejected as
+  `price_not_representable` rather than silently rounded, so a recorded sale
+  can never disagree with the catalog it was priced from.
+- The business date uses a fixed Africa/Nairobi (UTC+3, no daylight saving)
+  offset, so it stays deterministic without a timezone database.
+- Draft creation captures the live session **when the draft is requested** and
+  is serialized by one local lock. A draft queued behind another draft is
+  discarded with `session_changed` if the UID, tenant, or epoch advanced, and
+  two overlapping drafts can never receive the same checkout ID. A reused
+  checkout ID replays idempotently for an identical payload and is rejected as
+  `checkout_already_exists` when the payload differs.
+- The safe landing route now renders a read-only pending-checkout evidence
+  panel behind `TenantRouteGuard`, showing outbox state counts only. It exposes
+  no submit, retry, edit, cancel, or delete action, renders nothing without an
+  authorized session, and reports unavailable evidence without leaking internal
+  error codes. The panel is injected by the composition root as a plain
+  `Widget`, so tenancy code gains no dependency on the checkout domain.
+- `main.dart` opens the cache with its own key and appends the catalog refresh
+  after recovery and submission on the existing session/connectivity hook, so
+  derived data never delays settling uncertain sale evidence.
+
+Deliberately left outside this chunk: `TenantProduct` still exposes no cost
+field, so drafts write no `unitCostMinor`. Restoring cost to the sale document
+belongs with the reports migration that consumes it.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/checkout/checkout.dart
+lib/checkout/checkout_catalog_cache.dart
+lib/checkout/checkout_draft.dart
+lib/checkout/checkout_evidence.dart
+lib/checkout/checkout_outbox.dart
+lib/checkout/checkout_sale.dart
+lib/checkout/secure_checkout_outbox_key.dart
+lib/main.dart
+lib/tenancy/tenant_routing_shell.dart
+test/checkout/checkout_catalog_cache_test.dart
+test/checkout/checkout_draft_test.dart
+test/checkout/checkout_evidence_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/checkout lib/tenancy test/checkout test/tenancy`
+  reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=compact test/checkout
+  test/tenancy` passed **344/344** relevant Flutter tests, including **27** new
+  tests: 10 catalog-cache, 11 draft, 5 evidence-panel, and 1 routing-shell
+  case. Focused runs passed 10/10, 16/16, and 19/19 during development.
+- With portable Node.js 24.18.1, Temurin JDK 21 at
+  `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8`, inherited `DEBUG` removed,
+  and `NODE_OPTIONS=--max-old-space-size=512`, `npm --prefix functions test`
+  passed **166/166** Functions tests.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **30/30**. No Rules file, Firestore operation, server authorization, or
+  backend contract changed in this chunk; the suite was rerun because the new
+  cache reads the `products` and `categories` collections through the guarded
+  repository.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean before final validation and final staging.
+  Android build and Android emulator validation were intentionally skipped as
+  requested.
+
+Meaningful failures and resolutions:
+
+- The first focused Flutter run produced no output for roughly fifteen minutes
+  at zero CPU. Inspecting the processes showed **two** identical
+  `flutter_tools.snapshot test` invocations contending for the same build
+  state, not a code or test defect. Both were stopped and one clean rerun from
+  PowerShell passed 10/10 in under a second of test time. Prefer PowerShell for
+  `flutter test` on this host and confirm no earlier run is still alive before
+  relaunching.
+- An early edit added an instance `storageKey` getter beside the existing
+  static constant of the same name, which Dart forbids. The constructor now
+  takes an optional `storageKey` parameter that defaults to the unchanged
+  static value, so the existing key-provider tests were not disturbed.
+- No test assertion failed in this session; every analyzer and test command in
+  the final sequence was green on its first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded frontend chunk
+
+Implement only per-device receipt numbering and the tenant checkout
+configuration the draft builder still hard-codes:
+
+1. Add an atomic Hive device receipt counter keyed exactly by
+   `{tenantId}:{deviceId}:{businessDate}:receiptCounter`, deliberately not
+   scoped by cashier UID, guarded by the draft service's existing local lock so
+   two concurrent checkouts on one device cannot receive the same value.
+2. Emit the frozen `CT-A7F-20260729-0042` receipt shape, record the cashier UID
+   separately, and keep `checkoutId` as the database identity. Persist the
+   receipt inside the immutable draft payload and extend the frozen
+   `CheckoutSalePayload` v1 allow-list and Firestore Rules validation for it in
+   the same chunk, or explicitly version the payload schema.
+3. Resolve the device ID once per installation from durable local state and
+   read `currency` (and any other required checkout configuration) from a
+   guarded `tenants/{tenantId}/configuration` read instead of the current
+   constructor value; fail closed when configuration is missing or malformed.
+4. Add unit, Hive-reopen, and focused Rules-emulator coverage for two cashiers
+   on one device receiving different receipt numbers, counter independence
+   across devices, tenants, and business dates, restart continuity, business-day
+   rollover at the Africa/Nairobi boundary, and rejection of a spoofed or
+   duplicated receipt.
+5. Leave the checkout screen and payment flow, shift restoration, cashier
+   cross-tenant shift restriction, product cost/profit fields, returns,
+   printers, reports, deployment, and Android build/emulator validation outside
+   that chunk.

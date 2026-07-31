@@ -148,13 +148,20 @@ final class CheckoutOutboxRecord {
   );
 }
 
+/// The validated `{uid}:{tenantId}` prefix shared by session-scoped local
+/// checkout storage. Colons are rejected so segments stay unambiguous.
+String checkoutSessionStorageKey({
+  required String uid,
+  required String tenantId,
+}) =>
+    '${_validateKeySegment(uid, 'uid')}:${_validateOutboxTenantId(tenantId)}';
+
 String checkoutOutboxStorageKey({
   required String uid,
   required String tenantId,
   required String checkoutId,
 }) {
-  final safeUid = _validateKeySegment(uid, 'uid');
-  final safeTenantId = _validateOutboxTenantId(tenantId);
+  final sessionKey = checkoutSessionStorageKey(uid: uid, tenantId: tenantId);
   final safeCheckoutId = validateTenantDocumentId(
     checkoutId,
     fieldName: 'checkoutId',
@@ -162,7 +169,7 @@ String checkoutOutboxStorageKey({
   if (safeCheckoutId.contains(':')) {
     throw ArgumentError('Outbox key segments must not contain a colon.');
   }
-  return '$safeUid:$safeTenantId:$safeCheckoutId';
+  return '$sessionKey:$safeCheckoutId';
 }
 
 String checkoutPayloadHash(Map<String, Object?> payload) {
@@ -408,8 +415,7 @@ final class HiveCheckoutOutbox {
     required String tenantId,
   }) async {
     final prefix =
-        '${_validateKeySegment(uid, 'uid')}:'
-        '${_validateOutboxTenantId(tenantId)}:';
+        '${checkoutSessionStorageKey(uid: uid, tenantId: tenantId)}:';
     final records = <CheckoutOutboxRecord>[];
     for (final dynamic rawKey in _box.keys) {
       if (rawKey is! String || !rawKey.startsWith(prefix)) continue;

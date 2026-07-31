@@ -94,6 +94,26 @@ void main() {
     },
   );
 
+  testWidgets('shows read-only pending local work on the safe landing route', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      useDefaultRoute: true,
+      pendingCheckoutPanel: const Padding(
+        padding: EdgeInsets.zero,
+        child: Text('Saved offline: 2'),
+      ),
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(find.text('Saved offline: 2'), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
   testWidgets('shows a selector and revalidates the chosen business', (
     tester,
   ) async {
@@ -600,6 +620,7 @@ final class _ShellFixture {
     this.tenantDataReader,
     this.tenantSessionRecoveryFactory,
     this.tenantRecoveryTriggers,
+    this.pendingCheckoutPanel,
     String? failSelectionWriteFor,
   }) : gateway = _FakeGateway(
          memberships: memberships,
@@ -634,6 +655,7 @@ final class _ShellFixture {
   final TenantDataReader? tenantDataReader;
   final TenantSessionRecoveryFactory? tenantSessionRecoveryFactory;
   final Stream<Object?>? tenantRecoveryTriggers;
+  final Widget? pendingCheckoutPanel;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -668,6 +690,7 @@ final class _ShellFixture {
         tenantDataReader: useDefaultRoute
             ? (tenantDataReader ?? _RoutingReader())
             : null,
+        pendingCheckoutPanel: pendingCheckoutPanel,
         tenantRouteBuilder: useDefaultRoute
             ? null
             : (context, controller, membership) {

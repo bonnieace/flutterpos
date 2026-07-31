@@ -34,20 +34,34 @@ final class SecureCheckoutOutboxEncryptionKeyProvider
   SecureCheckoutOutboxEncryptionKeyProvider({
     required CheckoutOutboxSecureValueStore storage,
     Random? random,
+    String storageKey = SecureCheckoutOutboxEncryptionKeyProvider.storageKey,
   }) : _storage = storage,
-       _random = random ?? Random.secure();
+       _random = random ?? Random.secure(),
+       _storageKey = storageKey {
+    if (storageKey.isEmpty || storageKey != storageKey.trim()) {
+      throw ArgumentError.value(storageKey, 'storageKey');
+    }
+  }
 
+  /// Versioned secure-storage name of the checkout outbox key.
   static const storageKey = 'checkout-outbox-aes-key-v1';
+
+  /// Versioned secure-storage name of the offline catalog cache key.
+  ///
+  /// The cache is derived, replaceable data while the outbox holds sale
+  /// evidence, so the two boxes deliberately never share one key.
+  static const catalogCacheStorageKey = 'checkout-catalog-cache-aes-key-v1';
 
   final CheckoutOutboxSecureValueStore _storage;
   final Random _random;
+  final String _storageKey;
   Future<List<int>>? _pending;
 
   @override
   Future<List<int>> loadOrCreateKey() => _pending ??= _loadOrCreate();
 
   Future<List<int>> _loadOrCreate() async {
-    final encoded = await _storage.read(storageKey);
+    final encoded = await _storage.read(_storageKey);
     if (encoded != null) {
       try {
         final key = base64Url.decode(encoded);
@@ -65,7 +79,7 @@ final class SecureCheckoutOutboxEncryptionKeyProvider
       (_) => _random.nextInt(256),
       growable: false,
     );
-    await _storage.write(storageKey, base64UrlEncode(key));
+    await _storage.write(_storageKey, base64UrlEncode(key));
     return List<int>.unmodifiable(key);
   }
 }

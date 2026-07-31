@@ -34,11 +34,19 @@ Future<void> main() async {
       final tenantSelectionBox = await Hive.openBox<String>(
         HiveTenantSelectionStore.boxName,
       );
+      const secureValueStore = FlutterSecureCheckoutOutboxValueStore(
+        FlutterSecureStorage(),
+      );
       final checkoutOutbox = await HiveCheckoutOutbox.open(
         keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
-          storage: const FlutterSecureCheckoutOutboxValueStore(
-            FlutterSecureStorage(),
-          ),
+          storage: secureValueStore,
+        ),
+      );
+      final checkoutCatalogCache = await HiveCheckoutCatalogCache.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+          storageKey:
+              SecureCheckoutOutboxEncryptionKeyProvider.catalogCacheStorageKey,
         ),
       );
       final connectivity = Connectivity();
@@ -73,6 +81,7 @@ Future<void> main() async {
           child: SpiritPOSApp(
             bootstrapService: bootstrapService,
             checkoutOutbox: checkoutOutbox,
+            checkoutCatalogCache: checkoutCatalogCache,
             connectivity: connectivity,
             invitationLink: invitationLink,
             invalidInvitationLink: invalidInvitationLink,
@@ -88,6 +97,7 @@ class SpiritPOSApp extends StatelessWidget {
     super.key,
     required this.bootstrapService,
     required this.checkoutOutbox,
+    required this.checkoutCatalogCache,
     required this.connectivity,
     this.invitationLink,
     this.invalidInvitationLink = false,
@@ -95,6 +105,7 @@ class SpiritPOSApp extends StatelessWidget {
 
   final TenantBootstrapService bootstrapService;
   final HiveCheckoutOutbox checkoutOutbox;
+  final HiveCheckoutCatalogCache checkoutCatalogCache;
   final Connectivity connectivity;
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
@@ -103,6 +114,7 @@ class SpiritPOSApp extends StatelessWidget {
   Widget build(BuildContext context) {
     Future<bool> isOnline() async =>
         await connectivity.checkConnectivity() != ConnectivityResult.none;
+    final tenantDataReader = FirebaseTenantDocumentReader();
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -142,10 +154,17 @@ class SpiritPOSApp extends StatelessWidget {
             ),
             isOnline: isOnline,
           );
+          final catalogRefresher = CheckoutCatalogCacheRefresher(
+            sessionController: sessionController,
+            cache: checkoutCatalogCache,
+            reader: tenantDataReader,
+          );
           // Uncertain prior attempts are settled before any new batch commit.
+          // The derived catalog cache refreshes last; it never gates evidence.
           return () async => (
             await coordinator.recoverSelectedSession(),
             await submissionWorker.submitDueCheckouts(),
+            await catalogRefresher.refreshSelectedSession(),
           );
         },
         tenantRecoveryTriggers: connectivity.onConnectivityChanged
@@ -157,6 +176,10 @@ class SpiritPOSApp extends StatelessWidget {
           final token = await user.getIdTokenResult();
           return token.claims?['platformRole'] == 'superAdmin';
         },
+        tenantDataReader: tenantDataReader,
+        pendingCheckoutPanel: CheckoutPendingEvidencePanel(
+          source: CheckoutOutboxEvidenceSource(checkoutOutbox),
+        ),
         signOut: FirebaseAuth.instance.signOut,
         signedOut: const LoginScreen(),
       ),

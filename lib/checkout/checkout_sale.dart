@@ -9,8 +9,14 @@ const int checkoutSalePayloadSchemaVersion = 1;
 /// Firestore Rules validate at most sixteen explicit sale lines.
 const int maximumCheckoutSaleLines = 16;
 
-const int _maximumLineQuantity = 1000000;
-const int _maximumMinorAmount = 100000000000;
+/// The largest quantity accepted on one immutable sale line.
+const int maximumCheckoutLineQuantity = 1000000;
+
+/// The largest sale amount, in integer minor currency units.
+const int maximumCheckoutMinorAmount = 100000000000;
+
+const int _maximumLineQuantity = maximumCheckoutLineQuantity;
+const int _maximumMinorAmount = maximumCheckoutMinorAmount;
 const int _minorUnitsPerMajorUnit = 100;
 const int _maximumClientCreatedAtMs = 4102444800000; // 2100-01-01T00:00:00Z.
 
@@ -182,8 +188,46 @@ final class CheckoutSalePayload {
         'The checkout belongs to another tenant.',
       );
     }
+    return CheckoutSalePayload.fromLocalPayload(
+      session: session,
+      checkoutId: record.checkoutId,
+      payload: record.payload,
+      payloadHash: record.payloadHash,
+    );
+  }
 
-    final payload = record.payload;
+  /// Parses a locally constructed payload before it becomes durable evidence.
+  ///
+  /// Draft builders use this to prove the frozen contract holds while the
+  /// checkout can still be refused, rather than after it has been persisted.
+  factory CheckoutSalePayload.fromLocalPayload({
+    required TenantSession session,
+    required String checkoutId,
+    required Map<String, Object?> payload,
+    required String payloadHash,
+  }) {
+    if (!session.canAccess()) {
+      throw const CheckoutSaleFormatException(
+        'An active canonical session is required to parse a checkout.',
+      );
+    }
+    final String safeCheckoutId;
+    try {
+      safeCheckoutId = validateTenantDocumentId(
+        checkoutId,
+        fieldName: 'checkoutId',
+      );
+    } on ArgumentError {
+      throw const CheckoutSaleFormatException(
+        'checkoutId must be a document ID.',
+      );
+    }
+    if (checkoutPayloadHash(payload) != payloadHash) {
+      throw const CheckoutSaleFormatException(
+        'The payload hash does not describe this exact payload.',
+      );
+    }
+
     for (final key in payload.keys) {
       if (!_allowedPayloadKeys.contains(key)) {
         throw CheckoutSaleFormatException('Unsupported payload field $key.');
@@ -194,17 +238,17 @@ final class CheckoutSalePayload {
         'Unsupported checkout payload schema version.',
       );
     }
-    if (payload['checkoutId'] != record.checkoutId) {
+    if (payload['checkoutId'] != safeCheckoutId) {
       throw const CheckoutSaleFormatException(
         'The payload checkout ID is not the immutable outbox checkout ID.',
       );
     }
-    if (payload['tenantId'] != record.tenantId) {
+    if (payload['tenantId'] != session.tenantId) {
       throw const CheckoutSaleFormatException(
         'The payload tenant ID is not the immutable outbox tenant ID.',
       );
     }
-    if (payload['soldById'] != record.uid) {
+    if (payload['soldById'] != session.uid) {
       throw const CheckoutSaleFormatException(
         'The payload cashier is not the authenticated outbox user.',
       );
@@ -255,10 +299,10 @@ final class CheckoutSalePayload {
     }
 
     return CheckoutSalePayload._(
-      uid: record.uid,
-      tenantId: record.tenantId,
-      checkoutId: record.checkoutId,
-      payloadHash: record.payloadHash,
+      uid: session.uid,
+      tenantId: session.tenantId,
+      checkoutId: safeCheckoutId,
+      payloadHash: payloadHash,
       currency: currency,
       businessDate: businessDate,
       clientCreatedAtMs: clientCreatedAtMs,
