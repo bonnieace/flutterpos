@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { deleteApp, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
@@ -12,6 +14,10 @@ const PROJECT_ID = "demo-multitenant-invitation-integration";
 const INVITATION_SECRET =
   "local-emulator-invitation-hmac-secret-at-least-32-bytes";
 const PASSWORD = "Local-emulator-password-123!";
+const GRANT_PLATFORM_ADMIN_CLI = fileURLToPath(new URL(
+  "../../functions/lib/cli/grantPlatformAdmin.js",
+  import.meta.url,
+));
 const ACCEPTANCE_FIELDS = [
   "invitationStatus",
   "membershipStatus",
@@ -410,6 +416,101 @@ test("setGlobalUserStatus completes disable and reactivation sagas", async () =>
     globalAudits.map((document) => document.get("status")).sort(),
     ["completed", "completed"],
   );
+});
+
+test("grant-platform-admin CLI completes, rejects, and resumes real grants", async () => {
+  const fixture = await seedPlatformGrantFixture("grant-cli");
+
+  const completed = runPlatformGrantCli(
+    fixture.operatorUid,
+    fixture.eligibleUid,
+    "platform-grant-emulator-eligible-001",
+    "Security approved the dedicated platform identity.",
+    0,
+  );
+  assert.equal(completed.status, "completed");
+  assert.equal(completed.targetUid, fixture.eligibleUid);
+  assert.equal(completed.resumed, false);
+  assert.deepEqual(completed.warnings.sort(), [
+    "membership_counter_positive",
+    "owned_active_tenant_counter_positive",
+    "owned_tenant_counter_positive",
+  ]);
+
+  let [root, authUser, audit] = await Promise.all([
+    firestore.doc(`users/${fixture.eligibleUid}`).get(),
+    auth.getUser(fixture.eligibleUid),
+    firestore.doc(`platform_audit_logs/${completed.auditId}`).get(),
+  ]);
+  assert.equal(root.get("accountType"), "platform_admin");
+  assert.equal(root.get("identityTransition"), undefined);
+  assert.deepEqual(authUser.customClaims, {
+    supportTier: "senior",
+    platformRole: "superAdmin",
+  });
+  assert.equal(audit.get("status"), "completed");
+  assert.equal(audit.get("actorUid"), fixture.operatorUid);
+  assert.equal(audit.get("targetUid"), fixture.eligibleUid);
+  assert.equal(
+    audit.get("reason"),
+    "Security approved the dedicated platform identity.",
+  );
+  assert.deepEqual(audit.get("canonicalEvidenceCounts"), {
+    staffMemberships: 0,
+    ownedTenants: 0,
+    unresolvedInvitations: 0,
+  });
+
+  const rejected = runPlatformGrantCli(
+    fixture.operatorUid,
+    fixture.ineligibleUid,
+    "platform-grant-emulator-ineligible-001",
+    "Canonical membership makes this identity ineligible.",
+    4,
+  );
+  assert.deepEqual(rejected, {
+    status: "rejected",
+    code: "platform-identity-ineligible",
+    recoverable: false,
+  });
+  [root, authUser] = await Promise.all([
+    firestore.doc(`users/${fixture.ineligibleUid}`).get(),
+    auth.getUser(fixture.ineligibleUid),
+  ]);
+  assert.equal(root.get("accountType"), "tenant_user");
+  assert.equal(root.get("identityTransition"), undefined);
+  assert.equal(authUser.customClaims?.platformRole, undefined);
+  const rejectedAudits = await firestore
+    .collection("platform_audit_logs")
+    .where("targetUid", "==", fixture.ineligibleUid)
+    .get();
+  assert.equal(rejectedAudits.size, 1);
+  assert.equal(rejectedAudits.docs[0].get("status"), "rejected_ineligible");
+  assert.deepEqual(rejectedAudits.docs[0].get("canonicalEvidenceCounts"), {
+    staffMemberships: 1,
+    ownedTenants: 1,
+    unresolvedInvitations: 0,
+  });
+
+  const resumed = runPlatformGrantCli(
+    fixture.operatorUid,
+    fixture.resumableUid,
+    "platform-grant-emulator-resume-001",
+    "Resume the previously acquired guarded transition.",
+    0,
+  );
+  assert.equal(resumed.status, "completed");
+  assert.equal(resumed.targetUid, fixture.resumableUid);
+  assert.equal(resumed.resumed, true);
+  [root, authUser, audit] = await Promise.all([
+    firestore.doc(`users/${fixture.resumableUid}`).get(),
+    auth.getUser(fixture.resumableUid),
+    firestore.doc(`platform_audit_logs/${resumed.auditId}`).get(),
+  ]);
+  assert.equal(root.get("accountType"), "platform_admin");
+  assert.equal(root.get("identityTransition"), undefined);
+  assert.equal(authUser.customClaims?.platformRole, "superAdmin");
+  assert.equal(audit.get("status"), "completed");
 });
 
 function requireEmulator(name) {
@@ -811,6 +912,124 @@ async function seedGlobalStatusFixture(suffix) {
   );
   await batch.commit();
   return { platformEmail, targetUid, targetEmail, tenantId };
+}
+
+async function seedPlatformGrantFixture(suffix) {
+  const operatorUid = `grant-operator-${suffix}`;
+  const eligibleUid = `grant-eligible-${suffix}`;
+  const ineligibleUid = `grant-ineligible-${suffix}`;
+  const resumableUid = `grant-resumable-${suffix}`;
+  const tenantId = `grant-tenant-${suffix}`;
+  const now = Timestamp.now();
+  await Promise.all([
+    auth.createUser({
+      uid: operatorUid,
+      email: `${operatorUid}@integration.example.test`,
+      emailVerified: true,
+      disabled: false,
+    }),
+    auth.createUser({
+      uid: eligibleUid,
+      email: `${eligibleUid}@integration.example.test`,
+      emailVerified: true,
+      disabled: false,
+    }),
+    auth.createUser({
+      uid: ineligibleUid,
+      email: `${ineligibleUid}@integration.example.test`,
+      emailVerified: true,
+      disabled: false,
+    }),
+    auth.createUser({
+      uid: resumableUid,
+      email: `${resumableUid}@integration.example.test`,
+      emailVerified: true,
+      disabled: false,
+    }),
+  ]);
+  await Promise.all([
+    auth.setCustomUserClaims(operatorUid, { platformRole: "superAdmin" }),
+    auth.setCustomUserClaims(eligibleUid, { supportTier: "senior" }),
+  ]);
+
+  const root = (uid, extra = {}) => ({
+    email: `${uid}@integration.example.test`,
+    accountType: "tenant_user",
+    identityOrigin: "self_signup",
+    globalStatus: "active",
+    membershipCount: 0,
+    ownedTenantCount: 0,
+    ownedActiveTenantCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    ...extra,
+  });
+  const batch = firestore.batch();
+  batch.set(firestore.doc(`users/${operatorUid}`), root(operatorUid, {
+    accountType: "platform_admin",
+    identityOrigin: "platform_bootstrap",
+  }));
+  batch.set(firestore.doc(`users/${eligibleUid}`), root(eligibleUid, {
+    membershipCount: 9,
+    ownedTenantCount: 4,
+    ownedActiveTenantCount: 2,
+  }));
+  batch.set(firestore.doc(`users/${ineligibleUid}`), root(ineligibleUid));
+  batch.set(firestore.doc(`users/${resumableUid}`), root(resumableUid, {
+    identityTransition: "granting_platform",
+  }));
+  batch.set(firestore.doc(`tenants/${tenantId}`), {
+    name: "Canonical membership blocker",
+    slug: tenantId,
+    ownerUid: ineligibleUid,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}/staff/${ineligibleUid}`), {
+    uid: ineligibleUid,
+    email: `${ineligibleUid}@integration.example.test`,
+    role: "owner",
+    status: "active",
+    invitationStatus: "accepted",
+    createdAt: now,
+    joinedAt: now,
+    updatedAt: now,
+  });
+  await batch.commit();
+  return {operatorUid, eligibleUid, ineligibleUid, resumableUid};
+}
+
+function runPlatformGrantCli(
+  operatorUid,
+  targetUid,
+  requestId,
+  reason,
+  expectedExitCode,
+) {
+  const result = spawnSync(process.execPath, [
+    GRANT_PLATFORM_ADMIN_CLI,
+    "--environment", "emulator",
+    "--project-id", PROJECT_ID,
+    "--confirm-project-id", PROJECT_ID,
+    "--actor-uid", operatorUid,
+    "--target-uid", targetUid,
+    "--confirm-target-uid", targetUid,
+    "--request-id", requestId,
+    "--reason", reason,
+  ], {
+    encoding: "utf8",
+    env: process.env,
+    timeout: 30_000,
+  });
+  if (result.error) throw result.error;
+  assert.equal(
+    result.status,
+    expectedExitCode,
+    `stdout=${result.stdout}\nstderr=${result.stderr}`,
+  );
+  const output = expectedExitCode === 0 ? result.stdout : result.stderr;
+  return JSON.parse(output);
 }
 
 async function signIn(email) {

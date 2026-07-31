@@ -2983,3 +2983,113 @@ Implement only a secure operator entry point for the existing canonical
 5. Leave platform-admin revocation, Flutter role-management UI, general user
    search, tenant switching, checkout/Hive state, deployment, and operational
    POS screens outside that chunk.
+
+---
+
+## Guarded platform-admin grant CLI handoff - 2026-07-31
+
+### Completed in this session
+
+The existing canonical `grantPlatformAdmin` saga now has a deliberately
+invoked Admin SDK CLI. It is not exported as a callable, and no Flutter
+role-management or general platform-user surface was added.
+
+Implemented behavior:
+
+- `grant-platform-admin` requires an explicit environment, the exact
+  source-controlled project mapped to that environment, a second exact project
+  confirmation, the actor UID, exact target UID, a second exact target
+  confirmation, a stable request ID, and a normalized 3-1000 character reason.
+  Production additionally requires `--confirm-production`.
+- The allowlist is fixed to the frozen development, staging, and production
+  projects. The only additional entry is the fixed demo integration project,
+  which is rejected unless both Auth and Firestore emulator hosts resolve to
+  localhost. Real-project execution is rejected when emulator variables are
+  present.
+- Application Default Credentials authenticate real-project Admin SDK access.
+  The recorded actor is separately authorized from the exact enabled Auth
+  identity, its `platformRole=superAdmin` claim, and an active canonical
+  `platform_admin` root without an identity transition. Claim-only and
+  root-only operators fail closed.
+- The CLI delegates target mutation exclusively to the existing canonical
+  service. Its collection-group staff and invitation scans, owner scan,
+  resumable `granting_platform` transition, unrelated-claim preservation,
+  completion compensation, and bounded audit evidence remain unchanged.
+  Advisory counters can warn but cannot authorize or reject a grant.
+- Operator output uses deterministic safe exit states: success `0`, invalid
+  configuration `2`, operator denial `3`, canonical target ineligibility `4`,
+  recoverable retry `5`, and unexpected safe failure `1`. Recoverable output
+  directs the operator to retry the identical command with the same request ID
+  and does not include provider or canonical evidence details.
+- The real emulator fixture invokes the compiled CLI in child processes. It
+  proves eligible claim/root completion with unrelated claim preservation,
+  canonical staff/owner rejection despite zero counters, held-transition
+  resumption, actor/reason/audit evidence, and transition cleanup.
+
+Files in this chunk:
+
+```text
+functions/package.json
+functions/src/cli/grantPlatformAdmin.test.ts
+functions/src/cli/grantPlatformAdmin.ts
+functions/src/platform/README.md
+rules-tests/README.md
+rules-tests/test/invitation-acceptance.integration.test.js
+PLAN.md
+```
+
+Validation evidence:
+
+- `npm --prefix functions test` passed **159/159** Functions tests, including
+  **7/7** guarded CLI tests.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules suite
+  **21/21** using portable Node.js 24 and JDK 21.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **10/10** real
+  Auth, Firestore, and Functions emulator tests, including the compiled CLI's
+  eligible, ineligible, and resumed grant transactions.
+- A focused CLI emulator run also passed **1/1** before the complete integration
+  suite was run.
+- Android build/emulator validation was intentionally skipped for this chunk
+  at the user's request.
+
+The first emulator attempt selected system JDK 17 and stopped before starting
+any emulator because current Firebase tooling requires JDK 21. The focused
+rerun and both complete emulator suites passed with portable Node.js 24 and
+Temurin JDK 21 under `D:\firebase-emulator-tools`, plus
+`NODE_OPTIONS=--max-old-space-size=512`. Those tools are machine-local and are
+not repository artifacts. One focused CLI-only launch timed out Functions
+discovery, which that test does not use; the subsequent full integration run
+loaded all seven callable fixtures and passed.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded backend chunk
+
+Implement only canonical platform-admin revocation on a recoverable,
+operator-only boundary:
+
+1. Freeze and implement a private `revokePlatformAdmin` saga plus an Admin SDK
+   CLI entry point; do not expose a callable, Flutter role-management UI,
+   platform-user directory, search, or bulk action.
+2. Require the same explicit project allowlist, authenticated claim-plus-root
+   actor, exact target UID and confirmation, bounded reason, stable request ID,
+   and production confirmation. The actor and target must differ.
+3. Authorize from canonical roots and current Auth claims, verify again that
+   the target has no canonical tenant membership/ownership/invitation, and
+   prevent removal of the last fully active platform administrator using an
+   authoritative bounded scan rather than counters.
+4. Make claim removal the access-revoking step, persist resumable operation and
+   audit evidence around the external Auth effect, revoke refresh tokens, and
+   define a fail-closed retry path for root/claim disagreement. Do not restore
+   a platform claim automatically.
+5. Add unit and real Auth/Firestore emulator coverage for success, last-admin
+   denial, target/actor mismatch, stale root/claim state, canonical tenant
+   evidence, partial failure resumption, token cutoff, and audits. Leave
+   tenant switching, checkout/Hive state, deployment, and operational POS
+   screens outside that chunk.

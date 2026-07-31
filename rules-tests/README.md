@@ -33,6 +33,9 @@ suspension, suspended reactivation, and rejected archival.
 Global-user coverage includes claim-and-root-gated exact-UID review plus the
 real disable/reactivate saga across Auth, root state, operation, alert, and
 audit records.
+The same local-only harness invokes the compiled `grant-platform-admin` CLI in
+subprocesses and proves eligible completion, canonical-membership rejection,
+resumable transition completion, custom claims, roots, and audit evidence.
 
 Use Node.js 24 and JDK 21 or newer, then run from the repository root:
 
