@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../sales/sale_history.dart';
+import '../sales/sale_history_panel.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
 import 'shift_history.dart';
 
 /// Read-only shift history route for the selected tenant session.
@@ -95,6 +98,24 @@ final class _TenantShiftHistoryPanelState
         onScopeChanged: _setScope,
         onNextPage: () => _nextPage(page.nextCursor),
         onPreviousPage: _previousPage,
+        onViewSales: (request) => _openSales(context, request),
+      ),
+    );
+  }
+
+  /// Opens the read-only sales route under the same session scope, so its own
+  /// guard sees the exact controller this page was authorized against.
+  void _openSales(BuildContext context, TenantSaleHistoryRequest request) {
+    final sessions = TenantSessionScope.read(context);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: sessions,
+          child: TenantSaleHistoryScreen(
+            reader: widget.reader,
+            request: request,
+          ),
+        ),
       ),
     );
   }
@@ -108,6 +129,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
     required this.onScopeChanged,
     required this.onNextPage,
     required this.onPreviousPage,
+    required this.onViewSales,
   });
 
   final TenantSession session;
@@ -116,6 +138,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
   final ValueChanged<TenantShiftHistoryScope> onScopeChanged;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
+  final ValueChanged<TenantSaleHistoryRequest> onViewSales;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -148,6 +171,16 @@ final class _ShiftHistoryContents extends StatelessWidget {
           selected: <TenantShiftHistoryScope>{page.scope},
           onSelectionChanged: (selection) => onScopeChanged(selection.single),
         ),
+      const SizedBox(height: 16),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          key: const ValueKey('shift-history-own-sales'),
+          onPressed: () => onViewSales(const TenantOwnSaleHistoryRequest()),
+          icon: const Icon(Icons.receipt_long_outlined),
+          label: const Text('My recent sales'),
+        ),
+      ),
       const SizedBox(height: 16),
       if (page.items.isEmpty)
         const Text(
@@ -189,6 +222,15 @@ final class _ShiftHistoryContents extends StatelessWidget {
                     ),
                   const SizedBox(height: 8),
                   Text(_closedLabel(entry), style: _mutedStyle(context)),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton(
+                      key: ValueKey('shift-history-sales-link-${entry.id}'),
+                      onPressed: () => onViewSales(_salesRequest(entry)),
+                      child: const Text('View sales'),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -216,6 +258,22 @@ final class _ShiftHistoryContents extends StatelessWidget {
 
   String _staffLabel(TenantShiftHistoryEntry entry) =>
       entry.staffId == session.uid ? 'You' : entry.staffId;
+
+  /// Carries the already-validated shift identity into the sales page, so the
+  /// sales route proves attribution against this exact shift without a second
+  /// read of the shift document.
+  TenantSaleHistoryRequest _salesRequest(TenantShiftHistoryEntry entry) =>
+      TenantShiftSaleHistoryRequest(
+        shift: TenantSaleShiftScope(
+          shiftId: entry.id,
+          staffId: entry.staffId,
+          deviceId: entry.deviceId,
+          businessDate: entry.businessDate,
+        ),
+        recordedTransactionCount: entry.summary?.transactionCount,
+        recordedTotalSalesMinor: entry.summary?.totalSalesMinor,
+        countedCashMinor: entry.closingCashMinor,
+      );
 
   TextStyle? _mutedStyle(BuildContext context) =>
       Theme.of(context).textTheme.bodySmall;

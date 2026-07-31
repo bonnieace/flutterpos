@@ -134,7 +134,7 @@ void main() {
 
       final page = await _FilteredRepository().page(
         reader,
-        const <String, Object?>{},
+        const <String, Object?>{'status': 'closed'},
         descending: true,
       );
 
@@ -154,7 +154,7 @@ void main() {
       await expectLater(
         repository.page(
           ascendingResult,
-          const <String, Object?>{},
+          const <String, Object?>{'status': 'closed'},
           descending: true,
         ),
         throwsA(isA<TenantScopeViolation>()),
@@ -165,13 +165,34 @@ void main() {
       );
     });
 
+    test('an unfiltered descending page is refused before it is issued', () async {
+      final reader = _OrderedReader(<String>[]);
+
+      // Firestore rejects a descending scan of a whole collection by key, so
+      // the boundary refuses to build one at all.
+      await expectLater(
+        _FilteredRepository().page(
+          reader,
+          const <String, Object?>{},
+          descending: true,
+        ),
+        throwsArgumentError,
+      );
+      expect(reader.query, isNull);
+
+      await _FilteredRepository().page(reader, const <String, Object?>{
+        'status': 'closed',
+      }, descending: true);
+      expect(reader.query!.descending, isTrue);
+    });
+
     test('a repeated document ID fails closed in a descending page', () async {
       final reader = _OrderedReader(<String>['shift-b', 'shift-b']);
 
       await expectLater(
         _FilteredRepository().page(
           reader,
-          const <String, Object?>{},
+          const <String, Object?>{'status': 'closed'},
           descending: true,
         ),
         throwsA(isA<TenantScopeViolation>()),

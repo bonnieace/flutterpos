@@ -212,6 +212,13 @@ service cloud.firestore {
       }
 
       match /sales/{saleId} {
+        // Deliberately wider than the shift rule: any active staff member reads
+        // any sale in the business. A sale is the business's shared record of a
+        // transaction - a receipt lookup, a return against a colleague's sale,
+        // and the fail-closed confirmation classification of a deterministic
+        // sale path all need it - whereas a shift is one cashier's own cash
+        // record. Narrowing this to `soldById` would also turn an unreadable
+        // foreign sale into an endless retry instead of a reported mismatch.
         allow read: if activeStaff(tenantId);
         allow create: if activeStaff(tenantId)
           && saleId == request.resource.data.checkoutId

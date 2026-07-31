@@ -73,6 +73,28 @@ colleague's counted cash, the client already refused a foreign shift, and a
 cashier's list query must therefore carry `staffId == uid`, which is exactly
 what the history and open-shift-discovery repositories send.
 
+For the focused sale-history read boundary, run
+`npm --prefix rules-tests run test:emulator:sale-history`. It proves that a
+cashier pages the sales of one shift and its own sales across shifts, that a
+sale stays readable business-wide for every active member, that an absent sale
+still answers, that a non-member or deactivated identity reads nothing, and that
+a recorded sale is immutable for every role.
+
+The sale read rule was deliberately left wider than the shift rule. A sale is
+the business's shared record of a transaction - a receipt lookup, a return
+against a colleague's sale, and the fail-closed confirmation of a deterministic
+sale path all need it - while a shift is one cashier's own cash record.
+Narrowing sales to `soldById` would also turn an unreadable foreign sale into an
+endless submission retry instead of a reported mismatch. The three assertions in
+`a sale stays a shared business record for every active member` pin that
+decision, so a future narrowing has to change them on purpose.
+
+Firestore refuses `orderBy(documentId(), "desc")` over a whole collection
+("Firestore does not support descending key scans"), so every newest-first page
+carries at least one equality filter. `TenantReadRepository` refuses to build an
+unfiltered descending page at all, which turns that runtime query failure into
+an immediate programming error.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

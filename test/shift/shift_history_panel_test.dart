@@ -120,6 +120,12 @@ void main() {
     expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
     expect(find.byKey(const ValueKey('shift-history-previous')), findsNothing);
 
+    // The paging controls sit below the cards, so the list must scroll to
+    // them before they are built.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('shift-history-next')),
+      200,
+    );
     await tester.tap(find.byKey(const ValueKey('shift-history-next')));
     await tester.pump();
     await tester.pump();
@@ -157,6 +163,48 @@ void main() {
     await tester.pump();
     expect(find.byKey(const ValueKey('shift-history-entry-shift-b')), findsOne);
     expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
+  });
+
+  testWidgets('a closed shift links to the sales it recorded', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-a'),
+      ])
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[]);
+
+    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
+    await tester.tap(
+      find.byKey(const ValueKey('shift-history-sales-link-shift-a')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Shift sales'), findsOne);
+    // The sales page is scoped to this exact shift, and carries the figures
+    // the shift recorded rather than reading them again.
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'shiftId': 'shift-a',
+    });
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-recorded')))
+          .data,
+      'Recorded: 987.50 over 3 transactions. Counted cash was 1250.00.',
+    );
+  });
+
+  testWidgets('the cashier reaches its own recent sales', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[])
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[]);
+
+    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
+    await tester.tap(find.byKey(const ValueKey('shift-history-own-sales')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('My recent sales'), findsOne);
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'soldById': 'user-a',
+    });
   });
 
   testWidgets('no session renders the denied state and starts no load', (

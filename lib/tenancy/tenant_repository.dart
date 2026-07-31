@@ -219,6 +219,17 @@ abstract base class TenantReadRepository {
       throw RangeError.range(pageSize, 1, 50, 'pageSize');
     }
     final safeFilters = _validatedEqualityFilters(equalityFilters);
+    // Firestore refuses a descending scan of a whole collection by key
+    // ("Firestore does not support descending key scans"), so a newest-first
+    // page must always be narrowed by at least one equality filter. Refusing it
+    // here turns a runtime query failure into an immediate programming error.
+    if (descending && safeFilters.isEmpty) {
+      throw ArgumentError.value(
+        descending,
+        'descending',
+        'A descending page requires at least one equality filter.',
+      );
+    }
     final validatedCursor = cursor == null
         ? null
         : validateTenantDocumentId(cursor, fieldName: 'cursor');

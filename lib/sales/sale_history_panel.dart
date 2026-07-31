@@ -1,0 +1,275 @@
+import 'package:flutter/material.dart';
+
+import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_route_guard.dart';
+import 'sale_history.dart';
+
+/// What a sale page is scoped to.
+sealed class TenantSaleHistoryRequest {
+  const TenantSaleHistoryRequest();
+
+  String get title;
+
+  /// A stable identity for the guard key, so a new request restarts the load.
+  String get key;
+}
+
+/// The sales recorded during one canonical shift.
+final class TenantShiftSaleHistoryRequest extends TenantSaleHistoryRequest {
+  const TenantShiftSaleHistoryRequest({
+    required this.shift,
+    required this.recordedTransactionCount,
+    required this.recordedTotalSalesMinor,
+    required this.countedCashMinor,
+  });
+
+  final TenantSaleShiftScope shift;
+
+  /// The figures the closing device recorded. They are shown for inspection
+  /// and never recalculated here: only reconciliation may contradict them.
+  final int? recordedTransactionCount;
+  final int? recordedTotalSalesMinor;
+  final int countedCashMinor;
+
+  @override
+  String get title => 'Shift sales';
+
+  @override
+  String get key => 'shift:${shift.shiftId}';
+}
+
+/// This cashier's own most recent sales, for receipt lookup.
+final class TenantOwnSaleHistoryRequest extends TenantSaleHistoryRequest {
+  const TenantOwnSaleHistoryRequest();
+
+  @override
+  String get title => 'My recent sales';
+
+  @override
+  String get key => 'own';
+}
+
+/// Read-only sales route for the selected tenant session.
+final class TenantSaleHistoryScreen extends StatelessWidget {
+  const TenantSaleHistoryScreen({
+    super.key,
+    required this.reader,
+    required this.request,
+  });
+
+  final TenantDataReader reader;
+  final TenantSaleHistoryRequest request;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(request.title)),
+    body: TenantSaleHistoryPanel(reader: reader, request: request),
+  );
+}
+
+/// Pages immutable sales behind [TenantRouteGuard].
+final class TenantSaleHistoryPanel extends StatefulWidget {
+  const TenantSaleHistoryPanel({
+    super.key,
+    required this.reader,
+    required this.request,
+    this.pageSize = 20,
+  });
+
+  final TenantDataReader reader;
+  final TenantSaleHistoryRequest request;
+  final int pageSize;
+
+  @override
+  State<TenantSaleHistoryPanel> createState() => _TenantSaleHistoryPanelState();
+}
+
+final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
+  List<String?> _cursors = <String?>[null];
+  int _pageIndex = 0;
+
+  void _nextPage(String? cursor) {
+    if (cursor == null) return;
+    setState(() {
+      _cursors = <String?>[..._cursors.take(_pageIndex + 1), cursor];
+      _pageIndex++;
+    });
+  }
+
+  void _previousPage() {
+    if (_pageIndex == 0) return;
+    setState(() => _pageIndex--);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cursor = _cursors[_pageIndex];
+    final request = widget.request;
+    return TenantRouteGuard<TenantSalePage>(
+      key: ValueKey('${request.key}:$_pageIndex:$cursor'),
+      load: (session) {
+        final repository = TenantSaleHistoryRepository(
+          session: session,
+          reader: widget.reader,
+        );
+        return switch (request) {
+          TenantShiftSaleHistoryRequest(:final shift) => repository
+              .loadShiftSales(
+                shift: shift,
+                pageSize: widget.pageSize,
+                cursor: cursor,
+              ),
+          TenantOwnSaleHistoryRequest() => repository.loadOwnRecentSales(
+            pageSize: widget.pageSize,
+            cursor: cursor,
+          ),
+        };
+      },
+      denied: const Center(
+        key: ValueKey('sale-history-denied'),
+        child: Text('Sales are unavailable for this business.'),
+      ),
+      failure: (context, error) => const Center(
+        key: ValueKey('sale-history-failure'),
+        child: Text('Sales could not be loaded.'),
+      ),
+      builder: (context, session, page) => _SaleHistoryContents(
+        request: request,
+        page: page,
+        pageIndex: _pageIndex,
+        onNextPage: () => _nextPage(page.nextCursor),
+        onPreviousPage: _previousPage,
+      ),
+    );
+  }
+}
+
+final class _SaleHistoryContents extends StatelessWidget {
+  const _SaleHistoryContents({
+    required this.request,
+    required this.page,
+    required this.pageIndex,
+    required this.onNextPage,
+    required this.onPreviousPage,
+  });
+
+  final TenantSaleHistoryRequest request;
+  final TenantSalePage page;
+  final int pageIndex;
+  final VoidCallback onNextPage;
+  final VoidCallback onPreviousPage;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    key: const ValueKey('sale-history'),
+    padding: const EdgeInsets.all(20),
+    children: [
+      if (request case final TenantShiftSaleHistoryRequest shift) ...[
+        Text(
+          'Shift ${shift.shift.businessDate}',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          key: const ValueKey('sale-history-recorded'),
+          _recordedLabel(shift),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'These are the figures the shift recorded when it closed. Page '
+          'through the sales to inspect them; this screen calculates no '
+          'replacement total.',
+        ),
+      ] else
+        Text(
+          'Recent sales',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+      const SizedBox(height: 16),
+      if (page.items.isEmpty)
+        const Text(
+          key: ValueKey('sale-history-empty'),
+          'No sales were found.',
+        )
+      else
+        for (final sale in page.items)
+          Card(
+            key: ValueKey('sale-history-entry-${sale.id}'),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    sale.receiptNumber,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    key: ValueKey('sale-history-total-${sale.id}'),
+                    'Total: ${sale.currency} ${_money(sale.totalMinor)}'
+                    '${sale.discountMinor > 0 ? ' after ${_money(sale.discountMinor)} discount' : ''}',
+                  ),
+                  Text(
+                    key: ValueKey('sale-history-lines-${sale.id}'),
+                    '${sale.lines.length} '
+                    '${sale.lines.length == 1 ? 'item' : 'items'}: '
+                    '${sale.lines.map((line) => '${line.quantity} x ${line.name}').join(', ')}',
+                  ),
+                  const SizedBox(height: 8),
+                  Text(_recordedAtLabel(sale), style: _muted(context)),
+                ],
+              ),
+            ),
+          ),
+      const SizedBox(height: 16),
+      Wrap(
+        spacing: 12,
+        children: [
+          if (pageIndex > 0)
+            OutlinedButton(
+              key: const ValueKey('sale-history-previous'),
+              onPressed: onPreviousPage,
+              child: const Text('Previous page'),
+            ),
+          if (page.hasMore)
+            FilledButton(
+              key: const ValueKey('sale-history-next'),
+              onPressed: onNextPage,
+              child: const Text('Next page'),
+            ),
+        ],
+      ),
+    ],
+  );
+
+  TextStyle? _muted(BuildContext context) =>
+      Theme.of(context).textTheme.bodySmall;
+}
+
+String _recordedLabel(TenantShiftSaleHistoryRequest request) {
+  final count = request.recordedTransactionCount;
+  final total = request.recordedTotalSalesMinor;
+  if (count == null || total == null) {
+    return 'This shift closed without a recorded summary. Counted cash was '
+        '${_money(request.countedCashMinor)}.';
+  }
+  return 'Recorded: ${_money(total)} over $count transactions. Counted cash '
+      'was ${_money(request.countedCashMinor)}.';
+}
+
+String _recordedAtLabel(TenantSale sale) {
+  final recordedAt = sale.recordedAt;
+  return recordedAt == null
+      ? 'The server has not confirmed this sale yet.'
+      : 'Recorded ${_instant(recordedAt)} by ${sale.soldById}';
+}
+
+String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+
+String _instant(DateTime value) {
+  final utc = value.toUtc();
+  String pad(int part) => part.toString().padLeft(2, '0');
+  return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
+      '${pad(utc.hour)}:${pad(utc.minute)} UTC';
+}

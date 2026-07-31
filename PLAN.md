@@ -4878,3 +4878,157 @@ now points at:
    product cost/profit fields, subscription and branding surfaces, server-side
    cross-device shift transfer, deployment, and Android build/emulator
    validation outside that chunk.
+
+---
+
+## Guarded sale-history read surface handoff - 2026-08-01
+
+### Completed in this session
+
+A closed shift now links to the sales it recorded, and a cashier can look up
+its own recent receipts. This chunk adds no checkout screen or payment flow, no
+receipt printing, no returns, no product cost or profit surface, and makes no
+legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `TenantSale` is a strict read model for `tenants/{tenantId}/sales/{saleId}`.
+  The document must repeat the identity encoded in its own path - Rules bind the
+  document ID to the immutable `checkoutId` at create - declare the frozen v1
+  payload schema, and add up: line totals must equal price times quantity, their
+  sum must equal `subtotalMinor`, `totalMinor` must equal subtotal minus
+  discount, and every major-unit mirror must round-trip to its authoritative
+  minor units. An unsupported `payloadSchemaVersion` is refused outright rather
+  than partially interpreted.
+- The receipt is re-derived, not trusted. A sale whose `receiptNumber` is not
+  what this exact device, business date, and sequence would produce is refused,
+  which is the same proof the draft builder applies before submission and the
+  Rules apply on create. A customer-facing number is never shown unless it
+  describes its own sale.
+- Product cost and profit fields the draft may write are parsed away rather than
+  exposed. They stay outside this surface deliberately.
+- `TenantSaleHistoryRepository` extends the guarded `TenantReadRepository`. It
+  offers exactly two bounded pages: the sales of one canonical shift, and this
+  cashier's own recent sales. A shift page proves every sale names that shift
+  and agrees with its cashier, device, and business day; a sale that contradicts
+  the shift fails the whole page closed, because on a screen used to inspect a
+  shift, contradicting evidence must be reported rather than quietly listed as
+  if it belonged. The shift identity is carried from the already-validated
+  history entry, so the sales route needs no second read of the shift.
+- **The sale read rule was deliberately left wider than the shift rule.** Any
+  active staff member reads any sale in the business. A sale is the business's
+  shared record of a transaction: a receipt lookup, a return against a
+  colleague's sale, and the fail-closed confirmation of a deterministic sale
+  path all need it, whereas a shift is one cashier's own cash record. Narrowing
+  it to `soldById` would also turn an unreadable foreign sale into an endless
+  submission retry instead of a reported mismatch. Three assertions pin that
+  decision so a future narrowing has to change them on purpose.
+- The screen states the figures the shift recorded and pages the sales beneath
+  them. It computes no replacement total: a page tally would be a second,
+  weaker aggregate that disagrees with reconciliation at every page boundary.
+  Inspection is the point, recomputation is not.
+- `firestore.indexes.json` gained `shiftId`/`__name__ DESC` and
+  `soldById`/`__name__ DESC` for the two pages.
+
+Deliberately outside this chunk, and important for the next session:
+
+- A sale names its cashier by UID. Resolving it to a display name needs the
+  management-only staff directory, the same open question the shift history has.
+- There is no management-wide sales page. Every page carries an equality filter
+  by construction (see below), so a business-wide sales list needs its own
+  deliberate filter and index rather than an unfiltered scan.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.indexes.json
+firestore.rules
+lib/sales/sale_history.dart
+lib/sales/sale_history_panel.dart
+lib/sales/sales.dart
+lib/shift/shift_history_panel.dart
+lib/tenancy/tenant_repository.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/sale-history.test.js
+test/sales/sale_history_panel_test.dart
+test/sales/sale_history_test.dart
+test/shift/shift_history_panel_test.dart
+test/tenancy/tenant_repository_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/sales lib/shift lib/checkout lib/tenancy
+  test/sales test/shift test/checkout test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/sales
+  test/shift test/checkout test/tenancy` passed **503/503** relevant Flutter
+  tests, including **21** new tests: 11 sale read-model and repository, 7
+  sale-panel widget, 2 shift-to-sales navigation, and 1 base-repository
+  descending-scan case.
+- `npm --prefix rules-tests run test:emulator:sale-history` passed the focused
+  Firestore-only suite **5/5** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **62/62** (57 existing plus the 5 new sale-history cases).
+- `npm --prefix functions test` passed **166/166** Functions tests with the
+  pinned Node 24 / Temurin JDK 21 environment. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending
+  warnings, and `firestore.indexes.json` parsed as valid JSON. Android build and
+  Android emulator validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **Firestore does not support descending key scans.** The emulator refused an
+  unfiltered `orderBy(documentId(), "desc")` page outright - not a Rules denial
+  but a query-planner rejection - which no Dart fake could have caught. Both
+  history repositories always send an equality filter, so no shipped query was
+  affected, but the boundary now refuses to build an unfiltered descending page
+  at all, turning a runtime query failure into an immediate programming error.
+  The rule is recorded in `readCollectionPage`, the rules-tests README, and a
+  unit test; the emulator case now issues the query the client would actually
+  send.
+- **A shift-history pagination test stopped finding its own button.** The new
+  sales links made the list taller, so `ListView` no longer built the paging
+  controls; the test scrolls to them first. Worth remembering for every future
+  list surface in this app.
+- No other test assertion failed; the analyzer and every other command in the
+  final sequence were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded tenant staff-name resolution both history surfaces
+now need, and nothing else:
+
+1. Add a bounded, guarded lookup that resolves the cashier UIDs on one page of
+   shifts or sales to canonical staff display names, reusing the existing
+   `TenantStaffDirectoryRepository` boundary rather than a new path. Resolve
+   only the UIDs actually on screen, cache them per session/epoch, and fall back
+   to the UID when the caller may not read the staff record.
+2. Decide explicitly whether a cashier may read a colleague's canonical staff
+   document at all. The current rule allows it; the staff directory screen is
+   already owner/admin/manager-only, so the decision is about the read boundary,
+   not the screen. Test whichever decision is taken.
+3. Show the resolved name beside the UID-labelled entries in shift history and
+   sale history, keeping the UID visible wherever it is the authoritative
+   identity.
+4. Add unit, widget, and focused Rules emulator coverage for an unresolvable
+   UID, a denied staff read, a tenant switch during resolution, and a page whose
+   staff document disappears between reads.
+5. Leave the checkout screen and payment flow, receipt printing, returns,
+   product cost/profit fields, subscription and branding surfaces, server-side
+   cross-device shift transfer, deployment, and Android build/emulator
+   validation outside that chunk.

@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/control-plane.test.js test/stock-and-sales.test.js test/tenant-isolation.test.js test/checkout-confirmation.test.js test/checkout-submission.test.js test/checkout-receipt.test.js test/shift-lifecycle.test.js test/shift-sale-attribution.test.js test/shift-history.test.js",
+    "test": "node --test --test-concurrency=1 test/control-plane.test.js test/stock-and-sales.test.js test/tenant-isolation.test.js test/checkout-confirmation.test.js test/checkout-submission.test.js test/checkout-receipt.test.js test/shift-lifecycle.test.js test/shift-sale-attribution.test.js test/shift-history.test.js test/sale-history.test.js",
     "test:emulator": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"npm test\"",
     "test:emulator:checkout-confirmation": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/checkout-confirmation.test.js\"",
     "test:emulator:checkout-submission": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/checkout-submission.test.js\"",
@@ -15,6 +15,7 @@
     "test:emulator:shift-lifecycle": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/shift-lifecycle.test.js\"",
     "test:emulator:shift-sale-attribution": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/shift-sale-attribution.test.js\"",
     "test:emulator:shift-history": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/shift-history.test.js\"",
+    "test:emulator:sale-history": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/sale-history.test.js\"",
     "test:emulator:invitations": "npm --prefix ../functions run build && node scripts/run-invitation-emulator-tests.js"
   },
   "devDependencies": {
