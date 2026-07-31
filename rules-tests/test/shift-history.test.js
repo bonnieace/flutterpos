@@ -174,6 +174,20 @@ test("a cashier cannot widen the page beyond its own shifts", async () => {
   );
 });
 
+test("a cashier can still prove its own shift is absent", async () => {
+  await seedShiftHistory();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+
+  // Settlement after an unacknowledged create depends on this read: only a
+  // successful read may conclude that nothing was written.
+  const snapshot = await assertSucceeds(
+    getDoc(doc(firestore, "tenants/tenant-a/shifts/shift-never-created")),
+  );
+  if (snapshot.exists()) {
+    throw new Error("An absent shift unexpectedly existed.");
+  }
+});
+
 test("management pages every cashier's closed shifts", async () => {
   await seedShiftHistory();
 

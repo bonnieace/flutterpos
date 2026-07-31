@@ -239,8 +239,17 @@ service cloud.firestore {
         // server now agrees with it. A cashier's list query must therefore
         // carry `staffId == uid`, which is exactly what the history and
         // discovery repositories send.
+        //
+        // An absent document is deliberately readable: `resource` is null for a
+        // missing shift, and a field comparison would deny the read instead of
+        // answering it. Settlement after an unacknowledged create depends on
+        // that answer - only a successful read may conclude that nothing was
+        // written - and a document that does not exist discloses nothing.
         allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager'])
-          || (activeStaff(tenantId) && resource.data.staffId == request.auth.uid);
+          || (
+            activeStaff(tenantId)
+            && (resource == null || resource.data.staffId == request.auth.uid)
+          );
         allow create: if activeStaff(tenantId)
           && shiftId == request.resource.data.shiftId
           && request.resource.data.tenantId == tenantId

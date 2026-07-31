@@ -4824,6 +4824,24 @@ Meaningful failures and their resolutions:
 - No other test assertion failed; the analyzer and every command in the final
   sequence were green on their first execution.
 
+### Correction committed immediately after `1a27d83`
+
+**The narrowed read rule denied a read of an absent shift.** `resource` is null
+for a document that does not exist, so `resource.data.staffId` raised an
+evaluation error and the read was denied instead of answered. That broke the
+frozen settlement contract from the previous chunk - only a successful read may
+conclude that nothing was written - so an unacknowledged create would have
+become `shift_unavailable` instead of clearing its durable intent. Neither the
+Dart fakes nor the first emulator suite covered it, because every case read a
+document that existed.
+
+The rule now reads
+`resource == null || resource.data.staffId == request.auth.uid` for the cashier
+branch. A document that does not exist discloses nothing, so allowing the answer
+is safe. `shift-history.test.js` gained a permanent regression case, and the
+full Rules suite passed **57/57**. Apply the same reasoning to any future
+`resource.data`-based read narrowing.
+
 The existing user-owned local edits remain separate and must not be staged:
 
 ```text
