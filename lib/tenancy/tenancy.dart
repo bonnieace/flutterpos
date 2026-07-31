@@ -28,5 +28,6 @@ export 'tenant_staff_invitation_email_replacement.dart';
 export 'tenant_staff_invitation_resend.dart';
 export 'tenant_staff_status.dart';
 export 'tenant_staff_update.dart';
+export 'tenant_switch.dart';
 export 'tenant_types.dart';
 export 'tenant_visible_invitation_acceptance.dart';

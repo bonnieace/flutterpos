@@ -3305,3 +3305,130 @@ routing shell:
 6. Leave the encrypted Hive checkout outbox state machine, shift restoration,
    cashier cross-tenant shift restriction, stock mutation, receipts,
    deployment, and Android emulator validation outside that chunk.
+
+---
+
+## Tenant-switch safety coordinator handoff - 2026-07-31
+
+### Completed in this session
+
+The typed tenant routing shell now exposes a bounded `Change business` path
+only from the current safe landing route. Legacy POS routes remain unreachable,
+and no checkout, cash-close, shift-restoration, stock, receipt, or deployment
+behavior was added.
+
+Implemented behavior and safety decisions:
+
+- A session-bound `TenantSwitchCoordinator` requires exactly one explicit
+  inspection for checkout, other pending writes, cash/shift close, and unsaved
+  tenant workflow state. Missing or duplicate sources, null results, thrown
+  inspections, stale UID/tenant/epoch answers, mismatched source areas, and
+  invalid blocker/area combinations all fail closed.
+- Typed blockers cover unsynchronized checkout, checkout submission in flight,
+  other pending writes, unfinished cash count/shift close, unsaved workflows,
+  and unavailable online target validation. A server-confirmed open shift is
+  represented explicitly and does not block unless cash-close work is also
+  unfinished.
+- The production safe landing route registers four explicit clean sources
+  because it exposes no checkout, mutation queue, cash-close, or editable
+  tenant workflow. This assertion must be replaced by real state owners before
+  any corresponding operational route becomes reachable.
+- Connectivity is checked before target validation. The exact target is then
+  revalidated through the complete canonical paginated `listMyTenants`
+  directory. Missing/inaccessible canonical targets are distinguished from
+  transport, pagination, and malformed-response failures; none changes the
+  current session.
+- Successful switching opens the newly authorized session and advances its
+  epoch before writing the UID-local last selection. A failed local write
+  restores the prior tenant with another fresh epoch, so prior asynchronous
+  work remains invalidated while the user stays in the original business.
+- A concurrent attempt receives a deterministic in-progress blocker. Session
+  changes during inspection, validation, or persistence abort safely. In
+  particular, an Auth clear during persistence can never reopen the old tenant.
+- The switcher lists only other accessible routing projections, keeps the
+  dialog/current tenant on denials, shows bounded safe messages, and persists
+  the device-local selection only after the target session has opened.
+- Widget coverage proves that an outstanding tenant-A branding completion is
+  discarded after a tenant-B epoch opens. The target is never used to unlock
+  any legacy operational POS screen.
+
+Files in this chunk:
+
+```text
+lib/main.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_bootstrap.dart
+lib/tenancy/tenant_routing_shell.dart
+lib/tenancy/tenant_switch.dart
+test/tenancy/tenant_routing_shell_test.dart
+test/tenancy/tenant_switch_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/tenancy test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=compact test/tenancy`
+  passed **254/254** tests. Before the final run, the focused coordinator and
+  routing-shell command passed **34/34** tests.
+- `npm --prefix functions test` passed **166/166** Functions tests using the
+  portable Node.js 24 runtime and `NODE_OPTIONS=--max-old-space-size=512`.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules
+  emulator suite **21/21** with portable Node.js 24 and Temurin JDK 21.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **12/12**
+  real Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean during focused validation. Android build and
+  Android emulator validation were intentionally skipped as requested.
+
+Meaningful failures and resolutions:
+
+- The first stale-completion widget test used `pumpAndSettle` while deliberately
+  holding tenant A's branding future open, so the harness timed out. It was
+  changed to a bounded animation pump; the focused 34-test run and final
+  254-test tenancy suite then passed.
+- The first final Rules-emulator launch stopped before running a test because
+  Firebase resolved the system JDK below version 21. `JAVA_HOME` already named
+  the portable JDK, but its `bin` directory was not first on `PATH`. The
+  corrected single retry explicitly prepended the Temurin JDK 21 `bin` path and
+  passed 21/21. No Rules assertion failed.
+
+The machine-local portable tools under `D:\firebase-emulator-tools` and the
+captured logs under the system temporary directory are not repository
+artifacts.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only the encrypted Hive checkout-outbox persistence foundation:
+
+1. Add a versioned, encrypted local outbox keyed exactly by
+   `{uid}:{tenantId}:{checkoutId}`, with strict tenant/UID validation,
+   deterministic payload hashing, corruption detection, and a testable key
+   provider boundary. Do not read or migrate legacy root POS Hive records.
+2. Implement only the durable local transitions `saved_offline -> submitting
+   -> awaiting_confirmation -> confirmed | needs_attention`, including
+   persistent lease owner/expiry, attempt count, retry time, immutable payload,
+   and hash agreement. Invalid transitions and malformed records must fail
+   closed without deleting evidence.
+3. Provide atomic single-checkout operations and restart-safe lease recovery.
+   Lease expiry may make a record eligible for a later confirmation check but
+   must never itself authorize blind resubmission.
+4. Register a real checkout state source with `TenantSwitchCoordinator` so
+   `saved_offline`, `submitting`, and `awaiting_confirmation` produce the
+   appropriate unsynchronized/in-flight blockers. Keep the other safe-landing
+   sources explicit and clean until their operational owners exist.
+5. Add unit and Hive-backed restart coverage for tenant/UID isolation, every
+   valid and invalid transition, duplicate workers, lease expiry, payload/hash
+   mismatch, malformed storage, switch blockers, and Windows-compatible box
+   reopen behavior.
+6. Leave Firestore checkout submission/confirmation queries, stock mutation,
+   product cache, receipt counters, shift restoration, cashier cross-tenant
+   shift restriction, checkout UI, printers, deployment, and Android emulator
+   validation outside that chunk.

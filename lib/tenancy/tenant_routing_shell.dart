@@ -16,6 +16,7 @@ import 'tenant_repository.dart';
 import 'tenant_request.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_staff_directory.dart';
+import 'tenant_switch.dart';
 import 'tenant_types.dart';
 import 'tenant_visible_invitation_acceptance.dart';
 
@@ -37,6 +38,8 @@ final class TenantRoutingShell extends StatefulWidget {
     required this.bootstrapService,
     required this.signOut,
     required this.signedOut,
+    required this.tenantSwitchStateSources,
+    required this.tenantSwitchOnlineCheck,
     this.isEmailVerified,
     this.invitationLink,
     this.invalidInvitationLink = false,
@@ -64,6 +67,8 @@ final class TenantRoutingShell extends StatefulWidget {
   final TenantBootstrapService bootstrapService;
   final Future<void> Function() signOut;
   final Widget signedOut;
+  final List<TenantSwitchStateSource> tenantSwitchStateSources;
+  final TenantSwitchOnlineCheck tenantSwitchOnlineCheck;
   final bool Function(String uid)? isEmailVerified;
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
@@ -124,6 +129,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   PlatformGlobalUserDataSource? _defaultPlatformGlobalUserDataSource;
   SetTenantLifecycleCallable? _defaultTenantLifecycleCallable;
   SetGlobalUserStatusCallable? _defaultGlobalUserStatusCallable;
+  TenantSwitchCoordinator? _tenantSwitchCoordinator;
 
   @override
   void initState() {
@@ -145,6 +151,17 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     if (!identical(oldWidget.authUidChanges, widget.authUidChanges)) {
       _authSubscription?.cancel();
       _subscribeToAuth();
+    }
+    if (!identical(oldWidget.bootstrapService, widget.bootstrapService) ||
+        !identical(
+          oldWidget.tenantSwitchStateSources,
+          widget.tenantSwitchStateSources,
+        ) ||
+        !identical(
+          oldWidget.tenantSwitchOnlineCheck,
+          widget.tenantSwitchOnlineCheck,
+        )) {
+      _tenantSwitchCoordinator = null;
     }
   }
 
@@ -257,6 +274,20 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     if (uid == null || !membership.canAccess()) return;
     final token = ++_flowToken;
     unawaited(_openTenant(uid, membership.tenantId, token));
+  }
+
+  Future<TenantSwitchResult> _switchTenant(TenantMembership membership) async {
+    final coordinator = _tenantSwitchCoordinator ??= TenantSwitchCoordinator(
+      sessionController: _sessionController,
+      bootstrapService: widget.bootstrapService,
+      stateSources: widget.tenantSwitchStateSources,
+      isOnline: widget.tenantSwitchOnlineCheck,
+      onSessionChanged: (next) {
+        if (!mounted || _phase != _RoutingPhase.tenant) return;
+        setState(() => _membership = next);
+      },
+    );
+    return coordinator.switchTenant(membership.tenantId);
   }
 
   void _refreshAfterVisibleInvitationAcceptance() => _retry();
@@ -501,6 +532,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       setDefaultTenantCallable: widget.setDefaultTenantCallable,
       defaultTenantRequestIdFactory: widget.defaultTenantRequestIdFactory,
       onDefaultTenantChanged: _retry,
+      switchCandidates: _bootstrapResult?.selection.visible ?? const [],
+      onSwitchTenant: _switchTenant,
     );
   }
 }
@@ -869,6 +902,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.setDefaultTenantCallable,
     this.defaultTenantRequestIdFactory,
     this.onDefaultTenantChanged,
+    this.switchCandidates = const [],
+    this.onSwitchTenant,
   });
 
   final TenantMembership membership;
@@ -878,6 +913,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final SetDefaultTenantCallable? setDefaultTenantCallable;
   final TenantDefaultRequestIdFactory? defaultTenantRequestIdFactory;
   final VoidCallback? onDefaultTenantChanged;
+  final List<TenantMembership> switchCandidates;
+  final Future<TenantSwitchResult> Function(TenantMembership membership)?
+  onSwitchTenant;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -904,6 +942,18 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
+              if (onSwitchTenant != null &&
+                  switchCandidates.any(
+                    (candidate) =>
+                        candidate.canAccess() &&
+                        candidate.tenantId != membership.tenantId,
+                  ))
+                OutlinedButton.icon(
+                  key: const ValueKey('change-business'),
+                  onPressed: () => _showBusinessSwitcher(context),
+                  icon: const Icon(Icons.swap_horiz),
+                  label: const Text('Change business'),
+                ),
               if (isDefaultTenant)
                 OutlinedButton.icon(
                   onPressed: null,
@@ -988,7 +1038,148 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _showBusinessSwitcher(BuildContext context) async {
+    final controller = TenantSessionScope.read(context);
+    final session = controller.session;
+    if (session == null ||
+        !session.canAccess() ||
+        session.tenantId != membership.tenantId ||
+        onSwitchTenant == null) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => TenantBusinessSwitcher(
+        currentMembership: membership,
+        candidates: switchCandidates,
+        onSwitchTenant: onSwitchTenant!,
+        onCancel: () => Navigator.of(dialogContext).pop(),
+      ),
+    );
+  }
 }
+
+final class TenantBusinessSwitcher extends StatefulWidget {
+  const TenantBusinessSwitcher({
+    super.key,
+    required this.currentMembership,
+    required this.candidates,
+    required this.onSwitchTenant,
+    required this.onCancel,
+  });
+
+  final TenantMembership currentMembership;
+  final List<TenantMembership> candidates;
+  final Future<TenantSwitchResult> Function(TenantMembership membership)
+  onSwitchTenant;
+  final VoidCallback onCancel;
+
+  @override
+  State<TenantBusinessSwitcher> createState() => _TenantBusinessSwitcherState();
+}
+
+final class _TenantBusinessSwitcherState extends State<TenantBusinessSwitcher> {
+  bool _switching = false;
+  TenantSwitchBlocker? _blocker;
+
+  List<TenantMembership> get _available => widget.candidates
+      .where(
+        (candidate) =>
+            candidate.canAccess() &&
+            candidate.tenantId != widget.currentMembership.tenantId,
+      )
+      .toList(growable: false);
+
+  Future<void> _switch(TenantMembership target) async {
+    if (_switching) return;
+    setState(() {
+      _switching = true;
+      _blocker = null;
+    });
+    final result = await widget.onSwitchTenant(target);
+    if (!mounted) return;
+    if (result.switched) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _switching = false;
+      _blocker = result.blocker;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Change business'),
+    content: SizedBox(
+      width: 440,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Choose another accessible business.'),
+          const SizedBox(height: 12),
+          for (final membership in _available)
+            ListTile(
+              key: ValueKey('switch-business-${membership.tenantId}'),
+              enabled: !_switching,
+              title: Text(membership.tenantName),
+              subtitle: Text(membership.role.toJson()),
+              trailing: _switching ? null : const Icon(Icons.chevron_right),
+              onTap: _switching ? null : () => _switch(membership),
+            ),
+          if (_blocker != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              tenantSwitchBlockerMessage(_blocker!),
+              key: const ValueKey('tenant-switch-blocker'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          if (_switching) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(),
+          ],
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _switching ? null : widget.onCancel,
+        child: const Text('Cancel'),
+      ),
+    ],
+  );
+}
+
+String tenantSwitchBlockerMessage(
+  TenantSwitchBlocker blocker,
+) => switch (blocker) {
+  TenantSwitchBlocker.unsynchronizedCheckout =>
+    'Finish or discard the unsynchronized checkout before switching.',
+  TenantSwitchBlocker.submissionInFlight =>
+    'Wait for the checkout submission to finish before switching.',
+  TenantSwitchBlocker.pendingWrites =>
+    'Wait for pending business changes to synchronize before switching.',
+  TenantSwitchBlocker.unfinishedCashCountOrShiftClose =>
+    'Finish the cash count or shift close before switching.',
+  TenantSwitchBlocker.unsavedTenantWorkflow =>
+    'Save or discard the current business workflow before switching.',
+  TenantSwitchBlocker.onlineTargetValidationUnavailable =>
+    'Connect to the internet so this business can be revalidated.',
+  TenantSwitchBlocker.stateInspectionUnavailable =>
+    'Business state could not be checked safely. Try again.',
+  TenantSwitchBlocker.targetAccessDenied =>
+    'That business is no longer accessible.',
+  TenantSwitchBlocker.sessionChanged =>
+    'The current business changed. Open the switcher again.',
+  TenantSwitchBlocker.persistenceFailed =>
+    'The business selection could not be saved. The current business remains open.',
+  TenantSwitchBlocker.switchInProgress =>
+    'A business switch is already in progress.',
+};
 
 final class TenantBootstrapFailure extends StatelessWidget {
   const TenantBootstrapFailure({

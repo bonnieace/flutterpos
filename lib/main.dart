@@ -8,6 +8,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 Future<void> main() async {
   await SentryFlutter.init(
@@ -97,6 +98,9 @@ class SpiritPOSApp extends StatelessWidget {
         invitationLink: invitationLink,
         invalidInvitationLink: invalidInvitationLink,
         bootstrapService: bootstrapService,
+        tenantSwitchStateSources: safeLandingTenantSwitchStateSources(),
+        tenantSwitchOnlineCheck: () async =>
+            await Connectivity().checkConnectivity() != ConnectivityResult.none,
         hasPlatformSuperAdminClaim: (uid) async {
           final user = FirebaseAuth.instance.currentUser;
           if (user == null || user.uid != uid) return false;

@@ -118,6 +118,133 @@ void main() {
   });
 
   testWidgets(
+    'changes business only after safe inspection and discards stale tenant work',
+    (tester) async {
+      final reader = _SwitchRoutingReader();
+      final fixture = _ShellFixture(
+        memberships: [_membership('tenant-a'), _membership('tenant-b')],
+        localTenantId: 'tenant-a',
+        useDefaultRoute: true,
+        tenantDataReader: reader,
+      );
+      await fixture.pump(tester);
+      fixture.auth.add('user-a');
+      await _pumpRouting(tester);
+
+      expect(find.text('Business tenant-a'), findsOneWidget);
+      expect(reader.tenantARequest, isNotNull);
+      await tester.tap(find.byKey(const ValueKey('change-business')));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
+      await _pumpRouting(tester);
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text('Business tenant-b'), findsOneWidget);
+      expect(find.text('Tenant B current'), findsOneWidget);
+      expect(fixture.store.value, 'tenant-b');
+      expect(fixture.gateway.listCalls, 3);
+
+      reader.tenantARequest!.complete(
+        TenantDocumentSnapshot(
+          path: 'tenants/tenant-a/configuration/branding',
+          data: const {'companyName': 'Tenant A stale'},
+        ),
+      );
+      await _pumpRouting(tester);
+      expect(find.text('Tenant A stale'), findsNothing);
+      expect(find.text('Tenant B current'), findsOneWidget);
+      await fixture.dispose(tester);
+    },
+  );
+
+  testWidgets('shows a typed blocker and retains the current business', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a'), _membership('tenant-b')],
+      localTenantId: 'tenant-a',
+      useDefaultRoute: true,
+      tenantSwitchStateSources: _shellSwitchSources(
+        blocker: TenantSwitchBlocker.unsynchronizedCheckout,
+      ),
+    );
+    await fixture.pump(tester);
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    await tester.tap(find.byKey(const ValueKey('change-business')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
+    await _pumpRouting(tester);
+
+    expect(
+      find.text(
+        'Finish or discard the unsynchronized checkout before switching.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Business tenant-a'), findsWidgets);
+    expect(fixture.store.value, 'tenant-a');
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('offline target validation retains the current business', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a'), _membership('tenant-b')],
+      localTenantId: 'tenant-a',
+      useDefaultRoute: true,
+      tenantSwitchOnlineCheck: () async => false,
+    );
+    await fixture.pump(tester);
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    await tester.tap(find.byKey(const ValueKey('change-business')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
+    await _pumpRouting(tester);
+
+    expect(
+      find.text('Connect to the internet so this business can be revalidated.'),
+      findsOneWidget,
+    );
+    expect(find.text('Business tenant-a'), findsWidgets);
+    expect(fixture.store.value, 'tenant-a');
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('failed switch persistence restores the current business', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a'), _membership('tenant-b')],
+      localTenantId: 'tenant-a',
+      failSelectionWriteFor: 'tenant-b',
+      useDefaultRoute: true,
+    );
+    await fixture.pump(tester);
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    await tester.tap(find.byKey(const ValueKey('change-business')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
+    await _pumpRouting(tester);
+
+    expect(
+      find.text(
+        'The business selection could not be saved. The current business remains open.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Business tenant-a'), findsWidgets);
+    expect(fixture.store.value, 'tenant-a');
+    await fixture.dispose(tester);
+  });
+
+  testWidgets(
     'requests a pending business from no-access routing without opening it',
     (tester) async {
       late final _ShellFixture fixture;
@@ -432,13 +559,20 @@ final class _ShellFixture {
     this.requestTenantCallable,
     this.platformClaim = false,
     this.platformDataSource,
+    this.tenantSwitchStateSources,
+    this.tenantSwitchOnlineCheck,
+    this.tenantDataReader,
+    String? failSelectionWriteFor,
   }) : gateway = _FakeGateway(
          memberships: memberships,
          profile: profile,
          profileFuture: profileFuture,
          rootFailures: rootFailures,
        ),
-       store = _MemorySelectionStore(localTenantId) {
+       store = _MemorySelectionStore(
+         localTenantId,
+         failForTenantId: failSelectionWriteFor,
+       ) {
     service = TenantBootstrapService(
       rootGateway: gateway,
       directory: TenantDirectory(gateway),
@@ -457,6 +591,9 @@ final class _ShellFixture {
   final RequestTenantCallable? requestTenantCallable;
   final bool platformClaim;
   final _ShellPlatformDataSource? platformDataSource;
+  final List<TenantSwitchStateSource>? tenantSwitchStateSources;
+  final TenantSwitchOnlineCheck? tenantSwitchOnlineCheck;
+  final TenantDataReader? tenantDataReader;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -465,6 +602,9 @@ final class _ShellFixture {
       home: TenantRoutingShell(
         authUidChanges: auth.stream,
         bootstrapService: service,
+        tenantSwitchStateSources:
+            tenantSwitchStateSources ?? safeLandingTenantSwitchStateSources(),
+        tenantSwitchOnlineCheck: tenantSwitchOnlineCheck ?? (() async => true),
         signOut: () async => auth.add(null),
         signedOut: const Scaffold(body: Center(child: Text('Signed out'))),
         isEmailVerified: (_) => emailVerified,
@@ -483,7 +623,9 @@ final class _ShellFixture {
         setTenantLifecycleCallable: _ShellLifecycleCallable(),
         setGlobalUserStatusCallable: _ShellGlobalStatusCallable(),
         platformTenantReviewRequestIdFactory: () => 'routing-platform-review',
-        tenantDataReader: useDefaultRoute ? _RoutingReader() : null,
+        tenantDataReader: useDefaultRoute
+            ? (tenantDataReader ?? _RoutingReader())
+            : null,
         tenantRouteBuilder: useDefaultRoute
             ? null
             : (context, controller, membership) {
@@ -718,17 +860,74 @@ final class _RoutingReader implements TenantDataReader {
 }
 
 final class _MemorySelectionStore implements TenantSelectionStore {
-  _MemorySelectionStore(this.value);
+  _MemorySelectionStore(this.value, {this.failForTenantId});
 
   String? value;
+  final String? failForTenantId;
 
   @override
   Future<String?> readLastSelectedTenant(String uid) async => value;
 
   @override
   Future<void> writeLastSelectedTenant(String uid, String tenantId) async {
+    if (tenantId == failForTenantId) {
+      throw StateError('Selection persistence failed.');
+    }
     value = tenantId;
   }
+}
+
+final class _SwitchRoutingReader implements TenantDataReader {
+  Completer<TenantDocumentSnapshot?>? tenantARequest;
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) {
+    if (path.startsWith('tenants/tenant-a/')) {
+      return (tenantARequest ??= Completer<TenantDocumentSnapshot?>()).future;
+    }
+    return Future.value(
+      TenantDocumentSnapshot(
+        path: path,
+        data: const {'companyName': 'Tenant B current'},
+      ),
+    );
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async => const [];
+}
+
+List<TenantSwitchStateSource> _shellSwitchSources({
+  TenantSwitchBlocker? blocker,
+}) => TenantSwitchStateArea.values
+    .map(
+      (area) => _ShellSwitchSource(
+        area,
+        blocker != null && area == TenantSwitchStateArea.checkout
+            ? blocker
+            : null,
+      ),
+    )
+    .toList();
+
+final class _ShellSwitchSource implements TenantSwitchStateSource {
+  const _ShellSwitchSource(this.area, this.blocker);
+
+  @override
+  final TenantSwitchStateArea area;
+  final TenantSwitchBlocker? blocker;
+
+  @override
+  Future<TenantSwitchInspection?> inspect(TenantSession session) async =>
+      blocker == null
+      ? TenantSwitchInspection.clean(area: area, session: session)
+      : TenantSwitchInspection.blocked(
+          area: area,
+          session: session,
+          blocker: blocker!,
+        );
 }
 
 TenantMembership _membership(

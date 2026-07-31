@@ -147,14 +147,39 @@ final class TenantBootstrapService {
   }
 
   Future<TenantMembership> revalidateTenant(String tenantId) async {
+    final membership = await findAccessibleTenant(tenantId);
+    if (membership == null) {
+      throw StateError('The selected tenant is no longer accessible.');
+    }
+    return membership;
+  }
+
+  /// Returns the exact accessible canonical projection, while allowing
+  /// directory transport/format failures to remain distinguishable.
+  Future<TenantMembership?> findAccessibleTenant(String tenantId) async {
     final normalizedTenantId = validateTenantId(tenantId);
     final memberships = await _directory.loadAll();
     final matches = memberships.where(
       (membership) => membership.tenantId == normalizedTenantId,
     );
     if (matches.length != 1 || !matches.single.canAccess()) {
-      throw StateError('The selected tenant is no longer accessible.');
+      return null;
     }
     return matches.single;
+  }
+
+  /// Remembers a tenant only after its authorized session has been opened.
+  Future<void> rememberOpenedTenant({
+    required String uid,
+    required String tenantId,
+  }) async {
+    final normalizedUid = uid.trim();
+    if (normalizedUid.isEmpty) {
+      throw ArgumentError.value(uid, 'uid', 'Cannot be empty.');
+    }
+    await _selectionStore.writeLastSelectedTenant(
+      normalizedUid,
+      validateTenantId(tenantId),
+    );
   }
 }
