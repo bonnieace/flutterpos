@@ -41,6 +41,7 @@ Future<void> main() async {
           ),
         ),
       );
+      final connectivity = Connectivity();
 
       // Configure Firestore for offline persistence
       FirebaseFirestore firestore = FirebaseFirestore.instance;
@@ -72,6 +73,7 @@ Future<void> main() async {
           child: SpiritPOSApp(
             bootstrapService: bootstrapService,
             checkoutOutbox: checkoutOutbox,
+            connectivity: connectivity,
             invitationLink: invitationLink,
             invalidInvitationLink: invalidInvitationLink,
           ),
@@ -86,17 +88,22 @@ class SpiritPOSApp extends StatelessWidget {
     super.key,
     required this.bootstrapService,
     required this.checkoutOutbox,
+    required this.connectivity,
     this.invitationLink,
     this.invalidInvitationLink = false,
   });
 
   final TenantBootstrapService bootstrapService;
   final HiveCheckoutOutbox checkoutOutbox;
+  final Connectivity connectivity;
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
 
   @override
   Widget build(BuildContext context) {
+    Future<bool> isOnline() async =>
+        await connectivity.checkConnectivity() != ConnectivityResult.none;
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: spiritTheme,
@@ -116,8 +123,21 @@ class SpiritPOSApp extends StatelessWidget {
             checkoutOutbox,
           ),
         ),
-        tenantSwitchOnlineCheck: () async =>
-            await Connectivity().checkConnectivity() != ConnectivityResult.none,
+        tenantSwitchOnlineCheck: () async => isOnline(),
+        tenantSessionRecoveryFactory: (sessionController) {
+          final coordinator = CheckoutRecoveryCoordinator(
+            sessionController: sessionController,
+            outbox: checkoutOutbox,
+            confirmationGateway: FirebaseCheckoutConfirmationGateway(
+              firestore: FirebaseFirestore.instance,
+              isOnline: isOnline,
+            ),
+          );
+          return coordinator.recoverSelectedSession;
+        },
+        tenantRecoveryTriggers: connectivity.onConnectivityChanged
+            .where((result) => result != ConnectivityResult.none)
+            .map<Object?>((_) => null),
         hasPlatformSuperAdminClaim: (uid) async {
           final user = FirebaseAuth.instance.currentUser;
           if (user == null || user.uid != uid) return false;

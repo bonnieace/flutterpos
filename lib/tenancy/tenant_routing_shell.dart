@@ -27,6 +27,10 @@ typedef TenantRouteBuilder =
       TenantMembership membership,
     );
 
+typedef TenantSessionRecovery = Future<Object?> Function();
+typedef TenantSessionRecoveryFactory =
+    TenantSessionRecovery Function(TenantSessionController controller);
+
 /// Connects one Firebase Auth identity to one canonically revalidated tenant.
 ///
 /// The shell owns the session controller and invalidates every pending async
@@ -40,6 +44,8 @@ final class TenantRoutingShell extends StatefulWidget {
     required this.signedOut,
     required this.tenantSwitchStateSources,
     required this.tenantSwitchOnlineCheck,
+    this.tenantSessionRecoveryFactory,
+    this.tenantRecoveryTriggers,
     this.isEmailVerified,
     this.invitationLink,
     this.invalidInvitationLink = false,
@@ -69,6 +75,8 @@ final class TenantRoutingShell extends StatefulWidget {
   final Widget signedOut;
   final List<TenantSwitchStateSource> tenantSwitchStateSources;
   final TenantSwitchOnlineCheck tenantSwitchOnlineCheck;
+  final TenantSessionRecoveryFactory? tenantSessionRecoveryFactory;
+  final Stream<Object?>? tenantRecoveryTriggers;
   final bool Function(String uid)? isEmailVerified;
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
@@ -114,6 +122,7 @@ enum _RoutingPhase {
 final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   final TenantSessionController _sessionController = TenantSessionController();
   StreamSubscription<String?>? _authSubscription;
+  StreamSubscription<Object?>? _tenantRecoverySubscription;
   _RoutingPhase _phase = _RoutingPhase.waitingForAuth;
   String? _uid;
   int _flowToken = 0;
@@ -130,6 +139,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   SetTenantLifecycleCallable? _defaultTenantLifecycleCallable;
   SetGlobalUserStatusCallable? _defaultGlobalUserStatusCallable;
   TenantSwitchCoordinator? _tenantSwitchCoordinator;
+  TenantSessionRecovery? _tenantSessionRecovery;
 
   @override
   void initState() {
@@ -137,6 +147,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     _pendingInvitationLink = widget.invitationLink;
     _hasInvalidInvitationLink = widget.invalidInvitationLink;
     _subscribeToAuth();
+    _subscribeToTenantRecoveryTriggers();
   }
 
   @override
@@ -151,6 +162,19 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     if (!identical(oldWidget.authUidChanges, widget.authUidChanges)) {
       _authSubscription?.cancel();
       _subscribeToAuth();
+    }
+    if (!identical(
+      oldWidget.tenantRecoveryTriggers,
+      widget.tenantRecoveryTriggers,
+    )) {
+      _tenantRecoverySubscription?.cancel();
+      _subscribeToTenantRecoveryTriggers();
+    }
+    if (!identical(
+      oldWidget.tenantSessionRecoveryFactory,
+      widget.tenantSessionRecoveryFactory,
+    )) {
+      _tenantSessionRecovery = null;
     }
     if (!identical(oldWidget.bootstrapService, widget.bootstrapService) ||
         !identical(
@@ -178,6 +202,21 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
         });
       },
     );
+  }
+
+  void _subscribeToTenantRecoveryTriggers() {
+    _tenantRecoverySubscription = widget.tenantRecoveryTriggers?.listen(
+      (_) => _triggerTenantRecovery(),
+      onError: (Object _, StackTrace _) {},
+    );
+  }
+
+  void _triggerTenantRecovery() {
+    if (_sessionController.session == null) return;
+    final factory = widget.tenantSessionRecoveryFactory;
+    if (factory == null) return;
+    final recovery = _tenantSessionRecovery ??= factory(_sessionController);
+    unawaited(recovery());
   }
 
   void _handleAuthUid(String? value) {
@@ -263,6 +302,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
         _membership = membership;
         _phase = _RoutingPhase.tenant;
       });
+      _triggerTenantRecovery();
     } catch (error) {
       if (!_isCurrent(uid, token)) return;
       _showFailure(error);
@@ -285,6 +325,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       onSessionChanged: (next) {
         if (!mounted || _phase != _RoutingPhase.tenant) return;
         setState(() => _membership = next);
+        _triggerTenantRecovery();
       },
     );
     return coordinator.switchTenant(membership.tenantId);
@@ -352,6 +393,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
   void dispose() {
     _flowToken++;
     _authSubscription?.cancel();
+    _tenantRecoverySubscription?.cancel();
     _sessionController.dispose();
     super.dispose();
   }

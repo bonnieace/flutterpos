@@ -157,6 +157,42 @@ void main() {
     },
   );
 
+  testWidgets(
+    'runs recovery for the selected session on startup and connectivity restoration',
+    (tester) async {
+      final recoveryTriggers = StreamController<Object?>();
+      final recovered = <TenantSession>[];
+      final fixture = _ShellFixture(
+        memberships: [_membership('tenant-a')],
+        tenantSessionRecoveryFactory: (controller) => () async {
+          recovered.add(controller.requireSession());
+          return null;
+        },
+        tenantRecoveryTriggers: recoveryTriggers.stream,
+      );
+      await fixture.pump(tester);
+      fixture.auth.add('user-a');
+      await _pumpRouting(tester);
+
+      expect(recovered, hasLength(1));
+      expect(recovered.single.tenantId, 'tenant-a');
+      final startupEpoch = recovered.single.epoch;
+
+      recoveryTriggers.add(null);
+      await _pumpRouting(tester);
+      expect(recovered, hasLength(2));
+      expect(recovered.last.epoch, startupEpoch);
+
+      fixture.auth.add(null);
+      await _pumpRouting(tester);
+      recoveryTriggers.add(null);
+      await _pumpRouting(tester);
+      expect(recovered, hasLength(2));
+      await recoveryTriggers.close();
+      await fixture.dispose(tester);
+    },
+  );
+
   testWidgets('shows a typed blocker and retains the current business', (
     tester,
   ) async {
@@ -562,6 +598,8 @@ final class _ShellFixture {
     this.tenantSwitchStateSources,
     this.tenantSwitchOnlineCheck,
     this.tenantDataReader,
+    this.tenantSessionRecoveryFactory,
+    this.tenantRecoveryTriggers,
     String? failSelectionWriteFor,
   }) : gateway = _FakeGateway(
          memberships: memberships,
@@ -594,6 +632,8 @@ final class _ShellFixture {
   final List<TenantSwitchStateSource>? tenantSwitchStateSources;
   final TenantSwitchOnlineCheck? tenantSwitchOnlineCheck;
   final TenantDataReader? tenantDataReader;
+  final TenantSessionRecoveryFactory? tenantSessionRecoveryFactory;
+  final Stream<Object?>? tenantRecoveryTriggers;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -605,6 +645,8 @@ final class _ShellFixture {
         tenantSwitchStateSources:
             tenantSwitchStateSources ?? safeLandingTenantSwitchStateSources(),
         tenantSwitchOnlineCheck: tenantSwitchOnlineCheck ?? (() async => true),
+        tenantSessionRecoveryFactory: tenantSessionRecoveryFactory,
+        tenantRecoveryTriggers: tenantRecoveryTriggers,
         signOut: () async => auth.add(null),
         signedOut: const Scaffold(body: Center(child: Text('Signed out'))),
         isEmailVerified: (_) => emailVerified,

@@ -25,6 +25,37 @@ final class CheckoutOutboxException implements Exception {
   String toString() => 'CheckoutOutboxException($code)';
 }
 
+/// Evidence produced only after local writes have cleared and an exact server
+/// sale lookup has proved the deterministic checkout document is absent.
+final class CheckoutMissingSaleProof {
+  CheckoutMissingSaleProof.confirmed({
+    required String uid,
+    required String tenantId,
+    required String checkoutId,
+    required String expectedPayloadHash,
+    required DateTime checkedAt,
+  }) : uid = _validateKeySegment(uid, 'uid'),
+       tenantId = _validateOutboxTenantId(tenantId),
+       checkoutId = validateTenantDocumentId(
+         checkoutId,
+         fieldName: 'checkoutId',
+       ),
+       expectedPayloadHash = _validateHash(
+         expectedPayloadHash,
+         'expectedPayloadHash',
+       ),
+       checkedAt = checkedAt.toUtc();
+
+  final String uid;
+  final String tenantId;
+  final String checkoutId;
+  final String expectedPayloadHash;
+  final DateTime checkedAt;
+
+  bool get localPendingWritesCleared => true;
+  bool get serverSaleAbsent => true;
+}
+
 abstract interface class CheckoutOutboxEncryptionKeyProvider {
   Future<List<int>> loadOrCreateKey();
 }
@@ -342,6 +373,36 @@ final class HiveCheckoutOutbox {
     });
   }
 
+  /// Makes a confirmation-proven missing sale eligible for a later submit.
+  ///
+  /// An expired lease is deliberately insufficient: callers must supply
+  /// evidence tied to this immutable checkout payload after pending writes
+  /// cleared and the exact server document was found missing.
+  Future<CheckoutOutboxRecord> markRetryableAfterMissingSale({
+    required CheckoutMissingSaleProof proof,
+    required Duration backoff,
+  }) {
+    if (backoff <= Duration.zero || backoff > const Duration(hours: 24)) {
+      throw ArgumentError.value(backoff, 'backoff');
+    }
+    return _mutate(proof.uid, proof.tenantId, proof.checkoutId, (record, now) {
+      if (record.state != CheckoutOutboxState.awaitingConfirmation) {
+        throw const CheckoutOutboxException('invalid_transition');
+      }
+      if (proof.expectedPayloadHash != record.payloadHash ||
+          proof.checkedAt.isBefore(record.updatedAt) ||
+          proof.checkedAt.isAfter(now)) {
+        throw const CheckoutOutboxException('invalid_missing_sale_proof');
+      }
+      return record.copyWith(
+        state: CheckoutOutboxState.savedOffline,
+        attemptCount: record.attemptCount,
+        updatedAt: now,
+        retryAt: now.add(backoff),
+      );
+    });
+  }
+
   Future<List<CheckoutOutboxRecord>> recordsForSession({
     required String uid,
     required String tenantId,
@@ -484,8 +545,12 @@ CheckoutOutboxRecord _parseRecord(String key, Object? raw) {
     } else if (leaseOwner != null || leaseExpiresAt != null) {
       throw const FormatException();
     }
-    if ((state == CheckoutOutboxState.savedOffline && attemptCount != 0) ||
-        (state != CheckoutOutboxState.savedOffline && attemptCount < 1)) {
+    if (state != CheckoutOutboxState.savedOffline && attemptCount < 1) {
+      throw const FormatException();
+    }
+    if (state == CheckoutOutboxState.savedOffline &&
+        attemptCount > 0 &&
+        retryAt == null) {
       throw const FormatException();
     }
     if (state == CheckoutOutboxState.needsAttention) {

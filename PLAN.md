@@ -3582,3 +3582,148 @@ new Firestore sale in that chunk:
    product cache, receipt counters, shift restoration, cashier cross-tenant
    restriction, printers, deployment, and Android emulator validation outside
    that chunk.
+
+---
+
+## Confirmation-safe checkout restart recovery handoff - 2026-07-31
+
+### Completed in this session
+
+The encrypted checkout outbox now recovers uncertain prior submissions by
+checking exact canonical Firestore sale evidence. This chunk remains
+confirmation-only: it does not submit a new sale, decrement stock, expose
+checkout UI, or make any legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `FirebaseCheckoutConfirmationGateway` checks connectivity, waits for this
+  Firestore client's pending writes with a bounded timeout, rechecks
+  connectivity, and reads only
+  `tenants/{tenantId}/sales/{checkoutId}` with `Source.server`. It never trusts
+  a membership mirror or a cached sale document.
+- Confirmation results are typed as matching, missing, mismatching, pending
+  writes, unavailable, or malformed. A server sale must repeat the exact
+  tenant ID and checkout ID and contain a lowercase 64-character SHA-256 hash;
+  malformed identity or hash data fails closed and remains local evidence.
+- A missing result carries evidence bound to the immutable UID, tenant,
+  checkout ID, payload hash, and confirmation time. The outbox accepts that
+  evidence only from `awaiting_confirmation`, rejects stale/future or hash-
+  mismatched proof, preserves the prior attempt count, and persists a bounded
+  retry backoff before returning to `saved_offline`.
+- Lease expiry alone still moves `submitting` only to
+  `awaiting_confirmation`. It never authorizes a submission or makes a record
+  retryable. Pending writes, unavailable connectivity, malformed server data,
+  active leases, and malformed local storage retain all evidence.
+- `CheckoutRecoveryCoordinator` scans only the authenticated UID and selected
+  tenant. It is bound to the captured session epoch and discards a server
+  result if Auth, tenant, or epoch changes before mutation. Concurrent triggers
+  never run duplicate workers; one follow-up run is queued so a connectivity
+  restoration or tenant change is not lost behind an older check.
+- Recovery runs after an authorized tenant session opens and whenever
+  connectivity reports restoration. The routing shell's generic recovery hook
+  does nothing without a selected session. Existing outbox-backed tenant-
+  switch blockers remain in force for `saved_offline`, `submitting`,
+  `awaiting_confirmation`, and `needs_attention`.
+- Focused Firestore-emulator coverage proves the active canonical member can
+  read the exact deterministic sale or observe it missing, while cross-tenant
+  and globally disabled access remains denied. No Firestore Rules changed.
+
+Files in this chunk:
+
+```text
+lib/checkout/checkout.dart
+lib/checkout/checkout_confirmation.dart
+lib/checkout/checkout_outbox.dart
+lib/checkout/checkout_recovery.dart
+lib/main.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/checkout-confirmation.test.js
+test/checkout/checkout_confirmation_test.dart
+test/checkout/checkout_recovery_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code and harness changes were frozen:
+
+- `flutter analyze --no-pub lib/checkout lib/tenancy test/checkout
+  test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=compact test/checkout
+  test/tenancy` passed **294/294** relevant Flutter tests. Before the final
+  run, focused checkout and routing-shell runs passed **55/55**, then **57/57**
+  after the queued-recovery and corruption-retention hardening.
+- With portable Node.js 24.18.1, JDK 21 at
+  `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8`, inherited `DEBUG` removed,
+  and `NODE_OPTIONS=--max-old-space-size=512`, `npm --prefix functions test`
+  passed **166/166** Functions tests.
+- With the same pinned Node/JDK environment,
+  `npm --prefix rules-tests run test:emulator:checkout-confirmation` passed the
+  focused Firestore-only suite **3/3** during development.
+- `npm --prefix rules-tests run test:emulator` passed the final full Firestore
+  Rules suite **24/24**.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean before the final release-style sequence.
+  Android build and Android emulator validation were intentionally skipped as
+  requested.
+
+Meaningful failures and resolutions:
+
+- The first broad incremental analyzer included `lib/main.dart` and exited on
+  the existing experimental Sentry `profilesSampleRate` warning. No new type or
+  implementation error was reported. The correctly scoped checkout/tenancy
+  analyzer was clean before focused and final testing.
+- One development analyzer warned that the test recovery callback's nullable
+  `Future<Object?>` could complete without an explicit value. The callback now
+  returns `null`; the next scoped analyzer reported no issues and the focused
+  suite passed 57/57.
+- A combined development formatting command accidentally included the Markdown
+  README, so `dart format` printed Markdown parse diagnostics even though the
+  subsequent analyzer and 57-test run completed. The command target was
+  corrected to Dart sources only. No repository file was changed by that
+  formatter error, and the final validation sequence had no failures or
+  retries.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded frontend chunk
+
+Implement only the initial deterministic Firestore checkout submission worker,
+using the existing encrypted outbox and confirmation recovery:
+
+1. Add a strict typed sale payload/envelope parser for the frozen outbox
+   payload. Validate immutable checkout identity, authenticated UID, selected
+   tenant, positive integer line quantities, unique tenant-local product IDs,
+   monetary snapshot fields, and bounded line counts before any write.
+2. Add a typed Firestore submission gateway that performs one atomic batch:
+   create `tenants/{tenantId}/sales/{checkoutId}` with the exact payload hash
+   and server timestamp, and decrement each exact tenant product with
+   `FieldValue.increment(-quantity)` plus server `updatedAt`. Do not write any
+   legacy root collection.
+3. Add a session/epoch-bound sync worker that acquires the durable outbox lease
+   before the single `batch.commit()` call. A successful commit moves only to
+   `awaiting_confirmation`; an ambiguous failure remains `submitting` for the
+   existing expiry-and-confirmation recovery path. Never resubmit an expired
+   lease directly.
+4. Run submission only while online for due `saved_offline` records belonging
+   to the authenticated UID and selected tenant. Serialize/coalesce duplicate
+   triggers and preserve evidence on malformed payloads, stale epochs,
+   unavailable writes, or lease loss.
+5. Add unit, encrypted Hive-reopen, session/widget, and focused Firestore Rules
+   emulator coverage for exact batch paths, stock decrements including negative
+   stock, deterministic sale identity/hash, duplicate workers, ambiguous
+   commit outcomes, stale sessions, and transition safety.
+6. Leave checkout UI and draft creation, product cache, receipt counters,
+   shift restoration, cashier cross-tenant shift restriction, returns,
+   printers, deployment, and Android build/emulator validation outside that
+   chunk.

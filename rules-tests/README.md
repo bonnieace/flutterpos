@@ -21,6 +21,11 @@ $env:FIRESTORE_EMULATOR_HOST = '127.0.0.1:8180'
 npm --prefix rules-tests test
 ```
 
+For the focused checkout-confirmation read contract, run
+`npm --prefix rules-tests run test:emulator:checkout-confirmation`. It starts
+Firestore alone and proves exact deterministic-sale reads, missing documents,
+malformed evidence, tenant isolation, and global-disable denial.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under
