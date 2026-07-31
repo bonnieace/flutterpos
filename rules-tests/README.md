@@ -33,6 +33,14 @@ identity, server-owned `createdAt`, exact tenant stock decrements into negative
 stock, replay denial, cross-tenant denial, non-decrementing stock denial,
 envelope spoofing denial, and inactive-cashier denial.
 
+For the focused per-device receipt contract, run
+`npm --prefix rules-tests run test:emulator:checkout-receipt`. It proves that
+two cashiers sharing one device commit different receipt numbers while the sale
+records each cashier UID separately, that sequences stay independent across
+devices and business dates, and that a receipt disagreeing with its own sale
+envelope, a malformed or missing receipt, a replayed receipt, and an inactive
+cashier are all denied.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under
@@ -87,3 +95,16 @@ Sale-line validation is therefore capped at 16 items and explicitly checks all
 that an immutable sale document ID equals its `checkoutId`, but cannot prove
 how a client generated that ID or recompute its payload hash; the checkout
 coordinator owns those deterministic algorithms.
+
+Receipt validation is subject to the same limit. Firestore evaluates at most
+1000 expressions per request, and a sixteen-line sale batch already spends most
+of that budget, so the receipt rule proves the shape, the embedded business
+date, and the embedded sequence with one constructed pattern instead of several
+comparisons. Adding the earlier multi-comparison version denied a legitimate
+sixteen-line sale outright, which the maximum-size test in
+`checkout-receipt.test.js` now guards against.
+
+Rules cannot recompute the SHA-256 device code and cannot query other sales, so
+global receipt uniqueness is not a server-enforced invariant. Uniqueness comes
+from the device-local atomic counter; reconciliation is the place to detect a
+duplicate that local tampering or a restored backup could still produce.

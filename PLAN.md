@@ -4058,3 +4058,191 @@ configuration the draft builder still hard-codes:
    cross-tenant shift restriction, product cost/profit fields, returns,
    printers, reports, deployment, and Android build/emulator validation outside
    that chunk.
+
+---
+
+## Per-device receipt numbering and checkout configuration handoff - 2026-07-31
+
+### Completed in this session
+
+Offline drafts now carry a real per-device receipt number and are priced from
+the tenant's own guarded checkout configuration instead of a hard-coded
+constructor value. This chunk adds no checkout screen or payment flow, restores
+no shift, and makes no legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `HiveCheckoutReceiptCounters` allocates sequences atomically under the frozen
+  key `{tenantId}:{deviceId}:{businessDate}:receiptCounter`. The key is
+  deliberately not scoped by cashier UID, so two cashiers sharing one device
+  draw from one sequence and can never collide. Allocation is serialized per
+  key inside the box and additionally runs under the draft service's existing
+  local lock.
+- The counter box shares the checkout **outbox** encryption key rather than
+  taking a third key. A counter and the sale evidence it numbers must share one
+  fate: a rotated or lost key can never leave readable local sales beside a
+  restarted counter. The derived catalog cache keeps its own separate key.
+- Malformed durable receipt state always fails closed. A counter whose stored
+  record does not parse, names another tenant/device/date, or holds a
+  non-positive sequence raises `malformed_receipt_counter` instead of
+  restarting at 1, because a restart would reissue a receipt a committed sale
+  already carries. An exhausted daily sequence raises
+  `receipt_sequence_exhausted` rather than wrapping.
+- The receipt is `CT-A7F-20260729-0042`: the frozen `CT` prefix, a stable
+  three-character uppercase-hex device code, the compact business date, and the
+  sequence zero-padded to at least four digits. The device code is the first
+  three hex characters of the SHA-256 digest of the installation identifier, so
+  it is deterministic and never exposes the identifier. A busier device widens
+  the sequence field instead of wrapping.
+- The device identity is resolved once per installation from durable local
+  state, memoized per process, and is not a caller input; `CheckoutDraftRequest`
+  no longer accepts a `deviceId`. A corrupt stored identity is refused rather
+  than regenerated. `checkoutId` remains the database identity and the sale
+  still records the cashier UID separately in `soldById`.
+- The frozen `CheckoutSalePayload` v1 allow-list gained `receiptNumber` and
+  `receiptSequence`, and `deviceId` became required. The parser proves the
+  receipt is exactly the value derived from this payload's device, business
+  date, and sequence, so a locally altered receipt is refused before any write.
+  No deployed data exists, and a hypothetical pre-existing local draft without a
+  receipt is now refused as malformed and retained as evidence rather than
+  submitted - the deliberate fail-closed outcome.
+- `TenantCheckoutConfiguration` reads `tenants/{tenantId}/configuration/checkout`
+  through the guarded `TenantReadRepository`, so the exact tenant path
+  derivation and cross-tenant refusal still apply. It is cached with the offline
+  catalog because Firestore offline persistence is unavailable on Windows. The
+  catalog cache schema is now version 2; a version 1 record is reported as a
+  miss rather than migrated, so a draft can never be priced with a currency the
+  tenant never published. A missing or malformed configuration returns
+  `configurationUnavailable` and leaves any previous cache untouched.
+- The receipt sequence is allocated after every refusable check, so a rejected
+  draft leaves an unused gap rather than a reused number. Gaps are safe;
+  duplicates are not.
+- Firestore Rules now validate the receipt on sale creation: `deviceId` and
+  `businessDate` must be strings, `receiptSequence` a positive integer, and
+  `receiptNumber` a string of at least the frozen 20-character width that
+  matches a pattern constructed from that same sale's business date and
+  sequence. A receipt that disagrees with its own envelope, is free text, uses
+  another prefix, or lowercases the device code is denied.
+
+Deliberately outside this chunk: Rules cannot recompute the SHA-256 device code
+and cannot query other sales, so cross-sale receipt uniqueness is not a
+server-enforced invariant. Uniqueness comes from the device-local atomic
+counter; detecting a duplicate produced by local tampering or a restored backup
+belongs to reconciliation. `CheckoutDraftService` and the receipt counters are
+still not composed in `main.dart`, because no screen creates a draft yet.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/checkout/checkout.dart
+lib/checkout/checkout_catalog_cache.dart
+lib/checkout/checkout_configuration.dart
+lib/checkout/checkout_draft.dart
+lib/checkout/checkout_receipt.dart
+lib/checkout/checkout_sale.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/checkout-receipt.test.js
+rules-tests/test/checkout-submission.test.js
+rules-tests/test/stock-and-sales.test.js
+rules-tests/test/support.js
+test/checkout/checkout_catalog_cache_test.dart
+test/checkout/checkout_draft_test.dart
+test/checkout/checkout_receipt_test.dart
+test/checkout/checkout_sale_test.dart
+test/checkout/checkout_submission_test.dart
+test/checkout/checkout_sync_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/checkout lib/tenancy test/checkout test/tenancy`
+  reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=compact test/checkout
+  test/tenancy` passed **367/367** relevant Flutter tests, including **23** new
+  tests: 14 receipt-numbering, 5 draft, 2 payload-contract, and 2 catalog-cache
+  cases. The focused `test/checkout` command passed **111/111** during
+  development.
+- With portable Node.js 24.18.1, Temurin JDK 21 at
+  `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8`, inherited `DEBUG` removed,
+  and `NODE_OPTIONS=--max-old-space-size=512`, `npm --prefix functions test`
+  passed **166/166** Functions tests.
+- `npm --prefix rules-tests run test:emulator:checkout-receipt` passed the
+  focused Firestore-only suite **7/7** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **37/37** (30 existing plus the 7 new receipt cases, with two existing
+  sale cases updated for the now-required fields).
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean before final staging. Android build and Android
+  emulator validation were intentionally skipped as requested.
+
+Meaningful failures and resolutions:
+
+- **The first Rules receipt validation denied a legitimate maximum-size sale.**
+  The focused emulator run reported `Unable to evaluate the expression as the
+  maximum of 1000 expressions to evaluate has been reached` in the denial
+  traces. A new test that commits the largest allowed sale - 16 lines plus 16
+  stock decrements in one batch - failed, and removing only `validSaleReceipt`
+  made it pass, proving the new rule caused it rather than exposing an existing
+  defect. The rule was rewritten to prove the shape, the embedded date, and the
+  embedded sequence with one constructed pattern plus a minimum-width check
+  instead of separate `split`/`int` comparisons. The maximum-size test now
+  passes and stays in the suite as a permanent budget guard.
+- **An unpadded receipt was briefly accepted.** The constructed pattern alone
+  allowed `CT-A7F-20260729-1` because `0{0,3}` permits zero padding. Requiring
+  `receiptNumber.size() >= 20` restored the frozen four-digit minimum width,
+  since the fixed prefix, device code, and date always occupy 16 characters.
+- **Reusing a checkout ID is no longer an idempotent replay.** Every draft draws
+  its own receipt sequence, so a second draft for an existing checkout ID can
+  never describe the same immutable payload; the outbox now always answers
+  `checkout_already_exists` and the stored evidence is unchanged. This is
+  stronger than the previous behavior and the draft test asserts it. Idempotent
+  replay of a byte-identical payload remains covered at the
+  `HiveCheckoutOutbox.saveOffline` level.
+- No other test assertion failed; the analyzer and every command in the final
+  sequence were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded frontend chunk
+
+Implement only the guarded tenant shift lifecycle and the real tenant-switch
+state sources it owns:
+
+1. Add a strict shift read model and a guarded repository over
+   `tenants/{tenantId}/shifts/{shiftId}` that derives every path from
+   `TenantPaths`, rejects a cross-tenant or non-exact returned path, and refuses
+   a shift whose `staffId` is not the authenticated cashier.
+2. Add a session/epoch-bound shift controller that opens, restores, and closes
+   exactly one shift for the selected tenant. Restoration must re-read the
+   canonical server shift rather than trusting local state, and a server-
+   confirmed open shift alone must still not block tenant switching.
+3. Replace the safe landing route's asserted-clean cash-close and shift sources
+   in `safeLandingTenantSwitchStateSources` with the real state owner, so
+   unfinished cash counting or shift closing blocks switching for the documented
+   reason while a merely open shift does not.
+4. Enforce the frozen cashier restriction: a cashier may not open checkout in a
+   second tenant on the same device while another tenant's shift remains open.
+   Owners and managers may still inspect another tenant.
+5. Compose the receipt counters and `CheckoutDraftService` in `main.dart` only
+   as far as the shift surface requires, and record the resolved device identity
+   once at startup.
+6. Add unit, Hive-reopen, session/widget, and focused Firestore Rules emulator
+   coverage for open/close authorization, foreign-cashier shift refusal, stale
+   epochs, restoration after a restart, the open-shift non-blocking rule, the
+   cash-close blocker, and the cashier cross-tenant restriction.
+7. Leave the checkout screen and payment flow, receipts printing, product
+   cost/profit fields, returns, reports, subscription and branding surfaces,
+   deployment, and Android build/emulator validation outside that chunk.

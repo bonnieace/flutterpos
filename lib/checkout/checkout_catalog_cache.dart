@@ -7,6 +7,7 @@ import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import 'checkout_configuration.dart';
 import 'checkout_outbox.dart';
 
 /// Raised when the local catalog cache cannot be opened or written safely.
@@ -32,6 +33,7 @@ final class CheckoutCatalogSnapshot {
     required this.tenantId,
     required this.refreshedAt,
     required this.complete,
+    required this.configuration,
     required List<TenantCategory> categories,
     required List<TenantProduct> products,
   }) : categories = List<TenantCategory>.unmodifiable(categories),
@@ -49,6 +51,9 @@ final class CheckoutCatalogSnapshot {
 
   /// Whether the refresh reached the end of both collections within bounds.
   final bool complete;
+
+  /// The guarded tenant checkout configuration a draft must be priced with.
+  final TenantCheckoutConfiguration configuration;
 
   final List<TenantCategory> categories;
   final List<TenantProduct> products;
@@ -73,7 +78,12 @@ final class HiveCheckoutCatalogCache {
   HiveCheckoutCatalogCache._(this._box, this._clock);
 
   static const boxName = 'checkout-catalog-cache-v1';
-  static const schemaVersion = 1;
+
+  /// Version 2 adds the required tenant checkout configuration.
+  ///
+  /// A version 1 record is reported as a miss rather than migrated, so a draft
+  /// can never be priced with a currency the tenant never published.
+  static const schemaVersion = 2;
   static const encryptionKeyBytes = HiveCheckoutOutbox.encryptionKeyBytes;
 
   final Box<dynamic> _box;
@@ -124,6 +134,7 @@ final class HiveCheckoutCatalogCache {
   Future<CheckoutCatalogSnapshot> write({
     required String uid,
     required String tenantId,
+    required TenantCheckoutConfiguration configuration,
     required List<TenantCategory> categories,
     required List<TenantProduct> products,
     required bool complete,
@@ -165,6 +176,7 @@ final class HiveCheckoutCatalogCache {
       'tenantId': tenantId,
       'refreshedAtMs': refreshedAt.millisecondsSinceEpoch,
       'complete': complete,
+      'configuration': configuration.toCacheEntry(),
       'categories': categoryEntries,
       'products': productEntries,
     });
@@ -173,6 +185,7 @@ final class HiveCheckoutCatalogCache {
       tenantId: tenantId,
       refreshedAt: refreshedAt,
       complete: complete,
+      configuration: configuration,
       categories: categories,
       products: products,
     );
@@ -206,6 +219,9 @@ final class HiveCheckoutCatalogCache {
     }
     final complete = map['complete'];
     if (complete is! bool) throw const FormatException();
+    final configuration = TenantCheckoutConfiguration.fromMap(
+      _stringKeyedMap(map['configuration']),
+    );
 
     final paths = TenantPaths(tenantId);
     final categories = <TenantCategory>[];
@@ -255,9 +271,20 @@ final class HiveCheckoutCatalogCache {
         isUtc: true,
       ),
       complete: complete,
+      configuration: configuration,
       categories: categories,
       products: products,
     );
+  }
+
+  Map<String, Object?> _stringKeyedMap(Object? raw) {
+    if (raw is! Map) throw const FormatException();
+    final result = <String, Object?>{};
+    for (final entry in raw.entries) {
+      if (entry.key is! String) throw const FormatException();
+      result[entry.key as String] = entry.value;
+    }
+    return result;
   }
 
   List<Map<Object?, Object?>> _entries(Object? raw) {
@@ -284,6 +311,9 @@ enum CheckoutCatalogRefreshKind {
   alreadyRunning,
   sessionChanged,
   unavailable,
+
+  /// The tenant published no usable `configuration/checkout` document.
+  configurationUnavailable,
   storageUnavailable,
 }
 
@@ -363,6 +393,34 @@ final class CheckoutCatalogCacheRefresher {
         reader: _reader,
       );
 
+      // Configuration is read first: without it no draft may be priced, so
+      // paging the catalog would only waste a round trip.
+      final TenantCheckoutConfiguration? configuration;
+      try {
+        configuration = await TenantCheckoutConfigurationRepository(
+          session: captured,
+          reader: _reader,
+        ).load();
+      } on TenantScopeViolation {
+        return const CheckoutCatalogRefreshResult(
+          CheckoutCatalogRefreshKind.unavailable,
+        );
+      } on FormatException {
+        return const CheckoutCatalogRefreshResult(
+          CheckoutCatalogRefreshKind.configurationUnavailable,
+        );
+      } catch (_) {
+        return const CheckoutCatalogRefreshResult(
+          CheckoutCatalogRefreshKind.unavailable,
+        );
+      }
+      if (configuration == null) {
+        return const CheckoutCatalogRefreshResult(
+          CheckoutCatalogRefreshKind.configurationUnavailable,
+        );
+      }
+      if (!_owns(captured)) return _sessionChanged();
+
       final categories = <TenantCategory>[];
       var categoriesComplete = false;
       String? cursor;
@@ -417,6 +475,7 @@ final class CheckoutCatalogCacheRefresher {
         await _cache.write(
           uid: captured.uid,
           tenantId: captured.tenantId,
+          configuration: configuration,
           categories: categories,
           products: products,
           complete: complete,

@@ -6,6 +6,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'checkout_catalog_cache.dart';
 import 'checkout_outbox.dart';
+import 'checkout_receipt.dart';
 import 'checkout_sale.dart';
 
 /// Raised when a draft cannot be built from trusted local state.
@@ -42,18 +43,20 @@ final class CheckoutDraftLineRequest {
 }
 
 /// The bounded input accepted by [CheckoutDraftService.createDraft].
+///
+/// The device identity is deliberately not a caller input: it is resolved once
+/// per installation from durable local state so a receipt cannot be attributed
+/// to a device that never issued it.
 final class CheckoutDraftRequest {
   CheckoutDraftRequest({
     required List<CheckoutDraftLineRequest> lines,
     this.discountMinor = 0,
     this.shiftId,
-    this.deviceId,
   }) : lines = List<CheckoutDraftLineRequest>.unmodifiable(lines);
 
   final List<CheckoutDraftLineRequest> lines;
   final int discountMinor;
   final String? shiftId;
-  final String? deviceId;
 }
 
 /// Builds one frozen `CheckoutSalePayload` v1 draft from the offline cache.
@@ -61,32 +64,30 @@ final class CheckoutDraftRequest {
 /// The service writes only through [HiveCheckoutOutbox.saveOffline]; it never
 /// touches Firestore. Draft creation is serialized by one local lock and bound
 /// to one captured session epoch, so two concurrent drafts can neither reuse a
-/// checkout ID nor persist work for a tenant the device has already left.
+/// checkout ID nor persist work for a tenant the device has already left. That
+/// same lock guards receipt allocation, so two cashiers checking out on one
+/// device cannot receive the same receipt number.
 final class CheckoutDraftService {
   CheckoutDraftService({
     required TenantSessionController sessionController,
     required HiveCheckoutCatalogCache cache,
     required HiveCheckoutOutbox outbox,
-    required String currency,
+    required HiveCheckoutReceiptCounters receipts,
     CheckoutIdFactory? checkoutIdFactory,
     CheckoutDraftClock? clock,
     CheckoutBusinessDateResolver? businessDateResolver,
   }) : _sessionController = sessionController,
        _cache = cache,
        _outbox = outbox,
-       _currency = currency,
+       _receipts = receipts,
        _checkoutIdFactory = checkoutIdFactory ?? _generateCheckoutId,
        _clock = clock ?? _utcNow,
-       _businessDateResolver = businessDateResolver ?? checkoutBusinessDate {
-    if (!RegExp(r'^[A-Z]{3}$').hasMatch(currency)) {
-      throw ArgumentError.value(currency, 'currency');
-    }
-  }
+       _businessDateResolver = businessDateResolver ?? checkoutBusinessDate;
 
   final TenantSessionController _sessionController;
   final HiveCheckoutCatalogCache _cache;
   final HiveCheckoutOutbox _outbox;
-  final String _currency;
+  final HiveCheckoutReceiptCounters _receipts;
   final CheckoutIdFactory _checkoutIdFactory;
   final CheckoutDraftClock _clock;
   final CheckoutBusinessDateResolver _businessDateResolver;
@@ -160,16 +161,42 @@ final class CheckoutDraftService {
     }
 
     final checkoutId = _validatedCheckoutId();
+    final businessDate = _validatedBusinessDate();
+    final deviceId = await _resolvedDeviceId();
+    if (!_owns(captured)) {
+      throw const CheckoutDraftException('session_changed');
+    }
+
+    // The sequence is allocated last, after every refusable check, so a
+    // rejected draft leaves an unused gap rather than a reused receipt.
+    final int receiptSequence;
+    try {
+      receiptSequence = await _receipts.allocateSequence(
+        tenantId: captured.tenantId,
+        deviceId: deviceId,
+        businessDate: businessDate,
+      );
+    } on CheckoutReceiptException catch (error) {
+      throw CheckoutDraftException(error.code);
+    }
+    final receiptNumber = formatCheckoutReceiptNumber(
+      deviceId: deviceId,
+      businessDate: businessDate,
+      sequence: receiptSequence,
+    );
+
     final payload = <String, Object?>{
       'schemaVersion': checkoutSalePayloadSchemaVersion,
       'checkoutId': checkoutId,
       'tenantId': captured.tenantId,
       'soldById': captured.uid,
-      'currency': _currency,
-      'businessDate': _businessDateResolver(_clock().toUtc()),
+      'currency': snapshot.configuration.currency,
+      'businessDate': businessDate,
       'createdAtMs': _clock().toUtc().millisecondsSinceEpoch,
       if (request.shiftId != null) 'shiftId': request.shiftId,
-      if (request.deviceId != null) 'deviceId': request.deviceId,
+      'deviceId': deviceId,
+      'receiptNumber': receiptNumber,
+      'receiptSequence': receiptSequence,
       'items': items,
       'subtotalMinor': subtotalMinor,
       'discountMinor': request.discountMinor,
@@ -220,6 +247,26 @@ final class CheckoutDraftService {
       }
     }
     return lines;
+  }
+
+  /// Resolves the durable installation identity for this device.
+  Future<String> _resolvedDeviceId() async {
+    try {
+      return await _receipts.resolveDeviceId();
+    } on CheckoutReceiptException catch (error) {
+      throw CheckoutDraftException(error.code);
+    } catch (_) {
+      throw const CheckoutDraftException('device_identity_unavailable');
+    }
+  }
+
+  String _validatedBusinessDate() {
+    final businessDate = _businessDateResolver(_clock().toUtc());
+    try {
+      return validateCheckoutBusinessDate(businessDate);
+    } on ArgumentError {
+      throw const CheckoutDraftException('invalid_business_date');
+    }
   }
 
   String _validatedCheckoutId() {

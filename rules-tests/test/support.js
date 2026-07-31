@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { initializeTestEnvironment } from "@firebase/rules-unit-testing";
@@ -59,6 +60,25 @@ export async function seedDocuments(testEnvironment, documents) {
 
 export function authenticatedFirestore(testEnvironment, uid, token = {}) {
   return testEnvironment.authenticatedContext(uid, token).firestore();
+}
+
+/**
+ * Mirrors the client's frozen device code: the first three uppercase hex
+ * characters of the SHA-256 digest of the durable installation identifier.
+ */
+export function receiptDeviceCode(deviceId) {
+  return createHash("sha256")
+    .update(deviceId, "utf8")
+    .digest("hex")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+/** Builds the frozen `CT-A7F-20260729-0042` receipt shape. */
+export function receiptNumber(deviceId, businessDate, sequence) {
+  const compactDate = businessDate.split("-").join("");
+  const padded = String(sequence).padStart(4, "0");
+  return `CT-${receiptDeviceCode(deviceId)}-${compactDate}-${padded}`;
 }
 
 export function activeTenantDocuments({

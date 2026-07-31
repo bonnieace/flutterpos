@@ -201,6 +201,89 @@ void main() {
       'created-at': _payload(overrides: {'createdAtMs': 0}),
       'shift': _payload(overrides: {'shiftId': 'shifts/shift-a'}),
       'device': _payload(overrides: {'deviceId': ''}),
+      'missing-device': _payload(overrides: {'deviceId': null}),
+      'foreign-device-id': _payload(overrides: {'deviceId': 'workstation-1'}),
+    };
+
+    for (final entry in cases.entries) {
+      final record = await _save(
+        outbox,
+        entry.value,
+        checkoutId: 'checkout-${entry.key}',
+      );
+      expect(
+        () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
+        _throwsSaleFormat,
+        reason: entry.key,
+      );
+    }
+  });
+
+  test('accepts a receipt derived from this device, date, and sequence', () async {
+    final record = await _save(outbox, _payload(sequence: 42));
+
+    final payload = CheckoutSalePayload.fromOutboxRecord(
+      record,
+      session: session,
+    );
+
+    expect(payload.deviceId, _deviceId);
+    expect(payload.receiptSequence, 42);
+    expect(payload.receiptNumber, matches(checkoutReceiptNumberPattern));
+    expect(payload.receiptNumber.split('-')[2], '20260731');
+    expect(payload.receiptNumber.split('-')[3], '0042');
+
+    final fields = payload.toSubmission().saleFields;
+    expect(fields['receiptNumber'], payload.receiptNumber);
+    expect(fields['receiptSequence'], 42);
+    expect(fields['deviceId'], _deviceId);
+  });
+
+  test('rejects a spoofed or missing receipt number', () async {
+    final valid = formatCheckoutReceiptNumber(
+      deviceId: _deviceId,
+      businessDate: '2026-07-31',
+      sequence: 42,
+    );
+    final cases = <String, Map<String, Object?>>{
+      'missing': _payload(overrides: {'receiptNumber': null}),
+      'missing-sequence': _payload(overrides: {'receiptSequence': null}),
+      'shape': _payload(overrides: {'receiptNumber': 'CT-42'}),
+      'lowercase-device-code': _payload(
+        overrides: {'receiptNumber': valid.toLowerCase()},
+      ),
+      'other-device': _payload(
+        overrides: {
+          'receiptNumber': formatCheckoutReceiptNumber(
+            deviceId: _otherDeviceId,
+            businessDate: '2026-07-31',
+            sequence: 42,
+          ),
+        },
+      ),
+      'other-date': _payload(
+        overrides: {
+          'receiptNumber': formatCheckoutReceiptNumber(
+            deviceId: _deviceId,
+            businessDate: '2026-07-30',
+            sequence: 42,
+          ),
+        },
+      ),
+      'other-sequence': _payload(
+        overrides: {
+          'receiptNumber': formatCheckoutReceiptNumber(
+            deviceId: _deviceId,
+            businessDate: '2026-07-31',
+            sequence: 43,
+          ),
+        },
+      ),
+      'zero-sequence': _payload(sequence: 42, overrides: {'receiptSequence': 0}),
+      'fractional-sequence': _payload(overrides: {'receiptSequence': 1.5}),
+      'unbounded-sequence': _payload(
+        overrides: {'receiptSequence': maximumCheckoutReceiptSequence + 1},
+      ),
     };
 
     for (final entry in cases.entries) {
@@ -254,9 +337,14 @@ Map<String, Object?> _line({
   ...overrides,
 };
 
+const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';
+const String _otherDeviceId = 'dev-fedcba9876543210fedcba9876543210';
+
 Map<String, Object?> _payload({
   List<Object?>? items,
   int discountMinor = 0,
+  String deviceId = _deviceId,
+  int sequence = 42,
   Map<String, Object?> overrides = const <String, Object?>{},
 }) {
   final lines =
@@ -288,6 +376,13 @@ Map<String, Object?> _payload({
     'currency': 'KES',
     'businessDate': '2026-07-31',
     'createdAtMs': DateTime.utc(2026, 7, 31, 8).millisecondsSinceEpoch,
+    'deviceId': deviceId,
+    'receiptNumber': formatCheckoutReceiptNumber(
+      deviceId: deviceId,
+      businessDate: '2026-07-31',
+      sequence: sequence,
+    ),
+    'receiptSequence': sequence,
     'items': lines,
     'subtotalMinor': subtotalMinor,
     'discountMinor': discountMinor,

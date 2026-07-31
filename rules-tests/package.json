@@ -7,10 +7,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/control-plane.test.js test/stock-and-sales.test.js test/tenant-isolation.test.js test/checkout-confirmation.test.js test/checkout-submission.test.js",
+    "test": "node --test --test-concurrency=1 test/control-plane.test.js test/stock-and-sales.test.js test/tenant-isolation.test.js test/checkout-confirmation.test.js test/checkout-submission.test.js test/checkout-receipt.test.js",
     "test:emulator": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"npm test\"",
     "test:emulator:checkout-confirmation": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/checkout-confirmation.test.js\"",
     "test:emulator:checkout-submission": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/checkout-submission.test.js\"",
+    "test:emulator:checkout-receipt": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/checkout-receipt.test.js\"",
     "test:emulator:invitations": "npm --prefix ../functions run build && node scripts/run-invitation-emulator-tests.js"
   },
   "devDependencies": {

@@ -150,7 +150,9 @@ FirebaseCheckoutSubmissionGateway _failing(String code) =>
           throw FirebaseException(plugin: 'cloud_firestore', code: code),
     );
 
-const Map<String, Object?> _payload = <String, Object?>{
+const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';
+
+final Map<String, Object?> _payload = <String, Object?>{
   'schemaVersion': checkoutSalePayloadSchemaVersion,
   'checkoutId': 'checkout-a',
   'tenantId': 'tenant-a',
@@ -158,6 +160,13 @@ const Map<String, Object?> _payload = <String, Object?>{
   'currency': 'KES',
   'businessDate': '2026-07-31',
   'createdAtMs': 1785484800000,
+  'deviceId': _deviceId,
+  'receiptNumber': formatCheckoutReceiptNumber(
+    deviceId: _deviceId,
+    businessDate: '2026-07-31',
+    sequence: 42,
+  ),
+  'receiptSequence': 42,
   'items': <Map<String, Object?>>[
     {
       'productId': 'product-a',

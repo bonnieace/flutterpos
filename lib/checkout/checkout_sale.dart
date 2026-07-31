@@ -2,6 +2,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_session.dart';
 import 'checkout_outbox.dart';
+import 'checkout_receipt.dart';
 
 /// Frozen schema version of the immutable local checkout payload.
 const int checkoutSalePayloadSchemaVersion = 1;
@@ -30,6 +31,8 @@ const Set<String> _allowedPayloadKeys = <String>{
   'createdAtMs',
   'shiftId',
   'deviceId',
+  'receiptNumber',
+  'receiptSequence',
   'items',
   'subtotalMinor',
   'discountMinor',
@@ -46,7 +49,6 @@ const Set<String> _allowedLineKeys = <String>{
 };
 
 final RegExp _currencyPattern = RegExp(r'^[A-Z]{3}$');
-final RegExp _isoDatePattern = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$');
 
 /// Raised when frozen local checkout evidence cannot be trusted for a write.
 final class CheckoutSaleFormatException implements Exception {
@@ -161,6 +163,8 @@ final class CheckoutSalePayload {
     required this.clientCreatedAtMs,
     required this.shiftId,
     required this.deviceId,
+    required this.receiptNumber,
+    required this.receiptSequence,
     required List<CheckoutSaleLine> lines,
     required this.subtotalMinor,
     required this.discountMinor,
@@ -268,7 +272,19 @@ final class CheckoutSalePayload {
       maximum: _maximumClientCreatedAtMs,
     );
     final shiftId = _optionalDocumentId(payload, 'shiftId');
-    final deviceId = _optionalDocumentId(payload, 'deviceId');
+    final deviceId = _requiredDeviceId(payload);
+    final receiptSequence = _requiredInt(
+      payload,
+      'receiptSequence',
+      minimum: 1,
+      maximum: maximumCheckoutReceiptSequence,
+    );
+    final receiptNumber = _requiredReceiptNumber(
+      payload,
+      deviceId: deviceId,
+      businessDate: businessDate,
+      sequence: receiptSequence,
+    );
     final lines = _parseLines(payload['items']);
 
     var subtotalMinor = 0;
@@ -308,6 +324,8 @@ final class CheckoutSalePayload {
       clientCreatedAtMs: clientCreatedAtMs,
       shiftId: shiftId,
       deviceId: deviceId,
+      receiptNumber: receiptNumber,
+      receiptSequence: receiptSequence,
       lines: lines,
       subtotalMinor: subtotalMinor,
       discountMinor: discountMinor,
@@ -323,7 +341,16 @@ final class CheckoutSalePayload {
   final String businessDate;
   final int clientCreatedAtMs;
   final String? shiftId;
-  final String? deviceId;
+
+  /// The durable installation identity that issued [receiptNumber].
+  final String deviceId;
+
+  /// The customer-facing receipt, unique per device and business date.
+  final String receiptNumber;
+
+  /// The device-local daily sequence embedded in [receiptNumber].
+  final int receiptSequence;
+
   final List<CheckoutSaleLine> lines;
   final int subtotalMinor;
   final int discountMinor;
@@ -361,7 +388,9 @@ final class CheckoutSalePayload {
     'businessDate': businessDate,
     'clientCreatedAtMs': clientCreatedAtMs,
     if (shiftId != null) 'shiftId': shiftId,
-    if (deviceId != null) 'deviceId': deviceId,
+    'deviceId': deviceId,
+    'receiptNumber': receiptNumber,
+    'receiptSequence': receiptSequence,
     'items': <Map<String, Object?>>[
       for (final line in lines) line.toSaleLineFields(),
     ],
@@ -510,17 +539,54 @@ int? _optionalInt(
 
 String _requiredIsoDate(Map<String, Object?> map, String field) {
   final value = _requiredString(map, field);
-  final match = _isoDatePattern.firstMatch(value);
-  if (match == null) {
-    throw CheckoutSaleFormatException('$field must use yyyy-MM-dd format.');
+  try {
+    return validateCheckoutBusinessDate(value);
+  } on ArgumentError {
+    throw CheckoutSaleFormatException(
+      '$field must be a calendar date in yyyy-MM-dd format.',
+    );
   }
-  final date = DateTime.utc(
-    int.parse(match.group(1)!),
-    int.parse(match.group(2)!),
-    int.parse(match.group(3)!),
+}
+
+/// The durable installation identity is mandatory: a receipt is meaningless
+/// without the device whose sequence issued it.
+String _requiredDeviceId(Map<String, Object?> map) {
+  final value = _requiredDocumentId(map, 'deviceId');
+  try {
+    return validateCheckoutDeviceId(value);
+  } on ArgumentError {
+    throw const CheckoutSaleFormatException(
+      'deviceId must be a durable installation identifier.',
+    );
+  }
+}
+
+/// Proves the receipt was derived from this exact device, date, and sequence.
+///
+/// A locally altered receipt therefore fails before submission, and Firestore
+/// Rules independently reject a receipt that disagrees with the sale envelope.
+String _requiredReceiptNumber(
+  Map<String, Object?> map, {
+  required String deviceId,
+  required String businessDate,
+  required int sequence,
+}) {
+  final value = _requiredString(map, 'receiptNumber');
+  if (!checkoutReceiptNumberPattern.hasMatch(value)) {
+    throw const CheckoutSaleFormatException(
+      'receiptNumber must use the frozen CT-<device>-<date>-<sequence> shape.',
+    );
+  }
+  final expected = formatCheckoutReceiptNumber(
+    deviceId: deviceId,
+    businessDate: businessDate,
+    sequence: sequence,
   );
-  if (date.toIso8601String().substring(0, 10) != value) {
-    throw CheckoutSaleFormatException('$field is not a calendar date.');
+  if (value != expected) {
+    throw const CheckoutSaleFormatException(
+      'receiptNumber does not describe this device, business date, and '
+      'sequence.',
+    );
   }
   return value;
 }

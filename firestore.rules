@@ -71,6 +71,31 @@ service cloud.firestore {
         && get(rootUserPath(request.auth.uid)).data.accountType == 'platform_admin';
     }
 
+    // A receipt must describe the sale's own business date and sequence.
+    // Client state issues the number, so the server refuses any receipt that
+    // disagrees with the immutable sale envelope it is written with.
+    //
+    // The shape, the embedded date, and the embedded sequence are proved by one
+    // constructed pattern rather than by separate comparisons: a sale may carry
+    // sixteen lines, and Firestore evaluates at most 1000 expressions per
+    // request. The three-character device code is a SHA-256 digest that Rules
+    // cannot recompute, and Rules cannot query other sales, so cross-sale
+    // uniqueness stays a device-local and reconciliation concern.
+    function validSaleReceipt(sale) {
+      return sale.deviceId is string
+        && sale.businessDate is string
+        && sale.receiptSequence is int
+        && sale.receiptSequence > 0
+        && sale.receiptNumber is string
+        // "CT-" + 3 + "-" + 8 + "-" is 16 characters, so the frozen
+        // four-digit minimum sequence width makes 20 the shortest receipt.
+        && sale.receiptNumber.size() >= 20
+        && sale.receiptNumber.matches(
+          '^CT-[0-9A-F]{3}-' + sale.businessDate.split('-').join('')
+          + '-0{0,3}' + string(sale.receiptSequence) + '$'
+        );
+    }
+
     function validSaleLine(line) {
       return line is map
         && line.productId is string
@@ -167,6 +192,7 @@ service cloud.firestore {
           && request.resource.data.payloadHash is string
           && request.resource.data.payloadHash.size() > 0
           && request.resource.data.createdAt == request.time
+          && validSaleReceipt(request.resource.data)
           && validSaleLines(request.resource.data.items);
         allow update, delete: if false;
       }

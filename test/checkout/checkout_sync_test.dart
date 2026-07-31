@@ -318,6 +318,8 @@ CheckoutSubmissionWorker _worker(
   clock: clock.call,
 );
 
+const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';
+
 Future<CheckoutOutboxRecord> _save(
   HiveCheckoutOutbox outbox,
   String checkoutId, {
@@ -335,6 +337,13 @@ Future<CheckoutOutboxRecord> _save(
     'currency': 'KES',
     'businessDate': '2026-07-31',
     'createdAtMs': 1785484800000,
+    'deviceId': _deviceId,
+    'receiptNumber': formatCheckoutReceiptNumber(
+      deviceId: _deviceId,
+      businessDate: '2026-07-31',
+      sequence: 7,
+    ),
+    'receiptSequence': 7,
     'items': <Map<String, Object?>>[
       {
         'productId': 'product-a',

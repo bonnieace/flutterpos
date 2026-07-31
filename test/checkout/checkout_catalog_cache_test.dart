@@ -33,6 +33,7 @@ void main() {
       await cache.write(
         uid: 'user-a',
         tenantId: 'tenant-a',
+        configuration: _configuration,
         categories: [_category('tenant-a', 'drinks')],
         products: [_product('tenant-a', 'product-a')],
         complete: true,
@@ -42,6 +43,7 @@ void main() {
       expect(owned, isNotNull);
       expect(owned!.products.single.id, 'product-a');
       expect(owned.categories.single.name, 'drinks name');
+      expect(owned.configuration.currency, 'KES');
       expect(owned.complete, isTrue);
       expect(owned.refreshedAt, DateTime.utc(2026, 7, 31, 10));
       expect(await cache.read(uid: 'user-b', tenantId: 'tenant-a'), isNull);
@@ -52,6 +54,7 @@ void main() {
       await cache.write(
         uid: 'user-a',
         tenantId: 'tenant-a',
+        configuration: _configuration,
         categories: [_category('tenant-a', 'drinks')],
         products: [
           _product('tenant-a', 'product-a', price: 120.5, quantity: -2),
@@ -79,6 +82,7 @@ void main() {
         'tenantId': 'tenant-a',
         'refreshedAtMs': 100,
         'complete': true,
+        'configuration': <String, Object?>{'currency': 'KES'},
         'categories': <Object?>[],
         'products': <Object?>[
           <String, Object?>{
@@ -102,9 +106,18 @@ void main() {
       }
 
       expect(await store((record) => record), isNotNull);
-      expect(await store((record) => record..['schemaVersion'] = 2), isNull);
+      expect(await store((record) => record..['schemaVersion'] = 1), isNull);
       expect(await store((record) => record..['uid'] = 'user-b'), isNull);
       expect(await store((record) => record..['complete'] = 'yes'), isNull);
+      expect(await store((record) => record..remove('configuration')), isNull);
+      expect(
+        await store(
+          (record) => record..['configuration'] = <String, Object?>{
+            'currency': 'kes',
+          },
+        ),
+        isNull,
+      );
       expect(
         await store(
           (record) => record
@@ -161,6 +174,7 @@ void main() {
         cache.write(
           uid: 'user-a',
           tenantId: 'tenant-a',
+          configuration: _configuration,
           categories: const [],
           products: [
             _product('tenant-a', 'product-a'),
@@ -208,6 +222,9 @@ void main() {
         reader.queries.map((query) => query.collectionPath).toSet(),
         {'tenants/tenant-a/categories', 'tenants/tenant-a/products'},
       );
+      expect(reader.documentPaths, [
+        'tenants/tenant-a/configuration/checkout',
+      ]);
       final snapshot = await cache.read(uid: 'user-a', tenantId: 'tenant-a');
       expect(snapshot!.products.map((product) => product.id), [
         'product-a',
@@ -276,6 +293,62 @@ void main() {
       expect(await cache.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
     });
 
+    test('fails closed without a usable checkout configuration', () async {
+      final missing = await _refresher(
+        sessions,
+        cache,
+        _Reader(
+          products: [_productSnapshot('tenant-a', 'product-a')],
+          configuration: null,
+        ),
+      ).refreshSelectedSession();
+
+      expect(
+        missing.kind,
+        CheckoutCatalogRefreshKind.configurationUnavailable,
+      );
+      expect(await cache.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
+
+      final malformed = await _refresher(
+        sessions,
+        cache,
+        _Reader(
+          products: [_productSnapshot('tenant-a', 'product-a')],
+          configuration: const <String, Object?>{'currency': 'shillings'},
+        ),
+      ).refreshSelectedSession();
+
+      expect(
+        malformed.kind,
+        CheckoutCatalogRefreshKind.configurationUnavailable,
+      );
+      expect(await cache.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
+    });
+
+    test('leaves an existing cache untouched when a refresh fails', () async {
+      await cache.write(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        configuration: _configuration,
+        categories: const [],
+        products: [_product('tenant-a', 'product-a')],
+        complete: true,
+      );
+
+      final result = await _refresher(
+        sessions,
+        cache,
+        _Reader(configuration: null),
+      ).refreshSelectedSession();
+
+      expect(
+        result.kind,
+        CheckoutCatalogRefreshKind.configurationUnavailable,
+      );
+      final snapshot = await cache.read(uid: 'user-a', tenantId: 'tenant-a');
+      expect(snapshot!.products.single.id, 'product-a');
+    });
+
     test('coalesces a concurrent refresh instead of running twice', () async {
       final reader = _Reader(products: [_productSnapshot('tenant-a', 'a')]);
       final refresher = _refresher(sessions, cache, reader);
@@ -298,6 +371,10 @@ Future<Box<dynamic>> _openBox() => Hive.openBox<dynamic>(
 final List<int> _encryptionKey = List<int>.generate(
   HiveCheckoutCatalogCache.encryptionKeyBytes,
   (index) => (index * 7) % 256,
+);
+
+final TenantCheckoutConfiguration _configuration = TenantCheckoutConfiguration(
+  currency: 'KES',
 );
 
 CheckoutCatalogCacheRefresher _refresher(
@@ -356,17 +433,25 @@ final class _Reader implements TenantDataReader {
   _Reader({
     List<TenantQueryDocumentSnapshot>? categories,
     List<TenantQueryDocumentSnapshot>? products,
+    this.configuration = const <String, Object?>{'currency': 'KES'},
     this.onQuery,
   }) : categories = categories ?? const [],
        products = products ?? const [];
 
   final List<TenantQueryDocumentSnapshot> categories;
   final List<TenantQueryDocumentSnapshot> products;
+  final Map<String, Object?>? configuration;
   final void Function(TenantCollectionQuery query)? onQuery;
   final List<TenantCollectionQuery> queries = [];
+  final List<String> documentPaths = [];
 
   @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    documentPaths.add(path);
+    final data = configuration;
+    if (data == null) return null;
+    return TenantDocumentSnapshot(path: path, data: data);
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(

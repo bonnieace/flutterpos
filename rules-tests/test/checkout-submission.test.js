@@ -14,10 +14,12 @@ import {
   activeTenantDocuments,
   authenticatedFirestore,
   createRulesTestEnvironment,
+  receiptNumber,
   seedDocuments,
 } from "./support.js";
 
 const PAYLOAD_HASH = "a".repeat(64);
+const DEVICE_ID = "dev-0123456789abcdef0123456789abcdef";
 
 let testEnvironment;
 
@@ -81,6 +83,9 @@ function saleFields(checkoutId, overrides = {}) {
     currency: "KES",
     businessDate: "2026-07-31",
     clientCreatedAtMs: 1785484800000,
+    deviceId: DEVICE_ID,
+    receiptNumber: receiptNumber(DEVICE_ID, "2026-07-31", 42),
+    receiptSequence: 42,
     items: [saleLine("product-a", 2, 25000), saleLine("product-b", 1, 15000)],
     subtotalMinor: 65000,
     subtotal: 650,

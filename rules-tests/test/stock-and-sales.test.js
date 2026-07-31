@@ -16,6 +16,7 @@ import {
   activeTenantDocuments,
   authenticatedFirestore,
   createRulesTestEnvironment,
+  receiptNumber,
   seedDocuments,
 } from "./support.js";
 
@@ -48,6 +49,9 @@ async function seedCashierAndProduct(quantity = 2) {
   });
 }
 
+const DEVICE_ID = "dev-0123456789abcdef0123456789abcdef";
+const BUSINESS_DATE = "2026-07-31";
+
 function sale(checkoutId, overrides = {}) {
   return {
     checkoutId,
@@ -55,6 +59,10 @@ function sale(checkoutId, overrides = {}) {
     soldById: "cashier",
     payloadHash: `sha256:${checkoutId}`,
     createdAt: serverTimestamp(),
+    businessDate: BUSINESS_DATE,
+    deviceId: DEVICE_ID,
+    receiptNumber: receiptNumber(DEVICE_ID, BUSINESS_DATE, 1),
+    receiptSequence: 1,
     items: [{ productId: "product-a", quantity: 1 }],
     ...overrides,
   };

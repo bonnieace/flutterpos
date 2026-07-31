@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
@@ -9,8 +10,10 @@ void main() {
   late Directory directory;
   late Box<dynamic> outboxBox;
   late Box<dynamic> cacheBox;
+  late Box<dynamic> receiptBox;
   late HiveCheckoutOutbox outbox;
   late HiveCheckoutCatalogCache cache;
+  late HiveCheckoutReceiptCounters receipts;
   late TenantSessionController sessions;
   late _Clock clock;
 
@@ -27,14 +30,25 @@ void main() {
       encryptionCipher: HiveAesCipher(_encryptionKey),
       crashRecovery: false,
     );
+    receiptBox = await Hive.openBox<dynamic>(
+      HiveCheckoutReceiptCounters.boxName,
+      encryptionCipher: HiveAesCipher(_encryptionKey),
+      crashRecovery: false,
+    );
     clock = _Clock(DateTime.utc(2026, 7, 31, 9, 30));
     outbox = HiveCheckoutOutbox.fromBox(outboxBox, clock: clock.call);
     cache = HiveCheckoutCatalogCache.fromBox(cacheBox, clock: clock.call);
+    receipts = HiveCheckoutReceiptCounters.fromBox(
+      receiptBox,
+      clock: clock.call,
+      random: Random(7),
+    );
     sessions = TenantSessionController()
       ..open(uid: 'user-a', membership: _membership('tenant-a'));
     await cache.write(
       uid: 'user-a',
       tenantId: 'tenant-a',
+      configuration: TenantCheckoutConfiguration(currency: 'KES'),
       categories: [_category('tenant-a', 'drinks')],
       products: [
         _product('tenant-a', 'product-a', price: 120.5),
@@ -56,6 +70,7 @@ void main() {
       sessions,
       cache,
       outbox,
+      receipts,
       clock,
     ).createDraft(
       CheckoutDraftRequest(
@@ -64,7 +79,6 @@ void main() {
           CheckoutDraftLineRequest(productId: 'product-b', quantity: 3),
         ],
         discountMinor: 100,
-        deviceId: 'device-a',
         shiftId: 'shift-a',
       ),
     );
@@ -90,8 +104,17 @@ void main() {
     expect(payload.lines.first.unitPriceMinor, 12050);
     expect(payload.lines.first.lineTotalMinor, 24100);
     expect(payload.discountMinor, 100);
-    expect(payload.deviceId, 'device-a');
     expect(payload.shiftId, 'shift-a');
+    expect(payload.deviceId, await receipts.resolveDeviceId());
+    expect(payload.receiptSequence, 1);
+    expect(
+      payload.receiptNumber,
+      formatCheckoutReceiptNumber(
+        deviceId: await receipts.resolveDeviceId(),
+        businessDate: '2026-07-31',
+        sequence: 1,
+      ),
+    );
 
     final submission = payload.toSubmission();
     expect(submission.salePath, 'tenants/tenant-a/sales/${record.checkoutId}');
@@ -104,7 +127,7 @@ void main() {
   test('resolves the business date in the Africa/Nairobi day', () async {
     clock.value = DateTime.utc(2026, 7, 31, 22, 30);
 
-    final record = await _service(sessions, cache, outbox, clock).createDraft(
+    final record = await _service(sessions, cache, outbox, receipts, clock).createDraft(
       CheckoutDraftRequest(
         lines: const [
           CheckoutDraftLineRequest(productId: 'product-b', quantity: 1),
@@ -120,7 +143,7 @@ void main() {
   });
 
   test('fails closed on untrusted lines, products, and prices', () async {
-    final service = _service(sessions, cache, outbox, clock);
+    final service = _service(sessions, cache, outbox, receipts, clock);
     Future<void> expectCode(CheckoutDraftRequest request, String code) =>
         expectLater(
           service.createDraft(request),
@@ -203,7 +226,7 @@ void main() {
     sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
 
     await expectLater(
-      _service(sessions, cache, outbox, clock).createDraft(_request()),
+      _service(sessions, cache, outbox, receipts, clock).createDraft(_request()),
       throwsA(
         isA<CheckoutDraftException>().having(
           (error) => error.code,
@@ -219,7 +242,7 @@ void main() {
     sessions.clear();
 
     await expectLater(
-      _service(sessions, cache, outbox, clock).createDraft(_request()),
+      _service(sessions, cache, outbox, receipts, clock).createDraft(_request()),
       throwsA(
         isA<CheckoutDraftException>().having(
           (error) => error.code,
@@ -231,7 +254,7 @@ void main() {
   });
 
   test('discards a queued draft after the session epoch advanced', () async {
-    final service = _service(sessions, cache, outbox, clock);
+    final service = _service(sessions, cache, outbox, receipts, clock);
 
     final stale = service.createDraft(_request());
     sessions.open(uid: 'user-a', membership: _membership('tenant-a'));
@@ -258,6 +281,7 @@ void main() {
       sessions,
       cache,
       outbox,
+      receipts,
       clock,
       checkoutIdFactory: () => 'co-${outboxBox.keys.length}',
     );
@@ -271,30 +295,163 @@ void main() {
     expect(outboxBox.keys, hasLength(2));
   });
 
-  test('rejects a reused checkout ID whose payload changed', () async {
+  test('rejects a reused checkout ID', () async {
+    // Every draft draws its own receipt, so a second draft for an existing
+    // checkout ID can never describe the same immutable payload.
     final service = _service(
       sessions,
       cache,
       outbox,
+      receipts,
       clock,
       checkoutIdFactory: () => 'fixed-checkout',
     );
 
     final first = await service.createDraft(_request());
-    final replay = await service.createDraft(_request());
-    expect(replay.payloadHash, first.payloadHash);
 
-    await expectLater(
-      service.createDraft(_request(quantity: 5)),
-      throwsA(
-        isA<CheckoutOutboxException>().having(
-          (error) => error.code,
-          'code',
-          'checkout_already_exists',
+    for (final request in [_request(), _request(quantity: 5)]) {
+      await expectLater(
+        service.createDraft(request),
+        throwsA(
+          isA<CheckoutOutboxException>().having(
+            (error) => error.code,
+            'code',
+            'checkout_already_exists',
+          ),
         ),
+      );
+    }
+    expect(outboxBox.keys, hasLength(1));
+    expect(
+      (await outbox.read(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        checkoutId: 'fixed-checkout',
+      ))!.payloadHash,
+      first.payloadHash,
+      reason: 'A refused reuse must not rewrite stored checkout evidence.',
+    );
+  });
+
+  test('two cashiers on one device receive different receipts', () async {
+    final service = _service(sessions, cache, outbox, receipts, clock);
+
+    final first = await service.createDraft(_request());
+    sessions.open(uid: 'user-b', membership: _membership('tenant-a'));
+    await cache.write(
+      uid: 'user-b',
+      tenantId: 'tenant-a',
+      configuration: TenantCheckoutConfiguration(currency: 'KES'),
+      categories: const [],
+      products: [_product('tenant-a', 'product-b', price: 7)],
+      complete: true,
+    );
+    final second = await service.createDraft(_request());
+
+    expect(first.payload['soldById'], 'user-a');
+    expect(second.payload['soldById'], 'user-b');
+    expect(first.payload['receiptSequence'], 1);
+    expect(second.payload['receiptSequence'], 2);
+    expect(
+      second.payload['receiptNumber'],
+      isNot(first.payload['receiptNumber']),
+    );
+    expect(
+      second.payload['deviceId'],
+      first.payload['deviceId'],
+      reason: 'The counter is deliberately not scoped by cashier UID.',
+    );
+  });
+
+  test('concurrent drafts never share one receipt number', () async {
+    var counter = 0;
+    final service = _service(
+      sessions,
+      cache,
+      outbox,
+      receipts,
+      clock,
+      checkoutIdFactory: () => 'co-${counter++}',
+    );
+
+    final records = await Future.wait<CheckoutOutboxRecord>([
+      service.createDraft(_request()),
+      service.createDraft(_request(quantity: 2)),
+      service.createDraft(_request(quantity: 3)),
+    ]);
+
+    expect(records.map((record) => record.payload['receiptSequence']), [
+      1,
+      2,
+      3,
+    ]);
+    expect(
+      records.map((record) => record.payload['receiptNumber']).toSet(),
+      hasLength(3),
+    );
+  });
+
+  test('a new business date restarts the device sequence', () async {
+    final service = _service(sessions, cache, outbox, receipts, clock);
+    final deviceId = await receipts.resolveDeviceId();
+
+    // 20:59 UTC is still 2026-07-31 in Africa/Nairobi; 21:00 UTC is not.
+    clock.value = DateTime.utc(2026, 7, 31, 20, 59);
+    final before = await service.createDraft(_request());
+    clock.value = DateTime.utc(2026, 7, 31, 21);
+    final after = await service.createDraft(_request(quantity: 2));
+
+    expect(before.payload['businessDate'], '2026-07-31');
+    expect(after.payload['businessDate'], '2026-08-01');
+    expect(before.payload['receiptSequence'], 1);
+    expect(after.payload['receiptSequence'], 1);
+    expect(
+      before.payload['receiptNumber'],
+      formatCheckoutReceiptNumber(
+        deviceId: deviceId,
+        businessDate: '2026-07-31',
+        sequence: 1,
       ),
     );
-    expect(outboxBox.keys, hasLength(1));
+    expect(
+      after.payload['receiptNumber'],
+      formatCheckoutReceiptNumber(
+        deviceId: deviceId,
+        businessDate: '2026-08-01',
+        sequence: 1,
+      ),
+    );
+  });
+
+  test('another business keeps its own device sequence', () async {
+    final service = _service(sessions, cache, outbox, receipts, clock);
+    await service.createDraft(_request());
+
+    sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
+    await cache.write(
+      uid: 'user-a',
+      tenantId: 'tenant-b',
+      configuration: TenantCheckoutConfiguration(currency: 'USD'),
+      categories: const [],
+      products: [_product('tenant-b', 'product-b', price: 7)],
+      complete: true,
+    );
+    final other = await service.createDraft(_request());
+
+    expect(other.payload['receiptSequence'], 1);
+    expect(other.payload['currency'], 'USD');
+  });
+
+  test('a rejected draft consumes no receipt number', () async {
+    final service = _service(sessions, cache, outbox, receipts, clock);
+
+    await expectLater(
+      service.createDraft(_request(quantity: 0)),
+      throwsA(isA<CheckoutDraftException>()),
+    );
+    final record = await service.createDraft(_request());
+
+    expect(record.payload['receiptSequence'], 1);
   });
 
   test('a saved draft blocks tenant switching until it is settled', () async {
@@ -306,7 +463,7 @@ void main() {
       reason: 'An empty outbox must not block switching.',
     );
 
-    await _service(sessions, cache, outbox, clock).createDraft(_request());
+    await _service(sessions, cache, outbox, receipts, clock).createDraft(_request());
 
     expect(
       (await source.inspect(session))!.blocker,
@@ -341,13 +498,14 @@ CheckoutDraftService _service(
   TenantSessionController sessions,
   HiveCheckoutCatalogCache cache,
   HiveCheckoutOutbox outbox,
+  HiveCheckoutReceiptCounters receipts,
   _Clock clock, {
   CheckoutIdFactory? checkoutIdFactory,
 }) => CheckoutDraftService(
   sessionController: sessions,
   cache: cache,
   outbox: outbox,
-  currency: 'KES',
+  receipts: receipts,
   clock: clock.call,
   checkoutIdFactory: checkoutIdFactory,
 );
