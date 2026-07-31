@@ -3197,6 +3197,85 @@ android/gradle.properties
 pubspec.lock
 ```
 
+### Test iteration instructions for future sessions
+
+Do not use the full Firebase integration harness as the normal edit/test loop.
+On this machine the latest measured baselines were approximately 115 seconds
+for the 166-test Functions command, 79 seconds for the 21-test Rules emulator,
+208 seconds even for the filtered two-test revocation integration run, and 312
+seconds for the complete 12-test integration run. Most of that time is build,
+JVM/emulator startup, Functions discovery, cold worker, CLI process, and
+teardown overhead rather than the focused assertions.
+
+Use this three-level test discipline:
+
+1. During implementation, keep TypeScript compilation current with watch or an
+   incremental build and run only the affected compiled unit-test files. Run
+   `git diff --check` alongside those tests. Do not rebuild and execute all 166
+   Functions tests after every small edit.
+2. When a behavior is coherent, run the smallest emulator combination it
+   actually requires. Private Admin SDK grant/revoke sagas need Auth and
+   Firestore, not the Functions emulator. A Node test-name filter skips test
+   bodies but does not reduce emulator startup, so it is not a substitute for
+   an Auth/Firestore-only runner.
+3. After code and harness changes are frozen, run exactly one release-style
+   sequence: full Functions tests, full Rules emulator tests when applicable,
+   and the complete Auth/Firestore/Functions integration suite. Make no code
+   cleanup or type refactor after that green pass; update handover text and
+   commit. Any later code edit invalidates the pass and requires proportionate
+   retesting.
+
+Avoid the failure patterns observed in this session:
+
+- Set command wrappers from measured baselines. The full integration suite
+  needs a 10-12 minute outer bound on this host; a three-minute wrapper can
+  terminate healthy work and orphan an emulator.
+- Inspect the first infrastructure failure before retrying. Do not repeatedly
+  relaunch after Functions discovery errors. The runner now defaults the
+  supported `FUNCTIONS_DISCOVERY_TIMEOUT` to 60 seconds.
+- When direct tests import compiled Functions code, construct Firestore, Auth,
+  `FieldValue`, and other Admin objects from the Functions package's one
+  `firebase-admin` installation. Mixing Admin installations creates foreign
+  sentinel/prototype failures that do not represent production behavior.
+- Perform refactors and type cleanup before the green validation sequence, and
+  run at least `npm --prefix functions run build` immediately after every
+  TypeScript edit.
+- Reuse a known-current Functions build during focused emulator retries. Do not
+  make both the unit command and every emulator command rebuild unchanged
+  output.
+- Keep one local emulator set alive for repeated focused runs when practical;
+  use the isolated `emulators:exec` lifecycle for the final evidence run.
+- One real compiled CLI success smoke test is sufficient per operator tool
+  during iteration. Exercise rejection, idempotency, and partial recovery
+  directly in one Admin test process; reserve repeated CLI subprocess coverage
+  for the final suite when specifically required.
+
+Keep test output and model context bounded:
+
+- Remove inherited `DEBUG` from Firebase CLI child environments unless
+  diagnosing a failure. Firebase treats any non-empty value, including the
+  machine's `DEBUG=release`, as debug mode and otherwise emits command details,
+  complete environments, and large expected-denial traces.
+- Prefer Node's concise/dot reporter for green unit runs. Capture verbose
+  emulator output to a local ignored log and print only test totals and timing;
+  on failure print the failing assertion and a bounded tail, not the entire
+  emulator log.
+- Read targeted handover sections and diffs rather than repeatedly loading all
+  of `PLAN.md` or complete generated output into context.
+- Report only phase changes during long runs. Record exact commands, pass
+  counts, toolchain pins, and meaningful failures once in the final handover.
+
+Recommended harness remediation, in priority order:
+
+1. Strip `DEBUG` from spawned Firebase environments and add concise reporters.
+2. Add incremental Functions build plus separate `test:compiled` and
+   `:no-build` emulator commands.
+3. Add a dedicated Auth/Firestore-only platform-identity emulator runner.
+4. Reduce repeated grant/revoke CLI subprocesses to one smoke invocation plus
+   same-process saga cases.
+5. Add one sequential `verify:handover` command with the pinned Node 24/JDK 21
+   environment and appropriate measured timeouts.
+
 ### Next bounded frontend chunk
 
 Implement only the tenant-switch safety coordinator and wire it into the typed
