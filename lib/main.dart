@@ -133,7 +133,20 @@ class SpiritPOSApp extends StatelessWidget {
               isOnline: isOnline,
             ),
           );
-          return coordinator.recoverSelectedSession;
+          final submissionWorker = CheckoutSubmissionWorker(
+            sessionController: sessionController,
+            outbox: checkoutOutbox,
+            submissionGateway: FirebaseCheckoutSubmissionGateway(
+              firestore: FirebaseFirestore.instance,
+              isOnline: isOnline,
+            ),
+            isOnline: isOnline,
+          );
+          // Uncertain prior attempts are settled before any new batch commit.
+          return () async => (
+            await coordinator.recoverSelectedSession(),
+            await submissionWorker.submitDueCheckouts(),
+          );
         },
         tenantRecoveryTriggers: connectivity.onConnectivityChanged
             .where((result) => result != ConnectivityResult.none)

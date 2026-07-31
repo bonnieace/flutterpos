@@ -26,6 +26,13 @@ For the focused checkout-confirmation read contract, run
 Firestore alone and proves exact deterministic-sale reads, missing documents,
 malformed evidence, tenant isolation, and global-disable denial.
 
+For the focused checkout submission batch, run
+`npm --prefix rules-tests run test:emulator:checkout-submission`. It commits the
+exact atomic write set produced by the sync worker and proves deterministic sale
+identity, server-owned `createdAt`, exact tenant stock decrements into negative
+stock, replay denial, cross-tenant denial, non-decrementing stock denial,
+envelope spoofing denial, and inactive-cashier denial.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

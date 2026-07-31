@@ -20,7 +20,7 @@ unreachable until each row is migrated and tested behind a live
 | `lib/screens/returns_screen.dart` | `staff`, `returns` | `staff`, `returns` below `TenantPaths` | Disabled returns workflow. |
 | `lib/screens/main_hub_screen.dart` | `staff`, `store`, `shifts` | `staff`, `configuration/branding`, `shifts` below `TenantPaths` | Entire legacy hub remains unreachable. |
 | `lib/pos/inv.dart` | `alcohol` | `products` below `TenantPaths` | Disabled stock mutation screen. |
-| `lib/pos/pos.dart` | `shifts`, `categories`, `alcohol`, `alcoholsales` | `shifts`, `categories`, `products`, `sales` below `TenantPaths` | Disabled checkout; the read-only catalog does not enable this screen and checkout must use the later Hive single-flight state machine. |
+| `lib/pos/pos.dart` | `shifts`, `categories`, `alcohol`, `alcoholsales` | `shifts`, `categories`, `products`, `sales` below `TenantPaths` | Disabled checkout; the read-only catalog does not enable this screen. The encrypted Hive outbox and single-flight submission worker now own the sale write path, and any future checkout UI must produce its drafts through them. |
 | `lib/pos/services/returns_service.dart` | `alcoholsales`, `returns`, `staff`, `shifts` | `sales`, `returns`, `staff`, `shifts` below `TenantPaths` | Disabled returns workflow. |
 | `lib/pos/reports.dart` | `categories`, `staff`, `alcoholsales`, `alcohol` | `categories`, `staff`, `sales`, `products` below `TenantPaths` | Disabled report screen. |
 | `lib/pos/reports/debtpayment.dart` | `hwsales` | normalized `sales` snapshots below `TenantPaths` | Disabled legacy report; schema normalization required. |
@@ -30,6 +30,8 @@ unreachable until each row is migrated and tested behind a live
 | `lib/pos/reports/shift_reports.dart` | `shifts` | `shifts` below `TenantPaths` | Disabled report. |
 | `lib/pos/reports/profits.dart` | `alcoholsales`, `alcohol` | `sales`, `products` below `TenantPaths` | Disabled report. |
 | `lib/pos/reports/salesReports.dart` | `alcoholsales`, `staff` | `sales`, `staff` below `TenantPaths` | Disabled report. |
+| `lib/checkout/checkout_submission.dart` | None | `sales/{checkoutId}` and `products/{productId}` below `TenantPaths` | Current single-flight checkout write path. One atomic batch creates the deterministic sale with a server `createdAt` and decrements only the exact tenant products named by the immutable payload. It writes no legacy root collection and no checkout UI is reachable. |
+| `lib/checkout/checkout_confirmation.dart` | None | `sales/{checkoutId}` below `TenantPaths` | Current server-only confirmation read for uncertain submissions. |
 | `lib/tenancy/firebase_tenant_gateway.dart` | `users/{uid}` | Remains the caller's root routing profile | Current and intentional; Rules restrict it to the caller. |
 | `lib/tenancy/platform_tenant_review.dart` | `tenants`, `users/{ownerUid}` | Remains the canonical platform pending-tenant queue and owner profile metadata | Current claim-and-root-gated, read-only platform queue. It is bounded, ordered by request time and tenant ID, and exposes only pending tenants for explicit lifecycle review. |
 | `lib/tenancy/platform_tenant_lifecycle.dart` | `tenants`, `users/{ownerUid}` | Remains the canonical platform active/suspended tenant queue and owner profile metadata | Current claim-and-root-gated, read-only platform queue. It is independent from pending review, bounded, and ordered by status, last update time, and tenant ID. It enables only explicit suspension and reactivation review. |

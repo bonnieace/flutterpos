@@ -3727,3 +3727,161 @@ using the existing encrypted outbox and confirmation recovery:
    shift restoration, cashier cross-tenant shift restriction, returns,
    printers, deployment, and Android build/emulator validation outside that
    chunk.
+
+---
+
+## Deterministic checkout submission worker handoff - 2026-07-31
+
+### Completed in this session
+
+The encrypted outbox now submits due offline checkouts as one atomic Firestore
+batch. This chunk adds only the submission path: it creates no checkout UI or
+draft, caches no products, issues no receipt number, restores no shift, and
+makes no legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `CheckoutSalePayload` freezes the local sale contract at schema version 1 and
+  parses it strictly before any write. It requires the payload to repeat the
+  immutable outbox checkout ID, tenant ID, and authenticated UID, and it
+  additionally requires the live session to own that UID and tenant. Unknown
+  top-level and line fields are rejected rather than forwarded to Firestore.
+- Lines are bounded to 1-16 because Firestore Rules can validate only sixteen
+  explicit positions. Each line requires a valid tenant-local product document
+  ID, a unique product across the sale, a positive integer quantity within
+  1,000,000, and a non-negative integer unit price. Duplicate products are
+  rejected so one batch never writes the same product twice.
+- Monetary values are integer minor currency units, so the payload hash stays
+  deterministic and no float rounding enters the evidence. The parser derives
+  each line total, requires `subtotalMinor` to equal their sum, bounds
+  `discountMinor` by the subtotal, and requires `totalMinor` to equal subtotal
+  minus discount. Major-unit `total`, `subtotal`, `lineTotal`, `unitPrice`, and
+  `cost` numbers are derived only for the written document, because the frozen
+  backend reporting and reconciliation aggregate those field names. The
+  conversion is exact under the server's `moneyToMinorUnits` rounding.
+- `FirebaseCheckoutSubmissionGateway` performs one `batch.commit()`: it creates
+  `tenants/{tenantId}/sales/{checkoutId}` with the exact payload hash and a
+  server `createdAt`, and decrements each exact tenant product with
+  `FieldValue.increment(-quantity)` plus a server `updatedAt`. It writes no
+  legacy root collection. Before committing it re-derives every path from
+  `TenantPaths` and refuses a write set that escaped the tenant, repeated a
+  product, or carried a non-negative stock delta.
+- Outcomes are typed as committed, rejected, ambiguous, or unavailable. A
+  refusal is never treated as proof that the server holds no sale, because an
+  offline SDK can still flush a queued batch later; only the existing
+  confirmation gateway may decide a sale is absent. An unacknowledged commit
+  times out into `ambiguous` rather than being retried.
+- `CheckoutSubmissionWorker` runs only while online, only for the authenticated
+  UID and selected tenant, and only for due `saved_offline` records. It
+  acquires the durable outbox lease before the single commit, so a second local
+  worker cannot submit the same checkout. Only an acknowledged commit moves the
+  record to `awaiting_confirmation`; rejected, ambiguous, unavailable, and
+  lost-lease outcomes deliberately leave it `submitting` for the existing
+  expiry-and-confirmation recovery path. The worker never resubmits an expired
+  lease and never invents a retry.
+- A malformed payload is counted and skipped without taking a lease, changing
+  state, or deleting evidence. Session, tenant, or epoch changes during a
+  commit discard the result before any local mutation. Duplicate triggers are
+  coalesced into one queued rerun, and losing connectivity mid-run stops the
+  worker before it leases further checkouts.
+- `main.dart` composes recovery before submission on the existing session and
+  connectivity hook, so an uncertain prior attempt is always settled before a
+  new batch is committed. The safe landing route and its outbox-backed tenant
+  switch blockers are unchanged.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/checkout/checkout.dart
+lib/checkout/checkout_sale.dart
+lib/checkout/checkout_submission.dart
+lib/checkout/checkout_sync.dart
+lib/main.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/checkout-submission.test.js
+test/checkout/checkout_sale_test.dart
+test/checkout/checkout_submission_test.dart
+test/checkout/checkout_sync_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/checkout lib/tenancy test/checkout test/tenancy`
+  reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=compact test/checkout
+  test/tenancy` passed **317/317** relevant Flutter tests, including **23** new
+  tests: 7 payload-contract, 5 submission-gateway, and 11 sync-worker cases.
+  The focused `test/checkout` command passed **62/62** during development.
+- With portable Node.js 24.18.1, Temurin JDK 21 at
+  `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8`, inherited `DEBUG` removed,
+  and `NODE_OPTIONS=--max-old-space-size=512`, `npm --prefix functions test`
+  passed **166/166** Functions tests.
+- `npm --prefix rules-tests run test:emulator:checkout-submission` passed the
+  focused Firestore-only suite **6/6** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **30/30** (24 existing plus the 6 new submission cases). No Rules file
+  changed; the new tests prove the existing contract against the real batch.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean before the final release-style sequence. Android
+  build and Android emulator validation were intentionally skipped as
+  requested.
+
+The new emulator coverage commits the exact write set the worker produces and
+proves deterministic sale identity, a server-owned `createdAt`, exact stock
+decrements into negative stock, replay denial, cross-tenant denial with an
+atomically absent sale, non-decrementing stock denial, envelope spoofing
+denial, and inactive-cashier denial.
+
+Meaningful failures and resolutions:
+
+- The final integration launch refused to start with `Refusing to overwrite
+  existing Functions emulator configuration: functions/integration/.secret.local`.
+  The file was the runner's own deterministic local-only placeholder left over
+  from an earlier interrupted run; it is git-ignored and holds no real secret.
+  Removing it and retrying once passed 12/12, and the runner removed the file
+  again on exit.
+- No test assertion failed in this session. Analyzer, focused, and final runs
+  were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded frontend chunk
+
+Implement only the tenant-scoped offline product cache and deterministic
+checkout draft creation; do not build the checkout screen in that chunk:
+
+1. Add an encrypted, tenant- and UID-scoped Hive product/price/category cache
+   refreshed from the guarded catalog repository. Validate every cached
+   document against the existing strict read models, reject cross-tenant or
+   stale-epoch results, and treat malformed cache entries as a miss rather than
+   as authority.
+2. Add a deterministic checkout draft builder that produces exactly the frozen
+   `CheckoutSalePayload` v1 contract from cached products: immutable checkout
+   ID, authenticated UID, selected tenant, bounded unique lines, integer minor
+   monetary snapshot, and business date. It must save through
+   `HiveCheckoutOutbox.saveOffline` and never write Firestore directly.
+3. Bind draft creation to one session epoch and one local lock so two
+   concurrent drafts cannot reuse a checkout ID, and prove a reused ID with a
+   different payload is still rejected as `checkout_already_exists`.
+4. Surface a read-only pending-checkout evidence panel on the safe landing
+   route showing outbox state counts only, with no submit, edit, cancel, or
+   delete action.
+5. Add unit, Hive-reopen, and session/widget coverage for cache isolation,
+   stale-epoch refresh, malformed cache entries, draft-to-payload agreement
+   with the parser, duplicate draft prevention, and switch-blocker interaction.
+6. Leave receipt counters, the checkout screen and payment flow, shift
+   restoration, cashier cross-tenant shift restriction, returns, printers,
+   reports, deployment, and Android build/emulator validation outside that
+   chunk.
