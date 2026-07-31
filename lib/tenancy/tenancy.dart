@@ -23,6 +23,7 @@ export 'tenant_session.dart';
 export 'tenant_session_controller.dart';
 export 'tenant_staff_directory.dart';
 export 'tenant_staff_invitation.dart';
+export 'tenant_staff_names.dart';
 export 'tenant_staff_invitation_cancellation.dart';
 export 'tenant_staff_invitation_email_replacement.dart';
 export 'tenant_staff_invitation_resend.dart';

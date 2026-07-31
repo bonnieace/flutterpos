@@ -177,8 +177,23 @@ service cloud.firestore {
       allow read: if activeStaff(tenantId) || platformAdmin();
       allow write: if false;
 
+      // A canonical staff record carries the member's email and phone number,
+      // so a cashier reads only its own. Owners, admins, and managers read the
+      // whole roster, which is what the staff directory already requires.
+      // History surfaces therefore label a colleague by UID for a cashier and
+      // by name for management, which the name resolver degrades to on its own.
+      //
+      // The identity is the path wildcard, not a field, so an absent record
+      // still answers rather than raising an evaluation error.
       match /staff/{uid} {
-        allow read: if activeStaff(tenantId) || platformAdmin();
+        allow read: if platformAdmin()
+          || (
+            activeStaff(tenantId)
+            && (
+              uid == request.auth.uid
+              || tenantRole(tenantId) in ['owner', 'admin', 'manager']
+            )
+          );
         allow write: if false;
       }
 

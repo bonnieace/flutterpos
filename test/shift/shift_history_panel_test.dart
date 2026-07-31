@@ -103,8 +103,27 @@ void main() {
     expect(reader.queries.last.equalityFilters, <String, Object?>{
       'status': 'closed',
     });
-    expect(find.text('2026-07-31 - user-b'), findsOne);
+    // A resolved colleague keeps the UID beside the name; an unresolved one
+    // falls back to the UID alone.
+    expect(find.text('2026-07-31 - Brian (user-b)'), findsOne);
     expect(find.text('2026-07-31 - You'), findsOne);
+  });
+
+  testWidgets('an unreadable staff record leaves the UID in place', (
+    tester,
+  ) async {
+    final reader = _Reader(deniedStaff: true)
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-b', overrides: <String, Object?>{'staffId': 'user-b'}),
+      ]);
+
+    await _pumpPanel(tester, _controller(TenantRole.manager), reader);
+    await tester.tap(find.text('Every cashier'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('2026-07-31 - user-b'), findsOne);
+    expect(find.byKey(const ValueKey('shift-history-failure')), findsNothing);
   });
 
   testWidgets('paging forward asks for the next cursor only', (tester) async {
@@ -311,9 +330,13 @@ TenantQueryDocumentSnapshot _snapshot(
 }
 
 final class _Reader implements TenantDataReader {
-  _Reader({this.deferred = false});
+  _Reader({this.deferred = false, this.deniedStaff = false});
 
   final bool deferred;
+
+  /// Stands in for the narrowed canonical staff read: a cashier, and any role
+  /// the rule refuses, gets no name and must still see the page.
+  final bool deniedStaff;
   final Map<String, List<TenantQueryDocumentSnapshot>> _pages =
       <String, List<TenantQueryDocumentSnapshot>>{};
   final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
@@ -332,7 +355,16 @@ final class _Reader implements TenantDataReader {
   }
 
   @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    if (deniedStaff) throw StateError('permission-denied');
+    final uid = path.split('/').last;
+    return path.startsWith('tenants/tenant-a/staff/') && uid != 'user-a'
+        ? TenantDocumentSnapshot(
+            path: path,
+            data: <String, Object?>{'uid': uid, 'name': 'Brian'},
+          )
+        : null;
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(

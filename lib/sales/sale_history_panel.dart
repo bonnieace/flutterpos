@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_staff_names.dart';
 import 'sale_history.dart';
 
 /// What a sale page is scoped to.
@@ -87,6 +89,23 @@ final class TenantSaleHistoryPanel extends StatefulWidget {
 final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
+  TenantStaffNameResolver? _staffNames;
+  String? _staffNamesSessionKey;
+
+  /// One resolver per session, so its cache can never label another session's
+  /// rows. See [TenantStaffNameResolver] for why an unresolved name degrades
+  /// to the UID instead of failing the page.
+  TenantStaffNameResolver _resolverFor(TenantSession session) {
+    final key = '${session.uid}:${session.tenantId}:${session.epoch}';
+    if (key != _staffNamesSessionKey || _staffNames == null) {
+      _staffNamesSessionKey = key;
+      _staffNames = TenantStaffNameResolver(
+        session: session,
+        reader: widget.reader,
+      );
+    }
+    return _staffNames!;
+  }
 
   void _nextPage(String? cursor) {
     if (cursor == null) return;
@@ -105,14 +124,14 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
     final request = widget.request;
-    return TenantRouteGuard<TenantSalePage>(
+    return TenantRouteGuard<TenantNamedPage<TenantSalePage>>(
       key: ValueKey('${request.key}:$_pageIndex:$cursor'),
-      load: (session) {
+      load: (session) async {
         final repository = TenantSaleHistoryRepository(
           session: session,
           reader: widget.reader,
         );
-        return switch (request) {
+        final page = await switch (request) {
           TenantShiftSaleHistoryRequest(:final shift) => repository
               .loadShiftSales(
                 shift: shift,
@@ -124,6 +143,12 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
             cursor: cursor,
           ),
         };
+        return TenantNamedPage<TenantSalePage>(
+          page: page,
+          names: await _resolverFor(
+            session,
+          ).resolve(page.items.map((sale) => sale.soldById)),
+        );
       },
       denied: const Center(
         key: ValueKey('sale-history-denied'),
@@ -133,11 +158,13 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
         key: ValueKey('sale-history-failure'),
         child: Text('Sales could not be loaded.'),
       ),
-      builder: (context, session, page) => _SaleHistoryContents(
+      builder: (context, session, named) => _SaleHistoryContents(
         request: request,
-        page: page,
+        page: named.page,
+        staffNames: named.names,
+        selfUid: session.uid,
         pageIndex: _pageIndex,
-        onNextPage: () => _nextPage(page.nextCursor),
+        onNextPage: () => _nextPage(named.page.nextCursor),
         onPreviousPage: _previousPage,
       ),
     );
@@ -148,6 +175,8 @@ final class _SaleHistoryContents extends StatelessWidget {
   const _SaleHistoryContents({
     required this.request,
     required this.page,
+    required this.staffNames,
+    required this.selfUid,
     required this.pageIndex,
     required this.onNextPage,
     required this.onPreviousPage,
@@ -155,6 +184,8 @@ final class _SaleHistoryContents extends StatelessWidget {
 
   final TenantSaleHistoryRequest request;
   final TenantSalePage page;
+  final Map<String, String> staffNames;
+  final String selfUid;
   final int pageIndex;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
@@ -217,7 +248,18 @@ final class _SaleHistoryContents extends StatelessWidget {
                     '${sale.lines.map((line) => '${line.quantity} x ${line.name}').join(', ')}',
                   ),
                   const SizedBox(height: 8),
-                  Text(_recordedAtLabel(sale), style: _muted(context)),
+                  Text(
+                    key: ValueKey('sale-history-recorded-at-${sale.id}'),
+                    _recordedAtLabel(
+                      sale,
+                      tenantStaffLabel(
+                        sale.soldById,
+                        names: staffNames,
+                        selfUid: selfUid,
+                      ),
+                    ),
+                    style: _muted(context),
+                  ),
                 ],
               ),
             ),
@@ -258,11 +300,11 @@ String _recordedLabel(TenantShiftSaleHistoryRequest request) {
       'was ${_money(request.countedCashMinor)}.';
 }
 
-String _recordedAtLabel(TenantSale sale) {
+String _recordedAtLabel(TenantSale sale, String soldByLabel) {
   final recordedAt = sale.recordedAt;
   return recordedAt == null
       ? 'The server has not confirmed this sale yet.'
-      : 'Recorded ${_instant(recordedAt)} by ${sale.soldById}';
+      : 'Recorded ${_instant(recordedAt)} by $soldByLabel';
 }
 
 String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);

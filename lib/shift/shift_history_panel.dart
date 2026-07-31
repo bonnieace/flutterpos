@@ -6,6 +6,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../tenancy/tenant_staff_names.dart';
 import 'shift_history.dart';
 
 /// Read-only shift history route for the selected tenant session.
@@ -49,6 +50,22 @@ final class _TenantShiftHistoryPanelState
   /// The cursor that opened each visited page. The first page has none.
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
+  TenantStaffNameResolver? _staffNames;
+  String? _staffNamesSessionKey;
+
+  /// One resolver per session, so its cache is discarded the moment the UID,
+  /// business, or epoch changes and can never label the next session's rows.
+  TenantStaffNameResolver _resolverFor(TenantSession session) {
+    final key = '${session.uid}:${session.tenantId}:${session.epoch}';
+    if (key != _staffNamesSessionKey || _staffNames == null) {
+      _staffNamesSessionKey = key;
+      _staffNames = TenantStaffNameResolver(
+        session: session,
+        reader: widget.reader,
+      );
+    }
+    return _staffNames!;
+  }
 
   void _setScope(TenantShiftHistoryScope scope) {
     if (scope == _scope) return;
@@ -75,14 +92,22 @@ final class _TenantShiftHistoryPanelState
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
-    return TenantRouteGuard<TenantShiftHistoryPage>(
+    return TenantRouteGuard<TenantNamedPage<TenantShiftHistoryPage>>(
       // A new key restarts the guard for a new scope or page, so an earlier
       // page can never complete into the current one.
       key: ValueKey('${_scope.name}:$_pageIndex:$cursor'),
-      load: (session) => TenantShiftHistoryRepository(
-        session: session,
-        reader: widget.reader,
-      ).loadPage(scope: _scope, pageSize: widget.pageSize, cursor: cursor),
+      load: (session) async {
+        final page = await TenantShiftHistoryRepository(
+          session: session,
+          reader: widget.reader,
+        ).loadPage(scope: _scope, pageSize: widget.pageSize, cursor: cursor);
+        return TenantNamedPage<TenantShiftHistoryPage>(
+          page: page,
+          names: await _resolverFor(
+            session,
+          ).resolve(page.items.map((entry) => entry.staffId)),
+        );
+      },
       denied: const Center(
         key: ValueKey('shift-history-denied'),
         child: Text('Shift history is unavailable for this business.'),
@@ -91,12 +116,13 @@ final class _TenantShiftHistoryPanelState
         key: ValueKey('shift-history-failure'),
         child: Text('Shift history could not be loaded.'),
       ),
-      builder: (context, session, page) => _ShiftHistoryContents(
+      builder: (context, session, named) => _ShiftHistoryContents(
         session: session,
-        page: page,
+        page: named.page,
+        staffNames: named.names,
         pageIndex: _pageIndex,
         onScopeChanged: _setScope,
-        onNextPage: () => _nextPage(page.nextCursor),
+        onNextPage: () => _nextPage(named.page.nextCursor),
         onPreviousPage: _previousPage,
         onViewSales: (request) => _openSales(context, request),
       ),
@@ -125,6 +151,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
   const _ShiftHistoryContents({
     required this.session,
     required this.page,
+    required this.staffNames,
     required this.pageIndex,
     required this.onScopeChanged,
     required this.onNextPage,
@@ -134,6 +161,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
 
   final TenantSession session;
   final TenantShiftHistoryPage page;
+  final Map<String, String> staffNames;
   final int pageIndex;
   final ValueChanged<TenantShiftHistoryScope> onScopeChanged;
   final VoidCallback onNextPage;
@@ -256,8 +284,11 @@ final class _ShiftHistoryContents extends StatelessWidget {
     ],
   );
 
-  String _staffLabel(TenantShiftHistoryEntry entry) =>
-      entry.staffId == session.uid ? 'You' : entry.staffId;
+  String _staffLabel(TenantShiftHistoryEntry entry) => tenantStaffLabel(
+    entry.staffId,
+    names: staffNames,
+    selfUid: session.uid,
+  );
 
   /// Carries the already-validated shift identity into the sales page, so the
   /// sales route proves attribution against this exact shift without a second

@@ -146,6 +146,80 @@ void main() {
     expect(find.byKey(const ValueKey('sale-history-entry-co-1')), findsNothing);
   });
 
+  testWidgets('a colleague shift page names its cashier beside the UID', (
+    tester,
+  ) async {
+    final reader = _Reader(staffNames: <String, String>{'user-b': 'Brian'})
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _colleagueSale('co-2', sequence: 2),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      reader,
+      _colleagueShiftRequest(),
+    );
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-history-recorded-at-co-2')),
+          )
+          .data,
+      'Recorded 2026-07-31 12:00 UTC by Brian (user-b)',
+    );
+  });
+
+  testWidgets('a cashier own page labels itself', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot('co-1'),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      const TenantOwnSaleHistoryRequest(),
+    );
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-history-recorded-at-co-1')),
+          )
+          .data,
+      'Recorded 2026-07-31 12:00 UTC by You',
+    );
+  });
+
+  testWidgets('an unreadable staff record leaves the cashier UID in place', (
+    tester,
+  ) async {
+    final reader = _Reader(deniedStaff: true)
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _colleagueSale('co-2', sequence: 2),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      reader,
+      _colleagueShiftRequest(),
+    );
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-history-recorded-at-co-2')),
+          )
+          .data,
+      'Recorded 2026-07-31 12:00 UTC by user-b',
+    );
+    expect(find.byKey(const ValueKey('sale-history-failure')), findsNothing);
+  });
+
   testWidgets('each scope names itself on its own route', (tester) async {
     final controller = _controller();
     final reader = _Reader()
@@ -227,14 +301,40 @@ TenantSaleShiftScope _scope() => const TenantSaleShiftScope(
   businessDate: _businessDate,
 );
 
-TenantSessionController _controller() => TenantSessionController()
-  ..open(uid: 'user-a', membership: _membership('tenant-a'));
+/// A manager inspecting the shift of another cashier: the only page on which
+/// a colleague's identity is shown.
+TenantShiftSaleHistoryRequest _colleagueShiftRequest() =>
+    TenantShiftSaleHistoryRequest(
+      shift: const TenantSaleShiftScope(
+        shiftId: 'shift-a',
+        staffId: 'user-b',
+        deviceId: _deviceA,
+        businessDate: _businessDate,
+      ),
+      recordedTransactionCount: 1,
+      recordedTotalSalesMinor: 900,
+      countedCashMinor: 900,
+    );
 
-TenantMembership _membership(String tenantId) => TenantMembership(
+TenantQueryDocumentSnapshot _colleagueSale(String saleId, {int sequence = 1}) =>
+    _snapshot(
+      saleId,
+      sequence: sequence,
+      overrides: <String, Object?>{'soldById': 'user-b'},
+    );
+
+TenantSessionController _controller({TenantRole role = TenantRole.cashier}) =>
+    TenantSessionController()
+      ..open(uid: 'user-a', membership: _membership('tenant-a', role: role));
+
+TenantMembership _membership(
+  String tenantId, {
+  TenantRole role = TenantRole.cashier,
+}) => TenantMembership(
   tenantId: tenantId,
   tenantName: tenantId,
   tenantSlug: tenantId,
-  role: TenantRole.cashier,
+  role: role,
   membershipStatus: MembershipStatus.active,
   tenantStatus: TenantStatus.active,
   isOwner: false,
@@ -294,9 +394,18 @@ TenantQueryDocumentSnapshot _snapshot(
 }
 
 final class _Reader implements TenantDataReader {
-  _Reader({this.deferred = false});
+  _Reader({
+    this.deferred = false,
+    this.deniedStaff = false,
+    this.staffNames = const <String, String>{},
+  });
 
   final bool deferred;
+
+  /// Stands in for the narrowed canonical staff read: a role the rule refuses
+  /// gets no name and must still see the sales.
+  final bool deniedStaff;
+  final Map<String, String> staffNames;
   final Map<String, List<TenantQueryDocumentSnapshot>> _pages =
       <String, List<TenantQueryDocumentSnapshot>>{};
   final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
@@ -314,7 +423,17 @@ final class _Reader implements TenantDataReader {
   }
 
   @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    if (deniedStaff) throw StateError('permission-denied');
+    final uid = path.split('/').last;
+    final name = staffNames[uid];
+    return name == null
+        ? null
+        : TenantDocumentSnapshot(
+            path: path,
+            data: <String, Object?>{'uid': uid, 'name': name},
+          );
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(

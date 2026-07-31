@@ -5032,3 +5032,150 @@ now need, and nothing else:
    product cost/profit fields, subscription and branding surfaces, server-side
    cross-device shift transfer, deployment, and Android build/emulator
    validation outside that chunk.
+
+---
+
+## Guarded staff-name resolution handoff - 2026-08-01
+
+### Completed in this session
+
+Both history surfaces now name the cashier they are attributing evidence to,
+and the canonical staff read was narrowed so that name is only resolvable by a
+role entitled to the record behind it. This chunk adds no checkout screen or
+payment flow, no receipt printing, no returns, and makes no legacy operational
+POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `TenantStaffNameResolver` extends the guarded `TenantReadRepository` and
+  resolves `staff/{uid}` display names for the UIDs on one page. It is the one
+  repository that deliberately does **not** fail a page closed: a display name
+  is a convenience label and the UID beside it is the authoritative identity, so
+  an unreadable, missing, or malformed record degrades to the UID rather than
+  hiding a page of financial evidence. A `TenantScopeViolation` still
+  propagates, because a transport answering outside this tenant is a broken
+  boundary, not an unavailable label.
+- Only the explicit `name` field is used. The staff record also carries an email
+  and a phone number, and a history row is not the place to disclose either. A
+  record whose `uid` does not match its own path resolves to nothing, exactly as
+  the staff directory requires, because it describes somebody else.
+- Resolution is bounded to 25 documents per page - a page is bounded, but its
+  distinct cashiers are not necessarily few - and the remainder simply shows
+  UIDs. Misses are cached, so a denied record is not re-requested on every page.
+- One resolver exists per session. The cache key is UID, tenant, and epoch, so a
+  tenant switch or re-open discards it and it can never label the next session's
+  rows.
+- **The canonical staff read rule was narrowed.** A cashier now reads only its
+  own record; owners, admins, and managers read the whole roster, which is what
+  the staff directory screen already required. The identity compared in the rule
+  is the `{uid}` path wildcard rather than a document field, so - unlike the
+  shift rule earlier in this session - an absent record still answers instead of
+  raising an evaluation error. A cashier consequently sees a colleague's UID and
+  a manager sees the name, with no client branching: the resolver degrades on
+  its own.
+- `tenantStaffLabel` keeps the UID visible beside every resolved name
+  (`Brian (user-b)`), and labels the caller `You` or `You (Amina)`. The UID is
+  the identity every sale, shift, and audit record is attributed by, so it is
+  never replaced by a name.
+
+Deliberately outside this chunk, and important for the next session:
+
+- A colleague's name only ever appears on a management page. Both cashier-facing
+  pages are scoped to the caller's own UID by construction, so the fallback is
+  the normal path there, not an error.
+- The resolver reads one document per distinct UID. A page dominated by distinct
+  cashiers costs up to 25 reads; a denormalized `soldByName` on the sale would
+  remove that cost but would also freeze a name that later changes.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/sales/sale_history_panel.dart
+lib/shift/shift_history_panel.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_staff_names.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/staff-directory-read.test.js
+test/sales/sale_history_panel_test.dart
+test/shift/shift_history_panel_test.dart
+test/tenancy/tenant_staff_names_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/sales lib/shift lib/checkout lib/tenancy
+  test/sales test/shift test/checkout test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/sales
+  test/shift test/checkout test/tenancy` passed **514/514** relevant Flutter
+  tests, including **11** new tests: 7 resolver and label, 3 sale-panel naming,
+  and 1 shift-panel fallback case.
+- `npm --prefix rules-tests run test:emulator:staff-directory-read` passed the
+  focused Firestore-only suite **4/4** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **66/66** (62 existing plus the 4 new staff-read cases).
+- `npm --prefix functions test` passed **166/166** Functions tests with the
+  pinned Node 24 / Temurin JDK 21 environment. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending warnings.
+  Android build and Android emulator validation were intentionally skipped as
+  requested.
+
+Meaningful failures and their resolutions:
+
+- **Two widget tests asserted a colleague's row on a page that can never show
+  one.** Both cashier-facing sale pages are scoped to the caller's own UID, so
+  the fake reader correctly filtered the colleague's sale out. The tests now use
+  the only page where a colleague appears - a manager inspecting another
+  cashier's shift - which is also the only place the narrowed staff rule
+  resolves a name.
+- **A test source file ended up containing a raw control character.** The
+  malformed-name case was written with a literal BEL instead of an escape. It
+  was replaced with a visible `` through a checked script rather than a
+  shell text rewrite, which is the same failure mode recorded in an earlier
+  chunk.
+- No other test assertion failed; the analyzer and every other command in the
+  final sequence were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded daily sales summary the reporting contract already
+expects, and nothing else:
+
+1. Add a strict read model and guarded repository for the tenant's daily
+   metrics documents that nightly reconciliation regenerates, deriving every
+   path from `TenantPaths` and refusing a document that disagrees with the
+   business date encoded in its own path. Confirm the canonical collection and
+   field names against `functions/src/reconciliation/**` before designing the
+   model; do not invent a schema the backend does not write. `TenantCollection`
+   may need one new frozen segment, which is a deliberate path-contract change.
+2. Render a management-only daily summary behind `TenantRouteGuard`, showing the
+   reconciled figures as recorded, with an explicit `not yet reconciled` state
+   for a day the workers have not processed. Do not aggregate sales on the
+   device.
+3. Decide and test the read boundary for those documents exactly as the last
+   three chunks did, including the absent-document case, which is the normal
+   state for today's date.
+4. Add the composite indexes any bounded date-range page needs, remembering that
+   a descending page must carry at least one equality filter.
+5. Add unit, widget, and focused Rules emulator coverage for a missing day, a
+   wrong-role read, a cross-tenant response, a tenant switch during an
+   outstanding load, and a malformed metrics document.
+6. Leave `getSalesComparison`, the legacy report screens, the checkout screen
+   and payment flow, receipt printing, returns, product cost/profit fields,
+   subscription and branding surfaces, deployment, and Android build/emulator
+   validation outside that chunk.

@@ -95,6 +95,21 @@ carries at least one equality filter. `TenantReadRepository` refuses to build an
 unfiltered descending page at all, which turns that runtime query failure into
 an immediate programming error.
 
+For the focused canonical staff read boundary, run
+`npm --prefix rules-tests run test:emulator:staff-directory-read`. It proves
+that a cashier reads only its own staff record and cannot list the roster, that
+owners, admins, and managers read every record, that an absent record still
+answers, and that a deactivated or non-member identity reads nothing - not even
+its own record, because canonical access ends with the membership.
+
+That rule was narrowed deliberately: a canonical staff record carries the
+member's email and phone number, and the staff directory screen is already
+owner/admin/manager-only. History surfaces therefore resolve a colleague's name
+for management and fall back to the UID for a cashier, which the client's name
+resolver does on its own. The identity compared in the rule is the path
+wildcard, not a document field, so an absent record still answers instead of
+raising an evaluation error.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under
