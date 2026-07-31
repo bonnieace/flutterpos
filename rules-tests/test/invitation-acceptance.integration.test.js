@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -9,13 +10,28 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 import { createInvitationProof } from
   "../../functions/lib/staff/invitationProof.js";
+import {
+  PlatformAdminRevocationError,
+  revokePlatformAdmin,
+} from "../../functions/lib/platform/revokePlatformAdmin.js";
 
 const PROJECT_ID = "demo-multitenant-invitation-integration";
 const INVITATION_SECRET =
   "local-emulator-invitation-hmac-secret-at-least-32-bytes";
 const PASSWORD = "Local-emulator-password-123!";
+const requireFunctionsAdmin = createRequire(new URL(
+  "../../functions/package.json",
+  import.meta.url,
+));
+const functionsAdminApp = requireFunctionsAdmin("firebase-admin/app");
+const functionsAdminAuth = requireFunctionsAdmin("firebase-admin/auth");
+const functionsAdminFirestore = requireFunctionsAdmin("firebase-admin/firestore");
 const GRANT_PLATFORM_ADMIN_CLI = fileURLToPath(new URL(
   "../../functions/lib/cli/grantPlatformAdmin.js",
+  import.meta.url,
+));
+const REVOKE_PLATFORM_ADMIN_CLI = fileURLToPath(new URL(
+  "../../functions/lib/cli/revokePlatformAdmin.js",
   import.meta.url,
 ));
 const ACCEPTANCE_FIELDS = [
@@ -29,6 +45,9 @@ const ACCEPTANCE_FIELDS = [
 let app;
 let auth;
 let firestore;
+let revocationApp;
+let revocationAuth;
+let revocationFirestore;
 
 before(async () => {
   requireEmulator("FIREBASE_AUTH_EMULATOR_HOST");
@@ -38,10 +57,61 @@ before(async () => {
   app = initializeApp({ projectId: PROJECT_ID }, "invitation-integration");
   auth = getAuth(app);
   firestore = getFirestore(app);
+  revocationApp = functionsAdminApp.initializeApp(
+    { projectId: PROJECT_ID },
+    "platform-revocation-integration",
+  );
+  revocationAuth = functionsAdminAuth.getAuth(revocationApp);
+  revocationFirestore = functionsAdminFirestore.getFirestore(revocationApp);
 });
 
 after(async () => {
+  if (revocationApp) await functionsAdminApp.deleteApp(revocationApp);
   if (app) await deleteApp(app);
+});
+
+test("platform-admin revocation refuses the last fully active administrator", async () => {
+  const uid = "revoke-last-admin";
+  const now = Timestamp.now();
+  await auth.createUser({
+    uid,
+    email: `${uid}@integration.example.test`,
+    emailVerified: true,
+    disabled: false,
+  });
+  await auth.setCustomUserClaims(uid, { platformRole: "superAdmin" });
+  await firestore.doc(`users/${uid}`).set({
+    email: `${uid}@integration.example.test`,
+    accountType: "platform_admin",
+    identityOrigin: "platform_bootstrap",
+    globalStatus: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await assert.rejects(
+    revokePlatformAdmin({ db: revocationFirestore, auth: revocationAuth }, {
+      actorUid: "separate-break-glass-actor",
+      targetUid: uid,
+      requestId: "platform-revoke-last-admin-001",
+      reason: "Exercise the authoritative last-admin safety boundary.",
+    }),
+    (error) => error instanceof PlatformAdminRevocationError &&
+      error.code === "last-platform-admin" && !error.recoverable,
+  );
+  const [root, operations, audits] = await Promise.all([
+    firestore.doc(`users/${uid}`).get(),
+    firestore.collection("platform_identity_operations")
+      .where("targetUid", "==", uid).get(),
+    firestore.collection("platform_audit_logs")
+      .where("targetUid", "==", uid).get(),
+  ]);
+  assert.equal(root.get("accountType"), "platform_admin");
+  assert.equal(root.get("identityTransition"), undefined);
+  assert.equal(operations.size, 1);
+  assert.equal(operations.docs[0].get("status"), "rejected");
+  assert.equal(audits.size, 1);
+  assert.equal(audits.docs[0].get("rejectionCode"), "last-platform-admin");
 });
 
 test("acceptTenantInvitation consumes a real versioned proof", async () => {
@@ -510,6 +580,138 @@ test("grant-platform-admin CLI completes, rejects, and resumes real grants", asy
   assert.equal(root.get("accountType"), "platform_admin");
   assert.equal(root.get("identityTransition"), undefined);
   assert.equal(authUser.customClaims?.platformRole, "superAdmin");
+  assert.equal(audit.get("status"), "completed");
+});
+
+test("revoke-platform-admin CLI completes, rejects stale state, and resumes", async () => {
+  const fixture = await seedPlatformRevokeFixture("revoke-cli");
+
+  const completed = runPlatformRevokeCli(
+    fixture.operatorUid,
+    fixture.targetUid,
+    "platform-revoke-emulator-success-001",
+    "The dedicated platform access is no longer required.",
+    0,
+  );
+  assert.equal(completed.status, "completed");
+  assert.equal(completed.targetUid, fixture.targetUid);
+  assert.equal(completed.resumed, false);
+  assert.equal(Number.isSafeInteger(completed.authValidAfterSeconds), true);
+
+  let [root, authUser, operation, audit] = await Promise.all([
+    firestore.doc(`users/${fixture.targetUid}`).get(),
+    auth.getUser(fixture.targetUid),
+    firestore.doc(`platform_identity_operations/${completed.operationId}`).get(),
+    firestore.doc(`platform_audit_logs/${completed.auditId}`).get(),
+  ]);
+  assert.equal(root.get("accountType"), "tenant_user");
+  assert.equal(root.get("identityTransition"), undefined);
+  assert.equal(root.get("platformIdentityOperationId"), undefined);
+  assert.equal(root.get("authValidAfterSeconds"), completed.authValidAfterSeconds);
+  assert.deepEqual(authUser.customClaims, { supportTier: "senior" });
+  assert.equal(typeof authUser.tokensValidAfterTime, "string");
+  assert.equal(operation.get("status"), "completed");
+  assert.equal(operation.get("claimStatus"), "removed");
+  assert.equal(operation.get("tokenStatus"), "completed");
+  assert.equal(audit.get("status"), "completed");
+  assert.equal(audit.get("actorUid"), fixture.operatorUid);
+  assert.equal(audit.get("fullyActiveOtherAdminCount") >= 1, true);
+  assert.deepEqual(audit.get("canonicalEvidenceCounts"), {
+    staffMemberships: 0,
+    ownedTenants: 0,
+    unresolvedInvitations: 0,
+  });
+
+  const repeated = runPlatformRevokeCli(
+    fixture.operatorUid,
+    fixture.targetUid,
+    "platform-revoke-emulator-success-001",
+    "The dedicated platform access is no longer required.",
+    0,
+  );
+  assert.equal(repeated.operationId, completed.operationId);
+  assert.equal(repeated.resumed, true);
+
+  const stale = runPlatformRevokeCli(
+    fixture.operatorUid,
+    fixture.staleUid,
+    "platform-revoke-emulator-stale-001",
+    "Reject root-only administrator state without restoring its claim.",
+    4,
+  );
+  assert.deepEqual(stale, {
+    status: "rejected",
+    code: "target-state-disagreement",
+    recoverable: false,
+  });
+  [root, authUser] = await Promise.all([
+    firestore.doc(`users/${fixture.staleUid}`).get(),
+    auth.getUser(fixture.staleUid),
+  ]);
+  assert.equal(root.get("accountType"), "platform_admin");
+  assert.equal(root.get("identityTransition"), undefined);
+  assert.equal(authUser.customClaims?.platformRole, undefined);
+
+  const ineligible = runPlatformRevokeCli(
+    fixture.operatorUid,
+    fixture.ineligibleUid,
+    "platform-revoke-emulator-ineligible-001",
+    "Canonical tenant evidence must block identity conversion.",
+    4,
+  );
+  assert.equal(ineligible.code, "platform-identity-ineligible");
+  root = await firestore.doc(`users/${fixture.ineligibleUid}`).get();
+  assert.equal(root.get("accountType"), "platform_admin");
+  assert.equal(root.get("identityTransition"), undefined);
+
+  const partialInput = {
+    actorUid: fixture.operatorUid,
+    targetUid: fixture.partialUid,
+    requestId: "platform-revoke-emulator-partial-001",
+    reason: "Resume after an ambiguous successful Auth claim removal.",
+  };
+  let failAfterClaimRemoval = true;
+  await assert.rejects(
+    revokePlatformAdmin({
+      db: revocationFirestore,
+      auth: {
+        getUser: (uid) => revocationAuth.getUser(uid),
+        async setCustomUserClaims(uid, claims) {
+          await revocationAuth.setCustomUserClaims(uid, claims);
+          if (failAfterClaimRemoval) {
+            failAfterClaimRemoval = false;
+            throw new Error("simulated_response_loss_after_claim_removal");
+          }
+        },
+        revokeRefreshTokens: (uid) => revocationAuth.revokeRefreshTokens(uid),
+      },
+    }, partialInput),
+    (error) => error instanceof PlatformAdminRevocationError &&
+      error.code === "claim-removal-failed" && error.recoverable,
+  );
+  [root, authUser] = await Promise.all([
+    firestore.doc(`users/${fixture.partialUid}`).get(),
+    auth.getUser(fixture.partialUid),
+  ]);
+  assert.equal(root.get("identityTransition"), "revoking_platform");
+  assert.equal(authUser.customClaims?.platformRole, undefined);
+
+  const resumed = await revokePlatformAdmin({
+    db: revocationFirestore,
+    auth: revocationAuth,
+  }, partialInput);
+  assert.equal(resumed.resumed, true);
+  [root, authUser, operation, audit] = await Promise.all([
+    firestore.doc(`users/${fixture.partialUid}`).get(),
+    auth.getUser(fixture.partialUid),
+    firestore.doc(`platform_identity_operations/${resumed.operationId}`).get(),
+    firestore.doc(`platform_audit_logs/${resumed.auditId}`).get(),
+  ]);
+  assert.equal(root.get("accountType"), "tenant_user");
+  assert.equal(root.get("identityTransition"), undefined);
+  assert.equal(authUser.customClaims?.platformRole, undefined);
+  assert.equal(operation.get("attemptCount"), 2);
+  assert.equal(operation.get("status"), "completed");
   assert.equal(audit.get("status"), "completed");
 });
 
@@ -1020,7 +1222,101 @@ function runPlatformGrantCli(
   ], {
     encoding: "utf8",
     env: process.env,
-    timeout: 30_000,
+    timeout: 60_000,
+  });
+  if (result.error) throw result.error;
+  assert.equal(
+    result.status,
+    expectedExitCode,
+    `stdout=${result.stdout}\nstderr=${result.stderr}`,
+  );
+  const output = expectedExitCode === 0 ? result.stdout : result.stderr;
+  return JSON.parse(output);
+}
+
+async function seedPlatformRevokeFixture(suffix) {
+  const operatorUid = `revoke-operator-${suffix}`;
+  const targetUid = `revoke-target-${suffix}`;
+  const staleUid = `revoke-stale-${suffix}`;
+  const ineligibleUid = `revoke-ineligible-${suffix}`;
+  const partialUid = `revoke-partial-${suffix}`;
+  const tenantId = `revoke-tenant-${suffix}`;
+  const uids = [operatorUid, targetUid, staleUid, ineligibleUid, partialUid];
+  const now = Timestamp.now();
+  await Promise.all(uids.map((uid) => auth.createUser({
+    uid,
+    email: `${uid}@integration.example.test`,
+    emailVerified: true,
+    disabled: false,
+  })));
+  await Promise.all([
+    auth.setCustomUserClaims(operatorUid, { platformRole: "superAdmin" }),
+    auth.setCustomUserClaims(targetUid, {
+      supportTier: "senior",
+      platformRole: "superAdmin",
+    }),
+    auth.setCustomUserClaims(ineligibleUid, { platformRole: "superAdmin" }),
+    auth.setCustomUserClaims(partialUid, {
+      supportTier: "response-team",
+      platformRole: "superAdmin",
+    }),
+  ]);
+  const root = (uid) => ({
+    email: `${uid}@integration.example.test`,
+    accountType: "platform_admin",
+    identityOrigin: "platform_bootstrap",
+    globalStatus: "active",
+    membershipCount: 0,
+    ownedTenantCount: 0,
+    ownedActiveTenantCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const batch = firestore.batch();
+  for (const uid of uids) batch.set(firestore.doc(`users/${uid}`), root(uid));
+  batch.set(firestore.doc(`tenants/${tenantId}`), {
+    name: "Revocation canonical blocker",
+    slug: tenantId,
+    ownerUid: ineligibleUid,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`tenants/${tenantId}/staff/${ineligibleUid}`), {
+    uid: ineligibleUid,
+    email: `${ineligibleUid}@integration.example.test`,
+    role: "owner",
+    status: "active",
+    invitationStatus: "accepted",
+    createdAt: now,
+    joinedAt: now,
+    updatedAt: now,
+  });
+  await batch.commit();
+  return {operatorUid, targetUid, staleUid, ineligibleUid, partialUid};
+}
+
+function runPlatformRevokeCli(
+  operatorUid,
+  targetUid,
+  requestId,
+  reason,
+  expectedExitCode,
+) {
+  const result = spawnSync(process.execPath, [
+    REVOKE_PLATFORM_ADMIN_CLI,
+    "--environment", "emulator",
+    "--project-id", PROJECT_ID,
+    "--confirm-project-id", PROJECT_ID,
+    "--actor-uid", operatorUid,
+    "--target-uid", targetUid,
+    "--confirm-target-uid", targetUid,
+    "--request-id", requestId,
+    "--reason", reason,
+  ], {
+    encoding: "utf8",
+    env: process.env,
+    timeout: 60_000,
   });
   if (result.error) throw result.error;
   assert.equal(

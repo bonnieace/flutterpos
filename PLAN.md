@@ -3093,3 +3093,136 @@ operator-only boundary:
    evidence, partial failure resumption, token cutoff, and audits. Leave
    tenant switching, checkout/Hive state, deployment, and operational POS
    screens outside that chunk.
+
+---
+
+## Guarded platform-admin revocation CLI handoff - 2026-07-31
+
+### Completed in this session
+
+Canonical platform-administrator revocation now exists only behind a
+deliberately invoked Admin SDK CLI and a private resumable service. It is not
+exported from `functions/src/index.ts`; no callable, Flutter role-management
+surface, user directory, search, or bulk action was added.
+
+Implemented behavior:
+
+- `revoke-platform-admin` reuses the fixed development, staging, production,
+  and localhost-only emulator allowlist. It requires the explicit environment,
+  exact project and confirmation, claim-plus-root operator UID, exact target
+  UID and confirmation, a stable request ID, a normalized 3-1000 character
+  reason, and production confirmation. Actor and target must differ.
+- The private service transactionally acquires
+  `identityTransition=revoking_platform` plus an exact deterministic operation
+  lock. Stable input and progress are stored under
+  `platform_identity_operations`; privileged actor, reason, scan, phase,
+  cutoff, and completion evidence are stored under `platform_audit_logs`.
+- Before any Auth mutation it verifies the target's enabled `superAdmin` claim
+  and active `platform_admin` root, repeats the canonical collection-group
+  staff and invitation scans plus tenant-owner scan, and rejects any tenant
+  evidence. Advisory root counters are never consulted for authorization.
+- A bounded authoritative root/Auth scan requires proof of another fully
+  active claim-plus-root administrator. A complete scan with no other active
+  administrator rejects revocation; a truncated scan without positive proof
+  fails recoverably. Identities already holding a transition cannot count.
+- The saga durably records `claim_removal_pending` before removing only the
+  `platformRole` claim. It then revokes refresh tokens, records the second-safe
+  Auth cutoff, and atomically converts the root to `tenant_user` while clearing
+  the transition and operation lock. Unrelated custom claims are preserved.
+- A response loss after successful Auth claim removal resumes from the durable
+  pending phase and never restores a platform claim. Initial root/claim
+  disagreement rejects fail-closed; partial external or Firestore failures use
+  exit `5` and require the identical command and request ID.
+- Terminal target, canonical tenant-evidence, last-admin, and operation
+  conflicts use deterministic safe denial states. Provider and canonical
+  evidence details are absent from CLI error output.
+- The real emulator fixture proves last-admin denial, successful CLI
+  completion, idempotent replay, unrelated-claim preservation, refresh-token
+  cutoff, root demotion, canonical evidence and stale-state rejection, and
+  recovery after an ambiguous successful claim removal.
+- The integration runner now gives Firebase's HTTP Functions discovery a
+  bounded 60-second default through its supported
+  `FUNCTIONS_DISCOVERY_TIMEOUT` override. This avoids the Firebase CLI's
+  unreliable 10-second default on the current constrained Windows host and can
+  still be explicitly overridden.
+
+Files in this chunk:
+
+```text
+functions/package.json
+functions/src/cli/revokePlatformAdmin.test.ts
+functions/src/cli/revokePlatformAdmin.ts
+functions/src/core/model.ts
+functions/src/platform/README.md
+functions/src/platform/revokePlatformAdmin.test.ts
+functions/src/platform/revokePlatformAdmin.ts
+rules-tests/README.md
+rules-tests/scripts/run-invitation-emulator-tests.js
+rules-tests/test/invitation-acceptance.integration.test.js
+PLAN.md
+```
+
+Validation evidence:
+
+- `npm --prefix functions test` passed **166/166** Functions tests.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules suite
+  **21/21** using portable Node.js 24 and JDK 21.
+- A focused revocation integration run passed **2/2** real Auth/Firestore
+  emulator tests after the harness used the Functions package's Firebase Admin
+  instance for direct private-service calls.
+- `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator tests, including every previous
+  callable/grant contract and the new revocation transactions.
+- Android build/emulator validation was intentionally skipped for this chunk
+  at the user's request.
+
+The first complete integration command wrapper expired after three minutes and
+left one Firestore emulator process, which was identified by its exact command
+line and stopped before retry. The first focused revocation run exposed a
+test-only mixed-Firebase-Admin sentinel mismatch; using the Functions package's
+Admin clients fixed it and the focused run passed. Two later full launches hit
+Firebase CLI's 10-second Functions discovery timeout before loading any
+callables. After the runner set the supported bounded 60-second discovery
+override, the complete 12-test suite loaded all seven fixtures and passed.
+
+All successful emulator runs pinned portable Node.js 24, Temurin JDK 21, and
+`NODE_OPTIONS=--max-old-space-size=512` from `D:\firebase-emulator-tools`.
+Those tools are machine-local and are not repository artifacts.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded frontend chunk
+
+Implement only the tenant-switch safety coordinator and wire it into the typed
+routing shell:
+
+1. Add a session-bound `TenantSwitchCoordinator` with typed blockers for an
+   unsynchronized checkout, submission in flight, other pending writes,
+   unfinished cash count/shift close, unsaved tenant workflow, and unavailable
+   online target validation. A server-confirmed open shift by itself must not
+   block switching.
+2. Require every registered tenant-scoped state source to return an explicit
+   clean or blocked result; missing, malformed, or failed state inspection must
+   fail closed. Keep checkout submission and cash-close implementation outside
+   this chunk.
+3. Revalidate the exact target against the canonical paginated tenant
+   directory while online, retain the current session on any denial/failure,
+   and persist the device-local last selection only after the new authorized
+   session has opened.
+4. Expose a bounded `Change business` path from the current safe tenant shell,
+   invalidate prior-session asynchronous completions by epoch, and prevent
+   duplicate concurrent switch attempts. Do not make legacy operational POS
+   screens reachable.
+5. Add unit/widget coverage for every blocker, open-shift non-blocking behavior,
+   offline and inspection failures, stale target access, failed persistence,
+   current-session preservation, successful epoch change, and stale async
+   completion disposal.
+6. Leave the encrypted Hive checkout outbox state machine, shift restoration,
+   cashier cross-tenant shift restriction, stock mutation, receipts,
+   deployment, and Android emulator validation outside that chunk.

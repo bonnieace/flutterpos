@@ -84,6 +84,8 @@ try {
       env: {
         ...process.env,
         CI: "true",
+        FUNCTIONS_DISCOVERY_TIMEOUT:
+          process.env.FUNCTIONS_DISCOVERY_TIMEOUT ?? "60000",
         FUNCTIONS_EMULATOR_HOST: "127.0.0.1:5101",
         GCLOUD_PROJECT: projectId,
         STAFF_INVITATION_HMAC_SECRET_V1: invitationSecret,

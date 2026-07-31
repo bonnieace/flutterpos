@@ -9,6 +9,7 @@
     "start": "npm run shell",
     "owner-recovery": "npm run build && node lib/cli/ownerRecovery.js",
     "grant-platform-admin": "npm run build && node lib/cli/grantPlatformAdmin.js",
+    "revoke-platform-admin": "npm run build && node lib/cli/revokePlatformAdmin.js",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
   },

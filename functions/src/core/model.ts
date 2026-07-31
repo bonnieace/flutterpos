@@ -24,7 +24,11 @@ export interface RootUserRecord {
   displayName?: string;
   accountType?: AccountType;
   identityOrigin?: "self_signup" | "staff_invitation" | "platform_bootstrap";
-  identityTransition?: "granting_platform" | "cleanup_pending";
+  identityTransition?:
+    | "granting_platform"
+    | "revoking_platform"
+    | "cleanup_pending";
+  platformIdentityOperationId?: string;
   globalStatus?: GlobalStatus;
   authValidAfterSeconds?: number;
   defaultTenantId?: string;

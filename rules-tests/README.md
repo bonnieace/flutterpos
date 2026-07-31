@@ -36,6 +36,10 @@ audit records.
 The same local-only harness invokes the compiled `grant-platform-admin` CLI in
 subprocesses and proves eligible completion, canonical-membership rejection,
 resumable transition completion, custom claims, roots, and audit evidence.
+It also exercises the compiled `revoke-platform-admin` CLI and private saga,
+including last-admin denial, root/claim disagreement, canonical tenant
+evidence, idempotent success, refresh-token cutoff, and recovery after an
+ambiguous successful claim removal.
 
 Use Node.js 24 and JDK 21 or newer, then run from the repository root:
 
@@ -54,6 +58,10 @@ file, removes it after the emulator exits, and refuses to overwrite existing
 local configuration. It also refuses non-`demo-*` projects or missing
 localhost emulator hosts. It does not read `.firebaserc` and cannot target the
 configured development, staging, or production projects.
+
+The runner defaults Firebase Functions HTTP discovery to 60 seconds because
+the CLI's 10-second default is unreliable on constrained Windows hosts. Set
+`FUNCTIONS_DISCOVERY_TIMEOUT` explicitly to override that bounded default.
 
 For focused diagnosis, set `INTEGRATION_TEST_NAME_PATTERN` to a Node test-name
 pattern before launching the runner. On memory-constrained Windows hosts, set
