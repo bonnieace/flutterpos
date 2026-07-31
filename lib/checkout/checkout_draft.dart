@@ -25,14 +25,47 @@ final class CheckoutDraftException implements Exception {
 typedef CheckoutIdFactory = String Function();
 typedef CheckoutDraftClock = DateTime Function();
 
-/// A tenant-scoped policy consulted before any checkout may start.
+/// The canonical shift one draft is attributed to.
 ///
-/// The shift lifecycle implements this to enforce the frozen restriction that a
-/// cashier cannot open checkout in a second business while another business
-/// still holds an open shift on the same device.
-abstract interface class CheckoutStartGuard {
-  /// Returns `null` when a checkout may start, or the refusal code otherwise.
-  Future<String?> refuseCheckoutStart(TenantSession session);
+/// It repeats the identity the sale will carry so the draft service can prove
+/// the recorded `shiftId` belongs to the same cashier, business, device, and
+/// business date as the sale itself.
+final class CheckoutShiftAttribution {
+  const CheckoutShiftAttribution({
+    required this.uid,
+    required this.tenantId,
+    required this.shiftId,
+    required this.deviceId,
+    required this.businessDate,
+  });
+
+  final String uid;
+  final String tenantId;
+  final String shiftId;
+  final String deviceId;
+  final String businessDate;
+}
+
+/// Either the shift a checkout may be attributed to, or the refusal code.
+final class CheckoutShiftBinding {
+  const CheckoutShiftBinding.bound(CheckoutShiftAttribution this.attribution)
+    : refusalCode = null;
+
+  const CheckoutShiftBinding.refused(String this.refusalCode)
+    : attribution = null;
+
+  final CheckoutShiftAttribution? attribution;
+  final String? refusalCode;
+}
+
+/// The tenant-scoped policy consulted before any checkout may start.
+///
+/// The shift lifecycle implements this to supply the open shift every sale is
+/// attributed to, and to enforce the frozen restriction that a cashier cannot
+/// open checkout in a second business while another business still holds an
+/// open shift on the same device.
+abstract interface class CheckoutShiftBinder {
+  Future<CheckoutShiftBinding> bindCheckoutShift(TenantSession session);
 }
 
 /// Resolves the business date recorded on a sale from the current UTC instant.
@@ -57,16 +90,17 @@ final class CheckoutDraftLineRequest {
 /// The device identity is deliberately not a caller input: it is resolved once
 /// per installation from durable local state so a receipt cannot be attributed
 /// to a device that never issued it.
+/// The shift is deliberately not a caller input either: it is taken from the
+/// guarded shift lifecycle so a sale cannot name a shift the cashier does not
+/// hold.
 final class CheckoutDraftRequest {
   CheckoutDraftRequest({
     required List<CheckoutDraftLineRequest> lines,
     this.discountMinor = 0,
-    this.shiftId,
   }) : lines = List<CheckoutDraftLineRequest>.unmodifiable(lines);
 
   final List<CheckoutDraftLineRequest> lines;
   final int discountMinor;
-  final String? shiftId;
 }
 
 /// Builds one frozen `CheckoutSalePayload` v1 draft from the offline cache.
@@ -77,13 +111,17 @@ final class CheckoutDraftRequest {
 /// checkout ID nor persist work for a tenant the device has already left. That
 /// same lock guards receipt allocation, so two cashiers checking out on one
 /// device cannot receive the same receipt number.
+///
+/// Every draft is attributed to the canonical open shift supplied by
+/// [CheckoutShiftBinder]. The binder is required: a checkout with no proven
+/// open shift is refused rather than recorded as an unreconcilable sale.
 final class CheckoutDraftService {
   CheckoutDraftService({
     required TenantSessionController sessionController,
     required HiveCheckoutCatalogCache cache,
     required HiveCheckoutOutbox outbox,
     required HiveCheckoutReceiptCounters receipts,
-    CheckoutStartGuard? startGuard,
+    required CheckoutShiftBinder shiftBinder,
     CheckoutIdFactory? checkoutIdFactory,
     CheckoutDraftClock? clock,
     CheckoutBusinessDateResolver? businessDateResolver,
@@ -91,7 +129,7 @@ final class CheckoutDraftService {
        _cache = cache,
        _outbox = outbox,
        _receipts = receipts,
-       _startGuard = startGuard,
+       _shiftBinder = shiftBinder,
        _checkoutIdFactory = checkoutIdFactory ?? _generateCheckoutId,
        _clock = clock ?? _utcNow,
        _businessDateResolver = businessDateResolver ?? checkoutBusinessDate;
@@ -100,7 +138,7 @@ final class CheckoutDraftService {
   final HiveCheckoutCatalogCache _cache;
   final HiveCheckoutOutbox _outbox;
   final HiveCheckoutReceiptCounters _receipts;
-  final CheckoutStartGuard? _startGuard;
+  final CheckoutShiftBinder _shiftBinder;
   final CheckoutIdFactory _checkoutIdFactory;
   final CheckoutDraftClock _clock;
   final CheckoutBusinessDateResolver _businessDateResolver;
@@ -136,7 +174,7 @@ final class CheckoutDraftService {
     if (!_owns(captured)) {
       throw const CheckoutDraftException('session_changed');
     }
-    await _authorizeCheckoutStart(captured);
+    final attribution = await _boundShift(captured);
 
     final lines = _validatedLines(request.lines);
     final snapshot = await _cache.read(
@@ -180,6 +218,12 @@ final class CheckoutDraftService {
     if (!_owns(captured)) {
       throw const CheckoutDraftException('session_changed');
     }
+    _assertShiftDescribesThisSale(
+      attribution,
+      captured: captured,
+      deviceId: deviceId,
+      businessDate: businessDate,
+    );
 
     // The sequence is allocated last, after every refusable check, so a
     // rejected draft leaves an unused gap rather than a reused receipt.
@@ -207,7 +251,7 @@ final class CheckoutDraftService {
       'currency': snapshot.configuration.currency,
       'businessDate': businessDate,
       'createdAtMs': _clock().toUtc().millisecondsSinceEpoch,
-      if (request.shiftId != null) 'shiftId': request.shiftId,
+      'shiftId': attribution.shiftId,
       'deviceId': deviceId,
       'receiptNumber': receiptNumber,
       'receiptSequence': receiptSequence,
@@ -263,22 +307,53 @@ final class CheckoutDraftService {
     return lines;
   }
 
-  /// Applies the tenant-scoped checkout-start policy, if one is composed.
+  /// Resolves the canonical open shift this checkout will be attributed to.
   ///
-  /// A guard that cannot answer refuses the checkout: an unreadable local shift
-  /// state must never widen where a cashier may sell.
-  Future<void> _authorizeCheckoutStart(TenantSession captured) async {
-    final guard = _startGuard;
-    if (guard == null) return;
-    final String? refusal;
+  /// A binder that cannot answer refuses the checkout: unreadable local shift
+  /// state must never widen where a cashier may sell, and it must never produce
+  /// a sale that names no shift.
+  Future<CheckoutShiftAttribution> _boundShift(TenantSession captured) async {
+    final CheckoutShiftBinding binding;
     try {
-      refusal = await guard.refuseCheckoutStart(captured);
+      binding = await _shiftBinder.bindCheckoutShift(captured);
     } catch (_) {
       throw const CheckoutDraftException('checkout_start_unavailable');
     }
+    final refusal = binding.refusalCode;
     if (refusal != null) throw CheckoutDraftException(refusal);
+    final attribution = binding.attribution;
+    if (attribution == null) {
+      throw const CheckoutDraftException('checkout_start_unavailable');
+    }
     if (!_owns(captured)) {
       throw const CheckoutDraftException('session_changed');
+    }
+    return attribution;
+  }
+
+  /// Proves the bound shift describes this exact sale before it is recorded.
+  ///
+  /// The business date must agree because nightly reconciliation aggregates
+  /// sales per shift and business date: a sale filed under a shift from another
+  /// day could never match the shift's own closing summary.
+  void _assertShiftDescribesThisSale(
+    CheckoutShiftAttribution attribution, {
+    required TenantSession captured,
+    required String deviceId,
+    required String businessDate,
+  }) {
+    try {
+      validateTenantDocumentId(attribution.shiftId, fieldName: 'shiftId');
+    } on ArgumentError {
+      throw const CheckoutDraftException('invalid_shift_id');
+    }
+    if (attribution.uid != captured.uid ||
+        attribution.tenantId != captured.tenantId ||
+        attribution.deviceId != deviceId) {
+      throw const CheckoutDraftException('shift_binding_mismatch');
+    }
+    if (attribution.businessDate != businessDate) {
+      throw const CheckoutDraftException('shift_business_date_mismatch');
     }
   }
 

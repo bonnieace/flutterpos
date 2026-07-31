@@ -104,6 +104,30 @@ void main() {
     expect(find.byKey(const ValueKey('open-shift')), findsNothing);
   });
 
+  testWidgets('shows the confirmed sales summary during the count', (
+    tester,
+  ) async {
+    await state.save(_record(closeInProgress: true, countedCashMinor: 900));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: const ShiftSalesSummary(
+        transactionCount: 4,
+        totalMinor: 98750,
+        unsettledCount: 0,
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('shift-sales-summary')), findsOneWidget);
+    expect(
+      find.text('Confirmed sales: 4 transactions, 98750 minor units.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('renders nothing without an authorized session', (tester) async {
     final sessions = TenantSessionController();
     addTearDown(sessions.dispose);
@@ -187,8 +211,9 @@ Future<void> _settle(WidgetTester tester) async {
 Future<TenantSessionController> _pumpPanel(
   WidgetTester tester,
   HiveTenantShiftState state,
-  _Server server,
-) async {
+  _Server server, {
+  ShiftSalesSummary sales = ShiftSalesSummary.empty,
+}) async {
   final sessions = TenantSessionController()
     ..open(uid: 'user-a', membership: _membership('tenant-a'));
   addTearDown(sessions.dispose);
@@ -199,7 +224,7 @@ Future<TenantSessionController> _pumpPanel(
         child: Scaffold(
           body: TenantShiftPanel(
             controllerFactory: (controller) =>
-                _controller(controller, state, server),
+                _controller(controller, state, server, sales: sales),
           ),
         ),
       ),
@@ -212,12 +237,14 @@ Future<TenantSessionController> _pumpPanel(
 TenantShiftController _controller(
   TenantSessionController sessions,
   HiveTenantShiftState state,
-  _Server server,
-) {
+  _Server server, {
+  ShiftSalesSummary sales = ShiftSalesSummary.empty,
+}) {
   var nextShift = 0;
   return TenantShiftController(
     sessionController: sessions,
     localState: state,
+    salesLedger: _Ledger(sales),
     reader: _Reader(server),
     writer: FirebaseTenantShiftWriter.forTesting(
       isOnline: () async => true,
@@ -297,7 +324,7 @@ final class _Server {
   }
 }
 
-final class _Reader implements TenantDocumentReader {
+final class _Reader implements TenantDataReader {
   _Reader(this._server);
 
   final _Server _server;
@@ -309,6 +336,40 @@ final class _Reader implements TenantDocumentReader {
     if (data == null) return null;
     return TenantDocumentSnapshot(path: path, data: data);
   }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async {
+    final matches = <TenantQueryDocumentSnapshot>[];
+    for (final path in _server.shifts.keys.toList()..sort()) {
+      if (!path.startsWith('${query.collectionPath}/')) continue;
+      final data = _server.shifts[path]!;
+      if (!query.equalityFilters.entries.every(
+        (filter) => data[filter.key] == filter.value,
+      )) {
+        continue;
+      }
+      matches.add(TenantQueryDocumentSnapshot(path: path, data: data));
+      if (matches.length >= query.limit) break;
+    }
+    return matches;
+  }
+}
+
+/// The panel renders whatever the controller publishes; the sale evidence
+/// itself is proved in the ledger and controller suites.
+final class _Ledger implements ShiftSalesLedger {
+  const _Ledger(this.summary);
+
+  final ShiftSalesSummary summary;
+
+  @override
+  Future<ShiftSalesSummary> summarize({
+    required String uid,
+    required String tenantId,
+    required String shiftId,
+  }) async => summary;
 }
 
 TenantMembership _membership(

@@ -130,6 +130,18 @@ final class _ShiftContents extends StatelessWidget {
           key: ValueKey('shift-other-tenant-open'),
           'Another business still has an open shift on this device.',
         ),
+      if (state.otherDeviceShiftOpen)
+        const Text(
+          key: ValueKey('shift-other-device-open'),
+          'Your shift in this business is open on another device. Close it '
+          'there before opening a shift here.',
+        ),
+      if (state.sales != null)
+        Text(
+          key: const ValueKey('shift-sales-summary'),
+          'Confirmed sales: ${state.sales!.transactionCount} transactions, '
+          '${state.sales!.totalMinor} minor units.',
+        ),
       if (state.errorCode != null)
         Text(key: const ValueKey('shift-error'), _errorLabel()),
       const SizedBox(height: 8),
@@ -196,6 +208,11 @@ final class _ShiftContents extends StatelessWidget {
     'offline' => 'This device is offline, so shift state was not confirmed.',
     'other_tenant_shift_open' =>
       'Close the open shift in the other business first.',
+    'shift_open_on_other_device' =>
+      'This shift is open on another device. Close it there first.',
+    'unsynchronized_shift_sales' =>
+      'Some sales in this shift are not synchronized yet. Wait for them '
+          'before closing.',
     'shift_already_open' => 'A shift is already open on this device.',
     'no_open_shift' => 'No shift is open to count or close.',
     'cash_count_not_started' => 'Start the cash count before closing.',

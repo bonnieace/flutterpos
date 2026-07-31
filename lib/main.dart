@@ -210,6 +210,9 @@ class SpiritPOSApp extends StatelessWidget {
               firestore: FirebaseFirestore.instance,
               isOnline: isOnline,
             ),
+            // The outbox is the only local record of what this device sold, so
+            // it is also the only evidence a closing summary may be built from.
+            salesLedger: CheckoutOutboxShiftSalesLedger(checkoutOutbox),
             deviceId: deviceId,
             isOnline: isOnline,
           ),

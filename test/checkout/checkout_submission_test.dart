@@ -160,6 +160,7 @@ final Map<String, Object?> _payload = <String, Object?>{
   'currency': 'KES',
   'businessDate': '2026-07-31',
   'createdAtMs': 1785484800000,
+  'shiftId': 'shift-a',
   'deviceId': _deviceId,
   'receiptNumber': formatCheckoutReceiptNumber(
     deviceId: _deviceId,

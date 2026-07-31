@@ -32,16 +32,39 @@ final class TenantQueryDocumentSnapshot {
 }
 
 /// A query that can only be constructed by [TenantReadRepository].
+///
+/// [equalityFilters] carries the exact `field == value` conditions the
+/// repository chose. Callers cannot supply them, and the reader may not add,
+/// drop, or reinterpret one.
 final class TenantCollectionQuery {
-  const TenantCollectionQuery._({
+  TenantCollectionQuery._({
     required this.collectionPath,
     required this.limit,
     this.startAfterDocumentId,
-  });
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) : equalityFilters = Map<String, Object?>.unmodifiable(equalityFilters);
+
+  /// Lets a test transport describe a query a repository did not build.
+  ///
+  /// This constructs no path of its own for production code: every real query
+  /// still comes from [TenantReadRepository], which owns the collection path
+  /// and validates every returned document against it.
+  factory TenantCollectionQuery.forTesting({
+    required String collectionPath,
+    required int limit,
+    String? startAfterDocumentId,
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) => TenantCollectionQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    startAfterDocumentId: startAfterDocumentId,
+    equalityFilters: equalityFilters,
+  );
 
   final String collectionPath;
   final int limit;
   final String? startAfterDocumentId;
+  final Map<String, Object?> equalityFilters;
 }
 
 /// The narrow collection-read boundary used by tenant repositories.
@@ -74,10 +97,13 @@ final class FirebaseTenantDocumentReader implements TenantDataReader {
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
   ) async {
-    Query<Map<String, dynamic>> request = _firestore
-        .collection(query.collectionPath)
-        .orderBy(FieldPath.documentId)
-        .limit(query.limit);
+    Query<Map<String, dynamic>> request = _firestore.collection(
+      query.collectionPath,
+    );
+    for (final filter in query.equalityFilters.entries) {
+      request = request.where(filter.key, isEqualTo: filter.value);
+    }
+    request = request.orderBy(FieldPath.documentId).limit(query.limit);
     final cursor = query.startAfterDocumentId;
     if (cursor != null) request = request.startAfter(<Object>[cursor]);
     final snapshot = await request.get();
@@ -163,15 +189,19 @@ abstract base class TenantReadRepository {
   ///
   /// One extra document is requested so [TenantDocumentPage.hasMore] is exact.
   /// Neither callers nor repository subclasses can supply a collection path.
+  /// [equalityFilters] narrows the page to exact field values; every returned
+  /// document is still proved to be a direct child of this tenant collection.
   Future<TenantDocumentPage> readCollectionPage(
     TenantCollection collection, {
     required TenantCollectionReader collectionReader,
     int pageSize = 20,
     String? cursor,
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
   }) async {
     if (pageSize < 1 || pageSize > 50) {
       throw RangeError.range(pageSize, 1, 50, 'pageSize');
     }
+    final safeFilters = _validatedEqualityFilters(equalityFilters);
     final validatedCursor = cursor == null
         ? null
         : validateTenantDocumentId(cursor, fieldName: 'cursor');
@@ -182,6 +212,7 @@ abstract base class TenantReadRepository {
         collectionPath: expectedCollectionPath,
         limit: requestedLimit,
         startAfterDocumentId: validatedCursor,
+        equalityFilters: safeFilters,
       ),
     );
     if (snapshots.length > requestedLimit) {
@@ -233,4 +264,46 @@ abstract base class TenantReadRepository {
       hasMore: hasMore,
     );
   }
+
+  /// Accepts only simple, bounded `field == value` conditions.
+  ///
+  /// A field path with a dot or a slash could reach outside the intended
+  /// document shape, and an unbounded value type could not be reasoned about,
+  /// so both are refused before any query is issued.
+  static Map<String, Object?> _validatedEqualityFilters(
+    Map<String, Object?> filters,
+  ) {
+    if (filters.length > _maximumEqualityFilters) {
+      throw ArgumentError.value(
+        filters.length,
+        'equalityFilters',
+        'At most $_maximumEqualityFilters equality filters are supported.',
+      );
+    }
+    for (final entry in filters.entries) {
+      if (!_queryFieldPattern.hasMatch(entry.key)) {
+        throw ArgumentError.value(
+          entry.key,
+          'equalityFilters',
+          'Not a simple tenant document field name.',
+        );
+      }
+      final value = entry.value;
+      final isBounded =
+          (value is String && value.isNotEmpty && value.length <= 256) ||
+          value is int ||
+          value is bool;
+      if (!isBounded) {
+        throw ArgumentError.value(
+          value,
+          'equalityFilters',
+          'Only bounded string, integer, and boolean values are supported.',
+        );
+      }
+    }
+    return Map<String, Object?>.unmodifiable(filters);
+  }
 }
+
+const int _maximumEqualityFilters = 4;
+final RegExp _queryFieldPattern = RegExp(r'^[A-Za-z][A-Za-z0-9_]{0,63}$');

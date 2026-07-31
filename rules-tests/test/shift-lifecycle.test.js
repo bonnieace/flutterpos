@@ -91,6 +91,10 @@ function closeShift(firestore, { shiftId = "shift-a", overrides = {} } = {}) {
     status: "closed",
     closingCashMinor: 125000,
     closingCash: 1250,
+    // The sale-derived summary nightly reconciliation verifies.
+    totalSalesMinor: 98750,
+    totalSales: 987.5,
+    transactionCount: 3,
     endTime: serverTimestamp(),
     ...overrides,
   });
@@ -127,6 +131,32 @@ test("a cashier opens and closes exactly one server-timed shift", async () => {
   }
   if (closed.closingCashMinor !== 125000) {
     throw new Error("The counted cash was not recorded.");
+  }
+  if (closed.totalSales !== 987.5 || closed.transactionCount !== 3) {
+    throw new Error("The closed shift carries no sale-derived summary.");
+  }
+});
+
+test("an empty shift may close with a zero summary", async () => {
+  await seedShiftTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertSucceeds(openShift(firestore));
+
+  await assertSucceeds(
+    closeShift(firestore, {
+      overrides: {
+        totalSalesMinor: 0,
+        totalSales: 0,
+        transactionCount: 0,
+        closingCashMinor: 0,
+        closingCash: 0,
+      },
+    }),
+  );
+
+  const closed = await storedShift("shift-a");
+  if (closed.transactionCount !== 0 || closed.status !== "closed") {
+    throw new Error("A shift with no sales could not be closed.");
   }
 });
 
@@ -258,7 +288,18 @@ test("closing may not rewrite the shift envelope or skip the count", async () =>
     ["missing-cash", { closingCashMinor: null }],
     ["negative-cash", { closingCashMinor: -1 }],
     ["string-cash", { closingCashMinor: "125000" }],
-    ["extra-field", { totalSales: 999999 }],
+    ["extra-field", { cashierNote: "counted twice" }],
+    // The closing summary is mandatory and must be internally coherent.
+    ["missing-total", { totalSalesMinor: null, totalSales: null }],
+    ["missing-count", { transactionCount: null }],
+    ["negative-total", { totalSalesMinor: -1, totalSales: -0.01 }],
+    ["negative-count", { transactionCount: -1 }],
+    ["fractional-count", { transactionCount: 2.5 }],
+    ["string-total", { totalSalesMinor: "98750" }],
+    [
+      "sales-without-transactions",
+      { transactionCount: 0, totalSalesMinor: 500, totalSales: 5 },
+    ],
   ];
 
   for (const [name, overrides] of denied) {

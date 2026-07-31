@@ -201,12 +201,20 @@ void main() {
       final intent = repository.buildCloseIntent(
         shift: open,
         closingCashMinor: 125000,
+        sales: const ShiftSalesSummary(
+          transactionCount: 3,
+          totalMinor: 98750,
+          unsettledCount: 0,
+        ),
       );
       expect(intent.path, 'tenants/tenant-a/shifts/shift-a');
       expect(intent.updateData(), <String, Object?>{
         'status': 'closed',
         'closingCashMinor': 125000,
         'closingCash': 1250.0,
+        'totalSalesMinor': 98750,
+        'totalSales': 987.5,
+        'transactionCount': 3,
       });
 
       expect(
@@ -216,11 +224,16 @@ void main() {
             data: _document(overrides: <String, Object?>{'status': 'closed'}),
           ),
           closingCashMinor: 0,
+          sales: ShiftSalesSummary.empty,
         ),
         throwsA(_code('shift_not_open')),
       );
       expect(
-        () => repository.buildCloseIntent(shift: open, closingCashMinor: -1),
+        () => repository.buildCloseIntent(
+          shift: open,
+          closingCashMinor: -1,
+          sales: ShiftSalesSummary.empty,
+        ),
         throwsA(_code('invalid_closing_cash')),
       );
       expect(
@@ -232,8 +245,108 @@ void main() {
             ),
           ),
           closingCashMinor: 0,
+          sales: ShiftSalesSummary.empty,
         ),
         throwsA(_code('cross_tenant_shift')),
+      );
+    });
+
+    test('refuses a closing summary the device cannot prove', () {
+      final repository = _repository(_Reader(const {}));
+      final open = TenantShift.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _document(),
+      );
+
+      expect(
+        () => repository.buildCloseIntent(
+          shift: open,
+          closingCashMinor: 0,
+          sales: const ShiftSalesSummary(
+            transactionCount: 1,
+            totalMinor: 500,
+            unsettledCount: 1,
+          ),
+        ),
+        throwsA(_code('unsynchronized_shift_sales')),
+        reason: 'An unsynchronized sale makes the summary incomplete.',
+      );
+      expect(
+        () => repository.buildCloseIntent(
+          shift: open,
+          closingCashMinor: 0,
+          sales: const ShiftSalesSummary(
+            transactionCount: 0,
+            totalMinor: 500,
+            unsettledCount: 0,
+          ),
+        ),
+        throwsA(_code('invalid_shift_sales_summary')),
+        reason: 'Sales without a transaction cannot be reconciled.',
+      );
+    });
+
+    test('discovers only this cashier\'s open shifts in this tenant', () async {
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/shifts/shift-a': _document(),
+        'tenants/tenant-a/shifts/shift-closed': _document(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-closed',
+            'status': 'closed',
+          },
+        ),
+        'tenants/tenant-a/shifts/shift-colleague': _document(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-colleague',
+            'staffId': 'user-b',
+          },
+        ),
+        'tenants/tenant-b/shifts/shift-elsewhere': _document(
+          overrides: <String, Object?>{
+            'shiftId': 'shift-elsewhere',
+            'tenantId': 'tenant-b',
+          },
+        ),
+      });
+
+      final shifts = await _repository(
+        reader,
+      ).findOpenShifts(collectionReader: reader);
+
+      expect(shifts.map((shift) => shift.id), <String>['shift-a']);
+      expect(reader.queries.single.collectionPath, 'tenants/tenant-a/shifts');
+      expect(reader.queries.single.equalityFilters, <String, Object?>{
+        'staffId': 'user-a',
+        'status': 'open',
+      });
+      expect(reader.queries.single.limit, 6);
+    });
+
+    test('fails closed when discovery answers outside this tenant', () async {
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/shifts/shift-a': _document(),
+      }, collectionResponsePath: 'tenants/tenant-b/shifts/shift-a');
+
+      expect(
+        () => _repository(reader).findOpenShifts(collectionReader: reader),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+    });
+
+    test('refuses a discovered shift that names another cashier', () async {
+      // The query filters by UID, but a compromised or buggy reader must not
+      // be able to hand this device a colleague's shift.
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/shifts/shift-a': _document(
+          overrides: <String, Object?>{'staffId': 'user-b'},
+        ),
+      });
+
+      expect(
+        () => _repository(reader).findOpenShifts(
+          collectionReader: _UnfilteredReader(reader),
+        ),
+        throwsA(_code('foreign_shift')),
       );
     });
   });
@@ -263,6 +376,11 @@ void main() {
             data: _document(),
           ),
           closingCashMinor: 500,
+          sales: const ShiftSalesSummary(
+            transactionCount: 2,
+            totalMinor: 1500,
+            unsettledCount: 0,
+          ),
         ),
       );
 
@@ -356,6 +474,24 @@ TenantShiftRepository _repository(_Reader reader) => TenantShiftRepository(
   reader: reader,
 );
 
+/// A reader that ignores the repository's equality filters, standing in for a
+/// buggy or hostile transport that returns documents the query excluded.
+final class _UnfilteredReader implements TenantCollectionReader {
+  const _UnfilteredReader(this._reader);
+
+  final _Reader _reader;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) => _reader.getCollectionPage(
+    TenantCollectionQuery.forTesting(
+      collectionPath: query.collectionPath,
+      limit: query.limit,
+    ),
+  );
+}
+
 Map<String, Object?> _document({Map<String, Object?>? overrides}) {
   final data = <String, Object?>{
     'shiftId': 'shift-a',
@@ -377,12 +513,14 @@ Matcher _code(String code) => isA<TenantShiftException>().having(
   code,
 );
 
-final class _Reader implements TenantDocumentReader {
-  _Reader(this._documents, {this.responsePath});
+final class _Reader implements TenantDataReader {
+  _Reader(this._documents, {this.responsePath, this.collectionResponsePath});
 
   final Map<String, Map<String, Object?>> _documents;
   final String? responsePath;
+  final String? collectionResponsePath;
   final List<String> requested = <String>[];
+  final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
@@ -390,5 +528,30 @@ final class _Reader implements TenantDocumentReader {
     final data = _documents[path];
     if (data == null) return null;
     return TenantDocumentSnapshot(path: responsePath ?? path, data: data);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async {
+    queries.add(query);
+    final matches = <TenantQueryDocumentSnapshot>[];
+    final paths = _documents.keys.toList()..sort();
+    for (final path in paths) {
+      if (!path.startsWith('${query.collectionPath}/')) continue;
+      final data = _documents[path]!;
+      final matchesFilters = query.equalityFilters.entries.every(
+        (filter) => data[filter.key] == filter.value,
+      );
+      if (!matchesFilters) continue;
+      matches.add(
+        TenantQueryDocumentSnapshot(
+          path: collectionResponsePath ?? path,
+          data: data,
+        ),
+      );
+      if (matches.length >= query.limit) break;
+    }
+    return matches;
   }
 }

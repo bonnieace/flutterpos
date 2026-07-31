@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { initializeTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, setDoc } from "firebase/firestore";
+import { Timestamp, doc, setDoc } from "firebase/firestore";
 
 const RULES_PATH = new URL("../../firestore.rules", import.meta.url);
 const DEMO_PROJECT_ID = "demo-multitenant-rules";
@@ -79,6 +79,33 @@ export function receiptNumber(deviceId, businessDate, sequence) {
   const compactDate = businessDate.split("-").join("");
   const padded = String(sequence).padStart(4, "0");
   return `CT-${receiptDeviceCode(deviceId)}-${compactDate}-${padded}`;
+}
+
+/**
+ * The canonical open shift every sale must be attributed to.
+ *
+ * Sales are denied unless a shift document exists for the same tenant,
+ * cashier, device, and business date, so suites that commit sales seed one.
+ */
+export function openShiftDocuments({
+  tenantId = "tenant-a",
+  shiftId = "shift-a",
+  staffId = "user-a",
+  deviceId = "dev-0123456789abcdef0123456789abcdef",
+  businessDate = "2026-07-31",
+  status = "open",
+} = {}) {
+  return {
+    [`tenants/${tenantId}/shifts/${shiftId}`]: {
+      shiftId,
+      tenantId,
+      staffId,
+      deviceId,
+      businessDate,
+      status,
+      startTime: Timestamp.fromMillis(1785484800000),
+    },
+  };
 }
 
 export function activeTenantDocuments({

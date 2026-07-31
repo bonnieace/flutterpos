@@ -16,6 +16,7 @@ import {
   activeTenantDocuments,
   authenticatedFirestore,
   createRulesTestEnvironment,
+  openShiftDocuments,
   receiptNumber,
   seedDocuments,
 } from "./support.js";
@@ -41,6 +42,11 @@ after(async () => {
 async function seedCashierAndProduct(quantity = 2) {
   await seedDocuments(testEnvironment, {
     ...activeTenantDocuments({ uid: "cashier", role: "cashier" }),
+    ...openShiftDocuments({
+      staffId: "cashier",
+      deviceId: DEVICE_ID,
+      businessDate: BUSINESS_DATE,
+    }),
     "tenants/tenant-a/products/product-a": {
       name: "Coffee",
       quantity,
@@ -60,6 +66,7 @@ function sale(checkoutId, overrides = {}) {
     payloadHash: `sha256:${checkoutId}`,
     createdAt: serverTimestamp(),
     businessDate: BUSINESS_DATE,
+    shiftId: "shift-a",
     deviceId: DEVICE_ID,
     receiptNumber: receiptNumber(DEVICE_ID, BUSINESS_DATE, 1),
     receiptSequence: 1,

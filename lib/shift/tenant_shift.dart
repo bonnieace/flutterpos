@@ -6,6 +6,7 @@ import '../checkout/checkout_receipt.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
+import 'shift_sales_ledger.dart';
 
 /// Raised when canonical shift state cannot be trusted for this session.
 final class TenantShiftException implements Exception {
@@ -132,18 +133,26 @@ final class TenantShiftOpenIntent {
 }
 
 /// A validated close instruction for one already-open tenant shift.
+///
+/// The close carries the sale-derived aggregates nightly reconciliation
+/// compares against its own per-shift expectation. They are computed only from
+/// sales this device can prove the server already holds.
 final class TenantShiftCloseIntent {
   const TenantShiftCloseIntent._({
     required this.path,
     required this.tenantId,
     required this.shiftId,
     required this.closingCashMinor,
+    required this.totalSalesMinor,
+    required this.transactionCount,
   });
 
   final String path;
   final String tenantId;
   final String shiftId;
   final int closingCashMinor;
+  final int totalSalesMinor;
+  final int transactionCount;
 
   Map<String, Object?> updateData() => <String, Object?>{
     'status': TenantShiftStatus.closed.wireValue,
@@ -151,6 +160,9 @@ final class TenantShiftCloseIntent {
     // The major-unit mirror matches the money convention of the sale document
     // that reporting already aggregates. Minor units remain authoritative.
     'closingCash': closingCashMinor / 100,
+    'totalSalesMinor': totalSalesMinor,
+    'totalSales': totalSalesMinor / 100,
+    'transactionCount': transactionCount,
   };
 }
 
@@ -207,6 +219,7 @@ final class TenantShiftRepository extends TenantReadRepository {
   TenantShiftCloseIntent buildCloseIntent({
     required TenantShift shift,
     required int closingCashMinor,
+    required ShiftSalesSummary sales,
   }) {
     if (shift.tenantId != session.tenantId) {
       throw const TenantShiftException('cross_tenant_shift');
@@ -220,12 +233,62 @@ final class TenantShiftRepository extends TenantReadRepository {
     if (closingCashMinor < 0 || closingCashMinor > maximumShiftCashMinor) {
       throw const TenantShiftException('invalid_closing_cash');
     }
+    // An incomplete summary would understate the shift and guarantee a
+    // reconciliation variance, so it can never become a closing summary.
+    if (!sales.isComplete) {
+      throw const TenantShiftException('unsynchronized_shift_sales');
+    }
+    if (sales.transactionCount < 0 ||
+        sales.totalMinor < 0 ||
+        sales.totalMinor > maximumShiftSalesMinor ||
+        (sales.totalMinor > 0 && sales.transactionCount == 0)) {
+      throw const TenantShiftException('invalid_shift_sales_summary');
+    }
     return TenantShiftCloseIntent._(
       path: paths.shift(_validatedShiftId(shift.id)),
       tenantId: session.tenantId,
       shiftId: shift.id,
       closingCashMinor: closingCashMinor,
+      totalSalesMinor: sales.totalMinor,
+      transactionCount: sales.transactionCount,
     );
+  }
+
+  /// Finds this cashier's open shifts in this business, bounded and ordered.
+  ///
+  /// Restoration after a lost local record must discover the canonical shift
+  /// rather than open a duplicate. The query is filtered by the authenticated
+  /// UID and the open status only; every returned document is still proved to
+  /// be an exact child of this tenant's shift collection and to belong to this
+  /// cashier before it is trusted.
+  Future<List<TenantShift>> findOpenShifts({
+    required TenantCollectionReader collectionReader,
+    int limit = 5,
+  }) async {
+    final page = await readCollectionPage(
+      TenantCollection.shifts,
+      collectionReader: collectionReader,
+      pageSize: limit,
+      equalityFilters: <String, Object?>{
+        'staffId': session.uid,
+        'status': TenantShiftStatus.open.wireValue,
+      },
+    );
+    final shifts = <TenantShift>[];
+    for (final item in page.items) {
+      final shift = TenantShift.fromDocument(path: item.path, data: item.data);
+      if (shift.tenantId != session.tenantId) {
+        throw const TenantShiftException('cross_tenant_shift');
+      }
+      if (shift.staffId != session.uid) {
+        throw const TenantShiftException('foreign_shift');
+      }
+      if (!shift.isOpen) {
+        throw const TenantShiftException('shift_not_open');
+      }
+      shifts.add(shift);
+    }
+    return List<TenantShift>.unmodifiable(shifts);
   }
 
   String _validatedShiftId(String shiftId) {

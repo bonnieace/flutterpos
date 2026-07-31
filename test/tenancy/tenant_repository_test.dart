@@ -81,6 +81,87 @@ void main() {
     expect(find.text('Cold drinks, warm welcome'), findsOneWidget);
     expect(find.text('Signed in as admin'), findsOneWidget);
   });
+
+  group('bounded collection filters', () {
+    test('passes only simple field equality to the reader', () async {
+      final reader = _FakeCollectionReader();
+
+      await _FilteredRepository().page(reader, <String, Object?>{
+        'staffId': 'user-a',
+        'status': 'open',
+      });
+
+      expect(reader.query!.collectionPath, 'tenants/tenant-a/shifts');
+      expect(reader.query!.equalityFilters, <String, Object?>{
+        'staffId': 'user-a',
+        'status': 'open',
+      });
+      expect(reader.query!.limit, 21);
+    });
+
+    test('refuses a filter that is not a bounded document field', () async {
+      final reader = _FakeCollectionReader();
+      final repository = _FilteredRepository();
+      final refused = <String, Map<String, Object?>>{
+        'nested-path': <String, Object?>{'shift.staffId': 'user-a'},
+        'document-id': <String, Object?>{'__name__': 'shift-a'},
+        'path-escape': <String, Object?>{'tenants/x': 'user-a'},
+        'empty-value': <String, Object?>{'staffId': ''},
+        'unbounded-value': <String, Object?>{'staffId': <String>['user-a']},
+        'too-many': <String, Object?>{
+          'a': 1,
+          'b': 2,
+          'c': 3,
+          'd': 4,
+          'e': 5,
+        },
+      };
+
+      for (final entry in refused.entries) {
+        await expectLater(
+          repository.page(reader, entry.value),
+          throwsArgumentError,
+          reason: entry.key,
+        );
+      }
+      expect(reader.query, isNull);
+    });
+  });
+}
+
+/// Exposes the guarded collection boundary so its filter contract can be
+/// proved directly; production repositories choose their own filters.
+final class _FilteredRepository extends TenantReadRepository {
+  _FilteredRepository()
+    : super(
+        session: TenantSession.active(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+          role: TenantRole.cashier,
+        ),
+        reader: _FakeReader(response: null),
+      );
+
+  Future<TenantDocumentPage> page(
+    TenantCollectionReader reader,
+    Map<String, Object?> filters,
+  ) => readCollectionPage(
+    TenantCollection.shifts,
+    collectionReader: reader,
+    equalityFilters: filters,
+  );
+}
+
+final class _FakeCollectionReader implements TenantCollectionReader {
+  TenantCollectionQuery? query;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery request,
+  ) async {
+    query = request;
+    return const <TenantQueryDocumentSnapshot>[];
+  }
 }
 
 final class _FakeReader implements TenantDocumentReader {

@@ -48,7 +48,16 @@ repeat its own shift, tenant, device, and business-date identity, that a client
 can neither choose the start instant nor pre-close a shift, that only the
 shift's own cashier may close it once, that a closed shift is terminal and
 undeletable, and that closing may not rewrite the envelope, skip the counted
-cash, or smuggle extra fields.
+cash, omit or contradict the sale-derived closing summary, or smuggle extra
+fields.
+
+For the focused shift-bound sale contract, run
+`npm --prefix rules-tests run test:emulator:shift-sale-attribution`. It proves
+that a sale bound to the cashier's own canonical shift commits, that a missing,
+empty, non-string, or unknown `shiftId` is denied, that a colleague's shift
+cannot be borrowed, that a sale must share its shift's device and business day,
+that a closed shift still accepts a late offline sale, and that the largest
+allowed sale still evaluates within the Rules budget.
 
 ## Routing, invitation, and lifecycle callable integration tests
 
@@ -117,3 +126,12 @@ Rules cannot recompute the SHA-256 device code and cannot query other sales, so
 global receipt uniqueness is not a server-enforced invariant. Uniqueness comes
 from the device-local atomic counter; reconciliation is the place to detect a
 duplicate that local tampering or a restored backup could still produce.
+
+Binding every sale to its shift costs another document lookup, so the sale rule
+reads the shift once into a `let` binding and reclaims budget elsewhere: the
+receipt no longer type-checks `businessDate` and `deviceId` separately, and a
+sale line no longer carries an explicit `is map` check. Both cases still deny,
+because a value that cannot be split, compared to the shift's validated string,
+or asked for a field produces an evaluation error. Repeating the shift lookup
+per field denied a legitimate sixteen-line sale, which the maximum-size test in
+`shift-sale-attribution.test.js` now guards against as well.

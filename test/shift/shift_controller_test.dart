@@ -310,6 +310,199 @@ void main() {
     });
   });
 
+  group('closing summary', () {
+    test('writes the sale-derived aggregates reconciliation verifies', () async {
+      final ledger = _Ledger()
+        ..summary = const ShiftSalesSummary(
+          transactionCount: 3,
+          totalMinor: 98750,
+          unsettledCount: 0,
+        );
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        salesLedger: ledger,
+      );
+      await controller.openShift();
+      await controller.startCashCount();
+
+      final closed = await controller.closeShift(countedCashMinor: 125000);
+
+      expect(closed.phase, TenantShiftPhase.none);
+      expect(ledger.requested, contains('shift-1'));
+      final update = server.updated.single.$2;
+      expect(update['transactionCount'], 3);
+      expect(update['totalSalesMinor'], 98750);
+      expect(update['totalSales'], 987.5);
+      expect(update['closingCashMinor'], 125000);
+    });
+
+    test('refuses to close while a sale is still unsynchronized', () async {
+      final ledger = _Ledger()
+        ..summary = const ShiftSalesSummary(
+          transactionCount: 1,
+          totalMinor: 500,
+          unsettledCount: 1,
+        );
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        salesLedger: ledger,
+      );
+      await controller.openShift();
+      await controller.startCashCount();
+
+      final result = await controller.closeShift(countedCashMinor: 500);
+
+      // The device cannot describe the shift completely, so it keeps the
+      // counted cash and the switch blocker instead of publishing a wrong sum.
+      expect(result.errorCode, 'unsynchronized_shift_sales');
+      expect(result.phase, TenantShiftPhase.closing);
+      expect(result.countedCashMinor, 500);
+      expect(server.updated, isEmpty);
+      expect(
+        (await TenantShiftSwitchStateSource(
+          state,
+        ).inspect(sessions.requireSession()))!.blocker,
+        TenantSwitchBlocker.unfinishedCashCountOrShiftClose,
+      );
+    });
+
+    test('unreadable sale evidence never closes the shift', () async {
+      final ledger = _Ledger()
+        ..failure = const ShiftSalesLedgerException('malformed_local_sale');
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        salesLedger: ledger,
+      );
+      await controller.openShift();
+      await controller.startCashCount();
+
+      final result = await controller.closeShift(countedCashMinor: 500);
+
+      expect(result.phase, TenantShiftPhase.unavailable);
+      expect(result.errorCode, 'malformed_local_sale');
+      expect(server.updated, isEmpty);
+    });
+
+    test('shows the confirmed summary while the cash count is open', () async {
+      final ledger = _Ledger()
+        ..summary = const ShiftSalesSummary(
+          transactionCount: 2,
+          totalMinor: 4200,
+          unsettledCount: 0,
+        );
+      final controller = _controller(
+        sessions,
+        state,
+        server,
+        salesLedger: ledger,
+      );
+      await controller.openShift();
+
+      expect(controller.state.sales, isNull);
+      final counting = await controller.startCashCount();
+
+      expect(counting.sales!.transactionCount, 2);
+      expect(counting.sales!.totalMinor, 4200);
+    });
+  });
+
+  group('canonical open-shift discovery', () {
+    test('adopts the canonical shift after local state is lost', () async {
+      server.shifts['tenants/tenant-a/shifts/shift-restored'] = _document(
+        overrides: <String, Object?>{'shiftId': 'shift-restored'},
+      );
+      final controller = _controller(sessions, state, server);
+
+      final restored = await controller.restore(sessions.requireSession());
+
+      expect(restored.phase, TenantShiftPhase.open);
+      expect(restored.shift!.id, 'shift-restored');
+      final record = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+      expect(record!.shiftId, 'shift-restored');
+      expect(record.serverConfirmedOpen, isTrue);
+      expect(server.queries, <String>['tenants/tenant-a/shifts']);
+    });
+
+    test('opens no duplicate when a canonical shift already exists', () async {
+      server.shifts['tenants/tenant-a/shifts/shift-existing'] = _document(
+        overrides: <String, Object?>{'shiftId': 'shift-existing'},
+      );
+      final controller = _controller(sessions, state, server);
+
+      final result = await controller.openShift();
+
+      expect(result.phase, TenantShiftPhase.open);
+      expect(result.errorCode, 'shift_already_open');
+      expect(result.shift!.id, 'shift-existing');
+      expect(server.created, isEmpty);
+    });
+
+    test('never adopts a shift opened on another device', () async {
+      server.shifts['tenants/tenant-a/shifts/shift-elsewhere'] = _document(
+        overrides: <String, Object?>{
+          'shiftId': 'shift-elsewhere',
+          'deviceId': 'dev-fedcba9876543210fedcba9876543210',
+        },
+      );
+      final controller = _controller(sessions, state, server);
+
+      final result = await controller.openShift();
+
+      // The closing summary is built from local sale evidence, which only the
+      // issuing device holds, so a second device must not open or adopt one.
+      expect(result.phase, TenantShiftPhase.none);
+      expect(result.errorCode, 'shift_open_on_other_device');
+      expect(result.otherDeviceShiftOpen, isTrue);
+      expect(server.created, isEmpty);
+      expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
+    });
+
+    test('fails closed on two open shifts for one device', () async {
+      for (final id in <String>['shift-one', 'shift-two']) {
+        server.shifts['tenants/tenant-a/shifts/$id'] = _document(
+          overrides: <String, Object?>{'shiftId': id},
+        );
+      }
+      final controller = _controller(sessions, state, server);
+
+      final result = await controller.openShift();
+
+      expect(result.phase, TenantShiftPhase.unavailable);
+      expect(result.errorCode, 'ambiguous_open_shift');
+      expect(server.created, isEmpty);
+    });
+
+    test('an unavailable discovery query never opens a shift', () async {
+      server.failQueryWith = FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'unavailable',
+      );
+      final controller = _controller(sessions, state, server);
+
+      final result = await controller.openShift();
+
+      expect(result.phase, TenantShiftPhase.unavailable);
+      expect(server.created, isEmpty);
+      expect(await state.read(uid: 'user-a', tenantId: 'tenant-a'), isNull);
+    });
+
+    test('a known local shift needs no discovery query', () async {
+      await state.save(_record());
+      server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+      final controller = _controller(sessions, state, server);
+
+      await controller.restore(sessions.requireSession());
+
+      expect(server.queries, isEmpty);
+    });
+  });
+
   group('cashier cross-business restriction', () {
     test('a cashier cannot open a shift in a second business', () async {
       await state.save(_record(tenantId: 'tenant-b', shiftId: 'shift-b'));
@@ -395,11 +588,13 @@ TenantShiftController _controller(
   bool online = true,
   VoidCallback? beforeCreate,
   VoidCallback? beforeRead,
+  ShiftSalesLedger? salesLedger,
 }) {
   var nextShift = 0;
   return TenantShiftController(
     sessionController: sessions,
     localState: state,
+    salesLedger: salesLedger ?? _Ledger(),
     reader: _Reader(server, beforeRead: beforeRead),
     writer: FirebaseTenantShiftWriter.forTesting(
       isOnline: () async => online,
@@ -465,6 +660,7 @@ final class _Server {
   final Map<String, Map<String, Object?>> shifts =
       <String, Map<String, Object?>>{};
   final List<String> reads = <String>[];
+  final List<String> queries = <String>[];
   final List<(String, Map<String, Object?>)> created =
       <(String, Map<String, Object?>)>[];
   final List<(String, Map<String, Object?>)> updated =
@@ -472,6 +668,7 @@ final class _Server {
   Object? failCreateWith;
   Object? failUpdateWith;
   Object? failReadWith;
+  Object? failQueryWith;
   String? responsePath;
 
   Future<void> create(String path, Map<String, Object?> data) async {
@@ -498,7 +695,7 @@ final class _Server {
   }
 }
 
-final class _Reader implements TenantDocumentReader {
+final class _Reader implements TenantDataReader {
   _Reader(this._server, {this.beforeRead});
 
   final _Server _server;
@@ -516,6 +713,47 @@ final class _Reader implements TenantDocumentReader {
       path: _server.responsePath ?? path,
       data: data,
     );
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) async {
+    _server.queries.add(query.collectionPath);
+    final failure = _server.failQueryWith;
+    if (failure != null) throw failure;
+    final matches = <TenantQueryDocumentSnapshot>[];
+    for (final path in _server.shifts.keys.toList()..sort()) {
+      if (!path.startsWith('${query.collectionPath}/')) continue;
+      final data = _server.shifts[path]!;
+      if (!query.equalityFilters.entries.every(
+        (filter) => data[filter.key] == filter.value,
+      )) {
+        continue;
+      }
+      matches.add(TenantQueryDocumentSnapshot(path: path, data: data));
+      if (matches.length >= query.limit) break;
+    }
+    return matches;
+  }
+}
+
+/// A configurable stand-in for the local sale evidence of one shift.
+final class _Ledger implements ShiftSalesLedger {
+  ShiftSalesSummary summary = ShiftSalesSummary.empty;
+  Object? failure;
+  final List<String> requested = <String>[];
+
+  @override
+  Future<ShiftSalesSummary> summarize({
+    required String uid,
+    required String tenantId,
+    required String shiftId,
+  }) async {
+    requested.add(shiftId);
+    final error = failure;
+    if (error != null) throw error;
+    return summary;
   }
 }
 

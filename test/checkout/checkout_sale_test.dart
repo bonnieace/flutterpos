@@ -55,6 +55,8 @@ void main() {
     expect(fields['soldById'], 'user-a');
     expect(fields['payloadHash'], record.payloadHash);
     expect(fields['businessDate'], '2026-07-31');
+    expect(payload.shiftId, 'shift-a');
+    expect(fields['shiftId'], 'shift-a');
     expect(fields['currency'], 'KES');
     expect(fields.containsKey('createdAt'), isFalse);
     expect((fields['subtotalMinor'], fields['subtotal']), (65000, 650.0));
@@ -200,6 +202,10 @@ void main() {
       ),
       'created-at': _payload(overrides: {'createdAtMs': 0}),
       'shift': _payload(overrides: {'shiftId': 'shifts/shift-a'}),
+      // Every sale must name the shift reconciliation will aggregate it into.
+      'missing-shift': _payload(overrides: {'shiftId': null}),
+      'empty-shift': _payload(overrides: {'shiftId': ''}),
+      'numeric-shift': _payload(overrides: {'shiftId': 7}),
       'device': _payload(overrides: {'deviceId': ''}),
       'missing-device': _payload(overrides: {'deviceId': null}),
       'foreign-device-id': _payload(overrides: {'deviceId': 'workstation-1'}),
@@ -376,6 +382,7 @@ Map<String, Object?> _payload({
     'currency': 'KES',
     'businessDate': '2026-07-31',
     'createdAtMs': DateTime.utc(2026, 7, 31, 8).millisecondsSinceEpoch,
+    'shiftId': 'shift-a',
     'deviceId': deviceId,
     'receiptNumber': formatCheckoutReceiptNumber(
       deviceId: deviceId,

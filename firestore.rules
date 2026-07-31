@@ -81,10 +81,11 @@ service cloud.firestore {
     // request. The three-character device code is a SHA-256 digest that Rules
     // cannot recompute, and Rules cannot query other sales, so cross-sale
     // uniqueness stays a device-local and reconciliation concern.
+    // `businessDate` and `deviceId` are not type-checked here: a non-string
+    // date cannot be split into the pattern, and the shift comparison below
+    // proves the device against the shift's own validated string.
     function validSaleReceipt(sale) {
-      return sale.deviceId is string
-        && sale.businessDate is string
-        && sale.receiptSequence is int
+      return sale.receiptSequence is int
         && sale.receiptSequence > 0
         && sale.receiptNumber is string
         // "CT-" + 3 + "-" + 8 + "-" is 16 characters, so the frozen
@@ -96,9 +97,36 @@ service cloud.firestore {
         );
     }
 
+    function shiftPath(tenantId, shiftId) {
+      return /databases/$(database)/documents/tenants/$(tenantId)/shifts/$(shiftId);
+    }
+
+    // Every sale belongs to exactly one canonical shift held by the same
+    // cashier, on the same device, in the same business day. Nightly
+    // reconciliation aggregates sales per shift and business date and compares
+    // the result against that shift's own closing summary, so an unattributed
+    // or foreign-shift sale could never be reconciled.
+    //
+    // A closed shift is deliberately still accepted: an offline sale may reach
+    // the server after its shift closed, and refusing it would strand evidence
+    // the device can no longer correct. Reconciliation reports the variance.
+    //
+    // The shift is read once into a local binding: a sale may carry sixteen
+    // lines, and Firestore evaluates at most 1000 expressions per request, so
+    // repeating the path and the lookup for each field exhausts the budget and
+    // denies a legitimate maximum-size sale.
+    function validSaleShift(tenantId, sale) {
+      let shift = get(shiftPath(tenantId, sale.shiftId));
+      return shift != null
+        && shift.data.staffId == request.auth.uid
+        && shift.data.deviceId == sale.deviceId
+        && shift.data.businessDate == sale.businessDate;
+    }
+
+    // A non-map line cannot answer these field accesses, so the evaluation
+    // error denies the write without spending an extra type check per line.
     function validSaleLine(line) {
-      return line is map
-        && line.productId is string
+      return line.productId is string
         && line.productId.size() > 0
         && line.quantity is int
         && line.quantity > 0;
@@ -193,6 +221,9 @@ service cloud.firestore {
           && request.resource.data.payloadHash.size() > 0
           && request.resource.data.createdAt == request.time
           && validSaleReceipt(request.resource.data)
+          && request.resource.data.shiftId is string
+          && request.resource.data.shiftId.size() > 0
+          && validSaleShift(tenantId, request.resource.data)
           && validSaleLines(request.resource.data.items);
         allow update, delete: if false;
       }
@@ -229,8 +260,24 @@ service cloud.firestore {
           && request.resource.data.endTime == request.time
           && request.resource.data.closingCashMinor is int
           && request.resource.data.closingCashMinor >= 0
+          // The sale-derived summary nightly reconciliation verifies. It is
+          // mandatory: a shift closed without it is reported as
+          // invalid_or_missing_shift and can never be matched.
+          && request.resource.data.transactionCount is int
+          && request.resource.data.transactionCount >= 0
+          && request.resource.data.totalSalesMinor is int
+          && request.resource.data.totalSalesMinor >= 0
+          && request.resource.data.totalSales is number
+          && request.resource.data.totalSales >= 0
+          && (
+            request.resource.data.totalSalesMinor == 0
+            || request.resource.data.transactionCount > 0
+          )
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'endTime', 'closingCashMinor', 'closingCash']);
+            .hasOnly([
+              'status', 'endTime', 'closingCashMinor', 'closingCash',
+              'totalSales', 'totalSalesMinor', 'transactionCount'
+            ]);
         allow delete: if false;
       }
 

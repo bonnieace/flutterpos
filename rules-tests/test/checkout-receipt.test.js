@@ -14,6 +14,7 @@ import {
   activeTenantDocuments,
   authenticatedFirestore,
   createRulesTestEnvironment,
+  openShiftDocuments,
   receiptDeviceCode,
   receiptNumber,
   seedDocuments,
@@ -52,6 +53,31 @@ async function seedSharedDevice() {
       role: "cashier",
       status: "active",
     },
+    // One canonical shift per cashier, device, and business day used below.
+    ...openShiftDocuments({
+      shiftId: "shift-a",
+      staffId: "cashier-a",
+      deviceId: DEVICE_A,
+      businessDate: BUSINESS_DATE,
+    }),
+    ...openShiftDocuments({
+      shiftId: "shift-b",
+      staffId: "cashier-b",
+      deviceId: DEVICE_A,
+      businessDate: BUSINESS_DATE,
+    }),
+    ...openShiftDocuments({
+      shiftId: "shift-device-b",
+      staffId: "cashier-a",
+      deviceId: DEVICE_B,
+      businessDate: BUSINESS_DATE,
+    }),
+    ...openShiftDocuments({
+      shiftId: "shift-next-day",
+      staffId: "cashier-a",
+      deviceId: DEVICE_A,
+      businessDate: "2026-07-30",
+    }),
     "tenants/tenant-a/products/product-a": {
       name: "Coffee",
       quantity: 10,
@@ -69,6 +95,7 @@ function checkoutBatch(
     deviceId = DEVICE_A,
     businessDate = BUSINESS_DATE,
     sequence = 1,
+    shiftId = "shift-a",
     sale = {},
   },
 ) {
@@ -82,6 +109,7 @@ function checkoutBatch(
     currency: "KES",
     businessDate,
     clientCreatedAtMs: 1785484800000,
+    shiftId,
     deviceId,
     receiptNumber: receiptNumber(deviceId, businessDate, sequence),
     receiptSequence: sequence,
@@ -137,6 +165,7 @@ test("two cashiers on one device commit different receipt numbers", async () => 
     checkoutBatch(authenticatedFirestore(testEnvironment, "cashier-b"), {
       checkoutId: "checkout-b",
       soldById: "cashier-b",
+      shiftId: "shift-b",
       sequence: 2,
     }).commit(),
   );
@@ -168,6 +197,7 @@ test("receipt sequences stay independent across devices and business dates", asy
     checkoutBatch(firestore, {
       checkoutId: "checkout-other-device",
       deviceId: DEVICE_B,
+      shiftId: "shift-device-b",
       sequence: 1,
     }).commit(),
   );
@@ -175,6 +205,7 @@ test("receipt sequences stay independent across devices and business dates", asy
     checkoutBatch(firestore, {
       checkoutId: "checkout-next-day",
       businessDate: "2026-07-30",
+      shiftId: "shift-next-day",
       sequence: 1,
     }).commit(),
   );
@@ -289,6 +320,7 @@ test("the largest allowed sale still evaluates within the Rules budget", async (
     currency: "KES",
     businessDate: BUSINESS_DATE,
     clientCreatedAtMs: 1785484800000,
+    shiftId: "shift-a",
     deviceId: DEVICE_A,
     receiptNumber: receiptNumber(DEVICE_A, BUSINESS_DATE, 1),
     receiptSequence: 1,

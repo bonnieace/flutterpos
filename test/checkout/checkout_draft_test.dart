@@ -79,7 +79,6 @@ void main() {
           CheckoutDraftLineRequest(productId: 'product-b', quantity: 3),
         ],
         discountMinor: 100,
-        shiftId: 'shift-a',
       ),
     );
 
@@ -471,6 +470,105 @@ void main() {
     );
   });
 
+  test('records the bound shift instead of a caller-supplied one', () async {
+    final binder = _Binder(receipts: receipts, clock: clock)
+      ..shiftId = 'shift-evening';
+
+    final record = await _service(
+      sessions,
+      cache,
+      outbox,
+      receipts,
+      clock,
+      shiftBinder: binder,
+    ).createDraft(_request());
+
+    expect(record.payload['shiftId'], 'shift-evening');
+    expect(
+      CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: sessions.requireSession(),
+      ).shiftId,
+      'shift-evening',
+    );
+  });
+
+  test('refuses a checkout with no canonical open shift', () async {
+    final binder = _Binder(receipts: receipts, clock: clock)
+      ..refusal = 'no_open_shift';
+
+    await expectLater(
+      _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+        shiftBinder: binder,
+      ).createDraft(_request()),
+      throwsA(
+        isA<CheckoutDraftException>().having(
+          (error) => error.code,
+          'code',
+          'no_open_shift',
+        ),
+      ),
+    );
+    expect(outboxBox.keys, isEmpty);
+    // A refused checkout still consumes no receipt sequence.
+    expect(
+      await receipts.lastSequence(
+        tenantId: 'tenant-a',
+        deviceId: await receipts.resolveDeviceId(),
+        businessDate: '2026-07-31',
+      ),
+      0,
+    );
+  });
+
+  test('refuses a shift that does not describe this sale', () async {
+    final foreignDevice = 'dev-${'f' * 32}';
+    final cases = <String, void Function(_Binder)>{
+      'shift_binding_mismatch': (binder) => binder.uid = 'user-b',
+      'shift_binding_mismatch_tenant': (binder) => binder.tenantId = 'tenant-b',
+      'shift_binding_mismatch_device': (binder) =>
+          binder.deviceId = foreignDevice,
+      'shift_business_date_mismatch': (binder) =>
+          binder.businessDate = '2026-07-30',
+      'invalid_shift_id': (binder) => binder.shiftId = 'shifts/shift-a',
+      'checkout_start_unavailable': (binder) =>
+          binder.failure = StateError('unreadable'),
+    };
+
+    for (final entry in cases.entries) {
+      final binder = _Binder(receipts: receipts, clock: clock);
+      entry.value(binder);
+      final expected = entry.key.startsWith('shift_binding_mismatch')
+          ? 'shift_binding_mismatch'
+          : entry.key;
+
+      await expectLater(
+        _service(
+          sessions,
+          cache,
+          outbox,
+          receipts,
+          clock,
+          shiftBinder: binder,
+        ).createDraft(_request()),
+        throwsA(
+          isA<CheckoutDraftException>().having(
+            (error) => error.code,
+            'code',
+            expected,
+          ),
+        ),
+        reason: entry.key,
+      );
+    }
+    expect(outboxBox.keys, isEmpty);
+  });
+
   test('converts only exactly representable major-unit prices', () {
     expect(checkoutMinorUnitsFromMajor(0), 0);
     expect(checkoutMinorUnitsFromMajor(120.5), 12050);
@@ -501,14 +599,48 @@ CheckoutDraftService _service(
   HiveCheckoutReceiptCounters receipts,
   _Clock clock, {
   CheckoutIdFactory? checkoutIdFactory,
+  CheckoutShiftBinder? shiftBinder,
 }) => CheckoutDraftService(
   sessionController: sessions,
   cache: cache,
   outbox: outbox,
   receipts: receipts,
+  shiftBinder: shiftBinder ?? _Binder(receipts: receipts, clock: clock),
   clock: clock.call,
   checkoutIdFactory: checkoutIdFactory,
 );
+
+/// A stand-in for the guarded shift lifecycle that supplies the bound shift.
+final class _Binder implements CheckoutShiftBinder {
+  _Binder({required this.receipts, required this.clock});
+
+  final HiveCheckoutReceiptCounters receipts;
+  final _Clock clock;
+  String shiftId = 'shift-a';
+  String? refusal;
+  String? uid;
+  String? tenantId;
+  String? deviceId;
+  String? businessDate;
+  Object? failure;
+
+  @override
+  Future<CheckoutShiftBinding> bindCheckoutShift(TenantSession session) async {
+    final error = failure;
+    if (error != null) throw error;
+    final refused = refusal;
+    if (refused != null) return CheckoutShiftBinding.refused(refused);
+    return CheckoutShiftBinding.bound(
+      CheckoutShiftAttribution(
+        uid: uid ?? session.uid,
+        tenantId: tenantId ?? session.tenantId,
+        shiftId: shiftId,
+        deviceId: deviceId ?? await receipts.resolveDeviceId(),
+        businessDate: businessDate ?? checkoutBusinessDate(clock.value),
+      ),
+    );
+  }
+}
 
 final List<int> _encryptionKey = List<int>.generate(
   HiveCheckoutOutbox.encryptionKeyBytes,

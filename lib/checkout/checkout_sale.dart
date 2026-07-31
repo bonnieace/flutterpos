@@ -271,7 +271,10 @@ final class CheckoutSalePayload {
       minimum: 1,
       maximum: _maximumClientCreatedAtMs,
     );
-    final shiftId = _optionalDocumentId(payload, 'shiftId');
+    // Every sale is attributed to exactly one shift. Reconciliation compares
+    // sale-derived totals against the shift document, so an unattributed sale
+    // could never be reconciled and is refused before it becomes evidence.
+    final shiftId = _requiredDocumentId(payload, 'shiftId');
     final deviceId = _requiredDeviceId(payload);
     final receiptSequence = _requiredInt(
       payload,
@@ -340,7 +343,9 @@ final class CheckoutSalePayload {
   final String currency;
   final String businessDate;
   final int clientCreatedAtMs;
-  final String? shiftId;
+
+  /// The canonical shift this sale belongs to, in this tenant and business day.
+  final String shiftId;
 
   /// The durable installation identity that issued [receiptNumber].
   final String deviceId;
@@ -387,7 +392,7 @@ final class CheckoutSalePayload {
     'currency': currency,
     'businessDate': businessDate,
     'clientCreatedAtMs': clientCreatedAtMs,
-    if (shiftId != null) 'shiftId': shiftId,
+    'shiftId': shiftId,
     'deviceId': deviceId,
     'receiptNumber': receiptNumber,
     'receiptSequence': receiptSequence,

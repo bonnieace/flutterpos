@@ -4462,3 +4462,219 @@ frozen reconciliation contract already expects:
 6. Leave the checkout screen and payment flow, receipt printing, product
    cost/profit fields, returns, reports, subscription and branding surfaces,
    deployment, and Android build/emulator validation outside that chunk.
+
+---
+
+## Shift-scoped sale attribution and closing summary handoff - 2026-07-31
+
+### Completed in this session
+
+Every sale is now bound to a canonical shift, and a closing shift carries the
+sale-derived aggregates nightly reconciliation already expects. This chunk adds
+no checkout screen or payment flow, no receipt printing, no reports, and makes
+no legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `CheckoutDraftRequest.shiftId` is gone. The draft takes its shift from the
+  required `CheckoutShiftBinder`, which the guarded shift lifecycle implements,
+  so a caller can no longer name a shift the cashier does not hold. The binder
+  is a constructor requirement rather than an option: a checkout with no proven
+  open shift is refused instead of recorded as an unreconcilable sale.
+- `TenantShiftCheckoutBinder` replaces `TenantShiftCheckoutGate`. It still
+  enforces the frozen cashier cross-business restriction and additionally
+  refuses `no_open_shift`, `shift_not_confirmed` (the server has not
+  acknowledged the shift, so a sale bound to it might reference nothing), and
+  `shift_closing` (the cash count has started). Unreadable local state still
+  raises and becomes `checkout_start_unavailable`.
+- The draft proves the bound shift describes this exact sale: a different
+  cashier, business, or device fails closed as `shift_binding_mismatch`, and a
+  different business day fails closed as `shift_business_date_mismatch`. The
+  date must agree because reconciliation aggregates per shift **and** business
+  date, so a shift left open across the Africa/Nairobi boundary must be closed
+  rather than silently absorbing the next day's sales. All of this happens
+  before the receipt sequence is allocated, so a refused checkout still consumes
+  nothing.
+- `CheckoutSalePayload` v1 now requires `shiftId`; it is no longer optional and
+  is always written to the sale document. No deployed data exists, and a
+  hypothetical pre-existing local draft without a shift is refused as malformed
+  and retained as evidence rather than submitted.
+- Firestore Rules bind the sale to the shift on create: the named shift must
+  exist under the same tenant, name the calling cashier, and carry the same
+  `deviceId` and `businessDate` as the sale. A closed shift is deliberately
+  still accepted, because an offline sale may reach the server after its shift
+  closed and refusing it would strand evidence the device can no longer correct;
+  reconciliation reports that variance instead.
+- `CheckoutOutboxShiftSalesLedger` summarizes one shift from the encrypted
+  outbox: confirmed sales produce `transactionCount` and `totalSalesMinor`, and
+  every unconfirmed local sale is counted as unsettled. `closeShift` refuses
+  with `unsynchronized_shift_sales` while any sale is unsettled, so the shift
+  keeps its counted cash and its tenant-switch blocker rather than publishing a
+  total the server will contradict. An unattributed or malformed local sale
+  raises instead of being skipped, because a silently dropped sale would
+  understate the shift and turn a device defect into a permanent variance.
+- The close writes `totalSalesMinor`, the major-unit `totalSales`, and
+  `transactionCount`. Rules require all three, require non-negative integer and
+  numeric types, refuse sales without a transaction, and restrict the changed
+  keys to exactly the seven close fields. Nightly reconciliation therefore stops
+  reporting `invalid_or_missing_shift` for shifts this client closes.
+- A multi-device shift is resolved by preventing one, not by guessing. Bounded
+  open-shift discovery re-adopts this cashier's canonical shift after durable
+  local state is lost, so a reinstall no longer opens a duplicate; a shift open
+  on **another** device is reported as `shift_open_on_other_device` and neither
+  adopted nor duplicated, because the closing summary is built from local sale
+  evidence only the issuing device holds. Two open shifts for one cashier on one
+  device fail closed as `ambiguous_open_shift`. Server-side shift transfer
+  between devices remains out of scope.
+- Discovery runs through the repository boundary. `TenantReadRepository` gained
+  bounded `field == value` filters that only a repository can supply: field
+  names must be simple document fields, values must be bounded strings,
+  integers, or booleans, at most four are accepted, and every returned document
+  is still proved to be an exact child of this tenant's collection, unique, and
+  ordered. `firestore.indexes.json` gained the matching
+  `staffId`/`status`/`__name__` shift index.
+- The shift panel shows the confirmed sales summary while the cash count is
+  open, plus bounded messages for the other-device and unsynchronized-sales
+  refusals.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Rules cannot prove that a receipt is globally unique or that a shift's
+  aggregates match the sales the server holds; only reconciliation can. The
+  client guarantees are the device-local atomic counter and the refusal to close
+  with unsettled sales.
+- A `needs_attention` checkout (an observed payload hash that disagrees with
+  local evidence) counts as unsettled indefinitely, so it blocks both the tenant
+  switch and the shift close until it is resolved. That is deliberate: the
+  device already cannot describe the shift, and the state needs attention.
+- `CheckoutDraftService` is still not composed in `main.dart`, because no screen
+  creates a draft. `main.dart` does compose the sales ledger into the shift
+  controller.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.indexes.json
+firestore.rules
+lib/checkout/checkout_draft.dart
+lib/checkout/checkout_sale.dart
+lib/main.dart
+lib/shift/shift.dart
+lib/shift/shift_controller.dart
+lib/shift/shift_panel.dart
+lib/shift/shift_sales_ledger.dart
+lib/shift/tenant_shift.dart
+lib/tenancy/tenant_repository.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/checkout-receipt.test.js
+rules-tests/test/checkout-submission.test.js
+rules-tests/test/shift-lifecycle.test.js
+rules-tests/test/shift-sale-attribution.test.js
+rules-tests/test/stock-and-sales.test.js
+rules-tests/test/support.js
+test/checkout/checkout_draft_test.dart
+test/checkout/checkout_sale_test.dart
+test/checkout/checkout_submission_test.dart
+test/checkout/checkout_sync_test.dart
+test/shift/shift_checkout_binder_test.dart
+test/shift/shift_controller_test.dart
+test/shift/shift_panel_test.dart
+test/shift/shift_sales_ledger_test.dart
+test/shift/tenant_shift_test.dart
+test/tenancy/tenant_repository_test.dart
+PLAN.md
+```
+
+`test/shift/shift_checkout_gate_test.dart` was renamed to
+`test/shift/shift_checkout_binder_test.dart` and rewritten for the binding
+contract.
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/shift lib/checkout lib/tenancy test/shift
+  test/checkout test/tenancy` reported no issues. A whole-repository
+  `flutter analyze` still reports the pre-existing legacy POS findings and the
+  stale `test/widget_test.dart` reference to `MyApp`; neither was touched.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/shift
+  test/checkout test/tenancy` passed **458/458** relevant Flutter tests,
+  including **31** new tests: 6 sales-ledger, 10 controller closing-summary and
+  discovery, 5 draft-binding, 5 binder, 4 shift-repository, 3 payload-contract,
+  2 collection-filter, and 1 panel case.
+- `npm --prefix rules-tests run test:emulator:shift-sale-attribution` passed the
+  focused Firestore-only suite **6/6** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **51/51** (44 existing plus the 6 new attribution cases and the new
+  zero-summary close case, with the existing sale suites updated to seed a
+  canonical shift).
+- With portable Node.js and Temurin JDK 21 at
+  `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8`, inherited `DEBUG` removed,
+  and `NODE_OPTIONS=--max-old-space-size=512`, `npm --prefix functions test`
+  passed **166/166** Functions tests. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending warnings,
+  and `firestore.indexes.json` parsed as valid JSON. Android build and Android
+  emulator validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The first shift-bound sale rule denied a legitimate maximum-size sale.** The
+  focused emulator run reported `Unable to evaluate the expression as the
+  maximum of 1000 expressions to evaluate has been reached` for the sixteen-line
+  sale while the five behavioral cases passed, exactly as the receipt rule did
+  in the previous chunk. Repeating `exists()` plus four `get()` calls for the
+  same shift was the cost. The rule now reads the shift once into a Rules `let`
+  binding, and budget was reclaimed by dropping the redundant
+  `shift.data.tenantId` comparison (the path already scopes the tenant), the
+  separate `businessDate`/`deviceId` type checks in the receipt rule (a
+  non-string date cannot be split, and the device is compared against the
+  shift's validated string), and the per-line `is map` check (a non-map line
+  cannot answer a field access). Each of those cases still denies through an
+  evaluation error, which the existing suites prove. The maximum-size sale now
+  has a permanent budget guard in both the receipt and attribution suites.
+- **Rules `let` bindings are eager.** A binding is evaluated before the
+  short-circuiting condition, so `shiftId is string` is checked at the call site
+  before `validSaleShift` runs, keeping a non-string shift a clean denial rather
+  than relying on path-interpolation behavior.
+- **The existing shift-lifecycle `extra-field` denial used `totalSales`.** That
+  field is now a required close field, so the case was rewritten with an
+  unrelated `cashierNote` key and joined by seven new denial cases for a
+  missing, negative, fractional, string, or internally contradictory summary.
+- No other test assertion failed; the analyzer and every command in the final
+  sequence were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded shift-history read surface that a closed shift now
+makes meaningful:
+
+1. Add a strict read model and guarded repository for closed shifts in
+   `tenants/{tenantId}/shifts`: bounded, indexed, ordered pages of this
+   cashier's own closed shifts, plus owner/admin/manager access to every
+   cashier's closed shifts in the tenant. Derive every path from `TenantPaths`
+   and keep the exact-child, uniqueness, and ordering proofs.
+2. Render a read-only shift history behind `TenantRouteGuard`, showing counted
+   cash beside the sale-derived `totalSales`/`transactionCount` and naming the
+   difference without recomputing either figure on the device.
+3. Add the composite indexes those queries need, and prove the role boundary in
+   the Firestore Rules emulator. A cashier may currently read every shift in the
+   tenant; decide explicitly whether to narrow that rule and test the decision.
+4. Add unit, widget, and focused Rules emulator coverage for pagination
+   boundaries, a cross-tenant response, a wrong-role read, a tenant switch
+   during an outstanding page, and a shift closed without a summary.
+5. Leave the checkout screen and payment flow, receipt printing, returns,
+   product cost/profit fields, subscription and branding surfaces, server-side
+   cross-device shift transfer, deployment, and Android build/emulator
+   validation outside that chunk.
