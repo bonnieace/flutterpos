@@ -5179,3 +5179,160 @@ expects, and nothing else:
    and payment flow, receipt printing, returns, product cost/profit fields,
    subscription and branding surfaces, deployment, and Android build/emulator
    validation outside that chunk.
+
+---
+
+## Guarded daily summary handoff - 2026-08-01
+
+### Completed in this session
+
+The tenant-safe landing route now reaches a management-only daily summary built
+from the metrics nightly reconciliation regenerates. This chunk adds no
+checkout screen or payment flow, no receipt printing, no legacy report screen,
+no `getSalesComparison` call, and makes no legacy operational POS route
+reachable.
+
+Implemented behavior and safety decisions:
+
+- The schema was read from `functions/src/reconciliation/processors.ts` and
+  `model.ts` rather than invented: `tenants/{tenantId}/daily_metrics/
+  {businessDate}` carries `sales`, `profit`, `transactions`,
+  `incompleteCostLineCount`, `businessDate`, `transactionCount`, `shiftCount`,
+  `tenantId`, `metricGeneration`, `sourceDirtyRevision`, `regeneratedAt`, and
+  `updatedAt`.
+- `TenantCollection` gained one frozen segment, `daily_metrics`. That is a
+  deliberate path-contract change, and the enumerated path-contract test was
+  updated with it rather than around it.
+- `TenantDailyMetrics` requires the document to repeat the tenant and business
+  date its own path encodes, and refuses a document whose two transaction
+  counts disagree - the writer stores the same number twice, so a disagreement
+  means the reconciliation processor did not write it. `regeneratedAt` is
+  **required**, unlike the pending-write instants on a shift or a sale: the
+  client never writes this document, so there is no state in which a
+  server-owned timestamp is legitimately missing.
+- `profit` may legitimately be negative and is parsed, but no screen displays
+  it. It depends on product cost data whose completeness the document itself
+  reports through `incompleteCostLineCount`, and product cost/profit surfaces
+  are outside this chunk. The panel names the incomplete-cost count instead, so
+  the gap is visible without publishing a figure built on it.
+- **Days are read by exact document path, not by query.** A query cannot return
+  a day that has no document, and today is normally unreconciled, so a query
+  would silently omit exactly the day a manager is looking for. Reading the last
+  N business dates by path makes an unreconciled day a first-class
+  `not reconciled yet` result. It also needs no composite index at all, which is
+  why this chunk adds none.
+- The business dates are derived by subtracting whole days from the UTC instant
+  and reusing `checkoutBusinessDate`, so the Africa/Nairobi boundary is applied
+  by the one function that already owns it rather than by new date arithmetic.
+- The load is bounded to 14 days, one document read each, and refuses a
+  non-management session before issuing any read.
+- **The Firestore rule is management-only and server-write-only.** A cashier
+  reads its own sales and shifts but not the business's daily revenue. The role
+  check touches no document field, so an unreconciled day still answers instead
+  of raising an evaluation error - the same trap that had to be fixed for the
+  shift rule earlier in this session, avoided here by construction.
+- The route is injected into the safe landing screen the way the shift and
+  checkout panels already are, so tenancy code keeps owning routing rather than
+  the reporting domain, and the button only appears for the roles the reporting
+  domain names.
+
+Deliberately outside this chunk, and important for the next session:
+
+- There is no date picker and no range beyond the trailing window. A specific
+  historical day is reachable by `readDay`, but no surface offers it yet.
+- `getSalesComparison` remains uncalled. It is the callable that answers
+  period-over-period questions; this surface only reports regenerated days.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/main.dart
+lib/reporting/daily_metrics.dart
+lib/reporting/daily_metrics_panel.dart
+lib/reporting/reporting.dart
+lib/tenancy/tenant_paths.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/daily-metrics.test.js
+test/reporting/daily_metrics_panel_test.dart
+test/reporting/daily_metrics_test.dart
+test/tenancy/tenant_paths_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/reporting lib/sales lib/shift lib/checkout
+  lib/tenancy test/reporting test/sales test/shift test/checkout test/tenancy`
+  reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only
+  test/reporting test/sales test/shift test/checkout test/tenancy` passed
+  **529/529** relevant Flutter tests, including **15** new tests: 10 read-model
+  and repository, and 5 panel-widget cases.
+- `npm --prefix rules-tests run test:emulator:daily-metrics` passed the focused
+  Firestore-only suite **5/5** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **71/71** (66 existing plus the 5 new daily-metrics cases).
+- `npm --prefix functions test` passed **166/166** Functions tests with the
+  pinned Node 24 / Temurin JDK 21 environment. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending warnings.
+  Android build and Android emulator validation were intentionally skipped as
+  requested.
+
+Meaningful failures and their resolutions:
+
+- **The frozen path-contract test failed, exactly as it should have.**
+  `tenant_paths_test.dart` enumerates every business collection, so adding
+  `daily_metrics` broke it until the new segment was declared there too. The
+  test was updated deliberately, with a comment recording why the contract
+  changed; that guard is working as designed and must not be loosened.
+- **A widget test built an owner membership with `isOwner: false`.** Canonical
+  access refuses that combination, so the session never opened. The fixture now
+  derives `isOwner` from the role.
+- **A tenant-switch test completed only the first of several sequential reads.**
+  The summary reads one day at a time, so completing the outstanding read once
+  left the load unfinished. The test now drains the reads for a business before
+  asserting.
+- No other test assertion failed; the analyzer and every other command in the
+  final sequence were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded tenant returns surface, which is the last read-only
+operational vertical before any write-capable POS screen:
+
+1. Add a strict read model and guarded repository for
+   `tenants/{tenantId}/returns`, deriving every path from `TenantPaths`,
+   refusing a return whose sale attribution disagrees, and keeping the
+   exact-child, uniqueness, and ordering proofs. Confirm the canonical field
+   names against `functions/src/operations/**` before designing the model.
+2. Link a sale to the returns recorded against it from the sale-history entry,
+   showing verified and pending returns distinctly.
+3. Decide and test the returns read boundary in Rules exactly as the last four
+   chunks did, including the absent-document case. Remember that a rule
+   comparing `resource.data` denies a read of a document that does not exist,
+   while a rule comparing a path wildcard or a role does not.
+4. Add the composite indexes those pages need, remembering that a descending
+   page must carry at least one equality filter.
+5. Add unit, widget, and focused Rules emulator coverage for a missing return, a
+   wrong-role read, a cross-tenant response, a tenant switch during an
+   outstanding page, and a return that names a sale it does not belong to.
+6. Leave return **creation** and `verifyReturnAndRestoreStock`, the checkout
+   screen and payment flow, receipt printing, product cost/profit fields,
+   subscription and branding surfaces, deployment, and Android build/emulator
+   validation outside that chunk. This vertical stays read-only.

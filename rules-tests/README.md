@@ -110,6 +110,19 @@ resolver does on its own. The identity compared in the rule is the path
 wildcard, not a document field, so an absent record still answers instead of
 raising an evaluation error.
 
+For the focused daily reporting boundary, run
+`npm --prefix rules-tests run test:emulator:daily-metrics`. It proves that
+owners and managers read the regenerated `daily_metrics` documents, that a day
+which has not been reconciled yet still answers instead of being denied - the
+normal state for today, which the summary reports as pending - that a cashier
+reads no business-wide revenue, that no client may write or delete a metric,
+and that a non-member or deactivated identity reads nothing.
+
+`daily_metrics` is regenerated only by the reconciliation workers, so the client
+never aggregates a replacement: a device holds only its own sales, and any total
+it derived would disagree with the server's for a business using more than one
+device.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

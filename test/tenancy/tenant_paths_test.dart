@@ -57,6 +57,9 @@ void main() {
         TenantCollection.configuration: 'tenants/tenant-a/configuration',
         TenantCollection.subscription: 'tenants/tenant-a/subscription',
         TenantCollection.auditLogs: 'tenants/tenant-a/audit_logs',
+        // Server-regenerated daily reporting. Added deliberately as part of the
+        // guarded daily summary; the client only ever reads it.
+        TenantCollection.dailyMetrics: 'tenants/tenant-a/daily_metrics',
       };
 
       expect(TenantPaths.businessCollections.toSet(), expected.keys.toSet());

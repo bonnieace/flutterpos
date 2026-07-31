@@ -12,6 +12,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'checkout/checkout.dart';
+import 'reporting/reporting.dart';
 import 'shift/shift.dart';
 
 Future<void> main() async {
@@ -201,6 +202,8 @@ class SpiritPOSApp extends StatelessWidget {
           return token.claims?['platformRole'] == 'superAdmin';
         },
         tenantDataReader: tenantDataReader,
+        dailySummaryRoute: (reader) => TenantDailySummaryScreen(reader: reader),
+        dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
         shiftPanel: TenantShiftPanel(
           historyReader: tenantDataReader,
           controllerFactory: (sessions) => TenantShiftController(

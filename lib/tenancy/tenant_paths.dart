@@ -10,7 +10,11 @@ enum TenantCollection {
   staff('staff'),
   configuration('configuration'),
   subscription('subscription'),
-  auditLogs('audit_logs');
+  auditLogs('audit_logs'),
+
+  /// Server-regenerated daily reporting. Nightly reconciliation is the only
+  /// writer; the client reads it and never aggregates a replacement.
+  dailyMetrics('daily_metrics');
 
   const TenantCollection(this.segment);
 
@@ -38,6 +42,7 @@ final class TenantPaths {
     TenantCollection.configuration,
     TenantCollection.subscription,
     TenantCollection.auditLogs,
+    TenantCollection.dailyMetrics,
   ];
 
   final String tenantId;
@@ -59,6 +64,7 @@ final class TenantPaths {
   String get configuration => collectionPath(TenantCollection.configuration);
   String get subscription => collectionPath(TenantCollection.subscription);
   String get auditLogs => collectionPath(TenantCollection.auditLogs);
+  String get dailyMetrics => collectionPath(TenantCollection.dailyMetrics);
 
   String product(String productId) =>
       documentPath(TenantCollection.products, productId);
@@ -76,6 +82,8 @@ final class TenantPaths {
       documentPath(TenantCollection.subscription, documentId);
   String auditRecord(String auditId) =>
       documentPath(TenantCollection.auditLogs, auditId);
+  String dailyMetric(String businessDate) =>
+      documentPath(TenantCollection.dailyMetrics, businessDate);
 
   String get currentSubscription => subscriptionDocument('current');
 

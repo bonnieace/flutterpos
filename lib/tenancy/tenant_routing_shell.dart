@@ -69,6 +69,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.tenantRouteBuilder,
     this.pendingCheckoutPanel,
     this.shiftPanel,
+    this.dailySummaryRoute,
+    this.dailySummaryRoles = const <TenantRole>[],
   });
 
   final Stream<String?> authUidChanges;
@@ -112,6 +114,12 @@ final class TenantRoutingShell extends StatefulWidget {
   /// Optional shift lifecycle surface rendered on the safe landing route. It is
   /// injected for the same reason: tenancy code owns routing, not operations.
   final Widget? shiftPanel;
+
+  /// Optional read-only reporting route, injected for the same reason.
+  final Widget Function(TenantDataReader reader)? dailySummaryRoute;
+
+  /// The roles the reporting route is offered to.
+  final List<TenantRole> dailySummaryRoles;
 
   @override
   State<TenantRoutingShell> createState() => _TenantRoutingShellState();
@@ -589,6 +597,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       onSwitchTenant: _switchTenant,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
       shiftPanel: widget.shiftPanel,
+      dailySummaryRoute: widget.dailySummaryRoute,
+      dailySummaryRoles: widget.dailySummaryRoles,
     );
   }
 }
@@ -961,6 +971,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.onSwitchTenant,
     this.pendingCheckoutPanel,
     this.shiftPanel,
+    this.dailySummaryRoute,
+    this.dailySummaryRoles = const <TenantRole>[],
   });
 
   final TenantMembership membership;
@@ -975,6 +987,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   onSwitchTenant;
   final Widget? pendingCheckoutPanel;
   final Widget? shiftPanel;
+
+  /// Builds the read-only reporting route. Supplied by the composition root so
+  /// tenancy code keeps owning routing rather than the reporting domain; the
+  /// route stays unreachable while it is absent.
+  final Widget Function(TenantDataReader reader)? dailySummaryRoute;
+
+  /// The roles that route is offered to, decided by the reporting domain.
+  final List<TenantRole> dailySummaryRoles;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -1056,6 +1076,24 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 icon: const Icon(Icons.inventory_2_outlined),
                 label: const Text('View read-only catalog'),
               ),
+              if (dailySummaryRoute != null &&
+                  membership.role.canAccess(dailySummaryRoles))
+                OutlinedButton.icon(
+                  key: const ValueKey('view-daily-summary'),
+                  onPressed: () {
+                    final controller = TenantSessionScope.of(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TenantSessionScope(
+                          controller: controller,
+                          child: dailySummaryRoute!(reader),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.insights_outlined),
+                  label: const Text('View daily summary'),
+                ),
               if (membership.role.canAccess(
                 TenantStaffDirectoryScreen.allowedRoles,
               ))
