@@ -416,6 +416,31 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // The business-wide immutable record of every manual `adjustStock`
+      // correction, written in the same transaction as the product update, the
+      // per-product `stock_movements` entry, and the audit record.
+      //
+      // The read is owner/admin/manager: the same set of roles `adjustStock`
+      // enforces and the same set that reads a product's ledger, so the surface
+      // that records a correction, the surface that explains one product's
+      // stock figure, and the surface that lists every correction in the
+      // business agree about who may see them. It is deliberately wider than
+      // `audit_logs`, which is owner/admin: that collection is the whole
+      // business's event trail, while this one is only the stock corrections a
+      // manager both records and answers for.
+      //
+      // The role check touches no document field, so an absent adjustment - and
+      // a business that has never recorded one - still answers instead of
+      // raising an evaluation error.
+      //
+      // Writing stays server-only. A client that could create here could claim
+      // a correction that never moved any stock, and one that could update or
+      // delete could erase the only record of one that did.
+      match /stock_adjustments/{adjustmentId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
       match /audit_logs/{documentId} {
         allow read: if hasTenantRole(tenantId, ['owner', 'admin']) || platformAdmin();
         allow write: if false;

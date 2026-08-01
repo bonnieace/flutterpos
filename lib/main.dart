@@ -235,6 +235,13 @@ class SpiritPOSApp extends StatelessWidget {
           actions: stockActions,
         ),
         productStockRoles: TenantProductStockRepository.allowedRoles,
+        // The business-wide record of every correction the callable above ever
+        // made. It is read-only: an adjustment cannot be undone, only followed
+        // by another one.
+        stockAdjustmentFeedRoute: (reader) =>
+            TenantStockAdjustmentFeedScreen(reader: reader),
+        stockAdjustmentFeedRoles:
+            TenantStockAdjustmentFeedRepository.allowedRoles,
         shiftPanel: TenantShiftPanel(
           historyReader: tenantDataReader,
           returnActions: returnActions,

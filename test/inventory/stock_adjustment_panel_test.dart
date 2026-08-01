@@ -302,6 +302,29 @@ void main() {
     expect(find.byKey(const ValueKey('product-stock-entry-mv-1')), findsOne);
   });
 
+  testWidgets('the ledger opens this product\'s manual corrections', (
+    tester,
+  ) async {
+    // Both surfaces belong to the inventory domain, so the route needs no
+    // injection; it opens under this route's own session scope.
+    final reader = _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+    await tester.tap(
+      find.byKey(const ValueKey('product-stock-adjustments')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Adjustments: Cold lager'), findsOne);
+    expect(
+      reader.queries.last.collectionPath,
+      'tenants/tenant-a/stock_adjustments',
+    );
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'productId': 'product-1',
+    });
+  });
+
   testWidgets('a ledger entry outside this product hides the page', (
     tester,
   ) async {

@@ -8,6 +8,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'stock_actions.dart';
 import 'stock_adjustment.dart';
+import 'stock_adjustment_feed_panel.dart';
 import 'stock_movements.dart';
 
 /// Read-and-correct stock route for one product in the selected tenant.
@@ -249,6 +250,13 @@ final class _TenantProductStockPanelState
         pageIndex: _pageIndex,
         busy: _busy,
         notice: _notice,
+        // The same domain owns both surfaces, so this route needs no injection
+        // from the composition root; it opens under this route's own scope.
+        onOpenAdjustments: () => openTenantStockAdjustmentFeed(
+          context,
+          reader: widget.reader,
+          product: view.stock.product,
+        ),
         canAdjust:
             widget.actions?.adjustCallable != null &&
             TenantStockAdjustmentGateway.canAdjustInSession(session),
@@ -301,6 +309,7 @@ final class _ProductStockContents extends StatelessWidget {
     required this.canAdjust,
     required this.onNextPage,
     required this.onPreviousPage,
+    required this.onOpenAdjustments,
     required this.onAdjust,
   });
 
@@ -312,6 +321,10 @@ final class _ProductStockContents extends StatelessWidget {
   final bool canAdjust;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
+
+  /// Opens the manual-correction feed narrowed to this product.
+  final VoidCallback onOpenAdjustments;
+
   final void Function(
     TenantStockAdjustmentType type,
     int quantityDelta,
@@ -379,6 +392,14 @@ final class _ProductStockContents extends StatelessWidget {
               onPressed: onNextPage,
               child: const Text('Next page'),
             ),
+          // The ledger explains every movement; this narrows the business-wide
+          // correction record to the manual ones recorded against this product.
+          OutlinedButton.icon(
+            key: const ValueKey('product-stock-adjustments'),
+            onPressed: onOpenAdjustments,
+            icon: const Icon(Icons.fact_check_outlined),
+            label: const Text('Manual adjustments'),
+          ),
         ],
       ),
       if (canAdjust) ...[

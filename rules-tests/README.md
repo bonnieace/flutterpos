@@ -200,6 +200,36 @@ and `sale_{saleId}` for sales, so document order carries no time information; a
 descending page would be neither newest-first nor servable without a composite
 index, and the client renders each entry's own recorded instants instead.
 
+For the focused business-wide correction record, run
+`npm --prefix rules-tests run test:emulator:stock-adjustments`. It proves that
+owners and managers page `stock_adjustments` both business-wide and narrowed to
+one product, that an unwritten adjustment, an uncorrected product, and a
+business that has never corrected stock all still answer, that a cashier reads
+the product document but never the corrections that explain it, that no client
+may record, rewrite, or delete an adjustment, that another business's record is
+never reached, and that a deactivated or non-member identity reads nothing.
+
+`stock_adjustments` was previously denied outright by the tenant catch-all, so
+this was another deliberate decision rather than an omission. The read is
+owner/admin/manager: the same set of roles `adjustStock` enforces and the same
+set that reads a product's ledger, so the surface that records a correction, the
+surface that explains one product's stock figure, and the surface that lists
+every correction agree about who may see them. It is deliberately wider than
+`audit_logs`, which stays owner/admin: that collection is the whole business's
+event trail, while this one is only the stock corrections a manager both records
+and answers for. The role check touches no document field, so an absent
+adjustment still answers. Writing stays server-only: a client that could create
+here could claim a correction that never moved any stock, and one that could
+update or delete could erase the only record of one that did.
+
+That suite issues both exact client pages. The business-wide page is ascending
+`__name__` with no filter; the narrowed page adds a single `productId ==`
+equality on the same order, which Firestore's automatic single-field index
+serves, so neither needs a composite index. An adjustment ID is `sa_` plus a
+digest of the actor, operation, tenant, and request ID, so document order
+carries no time information at all and each record states its own recorded
+instant instead.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

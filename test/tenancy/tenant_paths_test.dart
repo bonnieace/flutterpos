@@ -57,6 +57,10 @@ void main() {
         TenantCollection.configuration: 'tenants/tenant-a/configuration',
         TenantCollection.subscription: 'tenants/tenant-a/subscription',
         TenantCollection.auditLogs: 'tenants/tenant-a/audit_logs',
+        // The business-wide manual correction record. Added deliberately as
+        // part of the guarded adjustment feed; `adjustStock` is the only
+        // writer and the client only ever reads it.
+        TenantCollection.stockAdjustments: 'tenants/tenant-a/stock_adjustments',
         // Server-regenerated daily reporting. Added deliberately as part of the
         // guarded daily summary; the client only ever reads it.
         TenantCollection.dailyMetrics: 'tenants/tenant-a/daily_metrics',
@@ -83,6 +87,7 @@ void main() {
       expect(paths.configuration, 'tenants/tenant-a/configuration');
       expect(paths.subscription, 'tenants/tenant-a/subscription');
       expect(paths.auditLogs, 'tenants/tenant-a/audit_logs');
+      expect(paths.stockAdjustments, 'tenants/tenant-a/stock_adjustments');
     });
 
     test('document factories cannot escape the tenant root', () {
@@ -97,6 +102,7 @@ void main() {
         paths.configurationDocument('checkout'),
         paths.currentSubscription,
         paths.auditRecord('audit-1'),
+        paths.stockAdjustment('sa_abc'),
       ];
 
       for (final document in documents) {

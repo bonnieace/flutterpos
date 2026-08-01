@@ -146,8 +146,16 @@ final class TenantCatalogRepository extends TenantReadRepository {
 /// catalog is exactly the read-only surface it was before.
 typedef TenantProductRouteBuilder = Widget Function(TenantProduct product);
 
+/// Builds the business-wide stock adjustment feed route.
+///
+/// It is supplied by the composition root for the same reason: while it is
+/// absent the route stays unreachable and the catalog is exactly the read-only
+/// surface it was before.
+typedef TenantAdjustmentFeedRouteBuilder = Widget Function();
+
 /// Read-only catalog route. Catalog editing remains absent; the only reachable
-/// product action is the guarded stock route, when one is supplied.
+/// actions are the guarded per-product stock route and the business-wide
+/// adjustment feed, each when one is supplied.
 final class TenantCatalogScreen extends StatelessWidget {
   const TenantCatalogScreen({
     super.key,
@@ -155,6 +163,8 @@ final class TenantCatalogScreen extends StatelessWidget {
     this.allowedRoles,
     this.productStockRoute,
     this.productStockRoles = const <TenantRole>[],
+    this.adjustmentFeedRoute,
+    this.adjustmentFeedRoles = const <TenantRole>[],
   });
 
   final TenantDataReader reader;
@@ -164,6 +174,11 @@ final class TenantCatalogScreen extends StatelessWidget {
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> productStockRoles;
 
+  final TenantAdjustmentFeedRouteBuilder? adjustmentFeedRoute;
+
+  /// The roles the feed is offered to, decided by the inventory domain.
+  final List<TenantRole> adjustmentFeedRoles;
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Product catalog')),
@@ -172,6 +187,8 @@ final class TenantCatalogScreen extends StatelessWidget {
       allowedRoles: allowedRoles,
       productStockRoute: productStockRoute,
       productStockRoles: productStockRoles,
+      adjustmentFeedRoute: adjustmentFeedRoute,
+      adjustmentFeedRoles: adjustmentFeedRoles,
     ),
   );
 }
@@ -184,12 +201,16 @@ final class TenantCatalogPanel extends StatelessWidget {
     this.allowedRoles,
     this.productStockRoute,
     this.productStockRoles = const <TenantRole>[],
+    this.adjustmentFeedRoute,
+    this.adjustmentFeedRoles = const <TenantRole>[],
   });
 
   final TenantDataReader reader;
   final Iterable<TenantRole>? allowedRoles;
   final TenantProductRouteBuilder? productStockRoute;
   final List<TenantRole> productStockRoles;
+  final TenantAdjustmentFeedRouteBuilder? adjustmentFeedRoute;
+  final List<TenantRole> adjustmentFeedRoles;
 
   @override
   Widget build(BuildContext context) => TenantRouteGuard<TenantCatalogSnapshot>(
@@ -204,6 +225,9 @@ final class TenantCatalogPanel extends StatelessWidget {
       productStockRoute: session.canAccess(allowedRoles: productStockRoles)
           ? productStockRoute
           : null,
+      adjustmentFeedRoute: session.canAccess(allowedRoles: adjustmentFeedRoles)
+          ? adjustmentFeedRoute
+          : null,
     ),
   );
 }
@@ -213,11 +237,13 @@ final class _CatalogContents extends StatelessWidget {
     required this.tenantId,
     required this.snapshot,
     this.productStockRoute,
+    this.adjustmentFeedRoute,
   });
 
   final String tenantId;
   final TenantCatalogSnapshot snapshot;
   final TenantProductRouteBuilder? productStockRoute;
+  final TenantAdjustmentFeedRouteBuilder? adjustmentFeedRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -234,6 +260,15 @@ final class _CatalogContents extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text('Business: $tenantId'),
+        if (adjustmentFeedRoute != null) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const ValueKey('catalog-adjustment-feed'),
+            onPressed: () => _openAdjustmentFeed(context),
+            icon: const Icon(Icons.fact_check_outlined),
+            label: const Text('View recorded stock adjustments'),
+          ),
+        ],
         const SizedBox(height: 20),
         Text('Categories', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
@@ -301,6 +336,20 @@ final class _CatalogContents extends StatelessWidget {
         builder: (_) => TenantSessionScope(
           controller: controller,
           child: productStockRoute!(product),
+        ),
+      ),
+    );
+  }
+
+  /// Opens the business-wide correction feed under the same session scope, for
+  /// the same reason the per-product route does.
+  void _openAdjustmentFeed(BuildContext context) {
+    final controller = TenantSessionScope.of(context);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: controller,
+          child: adjustmentFeedRoute!(),
         ),
       ),
     );

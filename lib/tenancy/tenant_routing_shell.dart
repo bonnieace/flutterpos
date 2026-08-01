@@ -75,6 +75,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.receiptLookupRoles = const <TenantRole>[],
     this.productStockRoute,
     this.productStockRoles = const <TenantRole>[],
+    this.stockAdjustmentFeedRoute,
+    this.stockAdjustmentFeedRoles = const <TenantRole>[],
   });
 
   final Stream<String?> authUidChanges;
@@ -138,6 +140,13 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> productStockRoles;
+
+  /// Optional guarded business-wide stock adjustment feed, reached from the
+  /// read-only catalog and injected for the same reason.
+  final Widget Function(TenantDataReader reader)? stockAdjustmentFeedRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> stockAdjustmentFeedRoles;
 
   @override
   State<TenantRoutingShell> createState() => _TenantRoutingShellState();
@@ -621,6 +630,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       receiptLookupRoles: widget.receiptLookupRoles,
       productStockRoute: widget.productStockRoute,
       productStockRoles: widget.productStockRoles,
+      stockAdjustmentFeedRoute: widget.stockAdjustmentFeedRoute,
+      stockAdjustmentFeedRoles: widget.stockAdjustmentFeedRoles,
     );
   }
 }
@@ -999,6 +1010,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.receiptLookupRoles = const <TenantRole>[],
     this.productStockRoute,
     this.productStockRoles = const <TenantRole>[],
+    this.stockAdjustmentFeedRoute,
+    this.stockAdjustmentFeedRoles = const <TenantRole>[],
   });
 
   final TenantMembership membership;
@@ -1035,6 +1048,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> productStockRoles;
+
+  /// Optional guarded business-wide stock adjustment feed, opened from the
+  /// read-only catalog rather than from this screen.
+  final Widget Function(TenantDataReader reader)? stockAdjustmentFeedRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> stockAdjustmentFeedRoles;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -1114,6 +1134,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                               ? null
                               : (product) => productStockRoute!(reader, product),
                           productStockRoles: productStockRoles,
+                          adjustmentFeedRoute: stockAdjustmentFeedRoute == null
+                              ? null
+                              : () => stockAdjustmentFeedRoute!(reader),
+                          adjustmentFeedRoles: stockAdjustmentFeedRoles,
                         ),
                       ),
                     ),

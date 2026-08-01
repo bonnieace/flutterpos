@@ -1,0 +1,373 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_application_1/inventory/inventory.dart';
+import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('the business-wide record is listed as it was recorded', (
+    tester,
+  ) async {
+    final reader = _Reader(staffNames: <String, String>{'owner-a': 'Juma'})
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _adjustment('sa_abc'),
+        _adjustment(
+          'sa_def',
+          overrides: <String, Object?>{
+            'productId': 'product-9',
+            'adjustmentType': 'restock',
+            'quantityDelta': 6,
+            'previousQuantity': 4,
+            'quantityAfter': 10,
+            'reason': 'Delivery received',
+            'actorUid': 'owner-a',
+          },
+        ),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('stock-adjustments-scope')))
+          .data,
+      startsWith('Every manual correction recorded across this business.'),
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('stock-adjustments-delta-sa_abc')),
+          )
+          .data,
+      '-3 • ${TenantStockAdjustmentType.damage.label}',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('stock-adjustments-product-sa_abc')),
+          )
+          .data,
+      'Product product-1',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('stock-adjustments-figures-sa_abc')),
+          )
+          .data,
+      '10 to 7',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('stock-adjustments-reason-sa_abc')),
+          )
+          .data,
+      'Reason: Broken in transit',
+    );
+    // The signed-in manager recorded this one, so the row says so rather than
+    // repeating their own UID back at them. Their name was never read, so only
+    // the authoritative UID is available for them.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('stock-adjustments-recorded-sa_abc')),
+          )
+          .data,
+      'Recorded 2026-08-01 09:00 UTC by You',
+    );
+    // A colleague is labelled by the resolved name beside their UID.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('stock-adjustments-recorded-sa_def')),
+          )
+          .data,
+      'Recorded 2026-08-01 09:00 UTC by Juma (owner-a)',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('stock-adjustments-delta-sa_def')),
+          )
+          .data,
+      '+6 • ${TenantStockAdjustmentType.restock.label}',
+    );
+    expect(reader.queries.single.descending, isFalse);
+    expect(reader.queries.single.equalityFilters, isEmpty);
+  });
+
+  testWidgets('a business with no corrections says so', (tester) async {
+    final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('stock-adjustments-empty')))
+          .data,
+      'No manual adjustment has been recorded in this business.',
+    );
+  });
+
+  testWidgets('a product-scoped feed states its scope and filters', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_adjustment('sa_abc')]);
+
+    await _pump(tester, _controller(), reader, product: _product());
+
+    expect(reader.queries.single.equalityFilters, <String, Object?>{
+      'productId': 'product-1',
+    });
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('stock-adjustments-scope')))
+          .data,
+      startsWith(
+        'Every manual correction recorded against product product-1.',
+      ),
+    );
+    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_abc')), findsOne);
+  });
+
+  testWidgets('a cashier is denied and issues no read at all', (tester) async {
+    final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(role: TenantRole.cashier), reader);
+
+    expect(find.byKey(const ValueKey('stock-adjustments-denied')), findsOne);
+    expect(reader.queries, isEmpty);
+    expect(reader.documentPaths, isEmpty);
+  });
+
+  testWidgets('the feed pages forward and back', (tester) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _adjustment('sa_1'),
+        _adjustment('sa_2'),
+        _adjustment('sa_3'),
+      ]);
+
+    await _pump(tester, _controller(), reader, pageSize: 2);
+
+    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_1')), findsOne);
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_3')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('stock-adjustments-next')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_3')), findsOne);
+    expect(reader.queries.last.startAfterDocumentId, 'sa_2');
+
+    await tester.tap(find.byKey(const ValueKey('stock-adjustments-previous')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_1')), findsOne);
+  });
+
+  testWidgets('a record that contradicts itself hides the page', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _adjustment('sa_abc', overrides: <String, Object?>{'quantityAfter': 8}),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(find.byKey(const ValueKey('stock-adjustments-failure')), findsOne);
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_abc')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a tenant switch discards an outstanding page', (tester) async {
+    final controller = _controller();
+    final reader = _Reader.deferred();
+
+    await _pump(tester, controller, reader, settle: false);
+    expect(
+      reader.queries.single.collectionPath,
+      'tenants/tenant-a/stock_adjustments',
+    );
+
+    controller.open(uid: 'manager-a', membership: _membership('tenant-b'));
+    await tester.pump();
+    expect(
+      reader.queries.last.collectionPath,
+      'tenants/tenant-b/stock_adjustments',
+    );
+
+    // The first business's page arrives after the switch and is discarded
+    // before it can label another business's screen.
+    reader.completeFirst(<TenantQueryDocumentSnapshot>[_adjustment('sa_abc')]);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_abc')),
+      findsNothing,
+    );
+
+    reader.completeFirst(<TenantQueryDocumentSnapshot>[
+      _adjustment('sa_xyz', tenantId: 'tenant-b'),
+    ]);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_xyz')), findsOne);
+  });
+}
+
+Future<void> _pump(
+  WidgetTester tester,
+  TenantSessionController controller,
+  _Reader reader, {
+  int pageSize = 20,
+  TenantProduct? product,
+  bool settle = true,
+}) async {
+  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TenantSessionScope(
+        controller: controller,
+        child: Scaffold(
+          body: TenantStockAdjustmentFeedPanel(
+            reader: reader,
+            product: product,
+            pageSize: pageSize,
+          ),
+        ),
+      ),
+    ),
+  );
+  if (!settle) return;
+  await tester.pump();
+  await tester.pump();
+}
+
+TenantProduct _product() => TenantProduct.fromDocument(
+  path: 'tenants/tenant-a/products/product-1',
+  data: <String, Object?>{
+    'name': 'Cold lager',
+    'SKU': 'LAGER-001',
+    'price': 120.5,
+    'quantity': 7,
+    'categoryId': 'drinks',
+  },
+);
+
+TenantQueryDocumentSnapshot _adjustment(
+  String adjustmentId, {
+  String tenantId = 'tenant-a',
+  Map<String, Object?>? overrides,
+}) {
+  final data = <String, Object?>{
+    'tenantId': tenantId,
+    'productId': 'product-1',
+    'sourceType': 'manual_adjustment',
+    'adjustmentType': 'damage',
+    'quantityDelta': -3,
+    'previousQuantity': 10,
+    'quantityAfter': 7,
+    'reason': 'Broken in transit',
+    'actorUid': 'manager-a',
+    'requestId': 'adjust-stock-abcdefgh',
+    'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 9)),
+  };
+  if (overrides != null) data.addAll(overrides);
+  return TenantQueryDocumentSnapshot(
+    path: 'tenants/$tenantId/stock_adjustments/$adjustmentId',
+    data: data,
+  );
+}
+
+TenantSessionController _controller({TenantRole role = TenantRole.manager}) =>
+    TenantSessionController()..open(
+      uid: 'manager-a',
+      membership: _membership('tenant-a', role: role),
+    );
+
+TenantMembership _membership(
+  String tenantId, {
+  TenantRole role = TenantRole.manager,
+}) => TenantMembership(
+  tenantId: tenantId,
+  tenantName: tenantId,
+  tenantSlug: tenantId,
+  role: role,
+  membershipStatus: MembershipStatus.active,
+  tenantStatus: TenantStatus.active,
+  isOwner: role == TenantRole.owner,
+  mirrorVersion: 1,
+  createdAt: DateTime.utc(2026, 8, 1),
+  updatedAt: DateTime.utc(2026, 8, 1),
+  serverCanAccess: true,
+  canonicalTenantExists: true,
+  canonicalMembershipExists: true,
+);
+
+final class _Reader implements TenantDataReader {
+  _Reader({this.staffNames = const <String, String>{}}) : _defer = false;
+  _Reader.deferred() : staffNames = const <String, String>{}, _defer = true;
+
+  final Map<String, String> staffNames;
+  final bool _defer;
+  List<TenantQueryDocumentSnapshot> _page =
+      const <TenantQueryDocumentSnapshot>[];
+  final List<Completer<List<TenantQueryDocumentSnapshot>>> _pending =
+      <Completer<List<TenantQueryDocumentSnapshot>>>[];
+  final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
+  final List<String> documentPaths = <String>[];
+
+  void respond(List<TenantQueryDocumentSnapshot> page) => _page = page;
+
+  void completeFirst(List<TenantQueryDocumentSnapshot> page) {
+    if (_pending.isEmpty) return;
+    _pending.removeAt(0).complete(page);
+  }
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    documentPaths.add(path);
+    final uid = path.split('/').last;
+    final name = staffNames[uid];
+    return name == null
+        ? null
+        : TenantDocumentSnapshot(
+            path: path,
+            data: <String, Object?>{'uid': uid, 'name': name},
+          );
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) {
+    queries.add(query);
+    if (_defer) {
+      final completer = Completer<List<TenantQueryDocumentSnapshot>>();
+      _pending.add(completer);
+      return completer.future;
+    }
+    final cursor = query.startAfterDocumentId;
+    final matches = <TenantQueryDocumentSnapshot>[];
+    for (final snapshot in _page) {
+      final id = snapshot.path.split('/').last;
+      if (cursor != null && id.compareTo(cursor) <= 0) continue;
+      matches.add(snapshot);
+      if (matches.length >= query.limit) break;
+    }
+    return Future<List<TenantQueryDocumentSnapshot>>.value(matches);
+  }
+}

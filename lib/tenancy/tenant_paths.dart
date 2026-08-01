@@ -12,6 +12,11 @@ enum TenantCollection {
   subscription('subscription'),
   auditLogs('audit_logs'),
 
+  /// The business-wide immutable record of every manual `adjustStock`
+  /// correction. `adjustStock` is the only writer; the client reads it and can
+  /// never append, amend, or undo one.
+  stockAdjustments('stock_adjustments'),
+
   /// Server-regenerated daily reporting. Nightly reconciliation is the only
   /// writer; the client reads it and never aggregates a replacement.
   dailyMetrics('daily_metrics');
@@ -53,6 +58,7 @@ final class TenantPaths {
     TenantCollection.configuration,
     TenantCollection.subscription,
     TenantCollection.auditLogs,
+    TenantCollection.stockAdjustments,
     TenantCollection.dailyMetrics,
   ];
 
@@ -75,6 +81,8 @@ final class TenantPaths {
   String get configuration => collectionPath(TenantCollection.configuration);
   String get subscription => collectionPath(TenantCollection.subscription);
   String get auditLogs => collectionPath(TenantCollection.auditLogs);
+  String get stockAdjustments =>
+      collectionPath(TenantCollection.stockAdjustments);
   String get dailyMetrics => collectionPath(TenantCollection.dailyMetrics);
 
   String product(String productId) =>
@@ -93,6 +101,10 @@ final class TenantPaths {
       documentPath(TenantCollection.subscription, documentId);
   String auditRecord(String auditId) =>
       documentPath(TenantCollection.auditLogs, auditId);
+  String stockAdjustment(String adjustmentId) => documentPath(
+    TenantCollection.stockAdjustments,
+    adjustmentId,
+  );
   String dailyMetric(String businessDate) =>
       documentPath(TenantCollection.dailyMetrics, businessDate);
 

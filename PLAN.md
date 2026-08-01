@@ -6157,3 +6157,199 @@ tenant-level records this chunk deliberately left unreachable, and nothing else:
    cost/profit fields, `getSalesComparison`, tenant-level `audit_logs`,
    subscription and branding surfaces, deployment, and Android build/emulator
    validation outside that chunk.
+
+---
+
+## Guarded business-wide stock adjustment feed handoff - 2026-08-01
+
+### Completed in this session
+
+The corrections a business records are now readable as a business, not only one
+product at a time. The read-only catalog opens a management-only feed of every
+manual `adjustStock` correction the server recorded, and the per-product stock
+route opens the same feed narrowed to that product. This chunk adds no checkout
+screen or payment flow, no receipt printing, no product cost or profit surface,
+no `getSalesComparison`, no `audit_logs` surface, and makes no legacy
+operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `TenantStockAdjustmentRecord` decodes what
+  `functions/src/operations/stock.ts` writes and is the only authority on those
+  field names. **Unlike the per-product ledger, a missing before or after is
+  refused rather than tolerated**: `adjustStock` reads the product inside its
+  own transaction, so every adjustment records both figures, and there is no
+  shape here that legitimately omits one the way a reconciled sale movement
+  does. `quantityAfter == previousQuantity + quantityDelta` is re-derived, and a
+  record that cannot explain its own change is refused rather than listed as
+  evidence.
+- **The record does not repeat its own ID** - only the `stock_movements` entry
+  below the product carries `movementId` - so its path is the one authority on
+  which adjustment it is. The business it names must still agree with the path
+  it was read from, and `productId`, `actorUid`, and `reason` are required
+  because every real record carries them.
+- An unmodelled `adjustmentType` degrades to a null typed category and is
+  displayed verbatim, exactly as an unmodelled movement `sourceType` is: a
+  server deploy adding a category is not evidence of anything wrong, and hiding
+  a real correction would be worse than naming it honestly. `sourceType` is
+  decoded rather than pinned to `manual_adjustment` for the same reason.
+- **`stock_adjustments` was a deliberate Rules decision, not an omission.** The
+  collection was denied outright by the tenant catch-all. The read is now
+  `owner/admin/manager` - the same set `adjustStock` enforces and the same set
+  that reads a product's ledger, so the surface that records a correction, the
+  surface that explains one product's stock figure, and the surface that lists
+  every correction agree about who may see them. It is deliberately **wider than
+  `audit_logs`**, which stays owner/admin: that collection is the whole
+  business's event trail, while this one is only the stock corrections a manager
+  both records and answers for. The role check touches no document field, so an
+  absent adjustment, an uncorrected product, and a business that has never
+  corrected stock all still answer. Writing stays server-only.
+- **Both pages are ascending by document ID and neither needed a composite
+  index.** An adjustment ID is `sa_` plus a digest of the actor, operation,
+  tenant, and request ID, so document order carries no time information at all;
+  each record states its own recorded instant and the screen says outright that
+  the list is not time order. The business-wide page carries no filter and the
+  product page carries exactly one `productId ==` equality on the same ascending
+  key order, both of which Firestore's automatic single-field index serves. A
+  descending page would have required a filter and a composite index and bought
+  nothing but a different arbitrary order, so `firestore.indexes.json` was not
+  touched.
+- A page narrowed to one product that answers with another product's correction
+  fails closed as `foreign_product_adjustment`, and a cross-tenant response
+  fails closed, because a filtered page returning foreign rows is a broken
+  boundary rather than rows to skip past. A product filter that is not a
+  document ID is refused before any query is issued.
+- A cashier is refused as `stock_adjustments_forbidden` before any read is
+  issued, so a role that may not see the corrections never reaches the server.
+- The feed is reached from the read-only catalog when the composition root
+  supplies a route **and** the guarded session allows the role, exactly as the
+  per-product stock route already is. Tenancy keeps owning routing: `main.dart`
+  passes the builder through `TenantRoutingShell` and `TenantSafeLandingScreen`
+  into `TenantCatalogScreen`. The product-narrowed entry point needs no
+  injection at all - both surfaces belong to the inventory domain, so the stock
+  route opens it directly under its own session scope.
+- Every route opens under the caller's `TenantSessionScope`, so a tenant switch
+  during an outstanding page discards it before it can label another business's
+  screen, which the widget suite proves.
+- Actor UIDs are resolved through the existing `TenantStaffNameResolver` rather
+  than a new lookup, one resolver per session epoch, degrading to the
+  authoritative UID. Product names are deliberately **not** resolved: that would
+  be one more document read per row for a label, and the product ID is the
+  identity every other record is attributed by.
+
+Deliberately outside this chunk, and important for the next session:
+
+- The feed lists only manual corrections. Sales and verified returns move stock
+  too, and the screen says so rather than implying this is every movement.
+- Nothing on the surface can record, amend, or undo an adjustment. Correcting
+  one still means recording another through the per-product route.
+- The tenant-level `audit_logs` collection is readable by Rules but still has no
+  client surface, and no business-wide movement or reconciliation feed exists.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/inventory/inventory.dart
+lib/inventory/stock_adjustment_feed.dart
+lib/inventory/stock_adjustment_feed_panel.dart
+lib/inventory/stock_adjustment_panel.dart
+lib/main.dart
+lib/tenancy/tenant_catalog.dart
+lib/tenancy/tenant_paths.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/stock-adjustments.test.js
+test/inventory/stock_adjustment_feed_panel_test.dart
+test/inventory/stock_adjustment_feed_test.dart
+test/inventory/stock_adjustment_panel_test.dart
+test/tenancy/tenant_catalog_test.dart
+test/tenancy/tenant_paths_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/inventory lib/returns lib/reporting lib/sales
+  lib/shift lib/checkout lib/tenancy lib/main.dart test/inventory test/returns
+  test/reporting test/sales test/shift test/checkout test/tenancy` reported one
+  pre-existing issue and nothing else: the Sentry `profilesSampleRate`
+  experimental warning at `lib/main.dart:27`, which this chunk does not touch.
+  Earlier handovers scoped the command without `lib/main.dart`, which is why it
+  had not been reported before. Analyzing all of `lib` and `test` still reports
+  the 477 known issues in the disabled legacy screens, services, widgets, and
+  `test/widget_test.dart`; none is in a migrated surface.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/inventory
+  test/returns test/reporting test/sales test/shift test/checkout test/tenancy`
+  passed **674/674** relevant Flutter tests, including **21** new tests: 5
+  adjustment read-model cases, 7 feed-repository cases, 7 feed-panel widget
+  cases, 1 product-stock-route entry-point case, and 1 catalog case.
+- `npm --prefix rules-tests run test:emulator:stock-adjustments` passed the
+  focused Firestore-only suite **6/6** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **96/96** (90 existing plus the 6 new stock-adjustment cases).
+- `npm --prefix functions test` passed **166/166** Functions tests with the
+  pinned Node 24 / Temurin JDK 21 environment. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean. No index change was needed, so
+  `firestore.indexes.json` was not touched. Android build and Android emulator
+  validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- No test assertion failed. Every command in the final sequence was green on its
+  first execution.
+- The emulator proves a query is **valid and permitted**, not that a composite
+  index exists - the Firestore emulator serves any query it can plan. What the
+  suite genuinely proves is the class of failure the descending key-scan
+  rejection already exposed: a query shape Firestore refuses outright is caught
+  here rather than in production. Index coverage itself is an argument about the
+  automatic single-field index, recorded above and in `rules-tests/README.md`.
+- The pinned toolchain must be put on `PATH` for every emulator command in a
+  fresh shell, as the previous handover recorded: the ambient JRE is older than
+  21 and firebase-tools hard-fails on it.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded tenant audit-log surface, which is the last
+tenant-level record this migration leaves unreachable, and nothing else:
+
+1. Add a strict read model and guarded repository for
+   `tenants/{tenantId}/audit_logs`: bounded, ascending, document-ID-ordered
+   pages of the events the server writes, plus a page filtered to one event
+   type. Reuse the field set the Functions writers are the only authority on,
+   model each `eventType` explicitly, and degrade an unmodelled one to a
+   verbatim row rather than failing a page closed - the same decision the
+   movement `sourceType` and the adjustment category already document.
+2. Keep the existing owner/admin Rules boundary and prove it rather than widen
+   it: `audit_logs` is the whole business's event trail, which is deliberately
+   narrower than the `owner/admin/manager` stock surfaces landed this session.
+   Add its own focused emulator suite - an absent record must still answer, and
+   a platform admin reads it while a manager does not.
+3. Prove each client query is at least valid and permitted by issuing the exact
+   page in that suite, and add a composite index only if a query shape actually
+   requires one. Ascending key order with at most one equality filter needs
+   none, as this session and the receipt lookup both recorded.
+4. Reach it from the safe landing route as an owner/admin sibling of the daily
+   summary, resolving actor UIDs through the existing `TenantStaffNameResolver`.
+5. Add unit, widget, and focused Rules emulator coverage for pagination
+   boundaries, a cross-tenant response, a manager and a cashier being refused, a
+   tenant switch during an outstanding page, an unmodelled event type, and a
+   record that contradicts its own path.
+6. Leave the checkout screen and payment flow, receipt printing, product
+   cost/profit fields, `getSalesComparison`, any business-wide movement or
+   reconciliation feed, subscription and branding surfaces, deployment, and
+   Android build/emulator validation outside that chunk.
