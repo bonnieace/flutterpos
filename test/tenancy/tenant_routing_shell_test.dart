@@ -300,6 +300,71 @@ void main() {
     await fixture.dispose(tester);
   });
 
+  testWidgets('an unverified identity is offered the one way forward', (
+    tester,
+  ) async {
+    final callable = _ShellVerificationCallable();
+    final fixture = _ShellFixture(
+      memberships: [],
+      sendAccountVerificationCallable: callable,
+      reloadIdentity: () async {},
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    // Requesting a business and accepting an invitation both require a
+    // verified address, so without this panel the selector is a dead end.
+    expect(find.byKey(const ValueKey('show-tenant-request')), findsNothing);
+    expect(find.byKey(const ValueKey('account-verification')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('account-verification-send')));
+    await tester.pump();
+    await tester.pump();
+    expect(callable.payloads.single, <String, Object?>{
+      'requestId': 'routing-verify-request',
+    });
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('a verified identity is never offered verification', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [],
+      emailVerified: true,
+      sendAccountVerificationCallable: _ShellVerificationCallable(),
+      reloadIdentity: () async {},
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(find.byKey(const ValueKey('account-verification')), findsNothing);
+    expect(find.byKey(const ValueKey('show-tenant-request')), findsOneWidget);
+    await fixture.dispose(tester);
+  });
+
+  testWidgets('without an identity reload the panel stays unreachable', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [],
+      sendAccountVerificationCallable: _ShellVerificationCallable(),
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    // A "check again" that could never observe the change would be worse than
+    // no action, so the composition root must supply the reload to enable it.
+    expect(find.byKey(const ValueKey('account-verification')), findsNothing);
+    await fixture.dispose(tester);
+  });
+
   testWidgets(
     'requests a pending business from no-access routing without opening it',
     (tester) async {
@@ -613,6 +678,8 @@ final class _ShellFixture {
     this.setDefaultTenantCallable,
     this.emailVerified = false,
     this.requestTenantCallable,
+    this.sendAccountVerificationCallable,
+    this.reloadIdentity,
     this.platformClaim = false,
     this.platformDataSource,
     this.tenantSwitchStateSources,
@@ -648,6 +715,8 @@ final class _ShellFixture {
   final SetDefaultTenantCallable? setDefaultTenantCallable;
   final bool emailVerified;
   final RequestTenantCallable? requestTenantCallable;
+  final SendAccountVerificationCallable? sendAccountVerificationCallable;
+  final AccountVerificationReload? reloadIdentity;
   final bool platformClaim;
   final _ShellPlatformDataSource? platformDataSource;
   final List<TenantSwitchStateSource>? tenantSwitchStateSources;
@@ -679,6 +748,9 @@ final class _ShellFixture {
         defaultTenantRequestIdFactory: () => 'routing-default-request',
         requestTenantCallable: requestTenantCallable,
         tenantRequestIdFactory: () => 'routing-tenant-request',
+        sendAccountVerificationCallable: sendAccountVerificationCallable,
+        accountVerificationRequestIdFactory: () => 'routing-verify-request',
+        reloadIdentity: reloadIdentity,
         hasPlatformSuperAdminClaim: (_) async => platformClaim,
         platformPendingTenantDataSource: platformDataSource,
         platformLifecycleTenantDataSource: platformDataSource,
@@ -754,6 +826,17 @@ final class _ShellDefaultCallable implements SetDefaultTenantCallable {
     final tenantId = payload['tenantId']! as String;
     onCall(tenantId);
     return {'tenantId': tenantId, 'defaultTenantId': tenantId};
+  }
+}
+
+final class _ShellVerificationCallable
+    implements SendAccountVerificationCallable {
+  final List<Map<String, Object?>> payloads = [];
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(Map<String, Object?>.from(payload));
+    return <String, Object?>{'accepted': true};
   }
 }
 

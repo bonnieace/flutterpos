@@ -82,32 +82,62 @@ dropped, not postponed.
 
 | Capability | State | Deferred on purpose? |
 | --- | --- | --- |
-| `sendAccountVerification` | No caller in `lib/`. See below. | **No - undeclared** |
-| `requestPasswordReset` | No caller in `lib/`. See below. | **No - undeclared** |
-| `getMyEmailDeliveryStatus` | No caller in `lib/`; named for a user-facing read. | **No - undeclared** |
+| `sendAccountVerification` | **Reached 2026-08-01.** The business selector offers it to an unverified identity. | Resolved |
+| `requestPasswordReset` | **Blocked on App Check** - see below. Still no caller. | Now declared |
+| `getMyEmailDeliveryStatus` | No caller in `lib/`; named for a user-facing read. | Next chunk |
 | `getSalesComparison` | No caller; excluded by name in ~14 consecutive chunks. | Yes, never revisited |
 | `requestTenantReconciliation` | No caller. The status surface added 2026-08-01 reads runs but cannot request one. | Yes |
 | Subscription | Rules exist and `TenantPaths.currentSubscription` exists; **no repository reads it at all**. Spec line 14 names subscription as a per-business concern. | Yes, never revisited |
 | Product cost / profit | `profit` is parsed at `lib/reporting/daily_metrics.dart:64` and deliberately never displayed. | Yes |
 
-**The email gap is a user-facing lockout, and it is the most urgent item in this
-file.** `emailVerified` is consumed as a gate in two places - a user cannot
-request a business (`lib/tenancy/tenant_request.dart:68`) and cannot accept a
-visible invitation (`lib/tenancy/tenant_visible_invitation_acceptance.dart:65`) -
-while nothing in the app can trigger the verification email. There is no direct
-Firebase fallback either: `sendPasswordResetEmail` and `sendEmailVerification`
-appear nowhere in `lib/`, and `lib/login_screen.dart` offers only
-`signInWithEmailAndPassword`. So an unverified identity is permanently gated and
-a forgotten password is a lockout with no recovery path. Rollout step 7 and the
-first implementation handoff both record this as implemented, which is true of
-the server only: the ten test files under `functions/src/email/` cover HMAC
-recipient binding, enumeration resistance, suppression, and Brevo webhooks, and
-none of it is reachable.
+The verification half of that lockout was closed on 2026-08-01; see the handoff
+at the end of this file. `emailVerified` still gates requesting a business
+(`lib/tenancy/tenant_request.dart:68`) and accepting a visible invitation
+(`lib/tenancy/tenant_visible_invitation_acceptance.dart:65`), but the business
+selector now offers the identity the one action that releases it.
 
-Recommended order for the next sessions: the email lockout first, because it
-needs no new architecture decision and the server contract is already frozen and
-proved; then the checkout screen and the tender decision above; then the smaller
-unreachable rows.
+### Open decision: public password reset needs App Check, which this app has none of
+
+Found 2026-08-01 while implementing the verification half, and it is a genuine
+blocker rather than an omission. `requestPasswordReset` is declared with
+`enforceAppCheck: true` **and** calls `requireAppCheckedPublic`, which throws
+`failed-precondition` outright when `request.app` is absent. The Flutter app has
+no `firebase_app_check` dependency and no initialization, so the callable would
+reject every request the client could make today.
+
+That cannot be worked around by signing in first: password reset is a *public*
+endpoint, used precisely by someone who cannot authenticate. So unlike every
+other callable, it has no authenticated fallback.
+
+The harder half is Windows. This app targets `android`, `ios`, `linux`, `macos`,
+`web`, and `windows`, and the frozen spec already records that built-in App Check
+providers cover only Apple, Android, and web, with Windows relying on
+authentication until a tested custom provider exists. A public endpoint has no
+authentication to rely on, so **in-app password reset is structurally
+unreachable on Windows** under the current architecture - and Windows is the
+platform the whole Hive offline design exists for.
+
+Someone has to choose one of these; none is obviously right, and all three are
+outside what a bounded chunk should decide on its own:
+
+1. Add `firebase_app_check` and offer in-app reset only on Apple, Android, and
+   web, telling a Windows user to reset from another device. Cheapest, and it
+   leaves the primary POS platform without recovery.
+2. Implement the custom App Check provider the spec already anticipates for
+   Windows, then offer reset everywhere. Most faithful to the architecture and
+   by far the most work.
+3. Relax `requestPasswordReset` to accept an unattested request under a
+   different rate-limiting and abuse control. This weakens a deliberate
+   enumeration and abuse boundary and should not be done casually - the endpoint
+   is public and unauthenticated by design.
+
+Until this is decided, a user who forgets their password has no recovery path
+inside the app on any platform.
+
+Recommended order for the next sessions: `getMyEmailDeliveryStatus`, which
+closes the verification loop by telling a user whose address is suppressed why
+no mail arrives; then the checkout screen and the tender decision above; then
+this password-reset decision; then the smaller unreachable rows.
 
 ### Checked and found sound
 
@@ -7134,3 +7164,158 @@ the counts this session's runs report - and nothing else:
    cancels a reconciliation run, any status filter or date-range view on the
    runs page, subscription and branding surfaces, deployment, and Android
    build/emulator validation outside that chunk.
+
+---
+
+## Guarded account verification entry point handoff - 2026-08-01
+
+### Completed in this session
+
+An unverified identity could not verify its address from inside the app, while
+`emailVerified` gated both of the only two things it could otherwise do. The
+business selector now offers that identity the one action that releases it. This
+chunk adds no password reset, no email delivery-status surface, no checkout
+screen or payment flow, and makes no legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- **This closed a real lockout, not a missing convenience.** `emailVerified`
+  gates requesting a business (`tenant_request.dart:68`) and accepting a visible
+  invitation (`tenant_visible_invitation_acceptance.dart:65`), and nothing in
+  the app could trigger the email. There was no direct Firebase fallback either.
+  A new identity signing in unverified reached the selector and had no action of
+  any kind available to it.
+- **Acceptance is never presented as delivery.** `sendAccountVerification`
+  answers `{accepted: true}` for a request it took responsibility for, which is
+  deliberately not the same thing: an already-verified address is accepted and
+  sends nothing, and a suppressed address is accepted and then dropped by the
+  delivery pipeline. The panel therefore says "if this address can receive mail,
+  a verification link is on its way", and a widget test asserts the copy carries
+  no claim of sending. Anything stronger would assert something the client
+  cannot know, and would also leak whether an address is suppressed.
+- **The identity is reloaded, because `emailVerified` is a cached token claim.**
+  It does not change when the user follows the link in their mailbox, so a
+  "check again" built on the existing `isEmailVerified` callback would have told
+  a verified user they were still unverified forever. `reloadIdentity` is a
+  required injection rather than an optional one: without it the panel stays
+  unreachable entirely, and a routing-shell test proves that. The composition
+  root supplies `FirebaseAuth.instance.currentUser?.reload()`, and the shell
+  restarts bootstrap afterwards so the refreshed claim is consulted.
+- **One user intent carries one idempotency key.** The intent is created once
+  and reused by every retry of that intent, so a user who taps twice or retries
+  after a transport failure addresses the same delivery rather than queuing a
+  second email. A widget test fails the transport, retries, and asserts both
+  calls carried the identical `requestId`. A different UID discards the intent,
+  so one identity's retry can never address another identity's delivery.
+- The generated `requestId` is proved against the server's own
+  `^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$` contract **before** any call, so a
+  broken generator is a local programming error rather than a rejected round
+  trip. A unit test runs the real generator fifty times against that pattern.
+- The response is proved rather than assumed: exactly one key, exactly
+  `accepted: true`. An extra field means the contract moved, and it is refused
+  instead of being read as the response this client already knows.
+- Every failure maps to a message that discloses nothing about the address. The
+  five-minute recency rule is the one case named precisely, because it is the
+  only one the user can act on - and it is the expected answer for any session
+  that has been open a while.
+- The account type is deliberately **not** checked client-side. Every identity
+  signs in with an address and the server decides eligibility from the canonical
+  root record; narrowing it here would hide the only recovery path from an
+  identity the server would have served.
+- The panel is offered only when the composition root supplies both the reload
+  and the callable, exactly as every other injected surface is, and only while
+  the identity is unverified and globally active.
+
+Deliberately outside this chunk, and important for the next session:
+
+- **Password reset is blocked on App Check** - see "Open decision" near the top
+  of this file. It is not an oversight in this chunk: the callable rejects any
+  request this client could make, and on Windows it is structurally unreachable.
+- `getMyEmailDeliveryStatus` still has no surface, so a user whose address is
+  suppressed sees the accepted message and never learns why nothing arrives.
+  That is the honest limit of this chunk and the obvious next one.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/main.dart
+lib/tenancy/account_verification.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_routing_shell.dart
+test/tenancy/account_verification_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **778/778** relevant Flutter tests, including **17** new
+  tests: 7 gateway cases, 7 panel widget cases, and 3 routing-shell entry-point
+  cases. The focused `test/tenancy` command passed **300/300**.
+- `git diff --check` was clean.
+- **The emulator suites were deliberately not re-run.** `git diff --stat HEAD --
+  firestore.rules functions rules-tests` was empty, so all three are
+  byte-identical to this session's earlier green run - Rules **120/120**,
+  Functions **166/166**, integration **12/12** - and none of them executes any
+  Dart. Re-running them would have proved nothing, which is exactly what the
+  test discipline in this file warns against. Android build and Android emulator
+  validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- No test assertion failed. Every command was green on its first execution.
+- **The chunk was cut in half after reading the server, not before.** It began
+  as "the email lockout", meaning verification *and* password reset. Reading
+  `functions/src/email/passwordReset.ts` showed `enforceAppCheck: true` plus
+  `requireAppCheckedPublic`, which throws when `request.app` is absent - and the
+  app has no `firebase_app_check` dependency at all. Writing that client would
+  have shipped a button that fails every time it is pressed. The blocker and the
+  three ways out are recorded near the top of this file instead.
+- The reload requirement was also found by reading rather than by testing:
+  `isEmailVerified` in `lib/main.dart` reads `currentUser.emailVerified`, which
+  is a claim inside the cached ID token. A "check again" wired only to the
+  existing bootstrap retry would have compiled, passed a naive test, and never
+  worked in production.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded email delivery-status surface - the missing half of
+the verification loop - and nothing else:
+
+1. Add a strict client boundary for `getMyEmailDeliveryStatus`. Note that it
+   returns a bare **string**, not an object: either the exact
+   `EMAIL_UNAVAILABLE_MESSAGE` from `functions/src/email/config.ts` or
+   `"available"`. Decide explicitly whether the client re-displays the server's
+   sentence or maps the two known answers to its own copy, and refuse any third
+   value rather than showing it verbatim.
+2. Reach it from the account verification panel added this session, so a user
+   who requested the email and received nothing learns the address is
+   undeliverable instead of tapping "send again" forever. It requires
+   authentication but not verification, which is exactly the state that panel
+   runs in.
+3. Keep the enumeration boundary intact: the answer is about the caller's own
+   address only, and no surface may reveal it for anybody else.
+4. Add unit and widget coverage for both answers, an unrecognised answer, a
+   transport failure, a signed-out caller, and an identity change during an
+   outstanding load.
+5. Leave password reset - blocked on the App Check decision above - the checkout
+   screen and payment flow, receipt printing, product cost/profit fields,
+   `getSalesComparison`, a `platform_audit_logs` surface, subscription and
+   branding surfaces, deployment, and Android build/emulator validation outside
+   that chunk.

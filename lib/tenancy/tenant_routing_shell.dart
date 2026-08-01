@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'account_verification.dart';
 import 'platform_tenant_review.dart';
 import 'platform_tenant_lifecycle.dart';
 import 'platform_tenant_archival.dart';
@@ -57,6 +58,9 @@ final class TenantRoutingShell extends StatefulWidget {
     this.defaultTenantRequestIdFactory,
     this.requestTenantCallable,
     this.tenantRequestIdFactory,
+    this.sendAccountVerificationCallable,
+    this.accountVerificationRequestIdFactory,
+    this.reloadIdentity,
     this.hasPlatformSuperAdminClaim,
     this.platformPendingTenantDataSource,
     this.platformLifecycleTenantDataSource,
@@ -104,6 +108,17 @@ final class TenantRoutingShell extends StatefulWidget {
   final TenantDefaultRequestIdFactory? defaultTenantRequestIdFactory;
   final RequestTenantCallable? requestTenantCallable;
   final TenantRequestIdFactory? tenantRequestIdFactory;
+  final SendAccountVerificationCallable? sendAccountVerificationCallable;
+  final AccountVerificationRequestIdFactory?
+  accountVerificationRequestIdFactory;
+
+  /// Re-reads the signed-in identity so a completed verification is observed.
+  ///
+  /// While it is absent the verification panel stays unreachable, exactly as
+  /// every other injected route does: a "check again" that could never observe
+  /// the change would be worse than no action at all.
+  final AccountVerificationReload? reloadIdentity;
+
   final Future<bool> Function(String uid)? hasPlatformSuperAdminClaim;
   final PlatformPendingTenantDataSource? platformPendingTenantDataSource;
   final PlatformLifecycleTenantDataSource? platformLifecycleTenantDataSource;
@@ -484,6 +499,14 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
         _RoutingPhase.noAccessibleTenant => TenantBusinessSelector(
           identity: _visibleInvitationIdentity(),
           requestIdentity: _tenantRequestIdentity(),
+          verificationIdentity: _accountVerificationIdentity(),
+          sendAccountVerificationCallable:
+              widget.sendAccountVerificationCallable,
+          accountVerificationRequestIdFactory:
+              widget.accountVerificationRequestIdFactory,
+          onReloadIdentity: widget.reloadIdentity == null
+              ? null
+              : _reloadIdentity,
           memberships: _bootstrapResult?.selection.visible ?? const [],
           onOpen: _selectTenant,
           onAccepted: _refreshAfterVisibleInvitationAcceptance,
@@ -609,6 +632,31 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       emailVerified: widget.isEmailVerified?.call(uid) ?? false,
       globallyActive: profile.isActive,
     );
+  }
+
+  /// The identity offered the verification panel, or null while the route is
+  /// not supplied. `emailVerified` gates requesting a business and accepting an
+  /// invitation, so an unverified identity has no way forward without it.
+  AccountVerificationIdentity? _accountVerificationIdentity() {
+    final uid = _uid;
+    final profile = _bootstrapResult?.profile;
+    if (uid == null || profile == null || widget.reloadIdentity == null) {
+      return null;
+    }
+    return AccountVerificationIdentity(
+      uid: uid,
+      emailVerified: widget.isEmailVerified?.call(uid) ?? false,
+      profile: profile,
+    );
+  }
+
+  /// Re-reads the identity, then restarts bootstrap so the refreshed
+  /// `emailVerified` claim is consulted again.
+  Future<void> _reloadIdentity() async {
+    final uid = _uid;
+    await widget.reloadIdentity!.call();
+    if (!mounted || _uid != uid) return;
+    _retry();
   }
 
   TenantRequestIdentity? _tenantRequestIdentity() {
@@ -771,6 +819,10 @@ final class TenantBusinessSelector extends StatefulWidget {
     required this.onRetry,
     required this.onSignOut,
     required this.onTenantRequested,
+    this.verificationIdentity,
+    this.sendAccountVerificationCallable,
+    this.accountVerificationRequestIdFactory,
+    this.onReloadIdentity,
     this.acceptVisibleInvitationCallable,
     this.visibleInvitationRequestIdFactory,
     this.requestTenantCallable,
@@ -780,6 +832,19 @@ final class TenantBusinessSelector extends StatefulWidget {
 
   final TenantVisibleInvitationIdentity? identity;
   final TenantRequestIdentity? requestIdentity;
+
+  /// The identity offered the verification panel. This screen is exactly where
+  /// an unverified identity is stuck: it can neither request a business nor
+  /// accept an invitation until the address is verified.
+  final AccountVerificationIdentity? verificationIdentity;
+
+  final SendAccountVerificationCallable? sendAccountVerificationCallable;
+  final AccountVerificationRequestIdFactory?
+  accountVerificationRequestIdFactory;
+
+  /// Supplied together with [verificationIdentity]; the panel stays unreachable
+  /// without it.
+  final AccountVerificationReload? onReloadIdentity;
   final List<TenantMembership> memberships;
   final ValueChanged<TenantMembership> onOpen;
   final VoidCallback onAccepted;
@@ -850,6 +915,23 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
       ),
       body: Column(
         children: [
+          if (widget.verificationIdentity?.canSendVerification == true &&
+              widget.onReloadIdentity != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: AccountVerificationPanel(
+                  identity: widget.verificationIdentity!,
+                  callable:
+                      widget.sendAccountVerificationCallable ??
+                      FirebaseSendAccountVerificationCallable(),
+                  onReload: widget.onReloadIdentity!,
+                  requestIdFactory: widget.accountVerificationRequestIdFactory,
+                  isCurrent: widget.isCurrent,
+                ),
+              ),
+            ),
           if (_requestingTenant && widget.requestIdentity != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),

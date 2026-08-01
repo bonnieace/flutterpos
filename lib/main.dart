@@ -172,6 +172,12 @@ class SpiritPOSApp extends StatelessWidget {
           final user = FirebaseAuth.instance.currentUser;
           return user != null && user.uid == uid && user.emailVerified;
         },
+        // `emailVerified` above is a claim inside the cached ID token, so it
+        // does not change when the user follows the link in their mailbox.
+        // Reloading is the only way the app can observe a verification it did
+        // not itself perform, which is what makes "I have verified" honest.
+        reloadIdentity: () async =>
+            FirebaseAuth.instance.currentUser?.reload(),
         invitationLink: invitationLink,
         invalidInvitationLink: invalidInvitationLink,
         bootstrapService: bootstrapService,
