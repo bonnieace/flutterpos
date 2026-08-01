@@ -104,6 +104,7 @@ Future<void> main() async {
             bootstrapService: bootstrapService,
             checkoutOutbox: checkoutOutbox,
             checkoutCatalogCache: checkoutCatalogCache,
+            checkoutReceiptCounters: checkoutReceiptCounters,
             tenantShiftState: tenantShiftState,
             deviceId: deviceId,
             connectivity: connectivity,
@@ -122,6 +123,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.bootstrapService,
     required this.checkoutOutbox,
     required this.checkoutCatalogCache,
+    required this.checkoutReceiptCounters,
     required this.tenantShiftState,
     required this.deviceId,
     required this.connectivity,
@@ -132,6 +134,7 @@ class SpiritPOSApp extends StatelessWidget {
   final TenantBootstrapService bootstrapService;
   final HiveCheckoutOutbox checkoutOutbox;
   final HiveCheckoutCatalogCache checkoutCatalogCache;
+  final HiveCheckoutReceiptCounters checkoutReceiptCounters;
   final HiveTenantShiftState tenantShiftState;
   final String deviceId;
   final Connectivity connectivity;
@@ -296,6 +299,28 @@ class SpiritPOSApp extends StatelessWidget {
             salesLedger: CheckoutOutboxShiftSalesLedger(checkoutOutbox),
             deviceId: deviceId,
             isOnline: isOnline,
+          ),
+        ),
+        // The till, reachable for the first time. Everything below it already
+        // existed: the draft service refuses a checkout with no proven open
+        // shift, the submission worker and recovery coordinator above pick a
+        // saved draft up on their own, and neither is reachable from here.
+        //
+        // The service is built per navigation because it must bind to the live
+        // session controller. That is safe: receipt allocation and every outbox
+        // mutation serialize on locks held by the boxes themselves, not by this
+        // object, so two instances can never issue the same receipt number.
+        checkoutRoute: (sessions) => TenantCheckoutScreen(
+          cache: checkoutCatalogCache,
+          drafts: CheckoutDraftService(
+            sessionController: sessions,
+            cache: checkoutCatalogCache,
+            outbox: checkoutOutbox,
+            receipts: checkoutReceiptCounters,
+            // The frozen restriction that a cashier cannot open checkout in a
+            // second business while another still holds an open shift on this
+            // device is enforced here, not by the screen.
+            shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
           ),
         ),
         pendingCheckoutPanel: CheckoutPendingEvidencePanel(

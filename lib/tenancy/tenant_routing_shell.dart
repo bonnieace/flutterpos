@@ -73,6 +73,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.platformTenantReviewRequestIdFactory,
     this.tenantDataReader,
     this.tenantRouteBuilder,
+    this.checkoutRoute,
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
@@ -142,6 +143,16 @@ final class TenantRoutingShell extends StatefulWidget {
   /// route. It is supplied by the composition root so tenancy code stays
   /// independent of the checkout domain.
   final Widget? pendingCheckoutPanel;
+
+  /// Optional point-of-sale route, injected for the same reason. It takes no
+  /// reader: a sale is built from the device's own offline catalog, not from a
+  /// live read, which is the whole point of the offline checkout design.
+  ///
+  /// Every active member may sell - the same set Firestore Rules allow to
+  /// create a sale - so it carries no role list. It receives the live session
+  /// controller because saving a draft must be bound to the exact session it
+  /// was started in.
+  final Widget Function(TenantSessionController sessions)? checkoutRoute;
 
   /// Optional shift lifecycle surface rendered on the safe landing route. It is
   /// injected for the same reason: tenancy code owns routing, not operations.
@@ -695,6 +706,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       onDefaultTenantChanged: _retry,
       switchCandidates: _bootstrapResult?.selection.visible ?? const [],
       onSwitchTenant: _switchTenant,
+      checkoutRoute: widget.checkoutRoute,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
       shiftPanel: widget.shiftPanel,
       dailySummaryRoute: widget.dailySummaryRoute,
@@ -1116,6 +1128,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.onDefaultTenantChanged,
     this.switchCandidates = const [],
     this.onSwitchTenant,
+    this.checkoutRoute,
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
@@ -1143,6 +1156,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final Future<TenantSwitchResult> Function(TenantMembership membership)?
   onSwitchTenant;
   final Widget? pendingCheckoutPanel;
+  final Widget Function(TenantSessionController sessions)? checkoutRoute;
   final Widget? shiftPanel;
 
   /// Builds the read-only reporting route. Supplied by the composition root so
@@ -1254,7 +1268,28 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   icon: const Icon(Icons.star_outline),
                   label: const Text('Make default'),
                 ),
-              FilledButton.icon(
+              // The till. It is the only write-capable operational route on
+              // this screen, and it opens under the same session scope as every
+              // other one, so a business switch invalidates a sale in progress
+              // exactly as it invalidates a read.
+              if (checkoutRoute != null)
+                FilledButton.icon(
+                  key: const ValueKey('start-checkout'),
+                  onPressed: () {
+                    final controller = TenantSessionScope.of(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TenantSessionScope(
+                          controller: controller,
+                          child: checkoutRoute!(controller),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.point_of_sale),
+                  label: const Text('New sale'),
+                ),
+              OutlinedButton.icon(
                 onPressed: () {
                   final controller = TenantSessionScope.of(context);
                   Navigator.of(context).push(

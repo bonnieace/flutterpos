@@ -114,6 +114,49 @@ void main() {
     await fixture.dispose(tester);
   });
 
+  testWidgets('opens the till under the same session scope', (tester) async {
+    TenantSessionController? given;
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      useDefaultRoute: true,
+      checkoutRoute: (sessions) {
+        given = sessions;
+        return const Scaffold(body: Text('Till open'));
+      },
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+    await tester.tap(find.byKey(const ValueKey('start-checkout')));
+    await _pumpRouting(tester);
+
+    expect(find.text('Till open'), findsOneWidget);
+    // The route is handed the live controller, so a draft saved from it binds
+    // to the session the shell revalidated rather than to a captured copy.
+    expect(given, isNotNull);
+    expect(given!.session?.tenantId, 'tenant-a');
+    await fixture.dispose(tester);
+  });
+
+  // The write-capable route must never appear merely because the shell is on
+  // the safe landing screen; it appears only when a till was actually injected.
+  testWidgets('offers no till when the composition root supplies none', (
+    tester,
+  ) async {
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      useDefaultRoute: true,
+    );
+    await fixture.pump(tester);
+
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    expect(find.byKey(const ValueKey('start-checkout')), findsNothing);
+    await fixture.dispose(tester);
+  });
+
   testWidgets('shows a selector and revalidates the chosen business', (
     tester,
   ) async {
@@ -688,6 +731,7 @@ final class _ShellFixture {
     this.tenantSessionRecoveryFactory,
     this.tenantRecoveryTriggers,
     this.pendingCheckoutPanel,
+    this.checkoutRoute,
     String? failSelectionWriteFor,
   }) : gateway = _FakeGateway(
          memberships: memberships,
@@ -725,6 +769,7 @@ final class _ShellFixture {
   final TenantSessionRecoveryFactory? tenantSessionRecoveryFactory;
   final Stream<Object?>? tenantRecoveryTriggers;
   final Widget? pendingCheckoutPanel;
+  final Widget Function(TenantSessionController sessions)? checkoutRoute;
   late final TenantBootstrapService service;
   TenantSessionController? openedController;
 
@@ -763,6 +808,7 @@ final class _ShellFixture {
             ? (tenantDataReader ?? _RoutingReader())
             : null,
         pendingCheckoutPanel: pendingCheckoutPanel,
+        checkoutRoute: checkoutRoute,
         tenantRouteBuilder: useDefaultRoute
             ? null
             : (context, controller, membership) {
