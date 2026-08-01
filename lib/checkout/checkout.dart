@@ -6,6 +6,7 @@ export 'checkout_evidence.dart';
 export 'checkout_outbox.dart';
 export 'checkout_receipt.dart';
 export 'checkout_recovery.dart';
+export 'checkout_refusal.dart';
 export 'checkout_sale.dart';
 export 'checkout_submission.dart';
 export 'checkout_sync.dart';
