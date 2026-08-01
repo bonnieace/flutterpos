@@ -319,6 +319,21 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // A return is the business's shared record of a reversal, so the read is
+      // deliberately as wide as the sale rule rather than as narrow as the
+      // shift rule. `verifyReturnAndRestoreStock` bounds a restoration by the
+      // immutable sale minus every prior verified return, so the quantity a
+      // cashier may still request depends on returns other cashiers recorded.
+      // Narrowing this to `createdBy` would hide exactly that evidence and let
+      // one cashier record a return the server can never verify.
+      //
+      // The role check touches no document field, so an absent return still
+      // answers instead of raising an evaluation error.
+      //
+      // Verification stays server-only: `return_verifications` and the
+      // resulting stock movements are denied by the catch-all below, and no
+      // client may update a return, so the terminal state, the verifier, and
+      // the restoration ID can only ever be written by the callable.
       match /returns/{returnId} {
         allow read: if activeStaff(tenantId);
         allow create: if activeStaff(tenantId)

@@ -258,7 +258,43 @@ void main() {
     expect(find.byKey(const ValueKey('sale-history-denied')), findsOne);
     expect(reader.queries, isEmpty);
   });
+
+  testWidgets('a sale opens the returns recorded against it', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot('co-1'),
+      ])
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      const TenantOwnSaleHistoryRequest(),
+    );
+
+    // The list is tall enough that the link may not be built yet.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('sale-history-returns-link-co-1')),
+      120,
+    );
+    await tester.tap(find.byKey(const ValueKey('sale-history-returns-link-co-1')));
+    await tester.pumpAndSettle();
+
+    // The returns route derives its own page from the sale it was opened from.
+    expect(find.text('Returns against ${_receipt(1)}'), findsOne);
+    expect(reader.queries.last.collectionPath, 'tenants/tenant-a/returns');
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'saleId': 'co-1',
+    });
+  });
 }
+
+String _receipt(int sequence) => formatCheckoutReceiptNumber(
+  deviceId: _deviceA,
+  businessDate: _businessDate,
+  sequence: sequence,
+);
 
 Future<void> _pump(
   WidgetTester tester,

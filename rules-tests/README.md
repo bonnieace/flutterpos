@@ -123,6 +123,23 @@ never aggregates a replacement: a device holds only its own sales, and any total
 it derived would disagree with the server's for a business using more than one
 device.
 
+For the focused returns read boundary, run
+`npm --prefix rules-tests run test:emulator:tenant-returns`. It proves that any
+active member pages the returns recorded against one sale newest-first, that a
+colleague's return is readable, that a sale with no returns still answers for
+both a direct read and a query, that no client may write the verification
+evidence or delete a return, that a create may neither pre-declare itself
+verified nor name another actor, that a non-member or deactivated identity reads
+nothing, and that the `return_verifications` ledger stays server-only.
+
+The returns read rule is deliberately as wide as the sale rule rather than as
+narrow as the shift rule. `verifyReturnAndRestoreStock` bounds a restoration by
+the immutable sale minus every prior verified return, so the quantity a cashier
+may still request depends on returns other cashiers recorded. Narrowing this to
+`createdBy` would hide exactly that evidence and let one cashier record a return
+the server can never verify. The assertions in `a return stays a shared business
+record for every active member` pin that decision.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

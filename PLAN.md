@@ -5336,3 +5336,167 @@ operational vertical before any write-capable POS screen:
    screen and payment flow, receipt printing, product cost/profit fields,
    subscription and branding surfaces, deployment, and Android build/emulator
    validation outside that chunk. This vertical stays read-only.
+
+---
+
+## Guarded returns read surface handoff - 2026-08-01
+
+### Completed in this session
+
+A sale now names the returns recorded against it. This is the last read-only
+operational vertical: nothing on this surface creates, verifies, or restores
+anything, and no checkout screen, payment flow, receipt printing, or legacy
+operational POS route became reachable.
+
+Implemented behavior and safety decisions:
+
+- The schema was read from `functions/src/operations/returns.ts` and `domain.ts`
+  rather than invented. `verifyReturnAndRestoreStock` is the only authority on
+  this document: it reads `tenantId`, `saleId`, `itemsReturned`, `status`,
+  `verified`, and `stockRestored`, and writes back `status`, `verified`,
+  `verifiedBy`, `verifiedAt`, `stockRestored`, `stockRestoredAt`,
+  `stockRestorationId`, and `updatedAt`. Rules bind `createdBy` and
+  `status == 'pending'` on create. Nothing outside that set is modelled.
+- `TenantCollection.returns` already existed, so **no path-contract change was
+  needed** and the frozen enumeration test was not touched.
+- **The terminal state is read from every field the server's own guard
+  consults.** The callable refuses to verify when `status` is `verified` or
+  `restored`, or when `verified`/`stockRestored` is true, and refuses a `status`
+  that is neither absent nor `pending`. A document whose flags disagree - say
+  `status: 'pending'` beside `stockRestored: true` - is therefore one the server
+  would never verify, so listing it as awaiting verification would invite an
+  action that cannot succeed. It fails the page closed instead.
+- `restored` is read as the same state as `verified`, because the server's guard
+  already treats the two spellings identically.
+- A verified return must carry `verifiedBy`, `verifiedAt`, and
+  `stockRestorationId`, and a pending one must carry none of them. Those fields
+  are written by one server transaction and the client can never write them at
+  all, so - unlike the pending-write instants on a sale or a shift - there is no
+  state in which one is legitimately missing or legitimately early.
+- A line is read as `productId ?? itemId`, exactly as `normalizeReturnStockLines`
+  reads it, so the client and the server can never disagree about which product
+  a line names. `productName` is an optional label; stock is restored by ID.
+- The page always carries `saleId ==` and refuses a returned document naming a
+  different sale. The remaining returnable quantity of a sale is computed from
+  exactly these records, so a foreign one would misstate it.
+- **The Firestore returns read rule was deliberately left as wide as the sale
+  rule rather than narrowed like the shift rule.** `assertReturnWithinSale`
+  bounds a restoration by the immutable sale minus every prior verified return,
+  so the quantity a cashier may still request depends on returns other cashiers
+  recorded. Narrowing to `createdBy` would hide that evidence and let one
+  cashier record a return the server can never verify. The rule compares a role
+  and no document field, so a sale with no returns still answers instead of
+  raising an evaluation error. Assertions in both the Rules suite and the Dart
+  suite pin the decision so a future narrowing has to change them on purpose.
+- `return_verifications` and the resulting stock movements stay denied by the
+  tenant catch-all. The return document itself carries the verifier, the
+  instant, and the restoration ID, so the ledger behind it needs no client read.
+- `firestore.indexes.json` gained `saleId`/`__name__ DESC`, the only index this
+  page needs.
+
+Deliberately outside this chunk, and important for the next session:
+
+- There is no business-wide returns list. Every descending page carries an
+  equality filter by construction, so a business-wide list would need its own
+  deliberate filter, index, and read decision rather than an unfiltered scan.
+- The page counts describe that page only. A running total for the sale would be
+  a second, weaker aggregate that disagrees at every page boundary; the server
+  is the only place the remaining returnable quantity is computed.
+- The create rule is still the loose original: it binds only `createdBy` and
+  `status == 'pending'`. Tightening it is the next chunk's work, and until then
+  the read model is strictly stronger than the rule that admits the document.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.indexes.json
+firestore.rules
+lib/returns/return_history.dart
+lib/returns/return_history_panel.dart
+lib/returns/returns.dart
+lib/sales/sale_history_panel.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/tenant-returns.test.js
+test/returns/return_history_panel_test.dart
+test/returns/return_history_test.dart
+test/sales/sale_history_panel_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/returns lib/reporting lib/sales lib/shift
+  lib/checkout lib/tenancy test/returns test/reporting test/sales test/shift
+  test/checkout test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/returns
+  test/reporting test/sales test/shift test/checkout test/tenancy` passed
+  **553/553** relevant Flutter tests, including **24** new tests: 14 read-model
+  and repository, 9 returns-panel widget, and 1 sale-to-returns navigation case.
+- `npm --prefix rules-tests run test:emulator:tenant-returns` passed the focused
+  Firestore-only suite **6/6** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **77/77** (71 existing plus the 6 new returns cases).
+- `npm --prefix functions test` passed **166/166** Functions tests. No Functions
+  source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending warnings.
+  Android build and Android emulator validation were intentionally skipped as
+  requested.
+
+Meaningful failures and their resolutions:
+
+- **The pinned JDK 21 was gone from this machine.** `C:\tmp\chilltent-jdk21`
+  had been cleared, leaving only Temurin 17, and `firebase-tools` refuses any
+  Java before 21 outright - a one-line CLI error, not a test failure. Temurin
+  21.0.12+8 was reinstalled to the same pinned path before any emulator command
+  was retried. Every future session should check that path first rather than
+  interpreting the message as a harness fault.
+- No test assertion failed. The analyzer and every command in the final sequence
+  were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only guarded return **creation**, which is the first write-capable
+operational surface outside checkout, and nothing else:
+
+1. Tighten the `returns` create rule. It currently binds only `createdBy` and
+   `status == 'pending'`, so a client may still file a return under another
+   business, name no sale, or write an unbounded `itemsReturned`. Bind
+   `tenantId`, require a `saleId` string, require a server-owned
+   `createdAt == request.time`, require the bounded line shape the way
+   `validSaleLines` does, and forbid every verification field on create.
+   Remember Firestore's 1000-expression budget and the absence of a list `every`
+   operation: cap the line count explicitly, as the sale rule does.
+2. Add a guarded write repository that builds the return intent from an
+   already-validated `TenantSale` and the existing returns page, so a request
+   can never exceed the immutable sale minus the returns already recorded
+   against it. That is the same bound `assertReturnWithinSale` applies on the
+   server; the client refusing early must not become the only check.
+3. Decide and record the create boundary: which roles may record a return at
+   all, and whether a cashier may return a colleague's sale. Test whichever
+   decision is taken, including the absent-sale case.
+4. Add the confirmation UI on the returns route: select lines and quantities
+   from the sale, show the remaining returnable quantity per product, and
+   require an explicit confirmation. A recorded return must clearly state that
+   it has restored no stock yet.
+5. Add unit, widget, and focused Rules emulator coverage for an over-quantity
+   request, a return against a sale that does not exist, a wrong-role create, a
+   forged `createdBy`, a create pre-declaring verification, a cross-tenant
+   create, and a tenant switch during an outstanding write.
+6. Leave `verifyReturnAndRestoreStock` and every stock-restoring path, the
+   checkout screen and payment flow, receipt printing, product cost/profit
+   fields, subscription and branding surfaces, deployment, and Android
+   build/emulator validation outside that chunk.

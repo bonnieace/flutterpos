@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../returns/return_history_panel.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'sale_history.dart';
 
@@ -166,6 +168,27 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
         pageIndex: _pageIndex,
         onNextPage: () => _nextPage(named.page.nextCursor),
         onPreviousPage: _previousPage,
+        onViewReturns: (sale) => _openReturns(context, sale),
+      ),
+    );
+  }
+
+  /// Opens the read-only returns route under the same session scope, so its own
+  /// guard sees the exact controller this page was authorized against.
+  void _openReturns(BuildContext context, TenantSale sale) {
+    final sessions = TenantSessionScope.read(context);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: sessions,
+          child: TenantSaleReturnsScreen(
+            reader: widget.reader,
+            request: TenantSaleReturnsRequest(
+              saleId: sale.id,
+              receiptNumber: sale.receiptNumber,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -180,6 +203,7 @@ final class _SaleHistoryContents extends StatelessWidget {
     required this.pageIndex,
     required this.onNextPage,
     required this.onPreviousPage,
+    required this.onViewReturns,
   });
 
   final TenantSaleHistoryRequest request;
@@ -189,6 +213,7 @@ final class _SaleHistoryContents extends StatelessWidget {
   final int pageIndex;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
+  final ValueChanged<TenantSale> onViewReturns;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -259,6 +284,15 @@ final class _SaleHistoryContents extends StatelessWidget {
                       ),
                     ),
                     style: _muted(context),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton(
+                      key: ValueKey('sale-history-returns-link-${sale.id}'),
+                      onPressed: () => onViewReturns(sale),
+                      child: const Text('View returns'),
+                    ),
                   ),
                 ],
               ),
