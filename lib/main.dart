@@ -11,6 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'audit/audit.dart';
 import 'checkout/checkout.dart';
 import 'inventory/inventory.dart';
 import 'reporting/reporting.dart';
@@ -242,6 +243,11 @@ class SpiritPOSApp extends StatelessWidget {
             TenantStockAdjustmentFeedScreen(reader: reader),
         stockAdjustmentFeedRoles:
             TenantStockAdjustmentFeedRepository.allowedRoles,
+        // The whole business's event trail: who was invited, deactivated, or
+        // recovered, and every lifecycle change the platform made. It is
+        // deliberately narrower than the stock surfaces above.
+        auditLogRoute: (reader) => TenantAuditLogScreen(reader: reader),
+        auditLogRoles: TenantAuditLogRepository.allowedRoles,
         shiftPanel: TenantShiftPanel(
           historyReader: tenantDataReader,
           returnActions: returnActions,

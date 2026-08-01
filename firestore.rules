@@ -441,6 +441,27 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // The whole business's event trail: every tenant request, lifecycle
+      // change, staff invitation, acceptance, cancellation, role or status
+      // change, owner recovery, administrative alert, stock correction,
+      // verified return, and reconciliation request the server recorded.
+      //
+      // The read stays owner/admin and is deliberately narrower than the
+      // owner/admin/manager `stock_adjustments` and `daily_metrics` surfaces. A
+      // manager records and answers for stock corrections, so that manager sees
+      // them; this collection also names who was invited, deactivated, and
+      // recovered, which is the business's own governance rather than a shift's
+      // operational information. A platform admin also reads it, because the
+      // platform is the actor on the lifecycle and alert records here and must
+      // be able to see what it did.
+      //
+      // The role check touches no document field, so an absent record - and a
+      // business whose trail has not started - still answers instead of raising
+      // an evaluation error.
+      //
+      // Writing stays server-only. A client that could create here could
+      // fabricate evidence of an event that never happened, and one that could
+      // update or delete could erase the only record of one that did.
       match /audit_logs/{documentId} {
         allow read: if hasTenantRole(tenantId, ['owner', 'admin']) || platformAdmin();
         allow write: if false;

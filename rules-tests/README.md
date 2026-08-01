@@ -230,6 +230,37 @@ digest of the actor, operation, tenant, and request ID, so document order
 carries no time information at all and each record states its own recorded
 instant instead.
 
+For the focused business activity log, run
+`npm --prefix rules-tests run test:emulator:audit-logs`. It proves that an owner
+and an admin page `tenants/{tenantId}/audit_logs` both business-wide and
+narrowed to one event type, that an unwritten record, an event a business has
+never caused, and a business whose trail has not started all still answer, that
+a **manager reads the stock corrections but never the whole trail**, that a
+cashier reads nothing from it, that a platform admin reads the trail it is the
+actor on while the same identity without the claim does not, that no client -
+including a platform admin - may record, rewrite, or delete an event, that
+another business's trail is never reached, and that a deactivated or non-member
+identity reads nothing.
+
+The `audit_logs` boundary was **kept and proved rather than widened**. The read
+stays owner/admin plus platform admin, which is deliberately narrower than the
+owner/admin/manager `stock_adjustments` and `daily_metrics` surfaces: a manager
+records and answers for stock corrections, while this collection also names who
+was invited, deactivated, and recovered, and carries every lifecycle change and
+critical administrative alert the platform caused. The platform reads it because
+it is the actor on those records. The role check touches no document field, so an
+absent record still answers. Writing stays server-only: a client that could
+create here could fabricate evidence of an event that never happened, and one
+that could update or delete could erase the only record of one that did.
+
+That suite issues both exact client pages. The business-wide page is ascending
+`__name__` with no filter; the narrowed page adds a single `eventType ==`
+equality on the same order, which Firestore's automatic single-field index
+serves, so neither needs a composite index. An audit ID is the operation,
+request, or delivery ID the event belongs to - a digest for most writers and the
+tenant ID itself for `tenant_requested` - so document order carries no time
+information and each record states its own recorded instant instead.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

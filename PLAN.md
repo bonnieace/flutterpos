@@ -6353,3 +6353,214 @@ tenant-level record this migration leaves unreachable, and nothing else:
    cost/profit fields, `getSalesComparison`, any business-wide movement or
    reconciliation feed, subscription and branding surfaces, deployment, and
    Android build/emulator validation outside that chunk.
+
+---
+
+## Guarded tenant activity log handoff - 2026-08-01
+
+### Completed in this session
+
+The last tenant-level record this migration left unreachable is now readable.
+The safe landing route opens an owner/admin-only activity log of every event the
+server recorded for the business, and the same page can be narrowed to exactly
+one modelled event. This chunk adds no checkout screen or payment flow, no
+receipt printing, no product cost or profit surface, no `getSalesComparison`, no
+business-wide movement or reconciliation feed, and makes no legacy operational
+POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `TenantAuditRecord` decodes what the ten tenant `audit_logs` writers agree on
+  and nothing more: `tenants/onboarding.ts`, `lifecycle/tenantLifecycle.ts`,
+  `lifecycle/impactScan.ts`, `recovery/ownerRecovery.ts`, `staff/issuance.ts`,
+  `staff/acceptance.ts`, `staff/membership.ts` (through the `auditData` helper
+  in `staff/shared.ts`), `operations/stock.ts`, `operations/returns.ts`, and
+  `reconciliation/handlers.ts`. **Only the shared envelope is modelled** - the
+  business, the event, its attribution, and when it was recorded. Each event
+  also carries its own detail, and modelling sixteen payload shapes to render
+  one line each would make the surface fail closed every time a writer added a
+  field, which is exactly the outcome an audit trail must avoid.
+- **Attribution is required, but its form differs and both are real.** Every
+  staff-caused record carries `actorUid`; the tenant-readable lifecycle record
+  and the impact-scan alert carry `actorType` (`platform_admin`, `platform`) and
+  no `actorUid`, because the platform is not a member of the business it acted
+  on. A record that names neither is refused as `unattributed_audit_record`
+  rather than listed as evidence, and a platform event is attributed to the
+  platform on screen rather than to a missing colleague.
+- **A missing `createdAt` degrades the row rather than failing the page
+  closed**, the same decision the per-product ledger and the stock correction
+  feed already record. A row without a time still proves the event happened,
+  names who caused it, and says what it was; denying an owner the whole trail
+  over one missing convenience field would be strictly worse. This is
+  deliberately the opposite call from the adjustment feed's before/after
+  figures, which are refused because a correction that cannot explain its own
+  change is not evidence of anything.
+- An unmodelled `eventType` degrades to a null typed event and is displayed
+  verbatim, exactly as an unmodelled movement `sourceType` and adjustment
+  category are: a server deploy recording a new event is not evidence of
+  anything wrong, and hiding a real event from the business's own trail would be
+  far worse than naming it honestly. A unit test proves every modelled wire
+  value is distinct and round-trips.
+- **The record does not repeat its own ID** - the writers address it by the
+  operation, request, or delivery ID the event belongs to - so its path is the
+  one authority on which event it is. The business it names must still agree
+  with the path it was read from.
+- **The `audit_logs` Rules boundary was kept and proved rather than widened.**
+  The read stays `owner/admin` plus `platformAdmin()`, deliberately narrower
+  than the `owner/admin/manager` `stock_adjustments` and `daily_metrics`
+  surfaces landed previously: a manager records and answers for stock
+  corrections, while this collection also names who was invited, deactivated,
+  and recovered, and carries every lifecycle change and critical administrative
+  alert the platform caused. The platform reads it because it is the actor on
+  those records. The rule itself is unchanged; only its reasoning is now written
+  down beside it. The role check touches no document field, so an absent record
+  and a business whose trail has not started both still answer. Writing stays
+  server-only.
+- **Both pages are ascending by document ID and neither needed a composite
+  index.** An audit ID is the operation, request, or delivery ID the event
+  belongs to - a digest for most writers and the tenant ID itself for
+  `tenant_requested` - so document order carries no time information at all, and
+  the screen says outright that the list is not time order. The business-wide
+  page carries no filter and the narrowed page carries exactly one `eventType ==`
+  equality on the same ascending key order, both of which Firestore's automatic
+  single-field index serves. A descending page would have required a filter and
+  a composite index and bought nothing but a different arbitrary order, so
+  `firestore.indexes.json` was not touched.
+- **The event filter is a typed enum, never a caller-supplied string.**
+  `loadEventsOfType` accepts a `TenantAuditEventType`, so no caller can name an
+  arbitrary field value. The consequence is deliberate: an event this client
+  does not model cannot be filtered for, and the unfiltered page still lists it.
+- A cross-tenant response fails closed as `cross_tenant_audit_record`, and a
+  narrowed page that answers with another event fails closed as
+  `foreign_audit_event_type`, because a filtered page returning foreign rows is
+  a broken boundary rather than rows to skip past.
+- A manager and a cashier are both refused as `audit_logs_forbidden` before any
+  read is issued, so a role that may not see the trail never reaches the server.
+- Narrowing the trail on screen restarts it. A cursor is a document ID inside
+  one exact query, so carrying it across a filter change would page from a
+  position the new query never established.
+- The route is reached from the safe landing screen when the composition root
+  supplies one **and** the guarded session allows the role, exactly as the daily
+  summary and receipt lookup already are. Tenancy keeps owning routing:
+  `main.dart` passes the builder through `TenantRoutingShell` into
+  `TenantSafeLandingScreen`, and the route opens under the caller's
+  `TenantSessionScope`, so a tenant switch during an outstanding page discards
+  it before it can label another business's screen.
+- Actor **and** target UIDs are resolved through the existing
+  `TenantStaffNameResolver` - one resolver per session epoch, one bounded cap
+  across both, degrading to the authoritative UID. Both are staff of the same
+  business, so this is one existing lookup rather than a new one.
+
+Deliberately outside this chunk, and important for the next session:
+
+- The trail lists the envelope, not each event's own payload. A `staff_updated`
+  row says who changed whom, not which fields changed.
+- Nothing on the surface can record, amend, or remove an event.
+- `platform_audit_logs` remains platform-only with no client surface, and no
+  business-wide stock movement or reconciliation feed exists.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/audit/audit.dart
+lib/audit/audit_log.dart
+lib/audit/audit_log_panel.dart
+lib/main.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/audit-logs.test.js
+test/audit/audit_log_panel_test.dart
+test/audit/audit_log_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`, which this
+  chunk does not touch.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **704/704** relevant Flutter tests, including **30** new
+  tests: 9 audit read-model cases, 7 repository cases, 11 panel widget cases,
+  and 3 safe-landing entry-point cases.
+- `npm --prefix rules-tests run test:emulator:audit-logs` passed the focused
+  Firestore-only suite **8/8** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **104/104** (96 existing plus the 8 new audit-log cases).
+- `npm --prefix functions test` passed **166/166** Functions tests with the
+  pinned Node 24 / Temurin JDK 21 environment. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean. No index change was needed, so
+  `firestore.indexes.json` was not touched. Android build and Android emulator
+  validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- No test assertion failed. Every command in the final sequence was green on its
+  first execution.
+- **Two pieces of speculative API were written and then removed before the
+  validation sequence.** An `openTenantAuditLog` helper mirroring the stock feed
+  had no caller, because the routing shell opens the screen directly under its
+  own session scope; it was deleted along with the import it alone needed. The
+  screen's pre-narrowed `eventType` entry point was kept instead of deleted, but
+  only after it was given real coverage - including a rebuild with a different
+  event, which proves `didUpdateWidget` re-narrows the page rather than leaving
+  a stale filter in state. Prefer this order: delete what has no caller, and
+  cover what survives.
+- The pinned toolchain must be put on `PATH` for every emulator command in a
+  fresh shell, as the previous handovers recorded: the ambient JRE is older than
+  21 and firebase-tools hard-fails on it.
+- The focused suite prints large expected-denial traces for the write-refusal
+  cases. That is the harness's known behavior, not a failure; only totals were
+  read.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded business-wide stock movement feed - the reconciled
+counterpart to the manual-correction feed landed previously - and nothing else:
+
+1. Add a strict read model and guarded repository for a **collection-group**
+   read of `stock_movements`, or an explicit decision not to use one. Today the
+   ledger is reachable only one product at a time; a business asking "what moved
+   this week" has no surface. Reuse the existing `TenantStockMovement` read
+   model rather than adding a second authority on those field names, and keep
+   the exact-child, uniqueness, and ordering proofs - note that a
+   collection-group query returns paths the current `TenantReadRepository`
+   child-path proof rejects, so that proof needs a deliberate extension rather
+   than a bypass.
+2. Decide and test the collection-group Rules boundary explicitly. A
+   `match /{path=**}/stock_movements/{movementId}` rule is a different boundary
+   from the per-product one and must be reasoned about on its own; if it cannot
+   be made safe, record that and keep the per-product surface as the answer.
+3. Add the composite indexes a collection-group page needs - a group query is
+   **not** served by the automatic single-field index the way this session's and
+   the previous session's key-ordered pages were - and prove each query is
+   servable by issuing the exact client query in the emulator suite.
+4. Reach it from the read-only catalog as a sibling of the correction feed,
+   resolving actor UIDs through the existing `TenantStaffNameResolver`.
+5. Add unit, widget, and focused Rules emulator coverage for pagination
+   boundaries, a cross-tenant response, a wrong-role read, a tenant switch
+   during an outstanding page, a movement whose figures contradict themselves,
+   and a group query answering with a document below another business.
+6. Leave the checkout screen and payment flow, receipt printing, product
+   cost/profit fields, `getSalesComparison`, per-event audit payload detail, a
+   `platform_audit_logs` surface, subscription and branding surfaces,
+   deployment, and Android build/emulator validation outside that chunk.

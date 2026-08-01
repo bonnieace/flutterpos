@@ -77,6 +77,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.productStockRoles = const <TenantRole>[],
     this.stockAdjustmentFeedRoute,
     this.stockAdjustmentFeedRoles = const <TenantRole>[],
+    this.auditLogRoute,
+    this.auditLogRoles = const <TenantRole>[],
   });
 
   final Stream<String?> authUidChanges;
@@ -147,6 +149,12 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> stockAdjustmentFeedRoles;
+
+  /// Optional guarded business-wide activity log, injected for the same reason.
+  final Widget Function(TenantDataReader reader)? auditLogRoute;
+
+  /// The roles that route is offered to, decided by the audit domain.
+  final List<TenantRole> auditLogRoles;
 
   @override
   State<TenantRoutingShell> createState() => _TenantRoutingShellState();
@@ -632,6 +640,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       productStockRoles: widget.productStockRoles,
       stockAdjustmentFeedRoute: widget.stockAdjustmentFeedRoute,
       stockAdjustmentFeedRoles: widget.stockAdjustmentFeedRoles,
+      auditLogRoute: widget.auditLogRoute,
+      auditLogRoles: widget.auditLogRoles,
     );
   }
 }
@@ -1012,6 +1022,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.productStockRoles = const <TenantRole>[],
     this.stockAdjustmentFeedRoute,
     this.stockAdjustmentFeedRoles = const <TenantRole>[],
+    this.auditLogRoute,
+    this.auditLogRoles = const <TenantRole>[],
   });
 
   final TenantMembership membership;
@@ -1055,6 +1067,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> stockAdjustmentFeedRoles;
+
+  /// Optional guarded business-wide activity log, opened from this screen as a
+  /// sibling of the daily summary. It stays unreachable while it is absent.
+  final Widget Function(TenantDataReader reader)? auditLogRoute;
+
+  /// The roles that route is offered to, decided by the audit domain. It is
+  /// deliberately narrower than every other route offered here.
+  final List<TenantRole> auditLogRoles;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -1181,6 +1201,24 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   },
                   icon: const Icon(Icons.receipt_long_outlined),
                   label: const Text('Find a receipt'),
+                ),
+              if (auditLogRoute != null &&
+                  membership.role.canAccess(auditLogRoles))
+                OutlinedButton.icon(
+                  key: const ValueKey('view-audit-log'),
+                  onPressed: () {
+                    final controller = TenantSessionScope.of(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TenantSessionScope(
+                          controller: controller,
+                          child: auditLogRoute!(reader),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('View activity log'),
                 ),
               if (membership.role.canAccess(
                 TenantStaffDirectoryScreen.allowedRoles,
