@@ -7647,13 +7647,17 @@ save it offline, and nothing beyond that.
 4. End the chunk at `saveOffline`. Submission, confirmation, and recovery are
    already implemented and already automatic; this chunk adds no submit button,
    no retry, and no cancel.
-5. Map every `CheckoutDraftException` code to a bounded message. There are
-   already sixteen of them - `no_selected_session`, `session_changed`,
-   `checkout_start_unavailable`, `catalog_cache_unavailable`, `unknown_product`,
-   `price_not_representable`, `invalid_discount`, `shift_binding_mismatch`,
-   `shift_business_date_mismatch`, `receipt_sequence_exhausted`,
-   `device_identity_unavailable`, and the rest - and a screen that surfaces a
-   raw code to a cashier has not finished the work.
+5. Map every `CheckoutDraftException` code to a bounded message. Count them
+   before estimating: there are **18 raised directly** in `checkout_draft.dart`,
+   plus **4 shift-binder refusals** passed through verbatim (`no_open_shift`,
+   `other_tenant_shift_open`, `shift_closing`, `shift_not_confirmed`), plus the
+   `CheckoutReceiptException` codes rethrown as draft codes by
+   `_resolvedDeviceId` and `allocateSequence` (`receipt_sequence_exhausted`,
+   `malformed_receipt_counter`, `malformed_device_identity`) - about **25**
+   distinct outcomes a cashier can reach. They are not one message: a closed
+   shift, an open shift in another business, an exhausted receipt counter, and
+   corrupt device identity each need a different next action. A screen that
+   surfaces a raw code has not finished the work.
 6. Add widget coverage for: a saved draft appearing in the existing evidence
    panel, a refused draft leaving nothing persisted, each distinct refusal
    message, a tenant switch during an outstanding save, and the no-open-shift
@@ -7662,3 +7666,12 @@ save it offline, and nothing beyond that.
    breakdown, password reset, product cost/profit fields, `getSalesComparison`,
    a `platform_audit_logs` surface, subscription and branding surfaces,
    deployment, and Android build/emulator validation outside that chunk.
+
+One scope question that chunk must answer explicitly rather than discover:
+**does the cart expose the discount?** `CheckoutDraftRequest.discountMinor`
+already exists, is already bounded by `invalid_discount`, and is already written
+into the payload and the sale. So the screen either offers discount entry or
+pins it to zero, and pinning it to zero is a real product answer - a discount a
+cashier can apply at the till without a role check is a cash-shrinkage path, and
+nothing in this app currently authorizes one. Decide it in the chunk; do not
+leave the field reachable by accident.
