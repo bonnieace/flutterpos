@@ -7675,3 +7675,188 @@ pins it to zero, and pinning it to zero is a real product answer - a discount a
 cashier can apply at the till without a role check is a cash-shrinkage path, and
 nothing in this app currently authorizes one. Decide it in the chunk; do not
 leave the field reachable by accident.
+
+---
+
+## Reachable point-of-sale till handoff - 2026-08-02
+
+### Completed in this session
+
+The app can sell. A cashier reaches a till from the safe landing route, builds a
+cart from the device's own offline catalog, states how the customer paid, and
+saves the sale to the encrypted outbox - which the existing submission and
+recovery workers then carry to Firestore on their own.
+
+This was built as three separately committed increments, each with its own tests
+green before the next began: the refusal vocabulary, the cart panel, then the
+composition-root wiring.
+
+Implemented behavior and safety decisions:
+
+- **The discount is pinned to zero and has no control.** This was the scope
+  question the previous handover refused to leave implicit.
+  `CheckoutDraftRequest.discountMinor` exists and is validated, so a field wired
+  to it would have handed every cashier an unaudited way to reduce a sale. No
+  role check authorizes a till discount anywhere in this system, so offering one
+  would have created a cash-shrinkage path nothing reviews. A widget test pins
+  `discountMinor == 0` on every saved request, so re-introducing it has to be
+  deliberate.
+- **There is no default tender and no way to save without one.** The payload
+  contract already refuses an absent tender; the screen refuses it earlier and
+  more legibly, naming the reason next to a disabled button rather than
+  presenting a dead control. A pre-selected method would be indistinguishable
+  from one somebody observed.
+- **Every refusal has its own sentence, and says who can clear it.**
+  `CheckoutRefusal` maps 26 codes drawn from four different files. The
+  classification that matters is not severity but whether the person at the till
+  can act: `cashierCanFix` is false for a damaged receipt counter, a damaged
+  device identity, an exhausted daily sequence, and an encryption-key failure,
+  and the screen then says that retrying will not help. That is not cosmetic -
+  the receipt counter is deliberately refused rather than restarted, because
+  restarting it would reissue a receipt number a committed sale already carries,
+  so inviting a retry there would invite exactly the wrong action forever.
+- **An unrecognised code fails closed** to a generic sentence with
+  `cashierCanFix: false`, and a failure that is not a `CheckoutDraftException`
+  at all - a storage fault - still reaches the till as a sentence rather than a
+  crash. A unit test drives every known code plus unknown input through both.
+- **No message can leak a machine code.** A test asserts every sentence is plain
+  ASCII, contains no underscore, is trimmed, ends in a full stop, and is between
+  20 and 220 characters. The ASCII rule also caught this session's own slip: the
+  first draft of the file introduced the only typographic apostrophes in the
+  codebase, which the existing surfaces avoid by never using possessives.
+- **The panel ends at `saveDraft`.** There is no submit, retry, or cancel
+  control, matching the read-only evidence panel. Submission, confirmation, and
+  recovery stay owned by the workers.
+- **A refused sale keeps the cart; only a durable save clears it.** The cashier
+  never has to ring a sale up twice because of a refusal, and the tender clears
+  with the cart so it is never carried into the next customer unobserved.
+- **Two narrow interfaces replaced two concrete dependencies.**
+  `CheckoutCatalogSource` and `CheckoutDraftSink` now stand between the screen
+  and `HiveCheckoutCatalogCache`/`CheckoutDraftService`. This is the same
+  boundary `CheckoutShiftBinder` and `CheckoutEvidenceSource` already draw, and
+  it means a checkout surface cannot reach the cache's write path, the session
+  controller, the outbox, or the receipt counters.
+- **`CheckoutSavedDraft` is what a surface learns from a save** - the checkout
+  ID and the receipt - rather than the outbox record. No screen can read a
+  lease, an attempt count, or a payload hash, so none can be tempted to act on a
+  state the workers own.
+- **The till opens under the same session scope as every read route**, and
+  receives the live session controller, so a business switch invalidates a sale
+  in progress exactly as it invalidates a read. The route appears only when the
+  composition root injects one; a test proves the shell offers no till on its
+  own.
+- The draft service is constructed per navigation because it must bind to the
+  live controller. That is safe: receipt allocation and every outbox mutation
+  serialize on locks held by the boxes themselves, not by the service, so two
+  instances can never issue the same receipt number.
+
+Deliberately outside this chunk, and important for the next session:
+
+- No receipt is printed and no printed receipt body exists. The cashier is told
+  the receipt number; handing it to a customer on paper is a separate chunk.
+- The cart offers no search, no categories, and no barcode entry. It lists the
+  cached products as buttons, which is honest for a first till and will not
+  scale past a small catalog.
+- Nothing here submits, retries, or cancels a checkout.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/checkout/checkout.dart
+lib/checkout/checkout_cart_panel.dart
+lib/checkout/checkout_catalog_cache.dart
+lib/checkout/checkout_draft.dart
+lib/checkout/checkout_refusal.dart
+lib/main.dart
+lib/tenancy/tenant_routing_shell.dart
+test/checkout/checkout_cart_panel_test.dart
+test/checkout/checkout_refusal_test.dart
+test/tenancy/tenant_routing_shell_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **825/825**, up from 800, adding **25** tests: 7 refusal
+  cases, 16 cart cases, and 2 routing-shell cases.
+- `git diff --check` was clean.
+- **The emulator suites were deliberately not re-run.**
+  `git diff --stat 1322371..HEAD -- firestore.rules functions rules-tests` was
+  empty, so all three remain byte-identical to the tender commit's green run -
+  Rules **125/125**, Functions **166/166**, integration **12/12** - and this
+  chunk changed only Dart. Android build and Android emulator validation were
+  intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The cart widget tests hung twice, for two stacked reasons, and the second
+  one was a design fault rather than a test fault.** First, `pumpAndSettle`
+  never returns while `TenantRouteGuard`'s default `CircularProgressIndicator`
+  is on screen; the panel now supplies its own non-animating loading widget,
+  which is better till behavior anyway. Second - and the real cause - the panel
+  depended on `HiveCheckoutCatalogCache` and `CheckoutDraftService` concretely,
+  so every widget test drove real encrypted disk I/O under a faked clock.
+  `tester.pump` advances only fake time, so saves never completed; worse, the
+  outbox serializes on a **static** per-box lock, so one abandoned mid-flight
+  operation deadlocked every later test in the file. Introducing
+  `CheckoutCatalogSource` and `CheckoutDraftSink` removed real I/O from the
+  widget tests entirely: the file went from hanging past 500 seconds to passing
+  in 15. The lesson worth keeping: a widget test that needs `runAsync` to pass
+  is usually reporting a missing seam, not a timing problem.
+- **The refusal mapping introduced the codebase's only typographic
+  apostrophes.** Caught by grepping the existing surfaces rather than by a test,
+  then pinned with an ASCII assertion. Removing them mechanically also dropped
+  an article in two sentences ("cannot number receipt"), which the review of the
+  applied diff caught.
+- **The `checkout-failure` key was on a `Center`, not the `Text` it wrapped**,
+  so the test that reads that message cast the wrong widget. The key moved to
+  the `Text`.
+- No other assertion failed. The refusal unit tests, the routing-shell tests,
+  and the full suite were green on first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+The till works but is only usable for a demonstration-sized catalog: it renders
+every cached product as a button, with no way to find anything. Make the cart
+usable at a real till, and nothing else:
+
+1. Add product search and category filtering to the cart, reading only the
+   already-cached `CheckoutCatalogSnapshot`. It must issue no Firestore read:
+   the whole point of the offline design is that a sale can be built with no
+   network at all.
+2. Add direct quantity entry, so selling twelve of something is not twelve taps.
+   Keep the existing bounds - the draft still refuses a quantity outside 1 to
+   1,000,000, and the cart still refuses a seventeenth line.
+3. Show the cached stock figure per product, and decide explicitly whether the
+   till refuses to sell below zero. Note before deciding: Firestore Rules
+   deliberately permit signed stock, an offline device cannot know the true
+   figure, and `checkout-submission.test.js` already proves a sale below zero
+   commits. Refusing at the till would therefore be a local convenience, not a
+   guarantee - and it would block a legitimate sale whenever the cached figure
+   is merely stale. Record the answer either way.
+4. Keep the receipt confirmation visible long enough to be read and copied; a
+   cashier who taps save and immediately serves the next customer currently
+   loses the number when the cart is next touched.
+5. Add widget coverage for search, filtering, quantity entry, the stock display,
+   and whatever step 3 decides.
+6. Leave receipt printing, the printed receipt body, discounts, a per-tender
+   reporting breakdown, password reset, product cost/profit fields,
+   `getSalesComparison`, a `platform_audit_logs` surface, subscription and
+   branding surfaces, deployment, and Android build/emulator validation outside
+   that chunk.
