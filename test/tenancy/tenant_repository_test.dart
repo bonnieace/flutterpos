@@ -128,6 +128,68 @@ void main() {
     });
   });
 
+  group('product subcollection pages', () {
+    test('derives the path from the session and the product', () async {
+      final reader = _FakeCollectionReader();
+
+      await _FilteredRepository().subcollectionPage(reader, 'product-1');
+
+      expect(
+        reader.query!.collectionPath,
+        'tenants/tenant-a/products/product-1/stock_movements',
+      );
+      expect(reader.query!.descending, isFalse);
+      expect(reader.query!.equalityFilters, isEmpty);
+      expect(reader.query!.limit, 21);
+    });
+
+    test('a product ID that is not a document ID is refused', () async {
+      final reader = _FakeCollectionReader();
+
+      await expectLater(
+        _FilteredRepository().subcollectionPage(reader, 'other/product'),
+        throwsArgumentError,
+      );
+      expect(reader.query, isNull);
+    });
+
+    test('the exact-child and ordering proofs still apply', () async {
+      final repository = _FilteredRepository();
+
+      // A nested path is not an exact child of the subcollection.
+      await expectLater(
+        repository.subcollectionPage(
+          _PathReader(<String>[
+            'tenants/tenant-a/products/product-1/stock_movements/mv-1/extra/x',
+          ]),
+          'product-1',
+        ),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+      // Another product's ledger is not this one's.
+      await expectLater(
+        repository.subcollectionPage(
+          _PathReader(<String>[
+            'tenants/tenant-a/products/product-2/stock_movements/mv-1',
+          ]),
+          'product-1',
+        ),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+      // Out-of-order results fail closed exactly as a collection page does.
+      await expectLater(
+        repository.subcollectionPage(
+          _PathReader(<String>[
+            'tenants/tenant-a/products/product-1/stock_movements/mv-2',
+            'tenants/tenant-a/products/product-1/stock_movements/mv-1',
+          ]),
+          'product-1',
+        ),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+    });
+  });
+
   group('document-ID ordering', () {
     test('a descending page carries the reversed order to the reader', () async {
       final reader = _OrderedReader(<String>['shift-c', 'shift-b', 'shift-a']);
@@ -224,6 +286,31 @@ final class _FilteredRepository extends TenantReadRepository {
     equalityFilters: filters,
     descending: descending,
   );
+
+  Future<TenantDocumentPage> subcollectionPage(
+    TenantCollectionReader reader,
+    String productId,
+  ) => readProductSubcollectionPage(
+    TenantProductSubcollection.stockMovements,
+    productId: productId,
+    collectionReader: reader,
+  );
+}
+
+/// Returns exactly the document paths it was given, so the exact-child proof
+/// can be exercised with paths a real reader could never be trusted to avoid.
+final class _PathReader implements TenantCollectionReader {
+  _PathReader(this._paths);
+
+  final List<String> _paths;
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery request,
+  ) async => <TenantQueryDocumentSnapshot>[
+    for (final path in _paths)
+      TenantQueryDocumentSnapshot(path: path, data: const <String, Object?>{}),
+  ];
 }
 
 /// Returns exactly the document IDs it was given, in that order, so the

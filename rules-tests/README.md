@@ -172,6 +172,34 @@ ever stops being true the emulator rejects the query here, rather than the
 client failing in production - the same class of discovery as the descending
 key-scan rejection above.
 
+For the focused per-product stock ledger, run
+`npm --prefix rules-tests run test:emulator:stock-movements`. It proves that
+owners and managers read and page a product's `stock_movements`, that a product
+with no movements still answers for both a direct read and a query, that a
+cashier reads the product document but never its ledger, that no client may
+append, rewrite, or delete a movement, that another business's ledger is never
+reached, and that a deactivated or non-member identity reads nothing.
+
+`stock_movements` was previously denied outright by the tenant catch-all, so
+this was a deliberate decision rather than an omission. The read is narrower
+than the product document on purpose: the current quantity is operational
+information every member needs at the till, while the ledger names damage,
+waste, corrections, and who recorded them - management information in exactly
+the way `daily_metrics` is. It is also the same set of roles `adjustStock`
+enforces, so the surface that explains a stock figure and the surface that
+changes it agree. The role check touches no document field, so an absent
+movement still answers instead of raising an evaluation error.
+
+Writing stays server-only. Every entry is created by a callable or a
+reconciliation worker inside the same transaction that changes the quantity, so
+a client that could append here could claim a movement that never happened.
+
+That suite also issues the exact client page - ascending `__name__`, no filter,
+one more document than the page size. Movement IDs are digests for adjustments
+and `sale_{saleId}` for sales, so document order carries no time information; a
+descending page would be neither newest-first nor servable without a composite
+index, and the client renders each entry's own recorded instants instead.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

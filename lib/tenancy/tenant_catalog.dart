@@ -4,6 +4,7 @@ import 'tenant_id.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_route_guard.dart';
+import 'tenant_session_controller.dart';
 import 'tenant_types.dart';
 
 const int _maximumSafeInteger = 9007199254740991;
@@ -23,16 +24,33 @@ final class TenantCategory {
 /// New documents use `categoryId`. The legacy `category` alias is accepted
 /// only while migration is in progress and must agree when both are present.
 final class TenantProduct {
-  TenantProduct.fromSnapshot(TenantQueryDocumentSnapshot snapshot)
-    : id = _documentId(snapshot.path, TenantCollection.products),
-      name = _requiredTrimmedString(snapshot.data, 'name'),
-      sku = _requiredTrimmedString(snapshot.data, 'SKU'),
-      price = _nonNegativeFiniteNumber(snapshot.data, 'price'),
-      quantity = _signedSafeInteger(snapshot.data, 'quantity'),
-      categoryId = _categoryId(snapshot.data),
-      imageUrl = _optionalHttpsUrl(snapshot.data, 'image');
+  factory TenantProduct.fromSnapshot(TenantQueryDocumentSnapshot snapshot) =>
+      TenantProduct.fromDocument(path: snapshot.path, data: snapshot.data);
+
+  /// Decodes one product read by its exact canonical path.
+  ///
+  /// A stock surface re-reads the product document rather than carrying a
+  /// figure between screens, so the quantity it states is always the one the
+  /// server most recently recorded.
+  TenantProduct.fromDocument({
+    required String path,
+    required Map<String, Object?> data,
+  }) : id = _documentId(path, TenantCollection.products),
+       tenantId = _pathTenantId(path, TenantCollection.products),
+       name = _requiredTrimmedString(data, 'name'),
+       sku = _requiredTrimmedString(data, 'SKU'),
+       price = _nonNegativeFiniteNumber(data, 'price'),
+       quantity = _signedSafeInteger(data, 'quantity'),
+       categoryId = _categoryId(data),
+       imageUrl = _optionalHttpsUrl(data, 'image');
 
   final String id;
+
+  /// The business this exact document path belongs to. A mutation gateway
+  /// compares it against its own session, so a product decoded from one
+  /// business can never be adjusted while another is open.
+  final String tenantId;
+
   final String name;
   final String sku;
   final double price;
@@ -121,21 +139,40 @@ final class TenantCatalogRepository extends TenantReadRepository {
   }
 }
 
-/// Temporary read-only route; all product and stock actions remain absent.
+/// Builds the per-product stock route for one already-decoded product.
+///
+/// The composition root supplies it; the catalog only passes the product it
+/// already proved. While it is absent the route stays unreachable and the
+/// catalog is exactly the read-only surface it was before.
+typedef TenantProductRouteBuilder = Widget Function(TenantProduct product);
+
+/// Read-only catalog route. Catalog editing remains absent; the only reachable
+/// product action is the guarded stock route, when one is supplied.
 final class TenantCatalogScreen extends StatelessWidget {
   const TenantCatalogScreen({
     super.key,
     required this.reader,
     this.allowedRoles,
+    this.productStockRoute,
+    this.productStockRoles = const <TenantRole>[],
   });
 
   final TenantDataReader reader;
   final Iterable<TenantRole>? allowedRoles;
+  final TenantProductRouteBuilder? productStockRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> productStockRoles;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Product catalog')),
-    body: TenantCatalogPanel(reader: reader, allowedRoles: allowedRoles),
+    body: TenantCatalogPanel(
+      reader: reader,
+      allowedRoles: allowedRoles,
+      productStockRoute: productStockRoute,
+      productStockRoles: productStockRoles,
+    ),
   );
 }
 
@@ -145,26 +182,42 @@ final class TenantCatalogPanel extends StatelessWidget {
     super.key,
     required this.reader,
     this.allowedRoles,
+    this.productStockRoute,
+    this.productStockRoles = const <TenantRole>[],
   });
 
   final TenantDataReader reader;
   final Iterable<TenantRole>? allowedRoles;
+  final TenantProductRouteBuilder? productStockRoute;
+  final List<TenantRole> productStockRoles;
 
   @override
   Widget build(BuildContext context) => TenantRouteGuard<TenantCatalogSnapshot>(
     allowedRoles: allowedRoles,
     load: (session) =>
         TenantCatalogRepository(session: session, reader: reader).loadInitial(),
-    builder: (context, session, snapshot) =>
-        _CatalogContents(tenantId: session.tenantId, snapshot: snapshot),
+    builder: (context, session, snapshot) => _CatalogContents(
+      tenantId: session.tenantId,
+      snapshot: snapshot,
+      // The role is taken from the guarded session, never from the caller, so
+      // the action disappears the moment the session stops allowing it.
+      productStockRoute: session.canAccess(allowedRoles: productStockRoles)
+          ? productStockRoute
+          : null,
+    ),
   );
 }
 
 final class _CatalogContents extends StatelessWidget {
-  const _CatalogContents({required this.tenantId, required this.snapshot});
+  const _CatalogContents({
+    required this.tenantId,
+    required this.snapshot,
+    this.productStockRoute,
+  });
 
   final String tenantId;
   final TenantCatalogSnapshot snapshot;
+  final TenantProductRouteBuilder? productStockRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -209,12 +262,16 @@ final class _CatalogContents extends StatelessWidget {
           for (final product in snapshot.products.items)
             Card(
               child: ListTile(
+                key: ValueKey('catalog-product-${product.id}'),
                 title: Text(product.name),
                 subtitle: Text(
                   '${categoryNames[product.categoryId] ?? product.categoryId} '
                   '• SKU ${product.sku} • Stock ${product.quantity}',
                 ),
                 trailing: Text(product.price.toStringAsFixed(2)),
+                onTap: productStockRoute == null
+                    ? null
+                    : () => _openStockRoute(context, product),
               ),
             ),
         if (snapshot.products.hasMore)
@@ -223,25 +280,48 @@ final class _CatalogContents extends StatelessWidget {
             child: Text('More products are available.'),
           ),
         const SizedBox(height: 12),
-        const Text(
-          'Catalog changes, stock actions, checkout, returns, and reports '
-          'remain unavailable.',
+        Text(
+          productStockRoute == null
+              ? 'Catalog changes, stock actions, checkout, returns, and '
+                    'reports remain unavailable.'
+              : 'Catalog changes, checkout, returns, and reports remain '
+                    'unavailable. Open a product to see and correct its stock.',
         ),
       ],
     );
   }
+
+  /// Opens the stock route under the same session scope this route runs in, so
+  /// a tenant switch invalidates it exactly as it does every other guarded
+  /// route rather than leaving a detached screen behind.
+  void _openStockRoute(BuildContext context, TenantProduct product) {
+    final controller = TenantSessionScope.of(context);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: controller,
+          child: productStockRoute!(product),
+        ),
+      ),
+    );
+  }
 }
 
-String _documentId(String path, TenantCollection collection) {
+String _documentId(String path, TenantCollection collection) =>
+    validateTenantDocumentId(_pathSegments(path, collection)[3]);
+
+String _pathTenantId(String path, TenantCollection collection) =>
+    _pathSegments(path, collection)[1];
+
+List<String> _pathSegments(String path, TenantCollection collection) {
   final segments = path.split('/');
-  if (segments.length != 4 || segments[0] != 'tenants') {
+  if (segments.length != 4 ||
+      segments[0] != 'tenants' ||
+      segments[2] != collection.segment) {
     throw FormatException('Invalid ${collection.segment} document path.');
   }
   validateTenantId(segments[1]);
-  if (segments[2] != collection.segment) {
-    throw FormatException('Invalid ${collection.segment} document path.');
-  }
-  return validateTenantDocumentId(segments[3]);
+  return segments;
 }
 
 String _requiredTrimmedString(Map<String, Object?> map, String field) {

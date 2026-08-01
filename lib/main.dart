@@ -12,6 +12,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'checkout/checkout.dart';
+import 'inventory/inventory.dart';
 import 'reporting/reporting.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
@@ -152,6 +153,12 @@ class SpiritPOSApp extends StatelessWidget {
       ),
       verifyCallable: FirebaseVerifyReturnCallable(),
     );
+    // The only path in the app that can set stock to an arbitrary figure.
+    // It is management-only, which the callable itself enforces, and it is
+    // reached one product at a time from the read-only catalog.
+    final stockActions = TenantStockActions(
+      adjustCallable: FirebaseAdjustStockCallable(),
+    );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -222,6 +229,12 @@ class SpiritPOSApp extends StatelessWidget {
           returnActions: returnActions,
         ),
         receiptLookupRoles: TenantReceiptLookupRepository.allowedRoles,
+        productStockRoute: (reader, product) => TenantProductStockScreen(
+          reader: reader,
+          product: product,
+          actions: stockActions,
+        ),
+        productStockRoles: TenantProductStockRepository.allowedRoles,
         shiftPanel: TenantShiftPanel(
           historyReader: tenantDataReader,
           returnActions: returnActions,

@@ -111,6 +111,37 @@ void main() {
       expect(() => paths.staffMember('users/other'), throwsArgumentError);
     });
 
+    test('product subcollections stay below their exact product', () {
+      final paths = TenantPaths('tenant-a');
+
+      expect(
+        paths.productSubcollectionPath(
+          'product-1',
+          TenantProductSubcollection.stockMovements,
+        ),
+        'tenants/tenant-a/products/product-1/stock_movements',
+      );
+      expect(
+        paths.productStockMovements('product-1'),
+        'tenants/tenant-a/products/product-1/stock_movements',
+      );
+      expect(
+        paths.productStockMovement('product-1', 'sa_abc'),
+        'tenants/tenant-a/products/product-1/stock_movements/sa_abc',
+      );
+      expect(paths.owns(paths.productStockMovements('product-1')), isTrue);
+
+      // Neither segment may be used to walk out of the product.
+      expect(
+        () => paths.productStockMovements('../other'),
+        throwsArgumentError,
+      );
+      expect(
+        () => paths.productStockMovement('product-1', 'a/b'),
+        throwsArgumentError,
+      );
+    });
+
     test('scope ownership uses a segment boundary', () {
       final paths = TenantPaths('tenant-a');
 

@@ -216,6 +216,29 @@ service cloud.firestore {
           && request.resource.data.updatedAt == request.time;
 
         allow delete: if hasTenantRole(tenantId, ['owner', 'admin']);
+
+        // The append-only ledger of everything that moved this product's
+        // stock: sales, verified returns, and manual adjustments. It is
+        // deliberately narrower than the product document a cashier reads.
+        // The current quantity is operational information every member needs
+        // at the till; the ledger names damage, waste, corrections, and who
+        // recorded them, which is management information in exactly the way
+        // `daily_metrics` is. It is also the same set of roles `adjustStock`
+        // itself enforces, so the surface that explains a stock figure and the
+        // surface that changes it agree.
+        //
+        // The role check touches no document field, so an absent movement -
+        // and a product with an empty ledger - still answers instead of
+        // raising an evaluation error.
+        //
+        // Writing stays server-only. Every entry is created by a callable or a
+        // reconciliation worker inside the same transaction that changes the
+        // quantity, so a client that could append here could claim a movement
+        // that never happened.
+        match /stock_movements/{movementId} {
+          allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+          allow write: if false;
+        }
       }
 
       match /categories/{categoryId} {

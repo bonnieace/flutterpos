@@ -21,6 +21,17 @@ enum TenantCollection {
   final String segment;
 }
 
+/// Every subcollection of one tenant product allowed by the path contract.
+enum TenantProductSubcollection {
+  /// The immutable per-product stock ledger. Sales, verified returns, and
+  /// manual adjustments all append to it, and only server code writes it.
+  stockMovements('stock_movements');
+
+  const TenantProductSubcollection(this.segment);
+
+  final String segment;
+}
+
 /// Constructs business Firestore paths rooted below one validated tenant.
 ///
 /// This class intentionally returns strings and has no Firebase dependency.
@@ -84,6 +95,24 @@ final class TenantPaths {
       documentPath(TenantCollection.auditLogs, auditId);
   String dailyMetric(String businessDate) =>
       documentPath(TenantCollection.dailyMetrics, businessDate);
+
+  /// The path of one allowed subcollection below one product.
+  ///
+  /// Both segments are validated document IDs, so no caller can walk out of
+  /// `tenants/{tenantId}/products/{productId}` by naming a path.
+  String productSubcollectionPath(
+    String productId,
+    TenantProductSubcollection subcollection,
+  ) => '${product(productId)}/${subcollection.segment}';
+
+  String productStockMovements(String productId) => productSubcollectionPath(
+    productId,
+    TenantProductSubcollection.stockMovements,
+  );
+
+  String productStockMovement(String productId, String movementId) =>
+      '${productStockMovements(productId)}/'
+      '${validateTenantDocumentId(movementId, fieldName: 'movementId')}';
 
   String get currentSubscription => subscriptionDocument('current');
 

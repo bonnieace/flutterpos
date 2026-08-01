@@ -73,6 +73,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.dailySummaryRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
+    this.productStockRoute,
+    this.productStockRoles = const <TenantRole>[],
   });
 
   final Stream<String?> authUidChanges;
@@ -128,6 +130,14 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles that route is offered to, decided by the sales domain.
   final List<TenantRole> receiptLookupRoles;
+
+  /// Optional guarded per-product stock route, reached from the read-only
+  /// catalog and injected for the same reason.
+  final Widget Function(TenantDataReader reader, TenantProduct product)?
+  productStockRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> productStockRoles;
 
   @override
   State<TenantRoutingShell> createState() => _TenantRoutingShellState();
@@ -609,6 +619,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       dailySummaryRoles: widget.dailySummaryRoles,
       receiptLookupRoute: widget.receiptLookupRoute,
       receiptLookupRoles: widget.receiptLookupRoles,
+      productStockRoute: widget.productStockRoute,
+      productStockRoles: widget.productStockRoles,
     );
   }
 }
@@ -985,6 +997,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.dailySummaryRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
+    this.productStockRoute,
+    this.productStockRoles = const <TenantRole>[],
   });
 
   final TenantMembership membership;
@@ -1013,6 +1027,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the sales domain.
   final List<TenantRole> receiptLookupRoles;
+
+  /// Optional guarded per-product stock route, opened from the read-only
+  /// catalog rather than from this screen.
+  final Widget Function(TenantDataReader reader, TenantProduct product)?
+  productStockRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> productStockRoles;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -1086,7 +1108,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     MaterialPageRoute<void>(
                       builder: (_) => TenantSessionScope(
                         controller: controller,
-                        child: TenantCatalogScreen(reader: reader),
+                        child: TenantCatalogScreen(
+                          reader: reader,
+                          productStockRoute: productStockRoute == null
+                              ? null
+                              : (product) => productStockRoute!(reader, product),
+                          productStockRoles: productStockRoles,
+                        ),
                       ),
                     ),
                   );

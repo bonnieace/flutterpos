@@ -27,6 +27,22 @@ void main() {
       expect(legacy.categoryId, 'drinks');
     });
 
+    test('a product carries the business its own path names', () {
+      final product = TenantProduct.fromDocument(
+        path: 'tenants/tenant-a/products/product-a',
+        data: _productData(),
+      );
+
+      expect(product.tenantId, 'tenant-a');
+      expect(product.id, 'product-a');
+      expect(
+        TenantProduct.fromSnapshot(
+          _productSnapshot('tenant-b', 'product-a'),
+        ).tenantId,
+        'tenant-b',
+      );
+    });
+
     test('rejects malformed paths, quantities, prices, and categories', () {
       expect(
         () => TenantProduct.fromSnapshot(
@@ -219,6 +235,63 @@ void main() {
       expect(reader.queries, isEmpty);
     });
 
+    testWidgets('the product stock route is offered only to its roles', (
+      tester,
+    ) async {
+      final reader = _CatalogReader(
+        handler: (query) async => query.collectionPath.endsWith('/categories')
+            ? [_categorySnapshot('tenant-a', 'drinks')]
+            : [_productSnapshot('tenant-a', 'product-a')],
+      );
+
+      // A cashier reads the catalog but never reaches the stock surface.
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(
+              uid: 'user-a',
+              membership: _membership('tenant-a', role: TenantRole.cashier),
+            ),
+          reader: reader,
+          productStockRoute: (product) => const Text('stock route'),
+          productStockRoles: const [TenantRole.manager],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Cold lager'), findsOneWidget);
+      expect(
+        tester
+            .widget<ListTile>(
+              find.byKey(const ValueKey('catalog-product-product-a')),
+            )
+            .onTap,
+        isNull,
+      );
+
+      // A manager opens it, under the same session scope the catalog runs in.
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(
+              uid: 'user-a',
+              membership: _membership('tenant-a', role: TenantRole.manager),
+            ),
+          reader: reader,
+          productStockRoute: (product) =>
+              Scaffold(body: Text('stock route ${product.id}')),
+          productStockRoles: const [TenantRole.manager],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('catalog-product-product-a')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('stock route product-a'), findsOneWidget);
+    });
+
     testWidgets('a tenant switch discards outstanding catalog queries', (
       tester,
     ) async {
@@ -300,11 +373,18 @@ Widget _catalogApp({
   required TenantSessionController controller,
   required TenantDataReader reader,
   Iterable<TenantRole>? allowedRoles,
+  TenantProductRouteBuilder? productStockRoute,
+  List<TenantRole> productStockRoles = const <TenantRole>[],
 }) => MaterialApp(
   home: TenantSessionScope(
     controller: controller,
     child: Scaffold(
-      body: TenantCatalogPanel(reader: reader, allowedRoles: allowedRoles),
+      body: TenantCatalogPanel(
+        reader: reader,
+        allowedRoles: allowedRoles,
+        productStockRoute: productStockRoute,
+        productStockRoles: productStockRoles,
+      ),
     ),
   ),
 );

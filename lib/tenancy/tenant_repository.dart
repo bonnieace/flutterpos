@@ -214,6 +214,50 @@ abstract base class TenantReadRepository {
     String? cursor,
     bool descending = false,
     Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) => _readPage(
+    paths.collectionPath(collection),
+    collectionReader: collectionReader,
+    pageSize: pageSize,
+    cursor: cursor,
+    descending: descending,
+    equalityFilters: equalityFilters,
+  );
+
+  /// Reads one bounded page from an allowed subcollection of one product.
+  ///
+  /// The product ID and the subcollection are both derived from this session's
+  /// [TenantPaths], so a caller still cannot supply a collection path, and every
+  /// returned document is proved to be an exact child of that subcollection.
+  /// The same page-size bound, uniqueness, and ordering proofs apply.
+  ///
+  /// It is deliberately `async` so a product ID that is not a document ID is
+  /// reported the same way every other refusal here is - as a failed future,
+  /// never as a synchronous throw an awaiting caller would have to guard
+  /// separately.
+  Future<TenantDocumentPage> readProductSubcollectionPage(
+    TenantProductSubcollection subcollection, {
+    required String productId,
+    required TenantCollectionReader collectionReader,
+    int pageSize = 20,
+    String? cursor,
+    bool descending = false,
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) async => _readPage(
+    paths.productSubcollectionPath(productId, subcollection),
+    collectionReader: collectionReader,
+    pageSize: pageSize,
+    cursor: cursor,
+    descending: descending,
+    equalityFilters: equalityFilters,
+  );
+
+  Future<TenantDocumentPage> _readPage(
+    String expectedCollectionPath, {
+    required TenantCollectionReader collectionReader,
+    required int pageSize,
+    required String? cursor,
+    required bool descending,
+    required Map<String, Object?> equalityFilters,
   }) async {
     if (pageSize < 1 || pageSize > 50) {
       throw RangeError.range(pageSize, 1, 50, 'pageSize');
@@ -233,7 +277,6 @@ abstract base class TenantReadRepository {
     final validatedCursor = cursor == null
         ? null
         : validateTenantDocumentId(cursor, fieldName: 'cursor');
-    final expectedCollectionPath = paths.collectionPath(collection);
     final requestedLimit = pageSize + 1;
     final snapshots = await collectionReader.getCollectionPage(
       TenantCollectionQuery._(

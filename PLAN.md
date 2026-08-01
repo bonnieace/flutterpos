@@ -5941,3 +5941,219 @@ path every restored-stock mistake currently has no answer for, and nothing else:
 6. Leave the checkout screen and payment flow, receipt printing, product
    cost/profit fields, `getSalesComparison`, subscription and branding surfaces,
    deployment, and Android build/emulator validation outside that chunk.
+
+---
+
+## Guarded stock adjustment surface handoff - 2026-08-01
+
+### Completed in this session
+
+A restored-stock mistake finally has a correction path. The read-only catalog
+now opens one product at a time onto a management-only surface that states the
+stock the server recorded, pages the server-written ledger that explains it, and
+corrects it through `adjustStock`. This chunk adds no checkout screen or payment
+flow, no receipt printing, no product cost or profit surface, no
+`getSalesComparison`, and makes no legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `TenantStockAdjustmentGateway` is session- and product-bound, following the
+  `verifyReturnAndRestoreStock` gateway landed in the previous session. The
+  tenant comes from one captured live session and the product from one
+  already-decoded `TenantProduct`, so no caller can name either. A product
+  decoded in another business is refused before any call, which is why
+  `TenantProduct` now carries the `tenantId` its own path encodes.
+- **Every local refusal mirrors one the server performs**, so a mistake an
+  operator can fix is reported on the form instead of costing a round trip and
+  an idempotency record: a non-zero delta bounded by the server's
+  `MAX_QUANTITY_DELTA`, the direction `assertAdjustmentDirection` binds, and the
+  exact reason normalization `normalizeReason` applies - trimmed length checked
+  first, whitespace runs collapsed afterwards, control characters refused. The
+  normalized reason is what is sent, so what an operator confirmed is what the
+  immutable record stores.
+- **The UI never offers a combination the server refuses.** `restock` and
+  `opening_balance` only add, `damage` and `waste` only remove, and only
+  `inventory_count` and `correction` show a direction control. Choosing a
+  removal-only type states the direction rather than asking for it.
+- One request ID per confirmation intent, preserved **only** across an unknown
+  outcome. Every other refusal is proof that nothing moved and releases the ID,
+  so an edited retry is a new operation instead of failing as a duplicate;
+  `already-exists` is classified as its own `duplicateRequest` outcome rather
+  than as an unknown one, because it proves an earlier attempt settled and this
+  one did not.
+- The `{adjustmentId, productId, previousQuantity, quantity, quantityDelta}`
+  response is reconciled against the intent: it must name that product, apply
+  exactly that change, and `quantity == previousQuantity + quantityDelta` is
+  re-derived rather than trusted. A response that cannot be trusted reports that
+  the call may still have moved stock and reloads, because only the server can
+  say.
+- **`stock_movements` was a deliberate Rules decision, not an omission.** The
+  subcollection was denied outright by the tenant catch-all. The read is now
+  `owner/admin/manager` - narrower than the product document a cashier reads,
+  because the current quantity is operational information every member needs at
+  the till while the ledger names damage, waste, corrections, and who recorded
+  them. That is management information in exactly the way `daily_metrics` is,
+  and it is the same set of roles `adjustStock` enforces, so the surface that
+  explains a stock figure and the surface that changes it agree. The role check
+  touches no document field, so an absent movement and an empty ledger still
+  answer. Writing stays server-only.
+- `TenantProductStockRepository` re-reads the canonical product document on
+  every page, so the quantity shown is always the server's most recent one
+  rather than a figure carried between screens or derived from the ledger below
+  it. A cashier is refused as `stock_ledger_forbidden` before any read is
+  issued, and an absent product is reported rather than shown as an empty
+  ledger.
+- **The ledger page is ascending by document ID and is never presented as
+  chronological.** A movement ID is a digest for an adjustment and
+  `sale_{saleId}` for a sale, so document order carries no time information at
+  all; each entry states its own recorded instants instead. Ascending order also
+  keeps the page servable by Firestore's automatic index, so **no new composite
+  index was needed** - a descending page would have required a filter and a
+  composite index and bought nothing.
+- The read model handles the three shapes the server actually writes. Only the
+  writers that read the product inside their transaction record a before and
+  after, so `previousQuantity`/`quantityAfter` are present or absent as a whole
+  and must add up when present; a reconciled sale carries neither, which the
+  screen names rather than filling in. An unmodelled `sourceType` degrades to
+  `other` and is displayed verbatim: a server deploy adding a source is not
+  evidence of anything wrong, and taking a working ledger down for it would be
+  worse than naming it honestly.
+- `TenantReadRepository` gained `readProductSubcollectionPage`, sharing one
+  private page implementation with `readCollectionPage`, so the exact-child,
+  uniqueness, page-size, and ordering proofs apply unchanged. It is deliberately
+  `async` so an invalid product ID is a failed future like every other refusal
+  there rather than a synchronous throw.
+- The entry point is a tap on a catalog product, and it exists only when the
+  composition root supplies a route **and** the guarded session allows the role.
+  The route opens under the same `TenantSessionScope`, so a tenant switch
+  invalidates it exactly as it does every other guarded route. Tenancy keeps
+  owning routing: `main.dart` passes the builder through
+  `TenantRoutingShell`/`TenantSafeLandingScreen` as the daily-summary and
+  receipt-lookup routes already are.
+
+Deliberately outside this chunk, and important for the next session:
+
+- The ledger is per product and per page. There is no business-wide adjustment
+  feed, and the tenant-level `stock_adjustments` and `audit_logs` collections
+  stay unreachable from the app.
+- An adjustment cannot be undone. Correcting one means recording another, which
+  the confirmation dialog says outright.
+- The screen shows the recorded quantity and the ledger side by side but never
+  reconciles them: the ledger page is bounded, so a sum over it would be a
+  second, weaker aggregate. That is reconciliation's job.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/inventory/inventory.dart
+lib/inventory/stock_actions.dart
+lib/inventory/stock_adjustment.dart
+lib/inventory/stock_adjustment_panel.dart
+lib/inventory/stock_movements.dart
+lib/main.dart
+lib/tenancy/tenant_catalog.dart
+lib/tenancy/tenant_paths.dart
+lib/tenancy/tenant_repository.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/stock-movements.test.js
+test/inventory/stock_adjustment_panel_test.dart
+test/inventory/stock_adjustment_test.dart
+test/inventory/stock_movements_test.dart
+test/tenancy/tenant_catalog_test.dart
+test/tenancy/tenant_paths_test.dart
+test/tenancy/tenant_repository_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/inventory lib/returns lib/reporting lib/sales
+  lib/shift lib/checkout lib/tenancy test/inventory test/returns test/reporting
+  test/sales test/shift test/checkout test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/inventory
+  test/returns test/reporting test/sales test/shift test/checkout test/tenancy`
+  passed **653/653** relevant Flutter tests, including **42** new tests: 15
+  adjustment-gateway and response cases, 10 movement read-model and repository
+  cases, 11 stock-panel widget cases, 3 base-repository subcollection cases, 1
+  tenant-path case, and 2 catalog cases.
+- `npm --prefix rules-tests run test:emulator:stock-movements` passed the
+  focused Firestore-only suite **6/6** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **90/90** (84 existing plus the 6 new stock-movement cases).
+- `npm --prefix functions test` passed **166/166** Functions tests with the
+  pinned Node 24 / Temurin JDK 21 environment. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending warnings.
+  No index change was needed, so `firestore.indexes.json` was not touched.
+  Android build and Android emulator validation were intentionally skipped as
+  requested.
+
+Meaningful failures and their resolutions:
+
+- **`firebase emulators:exec` refused to start on the ambient JRE.** The shell's
+  default Java is older than 21, and firebase-tools now hard-fails on that. The
+  pinned `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8` and the portable
+  Node 24 must be put on `PATH` for every emulator command in a fresh shell;
+  the previous handovers recorded the toolchain but not that the ambient JRE
+  wins by default.
+- **A refused-then-retried adjustment reused its request ID in a widget test.**
+  Calling `pumpWidget` twice with the same unkeyed panel updates the existing
+  element, so `State` - and the retained request ID - survived what the test
+  intended as a fresh screen. The retry contract is now two separate tests, one
+  per outcome class. Worth remembering for every future panel test that wants a
+  clean state.
+- **A staff-name assertion expected a colleague's label for the signed-in
+  user.** `tenantStaffLabel` renders the actor's own UID as `You (Amina)`, which
+  is correct; the expectation was wrong and now documents that.
+- **An invalid product ID threw synchronously out of the new subcollection
+  page.** The path was derived in argument position, outside the `async` body,
+  so an awaiting caller would have had to guard it separately from every other
+  refusal. The method is now `async`.
+- No other test assertion failed; the analyzer and every other command in the
+  final sequence were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded business-wide stock adjustment feed and the
+tenant-level records this chunk deliberately left unreachable, and nothing else:
+
+1. Add a strict read model and guarded repository for
+   `tenants/{tenantId}/stock_adjustments`: bounded, indexed, ordered pages of
+   the manual adjustments recorded across the business, plus a page filtered to
+   one product. Reuse the field set `functions/src/operations/stock.ts` writes,
+   refuse a record whose `productId`, `quantityDelta`, or before/after figures
+   disagree with themselves, and keep the exact-child, uniqueness, and ordering
+   proofs.
+2. Decide and test the `stock_adjustments` read boundary in Rules exactly as
+   this chunk did for `stock_movements`. That collection is currently denied by
+   the tenant catch-all, so it needs a deliberate decision and its own focused
+   emulator suite - remember an absent document must still answer, and that a
+   descending page needs an equality filter and a composite index.
+3. Add the composite indexes those queries need and prove each query is servable
+   by issuing the exact client query in the emulator suite, as the receipt
+   lookup and the descending key-scan discovery already required.
+4. Reach it from the read-only catalog route as a business-wide sibling of the
+   per-product ledger, resolving actor UIDs through the existing
+   `TenantStaffNameResolver` rather than a new lookup.
+5. Add unit, widget, and focused Rules emulator coverage for pagination
+   boundaries, a cross-tenant response, a wrong-role read, a tenant switch
+   during an outstanding page, and an adjustment record that contradicts itself.
+6. Leave the checkout screen and payment flow, receipt printing, product
+   cost/profit fields, `getSalesComparison`, tenant-level `audit_logs`,
+   subscription and branding surfaces, deployment, and Android build/emulator
+   validation outside that chunk.
