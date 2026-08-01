@@ -6564,3 +6564,238 @@ counterpart to the manual-correction feed landed previously - and nothing else:
    cost/profit fields, `getSalesComparison`, per-event audit payload detail, a
    `platform_audit_logs` surface, subscription and branding surfaces,
    deployment, and Android build/emulator validation outside that chunk.
+
+---
+
+## Guarded business-wide stock movement feed handoff - 2026-08-01
+
+### Completed in this session
+
+A business can finally ask "what moved this week". The read-only catalog now
+opens a management-only page of every entry recorded against every product's
+ledger at once, narrowable to one modelled source. This chunk adds no checkout
+screen or payment flow, no receipt printing, no product cost or profit surface,
+no `getSalesComparison`, no per-event audit payload detail, no
+`platform_audit_logs` surface, and makes no legacy operational POS route
+reachable.
+
+Implemented behavior and safety decisions:
+
+- **A collection group was used, and the decision was proved before it was
+  designed.** The previous handover left "or an explicit decision not to use
+  one" open, so the first thing this session did was put a candidate rule and
+  the exact client query in front of the real emulator. It answered
+  unambiguously: a `resource.data.tenantId` group rule authorizes a page that
+  carries that equality filter, and refuses one that does not. That experiment
+  decided the chunk; everything below follows from it.
+- **The group boundary is narrowed in three independent places, not one.** The
+  repository attaches the `tenantId ==` filter itself and refuses a caller that
+  supplies one at all - even its own business - so there is exactly one author
+  of the tenant binding. The Firestore rule authorizes the page by that same
+  condition, so a page without it is refused by the server too. And
+  `readProductSubcollectionGroupPage` still proves every returned path is an
+  exact `tenants/{tenantId}/products/{productId}/stock_movements/{movementId}`
+  child of this session's own root. Any one of the three failing leaves the
+  other two standing.
+- **`match /{ledgerPath=**}/stock_movements/{movementId}` is `list` only.** A
+  rule nested under `products/{productId}` does not apply to a group query at
+  all, so this is a genuinely separate boundary. Restricting it to `list` keeps
+  the per-product rule the one authority on reading a single movement -
+  including an **absent** one, which the group rule's `resource.data` comparison
+  could not answer without raising an evaluation error. The focused suite proves
+  a missing movement still answers, so the new rule demonstrably did not disturb
+  the old one. `allow get, write: if false` beside it is documentation, not a
+  denial: Firestore rules are permissive-OR and an `if false` never revokes what
+  another rule granted.
+- The roles are the same owner/admin/manager set the per-product ledger,
+  `stock_adjustments`, and `adjustStock` itself use, so every stock surface
+  agrees about who may see what moved. A cashier is refused as
+  `stock_movement_feed_forbidden` before any query is issued.
+- **The child-path proof was extended, not bypassed.** A group result is not
+  below any single collection path, so `TenantDocumentGroupPage` is a distinct
+  page type with a distinct proof: six segments, the products segment, the
+  subcollection segment, this session's tenant, and two validated document IDs.
+- **Ordering is compared segment by segment, because that is how Firestore
+  orders `__name__`.** A product `p` sorts before `p-2`, while the joined paths
+  `.../p/...` and `.../p-2/...` compare the other way round as plain text, since
+  `-` is below `/`. A string comparison would have rejected a page Firestore
+  ordered correctly, and a unit test pins exactly that pair.
+- **The cursor is a whole document path, and Firestore refuses anything else.**
+  A movement ID is unique only below its own product - a sale of two items
+  writes `sale_{saleId}` under each - so a bare ID could not resume the page.
+  The first emulator run failed on this and is recorded below; the client and
+  the Rules suite now issue the identical string-path cursor.
+- **A group query is not served by the automatic single-field index**, unlike
+  every key-ordered page the last three chunks added, so
+  `firestore.indexes.json` gained two `COLLECTION_GROUP`-scoped
+  `stock_movements` indexes: `tenantId`/`__name__` and
+  `tenantId`/`sourceType`/`__name__`. The `tenant_memberships` group index
+  already in the file is the precedent for the shape.
+- The source filter is a typed enum, never a caller-supplied string, exactly as
+  the audit log's event filter is. `other` carries no wire value, so an
+  unmodelled source cannot be filtered for and is refused as
+  `unfilterable_movement_source` before any query - while the unnarrowed page
+  still lists it verbatim. Narrowing restarts the page, because a cursor is a
+  position inside one exact query.
+- A cross-tenant document fails closed, and a narrowed page answering with
+  another source fails closed as `foreign_movement_source`: a filtered page
+  returning foreign rows is a broken boundary rather than rows to skip past.
+- The read model is **reused, not duplicated**. `TenantStockMovement` stays the
+  one authority on those field names; it only gained a display `label` per
+  source. A reconciled sale records no actor and no before/after, so the screen
+  says "the server" and "Before and after were not recorded" rather than
+  inventing either.
+- Rows are keyed by product **and** record, since one movement ID is unique only
+  below its own product. A widget test seeds `sale_co-1` under two products and
+  proves two distinct rows.
+- The collection-group reader is a **separate injected boundary**
+  (`TenantCollectionGroupReader`), deliberately not folded into
+  `TenantDataReader`. Every other read in the app is bounded by a path this
+  tenant owns; this one is not, so a surface that needs it asks for it by name
+  and the composition root hands it over explicitly.
+- The entry point is a catalog button that exists only when the composition root
+  supplies a route **and** the guarded session allows the role, exactly as the
+  per-product stock route and the correction feed already are. Tenancy keeps
+  owning routing, and the route opens under the caller's `TenantSessionScope`,
+  so a tenant switch during an outstanding page discards it.
+- Actor UIDs resolve through the existing `TenantStaffNameResolver`, one
+  resolver per session epoch, degrading to the authoritative UID. Product names
+  are deliberately not resolved: that would be one document read per row for a
+  label the product ID already identifies.
+
+Deliberately outside this chunk, and important for the next session:
+
+- The feed lists movements, not their sources. A `sale` row names the checkout
+  it came from but does not open it, and there is no date range or product
+  filter - both would need their own composite index and read decision.
+- Nothing on the surface can record, amend, or undo a movement.
+- No reconciliation feed exists, and `platform_audit_logs` still has no client
+  surface.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.indexes.json
+firestore.rules
+lib/inventory/inventory.dart
+lib/inventory/stock_movement_feed.dart
+lib/inventory/stock_movement_feed_panel.dart
+lib/inventory/stock_movements.dart
+lib/main.dart
+lib/tenancy/tenant_catalog.dart
+lib/tenancy/tenant_repository.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/stock-movement-feed.test.js
+test/inventory/stock_movement_feed_panel_test.dart
+test/inventory/stock_movement_feed_test.dart
+test/tenancy/tenant_catalog_test.dart
+test/tenancy/tenant_repository_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`, which this
+  chunk does not touch.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **729/729** relevant Flutter tests, including **25** new
+  tests: 10 feed read-model and repository cases, 9 feed-panel widget cases, 5
+  base-repository collection-group cases, and 1 catalog entry-point case.
+- `npm --prefix rules-tests run test:emulator:stock-movement-feed` passed the
+  focused Firestore-only suite **8/8** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **112/112** (104 existing plus the 8 new movement-feed cases).
+- `npm --prefix functions test` passed **166/166** Functions tests with the
+  pinned Node 24 / Temurin JDK 21 environment. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean, and `firestore.indexes.json` parsed as valid
+  JSON. Android build and Android emulator validation were intentionally
+  skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The collection-group cursor was wrong, and only the emulator said so.**
+  `startAfter` with a `DocumentReference` was rejected outright: *"Expected a
+  string for document ID in startAfter(), but got a object"*. Firestore wants
+  the complete path as a **string** for a group page, and a bare document ID
+  only for a page whose collection path it already knows. Both the Dart
+  transport and the Rules suite now pass the string path. Worth remembering:
+  this is a query-construction error the type system cannot catch and no Dart
+  fake would have exposed.
+- **Two test fakes answered pages their own filters excluded.** A cross-tenant
+  case was written against a fake that honoured the `tenantId ==` filter, so the
+  document was filtered out and the page succeeded empty rather than failing
+  closed; it now uses the explicit `ignoreFilters` transport, which is the only
+  honest way to exercise a check that exists for a transport ignoring the rule.
+  The panel fake had the opposite problem - it ignored filters entirely, so
+  narrowing the feed returned the wrong source and failed the page closed. A
+  fake reader must model the filter contract in both directions.
+- **A speculative `openTenantStockMovementFeed` helper was deleted before the
+  validation sequence**, along with the import it alone needed. The catalog
+  opens the screen through the injected route builder, so it had no caller. The
+  pre-narrowed `source` entry point was kept instead of deleted, but only after
+  a rebuild-with-a-different-source test proved `didUpdateWidget` re-narrows the
+  page. This is the same order the previous handover recorded: delete what has
+  no caller, cover what survives.
+- The pinned toolchain must be put on `PATH` for every emulator command in a
+  fresh shell, as every previous handover records: the ambient JRE is older than
+  21 and firebase-tools hard-fails on it.
+- The focused suite prints large expected-denial traces for the write-refusal
+  cases. That is the harness's known behavior, not a failure; only totals were
+  read.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded reconciliation status surface - the last server
+process whose outcome the app cannot see - and nothing else:
+
+1. Add a strict read model and guarded repository for the reconciliation
+   records `functions/src/reconciliation/**` writes. Confirm the canonical
+   collection, its scope, and its field names against that source before
+   designing anything; note that `reconciliation_jobs` is already a
+   `COLLECTION_GROUP` index in `firestore.indexes.json`, so establish where it
+   actually lives rather than assuming a tenant subcollection. If it turns out
+   to be a platform-only queue, record that and surface the tenant-visible
+   outcome instead - the daily summary already reports a day as reconciled or
+   not, so this chunk must add the *why*, not a second answer to the same
+   question.
+2. Decide and test the Rules boundary exactly as the last four chunks did.
+   Whatever the collection is, it is currently denied by a catch-all, so this
+   needs a deliberate decision and its own focused emulator suite. If a group
+   read is involved, reuse the `list`-only, `resource.data.tenantId` pattern
+   landed this session rather than inventing a second one, and remember that an
+   absent record must still answer.
+3. Add only the composite indexes a query shape actually requires, and prove
+   each query is valid and permitted by issuing the exact client page in that
+   suite. A group query needs a `COLLECTION_GROUP` index; a key-ordered page
+   with at most one equality filter needs none.
+4. Reach it from the daily summary, which is where a manager already asks
+   whether a day is reconciled, resolving any actor UIDs through the existing
+   `TenantStaffNameResolver`.
+5. Add unit, widget, and focused Rules emulator coverage for a day with no
+   record, a failed run, a wrong-role read, a cross-tenant response, a tenant
+   switch during an outstanding load, and a record that contradicts itself.
+6. Leave the checkout screen and payment flow, receipt printing, product
+   cost/profit fields, `getSalesComparison`, per-event audit payload detail, a
+   `platform_audit_logs` surface, any business-wide date-range or product filter
+   on the movement feed, subscription and branding surfaces, deployment, and
+   Android build/emulator validation outside that chunk.

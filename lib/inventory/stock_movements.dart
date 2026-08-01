@@ -25,20 +25,22 @@ final class TenantStockException implements Exception {
 /// unmodelled source is carried verbatim as [other] and displayed as itself.
 enum TenantStockMovementSource {
   /// A confirmed sale, recorded by nightly reconciliation. Always negative.
-  sale('sale'),
+  sale('sale', 'Sale'),
 
   /// A verified return, recorded by `verifyReturnAndRestoreStock`.
-  verifiedReturn('verified_return'),
+  verifiedReturn('verified_return', 'Verified return'),
 
   /// A manual `adjustStock` correction.
-  manualAdjustment('manual_adjustment'),
+  manualAdjustment('manual_adjustment', 'Manual adjustment'),
 
-  /// Any source this client does not model.
-  other('');
+  /// Any source this client does not model. It carries no wire value, so it can
+  /// never be filtered for; a surface shows the recorded value verbatim.
+  other('', 'Other source');
 
-  const TenantStockMovementSource(this.wireValue);
+  const TenantStockMovementSource(this.wireValue, this.label);
 
   final String wireValue;
+  final String label;
 
   static TenantStockMovementSource parse(String value) {
     for (final source in values) {

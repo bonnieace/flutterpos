@@ -154,6 +154,38 @@ service cloud.firestore {
         && (lines.size() <= 15 || validSaleLine(lines[15]));
     }
 
+    // The business-wide view of every product's stock ledger.
+    //
+    // A collection group is the only read here Firestore does not bound by a
+    // path prefix: the per-product rule below `tenants/{tenantId}/products`
+    // does not apply to a group query at all, so this is a separate boundary
+    // and is reasoned about as one.
+    //
+    // It is `list` only, so it authorizes a query and never an individual
+    // document. A single movement is still read through the per-product rule,
+    // where the tenant is the path wildcard, and an absent one still answers
+    // there rather than raising an evaluation error here.
+    //
+    // The authorization is `resource.data.tenantId`, which Firestore can only
+    // resolve when the query itself carries that exact equality filter. An
+    // unfiltered group page is therefore refused outright, and a page filtered
+    // to another business fails the role check - the client attaches the filter
+    // from its own live session and can never drop it. The roles are the same
+    // owner/admin/manager set the per-product ledger and `stock_adjustments`
+    // use, so the surface that explains one product's figure and the surface
+    // that lists everything that moved agree about who may see them.
+    //
+    // Writing stays server-only everywhere, so a document's `tenantId` is
+    // always the one its own path encodes; the client re-proves that path
+    // anyway before showing a row.
+    match /{ledgerPath=**}/stock_movements/{movementId} {
+      allow list: if hasTenantRole(
+        resource.data.tenantId,
+        ['owner', 'admin', 'manager']
+      );
+      allow get, write: if false;
+    }
+
     match /users/{uid} {
       allow get: if (signedIn() && request.auth.uid == uid) || platformAdmin();
       allow list: if platformAdmin();

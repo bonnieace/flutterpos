@@ -243,6 +243,15 @@ class SpiritPOSApp extends StatelessWidget {
             TenantStockAdjustmentFeedScreen(reader: reader),
         stockAdjustmentFeedRoles:
             TenantStockAdjustmentFeedRepository.allowedRoles,
+        // Everything that moved stock, of which the corrections above are only
+        // one source. It is the one read in the app that Firestore does not
+        // bound by a path prefix, so the collection-group boundary is injected
+        // explicitly rather than folded into the general tenant data reader.
+        stockMovementFeedRoute: (reader) => TenantStockMovementFeedScreen(
+          reader: reader,
+          groupReader: tenantDataReader,
+        ),
+        stockMovementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
         // The whole business's event trail: who was invited, deactivated, or
         // recovered, and every lifecycle change the platform made. It is
         // deliberately narrower than the stock surfaces above.

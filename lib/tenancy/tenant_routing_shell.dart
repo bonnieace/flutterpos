@@ -77,6 +77,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.productStockRoles = const <TenantRole>[],
     this.stockAdjustmentFeedRoute,
     this.stockAdjustmentFeedRoles = const <TenantRole>[],
+    this.stockMovementFeedRoute,
+    this.stockMovementFeedRoles = const <TenantRole>[],
     this.auditLogRoute,
     this.auditLogRoles = const <TenantRole>[],
   });
@@ -149,6 +151,13 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> stockAdjustmentFeedRoles;
+
+  /// Optional guarded business-wide stock movement feed, reached from the
+  /// read-only catalog and injected for the same reason.
+  final Widget Function(TenantDataReader reader)? stockMovementFeedRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> stockMovementFeedRoles;
 
   /// Optional guarded business-wide activity log, injected for the same reason.
   final Widget Function(TenantDataReader reader)? auditLogRoute;
@@ -640,6 +649,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       productStockRoles: widget.productStockRoles,
       stockAdjustmentFeedRoute: widget.stockAdjustmentFeedRoute,
       stockAdjustmentFeedRoles: widget.stockAdjustmentFeedRoles,
+      stockMovementFeedRoute: widget.stockMovementFeedRoute,
+      stockMovementFeedRoles: widget.stockMovementFeedRoles,
       auditLogRoute: widget.auditLogRoute,
       auditLogRoles: widget.auditLogRoles,
     );
@@ -1022,6 +1033,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.productStockRoles = const <TenantRole>[],
     this.stockAdjustmentFeedRoute,
     this.stockAdjustmentFeedRoles = const <TenantRole>[],
+    this.stockMovementFeedRoute,
+    this.stockMovementFeedRoles = const <TenantRole>[],
     this.auditLogRoute,
     this.auditLogRoles = const <TenantRole>[],
   });
@@ -1067,6 +1080,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> stockAdjustmentFeedRoles;
+
+  /// Optional guarded business-wide stock movement feed, opened from the
+  /// read-only catalog rather than from this screen.
+  final Widget Function(TenantDataReader reader)? stockMovementFeedRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> stockMovementFeedRoles;
 
   /// Optional guarded business-wide activity log, opened from this screen as a
   /// sibling of the daily summary. It stays unreachable while it is absent.
@@ -1158,6 +1178,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                               ? null
                               : () => stockAdjustmentFeedRoute!(reader),
                           adjustmentFeedRoles: stockAdjustmentFeedRoles,
+                          movementFeedRoute: stockMovementFeedRoute == null
+                              ? null
+                              : () => stockMovementFeedRoute!(reader),
+                          movementFeedRoles: stockMovementFeedRoles,
                         ),
                       ),
                     ),

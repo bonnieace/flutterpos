@@ -85,8 +85,64 @@ abstract interface class TenantCollectionReader {
 abstract interface class TenantDataReader
     implements TenantDocumentReader, TenantCollectionReader {}
 
+/// A collection-group query that can only be constructed by
+/// [TenantReadRepository].
+///
+/// Unlike [TenantCollectionQuery] this names no path at all: Firestore matches
+/// [collectionId] wherever it appears in the database, so the tenant binding is
+/// an [equalityFilters] entry the repository always adds itself. The reader may
+/// not add, drop, or reinterpret one, and the page is always ordered by
+/// ascending document path.
+final class TenantCollectionGroupQuery {
+  TenantCollectionGroupQuery._({
+    required this.collectionId,
+    required this.limit,
+    this.startAfterDocumentPath,
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) : equalityFilters = Map<String, Object?>.unmodifiable(equalityFilters);
+
+  /// Lets a test transport describe a group query a repository did not build.
+  factory TenantCollectionGroupQuery.forTesting({
+    required String collectionId,
+    required int limit,
+    String? startAfterDocumentPath,
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) => TenantCollectionGroupQuery._(
+    collectionId: collectionId,
+    limit: limit,
+    startAfterDocumentPath: startAfterDocumentPath,
+    equalityFilters: equalityFilters,
+  );
+
+  /// The last path segment of the collections this query spans.
+  final String collectionId;
+
+  final int limit;
+
+  /// The **complete** path of the last document on the previous page.
+  ///
+  /// A collection-group page is ordered by the whole resource path rather than
+  /// by a leaf document ID, so a bare ID could not resume it.
+  final String? startAfterDocumentPath;
+
+  final Map<String, Object?> equalityFilters;
+}
+
+/// The narrow collection-group read boundary.
+///
+/// It is deliberately **not** part of [TenantDataReader]. Every other read here
+/// is bounded by a path this tenant owns; a group read is bounded only by the
+/// filter the repository attaches and the proof it applies afterwards, so a
+/// surface that needs one asks for it explicitly.
+abstract interface class TenantCollectionGroupReader {
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionGroupPage(
+    TenantCollectionGroupQuery query,
+  );
+}
+
 /// Firebase implementation of the tenant document and collection boundaries.
-final class FirebaseTenantDocumentReader implements TenantDataReader {
+final class FirebaseTenantDocumentReader
+    implements TenantDataReader, TenantCollectionGroupReader {
   FirebaseTenantDocumentReader([FirebaseFirestore? firestore])
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
@@ -116,15 +172,39 @@ final class FirebaseTenantDocumentReader implements TenantDataReader {
     final cursor = query.startAfterDocumentId;
     if (cursor != null) request = request.startAfter(<Object>[cursor]);
     final snapshot = await request.get();
-    return snapshot.docs
-        .map(
-          (document) => TenantQueryDocumentSnapshot(
-            path: document.reference.path,
-            data: document.data(),
-          ),
-        )
-        .toList(growable: false);
+    return _snapshots(snapshot);
   }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionGroupPage(
+    TenantCollectionGroupQuery query,
+  ) async {
+    Query<Map<String, dynamic>> request = _firestore.collectionGroup(
+      query.collectionId,
+    );
+    for (final filter in query.equalityFilters.entries) {
+      request = request.where(filter.key, isEqualTo: filter.value);
+    }
+    request = request.orderBy(FieldPath.documentId).limit(query.limit);
+    final cursor = query.startAfterDocumentPath;
+    // `__name__` in a collection group orders by the whole resource path, so
+    // the cursor is that complete path. Firestore refuses a bare document ID
+    // here - it accepts one only for a page whose collection path is known.
+    if (cursor != null) request = request.startAfter(<Object>[cursor]);
+    final snapshot = await request.get();
+    return _snapshots(snapshot);
+  }
+
+  static List<TenantQueryDocumentSnapshot> _snapshots(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) => snapshot.docs
+      .map(
+        (document) => TenantQueryDocumentSnapshot(
+          path: document.reference.path,
+          data: document.data(),
+        ),
+      )
+      .toList(growable: false);
 }
 
 /// Raised when a reader returns a document outside the requested tenant scope.
@@ -152,6 +232,26 @@ final class TenantDocumentPage {
 
   /// Whether this page was ordered by descending document ID.
   final bool descending;
+}
+
+/// A bounded collection-group page ordered by ascending Firestore document
+/// path.
+final class TenantDocumentGroupPage {
+  TenantDocumentGroupPage({
+    required List<TenantQueryDocumentSnapshot> items,
+    required this.nextCursor,
+    required this.hasMore,
+  }) : items = List<TenantQueryDocumentSnapshot>.unmodifiable(items);
+
+  final List<TenantQueryDocumentSnapshot> items;
+
+  /// The **complete** path of the last document on this page.
+  ///
+  /// A group page spans many parent documents, so only a whole path identifies
+  /// the position the next page resumes from.
+  final String? nextCursor;
+
+  final bool hasMore;
 }
 
 /// Base for read-only repositories bound to one live tenant session.
@@ -250,6 +350,155 @@ abstract base class TenantReadRepository {
     descending: descending,
     equalityFilters: equalityFilters,
   );
+
+  /// Reads one bounded page of an allowed product subcollection across **every**
+  /// product in this tenant.
+  ///
+  /// A collection-group query is the one read here that Firestore does not
+  /// bound by a path prefix: it matches [subcollection] wherever it appears in
+  /// the database. The tenant binding is therefore an equality filter this
+  /// method attaches itself - a caller may not supply, override, or drop it -
+  /// and the exact-child proof is extended rather than bypassed: every returned
+  /// document must be a `tenants/{tenantId}/products/{productId}/
+  /// {subcollection}/{documentId}` path below **this** session's own root, with
+  /// two validated document IDs, no duplicates, and ascending path order.
+  ///
+  /// The filter is not decoration. The matching Firestore rule authorizes the
+  /// page by that exact `tenantId ==` condition, so a page issued without it is
+  /// refused by the server as well as here.
+  Future<TenantDocumentGroupPage> readProductSubcollectionGroupPage(
+    TenantProductSubcollection subcollection, {
+    required TenantCollectionGroupReader groupReader,
+    int pageSize = 20,
+    String? cursor,
+    Map<String, Object?> equalityFilters = const <String, Object?>{},
+  }) async {
+    if (pageSize < 1 || pageSize > 50) {
+      throw RangeError.range(pageSize, 1, 50, 'pageSize');
+    }
+    final callerFilters = _validatedEqualityFilters(equalityFilters);
+    if (callerFilters.containsKey(tenantIdField)) {
+      throw ArgumentError.value(
+        equalityFilters,
+        'equalityFilters',
+        'The tenant binding of a group page is not a caller-supplied filter.',
+      );
+    }
+    final validatedCursor = cursor == null
+        ? null
+        : _validatedGroupCursor(cursor, subcollection);
+    final requestedLimit = pageSize + 1;
+    final snapshots = await groupReader.getCollectionGroupPage(
+      TenantCollectionGroupQuery._(
+        collectionId: subcollection.segment,
+        limit: requestedLimit,
+        startAfterDocumentPath: validatedCursor,
+        equalityFilters: <String, Object?>{
+          tenantIdField: session.tenantId,
+          ...callerFilters,
+        },
+      ),
+    );
+    if (snapshots.length > requestedLimit) {
+      throw const TenantScopeViolation(
+        'A collection group reader returned more documents than requested.',
+      );
+    }
+
+    final seenPaths = <String>{};
+    String? previousPath;
+    for (final snapshot in snapshots) {
+      _requireGroupChildPath(snapshot.path, subcollection);
+      if (!seenPaths.add(snapshot.path)) {
+        throw TenantScopeViolation(
+          'The group reader returned duplicate document ${snapshot.path}.',
+        );
+      }
+      if (previousPath != null &&
+          compareDocumentPaths(previousPath, snapshot.path) >= 0) {
+        throw const TenantScopeViolation(
+          'Collection group results were not ordered by document path.',
+        );
+      }
+      previousPath = snapshot.path;
+    }
+
+    final hasMore = snapshots.length > pageSize;
+    final items = hasMore ? snapshots.take(pageSize).toList() : snapshots;
+    return TenantDocumentGroupPage(
+      items: items,
+      nextCursor: hasMore ? items.last.path : null,
+      hasMore: hasMore,
+    );
+  }
+
+  /// Proves one group result really is an exact child of an allowed product
+  /// subcollection inside this session's own tenant.
+  void _requireGroupChildPath(
+    String path,
+    TenantProductSubcollection subcollection,
+  ) {
+    final segments = path.split('/');
+    if (segments.length != 6 ||
+        segments[0] != 'tenants' ||
+        segments[2] != TenantCollection.products.segment ||
+        segments[4] != subcollection.segment ||
+        !paths.owns(path) ||
+        segments[1] != session.tenantId) {
+      throw TenantScopeViolation(
+        'Expected a ${subcollection.segment} document below ${paths.root} but '
+        'received $path.',
+      );
+    }
+    try {
+      validateTenantDocumentId(segments[3], fieldName: 'productId');
+      validateTenantDocumentId(segments[5]);
+    } on ArgumentError {
+      throw TenantScopeViolation(
+        'The returned document path is not an exact group child: $path.',
+      );
+    }
+  }
+
+  String _validatedGroupCursor(
+    String cursor,
+    TenantProductSubcollection subcollection,
+  ) {
+    try {
+      _requireGroupChildPath(cursor, subcollection);
+    } on TenantScopeViolation {
+      throw ArgumentError.value(
+        cursor,
+        'cursor',
+        'Not a ${subcollection.segment} document path in this tenant.',
+      );
+    }
+    return cursor;
+  }
+
+  /// Compares two document paths the way Firestore orders `__name__`.
+  ///
+  /// The comparison is segment by segment, never over the joined string: a
+  /// product `p` sorts before `p-2`, while `tenants/t/products/p/...` sorts
+  /// *after* `tenants/t/products/p-2/...` as plain text, because `-` is below
+  /// `/`. A string comparison would therefore reject a page Firestore ordered
+  /// correctly.
+  static int compareDocumentPaths(String left, String right) {
+    final leftSegments = left.split('/');
+    final rightSegments = right.split('/');
+    final shared = leftSegments.length < rightSegments.length
+        ? leftSegments.length
+        : rightSegments.length;
+    for (var index = 0; index < shared; index++) {
+      final order = leftSegments[index].compareTo(rightSegments[index]);
+      if (order != 0) return order;
+    }
+    return leftSegments.length.compareTo(rightSegments.length);
+  }
+
+  /// The field every tenant-scoped document repeats from its own path, and the
+  /// only binding a collection-group page and its Firestore rule share.
+  static const String tenantIdField = 'tenantId';
 
   Future<TenantDocumentPage> _readPage(
     String expectedCollectionPath, {

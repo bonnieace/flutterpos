@@ -200,6 +200,45 @@ and `sale_{saleId}` for sales, so document order carries no time information; a
 descending page would be neither newest-first nor servable without a composite
 index, and the client renders each entry's own recorded instants instead.
 
+For the focused business-wide stock ledger, run
+`npm --prefix rules-tests run test:emulator:stock-movement-feed`. It proves that
+owners and managers page **every** product's `stock_movements` at once and
+narrowed to one `sourceType`, that the page resumes from a whole document path,
+that an unfiltered group page is refused outright, that a cashier never reaches
+it, that another business's ledger is never returned while that business's own
+manager still pages it, that a single movement and an absent one still answer
+through the per-product rule, that no client may append, rewrite, or delete a
+movement, and that a deactivated or non-member identity pages nothing.
+
+That surface needs a **collection group**, which is a different boundary from
+the per-product one and is reasoned about on its own. A rule nested under
+`tenants/{tenantId}/products/{productId}` does not apply to a group query at
+all, so `match /{ledgerPath=**}/stock_movements/{movementId}` was added beside
+it. Three things make it safe:
+
+- It is `list` only. It authorizes a query and never an individual document, so
+  the per-product rule stays the one authority on reading a single movement -
+  including an absent one, which the group rule's `resource.data` comparison
+  could not answer without raising an evaluation error.
+- It authorizes by `resource.data.tenantId`, which Firestore can only resolve
+  when the query itself carries that exact equality filter. An unfiltered group
+  page - which would span every business in the database - is therefore refused
+  outright, and the suite proves it. The client attaches the filter from its own
+  live session and cannot drop it.
+- The roles are the same owner/admin/manager set the per-product ledger and
+  `stock_adjustments` use, so all three stock surfaces agree about who may see
+  what moved.
+
+Writing stays server-only everywhere, so a movement's `tenantId` is always the
+one its own path encodes; the client re-proves that path before showing a row.
+
+A group query is **not** served by the automatic single-field index the way the
+key-ordered pages above are, so `firestore.indexes.json` gained two
+`COLLECTION_GROUP`-scoped indexes on `stock_movements`: `tenantId`/`__name__`
+and `tenantId`/`sourceType`/`__name__`. Both pages are ascending by document
+path, which sorts by product first and then by record - arbitrary with respect
+to time, which the screen says outright.
+
 For the focused business-wide correction record, run
 `npm --prefix rules-tests run test:emulator:stock-adjustments`. It proves that
 owners and managers page `stock_adjustments` both business-wide and narrowed to

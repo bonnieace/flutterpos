@@ -343,6 +343,54 @@ void main() {
       expect(find.text('adjustment feed'), findsOneWidget);
     });
 
+    testWidgets('the movement feed is offered only to its roles', (
+      tester,
+    ) async {
+      final reader = _CatalogReader(
+        handler: (query) async => query.collectionPath.endsWith('/categories')
+            ? [_categorySnapshot('tenant-a', 'drinks')]
+            : [_productSnapshot('tenant-a', 'product-a')],
+      );
+
+      // A cashier reads a product's current quantity at the till but never the
+      // ledger that explains it.
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(
+              uid: 'user-a',
+              membership: _membership('tenant-a', role: TenantRole.cashier),
+            ),
+          reader: reader,
+          movementFeedRoute: () => const Text('movement feed'),
+          movementFeedRoles: const [TenantRole.manager],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Cold lager'), findsOneWidget);
+      expect(find.byKey(const ValueKey('catalog-movement-feed')), findsNothing);
+
+      // A manager opens it, under the same session scope the catalog runs in.
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(
+              uid: 'user-a',
+              membership: _membership('tenant-a', role: TenantRole.manager),
+            ),
+          reader: reader,
+          movementFeedRoute: () => const Scaffold(body: Text('movement feed')),
+          movementFeedRoles: const [TenantRole.manager],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('catalog-movement-feed')));
+      await tester.pumpAndSettle();
+      expect(find.text('movement feed'), findsOneWidget);
+    });
+
     testWidgets('a tenant switch discards outstanding catalog queries', (
       tester,
     ) async {
@@ -428,6 +476,8 @@ Widget _catalogApp({
   List<TenantRole> productStockRoles = const <TenantRole>[],
   TenantAdjustmentFeedRouteBuilder? adjustmentFeedRoute,
   List<TenantRole> adjustmentFeedRoles = const <TenantRole>[],
+  TenantMovementFeedRouteBuilder? movementFeedRoute,
+  List<TenantRole> movementFeedRoles = const <TenantRole>[],
 }) => MaterialApp(
   home: TenantSessionScope(
     controller: controller,
@@ -439,6 +489,8 @@ Widget _catalogApp({
         productStockRoles: productStockRoles,
         adjustmentFeedRoute: adjustmentFeedRoute,
         adjustmentFeedRoles: adjustmentFeedRoles,
+        movementFeedRoute: movementFeedRoute,
+        movementFeedRoles: movementFeedRoles,
       ),
     ),
   ),
