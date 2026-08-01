@@ -276,6 +276,137 @@ void main() {
       );
     });
 
+    testWidgets('an undeliverable address is stated instead of retried', (
+      tester,
+    ) async {
+      final status = _StatusCallable(
+        answer: emailDeliveryUnavailableSentinel,
+      );
+
+      await _pump(tester, _Callable(), deliveryStatus: status);
+      await tester.tap(find.byKey(const ValueKey('account-verification-send')));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      // The address is only asked about once a request has been accepted,
+      // which is exactly when the user starts waiting for a message.
+      expect(status.calls, 1);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('account-verification-undeliverable'),
+              ),
+            )
+            .data,
+        'This address cannot receive mail from us, so sending again will not '
+        'help. Check the address or contact support.',
+      );
+    });
+
+    testWidgets('a deliverable address adds no warning at all', (tester) async {
+      final status = _StatusCallable();
+
+      await _pump(tester, _Callable(), deliveryStatus: status);
+      await tester.tap(find.byKey(const ValueKey('account-verification-send')));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(status.calls, 1);
+      expect(
+        find.byKey(const ValueKey('account-verification-undeliverable')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('account-verification-accepted')),
+        findsOne,
+      );
+    });
+
+    testWidgets('the status is never checked before a request is accepted', (
+      tester,
+    ) async {
+      final status = _StatusCallable();
+
+      await _pump(
+        tester,
+        _Callable(failWith: 'unavailable'),
+        deliveryStatus: status,
+      );
+      await tester.tap(find.byKey(const ValueKey('account-verification-send')));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      // The send failed, so there is nothing to explain the absence of.
+      expect(status.calls, 0);
+      expect(
+        find.byKey(const ValueKey('account-verification-undeliverable')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a failed or unrecognised status stays silent', (tester) async {
+      for (final broken in <_StatusCallable>[
+        _StatusCallable(failWith: 'unavailable'),
+        // A wording change server-side must never be read as "available", and
+        // must never be shown to the user verbatim either.
+        _StatusCallable(answer: 'who knows'),
+      ]) {
+        await _pump(tester, _Callable(), deliveryStatus: broken);
+        await tester.tap(
+          find.byKey(const ValueKey('account-verification-send')),
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        // The send itself succeeded, so a failed diagnostic about it must not
+        // be reported as an error on the action the user took.
+        expect(
+          find.byKey(const ValueKey('account-verification-undeliverable')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('account-verification-error')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('account-verification-accepted')),
+          findsOne,
+        );
+      }
+    });
+
+    testWidgets('an identity change discards an outstanding status read', (
+      tester,
+    ) async {
+      final status = _StatusCallable(
+        answer: emailDeliveryUnavailableSentinel,
+        defer: true,
+      );
+
+      await _pump(tester, _Callable(), deliveryStatus: status);
+      await tester.tap(find.byKey(const ValueKey('account-verification-send')));
+      await tester.pump();
+      await tester.pump();
+      expect(status.calls, 1);
+
+      await _pump(tester, _Callable(), deliveryStatus: status, uid: 'user-b');
+      status.completeFirst();
+      await tester.pump();
+      await tester.pump();
+
+      // Deliverability belongs to the address it was asked about, so the first
+      // identity's answer must never label the second one's.
+      expect(
+        find.byKey(const ValueKey('account-verification-undeliverable')),
+        findsNothing,
+      );
+    });
+
     testWidgets('another identity never inherits the previous request ID', (
       tester,
     ) async {
@@ -308,6 +439,7 @@ Future<void> _pump(
   _Callable callable, {
   String uid = 'user-a',
   Future<void> Function()? onReload,
+  _StatusCallable? deliveryStatus,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -316,6 +448,7 @@ Future<void> _pump(
           identity: _identity(uid: uid),
           callable: callable,
           onReload: onReload ?? () async {},
+          deliveryStatusCallable: deliveryStatus,
         ),
       ),
     ),
@@ -351,6 +484,38 @@ AccountVerificationIdentity _identity({
     globalStatus: globallyActive ? 'active' : 'disabled',
   ),
 );
+
+final class _StatusCallable implements EmailDeliveryStatusCallable {
+  _StatusCallable({
+    this.answer = emailDeliveryAvailableSentinel,
+    this.failWith,
+    this.defer = false,
+  });
+
+  final Object? answer;
+  final String? failWith;
+  final bool defer;
+  int calls = 0;
+  final List<Completer<Object?>> _pending = <Completer<Object?>>[];
+
+  void completeFirst() {
+    if (_pending.isEmpty) return;
+    _pending.removeAt(0).complete(answer);
+  }
+
+  @override
+  Future<Object?> call() {
+    calls++;
+    final code = failWith;
+    if (code != null) {
+      return Future<Object?>.error(EmailDeliveryStatusCallableException(code));
+    }
+    if (!defer) return Future<Object?>.value(answer);
+    final completer = Completer<Object?>();
+    _pending.add(completer);
+    return completer.future;
+  }
+}
 
 final class _Callable implements SendAccountVerificationCallable {
   _Callable({

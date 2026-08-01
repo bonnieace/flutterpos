@@ -84,7 +84,7 @@ dropped, not postponed.
 | --- | --- | --- |
 | `sendAccountVerification` | **Reached 2026-08-01.** The business selector offers it to an unverified identity. | Resolved |
 | `requestPasswordReset` | **Blocked on App Check** - see below. Still no caller. | Now declared |
-| `getMyEmailDeliveryStatus` | No caller in `lib/`; named for a user-facing read. | Next chunk |
+| `getMyEmailDeliveryStatus` | **Reached 2026-08-01.** Checked once a verification request is accepted. | Resolved |
 | `getSalesComparison` | No caller; excluded by name in ~14 consecutive chunks. | Yes, never revisited |
 | `requestTenantReconciliation` | No caller. The status surface added 2026-08-01 reads runs but cannot request one. | Yes |
 | Subscription | Rules exist and `TenantPaths.currentSubscription` exists; **no repository reads it at all**. Spec line 14 names subscription as a per-business concern. | Yes, never revisited |
@@ -134,10 +134,11 @@ outside what a bounded chunk should decide on its own:
 Until this is decided, a user who forgets their password has no recovery path
 inside the app on any platform.
 
-Recommended order for the next sessions: `getMyEmailDeliveryStatus`, which
-closes the verification loop by telling a user whose address is suppressed why
-no mail arrives; then the checkout screen and the tender decision above; then
-this password-reset decision; then the smaller unreachable rows.
+Recommended order for the next sessions: the checkout screen and the tender
+decision above, which is now the largest reachable piece of product; then this
+password-reset decision; then the smaller unreachable rows. The email loop
+itself is closed - an identity can ask for its verification email and is told
+when the address cannot receive one.
 
 ### Checked and found sound
 
@@ -7319,3 +7320,130 @@ the verification loop - and nothing else:
    `getSalesComparison`, a `platform_audit_logs` surface, subscription and
    branding surfaces, deployment, and Android build/emulator validation outside
    that chunk.
+
+---
+
+## Guarded email delivery-status handoff - 2026-08-01
+
+### Completed in this session
+
+The verification loop is closed. A user who asks for a verification email and
+receives nothing is now told the address cannot receive mail, instead of tapping
+"send again" indefinitely. This chunk adds no password reset, no checkout screen
+or payment flow, and makes no legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- **The server's sentence is matched as a sentinel, not displayed.** This was
+  the explicit decision the previous handover asked for.
+  `getMyEmailDeliveryStatus` returns a bare string - either `"available"` or the
+  exact `EMAIL_UNAVAILABLE_MESSAGE` - and that message is returned identically
+  for **four** different causes: the account carries no address, the root record
+  is not eligible, an active suppression exists, or the recorded delivery status
+  is unavailable. It therefore carries no per-cause information and adds nothing
+  as display text, while the panel has context it lacks: the user has just asked
+  for a specific email, so it can say "sending again will not help" rather than
+  a generic support line. Matching the string exactly is unavoidable coupling;
+  re-displaying it would have been avoidable coupling.
+- **That collapsing is the server's enumeration boundary and the client does not
+  try to see through it.** The read model has exactly two states, and nothing
+  attempts to infer which of the four causes applied.
+- **An unrecognised answer is never read as available.** The parser refuses
+  anything that is not one of the two exact sentinels, and a unit test drives
+  eleven near-misses through it - `"Available"`, `" available"`,
+  `"unavailable"`, a truncated message, a map, a list, `null`, `true`, `1`. If
+  the server's wording is ever edited, this fails closed and the panel simply
+  says nothing. Telling a user their address works when the client can no longer
+  tell would be worse than silence.
+- **The status is read only once a request has been accepted**, which is exactly
+  when the user starts waiting for a message. A failed send checks nothing,
+  because there is no absence to explain yet, and a test pins that.
+- **A failed or unrecognised status read is deliberately silent.** The action
+  the user took succeeded; this is a diagnostic about it, and surfacing a failed
+  diagnostic as an error on a successful send would misreport what happened. A
+  test proves that neither the error line nor the undeliverable line appears in
+  that case, while the accepted line still does.
+- Deliverability belongs to the address it was asked about, so an identity
+  change discards an outstanding read. A widget test defers the answer, swaps
+  the identity, then completes it and proves the first identity's answer never
+  labels the second one's.
+- The callable takes **no argument at all**. The server derives the address from
+  the authenticated token, so there is no parameter a caller could use to ask
+  about anybody else, and the client boundary preserves that shape rather than
+  inventing one.
+- The surface is injected from the composition root like every other one. While
+  the callable is absent the panel simply does not make the claim, rather than
+  guessing or failing.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Password reset remains blocked on the App Check decision recorded near the top
+  of this file. Nothing here changes that.
+- The panel never states *why* an address is undeliverable, and must not: that
+  is the server's boundary, not a gap to fill later.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/main.dart
+lib/tenancy/account_verification.dart
+lib/tenancy/email_delivery_status.dart
+lib/tenancy/tenancy.dart
+lib/tenancy/tenant_routing_shell.dart
+test/tenancy/account_verification_test.dart
+test/tenancy/email_delivery_status_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **789/789** relevant Flutter tests, including **11** new
+  tests: 6 delivery-status cases and 5 verification-panel cases. The focused
+  two-file command passed **25/25** during development.
+- `git diff --check` was clean.
+- **The emulator suites were deliberately not re-run.** `git diff --stat HEAD --
+  firestore.rules functions rules-tests` was empty, so all three remain
+  byte-identical to this session's green run - Rules **120/120**, Functions
+  **166/166**, integration **12/12** - and none of them executes any Dart.
+  Android build and Android emulator validation were intentionally skipped as
+  requested.
+
+Meaningful failures and their resolutions:
+
+- No test assertion failed. Every command was green on its first execution.
+- The one design question the previous handover left open - re-display the
+  server's sentence, or map it - was decided by reading why the sentence exists
+  rather than by preference. Four causes collapsing into one message is a
+  deliberate privacy boundary, which makes the string a sentinel by
+  construction. Recorded above so it is not reopened.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+The read surfaces and the identity recovery paths are now closed. The largest
+remaining piece of reachable product is the **checkout screen**, which the
+tender decision near the top of this file unblocked. Before implementing it,
+re-read the five-point warning in that section: the payload schema version, the
+`payloadHash` breakage for a checkout already in `awaiting_confirmation`, the
+unfrozen `sales` create rule key set, the frozen receipt pattern, and the
+reconciliation boundary. Those are the hazards, not the UI.
+
+Scope one bounded chunk of it - not the whole flow at once - and keep password
+reset, receipt printing, product cost/profit fields, `getSalesComparison`, a
+`platform_audit_logs` surface, subscription and branding surfaces, deployment,
+and Android build/emulator validation outside it.

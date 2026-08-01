@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'account_verification.dart';
+import 'email_delivery_status.dart';
 import 'platform_tenant_review.dart';
 import 'platform_tenant_lifecycle.dart';
 import 'platform_tenant_archival.dart';
@@ -59,6 +60,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.requestTenantCallable,
     this.tenantRequestIdFactory,
     this.sendAccountVerificationCallable,
+    this.emailDeliveryStatusCallable,
     this.accountVerificationRequestIdFactory,
     this.reloadIdentity,
     this.hasPlatformSuperAdminClaim,
@@ -109,6 +111,11 @@ final class TenantRoutingShell extends StatefulWidget {
   final RequestTenantCallable? requestTenantCallable;
   final TenantRequestIdFactory? tenantRequestIdFactory;
   final SendAccountVerificationCallable? sendAccountVerificationCallable;
+
+  /// Reads whether the caller's own address can receive mail. Optional: while
+  /// it is absent the verification panel simply does not make that claim.
+  final EmailDeliveryStatusCallable? emailDeliveryStatusCallable;
+
   final AccountVerificationRequestIdFactory?
   accountVerificationRequestIdFactory;
 
@@ -502,6 +509,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
           verificationIdentity: _accountVerificationIdentity(),
           sendAccountVerificationCallable:
               widget.sendAccountVerificationCallable,
+          emailDeliveryStatusCallable: widget.emailDeliveryStatusCallable,
           accountVerificationRequestIdFactory:
               widget.accountVerificationRequestIdFactory,
           onReloadIdentity: widget.reloadIdentity == null
@@ -821,6 +829,7 @@ final class TenantBusinessSelector extends StatefulWidget {
     required this.onTenantRequested,
     this.verificationIdentity,
     this.sendAccountVerificationCallable,
+    this.emailDeliveryStatusCallable,
     this.accountVerificationRequestIdFactory,
     this.onReloadIdentity,
     this.acceptVisibleInvitationCallable,
@@ -839,6 +848,7 @@ final class TenantBusinessSelector extends StatefulWidget {
   final AccountVerificationIdentity? verificationIdentity;
 
   final SendAccountVerificationCallable? sendAccountVerificationCallable;
+  final EmailDeliveryStatusCallable? emailDeliveryStatusCallable;
   final AccountVerificationRequestIdFactory?
   accountVerificationRequestIdFactory;
 
@@ -927,6 +937,7 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
                       widget.sendAccountVerificationCallable ??
                       FirebaseSendAccountVerificationCallable(),
                   onReload: widget.onReloadIdentity!,
+                  deliveryStatusCallable: widget.emailDeliveryStatusCallable,
                   requestIdFactory: widget.accountVerificationRequestIdFactory,
                   isCurrent: widget.isCurrent,
                 ),

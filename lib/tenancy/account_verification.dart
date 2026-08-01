@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import 'email_delivery_status.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 
@@ -175,12 +176,21 @@ final class AccountVerificationPanel extends StatefulWidget {
     required this.identity,
     required this.callable,
     required this.onReload,
+    this.deliveryStatusCallable,
     this.requestIdFactory,
     this.isCurrent,
   });
 
   final AccountVerificationIdentity identity;
   final SendAccountVerificationCallable callable;
+
+  /// Reads whether the caller's own address can receive mail at all.
+  ///
+  /// Checked once an accepted request has been made, which is exactly when the
+  /// user starts waiting for a message. Without it a user whose address is
+  /// suppressed taps "send again" forever and is never told why nothing
+  /// arrives. While it is absent the panel simply does not make the claim.
+  final EmailDeliveryStatusCallable? deliveryStatusCallable;
 
   /// Re-reads the identity from the server so a completed verification is
   /// observed. See [AccountVerificationReload].
@@ -200,6 +210,7 @@ final class _AccountVerificationPanelState
   bool _sending = false;
   bool _reloading = false;
   bool _accepted = false;
+  EmailDeliveryStatus? _deliveryStatus;
   String? _safeError;
 
   @override
@@ -213,6 +224,9 @@ final class _AccountVerificationPanelState
         _sending = false;
         _reloading = false;
         _accepted = false;
+        // Deliverability is a property of the previous identity's address, so
+        // it must never be carried onto another one.
+        _deliveryStatus = null;
         _safeError = null;
       });
     }
@@ -264,6 +278,31 @@ final class _AccountVerificationPanelState
       _sending = false;
       _accepted = true;
     });
+    await _readDeliveryStatus(sentUid, intent);
+  }
+
+  /// Asks whether this address can receive mail at all, once a request has been
+  /// accepted.
+  ///
+  /// A failure here is deliberately silent. The action the user took succeeded,
+  /// and this is a diagnostic about it; reporting a failed diagnostic as an
+  /// error on a successful send would be misleading. An unrecognised answer is
+  /// treated the same way - the parser refuses it, and the panel says nothing
+  /// rather than claiming an address works.
+  Future<void> _readDeliveryStatus(
+    String sentUid,
+    AccountVerificationIntent intent,
+  ) async {
+    final callable = widget.deliveryStatusCallable;
+    if (callable == null) return;
+    final EmailDeliveryStatus status;
+    try {
+      status = await EmailDeliveryStatusReader(callable: callable).read();
+    } catch (_) {
+      return;
+    }
+    if (!mounted || !_isStillCurrent(sentUid, intent)) return;
+    setState(() => _deliveryStatus = status);
   }
 
   Future<void> _recheck() async {
@@ -322,6 +361,18 @@ final class _AccountVerificationPanelState
                 'verification link is on its way. Open the link, then check '
                 'again below.',
                 style: TextStyle(color: Theme.of(context).colorScheme.primary),
+              ),
+            ],
+            if (_deliveryStatus == EmailDeliveryStatus.unavailable) ...[
+              const SizedBox(height: 12),
+              Text(
+                key: const ValueKey('account-verification-undeliverable'),
+                // The server gives one answer for four causes, so this names
+                // none of them. Sending again cannot help, and saying so is the
+                // whole point: otherwise the user retries indefinitely.
+                'This address cannot receive mail from us, so sending again '
+                'will not help. Check the address or contact support.',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],
             if (_safeError != null) ...[

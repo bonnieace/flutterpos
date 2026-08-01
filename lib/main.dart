@@ -178,6 +178,10 @@ class SpiritPOSApp extends StatelessWidget {
         // not itself perform, which is what makes "I have verified" honest.
         reloadIdentity: () async =>
             FirebaseAuth.instance.currentUser?.reload(),
+        // Turns a silent non-delivery into a stated one. Without it a user
+        // whose address is suppressed sees the request accepted and taps send
+        // again indefinitely.
+        emailDeliveryStatusCallable: FirebaseEmailDeliveryStatusCallable(),
         invitationLink: invitationLink,
         invalidInvitationLink: invalidInvitationLink,
         bootstrapService: bootstrapService,
