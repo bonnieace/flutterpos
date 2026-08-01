@@ -1,10 +1,17 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/checkout/checkout_receipt.dart';
 import 'package:flutter_application_1/returns/returns.dart';
+import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
+const String _businessDate = '2026-07-31';
+const String _payloadHash =
+    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 void main() {
   testWidgets('verified and pending returns are shown distinctly', (
@@ -155,8 +162,12 @@ void main() {
 
     reader.completeFirst();
     await tester.pump();
-    expect(find.byKey(const ValueKey('sale-returns-entry-ret-9')), findsOne);
+    // The route was opened for a sale in the previous business, so the new
+    // session cannot answer it. Another business's returns are never shown
+    // under that sale's receipt, even if a sale ID coincided.
+    expect(find.byKey(const ValueKey('sale-returns-entry-ret-9')), findsNothing);
     expect(find.byKey(const ValueKey('sale-returns-entry-ret-1')), findsNothing);
+    expect(find.byKey(const ValueKey('sale-returns-failure')), findsOne);
   });
 
   testWidgets('an unreadable staff record leaves the UID in place', (
@@ -207,7 +218,203 @@ void main() {
     await tester.pump();
 
     expect(find.text('Returns'), findsOne);
-    expect(find.text('Returns against CT-A7F-20260731-0001'), findsOne);
+    expect(find.text('Returns against ${_receipt(1)}'), findsOne);
+  });
+
+  testWidgets('without a writer the route stays read-only', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(find.byKey(const ValueKey('sale-returns-form')), findsNothing);
+    expect(find.byKey(const ValueKey('sale-returns-submit')), findsNothing);
+  });
+
+  testWidgets('the form states what is still available to return', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pump(tester, _controller(), reader, writer: _Writer());
+
+    // Two of product-1 and one of product-2 are already recorded as pending,
+    // and pending units count against what may still be requested.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-returns-remaining-product-1')),
+          )
+          .data,
+      'Tusker: 2 of 4 available',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-returns-remaining-product-2')),
+          )
+          .data,
+      'Water: 4 of 5 available',
+    );
+  });
+
+  testWidgets('recording a return needs quantities, a reason, and a confirm', (
+    tester,
+  ) async {
+    final writer = _Writer();
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader, writer: writer);
+
+    // Nothing selected and no reason: the action is unavailable.
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('sale-returns-submit')))
+          .onPressed,
+      isNull,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('sale-returns-increase-product-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-increase-product-1')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-returns-quantity-product-1')),
+          )
+          .data,
+      '2',
+    );
+    // Still refused without a reason.
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('sale-returns-submit')))
+          .onPressed,
+      isNull,
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('sale-returns-reason')),
+      'Damaged bottle',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-submit')));
+    await tester.pumpAndSettle();
+
+    // A confirmation is required, and cancelling writes nothing.
+    await tester.tap(find.byKey(const ValueKey('sale-returns-cancel-confirm')));
+    await tester.pumpAndSettle();
+    expect(writer.intents, isEmpty);
+
+    await tester.tap(find.byKey(const ValueKey('sale-returns-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-confirm')));
+    await tester.pumpAndSettle();
+
+    final intent = writer.intents.single;
+    expect(intent.saleId, 'co-1');
+    expect(intent.createdBy, 'user-a');
+    expect(intent.reason, 'Damaged bottle');
+    expect(intent.lines.single.productId, 'product-1');
+    expect(intent.lines.single.quantity, 2);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('sale-returns-notice'))).data,
+      startsWith('Return recorded. No stock has been restored yet'),
+    );
+  });
+
+  testWidgets('the quantity can never exceed what is available', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader, writer: _Writer());
+
+    for (var tap = 0; tap < 6; tap++) {
+      await tester.tap(
+        find.byKey(const ValueKey('sale-returns-increase-product-1')),
+      );
+      await tester.pump();
+    }
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-returns-quantity-product-1')),
+          )
+          .data,
+      '4',
+    );
+  });
+
+  testWidgets('an ambiguous write tells the user not to record it again', (
+    tester,
+  ) async {
+    final writer = _Writer(
+      const TenantReturnWriteResult.ambiguous('write_timeout'),
+    );
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader, writer: writer);
+    await tester.tap(find.byKey(const ValueKey('sale-returns-increase-product-1')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey('sale-returns-reason')),
+      'Damaged bottle',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('sale-returns-notice'))).data,
+      startsWith('The result is unknown.'),
+    );
+
+    // The retry reuses the same deterministic document, so the create-only rule
+    // refuses a replay instead of recording the reversal twice.
+    await tester.tap(find.byKey(const ValueKey('sale-returns-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-confirm')));
+    await tester.pumpAndSettle();
+    expect(writer.intents.length, 2);
+    expect(writer.intents.last.returnId, writer.intents.first.returnId);
+  });
+
+  testWidgets('an incomplete returns page offers no record form', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-3'),
+        _pending('ret-2'),
+        _pending('ret-1'),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      pageSize: 2,
+      writer: _Writer(),
+    );
+
+    // The remaining quantity can only be derived from the complete set, and a
+    // partial page would overstate it.
+    expect(find.byKey(const ValueKey('sale-returns-form')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sale-returns-form-unavailable')),
+      findsOne,
+    );
   });
 }
 
@@ -217,7 +424,15 @@ Future<void> _pump(
   _Reader reader, {
   int pageSize = 20,
   bool settle = true,
+  TenantReturnWriter? writer,
 }) async {
+  // The record form adds a text field, so the page carries more than one
+  // Scrollable and `scrollUntilVisible` can no longer identify the list. A tall
+  // surface builds every row instead, which is what these assertions need.
+  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
@@ -227,6 +442,8 @@ Future<void> _pump(
             reader: reader,
             request: _request(),
             pageSize: pageSize,
+            writer: writer,
+            requestIdFactory: () => 'return-abcdefgh',
           ),
         ),
       ),
@@ -237,9 +454,69 @@ Future<void> _pump(
   await tester.pump();
 }
 
-TenantSaleReturnsRequest _request() => const TenantSaleReturnsRequest(
-  saleId: 'co-1',
-  receiptNumber: 'CT-A7F-20260731-0001',
+/// Records every intent handed to the write boundary.
+final class _Writer implements TenantReturnWriter {
+  _Writer([this._result = const TenantReturnWriteResult.committed()]);
+
+  final TenantReturnWriteResult _result;
+  final List<TenantReturnCreateIntent> intents = <TenantReturnCreateIntent>[];
+
+  @override
+  Future<TenantReturnWriteResult> recordReturn(
+    TenantReturnCreateIntent intent,
+  ) async {
+    intents.add(intent);
+    return _result;
+  }
+}
+
+TenantSaleReturnsRequest _request() =>
+    TenantSaleReturnsRequest(sale: _sale());
+
+String _receipt(int sequence) => formatCheckoutReceiptNumber(
+  deviceId: _deviceA,
+  businessDate: _businessDate,
+  sequence: sequence,
+);
+
+TenantSale _sale() => TenantSale.fromDocument(
+  path: 'tenants/tenant-a/sales/co-1',
+  data: <String, Object?>{
+    'checkoutId': 'co-1',
+    'tenantId': 'tenant-a',
+    'soldById': 'user-a',
+    'payloadHash': _payloadHash,
+    'payloadSchemaVersion': 1,
+    'currency': 'KES',
+    'businessDate': _businessDate,
+    'shiftId': 'shift-a',
+    'deviceId': _deviceA,
+    'receiptNumber': _receipt(1),
+    'receiptSequence': 1,
+    'items': <Object?>[
+      <String, Object?>{
+        'productId': 'product-1',
+        'name': 'Tusker',
+        'quantity': 4,
+        'unitPriceMinor': 500,
+        'lineTotalMinor': 2000,
+      },
+      <String, Object?>{
+        'productId': 'product-2',
+        'name': 'Water',
+        'quantity': 5,
+        'unitPriceMinor': 100,
+        'lineTotalMinor': 500,
+      },
+    ],
+    'subtotalMinor': 2500,
+    'subtotal': 25.0,
+    'discountMinor': 0,
+    'discount': 0.0,
+    'totalMinor': 2500,
+    'total': 25.0,
+    'createdAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 12)),
+  },
 );
 
 TenantSessionController _controller({TenantRole role = TenantRole.cashier}) =>
@@ -271,10 +548,12 @@ TenantQueryDocumentSnapshot _pending(
   Map<String, Object?>? overrides,
 }) {
   final data = <String, Object?>{
+    'returnId': returnId,
     'tenantId': tenantId,
     'saleId': 'co-1',
     'createdBy': 'user-a',
     'status': 'pending',
+    'reason': 'Damaged bottle',
     'itemsReturned': <Object?>[
       <String, Object?>{
         'productId': 'product-1',

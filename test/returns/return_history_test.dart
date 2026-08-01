@@ -15,6 +15,7 @@ void main() {
       expect(record.tenantId, 'tenant-a');
       expect(record.saleId, 'co-1');
       expect(record.createdBy, 'user-a');
+      expect(record.reason, 'Customer returned a damaged bottle');
       expect(record.status, TenantReturnStatus.pending);
       expect(record.isVerified, isFalse);
       expect(record.verification, isNull);
@@ -57,6 +58,14 @@ void main() {
         ),
         _code('return_identity_mismatch'),
       );
+      // The create rule binds the document ID into the document itself.
+      expect(
+        () => TenantReturn.fromDocument(
+          path: 'tenants/tenant-a/returns/ret-9',
+          data: _pending(),
+        ),
+        _code('return_identity_mismatch'),
+      );
       expect(
         () => TenantReturn.fromDocument(
           path: 'tenants/tenant-a/sales/ret-1',
@@ -90,6 +99,10 @@ void main() {
         },
         'unknown-status': <String, Object?>{'status': 'cancelled'},
         'non-boolean-flag': <String, Object?>{'verified': 'yes'},
+        // The create rule requires an auditable reason, so a document without
+        // one was not written through that contract.
+        'missing-reason': <String, Object?>{'reason': null},
+        'blank-reason': <String, Object?>{'reason': '  '},
       };
 
       for (final entry in refused.entries) {
@@ -179,8 +192,9 @@ void main() {
     test('pages one sale returns newest first from the tenant path', () async {
       final reader = _Reader(<String, Map<String, Object?>>{
         'tenants/tenant-a/returns/ret-1': _pending(),
-        'tenants/tenant-a/returns/ret-2': _verified(),
+        'tenants/tenant-a/returns/ret-2': _verified(returnId: 'ret-2'),
         'tenants/tenant-a/returns/ret-3': _pending(
+          returnId: 'ret-3',
           overrides: <String, Object?>{'saleId': 'co-2'},
         ),
       });
@@ -201,7 +215,7 @@ void main() {
     test('resumes a page from its cursor', () async {
       final reader = _Reader(<String, Map<String, Object?>>{
         'tenants/tenant-a/returns/ret-1': _pending(),
-        'tenants/tenant-a/returns/ret-2': _pending(),
+        'tenants/tenant-a/returns/ret-2': _pending(returnId: 'ret-2'),
       });
 
       final first = await _repository(
@@ -287,12 +301,17 @@ Matcher _returnCode(String code) =>
 
 Matcher _code(String code) => throwsA(_returnCode(code));
 
-Map<String, Object?> _pending({Map<String, Object?>? overrides}) {
+Map<String, Object?> _pending({
+  String returnId = 'ret-1',
+  Map<String, Object?>? overrides,
+}) {
   final data = <String, Object?>{
+    'returnId': returnId,
     'tenantId': 'tenant-a',
     'saleId': 'co-1',
     'createdBy': 'user-a',
     'status': 'pending',
+    'reason': 'Customer returned a damaged bottle',
     'itemsReturned': <Object?>[
       <String, Object?>{
         'productId': 'product-1',
@@ -308,8 +327,11 @@ Map<String, Object?> _pending({Map<String, Object?>? overrides}) {
   return data;
 }
 
-Map<String, Object?> _verified({Map<String, Object?>? overrides}) {
-  final data = _pending();
+Map<String, Object?> _verified({
+  String returnId = 'ret-1',
+  Map<String, Object?>? overrides,
+}) {
+  final data = _pending(returnId: returnId);
   data.addAll(<String, Object?>{
     'status': 'verified',
     'verified': true,

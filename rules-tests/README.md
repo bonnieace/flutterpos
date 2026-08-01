@@ -123,14 +123,31 @@ never aggregates a replacement: a device holds only its own sales, and any total
 it derived would disagree with the server's for a business using more than one
 device.
 
-For the focused returns read boundary, run
+For the focused returns boundary, run
 `npm --prefix rules-tests run test:emulator:tenant-returns`. It proves that any
 active member pages the returns recorded against one sale newest-first, that a
 colleague's return is readable, that a sale with no returns still answers for
 both a direct read and a query, that no client may write the verification
-evidence or delete a return, that a create may neither pre-declare itself
-verified nor name another actor, that a non-member or deactivated identity reads
-nothing, and that the `return_verifications` ledger stays server-only.
+evidence or delete a return, that any active member may record a **pending**
+return against any sale in the business, that a replayed deterministic ID is
+refused as an update, that the create contract is exactly frozen, and that a
+non-member or deactivated identity neither reads nor records anything. The
+`return_verifications` ledger stays server-only.
+
+The create rule freezes the key set with `hasOnly`, so no verification field and
+no unknown field can be smuggled in beside the request. `itemsReturned` reuses
+`validSaleLines`: a return line and a sale line are the same shape by
+construction, and a return can never carry more lines than the sale it reverses,
+which is capped at the same sixteen. The named sale must exist, because the
+verification callable reads the immutable sale to bound the restoration and a
+return filed against nothing could never be verified. `createdAt` must be
+`request.time`, so a device clock never decides when a reversal was recorded.
+
+Recording and verifying are deliberately separate privileges. Recording changes
+no stock; restoration runs through the owner/admin/manager-only
+`verifyReturnAndRestoreStock`, so the two steps are a two-person control rather
+than one privilege. A customer returns to whoever is at the till, so a cashier
+may record a return against a colleague's sale and `createdBy` records who did.
 
 The returns read rule is deliberately as wide as the sale rule rather than as
 narrow as the shift rule. `verifyReturnAndRestoreStock` bounds a restoration by

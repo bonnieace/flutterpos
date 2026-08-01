@@ -13,6 +13,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'checkout/checkout.dart';
 import 'reporting/reporting.dart';
+import 'returns/returns.dart';
 import 'shift/shift.dart';
 
 Future<void> main() async {
@@ -206,6 +207,12 @@ class SpiritPOSApp extends StatelessWidget {
         dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
         shiftPanel: TenantShiftPanel(
           historyReader: tenantDataReader,
+          // Recording a pending return changes no stock; restoration stays in
+          // the owner/admin/manager-only verification callable.
+          returnWriter: FirebaseTenantReturnWriter(
+            firestore: FirebaseFirestore.instance,
+            isOnline: isOnline,
+          ),
           controllerFactory: (sessions) => TenantShiftController(
             sessionController: sessions,
             localState: tenantShiftState,

@@ -334,11 +334,40 @@ service cloud.firestore {
       // resulting stock movements are denied by the catch-all below, and no
       // client may update a return, so the terminal state, the verifier, and
       // the restoration ID can only ever be written by the callable.
+      // Recording a return changes no stock. Every active member may record a
+      // pending one - a customer returns to whoever is at the till, and
+      // `createdBy` records who did - while restoration runs through the
+      // owner/admin/manager-only `verifyReturnAndRestoreStock`. The two steps
+      // are a deliberate two-person control rather than one privilege.
+      //
+      // The key set is frozen by `hasOnly`, so no verification field and no
+      // unknown field can be smuggled in beside the request. `itemsReturned`
+      // reuses `validSaleLines`: a return line and a sale line are the same
+      // shape by construction, and a return can never carry more lines than the
+      // sale it reverses, which is capped at the same sixteen.
+      //
+      // The sale must exist. A return filed against nothing could never be
+      // verified, because the callable reads the immutable sale to bound the
+      // restoration; refusing it here keeps that record out of the business.
       match /returns/{returnId} {
         allow read: if activeStaff(tenantId);
         allow create: if activeStaff(tenantId)
+          && returnId == request.resource.data.returnId
+          && request.resource.data.tenantId == tenantId
           && request.resource.data.createdBy == request.auth.uid
-          && request.resource.data.status == 'pending';
+          && request.resource.data.status == 'pending'
+          && request.resource.data.saleId is string
+          && request.resource.data.saleId.size() > 0
+          && exists(/databases/$(database)/documents/tenants/$(tenantId)/sales/$(request.resource.data.saleId))
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.reason is string
+          && request.resource.data.reason.size() >= 3
+          && request.resource.data.reason.size() <= 500
+          && validSaleLines(request.resource.data.itemsReturned)
+          && request.resource.data.keys().hasOnly([
+            'returnId', 'tenantId', 'saleId', 'createdBy', 'status',
+            'reason', 'itemsReturned', 'createdAt'
+          ]);
         allow update, delete: if false;
       }
 

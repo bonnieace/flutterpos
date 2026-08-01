@@ -96,9 +96,10 @@ final class TenantReturn {
     } on ArgumentError {
       throw const TenantReturnException('invalid_return_path');
     }
-    // The document repeats the business its own path encodes, exactly as the
-    // verification callable requires before it will restore any stock.
-    if (data['tenantId'] != tenantId) {
+    // The document repeats the business and the ID its own path encodes,
+    // exactly as the create rule binds them. The verification callable will not
+    // restore stock from a document whose tenant disagrees either.
+    if (data['tenantId'] != tenantId || data['returnId'] != returnId) {
       throw const TenantReturnException('return_identity_mismatch');
     }
 
@@ -107,6 +108,7 @@ final class TenantReturn {
       tenantId: tenantId,
       saleId: _requiredDocumentId(data, 'saleId'),
       createdBy: _requiredDocumentId(data, 'createdBy'),
+      reason: _requiredReason(data),
       status: _requiredStatus(data),
       lines: _parseLines(data['itemsReturned']),
       verification: _verification(data),
@@ -119,6 +121,7 @@ final class TenantReturn {
     required this.tenantId,
     required this.saleId,
     required this.createdBy,
+    required this.reason,
     required this.status,
     required List<TenantReturnLine> lines,
     required this.verification,
@@ -133,6 +136,10 @@ final class TenantReturn {
 
   /// The cashier who recorded the return. Rules bind it on create.
   final String createdBy;
+
+  /// The audit reason the create rule requires. A return without a recorded
+  /// reason is not auditable, so it is not a document this surface accepts.
+  final String reason;
   final TenantReturnStatus status;
   final List<TenantReturnLine> lines;
 
@@ -328,6 +335,23 @@ String? _optionalName(Object? value) {
     if (codeUnit < 0x20 || codeUnit == 0x7f) return null;
   }
   return name;
+}
+
+String _requiredReason(Map<String, Object?> data) {
+  final value = data['reason'];
+  if (value is! String) {
+    throw const TenantReturnException('invalid_return_document');
+  }
+  final reason = value.trim();
+  if (reason.length < 3 || reason.length > 500) {
+    throw const TenantReturnException('invalid_return_document');
+  }
+  for (final codeUnit in reason.codeUnits) {
+    if (codeUnit < 0x20 || codeUnit == 0x7f) {
+      throw const TenantReturnException('invalid_return_document');
+    }
+  }
+  return reason;
 }
 
 String _requiredDocumentId(Map<String, Object?> data, String field) {

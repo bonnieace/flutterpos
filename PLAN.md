@@ -5500,3 +5500,171 @@ operational surface outside checkout, and nothing else:
    checkout screen and payment flow, receipt printing, product cost/profit
    fields, subscription and branding surfaces, deployment, and Android
    build/emulator validation outside that chunk.
+
+---
+
+## Guarded return creation handoff - 2026-08-01
+
+### Completed in this session
+
+A return can now be recorded from the sale it reverses. This is the first
+write-capable operational surface outside checkout. It restores no stock, calls
+no callable, and makes no legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- **The create rule was tightened from two conditions to a frozen contract.** It
+  previously bound only `createdBy` and `status == 'pending'`, so a client could
+  file a return under another business, name no sale, choose its own instant, or
+  write an unbounded `itemsReturned`. It now also binds the document ID into the
+  document, binds `tenantId`, requires `createdAt == request.time`, requires a
+  3-500 character `reason`, and freezes the key set with `hasOnly` so no
+  verification field and no unknown field can be smuggled in beside the request.
+- `itemsReturned` **reuses `validSaleLines`**. A return line and a sale line are
+  the same shape by construction, and a return can never carry more lines than
+  the sale it reverses, which is capped at the same sixteen. Reusing the
+  function keeps the two contracts identical rather than nearly identical.
+- **The named sale must exist.** The verification callable reads the immutable
+  sale to bound the restoration, so a return filed against nothing could never
+  be verified. One `exists()` keeps that record out of the business entirely.
+- **Recording and verifying are deliberately separate privileges.** Every active
+  member may record a pending return - recording changes no stock - while
+  restoration stays in the owner/admin/manager-only callable. A customer returns
+  to whoever is at the till, so a cashier may record a return against a
+  colleague's sale, and `createdBy` records who did.
+- **The client subtracts pending returns as well as verified ones.** The
+  server's `assertReturnWithinSale` counts only verified restorations. Two
+  pending returns that each fit on their own can jointly exceed the sale, and
+  the second verification would then fail with the customer already gone. The
+  client bound is tighter on purpose and is never the only check.
+- **An incomplete returns page refuses to produce a returnable quantity at
+  all.** A partial list would overstate what is left, which is the one number
+  this surface exists to state, so the record form is offered only on a first
+  page with nothing behind it and says so otherwise.
+- **The document ID is deterministic.** It hashes `tenantId`, `saleId`, the
+  actor, and one request ID per confirmation intent - the same scoping the
+  backend's idempotency keys use - so a double submit addresses one document and
+  the create-only rule refuses the replay. The request ID is retained **only**
+  across an ambiguous result: a rejected or unattempted write left nothing
+  behind, and reusing its ID would deny an edited retry as a duplicate.
+- An ambiguous write tells the user to reload rather than record again, and
+  `TenantReturnRequestRepository.readReturn` settles it by exact path.
+- The read model was tightened to exactly what the create rule now freezes:
+  `returnId` must match its own path and `reason` is required. A return without
+  a recorded reason is not auditable.
+- The writer is injected from the composition root through the shift-history and
+  sale-history routes. While it is absent every one of those routes is read-only,
+  which is the same pattern the shift history and daily summary already use.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Nothing calls `verifyReturnAndRestoreStock`. A recorded return stays pending
+  forever until that chunk lands, and both the panel and the notice say so.
+- The returns route is reachable only through shift history to sale history. A
+  direct "find a receipt" entry point does not exist yet.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/main.dart
+lib/returns/return_history.dart
+lib/returns/return_history_panel.dart
+lib/returns/return_request.dart
+lib/returns/returns.dart
+lib/sales/sale_history_panel.dart
+lib/shift/shift_history_panel.dart
+lib/shift/shift_panel.dart
+rules-tests/README.md
+rules-tests/test/tenant-returns.test.js
+test/returns/return_history_panel_test.dart
+test/returns/return_history_test.dart
+test/returns/return_request_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/returns lib/reporting lib/sales lib/shift
+  lib/checkout lib/tenancy test/returns test/reporting test/sales test/shift
+  test/checkout test/tenancy` reported no issues. `lib/main.dart` still carries
+  one pre-existing `profilesSampleRate is experimental` Sentry warning, which
+  this chunk did not introduce and did not touch.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/returns
+  test/reporting test/sales test/shift test/checkout test/tenancy` passed
+  **577/577** relevant Flutter tests, including **24** new tests: 18 request,
+  intent, writer and settlement cases, and 6 record-form widget cases.
+- `npm --prefix rules-tests run test:emulator:tenant-returns` passed the focused
+  Firestore-only suite **9/9** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **80/80** (77 existing plus 3 new create-contract cases).
+- `npm --prefix functions test` passed **166/166** Functions tests. No Functions
+  source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending warnings.
+  Android build and Android emulator validation were intentionally skipped.
+
+Meaningful failures and their resolutions:
+
+- **A panel-level `setState` was silently restarting the guarded load and
+  wiping the half-filled form.** `TenantRouteGuard` restarts whenever its loader
+  changes identity - which is how a new loader is stopped from serving an old
+  page - and a closure rebuilt on every frame changes identity every frame. The
+  busy flag and the result notice therefore discarded the user's selected
+  quantities and reason. The loader is now cached against the same key the guard
+  is keyed by, so a rebuild reuses it and only a real page change reloads. Any
+  future panel that keeps local state beside a guard needs the same treatment.
+- **`scrollUntilVisible` stopped working once the form added a text field.** It
+  resolves `find.byType(Scrollable)` to exactly one widget, and an `EditableText`
+  carries its own. The returns widget tests now use a tall test surface instead,
+  which builds every row. This is the second list-layout trap in these panels,
+  after the shift-history pagination one.
+- **A tenant switch during an outstanding returns page revealed a stronger
+  invariant than the test asserted.** The route is opened for a sale in one
+  business, so after a switch the new session cannot answer it at all and
+  `describeReturnable` refuses the foreign sale. The test now asserts the
+  fail-closed state rather than the next business's page, which is the correct
+  behavior: another business's returns must never appear under that receipt.
+- No other test assertion failed.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only guarded return **verification**, which closes the returns
+vertical, and nothing else:
+
+1. Add a session-bound gateway for `verifyReturnAndRestoreStock` following the
+   existing callable-gateway pattern (`lib/tenancy/tenant_staff_status.dart` is
+   the closest model): derive the tenant from one captured live session, accept
+   only a decoded `TenantReturn` as the target, create one request ID per
+   confirmation intent, preserve it across a recoverable retry, and strictly
+   decode the `{returnId, verificationId, restoredProducts}` response.
+2. Offer the action on the returns route for owner/admin/manager only, on a
+   pending return only, behind an explicit confirmation that names the exact
+   products and units whose stock will be restored. A verified return must never
+   offer it again.
+3. Reconcile the response with the record: refuse a response naming a different
+   return, and re-read the return by exact path after success so the surface
+   shows the server's own verification evidence rather than an optimistic local
+   state.
+4. Decide and test what happens when the callable refuses - already verified, a
+   quantity exceeding the immutable sale, a missing product, a missing sale -
+   and make each refusal a distinct, actionable message rather than one generic
+   failure. `functions/src/operations/returns.ts` names every case.
+5. Add unit and widget coverage for a wrong-role attempt, an already-verified
+   return, a refused call, an ambiguous call, a tenant switch during an
+   outstanding call, and a response that names another return.
+6. Leave the checkout screen and payment flow, receipt printing, product
+   cost/profit fields, `getSalesComparison`, subscription and branding surfaces,
+   deployment, and Android build/emulator validation outside that chunk.

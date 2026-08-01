@@ -12,6 +12,7 @@ import {
   limit,
   orderBy,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
@@ -21,8 +22,13 @@ import {
   activeTenantDocuments,
   authenticatedFirestore,
   createRulesTestEnvironment,
+  openShiftDocuments,
+  receiptNumber,
   seedDocuments,
 } from "./support.js";
+
+const DEVICE_A = "dev-0123456789abcdef0123456789abcdef";
+const BUSINESS_DATE = "2026-07-31";
 
 let testEnvironment;
 
@@ -38,22 +44,43 @@ after(async () => {
   if (testEnvironment) await testEnvironment.cleanup();
 });
 
-/** A pending return exactly as the create rule allows it. */
-function pendingReturn({ saleId = "co-1", createdBy = "user-a" } = {}) {
+/** A pending return exactly as the create rule allows it, as seeded state. */
+function pendingReturn({
+  returnId = "ret-1",
+  saleId = "co-1",
+  createdBy = "user-a",
+} = {}) {
   return {
+    returnId,
     tenantId: "tenant-a",
     saleId,
     createdBy,
     status: "pending",
+    reason: "Customer returned a damaged bottle",
     itemsReturned: [{ productId: "product-1", quantity: 2 }],
     createdAt: Timestamp.fromMillis(1785500000000),
   };
 }
 
+/**
+ * The exact document the client writer commits: the frozen key set with a
+ * server-owned `createdAt`.
+ */
+function newReturn(returnId, overrides = {}) {
+  const { drop = [], ...fields } = overrides;
+  const data = {
+    ...pendingReturn({ returnId }),
+    createdAt: serverTimestamp(),
+    ...fields,
+  };
+  for (const key of drop) delete data[key];
+  return data;
+}
+
 /** The evidence `verifyReturnAndRestoreStock` writes back. */
 function verifiedReturn() {
   return {
-    ...pendingReturn(),
+    ...pendingReturn({ returnId: "ret-2" }),
     status: "verified",
     verified: true,
     verifiedBy: "manager-a",
@@ -65,9 +92,30 @@ function verifiedReturn() {
   };
 }
 
+/** The immutable sale a return must name for the create rule to answer. */
+function saleDocument(saleId) {
+  return {
+    checkoutId: saleId,
+    tenantId: "tenant-a",
+    soldById: "user-a",
+    shiftId: "shift-a",
+    deviceId: DEVICE_A,
+    businessDate: BUSINESS_DATE,
+    receiptNumber: receiptNumber(DEVICE_A, BUSINESS_DATE, 1),
+    receiptSequence: 1,
+    payloadHash: "a".repeat(64),
+    items: [{ productId: "product-1", quantity: 4 }],
+    total: 25,
+    createdAt: Timestamp.fromMillis(1785490000000),
+  };
+}
+
 async function seedReturns() {
   await seedDocuments(testEnvironment, {
     ...activeTenantDocuments({ uid: "user-a", role: "cashier" }),
+    ...openShiftDocuments({ businessDate: BUSINESS_DATE }),
+    "tenants/tenant-a/sales/co-1": saleDocument("co-1"),
+    "tenants/tenant-a/sales/co-2": saleDocument("co-2"),
     ...Object.fromEntries(
       [
         ["user-b", "cashier"],
@@ -88,7 +136,10 @@ async function seedReturns() {
     "tenants/tenant-a/returns/ret-1": pendingReturn(),
     // Recorded by a colleague against the same sale.
     "tenants/tenant-a/returns/ret-2": verifiedReturn(),
-    "tenants/tenant-a/returns/ret-3": pendingReturn({ saleId: "co-2" }),
+    "tenants/tenant-a/returns/ret-3": pendingReturn({
+      returnId: "ret-3",
+      saleId: "co-2",
+    }),
   });
 }
 
@@ -172,18 +223,110 @@ test("verification evidence is server-only for every role", async () => {
     );
     await assertFails(updateDoc(target, { status: "verified" }));
     await assertFails(deleteDoc(target));
-    // A create still cannot pre-declare itself verified or name another actor.
-    await assertFails(
-      setDoc(doc(firestore, "tenants/tenant-a/returns/ret-new"), {
-        ...pendingReturn(),
-        status: "verified",
-        createdBy: uid,
-      }),
+  }
+});
+
+test("an active member records a pending return against any sale", async () => {
+  await seedReturns();
+
+  // Recording changes no stock, so every active member may do it and the
+  // owner/admin/manager-only callable still gates restoration. A customer
+  // returns to whoever is at the till, so `user-b` may reverse `user-a`'s sale.
+  for (const [uid, returnId] of [
+    ["user-a", "rt_own"],
+    ["user-b", "rt_colleague"],
+    ["manager-a", "rt_manager"],
+  ]) {
+    const firestore = authenticatedFirestore(testEnvironment, uid);
+    await assertSucceeds(
+      setDoc(
+        doc(firestore, `tenants/tenant-a/returns/${returnId}`),
+        newReturn(returnId, { createdBy: uid }),
+      ),
     );
+  }
+
+  // The same deterministic ID is an update, which is denied, so a replayed
+  // submit cannot record the reversal twice.
+  const firestore = authenticatedFirestore(testEnvironment, "user-a");
+  await assertFails(
+    setDoc(
+      doc(firestore, "tenants/tenant-a/returns/rt_own"),
+      newReturn("rt_own", { createdBy: "user-a" }),
+    ),
+  );
+});
+
+test("a return must be exactly the frozen create contract", async () => {
+  await seedReturns();
+  const firestore = authenticatedFirestore(testEnvironment, "user-a");
+
+  const refused = {
+    "id-disagrees-with-path": { returnId: "rt_other" },
+    "another-business": { tenantId: "tenant-b" },
+    "forged-actor": { createdBy: "user-b" },
+    "pre-declared-verified": { status: "verified" },
+    "unknown-status": { status: "cancelled" },
+    // The callable is the only writer of every verification field.
+    "smuggled-verified-flag": { verified: true },
+    "smuggled-verifier": { verifiedBy: "manager-a" },
+    "smuggled-restoration": { stockRestored: true, stockRestorationId: "rv_x" },
+    "unknown-field": { refundedCash: 500 },
+    "no-sale": { drop: ["saleId"] },
+    "sale-does-not-exist": { saleId: "co-missing" },
+    "empty-sale-id": { saleId: "" },
+    "client-chosen-instant": { createdAt: Timestamp.fromMillis(1785500000000) },
+    "no-reason": { drop: ["reason"] },
+    "short-reason": { reason: "ab" },
+    "oversized-reason": { reason: "x".repeat(501) },
+    "no-lines": { itemsReturned: [] },
+    "not-a-list": { itemsReturned: "product-1" },
+    "zero-quantity": { itemsReturned: [{ productId: "product-1", quantity: 0 }] },
+    "no-product": { itemsReturned: [{ quantity: 1 }] },
+    "too-many-lines": {
+      itemsReturned: Array.from({ length: 17 }, (_unused, index) => ({
+        productId: `product-${index}`,
+        quantity: 1,
+      })),
+    },
+  };
+
+  for (const [name, overrides] of Object.entries(refused)) {
+    try {
+      await assertFails(
+        setDoc(
+          doc(firestore, "tenants/tenant-a/returns/rt_candidate"),
+          newReturn("rt_candidate", overrides),
+        ),
+      );
+    } catch (error) {
+      throw new Error(`${name} was not denied: ${error.message}`);
+    }
+  }
+});
+
+test("a deactivated or non-member identity records nothing", async () => {
+  await seedReturns();
+  await seedDocuments(testEnvironment, {
+    "users/outsider": {
+      accountType: "tenant_user",
+      globalStatus: "active",
+      membershipCount: 0,
+    },
+    "tenants/tenant-a/staff/user-b": {
+      uid: "user-b",
+      role: "cashier",
+      status: "inactive",
+    },
+  });
+
+  for (const uid of ["outsider", "user-b"]) {
+    const firestore = authenticatedFirestore(testEnvironment, uid);
     await assertFails(
-      setDoc(doc(firestore, "tenants/tenant-a/returns/ret-new"), {
-        ...pendingReturn({ createdBy: "somebody-else" }),
-      }),
+      setDoc(
+        doc(firestore, "tenants/tenant-a/returns/rt_blocked"),
+        newReturn("rt_blocked", { createdBy: uid }),
+      ),
     );
   }
 });

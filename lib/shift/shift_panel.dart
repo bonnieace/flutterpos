@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../returns/return_request.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -22,6 +23,7 @@ final class TenantShiftPanel extends StatefulWidget {
     super.key,
     required this.controllerFactory,
     this.historyReader,
+    this.returnWriter,
   });
 
   final TenantShiftControllerFactory controllerFactory;
@@ -29,6 +31,11 @@ final class TenantShiftPanel extends StatefulWidget {
   /// Supplied by the composition root to reach the read-only shift history.
   /// The route stays unreachable while it is absent.
   final TenantDataReader? historyReader;
+
+  /// Supplied by the composition root and passed through the history and sales
+  /// routes to the returns route. Recording a return stays unavailable while it
+  /// is absent, so every one of those routes remains read-only.
+  final TenantReturnWriter? returnWriter;
 
   @override
   State<TenantShiftPanel> createState() => _TenantShiftPanelState();
@@ -67,7 +74,10 @@ final class _TenantShiftPanelState extends State<TenantShiftPanel> {
       MaterialPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: sessions,
-          child: TenantShiftHistoryScreen(reader: reader),
+          child: TenantShiftHistoryScreen(
+            reader: reader,
+            returnWriter: widget.returnWriter,
+          ),
         ),
       ),
     );

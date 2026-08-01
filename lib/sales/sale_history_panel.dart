@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../returns/return_history_panel.dart';
+import '../returns/return_request.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -59,15 +60,24 @@ final class TenantSaleHistoryScreen extends StatelessWidget {
     super.key,
     required this.reader,
     required this.request,
+    this.returnWriter,
   });
 
   final TenantDataReader reader;
   final TenantSaleHistoryRequest request;
 
+  /// Passed through to the returns route. Recording stays unavailable while it
+  /// is absent, and that route is read-only.
+  final TenantReturnWriter? returnWriter;
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(request.title)),
-    body: TenantSaleHistoryPanel(reader: reader, request: request),
+    body: TenantSaleHistoryPanel(
+      reader: reader,
+      request: request,
+      returnWriter: returnWriter,
+    ),
   );
 }
 
@@ -77,11 +87,15 @@ final class TenantSaleHistoryPanel extends StatefulWidget {
     super.key,
     required this.reader,
     required this.request,
+    this.returnWriter,
     this.pageSize = 20,
   });
 
   final TenantDataReader reader;
   final TenantSaleHistoryRequest request;
+
+  /// Passed through to the returns route only. This surface never writes.
+  final TenantReturnWriter? returnWriter;
   final int pageSize;
 
   @override
@@ -183,10 +197,8 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
           controller: sessions,
           child: TenantSaleReturnsScreen(
             reader: widget.reader,
-            request: TenantSaleReturnsRequest(
-              saleId: sale.id,
-              receiptNumber: sale.receiptNumber,
-            ),
+            request: TenantSaleReturnsRequest(sale: sale),
+            writer: widget.returnWriter,
           ),
         ),
       ),
