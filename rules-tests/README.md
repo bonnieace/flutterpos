@@ -157,6 +157,21 @@ may still request depends on returns other cashiers recorded. Narrowing this to
 the server can never verify. The assertions in `a return stays a shared business
 record for every active member` pin that decision.
 
+For the focused receipt lookup, run
+`npm --prefix rules-tests run test:emulator:receipt-lookup`. It proves that
+every active member finds a sale by its receipt - including a colleague's,
+because a receipt is looked up by whoever is at the till - that an unissued
+receipt answers empty rather than failing, that the same receipt number in
+another business is never reached, and that a non-member or deactivated identity
+looks nothing up.
+
+That suite also proves the query is servable at all: an equality filter on
+`receiptNumber` with the default ascending key order is served by Firestore's
+automatic single-field index, so the lookup needs no composite index. If that
+ever stops being true the emulator rejects the query here, rather than the
+client failing in production - the same class of discovery as the descending
+key-scan rejection above.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

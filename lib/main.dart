@@ -14,6 +14,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'checkout/checkout.dart';
 import 'reporting/reporting.dart';
 import 'returns/returns.dart';
+import 'sales/sales.dart';
 import 'shift/shift.dart';
 
 Future<void> main() async {
@@ -140,6 +141,17 @@ class SpiritPOSApp extends StatelessWidget {
     Future<bool> isOnline() async =>
         await connectivity.checkConnectivity() != ConnectivityResult.none;
     final tenantDataReader = FirebaseTenantDocumentReader();
+    // Recording a pending return changes no stock and is open to every active
+    // member; restoring it is management-only and runs through the callable, so
+    // the two stay a deliberate two-person control. The same actions reach the
+    // returns route from shift history and from a receipt lookup.
+    final returnActions = TenantReturnActions(
+      writer: FirebaseTenantReturnWriter(
+        firestore: FirebaseFirestore.instance,
+        isOnline: isOnline,
+      ),
+      verifyCallable: FirebaseVerifyReturnCallable(),
+    );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -205,18 +217,14 @@ class SpiritPOSApp extends StatelessWidget {
         tenantDataReader: tenantDataReader,
         dailySummaryRoute: (reader) => TenantDailySummaryScreen(reader: reader),
         dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
+        receiptLookupRoute: (reader) => TenantReceiptLookupScreen(
+          reader: reader,
+          returnActions: returnActions,
+        ),
+        receiptLookupRoles: TenantReceiptLookupRepository.allowedRoles,
         shiftPanel: TenantShiftPanel(
           historyReader: tenantDataReader,
-          // Recording a pending return changes no stock and is open to every
-          // active member; restoring it is management-only and runs through the
-          // callable, so the two stay a deliberate two-person control.
-          returnActions: TenantReturnActions(
-            writer: FirebaseTenantReturnWriter(
-              firestore: FirebaseFirestore.instance,
-              isOnline: isOnline,
-            ),
-            verifyCallable: FirebaseVerifyReturnCallable(),
-          ),
+          returnActions: returnActions,
           controllerFactory: (sessions) => TenantShiftController(
             sessionController: sessions,
             localState: tenantShiftState,

@@ -5801,3 +5801,143 @@ reachable without walking through shift history, and nothing else:
    and every other stock mutation, product cost/profit fields,
    `getSalesComparison`, subscription and branding surfaces, deployment, and
    Android build/emulator validation outside that chunk.
+
+---
+
+## Guarded receipt lookup handoff - 2026-08-01
+
+### Completed in this session
+
+A customer's receipt now reaches its sale directly from the tenant-safe landing
+route, so the record-and-verify returns flow no longer requires walking through
+shift history. This chunk adds no checkout screen or payment flow, no receipt
+printing, no stock mutation beyond the verification already landed, and makes no
+legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- **The receipt is parsed by `checkout_receipt.dart`, which owns the frozen
+  format.** `TenantReceiptQuery` reuses `checkoutReceiptNumberPattern` and
+  `validateCheckoutBusinessDate` rather than re-implementing the shape, so the
+  lookup and the issuing device can never disagree about what a receipt is. A
+  malformed receipt - wrong prefix, non-hex device code, a date like `20260231`,
+  or a zero sequence that was never issued - is refused before any read, because
+  it is a typing mistake rather than a query.
+- **The query is an equality filter on `receiptNumber` with the default
+  ascending key order, so it needs no composite index.** Firestore's automatic
+  single-field index serves it, and the focused emulator suite issues the exact
+  client query so a future regression is caught there rather than in production.
+  A descending page would have needed a composite index and bought nothing.
+- **A colliding receipt is reported, not resolved.** The device code is a
+  three-character digest, so two devices can share one and receipt uniqueness is
+  device-local - a limitation the rules README already records. Picking a sale
+  would attribute a return to the wrong till, so up to five matches are listed
+  and the screen says why. A unit test derives a genuinely colliding
+  installation ID rather than contriving one.
+- A returned sale must carry the exact requested receipt. The sale model already
+  re-derives the receipt from the sale's own device, business date, and
+  sequence, so this second comparison proves a transport that ignored the filter
+  cannot answer with a different customer's sale.
+- **Every active member may look a receipt up.** The sale read rule is already
+  business-wide, and a receipt lookup is the counter operation a customer
+  initiates: whoever is at the till must find it. Recording a return from it is
+  open to the same roles; restoring stock stays management-only.
+- Opening the route issues no read at all. Nothing is queried until a receipt is
+  submitted, and one loader is cached per submitted receipt so a rebuild does
+  not re-issue it - the same trap that had to be fixed for the returns panel.
+- `main.dart` now builds one `TenantReturnActions` and shares it between the
+  shift-history route and the receipt lookup, so both reach the same returns
+  surface with the same capabilities.
+
+Deliberately outside this chunk, and important for the next session:
+
+- There is still no way to correct an over-restoration from the app;
+  `adjustStock` remains uncalled.
+- The lookup finds one receipt at a time. There is no browse-by-day sales list,
+  which would need its own filter, index, and read decision.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/main.dart
+lib/sales/receipt_lookup.dart
+lib/sales/receipt_lookup_panel.dart
+lib/sales/sales.dart
+lib/tenancy/tenant_routing_shell.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/receipt-lookup.test.js
+test/sales/receipt_lookup_panel_test.dart
+test/sales/receipt_lookup_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/returns lib/reporting lib/sales lib/shift
+  lib/checkout lib/tenancy test/returns test/reporting test/sales test/shift
+  test/checkout test/tenancy` reported no issues. `lib/main.dart` still carries
+  only the pre-existing `profilesSampleRate is experimental` Sentry warning.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/returns
+  test/reporting test/sales test/shift test/checkout test/tenancy` passed
+  **611/611** relevant Flutter tests, including **18** new tests: 10 receipt
+  query and repository cases and 8 lookup-panel widget cases.
+- `npm --prefix rules-tests run test:emulator:receipt-lookup` passed the focused
+  Firestore-only suite **4/4** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **84/84** (80 existing plus the 4 new receipt-lookup cases).
+- `npm --prefix functions test` passed **166/166** Functions tests. No Functions
+  source changed in any of this session's four chunks.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `firestore.indexes.json` parsed as valid JSON, and `git diff --check` was
+  clean apart from expected Windows line-ending warnings. Android build and
+  Android emulator validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- No test assertion failed. The analyzer and every command in the final sequence
+  were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded stock adjustment surface, which is the correction
+path every restored-stock mistake currently has no answer for, and nothing else:
+
+1. Add a session-bound gateway for `adjustStock` following the
+   `verifyReturnAndRestoreStock` gateway landed this session: derive the tenant
+   from one captured live session and the product from one already-decoded
+   catalog record, create one request ID per confirmation intent, preserve it
+   across a recoverable retry, and strictly decode the
+   `{adjustmentId, productId, previousQuantity, quantity, quantityDelta}`
+   response, re-deriving its arithmetic rather than trusting it.
+2. Offer it to owner/admin/manager only, which is what the callable enforces.
+   Require the typed adjustment `type` and a normalized reason; the server's
+   `assertAdjustmentDirection` binds `restock`/`opening_balance` to a positive
+   delta and `damage`/`waste` to a negative one, so the UI must not offer a
+   combination the server will refuse.
+3. Reach it from the existing read-only catalog route, on one product at a time.
+   Show the current quantity as recorded, never a locally derived one, and state
+   that stock may legitimately be negative.
+4. Add a guarded read of that product's `stock_movements` so an adjustment can
+   be seen in context. That subcollection is currently denied by the tenant
+   catch-all, so this needs a deliberate Rules decision and its own focused
+   emulator suite - remember an absent document must still answer.
+5. Add unit, widget, and focused Rules emulator coverage for a wrong-role
+   attempt, a refused direction, a malformed response, an ambiguous call, a
+   tenant switch during an outstanding call, and a movement page that crosses
+   tenants.
+6. Leave the checkout screen and payment flow, receipt printing, product
+   cost/profit fields, `getSalesComparison`, subscription and branding surfaces,
+   deployment, and Android build/emulator validation outside that chunk.

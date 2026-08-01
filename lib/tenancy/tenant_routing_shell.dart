@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -71,6 +71,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.shiftPanel,
     this.dailySummaryRoute,
     this.dailySummaryRoles = const <TenantRole>[],
+    this.receiptLookupRoute,
+    this.receiptLookupRoles = const <TenantRole>[],
   });
 
   final Stream<String?> authUidChanges;
@@ -120,6 +122,12 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles the reporting route is offered to.
   final List<TenantRole> dailySummaryRoles;
+
+  /// Optional guarded receipt-lookup route, injected for the same reason.
+  final Widget Function(TenantDataReader reader)? receiptLookupRoute;
+
+  /// The roles that route is offered to, decided by the sales domain.
+  final List<TenantRole> receiptLookupRoles;
 
   @override
   State<TenantRoutingShell> createState() => _TenantRoutingShellState();
@@ -599,6 +607,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       shiftPanel: widget.shiftPanel,
       dailySummaryRoute: widget.dailySummaryRoute,
       dailySummaryRoles: widget.dailySummaryRoles,
+      receiptLookupRoute: widget.receiptLookupRoute,
+      receiptLookupRoles: widget.receiptLookupRoles,
     );
   }
 }
@@ -973,6 +983,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.shiftPanel,
     this.dailySummaryRoute,
     this.dailySummaryRoles = const <TenantRole>[],
+    this.receiptLookupRoute,
+    this.receiptLookupRoles = const <TenantRole>[],
   });
 
   final TenantMembership membership;
@@ -995,6 +1007,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the reporting domain.
   final List<TenantRole> dailySummaryRoles;
+
+  /// Optional guarded receipt-lookup route, injected for the same reason.
+  final Widget Function(TenantDataReader reader)? receiptLookupRoute;
+
+  /// The roles that route is offered to, decided by the sales domain.
+  final List<TenantRole> receiptLookupRoles;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -1093,6 +1111,24 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   },
                   icon: const Icon(Icons.insights_outlined),
                   label: const Text('View daily summary'),
+                ),
+              if (receiptLookupRoute != null &&
+                  membership.role.canAccess(receiptLookupRoles))
+                OutlinedButton.icon(
+                  key: const ValueKey('find-receipt'),
+                  onPressed: () {
+                    final controller = TenantSessionScope.of(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TenantSessionScope(
+                          controller: controller,
+                          child: receiptLookupRoute!(reader),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Find a receipt'),
                 ),
               if (membership.role.canAccess(
                 TenantStaffDirectoryScreen.allowedRoles,
