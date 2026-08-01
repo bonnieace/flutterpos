@@ -330,6 +330,7 @@ CheckoutDraftService _service(
 );
 
 CheckoutDraftRequest _request() => CheckoutDraftRequest(
+  tender: CheckoutTender.cash,
   lines: const [CheckoutDraftLineRequest(productId: 'product-a', quantity: 1)],
 );
 

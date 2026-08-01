@@ -64,6 +64,10 @@ function sale(checkoutId, overrides = {}) {
     tenantId: "tenant-a",
     soldById: "cashier",
     payloadHash: `sha256:${checkoutId}`,
+    // A sale must now say which payload contract it was written under, and a
+    // v2 sale must name the tender the cashier selected.
+    payloadSchemaVersion: 2,
+    tender: "cash",
     createdAt: serverTimestamp(),
     businessDate: BUSINESS_DATE,
     shiftId: "shift-a",
@@ -154,6 +158,13 @@ test("sale identity and server-owned envelope fields cannot be spoofed", async (
       sale("client-created-time", { createdAt: Timestamp.fromMillis(0) }),
     ],
   ];
+
+  // A sale carrying no payload schema version cannot be checked against any
+  // contract, so it is refused rather than accepted as an implicit v1.
+  const noVersion = sale("no-schema-version");
+  delete noVersion.payloadSchemaVersion;
+  delete noVersion.tender;
+  invalidSales.push(["no-schema-version", noVersion]);
 
   for (const [documentId, data] of invalidSales) {
     await assertFails(

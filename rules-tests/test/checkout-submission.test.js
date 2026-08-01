@@ -80,12 +80,13 @@ function saleLine(productId, quantity, unitPriceMinor) {
 }
 
 function saleFields(checkoutId, overrides = {}) {
-  return {
+  const fields = {
     checkoutId,
     tenantId: "tenant-a",
     soldById: "cashier",
     payloadHash: PAYLOAD_HASH,
-    payloadSchemaVersion: 1,
+    payloadSchemaVersion: 2,
+    tender: "cash",
     currency: "KES",
     businessDate: "2026-07-31",
     clientCreatedAtMs: 1785484800000,
@@ -103,6 +104,12 @@ function saleFields(checkoutId, overrides = {}) {
     createdAt: serverTimestamp(),
     ...overrides,
   };
+  // An override of `undefined` means the field is absent from the write, which
+  // is how a schema v1 sale omits `tender` entirely.
+  for (const [field, value] of Object.entries(fields)) {
+    if (value === undefined) delete fields[field];
+  }
+  return fields;
 }
 
 /** Builds the exact atomic write set produced by the checkout sync worker. */
@@ -258,6 +265,152 @@ test("a checkout batch cannot spoof the sale identity or envelope", async () => 
       throw new Error(`A denied ${name} batch still changed product stock.`);
     }
   }
+});
+
+test("a schema v2 sale may record any of the three modelled tenders", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+
+  for (const tender of ["cash", "mpesa", "card"]) {
+    await assertSucceeds(
+      checkoutBatch(firestore, {
+        checkoutId: `checkout-${tender}`,
+        decrements: [["tenants/tenant-a/products/product-a", -1]],
+        sale: { tender },
+      }).commit(),
+    );
+  }
+});
+
+// The tender is the cashier's assertion, but an unconstrained string would not
+// even be evidence of that: the `sales` create rule does not freeze its key set
+// with `hasOnly`, so without this check a client could write anything at all.
+test("a schema v2 sale cannot record an unmodelled or missing tender", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+  const refused = [
+    ["missing", { tender: undefined }],
+    ["empty", { tender: "" }],
+    ["capitalised", { tender: "Cash" }],
+    ["padded", { tender: " cash" }],
+    ["unmodelled", { tender: "cheque" }],
+    ["numeric", { tender: 1 }],
+    ["boolean", { tender: true }],
+    ["list", { tender: ["cash"] }],
+    ["map", { tender: { method: "cash" } }],
+    ["null", { tender: null }],
+  ];
+
+  for (const [name, sale] of refused) {
+    await assertFails(
+      checkoutBatch(firestore, {
+        checkoutId: `checkout-tender-${name}`,
+        sale,
+      }).commit(),
+    );
+    if (await saleExists(`checkout-tender-${name}`)) {
+      throw new Error(`A ${name} tender was accepted as a canonical sale.`);
+    }
+    if (await storedQuantity("tenants/tenant-a/products/product-a") !== 2) {
+      throw new Error(`A denied ${name} tender batch still changed stock.`);
+    }
+  }
+});
+
+// The case that decided v1 stays supported: a device holding an unsubmitted v1
+// draft across the upgrade must still commit it. Its payload hash covers the
+// whole payload, so a draft migrated to v2 would no longer match the server
+// sale that an awaiting-confirmation record is waiting on.
+test("an unmigrated schema v1 sale still commits, but cannot carry a tender", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+
+  await assertSucceeds(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-v1",
+      decrements: [["tenants/tenant-a/products/product-a", -1]],
+      sale: { payloadSchemaVersion: 1, tender: undefined },
+    }).commit(),
+  );
+  await assertFails(
+    checkoutBatch(firestore, {
+      checkoutId: "checkout-v1-tender",
+      sale: { payloadSchemaVersion: 1, tender: "cash" },
+    }).commit(),
+  );
+
+  if (await saleExists("checkout-v1-tender")) {
+    throw new Error("A schema v1 sale carrying a tender was accepted.");
+  }
+});
+
+// A sale that does not say which contract it was written under cannot be
+// checked against one, so the version itself is now mandatory.
+test("a sale cannot claim an unsupported or untyped payload schema version", async () => {
+  await seedCheckoutTenant();
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+  const refused = [
+    ["future", { payloadSchemaVersion: 3 }],
+    ["zero", { payloadSchemaVersion: 0 }],
+    ["string", { payloadSchemaVersion: "2" }],
+    ["missing", { payloadSchemaVersion: undefined }],
+  ];
+
+  for (const [name, sale] of refused) {
+    await assertFails(
+      checkoutBatch(firestore, {
+        checkoutId: `checkout-version-${name}`,
+        sale,
+      }).commit(),
+    );
+    if (await saleExists(`checkout-version-${name}`)) {
+      throw new Error(`A ${name} schema version was accepted.`);
+    }
+  }
+});
+
+// Firestore caps one request at 1000 evaluated expressions, and the tender
+// check is new work on the most expensive rule in this file. The v1 budget is
+// already proved by checkout-receipt and shift-sale-attribution; this proves
+// the v2 branch, which evaluates two more terms, on the largest legal sale.
+test("the largest allowed schema v2 sale still evaluates within the Rules budget", async () => {
+  await seedCheckoutTenant();
+  await seedDocuments(
+    testEnvironment,
+    Object.fromEntries(
+      Array.from({ length: 16 }, (_, index) => [
+        `tenants/tenant-a/products/product-${index}`,
+        {
+          name: `Product ${index}`,
+          quantity: 100,
+          updatedAt: Timestamp.fromMillis(0),
+        },
+      ]),
+    ),
+  );
+  const firestore = authenticatedFirestore(testEnvironment, "cashier");
+  const batch = writeBatch(firestore);
+  batch.set(
+    doc(firestore, "tenants/tenant-a/sales/checkout-full"),
+    saleFields("checkout-full", {
+      tender: "card",
+      items: Array.from({ length: 16 }, (_, index) =>
+        saleLine(`product-${index}`, index + 1, 100),
+      ),
+      subtotalMinor: 13600,
+      subtotal: 136,
+      totalMinor: 13600,
+      total: 136,
+    }),
+  );
+  for (let index = 0; index < 16; index += 1) {
+    batch.update(doc(firestore, `tenants/tenant-a/products/product-${index}`), {
+      quantity: increment(-(index + 1)),
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  await assertSucceeds(batch.commit());
 });
 
 test("an inactive canonical cashier cannot submit a checkout batch", async () => {

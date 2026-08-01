@@ -345,6 +345,7 @@ Future<CheckoutOutboxRecord> _save(
       sequence: 7,
     ),
     'receiptSequence': 7,
+    'tender': 'cash',
     'items': <Map<String, Object?>>[
       {
         'productId': 'product-a',

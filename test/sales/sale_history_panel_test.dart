@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout_receipt.dart';
+import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,6 +40,60 @@ void main() {
     );
     // The screen states the recorded figures; it computes no replacement.
     expect(find.textContaining('Actual total'), findsNothing);
+  });
+
+  testWidgets('each sale states how it was paid for, and how sure that is', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot(
+          'co-2',
+          sequence: 2,
+          overrides: <String, Object?>{
+            'payloadSchemaVersion': 2,
+            'tender': 'card',
+          },
+        ),
+        // Recorded before the tender decision; the row must not imply the sale
+        // went unpaid.
+        _snapshot('co-1'),
+      ]);
+
+    await _pump(tester, _controller(), reader, _shiftRequest());
+
+    final paid = tester
+        .widget<Text>(find.byKey(const ValueKey('sale-history-tender-co-2')))
+        .data;
+    expect(paid, contains('Card'));
+    expect(paid, contains(checkoutTenderDisclaimer));
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-tender-co-1')))
+          .data,
+      checkoutTenderUnrecordedMessage,
+    );
+    expect(find.textContaining('unpaid'), findsNothing);
+  });
+
+  testWidgets('a sale naming an unmodelled tender hides the whole page', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot(
+          'co-1',
+          overrides: <String, Object?>{
+            'payloadSchemaVersion': 2,
+            'tender': 'cheque',
+          },
+        ),
+      ]);
+
+    await _pump(tester, _controller(), reader, _shiftRequest());
+
+    expect(find.byKey(const ValueKey('sale-history-failure')), findsOne);
+    expect(find.byKey(const ValueKey('sale-history-entry-co-1')), findsNothing);
   });
 
   testWidgets('a shift closed without a summary says so on its sales page', (

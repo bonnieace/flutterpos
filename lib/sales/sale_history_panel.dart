@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 
+import '../checkout/checkout_tender.dart';
 import '../returns/return_history_panel.dart';
 import '../returns/return_actions.dart';
 import '../tenancy/tenant_repository.dart';
@@ -284,6 +285,10 @@ final class _SaleHistoryContents extends StatelessWidget {
                     '${sale.lines.length == 1 ? 'item' : 'items'}: '
                     '${sale.lines.map((line) => '${line.quantity} x ${line.name}').join(', ')}',
                   ),
+                  Text(
+                    key: ValueKey('sale-history-tender-${sale.id}'),
+                    _tenderLabel(sale),
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     key: ValueKey('sale-history-recorded-at-${sale.id}'),
@@ -344,6 +349,18 @@ String _recordedLabel(TenantShiftSaleHistoryRequest request) {
   }
   return 'Recorded: ${_money(total)} over $count transactions. Counted cash '
       'was ${_money(request.countedCashMinor)}.';
+}
+
+/// States how the sale was paid for without implying the payment was checked.
+///
+/// The disclaimer travels with the value on purpose: a bare "Paid by M-Pesa"
+/// reads as a settled transaction, and nothing in this system has confirmed
+/// that the money arrived.
+String _tenderLabel(TenantSale sale) {
+  final tender = sale.tender;
+  return tender == null
+      ? checkoutTenderUnrecordedMessage
+      : 'Paid by ${tender.label}. $checkoutTenderDisclaimer';
 }
 
 String _recordedAtLabel(TenantSale sale, String soldByLabel) {

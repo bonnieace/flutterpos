@@ -3,9 +3,24 @@ import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_session.dart';
 import 'checkout_outbox.dart';
 import 'checkout_receipt.dart';
+import 'checkout_tender.dart';
 
-/// Frozen schema version of the immutable local checkout payload.
-const int checkoutSalePayloadSchemaVersion = 1;
+/// Schema version every new local checkout payload is built at.
+const int checkoutSalePayloadSchemaVersion = 2;
+
+/// The first schema version that records how the customer paid.
+const int checkoutSaleTenderSchemaVersion = 2;
+
+/// Every payload version this client can still parse and submit.
+///
+/// Version 1 predates the tender decision and stays supported on purpose. The
+/// payload hash is a SHA-256 over the *whole* payload, so migrating a stored
+/// draft to v2 would change its hash - and an outbox record already in
+/// `awaiting_confirmation` was hashed under v1 and is waiting on a server sale
+/// that carries exactly that hash. Rewriting it would break the only evidence
+/// that can settle it. So a v1 payload is never rewritten, never re-versioned,
+/// and submits unchanged; only new drafts are v2.
+const Set<int> supportedCheckoutSalePayloadSchemaVersions = <int>{1, 2};
 
 /// Firestore Rules validate at most sixteen explicit sale lines.
 const int maximumCheckoutSaleLines = 16;
@@ -33,6 +48,7 @@ const Set<String> _allowedPayloadKeys = <String>{
   'deviceId',
   'receiptNumber',
   'receiptSequence',
+  'tender',
   'items',
   'subtotalMinor',
   'discountMinor',
@@ -158,6 +174,8 @@ final class CheckoutSalePayload {
     required this.tenantId,
     required this.checkoutId,
     required this.payloadHash,
+    required this.schemaVersion,
+    required this.tender,
     required this.currency,
     required this.businessDate,
     required this.clientCreatedAtMs,
@@ -237,11 +255,14 @@ final class CheckoutSalePayload {
         throw CheckoutSaleFormatException('Unsupported payload field $key.');
       }
     }
-    if (payload['schemaVersion'] != checkoutSalePayloadSchemaVersion) {
+    final schemaVersion = payload['schemaVersion'];
+    if (schemaVersion is! int ||
+        !supportedCheckoutSalePayloadSchemaVersions.contains(schemaVersion)) {
       throw const CheckoutSaleFormatException(
         'Unsupported checkout payload schema version.',
       );
     }
+    final tender = _requiredTender(payload, schemaVersion);
     if (payload['checkoutId'] != safeCheckoutId) {
       throw const CheckoutSaleFormatException(
         'The payload checkout ID is not the immutable outbox checkout ID.',
@@ -322,6 +343,8 @@ final class CheckoutSalePayload {
       tenantId: session.tenantId,
       checkoutId: safeCheckoutId,
       payloadHash: payloadHash,
+      schemaVersion: schemaVersion,
+      tender: tender,
       currency: currency,
       businessDate: businessDate,
       clientCreatedAtMs: clientCreatedAtMs,
@@ -340,6 +363,19 @@ final class CheckoutSalePayload {
   final String tenantId;
   final String checkoutId;
   final String payloadHash;
+
+  /// The version this exact payload was written at, not the current constant.
+  ///
+  /// The sale document repeats it, so a v1 draft submitted after the upgrade
+  /// describes itself honestly instead of claiming a contract it never met.
+  final int schemaVersion;
+
+  /// How the cashier said the customer paid, absent on a schema v1 payload.
+  ///
+  /// See [CheckoutTender]: this is an assertion made at the till, and no
+  /// payment was authorized, queried, or reconciled anywhere.
+  final CheckoutTender? tender;
+
   final String currency;
   final String businessDate;
   final int clientCreatedAtMs;
@@ -388,7 +424,8 @@ final class CheckoutSalePayload {
     'tenantId': tenantId,
     'soldById': uid,
     'payloadHash': payloadHash,
-    'payloadSchemaVersion': checkoutSalePayloadSchemaVersion,
+    'payloadSchemaVersion': schemaVersion,
+    if (tender != null) 'tender': tender!.wireValue,
     'currency': currency,
     'businessDate': businessDate,
     'clientCreatedAtMs': clientCreatedAtMs,
@@ -406,6 +443,31 @@ final class CheckoutSalePayload {
     'totalMinor': totalMinor,
     'total': _majorUnits(totalMinor),
   };
+}
+
+/// Reads the tender exactly as the payload's own schema version requires it.
+///
+/// A v2 payload must name one of the three modelled methods; anything else -
+/// absent, misspelled, differently cased, or a type that is not a string - is
+/// refused rather than recorded as an unknown payment. A v1 payload must not
+/// carry the key at all: it was hashed without one, and a v1 draft that grew a
+/// tender locally would be a payload nobody agreed to.
+CheckoutTender? _requiredTender(Map<String, Object?> payload, int schemaVersion) {
+  if (schemaVersion < checkoutSaleTenderSchemaVersion) {
+    if (payload.containsKey('tender')) {
+      throw const CheckoutSaleFormatException(
+        'A schema v1 checkout cannot record a tender.',
+      );
+    }
+    return null;
+  }
+  final tender = CheckoutTender.tryParse(payload['tender']);
+  if (tender == null) {
+    throw const CheckoutSaleFormatException(
+      'tender must name one of the recorded payment methods.',
+    );
+  }
+  return tender;
 }
 
 List<CheckoutSaleLine> _parseLines(Object? raw) {

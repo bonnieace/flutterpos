@@ -47,32 +47,42 @@ Integration remains deferred and becomes its own ticket when it is wanted.
 
 That decision unblocks the checkout screen, and it is a **change to a frozen
 contract**, so it is a deliberate versioned ticket rather than a field somebody
-adds in passing. Whoever implements it must handle all five of these together:
+adds in passing. It was implemented as the payload v2 chunk on **2026-08-02**;
+see the handoff at the end of this file. All five hazards are now settled, and
+these are the answers, not open questions:
 
-1. `checkoutSalePayloadSchemaVersion` at `lib/checkout/checkout_sale.dart:8` is
-   `1` and is enforced on parse and again when reading sale history
-   (`lib/sales/sale_history.dart:68`). Adding a tender field makes the payload
-   v2. Decide explicitly whether a v1 payload still parses; a device holding an
-   unsubmitted v1 draft across the upgrade is the case that decides it.
-2. `checkoutPayloadHash` (`lib/checkout/checkout_outbox.dart:175`) is a SHA-256
-   over the canonical JSON of the **whole** payload, so a new field changes
-   every hash. An outbox record already in `awaiting_confirmation` was hashed
-   under v1 and would no longer match the server sale it is waiting on. That is
-   confirmation-safe recovery breaking, and it must be handled rather than
-   discovered.
-3. The `sales` create rule in `firestore.rules` deliberately does **not** freeze
-   its key set with `hasOnly`, unlike `returns`. So a tender field is permitted
-   today without any rules change - which also means it would be entirely
-   unvalidated. A client could write any string. The rule must constrain the
-   tender to the three modelled values, or the field is not evidence of
-   anything.
-4. The receipt format `CT-A7F-20260729-0042` is frozen and proved by a Rules
-   pattern; decide whether the tender appears on the receipt **before** touching
-   that pattern, not after.
-5. Reconciliation's `aggregateSales` reads only totals, so a tender field does
-   not disturb it. A per-tender breakdown - which is the obvious next request
-   from a business - is new work in `functions/src/operations/domain.ts` and is
-   **not** part of recording the tender.
+1. **A v1 payload still parses, and is never rewritten.** The payload contract
+   is `supportedCheckoutSalePayloadSchemaVersions = {1, 2}` in
+   `lib/checkout/checkout_sale.dart`. New drafts are always v2; a v1 draft saved
+   before the upgrade still parses, still submits, and writes a sale carrying
+   `payloadSchemaVersion: 1` and no tender. Version is read from the payload
+   itself, never from the current constant.
+2. **That is exactly why the hash still matches.** `checkoutPayloadHash` covers
+   the whole payload, so migrating a stored draft to v2 would change its hash -
+   and `_parseRecord` re-derives the hash on every read, so an in-place
+   migration would also make every stored record `malformed_record`. Nothing
+   migrates. An `awaiting_confirmation` v1 record therefore still matches the
+   server sale it is waiting on.
+3. **The `sales` create rule now constrains the tender**, through
+   `validSaleTender` in `firestore.rules`: v1 must carry no tender, v2 must name
+   one of `cash`, `mpesa`, `card`. The key set is still not frozen with
+   `hasOnly`. The rule also now **requires** `payloadSchemaVersion` on create,
+   which it previously ignored entirely.
+4. **The tender does not appear in the receipt number, and the frozen pattern
+   was not touched.** `CT-A7F-20260729-0042` is an identity, not a description:
+   it must stay derivable from device, business date, and sequence alone, and it
+   is proved by a Rules regex plus three Dart call sites. When receipt
+   *printing* arrives, the tender belongs in the printed body, which does not
+   exist yet and is a separate chunk.
+5. **Reconciliation was not touched and needs no change.** `aggregateSales`
+   reads only the fields it names. A per-tender breakdown remains new work in
+   `functions/src/operations/domain.ts` and is **not** part of recording the
+   tender.
+
+What remains open is the **write** half: nothing constructs a
+`CheckoutDraftRequest` outside tests, so no cashier can choose a tender until
+the checkout screen exists. The read half is reachable today - sale history and
+receipt lookup both display it.
 
 ### Built, tested, and unreachable
 
@@ -7447,3 +7457,208 @@ Scope one bounded chunk of it - not the whole flow at once - and keep password
 reset, receipt printing, product cost/profit fields, `getSalesComparison`, a
 `platform_audit_logs` surface, subscription and branding surfaces, deployment,
 and Android build/emulator validation outside it.
+
+---
+
+## Checkout tender contract - payload v2 handoff - 2026-08-02
+
+### Completed in this session
+
+The first bounded chunk of the checkout screen work: the **data contract** a
+tender needs, not the UI. A sale can now record how the customer paid, the
+server constrains what that value may be, and the two surfaces that already
+display sales show it. All five hazards from the tender decision near the top of
+this file are settled there rather than left as warnings.
+
+No checkout screen, no payment integration, no receipt printing, and no legacy
+operational POS route became reachable.
+
+Implemented behavior and safety decisions:
+
+- **A v1 payload still parses, and nothing migrates it.** This was the open
+  question the decision asked to resolve, and the case that resolves it is a
+  device holding an unsubmitted draft across the upgrade.
+  `supportedCheckoutSalePayloadSchemaVersions` is `{1, 2}`. Refusing v1 would
+  have stranded that draft; migrating it would have been worse, and the reason
+  is mechanical rather than aesthetic: `checkoutPayloadHash` is taken over the
+  **whole** payload, and `_parseRecord` re-derives it on every single read
+  (`lib/checkout/checkout_outbox.dart:529`). An in-place migration would turn
+  every stored record into `malformed_record` immediately, and would break the
+  hash that an `awaiting_confirmation` record is matched against during
+  confirmation. So a v1 draft is read, submitted, and confirmed unchanged.
+- **The sale reports the version it was actually written under.** `_saleFields`
+  now writes `payload.schemaVersion` instead of the module constant. Had it kept
+  writing the constant, a v1 draft submitted after the upgrade would have
+  claimed `payloadSchemaVersion: 2` while carrying no tender - a document that
+  lies about its own contract, and one the new Rules would reject outright.
+- **New drafts are always v2 and the tender is required, with no default.**
+  `CheckoutDraftRequest.tender` is a required parameter. A default would have
+  produced a value indistinguishable from an observed one; the tender is the one
+  field here that only the person at the till knows.
+- **Firestore Rules constrain the tender, and now require the schema version.**
+  `validSaleTender` accepts a v1 sale carrying no tender, or a v2 sale naming
+  exactly one of `cash`, `mpesa`, `card`. The `sales` create rule still does not
+  freeze its key set with `hasOnly`, so without this check a client could have
+  written any string at all and the field would have been evidence of nothing.
+  The rule also newly **requires** `payloadSchemaVersion`: it previously ignored
+  the field entirely, and a sale that does not say which contract it was written
+  under cannot be checked against one. That tightening broke two pre-existing
+  rules tests whose fixture omitted the field; both were fixtures, not clients -
+  the real submission gateway has always written it.
+- **The Rules expression budget was re-proved for the largest legal sale.**
+  Firestore evaluates at most 1000 expressions per request, `validSaleLines`
+  already spends 16 explicit positions, and the tender check adds work to the
+  most expensive rule in the file. A new rules test commits a **16-line v2**
+  sale and asserts it succeeds. The v1 budget stays proved by the existing
+  `checkout-receipt` and `shift-sale-attribution` maximum-size tests.
+- **The frozen receipt pattern was deliberately not touched.** The decision
+  required choosing before editing it, and the answer is no:
+  `CT-A7F-20260729-0042` is an identity that must stay derivable from device,
+  business date, and sequence alone. It is proved by a Rules regex and three
+  Dart call sites, and a tender embedded in it would become wrong the moment a
+  tender were ever corrected. When receipt *printing* exists, the tender belongs
+  in the printed body - which is a separate chunk and does not exist yet.
+- **An unrecognised tender is refused, never displayed.** Both the payload
+  parser and the `TenantSale` read model apply the same rule Firestore Rules
+  apply on create, so a document that slipped past them - an import, a rule
+  rollback - still fails closed. A v2 sale naming `cheque` fails its whole
+  history page rather than rendering a payment method nothing recognises.
+- **Every surface that shows a tender says it was not verified.**
+  `checkoutTenderDisclaimer` is one shared constant used by both the sale
+  history panel and the receipt lookup panel, so the claim cannot drift between
+  screens. This matters most on receipt lookup, which is where a return starts:
+  a bare "Paid by M-Pesa" there reads as a settled transaction, and nothing in
+  this system has confirmed the money arrived.
+- **A sale with no tender is described as an old record, not an unpaid sale.**
+  `checkoutTenderUnrecordedMessage` states that the sale predates the field. A
+  widget test asserts the word "unpaid" appears nowhere on such a page.
+- Reconciliation was not touched. `aggregateSales` reads only the fields it
+  names, and no Functions source changed in this chunk.
+
+Deliberately outside this chunk, and important for the next session:
+
+- **Nothing constructs a `CheckoutDraftRequest` outside tests.** The write half
+  of the tender is still unreachable and stays unreachable until the checkout
+  screen exists; that is this chunk's boundary, not an oversight. The read half
+  is reachable today.
+- A per-tender sales breakdown is not here and is not implied by recording the
+  tender. It is new work in `functions/src/operations/domain.ts`.
+- Password reset remains blocked on the App Check decision recorded near the top
+  of this file.
+
+Files in this chunk:
+
+```text
+PLAN.md
+firestore.rules
+lib/checkout/checkout.dart
+lib/checkout/checkout_draft.dart
+lib/checkout/checkout_sale.dart
+lib/checkout/checkout_tender.dart
+lib/sales/receipt_lookup_panel.dart
+lib/sales/sale_history.dart
+lib/sales/sale_history_panel.dart
+rules-tests/test/checkout-submission.test.js
+rules-tests/test/stock-and-sales.test.js
+test/checkout/checkout_draft_test.dart
+test/checkout/checkout_sale_test.dart
+test/checkout/checkout_submission_test.dart
+test/checkout/checkout_sync_test.dart
+test/sales/receipt_lookup_panel_test.dart
+test/sales/sale_history_panel_test.dart
+test/sales/sale_history_test.dart
+test/shift/shift_checkout_binder_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **800/800** relevant Flutter tests, up from 789, adding
+  **11** tests: 4 payload-contract cases, 1 draft case, 3 sale read-model cases,
+  and 3 widget cases across the two panels.
+- `npm --prefix rules-tests run test:emulator` passed the Firestore Rules
+  emulator suite **125/125**, up from 120, adding **5** rules tests: the three
+  accepted tenders, ten refused tender shapes, the v1 compatibility pair, four
+  refused schema versions, and the maximum-size v2 budget case.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `npm --prefix functions test` was **deliberately not re-run**.
+  `git diff --stat HEAD -- functions` was empty, so all 166 Functions tests
+  remain byte-identical to this session's green integration environment and no
+  Dart or Rules change can reach them.
+- `git diff --check` was clean; only the expected Windows CRLF advisories for
+  the two `rules-tests` files were printed. Android build and Android emulator
+  validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The full Rules suite failed 2/125 on its first run**, in
+  `rules-tests/test/stock-and-sales.test.js`: "a valid sale uses its
+  deterministic checkout ID and is immutable" and "sale line validation covers
+  all 16 supported positions and rejects overflow". Cause: that file's `sale()`
+  fixture omitted `payloadSchemaVersion` entirely, which the old rule ignored
+  and the new rule requires. This was the tightening working as intended on a
+  fixture, not a regression in a client - `_saleFields` has always written the
+  field. Resolved by giving the fixture `payloadSchemaVersion: 2` and a tender,
+  and by adding an explicit `no-schema-version` denial case so the new
+  requirement is proved rather than merely satisfied.
+- **The emulator log showed "maximum of 1000 expressions" traces**, which is the
+  exact hazard the sale rules comment warns about, so it was investigated rather
+  than accepted. Every occurrence was inside a *denial* trace, where Firestore
+  enumerates reasons for an already-refused batch; no successful commit produced
+  one. It was proved rather than argued: the new maximum-size 16-line v2 sale
+  test commits successfully.
+- No other test assertion failed. The focused two-file Flutter command and the
+  focused checkout-submission emulator command were green on first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+The tender contract is settled, so the next chunk is the **first reachable
+checkout surface**: a guarded cart screen that lets a cashier build a sale and
+save it offline, and nothing beyond that.
+
+1. Add a guarded checkout route reachable only from the current safe tenant
+   shell, reading products from the existing `HiveCheckoutCatalogCache`. It must
+   not make any legacy operational POS screen reachable.
+2. Compose `CheckoutDraftService` in `lib/main.dart` for the first time. Note
+   what it already requires and do not weaken any of it: a `CheckoutShiftBinder`
+   from the guarded shift lifecycle, the receipt counters, the outbox, and the
+   session controller. A checkout with no proven open shift must stay refused.
+3. Let the cashier pick exactly one `CheckoutTender` before the draft can be
+   saved. There must be no default selection and no way to save without one -
+   the payload contract already refuses an absent tender, and the screen must
+   refuse it earlier and more legibly than a format exception.
+4. End the chunk at `saveOffline`. Submission, confirmation, and recovery are
+   already implemented and already automatic; this chunk adds no submit button,
+   no retry, and no cancel.
+5. Map every `CheckoutDraftException` code to a bounded message. There are
+   already sixteen of them - `no_selected_session`, `session_changed`,
+   `checkout_start_unavailable`, `catalog_cache_unavailable`, `unknown_product`,
+   `price_not_representable`, `invalid_discount`, `shift_binding_mismatch`,
+   `shift_business_date_mismatch`, `receipt_sequence_exhausted`,
+   `device_identity_unavailable`, and the rest - and a screen that surfaces a
+   raw code to a cashier has not finished the work.
+6. Add widget coverage for: a saved draft appearing in the existing evidence
+   panel, a refused draft leaving nothing persisted, each distinct refusal
+   message, a tenant switch during an outstanding save, and the no-open-shift
+   refusal.
+7. Leave receipt printing, the printed receipt body, a per-tender reporting
+   breakdown, password reset, product cost/profit fields, `getSalesComparison`,
+   a `platform_audit_logs` surface, subscription and branding surfaces,
+   deployment, and Android build/emulator validation outside that chunk.

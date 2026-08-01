@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
 import '../tenancy/tenant_repository.dart';
@@ -229,6 +230,10 @@ final class _ReceiptLookupResult extends StatelessWidget {
                         .map((line) => '${line.quantity} x ${line.name}')
                         .join(', '),
                   ),
+                  Text(
+                    key: ValueKey('receipt-lookup-tender-${sale.id}'),
+                    _tenderLabel(sale),
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     key: ValueKey('receipt-lookup-recorded-${sale.id}'),
@@ -251,6 +256,18 @@ final class _ReceiptLookupResult extends StatelessWidget {
       ],
     );
   }
+}
+
+/// States how the sale was paid for without implying the payment was checked.
+///
+/// This lookup is the surface a return starts from, so the payment method is
+/// operationally useful here - and precisely for that reason it must not read
+/// as a settled transaction. Nothing has confirmed the money arrived.
+String _tenderLabel(TenantSale sale) {
+  final tender = sale.tender;
+  return tender == null
+      ? checkoutTenderUnrecordedMessage
+      : 'Paid by ${tender.label}. $checkoutTenderDisclaimer';
 }
 
 String _recordedLabel(TenantSale sale) {

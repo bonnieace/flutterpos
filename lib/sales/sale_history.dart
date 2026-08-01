@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../checkout/checkout_receipt.dart';
 import '../checkout/checkout_sale.dart';
+import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
@@ -38,8 +39,8 @@ final class TenantSaleLine {
 
 /// Strict read model for `tenants/{tenantId}/sales/{saleId}`.
 ///
-/// The document must repeat the identity encoded in its own path, describe the
-/// frozen v1 payload contract, and carry a receipt that this exact device,
+/// The document must repeat the identity encoded in its own path, describe a
+/// supported payload contract, and carry a receipt that this exact device,
 /// business date, and sequence would produce. A sale is immutable evidence, so
 /// anything that disagrees with itself is refused rather than displayed.
 final class TenantSale {
@@ -65,9 +66,12 @@ final class TenantSale {
     if (data['checkoutId'] != saleId || data['tenantId'] != tenantId) {
       throw const TenantSaleException('sale_identity_mismatch');
     }
-    if (data['payloadSchemaVersion'] != checkoutSalePayloadSchemaVersion) {
+    final schemaVersion = data['payloadSchemaVersion'];
+    if (schemaVersion is! int ||
+        !supportedCheckoutSalePayloadSchemaVersions.contains(schemaVersion)) {
       throw const TenantSaleException('unsupported_sale_schema');
     }
+    final tender = _tender(data, schemaVersion);
 
     final deviceId = _requiredDeviceId(data);
     final businessDate = _requiredBusinessDate(data);
@@ -116,6 +120,8 @@ final class TenantSale {
       ),
       receiptSequence: receiptSequence,
       payloadHash: _requiredPayloadHash(data),
+      schemaVersion: schemaVersion,
+      tender: tender,
       recordedAt: _optionalInstant(data, 'createdAt'),
       lines: lines,
       subtotalMinor: subtotalMinor,
@@ -135,6 +141,8 @@ final class TenantSale {
     required this.receiptNumber,
     required this.receiptSequence,
     required this.payloadHash,
+    required this.schemaVersion,
+    required this.tender,
     required this.recordedAt,
     required List<TenantSaleLine> lines,
     required this.subtotalMinor,
@@ -152,6 +160,15 @@ final class TenantSale {
   final String receiptNumber;
   final int receiptSequence;
   final String payloadHash;
+
+  /// The payload contract this exact sale was written under.
+  final int schemaVersion;
+
+  /// How the cashier said the customer paid, absent on a schema v1 sale.
+  ///
+  /// It is the cashier's assertion and never a verified payment; surfaces that
+  /// show it must carry [checkoutTenderDisclaimer].
+  final CheckoutTender? tender;
 
   /// The server instant, absent only while a local write is still pending.
   final DateTime? recordedAt;
@@ -363,6 +380,24 @@ String _requiredBusinessDate(Map<String, Object?> data) {
   } on ArgumentError {
     throw const TenantSaleException('invalid_sale_document');
   }
+}
+
+/// Reads the tender exactly as the sale's own payload version requires it.
+///
+/// The rule matches the one Firestore Rules apply on create, so a document that
+/// slipped past them - an import, a rule rollback - is still refused here. A v2
+/// sale that names an unmodelled method is not displayed as an unknown payment:
+/// showing a payment method nothing recognises is worse than refusing the row.
+CheckoutTender? _tender(Map<String, Object?> data, int schemaVersion) {
+  if (schemaVersion < checkoutSaleTenderSchemaVersion) {
+    if (data.containsKey('tender')) {
+      throw const TenantSaleException('invalid_sale_tender');
+    }
+    return null;
+  }
+  final tender = CheckoutTender.tryParse(data['tender']);
+  if (tender == null) throw const TenantSaleException('invalid_sale_tender');
+  return tender;
 }
 
 String _requiredCurrency(Map<String, Object?> data) {

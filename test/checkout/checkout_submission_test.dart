@@ -168,6 +168,7 @@ final Map<String, Object?> _payload = <String, Object?>{
     sequence: 42,
   ),
   'receiptSequence': 42,
+  'tender': 'cash',
   'items': <Map<String, Object?>>[
     {
       'productId': 'product-a',

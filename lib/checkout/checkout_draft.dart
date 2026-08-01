@@ -8,6 +8,7 @@ import 'checkout_catalog_cache.dart';
 import 'checkout_outbox.dart';
 import 'checkout_receipt.dart';
 import 'checkout_sale.dart';
+import 'checkout_tender.dart';
 
 /// Raised when a draft cannot be built from trusted local state.
 ///
@@ -93,17 +94,30 @@ final class CheckoutDraftLineRequest {
 /// The shift is deliberately not a caller input either: it is taken from the
 /// guarded shift lifecycle so a sale cannot name a shift the cashier does not
 /// hold.
+///
+/// The tender *is* a caller input, and is required: it is the one thing here
+/// only the person at the till knows. There is no default, because a guessed
+/// payment method would be indistinguishable from an observed one.
 final class CheckoutDraftRequest {
   CheckoutDraftRequest({
     required List<CheckoutDraftLineRequest> lines,
+    required this.tender,
     this.discountMinor = 0,
   }) : lines = List<CheckoutDraftLineRequest>.unmodifiable(lines);
 
   final List<CheckoutDraftLineRequest> lines;
+
+  /// How the cashier says the customer paid. Nothing verifies the payment.
+  final CheckoutTender tender;
+
   final int discountMinor;
 }
 
-/// Builds one frozen `CheckoutSalePayload` v1 draft from the offline cache.
+/// Builds one frozen `CheckoutSalePayload` v2 draft from the offline cache.
+///
+/// New drafts are always v2 and always record a tender. Version 1 drafts are
+/// never produced here; they only survive as already-persisted evidence, which
+/// [CheckoutSalePayload] still parses and submits unchanged.
 ///
 /// The service writes only through [HiveCheckoutOutbox.saveOffline]; it never
 /// touches Firestore. Draft creation is serialized by one local lock and bound
@@ -255,6 +269,7 @@ final class CheckoutDraftService {
       'deviceId': deviceId,
       'receiptNumber': receiptNumber,
       'receiptSequence': receiptSequence,
+      'tender': request.tender.wireValue,
       'items': items,
       'subtotalMinor': subtotalMinor,
       'discountMinor': request.discountMinor,

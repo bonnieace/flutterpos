@@ -54,6 +54,10 @@ void main() {
     expect(fields['tenantId'], 'tenant-a');
     expect(fields['soldById'], 'user-a');
     expect(fields['payloadHash'], record.payloadHash);
+    expect(payload.schemaVersion, 2);
+    expect(fields['payloadSchemaVersion'], 2);
+    expect(payload.tender, CheckoutTender.cash);
+    expect(fields['tender'], 'cash');
     expect(fields['businessDate'], '2026-07-31');
     expect(payload.shiftId, 'shift-a');
     expect(fields['shiftId'], 'shift-a');
@@ -99,7 +103,10 @@ void main() {
       'checkout': _payload(overrides: {'checkoutId': 'other-checkout'}),
       'tenant': _payload(overrides: {'tenantId': 'tenant-b'}),
       'cashier': _payload(overrides: {'soldById': 'user-b'}),
-      'version': _payload(overrides: {'schemaVersion': 2}),
+      'future-version': _payload(overrides: {'schemaVersion': 3}),
+      'zero-version': _payload(overrides: {'schemaVersion': 0}),
+      'string-version': _payload(overrides: {'schemaVersion': '2'}),
+      'missing-version': _payload(overrides: {'schemaVersion': null}),
       'unknown-field': _payload(overrides: {'note': 'extra'}),
     };
 
@@ -223,6 +230,107 @@ void main() {
         reason: entry.key,
       );
     }
+  });
+
+  test('records each modelled tender exactly as the cashier chose it', () async {
+    for (final tender in CheckoutTender.values) {
+      final record = await _save(
+        outbox,
+        _payload(tender: tender.wireValue),
+        checkoutId: 'checkout-${tender.wireValue}',
+      );
+
+      final payload = CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: session,
+      );
+
+      expect(payload.tender, tender, reason: tender.wireValue);
+      expect(
+        payload.toSubmission().saleFields['tender'],
+        tender.wireValue,
+        reason: tender.wireValue,
+      );
+    }
+  });
+
+  test('refuses a v2 payload whose tender names no modelled method', () async {
+    final cases = <String, Map<String, Object?>>{
+      'missing': _payload(tender: null),
+      'empty': _payload(tender: ''),
+      'null': _payload(overrides: {'tender': null}),
+      'capitalised': _payload(tender: 'Cash'),
+      'padded': _payload(tender: ' cash'),
+      'unmodelled': _payload(tender: 'cheque'),
+      // A tender integration would be a separate ticket, not a value nobody
+      // agreed to arriving through the payload.
+      'bank-transfer': _payload(tender: 'bank_transfer'),
+      'numeric': _payload(overrides: {'tender': 1}),
+      'boolean': _payload(overrides: {'tender': true}),
+      'list': _payload(
+        overrides: {
+          'tender': <Object?>['cash'],
+        },
+      ),
+      'map': _payload(
+        overrides: {
+          'tender': <String, Object?>{'method': 'cash'},
+        },
+      ),
+    };
+
+    for (final entry in cases.entries) {
+      final record = await _save(
+        outbox,
+        entry.value,
+        checkoutId: 'checkout-tender-${entry.key}',
+      );
+      expect(
+        () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
+        _throwsSaleFormat,
+        reason: entry.key,
+      );
+    }
+  });
+
+  // The case that decided whether v1 stays supported: a device that saved a
+  // draft before the upgrade must still be able to submit it. Its hash covers
+  // the whole payload, so a migrated draft would no longer match the server
+  // sale an awaiting-confirmation record is waiting on.
+  test('still parses and submits an unmigrated v1 draft', () async {
+    final record = await _save(
+      outbox,
+      _payload(schemaVersion: 1, tender: null),
+      checkoutId: 'checkout-legacy',
+    );
+
+    final payload = CheckoutSalePayload.fromOutboxRecord(
+      record,
+      session: session,
+    );
+    final fields = payload.toSubmission().saleFields;
+
+    expect(payload.schemaVersion, 1);
+    expect(payload.tender, isNull);
+    // The sale describes the contract it was actually written under.
+    expect(fields['payloadSchemaVersion'], 1);
+    expect(fields.containsKey('tender'), isFalse);
+    // The hash the server sale will be matched against is unchanged.
+    expect(fields['payloadHash'], record.payloadHash);
+    expect(payload.totalMinor, 65000);
+  });
+
+  test('refuses a v1 payload that grew a tender locally', () async {
+    final record = await _save(
+      outbox,
+      _payload(schemaVersion: 1, tender: 'cash'),
+      checkoutId: 'checkout-legacy-tender',
+    );
+
+    expect(
+      () => CheckoutSalePayload.fromOutboxRecord(record, session: session),
+      _throwsSaleFormat,
+    );
   });
 
   test('accepts a receipt derived from this device, date, and sequence', () async {
@@ -351,6 +459,8 @@ Map<String, Object?> _payload({
   int discountMinor = 0,
   String deviceId = _deviceId,
   int sequence = 42,
+  int schemaVersion = checkoutSalePayloadSchemaVersion,
+  Object? tender = 'cash',
   Map<String, Object?> overrides = const <String, Object?>{},
 }) {
   final lines =
@@ -375,7 +485,7 @@ Map<String, Object?> _payload({
     }
   }
   return <String, Object?>{
-    'schemaVersion': checkoutSalePayloadSchemaVersion,
+    'schemaVersion': schemaVersion,
     'checkoutId': 'checkout-a',
     'tenantId': 'tenant-a',
     'soldById': 'user-a',
@@ -390,6 +500,7 @@ Map<String, Object?> _payload({
       sequence: sequence,
     ),
     'receiptSequence': sequence,
+    if (tender != null) 'tender': tender,
     'items': lines,
     'subtotalMinor': subtotalMinor,
     'discountMinor': discountMinor,

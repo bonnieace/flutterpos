@@ -74,6 +74,7 @@ void main() {
       clock,
     ).createDraft(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: const [
           CheckoutDraftLineRequest(productId: 'product-a', quantity: 2),
           CheckoutDraftLineRequest(productId: 'product-b', quantity: 3),
@@ -90,6 +91,9 @@ void main() {
     expect(record.payload['businessDate'], '2026-07-31');
     expect(record.payload['subtotalMinor'], 24100 + 2100);
     expect(record.payload['totalMinor'], 26100);
+    // Every new draft is v2 and names the tender the cashier chose.
+    expect(record.payload['schemaVersion'], checkoutSalePayloadSchemaVersion);
+    expect(record.payload['tender'], 'mpesa');
 
     final payload = CheckoutSalePayload.fromOutboxRecord(
       record,
@@ -103,6 +107,8 @@ void main() {
     expect(payload.lines.first.unitPriceMinor, 12050);
     expect(payload.lines.first.lineTotalMinor, 24100);
     expect(payload.discountMinor, 100);
+    expect(payload.schemaVersion, checkoutSalePayloadSchemaVersion);
+    expect(payload.tender, CheckoutTender.mpesa);
     expect(payload.shiftId, 'shift-a');
     expect(payload.deviceId, await receipts.resolveDeviceId());
     expect(payload.receiptSequence, 1);
@@ -128,6 +134,7 @@ void main() {
 
     final record = await _service(sessions, cache, outbox, receipts, clock).createDraft(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: const [
           CheckoutDraftLineRequest(productId: 'product-b', quantity: 1),
         ],
@@ -139,6 +146,31 @@ void main() {
       record.payload['createdAtMs'],
       DateTime.utc(2026, 7, 31, 22, 30).millisecondsSinceEpoch,
     );
+  });
+
+  test('records every modelled tender and refuses no valid one', () async {
+    final service = _service(sessions, cache, outbox, receipts, clock);
+
+    for (final tender in CheckoutTender.values) {
+      final record = await service.createDraft(
+        CheckoutDraftRequest(
+          tender: tender,
+          lines: const [
+            CheckoutDraftLineRequest(productId: 'product-b', quantity: 1),
+          ],
+        ),
+      );
+
+      expect(record.payload['tender'], tender.wireValue);
+      expect(
+        CheckoutSalePayload.fromOutboxRecord(
+          record,
+          session: sessions.requireSession(),
+        ).tender,
+        tender,
+        reason: tender.wireValue,
+      );
+    }
   });
 
   test('fails closed on untrusted lines, products, and prices', () async {
@@ -155,9 +187,10 @@ void main() {
           ),
         );
 
-    await expectCode(CheckoutDraftRequest(lines: const []), 'invalid_line_count');
+    await expectCode(CheckoutDraftRequest(lines: const [], tender: CheckoutTender.mpesa), 'invalid_line_count');
     await expectCode(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: List<CheckoutDraftLineRequest>.generate(
           maximumCheckoutSaleLines + 1,
           (index) => CheckoutDraftLineRequest(
@@ -170,6 +203,7 @@ void main() {
     );
     await expectCode(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: const [
           CheckoutDraftLineRequest(productId: 'product-a', quantity: 1),
           CheckoutDraftLineRequest(productId: 'product-a', quantity: 1),
@@ -179,6 +213,7 @@ void main() {
     );
     await expectCode(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: const [
           CheckoutDraftLineRequest(productId: 'tenants/x', quantity: 1),
         ],
@@ -187,6 +222,7 @@ void main() {
     );
     await expectCode(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: const [
           CheckoutDraftLineRequest(productId: 'product-a', quantity: 0),
         ],
@@ -195,6 +231,7 @@ void main() {
     );
     await expectCode(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: const [
           CheckoutDraftLineRequest(productId: 'missing', quantity: 1),
         ],
@@ -203,6 +240,7 @@ void main() {
     );
     await expectCode(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: const [
           CheckoutDraftLineRequest(productId: 'product-odd', quantity: 1),
         ],
@@ -211,6 +249,7 @@ void main() {
     );
     await expectCode(
       CheckoutDraftRequest(
+        tender: CheckoutTender.mpesa,
         lines: const [
           CheckoutDraftLineRequest(productId: 'product-b', quantity: 1),
         ],
@@ -589,6 +628,7 @@ void main() {
 }
 
 CheckoutDraftRequest _request({int quantity = 1}) => CheckoutDraftRequest(
+  tender: CheckoutTender.mpesa,
   lines: [CheckoutDraftLineRequest(productId: 'product-b', quantity: quantity)],
 );
 

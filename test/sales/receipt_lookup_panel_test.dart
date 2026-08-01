@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout_receipt.dart';
+import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,6 +58,43 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('receipt-lookup-returns-co-1')));
     await tester.pumpAndSettle();
     expect(find.text('Returns against ${_receipt(42)}'), findsOne);
+  });
+
+  testWidgets('a recorded tender is shown as an unverified assertion', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot('co-1', sequence: 42, tender: CheckoutTender.mpesa),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+    await _lookUp(tester, _receipt(42));
+
+    final label = tester
+        .widget<Text>(find.byKey(const ValueKey('receipt-lookup-tender-co-1')))
+        .data;
+    expect(label, contains('M-Pesa'));
+    // A return starts from this screen, so the payment must never read as
+    // confirmed just because a method is named.
+    expect(label, contains(checkoutTenderDisclaimer));
+  });
+
+  testWidgets('a sale recorded before tenders says so plainly', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot('co-1', sequence: 42),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+    await _lookUp(tester, _receipt(42));
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('receipt-lookup-tender-co-1')))
+          .data,
+      checkoutTenderUnrecordedMessage,
+    );
   });
 
   testWidgets('a receipt with no sale says so', (tester) async {
@@ -214,6 +252,7 @@ TenantQueryDocumentSnapshot _snapshot(
   String saleId, {
   int sequence = 1,
   String tenantId = 'tenant-a',
+  CheckoutTender? tender,
 }) => TenantQueryDocumentSnapshot(
   path: 'tenants/$tenantId/sales/$saleId',
   data: <String, Object?>{
@@ -221,7 +260,8 @@ TenantQueryDocumentSnapshot _snapshot(
     'tenantId': tenantId,
     'soldById': 'user-a',
     'payloadHash': _payloadHash,
-    'payloadSchemaVersion': 1,
+    'payloadSchemaVersion': tender == null ? 1 : 2,
+    if (tender != null) 'tender': tender.wireValue,
     'currency': 'KES',
     'businessDate': _businessDate,
     'shiftId': 'shift-a',

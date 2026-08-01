@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_application_1/checkout/checkout_receipt.dart';
+import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,15 +53,96 @@ void main() {
         ),
         _code('invalid_sale_path'),
       );
+      for (final version in <Object?>[3, 0, '2', 2.0]) {
+        expect(
+          () => TenantSale.fromDocument(
+            path: 'tenants/tenant-a/sales/co-1',
+            data: _sale(
+              overrides: <String, Object?>{'payloadSchemaVersion': version},
+            ),
+          ),
+          _code('unsupported_sale_schema'),
+          reason: '$version',
+        );
+      }
       expect(
         () => TenantSale.fromDocument(
           path: 'tenants/tenant-a/sales/co-1',
+          // The key is removed rather than nulled by the builder.
           data: _sale(
-            overrides: <String, Object?>{'payloadSchemaVersion': 2},
+            overrides: <String, Object?>{'payloadSchemaVersion': null},
           ),
         ),
         _code('unsupported_sale_schema'),
       );
+    });
+
+    test('reads the tender exactly as its own schema version allows', () {
+      final v1 = TenantSale.fromDocument(
+        path: 'tenants/tenant-a/sales/co-1',
+        data: _sale(),
+      );
+      expect(v1.schemaVersion, 1);
+      // A sale recorded before the decision names no payment method. That is a
+      // statement about the record, never about whether the customer paid.
+      expect(v1.tender, isNull);
+
+      for (final tender in CheckoutTender.values) {
+        final sale = TenantSale.fromDocument(
+          path: 'tenants/tenant-a/sales/co-1',
+          data: _sale(
+            overrides: <String, Object?>{
+              'payloadSchemaVersion': 2,
+              'tender': tender.wireValue,
+            },
+          ),
+        );
+        expect(sale.schemaVersion, 2);
+        expect(sale.tender, tender, reason: tender.wireValue);
+      }
+    });
+
+    test('refuses a tender its schema version cannot carry', () {
+      final refused = <String, Map<String, Object?>>{
+        // A v1 sale that grew a tender did not come from this client.
+        'v1-with-tender': <String, Object?>{'tender': 'cash'},
+        'v2-without-tender': <String, Object?>{'payloadSchemaVersion': 2},
+        'v2-empty': <String, Object?>{
+          'payloadSchemaVersion': 2,
+          'tender': '',
+        },
+        'v2-capitalised': <String, Object?>{
+          'payloadSchemaVersion': 2,
+          'tender': 'Cash',
+        },
+        'v2-padded': <String, Object?>{
+          'payloadSchemaVersion': 2,
+          'tender': 'cash ',
+        },
+        'v2-unmodelled': <String, Object?>{
+          'payloadSchemaVersion': 2,
+          'tender': 'cheque',
+        },
+        'v2-numeric': <String, Object?>{
+          'payloadSchemaVersion': 2,
+          'tender': 1,
+        },
+        'v2-map': <String, Object?>{
+          'payloadSchemaVersion': 2,
+          'tender': <String, Object?>{'method': 'cash'},
+        },
+      };
+
+      for (final entry in refused.entries) {
+        expect(
+          () => TenantSale.fromDocument(
+            path: 'tenants/tenant-a/sales/co-1',
+            data: _sale(overrides: entry.value),
+          ),
+          _code('invalid_sale_tender'),
+          reason: entry.key,
+        );
+      }
     });
 
     test('refuses money that does not add up', () {

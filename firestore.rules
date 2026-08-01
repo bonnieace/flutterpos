@@ -97,6 +97,33 @@ service cloud.firestore {
         );
     }
 
+    // How the customer paid, as the cashier asserted it at the till. Nothing
+    // authorizes a card, queries an M-Pesa push, or reconciles a provider
+    // statement anywhere in this system, so the field records a selection and
+    // never a verified payment. It is still constrained to the three modelled
+    // values: the `sales` create rule deliberately does not freeze its key set
+    // with `hasOnly`, so an unconstrained tender would be an arbitrary
+    // client-chosen string and therefore evidence of nothing at all.
+    //
+    // Schema v1 predates the decision and must carry no tender. That version
+    // stays accepted on purpose: a device holding an unsubmitted v1 draft
+    // across the upgrade must still be able to commit it, and its payload hash
+    // covers the whole payload, so rewriting the draft to v2 would break the
+    // hash the server sale is matched against during confirmation. Refusing v1
+    // here would strand exactly that evidence.
+    //
+    // An absent or non-integer `payloadSchemaVersion` now denies the create.
+    // The rule previously ignored the field entirely; a sale that does not say
+    // which contract it was written under cannot be checked against one.
+    function validSaleTender(sale) {
+      return (sale.payloadSchemaVersion == 1 && !('tender' in sale))
+        || (
+          sale.payloadSchemaVersion == 2
+          && 'tender' in sale
+          && sale.tender in ['cash', 'mpesa', 'card']
+        );
+    }
+
     function shiftPath(tenantId, shiftId) {
       return /databases/$(database)/documents/tenants/$(tenantId)/shifts/$(shiftId);
     }
@@ -297,6 +324,7 @@ service cloud.firestore {
           && request.resource.data.payloadHash is string
           && request.resource.data.payloadHash.size() > 0
           && request.resource.data.createdAt == request.time
+          && validSaleTender(request.resource.data)
           && validSaleReceipt(request.resource.data)
           && request.resource.data.shiftId is string
           && request.resource.data.shiftId.size() > 0
