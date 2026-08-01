@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout_receipt.dart';
 import 'package:flutter_application_1/returns/returns.dart';
@@ -390,6 +391,227 @@ void main() {
     expect(writer.intents.last.returnId, writer.intents.first.returnId);
   });
 
+  testWidgets('a manager verifies a pending return and sees what moved', (
+    tester,
+  ) async {
+    final callable = _VerifyCallable(<String, Object?>{
+      'returnId': 'ret-1',
+      'verificationId': 'rv_abc',
+      'restoredProducts': <Object?>[
+        <String, Object?>{
+          'productId': 'product-1',
+          'quantityRestored': 2,
+          'previousQuantity': 10,
+          'quantity': 12,
+        },
+        <String, Object?>{
+          'productId': 'product-2',
+          'quantityRestored': 1,
+          'previousQuantity': 4,
+          'quantity': 5,
+        },
+      ],
+    });
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      reader,
+      verifyCallable: callable,
+    );
+
+    // A confirmation naming the exact units is required first.
+    await tester.tap(find.byKey(const ValueKey('sale-returns-verify-ret-1')));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('adds 2 x Tusker, 1 x product-2 back to stock'),
+      findsOne,
+    );
+    await tester.tap(find.byKey(const ValueKey('sale-returns-cancel-verify')));
+    await tester.pumpAndSettle();
+    expect(callable.payloads, isEmpty);
+
+    await tester.tap(find.byKey(const ValueKey('sale-returns-verify-ret-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-confirm-verify')));
+    await tester.pumpAndSettle();
+
+    expect(callable.payloads.single, <String, Object?>{
+      'tenantId': 'tenant-a',
+      'returnId': 'ret-1',
+      'requestId': 'verify-return-abcdefgh',
+    });
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('sale-returns-notice'))).data,
+      'Restored 3 units across 2 products.',
+    );
+  });
+
+  testWidgets('a cashier is never offered the restore action', (tester) async {
+    final callable = _VerifyCallable(const <String, Object?>{});
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pump(tester, _controller(), reader, verifyCallable: callable);
+
+    expect(find.byKey(const ValueKey('sale-returns-verify-ret-1')), findsNothing);
+    expect(callable.payloads, isEmpty);
+  });
+
+  testWidgets('a verified return is terminal on screen', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _verified('ret-2'),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      reader,
+      verifyCallable: _VerifyCallable(const <String, Object?>{}),
+    );
+
+    expect(find.byKey(const ValueKey('sale-returns-verify-ret-2')), findsNothing);
+    expect(find.byKey(const ValueKey('sale-returns-verified-ret-2')), findsOne);
+  });
+
+  testWidgets('each refusal is reported as its own outcome', (tester) async {
+    final refusals = <List<String>, String>{
+      <String>['failed-precondition', 'This return has already been verified.']:
+          'This return had already been verified, so nothing was restored '
+              'again.',
+      <String>[
+        'failed-precondition',
+        'The return quantity for product product-1 exceeds the immutable sale.',
+      ]: 'This return covers more than the original sale still allows. It '
+          'cannot be verified; record a corrected return instead.',
+      <String>['permission-denied', 'Denied.']:
+          'Only an owner, administrator, or manager may restore stock.',
+    };
+
+    for (final entry in refusals.entries) {
+      final reader = _Reader()
+        ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+          _pending('ret-1'),
+        ]);
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.manager),
+        reader,
+        verifyCallable: _VerifyCallable.failing(
+          FirebaseFunctionsException(
+            code: entry.key.first,
+            message: entry.key.last,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('sale-returns-verify-ret-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('sale-returns-confirm-verify')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('sale-returns-notice')))
+            .data,
+        entry.value,
+        reason: entry.key.first,
+      );
+    }
+  });
+
+  testWidgets('a response naming another return is not believed', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      reader,
+      verifyCallable: _VerifyCallable(<String, Object?>{
+        'returnId': 'ret-9',
+        'verificationId': 'rv_abc',
+        'restoredProducts': <Object?>[
+          <String, Object?>{
+            'productId': 'product-1',
+            'quantityRestored': 2,
+            'previousQuantity': 10,
+            'quantity': 12,
+          },
+        ],
+      }),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('sale-returns-verify-ret-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-confirm-verify')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('sale-returns-notice'))).data,
+      startsWith('The verification response could not be trusted.'),
+    );
+  });
+
+  testWidgets('a tenant switch discards an outstanding verification', (
+    tester,
+  ) async {
+    final controller = _controller(role: TenantRole.manager);
+    final callable = _VerifyCallable.deferred();
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pump(tester, controller, reader, verifyCallable: callable);
+    await tester.tap(find.byKey(const ValueKey('sale-returns-verify-ret-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sale-returns-confirm-verify')));
+    await tester.pump();
+
+    controller.open(
+      uid: 'user-a',
+      membership: _membership('tenant-b', role: TenantRole.manager),
+    );
+    await tester.pump();
+    callable.complete(<String, Object?>{
+      'returnId': 'ret-1',
+      'verificationId': 'rv_abc',
+      'restoredProducts': <Object?>[
+        <String, Object?>{
+          'productId': 'product-1',
+          'quantityRestored': 2,
+          'previousQuantity': 10,
+          'quantity': 12,
+        },
+        <String, Object?>{
+          'productId': 'product-2',
+          'quantityRestored': 1,
+          'previousQuantity': 4,
+          'quantity': 5,
+        },
+      ],
+    });
+    await tester.pumpAndSettle();
+
+    // The previous business's result may never surface in the new session.
+    expect(find.byKey(const ValueKey('sale-returns-notice')), findsNothing);
+  });
+
   testWidgets('an incomplete returns page offers no record form', (
     tester,
   ) async {
@@ -425,6 +647,7 @@ Future<void> _pump(
   int pageSize = 20,
   bool settle = true,
   TenantReturnWriter? writer,
+  VerifyReturnCallable? verifyCallable,
 }) async {
   // The record form adds a text field, so the page carries more than one
   // Scrollable and `scrollUntilVisible` can no longer identify the list. A tall
@@ -442,7 +665,12 @@ Future<void> _pump(
             reader: reader,
             request: _request(),
             pageSize: pageSize,
-            writer: writer,
+            actions: writer == null && verifyCallable == null
+                ? null
+                : TenantReturnActions(
+                    writer: writer,
+                    verifyCallable: verifyCallable,
+                  ),
             requestIdFactory: () => 'return-abcdefgh',
           ),
         ),
@@ -452,6 +680,42 @@ Future<void> _pump(
   if (!settle) return;
   await tester.pump();
   await tester.pump();
+}
+
+/// Records every payload handed to the verification callable.
+final class _VerifyCallable implements VerifyReturnCallable {
+  _VerifyCallable(this._response) : _error = null, _defer = false;
+
+  _VerifyCallable.failing(Object error)
+    : _response = null,
+      _error = error,
+      _defer = false;
+
+  _VerifyCallable.deferred() : _response = null, _error = null, _defer = true;
+
+  final Object? _response;
+  final Object? _error;
+  final bool _defer;
+  final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
+  final List<Completer<Object?>> _pending = <Completer<Object?>>[];
+
+  void complete(Object? response) {
+    if (_pending.isEmpty) return;
+    _pending.removeAt(0).complete(response);
+  }
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) {
+    payloads.add(payload);
+    if (_defer) {
+      final completer = Completer<Object?>();
+      _pending.add(completer);
+      return completer.future;
+    }
+    final error = _error;
+    if (error != null) return Future<Object?>.error(error);
+    return Future<Object?>.value(_response);
+  }
 }
 
 /// Records every intent handed to the write boundary.

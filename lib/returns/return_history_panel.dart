@@ -6,8 +6,10 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import 'return_actions.dart';
 import 'return_history.dart';
 import 'return_request.dart';
+import 'return_verification.dart';
 
 /// What one returns page is scoped to.
 ///
@@ -33,15 +35,15 @@ final class TenantSaleReturnsScreen extends StatelessWidget {
     super.key,
     required this.reader,
     required this.request,
-    this.writer,
+    this.actions,
   });
 
   final TenantDataReader reader;
   final TenantSaleReturnsRequest request;
 
-  /// Supplied by the composition root. Recording stays unavailable while it is
-  /// absent, and the route is read-only.
-  final TenantReturnWriter? writer;
+  /// Supplied by the composition root. Whatever is absent stays unavailable, so
+  /// a route with no actions is exactly the read-only surface it was before.
+  final TenantReturnActions? actions;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -49,7 +51,7 @@ final class TenantSaleReturnsScreen extends StatelessWidget {
     body: TenantSaleReturnsPanel(
       reader: reader,
       request: request,
-      writer: writer,
+      actions: actions,
     ),
   );
 }
@@ -80,17 +82,17 @@ final class TenantSaleReturnsPanel extends StatefulWidget {
     super.key,
     required this.reader,
     required this.request,
-    this.writer,
+    this.actions,
     this.pageSize = 20,
     this.requestIdFactory,
   });
 
   final TenantDataReader reader;
   final TenantSaleReturnsRequest request;
-  final TenantReturnWriter? writer;
+  final TenantReturnActions? actions;
   final int pageSize;
 
-  /// One fresh request ID per confirmation intent.
+  /// One fresh request ID per confirmation or verification intent.
   final String Function()? requestIdFactory;
 
   @override
@@ -155,7 +157,7 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     Map<String, int> quantities,
     String reason,
   ) async {
-    final writer = widget.writer;
+    final writer = widget.actions?.writer;
     if (writer == null || _busy) return;
     final capturedKey = _sessionKey(session);
     setState(() {
@@ -270,18 +272,101 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
         busy: _busy,
         notice: _notice,
         canRecord:
-            widget.writer != null &&
+            widget.actions?.writer != null &&
             session.canAccess(
               allowedRoles: TenantReturnRequestRepository.allowedRoles,
             ),
+        canVerify:
+            widget.actions?.verifyCallable != null &&
+            TenantReturnVerificationGateway.canVerifyInSession(session),
         onNextPage: () => _nextPage(view.page.nextCursor),
         onPreviousPage: _previousPage,
         onRecord: (quantities, reason) =>
             _record(session, view.returnable!, quantities, reason),
+        onVerify: (record) => _verify(session, record),
       ),
     );
   }
+
+  /// Verifies one pending return and restores its stock.
+  ///
+  /// The gateway is bound to this exact session and this exact decoded record,
+  /// so nothing on this screen can name another business or another return.
+  /// After any outcome the page is re-read, so what is shown is the server's own
+  /// verification evidence rather than an optimistic local state.
+  Future<void> _verify(TenantSession session, TenantReturn record) async {
+    final callable = widget.actions?.verifyCallable;
+    if (callable == null || _busy) return;
+    final capturedKey = _sessionKey(session);
+    setState(() {
+      _busy = true;
+      _notice = null;
+    });
+    try {
+      final gateway = TenantReturnVerificationGateway(
+        session: session,
+        target: record,
+        callable: callable,
+        requestIdFactory: widget.requestIdFactory == null
+            ? null
+            : () => 'verify-${widget.requestIdFactory!()}',
+      );
+      final result = await gateway.submit(gateway.createIntent());
+      if (!_stillCurrent(capturedKey)) return;
+      setState(
+        () => _notice =
+            'Restored ${result.restoredUnits} '
+            '${result.restoredUnits == 1 ? 'unit' : 'units'} across '
+            '${result.restoredProducts.length} '
+            '${result.restoredProducts.length == 1 ? 'product' : 'products'}.',
+      );
+      _reload();
+    } on TenantReturnVerificationException catch (error) {
+      if (!_stillCurrent(capturedKey)) return;
+      setState(() => _notice = _verificationNotice(error.failure));
+      // Only an unknown outcome may have restored stock, and only the server
+      // can say. Re-reading is the one safe response; retrying is not.
+      if (error.mayHaveCommitted) _reload();
+    } on FormatException {
+      if (!_stillCurrent(capturedKey)) return;
+      // The call may well have restored stock; only its answer was unusable.
+      setState(
+        () => _notice =
+            'The verification response could not be trusted. Reload this page '
+            'to see what the server recorded.',
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 }
+
+String _verificationNotice(TenantReturnVerificationFailure failure) =>
+    switch (failure) {
+      TenantReturnVerificationFailure.forbidden =>
+        'Only an owner, administrator, or manager may restore stock.',
+      TenantReturnVerificationFailure.notFound =>
+        'This return no longer exists in this business.',
+      TenantReturnVerificationFailure.alreadyVerified =>
+        'This return had already been verified, so nothing was restored again.',
+      TenantReturnVerificationFailure.exceedsSale =>
+        'This return covers more than the original sale still allows. It '
+            'cannot be verified; record a corrected return instead.',
+      TenantReturnVerificationFailure.missingProduct =>
+        'A returned product no longer exists, so its stock cannot be restored.',
+      TenantReturnVerificationFailure.missingSale =>
+        'The original sale is missing, so nothing bounds this restoration.',
+      TenantReturnVerificationFailure.tooManyVerifications =>
+        'This sale has too many prior verifications for automatic '
+            'restoration. It needs manual stock adjustment.',
+      TenantReturnVerificationFailure.refused =>
+        'The return was refused and no stock was restored.',
+      TenantReturnVerificationFailure.ambiguous =>
+        'The result is unknown. This page has been reloaded; check whether the '
+            'return is now verified before trying again.',
+      TenantReturnVerificationFailure.unavailable =>
+        'The server could not be reached, so no stock was restored.',
+    };
 
 String _resultNotice(TenantReturnWriteResult result) =>
     switch (result.kind) {
@@ -318,9 +403,11 @@ final class _SaleReturnsContents extends StatelessWidget {
     required this.busy,
     required this.notice,
     required this.canRecord,
+    required this.canVerify,
     required this.onNextPage,
     required this.onPreviousPage,
     required this.onRecord,
+    required this.onVerify,
   });
 
   final TenantSaleReturnsRequest request;
@@ -330,9 +417,14 @@ final class _SaleReturnsContents extends StatelessWidget {
   final bool busy;
   final String? notice;
   final bool canRecord;
+
+  /// Whether this session may restore stock. The action is offered on a pending
+  /// return only; a verified one is terminal.
+  final bool canVerify;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
   final void Function(Map<String, int> quantities, String reason) onRecord;
+  final ValueChanged<TenantReturn> onVerify;
 
   TenantReturnPage get page => view.page;
 
@@ -463,11 +555,56 @@ final class _SaleReturnsContents extends StatelessWidget {
               'Verified ${_instant(verification.verifiedAt)} by '
               '${_label(verification.verifiedBy)}',
               style: Theme.of(context).textTheme.bodySmall,
+            )
+          else if (canVerify) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton(
+                key: ValueKey('sale-returns-verify-${record.id}'),
+                onPressed: busy
+                    ? null
+                    : () => _confirmVerification(context, record),
+                child: const Text('Verify and restore stock'),
+              ),
             ),
+          ],
         ],
       ),
     ),
   );
+
+  /// Names the exact products and units whose stock will move before anything
+  /// is restored. Restoration is not reversible through this app.
+  Future<void> _confirmVerification(
+    BuildContext context,
+    TenantReturn record,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restore this stock?'),
+        content: Text(
+          'This verifies the return and adds '
+          '${record.lines.map(_lineLabel).join(', ')} back to stock. It '
+          'cannot be undone from this app.',
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('sale-returns-cancel-verify'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('sale-returns-confirm-verify'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Verify and restore'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) onVerify(record);
+  }
 
   String _label(String uid) =>
       tenantStaffLabel(uid, names: view.names, selfUid: selfUid);

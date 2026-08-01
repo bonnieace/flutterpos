@@ -5668,3 +5668,136 @@ vertical, and nothing else:
 6. Leave the checkout screen and payment flow, receipt printing, product
    cost/profit fields, `getSalesComparison`, subscription and branding surfaces,
    deployment, and Android build/emulator validation outside that chunk.
+
+---
+
+## Guarded return verification handoff - 2026-08-01
+
+### Completed in this session
+
+The returns vertical is closed: a pending return can now be verified, which is
+the only path in the app that increases stock. This chunk adds no checkout
+screen or payment flow, no receipt printing, no `getSalesComparison` call, and
+makes no legacy operational POS route reachable.
+
+Implemented behavior and safety decisions:
+
+- `TenantReturnVerificationGateway` follows the established callable-gateway
+  pattern: the tenant comes from one captured live session and the return from
+  one already-decoded canonical record, so nothing on the screen can name either.
+  It is owner/admin/manager-only, which is exactly what the callable enforces.
+- **One intent keeps one request ID across a retry**, so the server's own
+  idempotency record settles a repeated attempt rather than restoring twice.
+- **A verified return is terminal.** `canVerify` refuses it before any call, and
+  the action is never rendered for it.
+- **The response is reconciled against the record, not merely parsed.** It must
+  name that return, restore exactly the products and units the return itself
+  records - no extra product, no missing one, no different quantity - and its own
+  `previousQuantity + quantityRestored == quantity` arithmetic is re-derived. A
+  response that does not add up cannot describe a stock movement that happened,
+  and this is the screen that states what moved. A negative `previousQuantity` is
+  accepted: checkout may legitimately drive stock negative.
+- **Each server refusal is a distinct, actionable outcome.** The code decides;
+  `failed-precondition` covers several server conditions, so those are separated
+  by the exact wording `functions/src/operations/returns.ts` raises. If that
+  wording ever changes the case degrades to a truthful generic refusal - the
+  classification only ever words a message, it never decides whether to retry.
+- **Only an unknown outcome may have committed.** `mayHaveCommitted` is true for
+  exactly one failure, and the panel responds to it by reloading rather than
+  retrying. An unusable response is treated the same way, because the call may
+  well have restored stock even when its answer could not be trusted.
+- After success the page is re-read, so what is shown is the server's own
+  verification evidence rather than optimistic local state.
+- The confirmation names the exact products and units whose stock will move, and
+  says it cannot be undone from this app.
+- The two threaded capabilities were folded into one injected
+  `TenantReturnActions`. Whatever is absent stays unavailable, so a route with no
+  actions is exactly the read-only surface it was two chunks ago.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Restoration cannot be reversed from the app. Correcting an over-restoration
+  needs `adjustStock`, which no surface calls yet.
+- The returns route is still reachable only through shift history to sale
+  history. No "find a receipt" entry point exists.
+- No Firestore Rules change was needed: verification writes are server-only and
+  already denied to every client, which the existing suite proves.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+lib/main.dart
+lib/returns/return_actions.dart
+lib/returns/return_history_panel.dart
+lib/returns/return_verification.dart
+lib/returns/returns.dart
+lib/sales/sale_history_panel.dart
+lib/shift/shift_history_panel.dart
+lib/shift/shift_panel.dart
+test/returns/return_history_panel_test.dart
+test/returns/return_verification_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/returns lib/reporting lib/sales lib/shift
+  lib/checkout lib/tenancy test/returns test/reporting test/sales test/shift
+  test/checkout test/tenancy` reported no issues.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/returns
+  test/reporting test/sales test/shift test/checkout test/tenancy` passed
+  **593/593** relevant Flutter tests, including **16** new tests: 10 gateway and
+  response-decoding cases and 6 verification-widget cases.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **80/80**, unchanged: verification writes are server-only and the
+  existing returns cases already prove no client may make them.
+- `npm --prefix functions test` passed **166/166** Functions tests. No Functions
+  source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean apart from expected Windows line-ending warnings.
+  Android build and Android emulator validation were intentionally skipped.
+
+Meaningful failures and their resolutions:
+
+- No test assertion failed. The analyzer and every command in the final sequence
+  were green on their first execution.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded receipt lookup that makes the returns vertical
+reachable without walking through shift history, and nothing else:
+
+1. Add a bounded, guarded lookup from a receipt number to its sale. The receipt
+   encodes the device code, the business date, and the sequence, and
+   `checkout_receipt.dart` already owns that format - parse with it rather than
+   with new string handling, and refuse a malformed receipt before any read.
+2. Decide how the sale is found. `receiptNumber` is not indexed and the sale
+   document ID is the checkout ID, not the receipt, so this needs either a new
+   equality filter plus index or a deliberate narrowing (for example
+   `businessDate` plus `soldById`). Confirm what `firestore.indexes.json` and
+   the sale read rule already allow before designing the query; remember a
+   descending page must carry at least one equality filter.
+3. Reach it from the tenant-safe landing route behind `TenantRouteGuard`,
+   deciding and recording which roles may look up a receipt they did not issue.
+   The sale read rule is already business-wide; the screen decision is separate.
+4. From a found sale, open the existing sale detail and returns routes, so the
+   record/verify flow this session built is reachable from a customer's receipt.
+5. Add unit, widget, and focused Rules emulator coverage for a malformed
+   receipt, a receipt with no matching sale, a receipt matching a sale in
+   another business, a wrong-role lookup, and a tenant switch during a lookup.
+6. Leave the checkout screen and payment flow, receipt printing, `adjustStock`
+   and every other stock mutation, product cost/profit fields,
+   `getSalesComparison`, subscription and branding surfaces, deployment, and
+   Android build/emulator validation outside that chunk.

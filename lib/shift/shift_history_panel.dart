@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-import '../returns/return_request.dart';
+import '../returns/return_actions.dart';
 import '../sales/sale_history.dart';
 import '../sales/sale_history_panel.dart';
 import '../tenancy/tenant_repository.dart';
@@ -15,19 +15,19 @@ final class TenantShiftHistoryScreen extends StatelessWidget {
   const TenantShiftHistoryScreen({
     super.key,
     required this.reader,
-    this.returnWriter,
+    this.returnActions,
   });
 
   final TenantDataReader reader;
 
   /// Passed through to the sales and returns routes. Recording a return stays
   /// unavailable while it is absent.
-  final TenantReturnWriter? returnWriter;
+  final TenantReturnActions? returnActions;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Shift history')),
-    body: TenantShiftHistoryPanel(reader: reader, returnWriter: returnWriter),
+    body: TenantShiftHistoryPanel(reader: reader, returnActions: returnActions),
   );
 }
 
@@ -41,14 +41,14 @@ final class TenantShiftHistoryPanel extends StatefulWidget {
   const TenantShiftHistoryPanel({
     super.key,
     required this.reader,
-    this.returnWriter,
+    this.returnActions,
     this.pageSize = 20,
   });
 
   final TenantDataReader reader;
 
   /// Passed through to the sales route only. This surface never writes.
-  final TenantReturnWriter? returnWriter;
+  final TenantReturnActions? returnActions;
   final int pageSize;
 
   @override
@@ -153,7 +153,7 @@ final class _TenantShiftHistoryPanelState
           child: TenantSaleHistoryScreen(
             reader: widget.reader,
             request: request,
-            returnWriter: widget.returnWriter,
+            returnActions: widget.returnActions,
           ),
         ),
       ),

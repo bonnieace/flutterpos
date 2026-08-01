@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../returns/return_history_panel.dart';
-import '../returns/return_request.dart';
+import '../returns/return_actions.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -60,7 +60,7 @@ final class TenantSaleHistoryScreen extends StatelessWidget {
     super.key,
     required this.reader,
     required this.request,
-    this.returnWriter,
+    this.returnActions,
   });
 
   final TenantDataReader reader;
@@ -68,7 +68,7 @@ final class TenantSaleHistoryScreen extends StatelessWidget {
 
   /// Passed through to the returns route. Recording stays unavailable while it
   /// is absent, and that route is read-only.
-  final TenantReturnWriter? returnWriter;
+  final TenantReturnActions? returnActions;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -76,7 +76,7 @@ final class TenantSaleHistoryScreen extends StatelessWidget {
     body: TenantSaleHistoryPanel(
       reader: reader,
       request: request,
-      returnWriter: returnWriter,
+      returnActions: returnActions,
     ),
   );
 }
@@ -87,7 +87,7 @@ final class TenantSaleHistoryPanel extends StatefulWidget {
     super.key,
     required this.reader,
     required this.request,
-    this.returnWriter,
+    this.returnActions,
     this.pageSize = 20,
   });
 
@@ -95,7 +95,7 @@ final class TenantSaleHistoryPanel extends StatefulWidget {
   final TenantSaleHistoryRequest request;
 
   /// Passed through to the returns route only. This surface never writes.
-  final TenantReturnWriter? returnWriter;
+  final TenantReturnActions? returnActions;
   final int pageSize;
 
   @override
@@ -198,7 +198,7 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
           child: TenantSaleReturnsScreen(
             reader: widget.reader,
             request: TenantSaleReturnsRequest(sale: sale),
-            writer: widget.returnWriter,
+            actions: widget.returnActions,
           ),
         ),
       ),

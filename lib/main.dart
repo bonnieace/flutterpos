@@ -207,11 +207,15 @@ class SpiritPOSApp extends StatelessWidget {
         dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
         shiftPanel: TenantShiftPanel(
           historyReader: tenantDataReader,
-          // Recording a pending return changes no stock; restoration stays in
-          // the owner/admin/manager-only verification callable.
-          returnWriter: FirebaseTenantReturnWriter(
-            firestore: FirebaseFirestore.instance,
-            isOnline: isOnline,
+          // Recording a pending return changes no stock and is open to every
+          // active member; restoring it is management-only and runs through the
+          // callable, so the two stay a deliberate two-person control.
+          returnActions: TenantReturnActions(
+            writer: FirebaseTenantReturnWriter(
+              firestore: FirebaseFirestore.instance,
+              isOnline: isOnline,
+            ),
+            verifyCallable: FirebaseVerifyReturnCallable(),
           ),
           controllerFactory: (sessions) => TenantShiftController(
             sessionController: sessions,
