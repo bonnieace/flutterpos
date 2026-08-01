@@ -26,6 +26,104 @@ Final decisions:
 - Hive provides cross-platform offline checkout and controls Firestore submission.
 - Architecture changes after this baseline become separate implementation tickets.
 
+## Standing decisions and unreachable capabilities
+
+Added 2026-08-01 after an audit of the frozen spec against what is actually
+reachable in the app. The per-chunk handovers below track what each **frontend**
+chunk deliberately skipped; nothing tracked server capabilities that shipped
+without a client, which is how the first item here went unnoticed for roughly
+thirty sessions. Keep this section current: a capability that is built, tested,
+and unreachable is not done.
+
+### Decided: a sale records how it was paid for, chosen manually
+
+Resolved 2026-08-01 by the product owner. The checkout flow lets the cashier
+select the tender at the point of sale - **cash, M-Pesa, or card** - and records
+it on the sale. No payment *integration* is in scope: nothing authorizes a card,
+queries an M-Pesa STK push, or reconciles a provider statement. The recorded
+tender is the cashier's assertion about how the customer paid, and the surfaces
+that display it must say so rather than implying the payment was verified.
+Integration remains deferred and becomes its own ticket when it is wanted.
+
+That decision unblocks the checkout screen, and it is a **change to a frozen
+contract**, so it is a deliberate versioned ticket rather than a field somebody
+adds in passing. Whoever implements it must handle all five of these together:
+
+1. `checkoutSalePayloadSchemaVersion` at `lib/checkout/checkout_sale.dart:8` is
+   `1` and is enforced on parse and again when reading sale history
+   (`lib/sales/sale_history.dart:68`). Adding a tender field makes the payload
+   v2. Decide explicitly whether a v1 payload still parses; a device holding an
+   unsubmitted v1 draft across the upgrade is the case that decides it.
+2. `checkoutPayloadHash` (`lib/checkout/checkout_outbox.dart:175`) is a SHA-256
+   over the canonical JSON of the **whole** payload, so a new field changes
+   every hash. An outbox record already in `awaiting_confirmation` was hashed
+   under v1 and would no longer match the server sale it is waiting on. That is
+   confirmation-safe recovery breaking, and it must be handled rather than
+   discovered.
+3. The `sales` create rule in `firestore.rules` deliberately does **not** freeze
+   its key set with `hasOnly`, unlike `returns`. So a tender field is permitted
+   today without any rules change - which also means it would be entirely
+   unvalidated. A client could write any string. The rule must constrain the
+   tender to the three modelled values, or the field is not evidence of
+   anything.
+4. The receipt format `CT-A7F-20260729-0042` is frozen and proved by a Rules
+   pattern; decide whether the tender appears on the receipt **before** touching
+   that pattern, not after.
+5. Reconciliation's `aggregateSales` reads only totals, so a tender field does
+   not disturb it. A per-tender breakdown - which is the obvious next request
+   from a business - is new work in `functions/src/operations/domain.ts` and is
+   **not** part of recording the tender.
+
+### Built, tested, and unreachable
+
+Every row is server-side complete with passing tests and **no client entry
+point**. The first three were never listed as deferred anywhere; they were
+dropped, not postponed.
+
+| Capability | State | Deferred on purpose? |
+| --- | --- | --- |
+| `sendAccountVerification` | No caller in `lib/`. See below. | **No - undeclared** |
+| `requestPasswordReset` | No caller in `lib/`. See below. | **No - undeclared** |
+| `getMyEmailDeliveryStatus` | No caller in `lib/`; named for a user-facing read. | **No - undeclared** |
+| `getSalesComparison` | No caller; excluded by name in ~14 consecutive chunks. | Yes, never revisited |
+| `requestTenantReconciliation` | No caller. The status surface added 2026-08-01 reads runs but cannot request one. | Yes |
+| Subscription | Rules exist and `TenantPaths.currentSubscription` exists; **no repository reads it at all**. Spec line 14 names subscription as a per-business concern. | Yes, never revisited |
+| Product cost / profit | `profit` is parsed at `lib/reporting/daily_metrics.dart:64` and deliberately never displayed. | Yes |
+
+**The email gap is a user-facing lockout, and it is the most urgent item in this
+file.** `emailVerified` is consumed as a gate in two places - a user cannot
+request a business (`lib/tenancy/tenant_request.dart:68`) and cannot accept a
+visible invitation (`lib/tenancy/tenant_visible_invitation_acceptance.dart:65`) -
+while nothing in the app can trigger the verification email. There is no direct
+Firebase fallback either: `sendPasswordResetEmail` and `sendEmailVerification`
+appear nowhere in `lib/`, and `lib/login_screen.dart` offers only
+`signInWithEmailAndPassword`. So an unverified identity is permanently gated and
+a forgotten password is a lockout with no recovery path. Rollout step 7 and the
+first implementation handoff both record this as implemented, which is true of
+the server only: the ten test files under `functions/src/email/` cover HMAC
+recipient binding, enumeration resistance, suppression, and Brevo webhooks, and
+none of it is reachable.
+
+Recommended order for the next sessions: the email lockout first, because it
+needs no new architecture decision and the server contract is already frozen and
+proved; then the checkout screen and the tender decision above; then the smaller
+unreachable rows.
+
+### Checked and found sound
+
+Recorded so the audit is not repeated. These looked like gaps and are not:
+
+- The "Required tests" list below is genuinely honoured, including two cashiers
+  on one device, counters independent per device/tenant/date, encrypted restart,
+  Hive box reopen, mirror repair, and suppression/complaint/webhook coverage.
+- The cashier cross-tenant shift restriction is implemented as
+  `_otherTenantShiftOpen` in `lib/shift/shift_controller.dart:461`, despite
+  appearing in several early exclusion lists.
+- App Check sets `enforceAppCheck: true` on the public password-reset endpoint
+  only, which matches "validated platforms only" plus the Windows caveat.
+- `lib/main copy.dart` is a 48-line stray file in `lib/` and should be deleted;
+  it is noted here only so nobody mistakes it for a live entry point.
+
 ## Identity, Tenancy, and Public Interfaces
 
 ### Environments
@@ -6991,6 +7089,15 @@ material_color_utilities, meta, test_api, and the Dart SDK constraint
 ```
 
 ### Next bounded chunk
+
+**Read "Standing decisions and unreachable capabilities" near the top of this
+file first.** It was added after this chunk was committed, and it recommends a
+different order: the account-verification and password-reset lockout is a
+user-facing dead end and should come before the anomaly surface below. The
+payment question is also resolved there - a sale records a manually chosen cash,
+M-Pesa, or card tender, with integration deferred - which unblocks the checkout
+screen. The chunk below stays specified and correct; it is no longer
+automatically next.
 
 Implement only the guarded reconciliation anomaly surface - the detail behind
 the counts this session's runs report - and nothing else:
