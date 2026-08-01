@@ -129,7 +129,33 @@ final class CheckoutDraftRequest {
 /// Every draft is attributed to the canonical open shift supplied by
 /// [CheckoutShiftBinder]. The binder is required: a checkout with no proven
 /// open shift is refused rather than recorded as an unreconcilable sale.
-final class CheckoutDraftService {
+/// What a checkout surface learns once a draft is durable.
+///
+/// Deliberately not the outbox record: a screen needs the receipt to hand the
+/// customer and nothing else. Keeping the record out of the UI means no surface
+/// can read a lease, an attempt count, or a payload hash, and no surface can be
+/// tempted to act on a state the sync and recovery workers own.
+final class CheckoutSavedDraft {
+  const CheckoutSavedDraft({required this.checkoutId, required this.receiptNumber});
+
+  /// The immutable checkout identity the sale will be written under.
+  final String checkoutId;
+
+  /// The customer-facing receipt, absent only if the payload somehow lacks one.
+  final String? receiptNumber;
+}
+
+/// The single action a checkout surface may take: save one offline draft.
+///
+/// A cart depends on this rather than on [CheckoutDraftService] itself, so the
+/// screen cannot reach the session controller, the outbox, or the receipt
+/// counters the service composes - and cannot move a checkout through any state
+/// the sync and recovery workers own.
+abstract interface class CheckoutDraftSink {
+  Future<CheckoutSavedDraft> saveDraft(CheckoutDraftRequest request);
+}
+
+final class CheckoutDraftService implements CheckoutDraftSink {
   CheckoutDraftService({
     required TenantSessionController sessionController,
     required HiveCheckoutCatalogCache cache,
@@ -163,6 +189,17 @@ final class CheckoutDraftService {
   /// The session is captured when the draft is requested, so a checkout queued
   /// behind another draft can never be persisted for a tenant or epoch the
   /// device has already left.
+  /// Saves one draft and reports only what a surface may know about it.
+  @override
+  Future<CheckoutSavedDraft> saveDraft(CheckoutDraftRequest request) async {
+    final record = await createDraft(request);
+    final receiptNumber = record.payload['receiptNumber'];
+    return CheckoutSavedDraft(
+      checkoutId: record.checkoutId,
+      receiptNumber: receiptNumber is String ? receiptNumber : null,
+    );
+  }
+
   Future<CheckoutOutboxRecord> createDraft(CheckoutDraftRequest request) {
     final captured = _sessionController.session;
     final previous = _tail;

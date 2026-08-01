@@ -45,6 +45,29 @@ final class CheckoutCatalogSnapshot {
          for (final category in categories) category.id: category,
        };
 
+  /// Test and composition boundary for a snapshot that did not come from Hive.
+  ///
+  /// The entries still pass through the same strict [TenantProduct] and
+  /// [TenantCategory] read models, so this widens who may build a snapshot
+  /// without widening what a snapshot may contain.
+  factory CheckoutCatalogSnapshot.forTesting({
+    required String uid,
+    required String tenantId,
+    required TenantCheckoutConfiguration configuration,
+    List<TenantCategory> categories = const <TenantCategory>[],
+    List<TenantProduct> products = const <TenantProduct>[],
+    DateTime? refreshedAt,
+    bool complete = true,
+  }) => CheckoutCatalogSnapshot._(
+    uid: uid,
+    tenantId: tenantId,
+    refreshedAt: refreshedAt ?? DateTime.utc(2026, 7, 31),
+    complete: complete,
+    configuration: configuration,
+    categories: categories,
+    products: products,
+  );
+
   final String uid;
   final String tenantId;
   final DateTime refreshedAt;
@@ -74,7 +97,19 @@ final class CheckoutCatalogSnapshot {
 /// The cache is derived data, never authorization. A malformed or foreign
 /// record is reported as a miss so a draft fails closed instead of trusting
 /// unvalidated local state.
-final class HiveCheckoutCatalogCache {
+/// The narrow read the checkout cart needs from the offline catalog.
+///
+/// The cart depends on this rather than on the encrypted box, so a surface that
+/// only prices a sale cannot reach the cache's write, refresh, or eviction
+/// behavior - and so it can be exercised without real disk I/O.
+abstract interface class CheckoutCatalogSource {
+  Future<CheckoutCatalogSnapshot?> read({
+    required String uid,
+    required String tenantId,
+  });
+}
+
+final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
   HiveCheckoutCatalogCache._(this._box, this._clock);
 
   static const boxName = 'checkout-catalog-cache-v1';
@@ -116,6 +151,7 @@ final class HiveCheckoutCatalogCache {
   ///
   /// A stored record that no longer parses through the strict read models, or
   /// that names another UID, tenant, or document path, is treated as a miss.
+  @override
   Future<CheckoutCatalogSnapshot?> read({
     required String uid,
     required String tenantId,
