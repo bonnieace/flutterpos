@@ -473,6 +473,43 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // The server's own record of every reconciliation run queued for this
+      // business, and of whether each business day's totals are current.
+      //
+      // Both are read by the same owner/admin/manager set that reads
+      // `daily_metrics`, and for the same reason: this is the explanation of
+      // business-wide revenue, so whoever may not see the figure may not see
+      // why it is what it is either. It is deliberately wider than
+      // `audit_logs`, which is owner/admin - this is reporting rather than
+      // governance, and it names no staff member other than the one who
+      // requested a manual run.
+      //
+      // `reconciliation_dirty_days` is the one authority on whether a day's
+      // published totals are current, and its document ID is the business date
+      // itself, so a day is read by exact path. `reconciliation_jobs` carries
+      // the work: a client lists the runs of one day with a `localDate ==`
+      // filter, which is served by the automatic single-field index.
+      //
+      // Neither role check touches a document field, so a business date the
+      // server has never seen - the normal state of a day with no sales - and
+      // a business that has never been reconciled both still answer instead of
+      // raising an evaluation error.
+      //
+      // Writing stays server-only in both. A client that could write here
+      // could claim a day was regenerated when it was not, mark a day clean so
+      // its sales were never aggregated, or clear the failure record of a run
+      // that never succeeded. Reconciliation is requested through the callable,
+      // which enforces its own roles and idempotency, never by writing a job.
+      match /reconciliation_jobs/{jobId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
+      match /reconciliation_dirty_days/{businessDate} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
       // The whole business's event trail: every tenant request, lifecycle
       // change, staff invitation, acceptance, cancellation, role or status
       // change, owner recovery, administrative alert, stock correction,

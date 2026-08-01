@@ -6799,3 +6799,231 @@ process whose outcome the app cannot see - and nothing else:
    `platform_audit_logs` surface, any business-wide date-range or product filter
    on the movement feed, subscription and branding surfaces, deployment, and
    Android build/emulator validation outside that chunk.
+
+---
+
+## Guarded reconciliation status surface handoff - 2026-08-01
+
+### Completed in this session
+
+The daily summary already said whether a day was reconciled. Each day now opens
+a management-only page that says **why**: the server's own per-day verdict, and
+a bounded page of the reconciliation runs behind it. This chunk adds no checkout
+screen or payment flow, no receipt printing, no product cost or profit surface,
+no `getSalesComparison`, no per-event audit payload detail, no
+`platform_audit_logs` surface, and makes no legacy operational POS route
+reachable.
+
+Implemented behavior and safety decisions:
+
+- **The canonical collection was confirmed against the source before anything
+  was designed.** The previous handover flagged that `reconciliation_jobs` is
+  already a `COLLECTION_GROUP` index and warned it might be a platform-only
+  queue. It is not: `functions/src/reconciliation/jobs.ts` writes every job to
+  `tenants/{tenantId}/reconciliation_jobs/{jobId}`, and that group index serves
+  `listRetryableReconciliationTasks`, the server's own retry sweep across all
+  businesses. So this chunk needed no group read and no group rule at all.
+- **A run is not a verdict about a day, and the surface says so.** This decided
+  the chunk. `processMetricsPage` takes the oldest outstanding business day in
+  the whole business rather than the day its job names, so a *completed* run
+  does **not** mean the day it was queued for was regenerated. A page of runs
+  presented as a per-day answer would therefore have been a second - and wrong -
+  answer to the question the daily summary already answers, which is exactly
+  what the previous handover said this chunk must not be.
+- **`reconciliation_dirty_days/{businessDate}` is the one per-day authority**,
+  so it was brought in as the verdict. Its document ID *is* the business date,
+  so it is read by exact document path rather than by query - the same reason
+  the daily summary reads a day by path. A query cannot return a day that has no
+  record, and "no sale reached the server for this day" is precisely the answer
+  that absence carries. `TenantReconciliationDayOutcome` derives from that
+  record alone: no sales, awaiting regeneration, regenerated, blocked, or a
+  status this client does not model.
+- **No composite index was added, deliberately.** The runs page carries one
+  `localDate ==` equality on ascending `__name__`, which Firestore's automatic
+  single-field index serves. That is the shape the previous handover named as
+  needing none, and staying inside it is why a status filter was left out: it
+  would be a second equality filter and belongs to its own decision.
+- Both collections were denied by the `{serverCollection}/{document=**}`
+  catch-all, so each got a deliberate rule. The roles are owner/admin/manager -
+  the same set that reads `daily_metrics`, because this is the explanation of
+  business-wide revenue, and whoever may not see the figure may not see why it
+  is what it is. It is deliberately wider than the owner/admin `audit_logs`:
+  this is reporting, not governance. Neither role check touches a document
+  field, so a business date the server has never seen still answers rather than
+  raising an evaluation error - the absence is the answer.
+- Writing stays server-only in both. A client that could write here could mark
+  a day clean so its sales were never aggregated, or clear the failure record of
+  a run that never succeeded. Reconciliation stays requestable only through the
+  callable, which enforces its own roles and idempotency.
+- **Both read models refuse a record that contradicts its only writer.** A day
+  claiming to be `clean` without naming the revision it published, or naming one
+  the day never reached, or a `processedRevision` ahead of `revision`, or a
+  `quarantined` day with no error code, is refused. A run `completed` before
+  reaching `finalize` or without a completion instant, a `failed` run with no
+  failure count or no error code, and a `quarantined` run with no error code are
+  refused.
+- **The quarantined-run failure-count check was deliberately dropped after
+  reading the writer.** `listRetryableReconciliationTasks` quarantines a
+  malformed job with `merge: true` and never touches `consecutiveFailureCount`,
+  so requiring it to be positive there would have hidden exactly the run an
+  owner most needs to see. Only `failed`, whose sole writer is
+  `recordReconciliationFailure`, carries that requirement. A unit test pins the
+  accepted quarantined-with-zero case.
+- Unmodelled statuses, sources, and phases are carried verbatim as `other` and
+  shown as themselves, exactly as the movement feed and audit log do. A server
+  deploy that introduces one is not evidence of anything wrong, and reporting an
+  unknown day state as "reconciled" or "pending" would be inventing an answer.
+- A scheduled sweep records `system:nightly` and a sale trigger records
+  `system:sale_trigger`. Neither is a document ID and neither is a member of the
+  business, so neither is offered to `TenantStaffNameResolver`; the row says
+  "the server" and names the actor string. A manual run's `requestedBy` **is** a
+  UID and resolves through the existing resolver, one per session epoch.
+- The entry point is a per-day button on the summary that exists only when the
+  composition root supplies a route **and** the guarded session allows the role,
+  exactly as the catalog's stock routes are. Tenancy keeps owning routing: the
+  routing shell was not touched at all, because the reporting domain composes
+  its own sibling route inside `dailySummaryRoute`. The route opens under the
+  caller's `TenantSessionScope`, so a tenant switch discards it.
+- Opening a different day restarts the runs page. A cursor is a position inside
+  one exact query, so carrying it across a date change would page from somewhere
+  that day never established; a widget test rebuilds the panel with another date
+  and proves `didUpdateWidget` resets it.
+- Server error codes are shown as the server codes they are (`Server code:
+  resource-exhausted`), never rewritten into a sentence this app would be
+  inventing.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Nothing on the surface can queue, retry, or cancel a run; the
+  `requestTenantReconciliation` callable has no client surface.
+- There is no status filter on the runs page and no date-range view - both are a
+  second equality filter and their own index decision.
+- `reconciliation_anomalies`, `reconciliation_sale_receipts`,
+  `shift_expectations`, `stock_checkpoints`, and `platform_reconciliation_sweeps`
+  still have no client surface and stay denied by the catch-all.
+
+Files in this chunk:
+
+```text
+docs/frontend_tenant_migration_inventory.md
+firestore.rules
+lib/main.dart
+lib/reporting/daily_metrics_panel.dart
+lib/reporting/reconciliation_status.dart
+lib/reporting/reconciliation_status_panel.dart
+lib/reporting/reporting.dart
+lib/tenancy/tenant_paths.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/test/reconciliation-status.test.js
+test/reporting/daily_metrics_panel_test.dart
+test/reporting/reconciliation_status_panel_test.dart
+test/reporting/reconciliation_status_test.dart
+test/tenancy/tenant_paths_test.dart
+PLAN.md
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`, which this
+  chunk does not touch.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **761/761** relevant Flutter tests, including **32** new
+  tests: 21 read-model and repository cases, 9 status-panel widget cases, and 2
+  daily-summary entry-point cases.
+- `npm --prefix rules-tests run test:emulator:reconciliation-status` passed the
+  focused Firestore-only suite **8/8** during development.
+- `npm --prefix rules-tests run test:emulator` passed the full Firestore Rules
+  suite **120/120** (112 existing plus the 8 new reconciliation cases).
+- `npm --prefix functions test` passed **166/166** Functions tests with the
+  pinned Node 24 / Temurin JDK 21 environment. No Functions source changed.
+- With `FUNCTIONS_DISCOVERY_TIMEOUT=60`,
+  `npm --prefix rules-tests run test:emulator:invitations` passed **12/12** real
+  Auth, Firestore, and Functions emulator integration tests.
+- `git diff --check` was clean. `firestore.indexes.json` was deliberately **not**
+  touched. Android build and Android emulator validation were intentionally
+  skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- No test assertion failed. Every command in the final sequence was green on its
+  first execution.
+- **One speculative public method was deleted after the first green pass**, and
+  the Dart half of the sequence was re-run rather than waved through.
+  `readIntake` read only the day's verdict; the panel always needs the runs too,
+  so it had a test-only caller. That is the same order the last two handovers
+  recorded, so it is now applied without waiting to be told: delete what has no
+  caller, cover what survives. `flutter analyze --no-pub lib/reporting
+  test/reporting` reported no issues and the full relevant Flutter command
+  passed **761/761** again. The Rules, Functions, and integration suites execute
+  no Dart and were not re-run.
+- **The test fakes model the filter contract in both directions from the
+  start**, which the previous handover had to learn the hard way. The unit and
+  panel fakes honour the repository's `localDate ==` filter, so the narrowed
+  page is real; the one check that exists *for a transport ignoring the filter*
+  uses an explicit `ignoreFilters` transport instead, because a fake that
+  honoured it would have made that page succeed empty and prove nothing.
+- The Firestore emulator does not enforce composite indexes, so "no index is
+  needed" is a reasoning claim, not something the suite can prove. What the
+  suite does prove is that the exact client query is **valid and permitted**;
+  the index claim rests on the query being equality-plus-`__name__`, which is
+  the automatic single-field index shape, and on it being `COLLECTION`-scoped
+  rather than a group query.
+- The pinned toolchain must be put on `PATH` for every emulator command in a
+  fresh shell, as every previous handover records: the ambient JRE is older than
+  21 and firebase-tools hard-fails on it.
+- The focused suite prints large expected-denial traces for the write-refusal
+  cases. That is the harness's known behavior, not a failure; only totals were
+  read.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
+
+### Next bounded chunk
+
+Implement only the guarded reconciliation anomaly surface - the detail behind
+the counts this session's runs report - and nothing else:
+
+1. Add a strict read model and guarded repository for
+   `tenants/{tenantId}/reconciliation_anomalies/{anomalyId}`. Confirm the
+   canonical field names against `functions/src/reconciliation/jobs.ts` and
+   `processors.ts` before designing anything: three writers use that collection
+   with different shapes (`invalid_sale_lines`, `invalid_product_quantity`, and
+   the stock/shift variance records), so decide explicitly which envelope is
+   common and refuse only what contradicts itself. A run already reports *how
+   many* stock and shift differences it found; this chunk must add *which ones*,
+   not a second count.
+2. Decide and test the Rules boundary exactly as this chunk did. The collection
+   is currently denied by the `{serverCollection}/{document=**}` catch-all, so
+   it needs a deliberate decision and its own focused emulator suite. Reuse the
+   owner/admin/manager set the reconciliation surface landed here unless the
+   payload argues otherwise, and keep the role check off document fields so an
+   absent anomaly still answers.
+3. Add only the composite indexes a query shape actually requires, and prove
+   each query is valid and permitted by issuing the exact client page in that
+   suite. A key-ordered page with at most one equality filter needs none;
+   anything wider must be justified rather than indexed by reflex.
+4. Reach it from the reconciliation status page landed this session, as a
+   sibling of the runs list, resolving any actor UIDs through the existing
+   `TenantStaffNameResolver`.
+5. Add unit, widget, and focused Rules emulator coverage for a business with no
+   anomalies, each modelled anomaly shape, an unmodelled `anomalyType`, a
+   wrong-role read, a cross-tenant response, a tenant switch during an
+   outstanding page, and a record that contradicts itself.
+6. Leave the checkout screen and payment flow, receipt printing, product
+   cost/profit fields, `getSalesComparison`, per-event audit payload detail, a
+   `platform_audit_logs` surface, any client path that queues, retries, or
+   cancels a reconciliation run, any status filter or date-range view on the
+   runs page, subscription and branding surfaces, deployment, and Android
+   build/emulator validation outside that chunk.

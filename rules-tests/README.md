@@ -300,6 +300,37 @@ request, or delivery ID the event belongs to - a digest for most writers and the
 tenant ID itself for `tenant_requested` - so document order carries no time
 information and each record states its own recorded instant instead.
 
+For the focused reconciliation status surface, run
+`npm --prefix rules-tests run test:emulator:reconciliation-status`. It proves
+that a manager and an owner read one business day's
+`tenants/{tenantId}/reconciliation_dirty_days/{businessDate}` record and page
+the `tenants/{tenantId}/reconciliation_jobs` runs queued for that exact day,
+that the page resumes from a bare document ID, that a business day the server
+has never seen still answers as an absent record and an empty page, that a
+cashier reads neither, that no client may write or delete either, that another
+business's reconciliation state is never reached while that business's own
+manager still reads its own, and that a deactivated or non-member identity reads
+nothing.
+
+Both reads are owner/admin/manager: the same set that reads `daily_metrics`,
+because this is the explanation of business-wide revenue, so whoever may not see
+the figure may not see why it is what it is either. It is deliberately wider
+than `audit_logs`, which stays owner/admin - this is reporting rather than
+governance. Neither role check touches a document field, so a business date with
+no sales still answers, which is the whole point: the absence *is* the answer.
+Writing stays server-only in both. A client that could write here could mark a
+day clean so its sales were never aggregated, or clear the failure record of a
+run that never succeeded; reconciliation is requested through the callable,
+which enforces its own roles and idempotency.
+
+That suite issues the exact client page: one `localDate ==` equality on
+ascending `__name__`, which Firestore's automatic single-field index serves, so
+no composite index is involved. The intake record is read by exact document path
+rather than by query, because its ID **is** the business date and a query cannot
+return a day that has no record. A run ID is `rj_` plus a digest for a scheduled
+or manual run and `dirty_{bucket}` for a sale trigger, so document order carries
+no time information and each run states its own instants instead.
+
 ## Routing, invitation, and lifecycle callable integration tests
 
 The invitation integration harness starts Auth, Firestore, and Functions under

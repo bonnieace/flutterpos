@@ -19,7 +19,17 @@ enum TenantCollection {
 
   /// Server-regenerated daily reporting. Nightly reconciliation is the only
   /// writer; the client reads it and never aggregates a replacement.
-  dailyMetrics('daily_metrics');
+  dailyMetrics('daily_metrics'),
+
+  /// The server's own record of every reconciliation run queued for this
+  /// business. `functions/src/reconciliation/**` is the only writer; the client
+  /// reads it to explain how a day reached the state [dailyMetrics] reports.
+  reconciliationJobs('reconciliation_jobs'),
+
+  /// One record per business day stating whether that day's sales are still
+  /// waiting to be regenerated. Written by the same reconciliation code and
+  /// keyed by the business date itself, so a day is read by exact path.
+  reconciliationDirtyDays('reconciliation_dirty_days');
 
   const TenantCollection(this.segment);
 
@@ -60,6 +70,8 @@ final class TenantPaths {
     TenantCollection.auditLogs,
     TenantCollection.stockAdjustments,
     TenantCollection.dailyMetrics,
+    TenantCollection.reconciliationJobs,
+    TenantCollection.reconciliationDirtyDays,
   ];
 
   final String tenantId;
@@ -84,6 +96,10 @@ final class TenantPaths {
   String get stockAdjustments =>
       collectionPath(TenantCollection.stockAdjustments);
   String get dailyMetrics => collectionPath(TenantCollection.dailyMetrics);
+  String get reconciliationJobs =>
+      collectionPath(TenantCollection.reconciliationJobs);
+  String get reconciliationDirtyDays =>
+      collectionPath(TenantCollection.reconciliationDirtyDays);
 
   String product(String productId) =>
       documentPath(TenantCollection.products, productId);
@@ -107,6 +123,13 @@ final class TenantPaths {
   );
   String dailyMetric(String businessDate) =>
       documentPath(TenantCollection.dailyMetrics, businessDate);
+  String reconciliationJob(String jobId) =>
+      documentPath(TenantCollection.reconciliationJobs, jobId);
+
+  /// The intake record for one business day. Its document ID **is** the
+  /// business date, so a day is addressed rather than searched for.
+  String reconciliationDirtyDay(String businessDate) =>
+      documentPath(TenantCollection.reconciliationDirtyDays, businessDate);
 
   /// The path of one allowed subcollection below one product.
   ///

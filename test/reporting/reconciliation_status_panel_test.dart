@@ -1,0 +1,615 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_application_1/reporting/reporting.dart';
+import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('a regenerated day states the verdict and its runs', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(),
+      },
+      staffNames: <String, String>{'owner-a': 'Juma'},
+    )..respond(<TenantQueryDocumentSnapshot>[
+      _run('dirty_1785540000000'),
+      _run(
+        'rj_abc',
+        overrides: <String, Object?>{
+          'source': 'manual',
+          'mode': 'full',
+          'requestedBy': 'owner-a',
+        },
+      ),
+    ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-verdict')))
+          .data,
+      'The published totals cover every sale the server holds for this day.',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-receipts')),
+          )
+          .data,
+      '12 sale receipts registered for this day.',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-published')),
+          )
+          .data,
+      'The published totals were generated from change 3.',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-instants')),
+          )
+          .data,
+      'Last sale received 2026-07-31 18:00 UTC • '
+      'Last regenerated 2026-08-01 02:30 UTC',
+    );
+    // A sale trigger names no member of the business, so the row says so
+    // rather than attributing the work to a colleague.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey(
+                'reconciliation-status-run-requested-dirty_1785540000000',
+              ),
+            ),
+          )
+          .data,
+      'Requested by the server (system:sale_trigger)',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-requested-rj_abc'),
+            ),
+          )
+          .data,
+      'Requested by Juma (owner-a)',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-state-rj_abc'),
+            ),
+          )
+          .data,
+      'Completed • Requested by a person',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-progress-rj_abc'),
+            ),
+          )
+          .data,
+      'Full check • reached Finishing • 1 attempt',
+    );
+    expect(reader.queries.single.equalityFilters, <String, Object?>{
+      'localDate': '2026-07-31',
+    });
+  });
+
+  testWidgets('a day the server never saw says exactly that', (tester) async {
+    final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-verdict')))
+          .data,
+      'No sale has reached the server for this day, so there is nothing to '
+      'reconcile.',
+    );
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-receipts')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-runs-empty')),
+      findsOne,
+    );
+  });
+
+  testWidgets('a failed run explains a day that is still waiting', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(
+          overrides: <String, Object?>{
+            'status': 'dirty',
+            'processedRevision': 2,
+            'invalidLineCount': 4,
+          },
+        ),
+      },
+    )..respond(<TenantQueryDocumentSnapshot>[
+      _run(
+        'rj_abc',
+        overrides: <String, Object?>{
+          'status': 'failed',
+          'phase': 'metrics',
+          'completedAt': null,
+          'consecutiveFailureCount': 3,
+          'lastErrorCode': 'resource-exhausted',
+          'stockVarianceCount': 2,
+          'rerunRequested': true,
+        },
+      ),
+    ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-verdict')))
+          .data,
+      'Sales are recorded for this day that the published totals do not cover '
+      'yet.',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-published')),
+          )
+          .data,
+      'The published totals were generated from change 2; the day has since '
+      'reached change 3.',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-invalid-lines')),
+          )
+          .data,
+      '4 sale lines could not be used, so they moved no stock and count '
+      'towards no profit.',
+    );
+    // The server's code is shown as the server code it is, never rewritten
+    // into a sentence this app would be inventing.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-error-rj_abc'),
+            ),
+          )
+          .data,
+      'Server code: resource-exhausted',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-progress-rj_abc'),
+            ),
+          )
+          .data,
+      'Incremental • reached Daily totals • 1 attempt, 3 in a row failed',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-variance-rj_abc'),
+            ),
+          )
+          .data,
+      '2 stock and 0 shift differences were recorded.',
+    );
+    expect(
+      find.byKey(
+        const ValueKey('reconciliation-status-run-rerun-rj_abc'),
+      ),
+      findsOne,
+    );
+  });
+
+  testWidgets('a blocked day names the code the server recorded', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(
+          overrides: <String, Object?>{
+            'status': 'quarantined',
+            'processedRevision': null,
+            'processedAt': null,
+            'lastErrorCode': 'invalid_dirty_revision',
+          },
+        ),
+      },
+    )..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-verdict')))
+          .data,
+      'The server stopped reconciling this day and recorded why.',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-error')))
+          .data,
+      'Server code: invalid_dirty_revision',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-published')),
+          )
+          .data,
+      'The published totals have never been generated for this day.',
+    );
+  });
+
+  testWidgets('a cashier is denied and issues no read at all', (tester) async {
+    final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(role: TenantRole.cashier), reader);
+
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-denied')),
+      findsOne,
+    );
+    expect(reader.queries, isEmpty);
+    expect(reader.documentPaths, isEmpty);
+  });
+
+  testWidgets('the runs page moves forward and back', (tester) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _run('rj_1'),
+        _run('rj_2'),
+        _run('rj_3'),
+      ]);
+
+    await _pump(tester, _controller(), reader, pageSize: 2);
+
+    expect(find.byKey(const ValueKey('reconciliation-status-run-rj_1')), findsOne);
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-rj_3')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('reconciliation-status-next')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('reconciliation-status-run-rj_3')), findsOne);
+    expect(reader.queries.last.startAfterDocumentId, 'rj_2');
+
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-status-previous')),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('reconciliation-status-run-rj_1')), findsOne);
+  });
+
+  testWidgets('opening another day starts its page again', (tester) async {
+    final controller = _controller();
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _run('rj_1'),
+        _run('rj_2'),
+        _run('rj_3'),
+      ]);
+
+    await _pump(tester, controller, reader, pageSize: 2);
+    await tester.tap(find.byKey(const ValueKey('reconciliation-status-next')));
+    await tester.pump();
+    await tester.pump();
+    expect(reader.queries.last.startAfterDocumentId, 'rj_2');
+
+    // A cursor is a position inside one exact query, so the second day must be
+    // paged from its own beginning rather than from the first day's position.
+    await _pump(
+      tester,
+      controller,
+      reader,
+      pageSize: 2,
+      businessDate: '2026-07-30',
+    );
+
+    expect(reader.queries.last.startAfterDocumentId, isNull);
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'localDate': '2026-07-30',
+    });
+    expect(
+      reader.documentPaths.last,
+      'tenants/tenant-a/reconciliation_dirty_days/2026-07-30',
+    );
+  });
+
+  testWidgets('a run that contradicts itself hides the page', (tester) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _run('rj_abc', overrides: <String, Object?>{'phase': 'stock'}),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-failure')),
+      findsOne,
+    );
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-rj_abc')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a tenant switch discards an outstanding load', (tester) async {
+    final controller = _controller();
+    final reader = _Reader.deferred();
+
+    await _pump(tester, controller, reader, settle: false);
+    expect(
+      reader.documentPaths.single,
+      'tenants/tenant-a/reconciliation_dirty_days/2026-07-31',
+    );
+
+    controller.open(uid: 'manager-a', membership: _membership('tenant-b'));
+    await tester.pump();
+
+    // The first business answers after the switch, so its load is discarded
+    // before it can label another business's screen.
+    reader.completeFirstDocument(_intake());
+    await tester.pump();
+    await tester.pump();
+    reader.completeFirstPage(<TenantQueryDocumentSnapshot>[_run('rj_abc')]);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-rj_abc')),
+      findsNothing,
+    );
+
+    reader.completeFirstDocument(null);
+    await tester.pump();
+    await tester.pump();
+    reader.completeFirstPage(<TenantQueryDocumentSnapshot>[
+      _run('rj_xyz', tenantId: 'tenant-b'),
+    ]);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-rj_xyz')),
+      findsOne,
+    );
+  });
+}
+
+Future<void> _pump(
+  WidgetTester tester,
+  TenantSessionController controller,
+  _Reader reader, {
+  int pageSize = 20,
+  String businessDate = '2026-07-31',
+  bool settle = true,
+}) async {
+  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TenantSessionScope(
+        controller: controller,
+        child: Scaffold(
+          body: TenantReconciliationStatusPanel(
+            reader: reader,
+            businessDate: businessDate,
+            pageSize: pageSize,
+          ),
+        ),
+      ),
+    ),
+  );
+  if (!settle) return;
+  await tester.pump();
+  await tester.pump();
+  await tester.pump();
+}
+
+TenantSessionController _controller({TenantRole role = TenantRole.manager}) =>
+    TenantSessionController()..open(
+      uid: 'manager-a',
+      membership: _membership('tenant-a', role: role),
+    );
+
+TenantMembership _membership(
+  String tenantId, {
+  TenantRole role = TenantRole.manager,
+}) => TenantMembership(
+  tenantId: tenantId,
+  tenantName: tenantId,
+  tenantSlug: tenantId,
+  role: role,
+  membershipStatus: MembershipStatus.active,
+  tenantStatus: TenantStatus.active,
+  isOwner: role == TenantRole.owner,
+  mirrorVersion: 1,
+  createdAt: DateTime.utc(2026, 8, 1),
+  updatedAt: DateTime.utc(2026, 8, 1),
+  serverCanAccess: true,
+  canonicalTenantExists: true,
+  canonicalMembershipExists: true,
+);
+
+Map<String, Object?> _intake({
+  String tenantId = 'tenant-a',
+  String businessDate = '2026-07-31',
+  Map<String, Object?>? overrides,
+}) {
+  final data = <String, Object?>{
+    'tenantId': tenantId,
+    'businessDate': businessDate,
+    'status': 'clean',
+    'revision': 3,
+    'processedRevision': 3,
+    'saleReceiptCount': 12,
+    'invalidLineCount': 0,
+    'metricGeneration': 'gen-1',
+    'lastReceiptAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 18)),
+    'processedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 30)),
+  };
+  if (overrides != null) data.addAll(overrides);
+  data.removeWhere((key, value) => value == null);
+  return data;
+}
+
+TenantQueryDocumentSnapshot _run(
+  String jobId, {
+  String tenantId = 'tenant-a',
+  String localDate = '2026-07-31',
+  Map<String, Object?>? overrides,
+}) {
+  final data = <String, Object?>{
+    'tenantId': tenantId,
+    'source': 'sale_trigger',
+    'sourceKey': '1785540000000',
+    'mode': 'incremental',
+    'localDate': localDate,
+    'requestedBy': 'system:sale_trigger',
+    'status': 'completed',
+    'phase': 'finalize',
+    'attemptCount': 1,
+    'consecutiveFailureCount': 0,
+    'rerunRequested': false,
+    'metricsProcessed': 1,
+    'productsProcessed': 0,
+    'stockVarianceCount': 0,
+    'shiftsProcessed': 2,
+    'shiftVarianceCount': 0,
+    'completedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 31)),
+    'updatedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 31)),
+  };
+  if (overrides != null) data.addAll(overrides);
+  data.removeWhere((key, value) => value == null);
+  return TenantQueryDocumentSnapshot(
+    path: 'tenants/$tenantId/reconciliation_jobs/$jobId',
+    data: data,
+  );
+}
+
+final class _Reader implements TenantDataReader {
+  _Reader({
+    Map<String, Map<String, Object?>> documents =
+        const <String, Map<String, Object?>>{},
+    this.staffNames = const <String, String>{},
+  }) : documents = Map<String, Map<String, Object?>>.of(documents),
+       _defer = false;
+
+  _Reader.deferred()
+    : documents = <String, Map<String, Object?>>{},
+      staffNames = const <String, String>{},
+      _defer = true;
+
+  final Map<String, Map<String, Object?>> documents;
+  final Map<String, String> staffNames;
+  final bool _defer;
+  List<TenantQueryDocumentSnapshot> _page =
+      const <TenantQueryDocumentSnapshot>[];
+  final List<Completer<List<TenantQueryDocumentSnapshot>>> _pendingPages =
+      <Completer<List<TenantQueryDocumentSnapshot>>>[];
+  final List<(String, Completer<TenantDocumentSnapshot?>)> _pendingDocuments =
+      <(String, Completer<TenantDocumentSnapshot?>)>[];
+  final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
+  final List<String> documentPaths = <String>[];
+
+  void respond(List<TenantQueryDocumentSnapshot> page) => _page = page;
+
+  void completeFirstPage(List<TenantQueryDocumentSnapshot> page) {
+    if (_pendingPages.isEmpty) return;
+    _pendingPages.removeAt(0).complete(page);
+  }
+
+  /// Answers the oldest outstanding document read with its own exact path, so
+  /// the repository's path proof sees what it really asked for.
+  void completeFirstDocument(Map<String, Object?>? data) {
+    if (_pendingDocuments.isEmpty) return;
+    final (path, completer) = _pendingDocuments.removeAt(0);
+    completer.complete(
+      data == null ? null : TenantDocumentSnapshot(path: path, data: data),
+    );
+  }
+
+  @override
+  Future<TenantDocumentSnapshot?> getDocument(String path) {
+    documentPaths.add(path);
+    if (_defer) {
+      final completer = Completer<TenantDocumentSnapshot?>();
+      _pendingDocuments.add((path, completer));
+      return completer.future;
+    }
+    final segments = path.split('/');
+    if (segments.length == 4 && segments[2] == 'staff') {
+      final uid = segments[3];
+      final name = staffNames[uid];
+      return Future<TenantDocumentSnapshot?>.value(
+        name == null
+            ? null
+            : TenantDocumentSnapshot(
+                path: path,
+                data: <String, Object?>{'uid': uid, 'name': name},
+              ),
+      );
+    }
+    final data = documents[path];
+    return Future<TenantDocumentSnapshot?>.value(
+      data == null ? null : TenantDocumentSnapshot(path: path, data: data),
+    );
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
+    TenantCollectionQuery query,
+  ) {
+    queries.add(query);
+    if (_defer) {
+      final completer = Completer<List<TenantQueryDocumentSnapshot>>();
+      _pendingPages.add(completer);
+      return completer.future;
+    }
+    final cursor = query.startAfterDocumentId;
+    final matches = <TenantQueryDocumentSnapshot>[];
+    for (final snapshot in _page) {
+      final id = snapshot.path.split('/').last;
+      if (cursor != null && id.compareTo(cursor) <= 0) continue;
+      // The fake models the repository's filter contract in both directions:
+      // ignoring it would let a narrowed page silently answer with another
+      // day's run and prove nothing about the check that refuses one.
+      final matchesFilters = query.equalityFilters.entries.every(
+        (filter) => snapshot.data[filter.key] == filter.value,
+      );
+      if (!matchesFilters) continue;
+      matches.add(snapshot);
+      if (matches.length >= query.limit) break;
+    }
+    return Future<List<TenantQueryDocumentSnapshot>>.value(matches);
+  }
+}

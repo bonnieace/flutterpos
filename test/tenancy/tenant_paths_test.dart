@@ -64,6 +64,14 @@ void main() {
         // Server-regenerated daily reporting. Added deliberately as part of the
         // guarded daily summary; the client only ever reads it.
         TenantCollection.dailyMetrics: 'tenants/tenant-a/daily_metrics',
+        // The reconciliation work behind those figures, and the per-day record
+        // of whether they are current. Added deliberately as part of the
+        // guarded reconciliation status surface; the client only ever reads
+        // them and can never queue, retry, or cancel a run.
+        TenantCollection.reconciliationJobs:
+            'tenants/tenant-a/reconciliation_jobs',
+        TenantCollection.reconciliationDirtyDays:
+            'tenants/tenant-a/reconciliation_dirty_days',
       };
 
       expect(TenantPaths.businessCollections.toSet(), expected.keys.toSet());
@@ -88,6 +96,15 @@ void main() {
       expect(paths.subscription, 'tenants/tenant-a/subscription');
       expect(paths.auditLogs, 'tenants/tenant-a/audit_logs');
       expect(paths.stockAdjustments, 'tenants/tenant-a/stock_adjustments');
+      expect(paths.dailyMetrics, 'tenants/tenant-a/daily_metrics');
+      expect(
+        paths.reconciliationJobs,
+        'tenants/tenant-a/reconciliation_jobs',
+      );
+      expect(
+        paths.reconciliationDirtyDays,
+        'tenants/tenant-a/reconciliation_dirty_days',
+      );
     });
 
     test('document factories cannot escape the tenant root', () {
@@ -103,6 +120,11 @@ void main() {
         paths.currentSubscription,
         paths.auditRecord('audit-1'),
         paths.stockAdjustment('sa_abc'),
+        paths.dailyMetric('2026-07-31'),
+        paths.reconciliationJob('rj_abc'),
+        // The intake record's document ID is the business date itself, so a
+        // day is addressed by path rather than searched for.
+        paths.reconciliationDirtyDay('2026-07-31'),
       ];
 
       for (final document in documents) {

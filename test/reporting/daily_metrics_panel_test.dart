@@ -90,6 +90,63 @@ void main() {
     expect(find.byKey(const ValueKey('daily-summary')), findsOne);
   });
 
+  testWidgets('each day can open why it is in its state', (tester) async {
+    final reader = _Reader(<String, Map<String, Object?>>{
+      'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+        businessDate: '2026-07-30',
+      ),
+    });
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      reader,
+      reconciliationRoute: (businessDate) =>
+          Scaffold(body: Text('why $businessDate')),
+      reconciliationRoles: const <TenantRole>[
+        TenantRole.owner,
+        TenantRole.admin,
+        TenantRole.manager,
+      ],
+    );
+
+    // A reconciled day and an unreconciled one both have an explanation.
+    expect(
+      find.byKey(const ValueKey('daily-summary-reconciliation-2026-07-30')),
+      findsOne,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('daily-summary-reconciliation-2026-07-31')),
+    );
+    await tester.pumpAndSettle();
+
+    // The exact day is carried into the route, and the route runs under the
+    // same session scope, so a tenant switch invalidates it too.
+    expect(find.text('why 2026-07-31'), findsOne);
+    expect(find.byType(TenantSessionScope), findsWidgets);
+  });
+
+  testWidgets('a role the route is not offered to never sees it', (
+    tester,
+  ) async {
+    final reader = _Reader(const <String, Map<String, Object?>>{});
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      reader,
+      reconciliationRoute: (businessDate) => const Scaffold(),
+      // The summary is readable by a manager; the explanation, in this
+      // configuration, is not. The action disappears rather than failing.
+      reconciliationRoles: const <TenantRole>[TenantRole.owner],
+    );
+
+    expect(
+      find.byKey(const ValueKey('daily-summary-reconciliation-2026-07-31')),
+      findsNothing,
+    );
+  });
+
   testWidgets('a tenant switch discards the outstanding load', (tester) async {
     final controller = _controller(TenantRole.manager);
     final reader = _Reader(<String, Map<String, Object?>>{
@@ -139,6 +196,8 @@ Future<void> _pump(
   TenantSessionController controller,
   _Reader reader, {
   bool settle = true,
+  TenantReconciliationRouteBuilder? reconciliationRoute,
+  List<TenantRole> reconciliationRoles = const <TenantRole>[],
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -149,6 +208,8 @@ Future<void> _pump(
             reader: reader,
             days: 2,
             clock: () => DateTime.utc(2026, 7, 31, 9),
+            reconciliationRoute: reconciliationRoute,
+            reconciliationRoles: reconciliationRoles,
           ),
         ),
       ),

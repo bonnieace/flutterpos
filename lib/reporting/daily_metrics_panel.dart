@@ -2,19 +2,43 @@ import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session_controller.dart';
+import '../tenancy/tenant_types.dart';
 import 'daily_metrics.dart';
+
+/// Builds the guarded reconciliation status route for one exact business date.
+///
+/// The composition root supplies it, exactly as it supplies every other route
+/// tenancy owns. While it is absent the route stays unreachable and the summary
+/// is exactly the read-only surface it was before.
+typedef TenantReconciliationRouteBuilder = Widget Function(String businessDate);
 
 /// Read-only daily summary route for the selected tenant session.
 final class TenantDailySummaryScreen extends StatelessWidget {
-  const TenantDailySummaryScreen({super.key, required this.reader});
+  const TenantDailySummaryScreen({
+    super.key,
+    required this.reader,
+    this.reconciliationRoute,
+    this.reconciliationRoles = const <TenantRole>[],
+  });
 
   /// Only document reads are needed: a day is read by exact path.
   final TenantDocumentReader reader;
 
+  /// Opens the guarded explanation of one day's reconciliation state.
+  final TenantReconciliationRouteBuilder? reconciliationRoute;
+
+  /// The roles that route is offered to, decided by the reporting domain.
+  final List<TenantRole> reconciliationRoles;
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Daily summary')),
-    body: TenantDailySummaryPanel(reader: reader),
+    body: TenantDailySummaryPanel(
+      reader: reader,
+      reconciliationRoute: reconciliationRoute,
+      reconciliationRoles: reconciliationRoles,
+    ),
   );
 }
 
@@ -29,12 +53,20 @@ final class TenantDailySummaryPanel extends StatefulWidget {
     required this.reader,
     this.days = 7,
     this.clock,
+    this.reconciliationRoute,
+    this.reconciliationRoles = const <TenantRole>[],
   });
 
   /// Only document reads are needed: a day is read by exact path.
   final TenantDocumentReader reader;
   final int days;
   final DateTime Function()? clock;
+
+  /// Opens the guarded explanation of one day's reconciliation state.
+  final TenantReconciliationRouteBuilder? reconciliationRoute;
+
+  /// The roles that route is offered to, decided by the reporting domain.
+  final List<TenantRole> reconciliationRoles;
 
   @override
   State<TenantDailySummaryPanel> createState() =>
@@ -76,14 +108,23 @@ final class _TenantDailySummaryPanelState
             ],
           ),
         ),
-        builder: (context, session, days) => _DailySummaryContents(days: days),
+        builder: (context, session, days) => _DailySummaryContents(
+          days: days,
+          // The role is taken from the guarded session, never from the caller,
+          // so the action disappears the moment the session stops allowing it.
+          reconciliationRoute:
+              session.canAccess(allowedRoles: widget.reconciliationRoles)
+              ? widget.reconciliationRoute
+              : null,
+        ),
       );
 }
 
 final class _DailySummaryContents extends StatelessWidget {
-  const _DailySummaryContents({required this.days});
+  const _DailySummaryContents({required this.days, this.reconciliationRoute});
 
   final List<TenantDailyMetricsDay> days;
+  final TenantReconciliationRouteBuilder? reconciliationRoute;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -137,12 +178,39 @@ final class _DailySummaryContents extends StatelessWidget {
                     key: ValueKey('daily-summary-pending-${day.businessDate}'),
                     'Not reconciled yet.',
                   ),
+                if (reconciliationRoute != null) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    key: ValueKey(
+                      'daily-summary-reconciliation-${day.businessDate}',
+                    ),
+                    onPressed: () =>
+                        _openReconciliation(context, day.businessDate),
+                    icon: const Icon(Icons.help_outline),
+                    label: const Text('Why is it in this state?'),
+                  ),
+                ],
               ],
             ),
           ),
         ),
     ],
   );
+
+  /// Opens the reconciliation route under the same session scope this route
+  /// runs in, so a tenant switch invalidates it exactly as it does every other
+  /// guarded route rather than leaving a detached screen behind.
+  void _openReconciliation(BuildContext context, String businessDate) {
+    final controller = TenantSessionScope.of(context);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: controller,
+          child: reconciliationRoute!(businessDate),
+        ),
+      ),
+    );
+  }
 }
 
 String _instant(DateTime value) {

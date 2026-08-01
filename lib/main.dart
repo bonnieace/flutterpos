@@ -223,7 +223,20 @@ class SpiritPOSApp extends StatelessWidget {
           return token.claims?['platformRole'] == 'superAdmin';
         },
         tenantDataReader: tenantDataReader,
-        dailySummaryRoute: (reader) => TenantDailySummaryScreen(reader: reader),
+        // The reconciled totals, and - one day at a time - why each day is in
+        // the state it is. The explanation is reached from the summary itself
+        // rather than from the landing screen, because that is where a manager
+        // already asks whether a day is reconciled.
+        dailySummaryRoute: (reader) => TenantDailySummaryScreen(
+          reader: reader,
+          reconciliationRoute: (businessDate) =>
+              TenantReconciliationStatusScreen(
+                reader: reader,
+                businessDate: businessDate,
+              ),
+          reconciliationRoles:
+              TenantReconciliationStatusRepository.allowedRoles,
+        ),
         dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
         receiptLookupRoute: (reader) => TenantReceiptLookupScreen(
           reader: reader,
