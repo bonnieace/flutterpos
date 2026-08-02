@@ -29,7 +29,15 @@ typedef TenantRouteBuilder =
       TenantMembership membership,
     );
 
-typedef TenantSessionRecovery = Future<Object?> Function();
+/// Runs the composition root's per-session background work.
+///
+/// The argument is the event that asked for the run, forwarded verbatim from
+/// [TenantRoutingShell.tenantRecoveryTriggers] and `null` when the shell itself
+/// asked because a session opened. The shell attaches no meaning to it; it
+/// exists so the composition root can decide what a particular reason justifies
+/// - a sale saved at the till needs submitting, and does not need every derived
+/// read the shell performs when a session opens.
+typedef TenantSessionRecovery = Future<Object?> Function(Object? trigger);
 typedef TenantSessionRecoveryFactory =
     TenantSessionRecovery Function(TenantSessionController controller);
 
@@ -302,17 +310,17 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
 
   void _subscribeToTenantRecoveryTriggers() {
     _tenantRecoverySubscription = widget.tenantRecoveryTriggers?.listen(
-      (_) => _triggerTenantRecovery(),
+      _triggerTenantRecovery,
       onError: (Object _, StackTrace _) {},
     );
   }
 
-  void _triggerTenantRecovery() {
+  void _triggerTenantRecovery([Object? trigger]) {
     if (_sessionController.session == null) return;
     final factory = widget.tenantSessionRecoveryFactory;
     if (factory == null) return;
     final recovery = _tenantSessionRecovery ??= factory(_sessionController);
-    unawaited(recovery());
+    unawaited(recovery(trigger));
   }
 
   void _handleAuthUid(String? value) {

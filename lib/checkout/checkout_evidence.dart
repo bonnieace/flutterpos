@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_route_guard.dart';
@@ -82,21 +84,85 @@ final class CheckoutOutboxEvidenceSource implements CheckoutEvidenceSource {
 ///
 /// The panel deliberately exposes no submit, retry, edit, cancel, or delete
 /// action; every transition stays owned by the recovery and submission workers.
-final class CheckoutPendingEvidencePanel extends StatelessWidget {
-  const CheckoutPendingEvidencePanel({super.key, required this.source});
+///
+/// [refreshSignals] is how it learns that those workers, or a sale saved at the
+/// till, moved something. Without it the counts are read once when the session
+/// opens and then never again, so a cashier who rang up two sales was still
+/// told none was stored on this device until the app was restarted.
+final class CheckoutPendingEvidencePanel extends StatefulWidget {
+  const CheckoutPendingEvidencePanel({
+    super.key,
+    required this.source,
+    this.refreshSignals,
+  });
 
   final CheckoutEvidenceSource source;
 
+  /// Fires when local checkout evidence may have changed.
+  final Stream<Object?>? refreshSignals;
+
   @override
-  Widget build(BuildContext context) =>
-      TenantRouteGuard<CheckoutEvidenceSummary>(
-        load: source.summarize,
-        loading: const SizedBox.shrink(),
-        denied: const SizedBox.shrink(),
-        failure: (context, error) =>
-            const Text('Local checkout evidence is unavailable.'),
-        builder: (context, session, summary) => _EvidenceContents(summary),
-      );
+  State<CheckoutPendingEvidencePanel> createState() =>
+      _CheckoutPendingEvidencePanelState();
+}
+
+final class _CheckoutPendingEvidencePanelState
+    extends State<CheckoutPendingEvidencePanel> {
+  StreamSubscription<Object?>? _subscription;
+  int _generation = 0;
+  int _loaderGeneration = -1;
+  TenantGuardedLoader<CheckoutEvidenceSummary>? _load;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribe();
+  }
+
+  @override
+  void didUpdateWidget(covariant CheckoutPendingEvidencePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.refreshSignals, widget.refreshSignals)) {
+      _subscription?.cancel();
+      _subscribe();
+    }
+    if (!identical(oldWidget.source, widget.source)) _generation++;
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  void _subscribe() {
+    _subscription = widget.refreshSignals?.listen(
+      (_) {
+        if (mounted) setState(() => _generation++);
+      },
+      onError: (Object _, StackTrace _) {},
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The guard restarts whenever its loader changes identity, which is how a
+    // refresh is asked for - and why the loader is cached against the
+    // generation rather than rebuilt every frame, since an unrelated rebuild
+    // must not restart the read.
+    if (_loaderGeneration != _generation || _load == null) {
+      _loaderGeneration = _generation;
+      _load = (session) => widget.source.summarize(session);
+    }
+    return TenantRouteGuard<CheckoutEvidenceSummary>(
+      load: _load!,
+      loading: const SizedBox.shrink(),
+      denied: const SizedBox.shrink(),
+      failure: (context, error) =>
+          const Text('Local checkout evidence is unavailable.'),
+      builder: (context, session, summary) => _EvidenceContents(summary),
+    );
+  }
 }
 
 final class _EvidenceContents extends StatelessWidget {

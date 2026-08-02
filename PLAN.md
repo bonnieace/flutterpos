@@ -9751,3 +9751,119 @@ subscription surfaces, the Sentry DSN, and deployment.
   bypassed, which is the quickest way to see what the app actually wrote.
 - Collection-page test fakes must answer in **ascending document-ID order**, and
   must be keyed **per business**.
+
+---
+
+## A saved sale reaches the server while the till stays open - 2026-08-02
+
+### Completed in this session
+
+The chunk the previous handover named, and only that. Defect 1 - "a saved sale
+is not submitted until the next app start" - and defect 2 - "the pending-checkout
+panel on the landing route is stale" - are the same story from two sides, and
+both are closed. Nothing about what submission *does* changed: the worker, its
+leases, its idempotency, and the outbox state machine are untouched. What
+changed is **when** it runs, and what runs alongside it.
+
+Implemented behavior and safety decisions:
+
+- **`CheckoutSyncSignals` is the one seam between a saved sale and the workers.**
+  Before it, the submission worker ran only when a tenant session opened and
+  when connectivity was restored, and neither happens while a cashier stands at
+  a till. The observed consequence was severe: three sales rung up, the `sales`
+  collection absent from Firestore entirely, and the shift impossible to close,
+  because closing refuses while any sale is unsettled.
+- **It carries two streams, because they answer two different questions.**
+  `syncRequests` asks the workers to run and is what the routing shell consumes;
+  `evidenceChanges` says local state may have moved, so a read-only surface
+  should re-read. A durable save fires both. The end of a run fires only the
+  second - a run must never ask for another run, which would be a loop rather
+  than a refresh.
+- **Both streams are cached in `late final` fields.** The routing shell decides
+  whether to resubscribe by comparing `tenantRecoveryTriggers` with `identical`,
+  and a broadcast controller hands out a **new** stream object on every `.stream`
+  read, so an uncached getter would silently cancel and resubscribe on every
+  rebuild of the composition root. A test pins the identity.
+- **The till still only knows how to save.** The trigger is a decorator,
+  `CheckoutSyncOnSaveDraftSink`, wrapped around the sink in `main.dart`. The
+  screen gained no parameter and no knowledge of submission, so no surface can
+  move a checkout through a state the sync and recovery workers own - the same
+  boundary `CheckoutDraftSink` was introduced to draw.
+- **The signal fires after the save, never instead of it.** A refusal propagates
+  from the delegate untouched and asks for nothing, so nothing is ever requested
+  on behalf of a sale that was not recorded. A test proves the record is already
+  durable when the worker reaches it, because a signal that raced the write
+  would find nothing and the defect would survive the fix.
+- **A failed signal never turns a durable sale into a refusal.** The sale is on
+  disk by then; reporting the signal's failure would send a cashier to ring the
+  same sale up twice, and the reconnect trigger and the next session open still
+  submit it. It is swallowed deliberately, with a test.
+- **The shell now forwards *why* a run was asked for**, and this was the one
+  change to a frozen contract: `TenantSessionRecovery` takes the trigger event,
+  verbatim, and `null` when the shell itself asked because a session opened. The
+  shell attaches no meaning to it.
+- **That forwarding exists to stop a serious cost regression the fix would
+  otherwise have introduced.** The recovery closure also runs
+  `CheckoutCatalogCacheRefresher`, which pages every category and product from
+  Firestore. Reusing the trigger for saves without distinguishing them would
+  have re-read the whole catalog on **every single customer** - up to 2000
+  products, the cache's own bound. A save now runs recovery and submission only;
+  a reconnect still refreshes everything, which is exactly when fresh products
+  are wanted.
+- **The evidence panel re-reads on `evidenceChanges` and nothing else.** It is
+  now stateful, and its guarded loader is cached against a generation counter,
+  so an unrelated rebuild reuses it and only a real signal restarts the read -
+  the trap recorded in the returns-panel handover, applied on purpose this time.
+  A test asserts an unrelated rebuild costs zero reads.
+- **The end of a run reports evidence changed from a `finally`.** A run that
+  failed part-way through still moved something, and a panel that stayed stale
+  because of the failure would hide exactly the sale that needs attention.
+
+Deliberately outside this chunk:
+
+- Nothing here submits, retries, or cancels a checkout from a surface. Every
+  transition still belongs to the workers.
+- The panel briefly renders nothing while it re-reads, because the guard has one
+  loading state and this panel draws nothing for it. A Hive read is fast and the
+  alternative is holding a figure the app has just been told may be wrong.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/checkout/checkout.dart
+lib/checkout/checkout_evidence.dart
+lib/checkout/checkout_sync_signals.dart      (new)
+lib/main.dart
+lib/tenancy/tenant_routing_shell.dart
+test/checkout/checkout_evidence_test.dart
+test/checkout/checkout_sync_signals_test.dart  (new)
+test/tenancy/tenant_routing_shell_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 19 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy test/theme_test.dart` | **1044/1044**, up from 1028, adding **16** tests |
+| `git diff --check` | clean |
+
+The 16 new tests are 12 in the new signals file - 5 signal cases, 4 decorator
+cases, and 3 seam cases that wire the signals to a real encrypted outbox and a
+real `CheckoutSubmissionWorker` - plus 3 evidence-panel cases and 1 routing-shell
+case for the forwarded trigger.
+
+No backend suite was run for this chunk: it changed only Dart, and
+`git diff --stat 3cb7588..HEAD -- functions firestore.rules rules-tests
+firestore.indexes.json` is empty. The session-end sequence is recorded below.
+Android build and Android emulator validation were skipped as requested - which
+means the fix is proved by tests and not by the run that found the defect.
+
+Meaningful failures and their resolutions:
+
+- **The first panel refresh test found no updated count.** Two pumps deliver the
+  signal and restart the guarded read; the third renders its answer. The read
+  had happened - the call count was already correct - so the assertion, not the
+  code, was one frame early.
+- No other assertion failed.

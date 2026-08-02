@@ -73,6 +73,13 @@ Future<void> main() async {
       // and receipt this device records names the same device.
       final deviceId = await checkoutReceiptCounters.resolveDeviceId();
       final connectivity = Connectivity();
+      // The one seam between a saved sale and the workers that carry it to the
+      // server. Connectivity is piped into it here, once, rather than in
+      // `build`, so the shell sees one stream for the life of the process.
+      final checkoutSyncSignals = CheckoutSyncSignals();
+      connectivity.onConnectivityChanged
+          .where((result) => result != ConnectivityResult.none)
+          .listen((_) => checkoutSyncSignals.requestSyncAfterReconnect());
 
       // Configure Firestore for offline persistence
       FirebaseFirestore firestore = FirebaseFirestore.instance;
@@ -118,6 +125,7 @@ Future<void> main() async {
             connectivity: connectivity,
             invitationLink: invitationLink,
             invalidInvitationLink: invalidInvitationLink,
+            checkoutSyncSignals: checkoutSyncSignals,
           ),
         ),
       );
@@ -135,6 +143,7 @@ class SpiritPOSApp extends StatelessWidget {
     required this.tenantShiftState,
     required this.deviceId,
     required this.connectivity,
+    required this.checkoutSyncSignals,
     this.invitationLink,
     this.invalidInvitationLink = false,
   });
@@ -146,6 +155,7 @@ class SpiritPOSApp extends StatelessWidget {
   final HiveTenantShiftState tenantShiftState;
   final String deviceId;
   final Connectivity connectivity;
+  final CheckoutSyncSignals checkoutSyncSignals;
   final TenantInvitationLink? invitationLink;
   final bool invalidInvitationLink;
 
@@ -238,15 +248,26 @@ class SpiritPOSApp extends StatelessWidget {
           );
           // Uncertain prior attempts are settled before any new batch commit.
           // The derived catalog cache refreshes last; it never gates evidence.
-          return () async => (
-            await coordinator.recoverSelectedSession(),
-            await submissionWorker.submitDueCheckouts(),
-            await catalogRefresher.refreshSelectedSession(),
-          );
+          return (trigger) async {
+            try {
+              await coordinator.recoverSelectedSession();
+              await submissionWorker.submitDueCheckouts();
+              // A sale saved at the till needs submitting; it does not need the
+              // whole product catalog re-read. Refreshing it here would make a
+              // till pay for every product in the business on every customer.
+              if (trigger is! CheckoutSaveSyncRequest) {
+                await catalogRefresher.refreshSelectedSession();
+              }
+            } finally {
+              // Whatever the run settled - or got part-way through before
+              // failing - is now worth re-reading. This is not a second sync
+              // request: a run must never ask for another run.
+              checkoutSyncSignals.reportEvidenceChanged();
+            }
+            return null;
+          };
         },
-        tenantRecoveryTriggers: connectivity.onConnectivityChanged
-            .where((result) => result != ConnectivityResult.none)
-            .map<Object?>((_) => null),
+        tenantRecoveryTriggers: checkoutSyncSignals.syncRequests,
         hasPlatformSuperAdminClaim: (uid) async {
           final user = FirebaseAuth.instance.currentUser;
           if (user == null || user.uid != uid) return false;
@@ -339,19 +360,28 @@ class SpiritPOSApp extends StatelessWidget {
         // object, so two instances can never issue the same receipt number.
         checkoutRoute: (sessions) => TenantCheckoutScreen(
           cache: checkoutCatalogCache,
-          drafts: CheckoutDraftService(
-            sessionController: sessions,
-            cache: checkoutCatalogCache,
-            outbox: checkoutOutbox,
-            receipts: checkoutReceiptCounters,
-            // The frozen restriction that a cashier cannot open checkout in a
-            // second business while another still holds an open shift on this
-            // device is enforced here, not by the screen.
-            shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
+          // The decorator is what makes a saved sale reach the server while the
+          // till stays open. It is wrapped here rather than inside the screen so
+          // the screen still knows only how to save.
+          drafts: CheckoutSyncOnSaveDraftSink(
+            signals: checkoutSyncSignals,
+            delegate: CheckoutDraftService(
+              sessionController: sessions,
+              cache: checkoutCatalogCache,
+              outbox: checkoutOutbox,
+              receipts: checkoutReceiptCounters,
+              // The frozen restriction that a cashier cannot open checkout in a
+              // second business while another still holds an open shift on this
+              // device is enforced here, not by the screen.
+              shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
+            ),
           ),
         ),
         pendingCheckoutPanel: CheckoutPendingEvidencePanel(
           source: CheckoutOutboxEvidenceSource(checkoutOutbox),
+          // Without this the counts are read once when the session opens, so a
+          // sale rang up moments earlier is reported as no sale at all.
+          refreshSignals: checkoutSyncSignals.evidenceChanges,
         ),
         signOut: FirebaseAuth.instance.signOut,
         signedOut: const LoginScreen(),

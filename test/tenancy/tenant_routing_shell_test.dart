@@ -227,7 +227,7 @@ void main() {
       final recovered = <TenantSession>[];
       final fixture = _ShellFixture(
         memberships: [_membership('tenant-a')],
-        tenantSessionRecoveryFactory: (controller) => () async {
+        tenantSessionRecoveryFactory: (controller) => (_) async {
           recovered.add(controller.requireSession());
           return null;
         },
@@ -255,6 +255,41 @@ void main() {
       await fixture.dispose(tester);
     },
   );
+
+  testWidgets('forwards why a recovery run was asked for', (tester) async {
+    // The composition root decides what each reason justifies: a sale saved at
+    // the till needs submitting and must not also re-read the whole catalog.
+    // The shell attaches no meaning to the event, so it must arrive verbatim.
+    final recoveryTriggers = StreamController<Object?>();
+    final triggers = <Object?>[];
+    final fixture = _ShellFixture(
+      memberships: [_membership('tenant-a')],
+      tenantSessionRecoveryFactory: (controller) => (trigger) async {
+        triggers.add(trigger);
+        return null;
+      },
+      tenantRecoveryTriggers: recoveryTriggers.stream,
+    );
+    await fixture.pump(tester);
+    fixture.auth.add('user-a');
+    await _pumpRouting(tester);
+
+    // Opening a session is the shell's own reason, and carries none.
+    expect(triggers, [null]);
+
+    const saved = Object();
+    recoveryTriggers.add(saved);
+    await _pumpRouting(tester);
+    expect(triggers, [null, same(saved)]);
+
+    recoveryTriggers.add(null);
+    await _pumpRouting(tester);
+    expect(triggers, hasLength(3));
+    expect(triggers.last, isNull);
+
+    await recoveryTriggers.close();
+    await fixture.dispose(tester);
+  });
 
   testWidgets('shows a typed blocker and retains the current business', (
     tester,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -127,13 +128,73 @@ void main() {
       );
       expect(find.textContaining('malformed_record'), findsNothing);
     });
+
+    testWidgets('re-reads when a sale is saved on this device', (tester) async {
+      // The defect this closes: the counts were read once when the session
+      // opened, so a cashier who rang up two sales was told none was stored
+      // here until the app was restarted.
+      final signals = StreamController<Object?>.broadcast();
+      addTearDown(signals.close);
+      final source = _CountingSource([
+        const CheckoutEvidenceSummary(),
+        const CheckoutEvidenceSummary(savedOffline: 2),
+      ]);
+      await _pumpPanel(tester, source, refreshSignals: signals.stream);
+
+      expect(
+        find.text('No checkouts are stored on this device.'),
+        findsOneWidget,
+      );
+
+      signals.add(null);
+      // One frame delivers the signal, one restarts the guarded read, and one
+      // renders its answer.
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(source.calls, 2);
+      expect(find.text('Saved offline: 2'), findsOneWidget);
+    });
+
+    testWidgets('an unrelated rebuild does not re-read', (tester) async {
+      final signals = StreamController<Object?>.broadcast();
+      addTearDown(signals.close);
+      final source = _CountingSource([
+        const CheckoutEvidenceSummary(savedOffline: 1),
+      ]);
+      await _pumpPanel(tester, source, refreshSignals: signals.stream);
+
+      expect(source.calls, 1);
+      await tester.pump();
+      await tester.pump();
+
+      expect(source.calls, 1);
+      expect(find.text('Saved offline: 1'), findsOneWidget);
+    });
+
+    testWidgets('a signal after disposal reads nothing', (tester) async {
+      final signals = StreamController<Object?>.broadcast();
+      addTearDown(signals.close);
+      final source = _CountingSource([
+        const CheckoutEvidenceSummary(savedOffline: 1),
+      ]);
+      await _pumpPanel(tester, source, refreshSignals: signals.stream);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+
+      signals.add(null);
+      await tester.pump();
+
+      expect(source.calls, 1);
+    });
   });
 }
 
 Future<void> _pumpPanel(
   WidgetTester tester,
-  CheckoutEvidenceSource source,
-) async {
+  CheckoutEvidenceSource source, {
+  Stream<Object?>? refreshSignals,
+}) async {
   final controller = TenantSessionController()
     ..open(uid: 'user-a', membership: _membership('tenant-a'));
   addTearDown(controller.dispose);
@@ -141,7 +202,12 @@ Future<void> _pumpPanel(
     MaterialApp(
       home: TenantSessionScope(
         controller: controller,
-        child: Scaffold(body: CheckoutPendingEvidencePanel(source: source)),
+        child: Scaffold(
+          body: CheckoutPendingEvidencePanel(
+            source: source,
+            refreshSignals: refreshSignals,
+          ),
+        ),
       ),
     ),
   );
@@ -177,6 +243,20 @@ final class _FakeSource implements CheckoutEvidenceSource {
   @override
   Future<CheckoutEvidenceSummary> summarize(TenantSession session) async =>
       _summary;
+}
+
+/// Answers each read in turn, holding the last answer once they run out.
+final class _CountingSource implements CheckoutEvidenceSource {
+  _CountingSource(this._summaries);
+
+  final List<CheckoutEvidenceSummary> _summaries;
+  int calls = 0;
+
+  @override
+  Future<CheckoutEvidenceSummary> summarize(TenantSession session) async {
+    final index = calls++;
+    return _summaries[index < _summaries.length ? index : _summaries.length - 1];
+  }
 }
 
 final class _FailingSource implements CheckoutEvidenceSource {
