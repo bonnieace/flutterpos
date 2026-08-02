@@ -147,6 +147,51 @@ void main() {
     );
   });
 
+  testWidgets('the summary can open the totals for a period', (tester) async {
+    final reader = _Reader(const <String, Map<String, Object?>>{});
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      reader,
+      salesTotalsRoute: () => const Scaffold(body: Text('period totals')),
+      salesTotalsRoles: const <TenantRole>[
+        TenantRole.owner,
+        TenantRole.admin,
+        TenantRole.manager,
+      ],
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('daily-summary-sales-totals')),
+    );
+    await tester.pumpAndSettle();
+
+    // The route runs under the same session scope, so a tenant switch
+    // invalidates it exactly as it does every other guarded route.
+    expect(find.text('period totals'), findsOne);
+    expect(find.byType(TenantSessionScope), findsWidgets);
+  });
+
+  testWidgets('a role the totals route is not offered to never sees it', (
+    tester,
+  ) async {
+    final reader = _Reader(const <String, Map<String, Object?>>{});
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      reader,
+      salesTotalsRoute: () => const Scaffold(),
+      salesTotalsRoles: const <TenantRole>[TenantRole.owner],
+    );
+
+    expect(
+      find.byKey(const ValueKey('daily-summary-sales-totals')),
+      findsNothing,
+    );
+  });
+
   testWidgets('a tenant switch discards the outstanding load', (tester) async {
     final controller = _controller(TenantRole.manager);
     final reader = _Reader(<String, Map<String, Object?>>{
@@ -198,6 +243,8 @@ Future<void> _pump(
   bool settle = true,
   TenantReconciliationRouteBuilder? reconciliationRoute,
   List<TenantRole> reconciliationRoles = const <TenantRole>[],
+  TenantSalesTotalsRouteBuilder? salesTotalsRoute,
+  List<TenantRole> salesTotalsRoles = const <TenantRole>[],
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -210,6 +257,8 @@ Future<void> _pump(
             clock: () => DateTime.utc(2026, 7, 31, 9),
             reconciliationRoute: reconciliationRoute,
             reconciliationRoles: reconciliationRoles,
+            salesTotalsRoute: salesTotalsRoute,
+            salesTotalsRoles: salesTotalsRoles,
           ),
         ),
       ),

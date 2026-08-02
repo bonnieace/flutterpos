@@ -95,8 +95,8 @@ dropped, not postponed.
 | `sendAccountVerification` | **Reached 2026-08-01.** The business selector offers it to an unverified identity. | Resolved |
 | `requestPasswordReset` | **Blocked on App Check** - see below. Still no caller. | Now declared |
 | `getMyEmailDeliveryStatus` | **Reached 2026-08-01.** Checked once a verification request is accepted. | Resolved |
-| `getSalesComparison` | No caller; excluded by name in ~14 consecutive chunks. | Yes, never revisited |
-| `requestTenantReconciliation` | No caller. The status surface added 2026-08-01 reads runs but cannot request one. | Yes |
+| `getSalesComparison` | **Reached 2026-08-02.** The daily summary opens period totals; it answers for unreconciled days, which `daily_metrics` cannot. | Resolved |
+| `requestTenantReconciliation` | **Reached 2026-08-02.** The reconciliation status route lets an owner or administrator ask for a run. | Resolved |
 | Subscription | Rules exist and `TenantPaths.currentSubscription` exists; **no repository reads it at all**. Spec line 14 names subscription as a per-business concern. | Yes, never revisited |
 | Product cost / profit | `profit` is parsed at `lib/reporting/daily_metrics.dart:64` and deliberately never displayed. | Yes |
 
@@ -8330,3 +8330,172 @@ Two practical notes for whoever picks this up:
   quantity entry, code entry, tender, saving, and the receipt. It is coherent,
   but the next feature added to it should probably arrive with a split rather
   than after one.
+
+---
+
+## What a business has taken today - 2026-08-02
+
+### Completed in this session
+
+Candidate 1 of the chunk above: `getSalesComparison` now has a caller. The
+question it was read for first, and the answer, are recorded below because the
+previous handover asked for a decision rather than an implementation.
+
+**It does not duplicate the daily summary, and the row stays.** The handler
+reads the live `sales` collection, so it can answer for a day nightly
+reconciliation has not touched. `TenantDailyMetricsRepository` reads
+`daily_metrics` documents, which the reconciliation processor is the only writer
+of, so **today is normally blank there** - and "how much have we taken today?"
+is the single most-asked question at a counter. It also accepts a `soldById`
+filter and any range up to 366 days, neither of which a per-day document can
+express. Three genuinely different capabilities; the surface was built.
+
+Implemented behavior and safety decisions:
+
+- **The server name is a leftover and the client does not repeat it.** The
+  response carries one `previous` block and nothing to compare it against, so
+  every Dart name calls it what it is - the totals for a stretch of days - while
+  the wire fields stay exactly as the handler declared them
+  (`previousStartDate`, `previousEndDate`, `soldById`).
+- **Profit is parsed, validated, and never displayed.** No product in this app
+  carries a cost: `TenantProduct` has `price` only, and `CheckoutDraft`
+  therefore never sets `unitCostMinor`, so every sale line reaches the server
+  without cost data. The server's `profit` consequently equals its revenue, and
+  showing it would report a margin of 100%. The surface states the
+  `incompleteCostLineCount` instead, which is the same rule
+  `lib/reporting/daily_metrics.dart` already follows and the reason the "Product
+  cost / profit" row of the unreachable table is still open.
+- **An answer that counts differently from what it read is refused.** No
+  category filter is ever sent, and without one the handler counts one
+  transaction per sale it scanned, so `transactions` must equal
+  `scannedTransactions`. A disagreement means the response describes some other
+  request, and it is rejected rather than shown. This is the same strict
+  decoding the reconciliation request result got, applied to the one number an
+  owner would act on.
+- **The period is four fixed choices, not a date picker.** The server refuses a
+  range over 366 days and refuses any period holding more than `SALES_QUERY_LIMIT
+  = 5000` sales, so a free date range is a refusal waiting to happen. Today,
+  7, 30, and 90 days all answer a question somebody actually asks.
+- **A refusal keeps the chooser on screen.** `resource-exhausted` is answered
+  with "choose a shorter period", and that sentence is worthless if the failure
+  state replaces the chooser it refers to. A widget test picks a shorter period
+  straight out of the refusal.
+- **`failed-precondition` is not a transport failure.** The aggregation helpers
+  raise it when a stored sale amount cannot be added exactly; that is a data
+  problem in the business's own sales and asking again will not change it, so it
+  is classified separately from the codes a retry can fix. There is no ambiguous
+  outcome at all here - a read writes nothing, so every refusal is safe to
+  repeat.
+- **The member is never an input.** `Only mine` sends the captured session's own
+  UID, so the filter cannot be pointed at another cashier. The business comes
+  from the same session, and a query created against one business is refused by
+  a gateway holding another.
+- **Reading roles are the server's `REPORTING_ROLES`**, asserted in a test to be
+  identical to `TenantDailyMetricsRepository.allowedRoles`: a period total is
+  the same information over a different stretch of days, so it must not be
+  visible to anyone the daily summary is not.
+- **Reached from the daily summary, not the landing screen.** The summary is
+  where somebody reads "Today is normally still unreconciled"; the button sits
+  directly under that sentence, because it is the answer to it. The route opens
+  under the same session scope as every other guarded route.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/main.dart
+lib/reporting/daily_metrics_panel.dart
+lib/reporting/reporting.dart
+lib/reporting/sales_totals.dart          (new)
+lib/reporting/sales_totals_panel.dart    (new)
+test/reporting/daily_metrics_panel_test.dart
+test/reporting/sales_totals_panel_test.dart  (new)
+test/reporting/sales_totals_test.dart        (new)
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub` over the 17 in-scope lib/test paths reported one
+  pre-existing issue and nothing else: the Sentry `profilesSampleRate` warning
+  at `lib/main.dart:28`.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **941/941**, up from 901, adding **40** tests: 27 gateway
+  cases - including all 13 error codes classified one by one, the range each
+  period resolves to, and seven rejected responses - 11 panel cases, and 2
+  daily-summary cases for the new route and its role gate.
+- `git diff --check` was clean.
+- No backend suite was re-run for this chunk: it changed only Dart, and
+  `git diff --stat 3cb7588..HEAD -- functions firestore.rules rules-tests
+  firestore.indexes.json` is still empty. The session-end backend sequence is
+  recorded below.
+
+Meaningful failures and their resolutions:
+
+- **No test assertion failed in this chunk**; the gateway and both widget files
+  passed on their first run.
+- One layout decision was changed before any test ran. The period chooser was
+  first a four-segment `SegmentedButton`, which does not fit across a phone;
+  four chips in a `Wrap` do, and that is already the pattern the checkout
+  category filter uses.
+
+### The subscription surface was examined and deliberately not built
+
+The other candidate the previous handover offered. It was read before it was
+scoped, and it should not be built yet:
+
+- **Nothing writes the document.** `grep -i subscription functions/src` finds
+  nothing at all. `firestore.rules` allows `read: activeStaff || platformAdmin`
+  and `write: if false`, so only the Admin SDK or the console could ever create
+  one, and no code in this repository does.
+- **No field schema exists anywhere.** The spec names the path
+  `/tenants/{tenantId}/subscription/current` and stops. Rules validate no field,
+  because nothing may write it. There is no fixture, no read model, and no
+  handler to copy a shape from.
+- Building a strict read model would therefore mean **inventing** the contract,
+  and the surface would read "no subscription record" in every environment that
+  exists today. That is the "surface nobody needs" the previous handover warned
+  about, one step earlier in the same reasoning.
+
+The row stays in the unreachable table, with this recorded as the reason.
+Whoever revisits it should start on the server - decide what a subscription
+actually constrains, and which writer owns it - not with a Flutter screen.
+
+### Next bounded chunk
+
+Finish `getSalesComparison`. Its fourth parameter, `categoryId`, is still
+unreached, and reaching it requires correcting a rule the chunk above
+deliberately made strict:
+
+1. **Offer a category filter** on the totals surface, built from
+   `TenantCatalogRepository.loadCategories` - the same canonical categories the
+   checkout filters by. The panel needs a `TenantDataReader`; the daily summary
+   route already has one to pass.
+2. **The `transactions == scannedTransactions` invariant is only valid without
+   a category.** `aggregateSales` skips a sale that holds no matching line, so
+   with a category requested the server legitimately counts fewer transactions
+   than it read. Make the check conditional - equal without a category, no
+   greater than with one - and test both directions with a real fixture.
+3. **A category total is a different figure and must say so.** Without a
+   category the server prefers the recorded sale total; with one it sums the
+   matching lines only. Those are not the same money, and a screen that shows
+   them under one label is lying by omission.
+4. **A failed category load must not remove the total.** The whole-business
+   figure does not depend on the picker, so an unreadable category list should
+   leave the surface working with no filter rather than fail the route.
+5. Add coverage for the payload carrying `categoryId`, the relaxed invariant in
+   both directions, the changed label, an unreadable category list, and the
+   filter surviving a period change.
+6. Leave outside it: a per-cashier picker built from
+   `TenantStaffDirectoryRepository` (the natural chunk after this one), the
+   subscription surfaces, receipt printing, the printed receipt body, discounts,
+   camera barcode scanning, a per-tender reporting breakdown, password reset,
+   product cost/profit fields, a `platform_audit_logs` surface, branding
+   surfaces, deployment, and Android build/emulator validation.
+
+One defect found while building the surface above and deliberately left alone:
+**no reporting screen prints a currency.** The daily summary shows
+`Sales: 1250.50` and the new totals screen shows the same. The checkout does it
+correctly, from `TenantCheckoutConfiguration.currency`. Fixing it means giving
+both reporting routes the configuration read, and it should be one chunk that
+fixes both rather than a detail smuggled into a filter.

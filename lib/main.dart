@@ -169,6 +169,10 @@ class SpiritPOSApp extends StatelessWidget {
     final reconciliationActions = TenantReconciliationActions(
       requestCallable: FirebaseRequestReconciliationCallable(),
     );
+    // The only path in the app that totals sales the server currently holds,
+    // rather than the reconciled figures. It is management-only, which the
+    // callable itself enforces, and it can name no business but the session's.
+    final salesTotalsCallable = FirebaseSalesTotalsCallable();
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -256,6 +260,12 @@ class SpiritPOSApp extends StatelessWidget {
               ),
           reconciliationRoles:
               TenantReconciliationStatusRepository.allowedRoles,
+          // Reached from the summary rather than the landing screen for the
+          // same reason: the summary is where somebody learns that today has
+          // no reconciled figures yet, and this is the answer to that.
+          salesTotalsRoute: () =>
+              TenantSalesTotalsScreen(callable: salesTotalsCallable),
+          salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
         ),
         dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
         receiptLookupRoute: (reader) => TenantReceiptLookupScreen(
