@@ -8131,3 +8131,84 @@ android/gradle.properties
 pubspec.lock dependency-resolution updates for characters, matcher,
 material_color_utilities, meta, test_api, and the Dart SDK constraint
 ```
+
+### Session validation after both chunks were frozen
+
+The two chunks above were committed separately, each with its own Dart tests
+green first. This is the one release-style sequence run afterwards, with no code
+edited between it and this text.
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 17 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:28` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy` | **886/886**, up from 825 at session start |
+| `npm --prefix rules-tests run test:emulator` | **125/125** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `npm --prefix functions test` | **166/166** |
+| `git diff --check` | clean |
+
+`git diff --stat 3cb7588..HEAD -- functions firestore.rules rules-tests
+firestore.indexes.json` is empty: this session changed only Dart. The three
+backend suites were run anyway rather than inherited, because the last handover
+inherited them and one more green sequence is cheaper than an assumption.
+Android build and Android emulator validation were intentionally skipped as
+requested.
+
+**The emulator toolchain broke and the fix belongs in every future handover.**
+The first Rules run failed immediately with `firebase-tools no longer supports
+Java version before 21`. The machine's default `java` is now Temurin **17.0.20**
+(`JAVA_HOME=C:\Users\BonifaceMasota\develop\jdk-17`), which earlier sessions did
+not face. The pinned portable runtimes recorded further up this file are still
+present and still work; the exact prelude that makes every emulator command
+succeed on this host is:
+
+```powershell
+$env:DEBUG = $null
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:Path"
+```
+
+Note the path: the JDK is nested one level inside `jdk21`, and the older
+`C:\tmp\chilltent-jdk21\jdk-21.0.12+8` location quoted around line 1091 also
+still exists. Clearing `DEBUG` matters for the same reason recorded in the test
+instructions - the machine sets `DEBUG=release`, which Firebase treats as debug
+mode and answers with enormous logs.
+
+### Next bounded chunk
+
+The till now scales for a shop with a few dozen products and stops scaling
+somewhere well below the 2,000 the cache admits. Make it hold a real catalog,
+and nothing else:
+
+1. **Bound what is rendered.** `_catalogSection` builds a `Wrap` containing every
+   matching product, and a `Wrap` builds all of its children eagerly even inside
+   a `ListView`. `CheckoutCatalogCacheRefresher` caches up to
+   `maximumProducts = 2000`, so an unfiltered till currently builds two thousand
+   buttons every frame. Cap the rendered matches, state how many matched and how
+   many are shown, and tell the cashier to narrow the search. Do not change what
+   can be sold - only what is drawn.
+2. **Add exact-code entry.** A retail barcode scanner presents itself as a
+   keyboard, so submitting the search field should add the product whose SKU
+   matches exactly, then clear the field ready for the next scan. Ambiguity must
+   refuse rather than guess: no exact match, or more than one, adds nothing and
+   says so. Explicitly **not** camera scanning - that needs a plugin, runtime
+   permissions, and Android build validation, all of which are outside this.
+3. **Add a bounded way to abandon a sale.** A customer who walks away currently
+   costs the cashier one tap per line. One "clear this sale" control behind a
+   confirmation, clearing the cart and the tender and nothing else. Nothing is
+   saved at that point, so this destroys no record.
+4. Add widget coverage for the cap and its message, an exact-code hit, both
+   ambiguous cases, the field clearing after a scan, and clearing a sale
+   including its confirmation being cancelled.
+5. Leave receipt printing, the printed receipt body, discounts, a per-tender
+   reporting breakdown, password reset, product cost/profit fields,
+   `getSalesComparison`, a `platform_audit_logs` surface, subscription and
+   branding surfaces, deployment, and Android build/emulator validation outside
+   that chunk.
+
+One thing that chunk should check rather than assume: whether the till's cached
+SKUs are unique. `HiveCheckoutCatalogCache.write` rejects duplicate product
+**IDs** and says nothing about SKUs, and nothing in the Firestore Rules requires
+a unique SKU either. If two products can share one, step 2's "exactly one match"
+rule is doing real work and needs a test with a genuine collision, not a
+theoretical one.
