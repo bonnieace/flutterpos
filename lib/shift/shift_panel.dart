@@ -1,12 +1,14 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'shift_controller.dart';
 import 'shift_history_panel.dart';
+import 'shift_sales_ledger.dart';
 
 /// Builds the shift controller for the session controller owned by the shell.
 typedef TenantShiftControllerFactory =
@@ -177,12 +179,37 @@ final class _ShiftContents extends StatelessWidget {
           'Your shift in this business is open on another device. Close it '
           'there before opening a shift here.',
         ),
-      if (state.sales != null)
+      if (state.sales case final sales?) ...[
         Text(
           key: const ValueKey('shift-sales-summary'),
-          'Confirmed sales: ${state.sales!.transactionCount} transactions, '
-          '${state.sales!.totalMinor} minor units.',
+          'Confirmed sales: ${sales.transactionCount} transactions, '
+          '${sales.totalMinor} minor units.',
         ),
+        // Stated here rather than only after the close is refused. A real run
+        // found this surface reporting "Confirmed sales: 0" beside a drawer
+        // holding two unsynchronized sales, and saying nothing about them
+        // until the cashier pressed Close and got a message back.
+        if (!sales.isComplete)
+          Text(
+            key: const ValueKey('shift-unsettled-sales'),
+            '${sales.unsettledCount} '
+            '${sales.unsettledCount == 1 ? 'sale' : 'sales'} on this device '
+            '${sales.unsettledCount == 1 ? 'is' : 'are'} not synchronized yet '
+            'and none of the figures here include '
+            '${sales.unsettledCount == 1 ? 'it' : 'them'}. The shift cannot be '
+            'closed until they are.',
+          ),
+        // The expected cash waits for a complete shift. Until every sale is
+        // accounted for the figure is not a smaller truth, it is a number the
+        // drawer will not match - which is exactly what the run showed.
+        //
+        // A split that does not sum to the takings just stated is refused for
+        // the same reason: the cash figure is what a drawer is measured
+        // against, so a wrong one becomes an accusation about the person
+        // counting it.
+        if (sales.isComplete && sales.tendersDescribeTakings)
+          _ExpectedCash(split: sales.tenders),
+      ],
       if (state.errorCode != null)
         Text(key: const ValueKey('shift-error'), _errorLabel()),
       const SizedBox(height: 8),
@@ -267,4 +294,51 @@ final class _ShiftContents extends StatelessWidget {
     'session_changed' => 'The selected business changed.',
     _ => 'The last shift action could not be confirmed.',
   };
+}
+
+/// What the drawer should hold, beside the count the cashier is entering.
+///
+/// Only the cash bucket is shown. This is the surface for counting a drawer,
+/// and no other payment method ever entered it; the confirmed-sales line above
+/// already says what the whole shift came to. It appears with that line, which
+/// is exactly while a cash count is unfinished.
+///
+/// A shift with no cash sales still shows the figure rather than hiding it: a
+/// cashier counting a drawer needs to be told to expect nothing just as much as
+/// to expect something, and an absent line reads as an unanswered question.
+final class _ExpectedCash extends StatelessWidget {
+  const _ExpectedCash({required this.split});
+
+  final ShiftTenderSplit split;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        key: const ValueKey('shift-expected-cash'),
+        'Expected cash: ${split.cash.totalMinor} minor units over '
+        '${split.cash.transactionCount} '
+        '${split.cash.transactionCount == 1 ? 'sale' : 'sales'}.',
+      ),
+      // Money the device holds but cannot attribute is stated rather than
+      // silently left out, because the figure above is the one a drawer is
+      // measured against and a quiet exclusion would present as a shortfall.
+      if (!split.unattributed.isEmpty)
+        Text(
+          key: const ValueKey('shift-unattributed-tender'),
+          '${split.unattributed.transactionCount} '
+          '${split.unattributed.transactionCount == 1 ? 'sale names' : 'sales name'} '
+          'no recognised payment method, worth '
+          '${split.unattributed.totalMinor} minor units. They are inside the '
+          'confirmed sales above but not in the expected cash.',
+        ),
+      if (split.hasRecordedTenders)
+        const Text(
+          key: ValueKey('shift-tender-disclaimer'),
+          checkoutTenderDisclaimer,
+        ),
+    ],
+  );
 }

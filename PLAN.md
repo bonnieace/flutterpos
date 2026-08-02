@@ -9477,3 +9477,277 @@ Practical notes carried forward:
   now live in `SalesTotalsSessionContextLoader` and obey one rule: degrade on
   failure, rethrow `TenantScopeViolation`, cache by UID/tenant/epoch. Any fourth
   should join it rather than invent a fourth policy.
+
+---
+
+## The first real run, and what it found - 2026-08-02
+
+### Completed in this session
+
+Two chunks, committed separately. The Android exclusion was lifted for this
+session at the user's request, which is what made the first one possible: the
+handover above had queued "run the app" and noted that the `10.0.2.2` path had
+never been executed. It had not, and it did not work.
+
+#### Chunk 1: make the first real run possible (`5405fcf`)
+
+The app was driven end to end on an API 35 Android emulator against the local
+Firebase suite: sign in as the seeded owner, open a shift, ring up three sales
+across cash and M-Pesa, start a cash count, and read the figures back. Four
+defects surfaced. Two are fixed here; the other two are below.
+
+- **Android refused every emulator call, and the derivation was blameless.**
+  Sign-in failed with `Cleartext HTTP traffic to 10.0.2.2 not permitted`. The
+  emulators serve plain HTTP; Android has refused cleartext by default since
+  API 28. `lib/dev/firebase_emulators.dart` resolved the host perfectly and the
+  wire had simply never been used.
+  `android/app/src/debug/res/xml/network_security_config.xml` now permits
+  cleartext to exactly the hosts `derivedEmulatorHost` can return.
+- **It lives in `src/debug`, which is the whole safety argument.** A release
+  manifest never merges that source set, so a release binary keeps Android's
+  default refusal however the file changes. That is the same guarantee the Dart
+  switch already makes by throwing outside a debug build, restated where the
+  platform is the one enforcing it. The test asserts the main and profile
+  manifests do not name the config.
+- **The permitted set is narrow, not blanket.** A `base-config` would cover
+  whatever else a debug build talked to, and a test refuses one. The documented
+  physical-handset path (`FIREBASE_EMULATOR_HOST` at a LAN address) is
+  deliberately not covered; `rules-tests/README.md` says so and says what to do
+  about it.
+- **The config and the Dart derivation are tied together by test.**
+  `test/dev/firebase_emulators_test.dart` reads the XML and asserts every host
+  the switch can produce is named in it, so changing `androidEmulatorHostAddress`
+  without changing the config fails in a second instead of five minutes into a
+  Gradle build.
+- **The theme was light and the scaffold was near-black.** On the landing route
+  the branding heading, the `Shift` heading, and the shield icon were present
+  and unreadable, while plain body text beside them was fine. `ThemeData` with
+  no `brightness` is a light theme; only `headlineLarge` and `bodyMedium` were
+  overridden, and the other seventy-odd uses of `titleMedium`, `headlineSmall`,
+  `bodySmall`, `titleSmall`, and `titleLarge` took Material's near-black
+  defaults. Measured contrast against the scaffold was **1.004:1**.
+- **`brightness: Brightness.dark` is the whole fix, and the tests measure
+  rather than restate it.** `test/theme_test.dart` computes the WCAG contrast
+  ratio of every style in the theme against both the scaffold and the raised
+  surface, at the AA threshold that applies to each size and weight. Removing
+  the one line was verified to fail three of the four tests.
+- **The blast radius was checked rather than assumed.** Every use of `bgMid`,
+  `mutedGreen`, and `accentGreen` outside `theme.dart` is inside commented-out
+  legacy code in `lib/config.dart`, no `AppBar` sets a colour, and no test
+  asserted a theme colour. The app bar went from white-on-light to the dark
+  surface, which is what the scaffold was always asking for.
+
+#### Chunk 2: what the drawer should hold (`__CHUNK2__`)
+
+The queued chunk was "a per-tender figure where a cashier needs it: the shift
+close", and it was queued as server-first. **It is not server work at all.**
+`ShiftSalesSummary` is built by `CheckoutOutboxShiftSalesLedger` from the
+encrypted local outbox, not from a query, and every outbox payload has carried
+`tender` since schema v2. `getSalesComparison` was never involved. The scope
+note in the previous handover was wrong, and the code was read before it was
+believed.
+
+- **Nothing the server stores changed, and this was checked rather than
+  assumed.** `TenantShiftRepository.buildCloseIntent` enumerates the fields it
+  writes (`totalSalesMinor`, `transactionCount`), so growing
+  `ShiftSalesSummary` cannot change the closing document. No Rules change and
+  no Functions change: the Rules suite is unchanged at 125/125 and the
+  Functions suite at 171/171.
+- **The bucketing rule is the server's, copied rather than re-derived.**
+  `saleTenderBucket` in `functions/src/operations/domain.ts` treats absent and
+  null as `unrecorded`, the three exact wire values as themselves, and anything
+  else as `other`. `_ShiftTenderSplitBuilder` does the same, so one sale lands
+  in the same bucket whether it is counted at a till or reported over a period.
+  A test drives nine near-misses through it: `Cash`, a leading space, `CASH`,
+  `cheque`, the empty string, a number, a boolean, a map, and a list.
+- **An unmodelled tender does not fail the close.** The total is known and
+  correct either way; refusing would strand a cashier at the end of a shift
+  over a value they never chose. It is bucketed and stated. This is the same
+  decision the period report already made, for the same reason.
+- **The buckets sum to the shift total by construction.** They are filled in
+  the same pass, from the same already-validated `totalMinor`, that grows the
+  total. `tendersDescribeTakings` checks it anyway for every other source of a
+  split, and the panel shows no cash figure at all when it fails: the cash
+  figure is what a drawer is measured against, so a wrong one becomes an
+  accusation about the person counting it.
+- **Expected cash waits for a complete shift.** This came directly out of the
+  run. With two sales unsynchronized the surface said `Confirmed sales: 0
+  transactions, 0 minor units`, offered an expected-cash figure of zero, and
+  said nothing about the two sales until the cashier pressed Close and got a
+  refusal back. The panel now states the unsynchronized count in the cashier's
+  own terms and withholds the cash figure until every sale is accounted for. An
+  expected-cash figure over an incomplete shift is not a smaller truth, it is a
+  number the drawer will not match.
+- **A shift with no cash sales still shows the figure.** Being told to expect
+  nothing is an answer; an absent line is an unanswered question.
+- **The disclaimer is the shared constant.** `checkoutTenderDisclaimer` is
+  reused verbatim so the claim that the payment is unverified cannot drift
+  between the till, the sale history, the receipt lookup, the period report,
+  and this. It appears only when a modelled tender was actually recorded.
+- **A missing bucket is an empty bucket, never a crash.** The ledger always
+  writes all three, but `ShiftTenderSplit` is a public value read by the one
+  screen that closes a till, so `bucket()` answers for every method.
+
+Deliberately outside both chunks:
+
+- Nothing verifies a payment. This still reports what a cashier asserted.
+- No per-tender figure was added to the daily summary or any receipt, and
+  reconciliation still stores no split.
+- The two defects below were diagnosed, not fixed.
+
+### Two defects found by the run and deliberately not fixed
+
+Both are recorded with evidence because both deserve their own chunk.
+
+1. **A saved sale is not submitted until the next app start.** This is the
+   serious one. The till says "A saved sale is submitted and confirmed
+   automatically". It is durable immediately and correct, but the submission
+   worker only runs from `tenantSessionRecoveryFactory`, which fires on session
+   open and on `connectivity.onConnectivityChanged`. Neither happens while a
+   cashier stands at a till. Observed directly: three sales were rung up, the
+   `sales` collection did not exist in Firestore at all,
+   `checkout-outbox-v1.hive` held them as `savedOffline`, and the closing
+   summary therefore reported zero. Force-stopping and relaunching the app
+   submitted all of them and the collection appeared. A till left open all day
+   would never sync and could never close its shift.
+2. **The pending-checkout panel on the landing route is stale.** It is loaded
+   through a route guard that does not re-run when the till is popped, so after
+   ringing up two sales it still read "No checkouts are stored on this device."
+   A relaunch showed "Saved offline: 2". This masked the defect above during
+   diagnosis and would mask it for a cashier.
+
+Also observed, and out of scope: the Sentry DSN in `lib/main.dart` is an
+`http://` URL to an external host. Android blocks it in every build, so those
+envelopes have never been delivered from an Android device, debug or release.
+The debug config added here deliberately does not cover it, because permitting
+cleartext to a real telemetry endpoint is not this chunk's call to make.
+
+### Files in this session
+
+```text
+PLAN.md
+android/app/src/debug/AndroidManifest.xml
+android/app/src/debug/res/xml/network_security_config.xml
+lib/shift/shift_panel.dart
+lib/shift/shift_sales_ledger.dart
+lib/theme.dart
+rules-tests/README.md
+test/dev/firebase_emulators_test.dart
+test/shift/shift_panel_test.dart
+test/shift/shift_sales_ledger_test.dart
+test/theme_test.dart
+```
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/shift lib/dev lib/theme.dart test/shift test/dev test/theme_test.dart` | 1 pre-existing issue: an unused `cloud_firestore` import at `lib/theme.dart:2`, left alone because legacy `lib/pos/*` files import `theme.dart` and may take `Timestamp` transitively |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy test/theme_test.dart` | **1028/1028**, up from 1002, adding **26** tests |
+| `npm --prefix functions test` | **171/171**, unchanged |
+| `npm --prefix rules-tests run test:emulator` | **125/125**, unchanged |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `flutter build apk --debug --no-pub --target-platform android-x64 --dart-define=USE_FIREBASE_EMULATORS=true` | built, installed, and driven on the API 35 emulator |
+| `git diff --check` | clean |
+
+`test/shift` went from 111 to **131**, `test/dev` from 15 to **19**, and the new
+`test/theme_test.dart` adds **4**.
+
+### Meaningful failures and their resolutions
+
+- **The dev emulator command died at startup, and it was the host, not the
+  repo.** `npm --prefix rules-tests run emulators:dev` failed while registering
+  the second Firestore trigger. `rules-tests/firestore-debug.log` showed the
+  real cause: `java.lang.OutOfMemoryError: Unable to allocate 4194304 bytes` in
+  the Firestore emulator's JVM, a native allocation the OS refused. A cold
+  Gradle build was running at the same time on a host with 2 GB free. Run
+  sequentially it starts and seeds every time. Nothing in the repository was at
+  fault and nothing was changed for it.
+- **Two `adb` binaries fought and killed the run.** `flutter run` reported
+  `protocol fault (couldn't read status): connection reset`. Flutter uses
+  `C:\Users\BonifaceMasota\develop\android-sdk\platform-tools\adb.exe`; the one
+  first on `PATH` is a different binary under
+  `C:\Users\BonifaceMasota\Android\Sdk`. A second server takes over the first
+  one's port and both fail. Every later command used Flutter's copy explicitly.
+- **`flutter run` does not accept `--target-platform`.** That flag belongs to
+  `flutter build apk`. Building and installing separately turned out to be the
+  better shape anyway: it lets Gradle finish and release its memory before the
+  Firebase emulators start.
+- **A double hyphen inside an XML comment failed the Android resource merger.**
+  The comment described a `dart-define` flag. It cost a five-minute build to
+  find out, so `test/dev/firebase_emulators_test.dart` now checks that one rule
+  in a second. The comment was reworded rather than the check dropped.
+- **A killed emulator run orphans its processes and leaves its local config.**
+  The next start failed with `Could not start Authentication Emulator, port
+  taken`. The practical note below already warned about the files; the
+  listening ports need clearing too.
+- No test assertion failed at any point. Every suite above was green on its
+  first run after the code was frozen.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+**Submit a sale when it is saved.** Defect 1 above, and nothing else. It is the
+largest real-user gap in the app and the run proved it end to end.
+
+1. Give the composition root a trigger the till can fire. `main.dart` already
+   feeds `tenantRecoveryTriggers` from connectivity changes; a broadcast
+   controller merged into that stream is the smallest seam that does not push
+   submission knowledge into the checkout screen. The screen already knows when
+   a draft became durable, because it returns `CheckoutSavedDraft`, so it needs
+   to signal rather than to submit.
+2. **Change nothing about what submission does.** The worker, its leases, its
+   idempotency, and the outbox state machine are frozen. This chunk changes
+   when it runs. A save that fires a trigger while a submission is already in
+   flight must be harmless, and that is the case worth a test.
+3. Fix defect 2 in the same chunk, because it is the same story from the
+   cashier's side: the pending-checkout panel must re-read when the till is
+   popped, or the fix above is invisible until a relaunch.
+4. Cover: a save triggers submission; a trigger during an in-flight submission
+   does not double-submit; a failed submission leaves the record retryable; a
+   trigger after a tenant switch does not submit the previous session's work;
+   and the landing panel reflects a sale rung up moments earlier.
+5. Re-run the app on the Android emulator to prove it, since that is the only
+   thing that proved the defect. Ring up a sale and watch it reach Firestore
+   without relaunching.
+
+Leave outside it: the tender split anywhere new, receipt printing, the printed
+receipt body, discounts, camera barcode scanning, password reset (still blocked
+on the App Check decision recorded near the top of this file), product
+cost/profit fields, a `platform_audit_logs` surface, branding surfaces, the
+subscription surfaces, the Sentry DSN, and deployment.
+
+### Practical notes carried forward
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it.
+- **Do not run a Gradle build and the Firebase emulators at the same time.**
+  This host has 2-3 GB free and the Firestore emulator's JVM dies with a native
+  `OutOfMemoryError` when they compete. Build, let Gradle exit, then start the
+  emulators.
+- **Use Flutter's own `adb`**, at
+  `C:\Users\BonifaceMasota\develop\android-sdk\platform-tools\adb.exe`. The one
+  first on `PATH` is a different binary under
+  `C:\Users\BonifaceMasota\Android\Sdk` and the two servers fight.
+- **After killing an emulator run, clear both the local config and the ports.**
+  `functions/.secret.local` and `functions/.env.local` survive a hard kill, and
+  so do the processes listening on 9099, 8080, 5001, 4000, and 9150.
+- Driving the app: `adb shell input tap` needs coordinates in device pixels
+  (1080x2400 here), and the emulator's stylus handwriting tutorial will steal
+  the first `input text` into a field. `adb shell settings put secure
+  stylus_handwriting_enabled 0` stops it. Scripted taps must also wait for the
+  app to actually be on screen; a cold start here took over thirty seconds.
+- `adb shell run-as com.example.flutter_application_1 ls -la app_flutter/` shows
+  the Hive files with sizes and timestamps. That is what proved a sale had been
+  persisted locally while Firestore held nothing.
+- The Firestore emulator's REST API answers a `Bearer owner` token with Rules
+  bypassed, which is the quickest way to see what the app actually wrote.
+- Collection-page test fakes must answer in **ascending document-ID order**, and
+  must be keyed **per business**.

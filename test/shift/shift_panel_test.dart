@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -126,6 +127,268 @@ void main() {
       find.text('Confirmed sales: 4 transactions, 98750 minor units.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('shows the expected cash beside the count', (tester) async {
+    await state.save(_record(closeInProgress: true, countedCashMinor: 900));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: _summary(
+        totalMinor: 42500,
+        transactionCount: 4,
+        recorded: const <CheckoutTender, ShiftTenderTotals>{
+          CheckoutTender.cash: ShiftTenderTotals(
+            totalMinor: 25000,
+            transactionCount: 2,
+          ),
+          CheckoutTender.mpesa: ShiftTenderTotals(
+            totalMinor: 12500,
+            transactionCount: 1,
+          ),
+          CheckoutTender.card: ShiftTenderTotals(
+            totalMinor: 5000,
+            transactionCount: 1,
+          ),
+        },
+      ),
+    );
+
+    expect(
+      find.text('Expected cash: 25000 minor units over 2 sales.'),
+      findsOneWidget,
+      reason: 'a drawer holds the cash bucket, not the shift total',
+    );
+    expect(
+      find.byKey(const ValueKey('shift-unattributed-tender')),
+      findsNothing,
+    );
+    expect(
+      find.text(checkoutTenderDisclaimer),
+      findsOneWidget,
+      reason: 'the same sentence every surface uses for a recorded tender',
+    );
+  });
+
+  testWidgets('a shift with no cash sales still states the figure', (
+    tester,
+  ) async {
+    await state.save(_record(closeInProgress: true));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: _summary(
+        totalMinor: 12500,
+        transactionCount: 1,
+        recorded: const <CheckoutTender, ShiftTenderTotals>{
+          CheckoutTender.mpesa: ShiftTenderTotals(
+            totalMinor: 12500,
+            transactionCount: 1,
+          ),
+        },
+      ),
+    );
+
+    // Being told to expect nothing is an answer; an absent line is not.
+    expect(
+      find.text('Expected cash: 0 minor units over 0 sales.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('states the takings that name no recognised method', (
+    tester,
+  ) async {
+    await state.save(_record(closeInProgress: true));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: _summary(
+        totalMinor: 9000,
+        transactionCount: 3,
+        recorded: const <CheckoutTender, ShiftTenderTotals>{
+          CheckoutTender.cash: ShiftTenderTotals(
+            totalMinor: 4000,
+            transactionCount: 1,
+          ),
+        },
+        unrecorded: const ShiftTenderTotals(
+          totalMinor: 3000,
+          transactionCount: 1,
+        ),
+        unrecognised: const ShiftTenderTotals(
+          totalMinor: 2000,
+          transactionCount: 1,
+        ),
+      ),
+    );
+
+    expect(
+      find.text(
+        '2 sales name no recognised payment method, worth 5000 minor units. '
+        'They are inside the confirmed sales above but not in the expected '
+        'cash.',
+      ),
+      findsOneWidget,
+      reason: 'money left out of the cash figure is stated, never dropped',
+    );
+    expect(find.textContaining('unpaid'), findsNothing);
+  });
+
+  testWidgets('a shift that recorded no method carries no disclaimer', (
+    tester,
+  ) async {
+    await state.save(_record(closeInProgress: true));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: _summary(
+        totalMinor: 3000,
+        transactionCount: 1,
+        unrecorded: const ShiftTenderTotals(
+          totalMinor: 3000,
+          transactionCount: 1,
+        ),
+      ),
+    );
+
+    // Nothing on screen was recorded by a cashier, so the sentence claiming so
+    // would be about nothing at all.
+    expect(find.text(checkoutTenderDisclaimer), findsNothing);
+    expect(find.byKey(const ValueKey('shift-expected-cash')), findsOneWidget);
+  });
+
+  testWidgets('a split that does not add up shows no cash figure', (
+    tester,
+  ) async {
+    await state.save(_record(closeInProgress: true));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: _summary(
+        totalMinor: 9000,
+        transactionCount: 2,
+        recorded: const <CheckoutTender, ShiftTenderTotals>{
+          CheckoutTender.cash: ShiftTenderTotals(
+            totalMinor: 4000,
+            transactionCount: 1,
+          ),
+        },
+      ),
+    );
+
+    // The takings themselves are unaffected; only the claim about how they were
+    // paid is refused.
+    expect(find.byKey(const ValueKey('shift-sales-summary')), findsOneWidget);
+    expect(find.byKey(const ValueKey('shift-expected-cash')), findsNothing);
+    expect(find.textContaining('Expected cash'), findsNothing);
+  });
+
+  testWidgets('states unsynchronized sales instead of a cash figure', (
+    tester,
+  ) async {
+    await state.save(_record(closeInProgress: true));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: const ShiftSalesSummary(
+        transactionCount: 0,
+        totalMinor: 0,
+        unsettledCount: 2,
+      ),
+    );
+
+    expect(
+      find.text(
+        '2 sales on this device are not synchronized yet and none of the '
+        'figures here include them. The shift cannot be closed until they are.',
+      ),
+      findsOneWidget,
+      reason: 'the run found this surface silent about them until Close failed',
+    );
+    // An expected-cash figure over an incomplete shift is a number the drawer
+    // will not match, so it waits rather than misleading the count.
+    expect(find.byKey(const ValueKey('shift-expected-cash')), findsNothing);
+  });
+
+  testWidgets('one unsynchronized sale is described in the singular', (
+    tester,
+  ) async {
+    await state.save(_record(closeInProgress: true));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: const ShiftSalesSummary(
+        transactionCount: 1,
+        totalMinor: 4000,
+        unsettledCount: 1,
+      ),
+    );
+
+    expect(
+      find.text(
+        '1 sale on this device is not synchronized yet and none of the figures '
+        'here include it. The shift cannot be closed until they are.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a complete shift says nothing about synchronization', (
+    tester,
+  ) async {
+    await state.save(_record(closeInProgress: true));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: _summary(
+        totalMinor: 4000,
+        transactionCount: 1,
+        recorded: const <CheckoutTender, ShiftTenderTotals>{
+          CheckoutTender.cash: ShiftTenderTotals(
+            totalMinor: 4000,
+            transactionCount: 1,
+          ),
+        },
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('shift-unsettled-sales')), findsNothing);
+    expect(find.byKey(const ValueKey('shift-expected-cash')), findsOneWidget);
+  });
+
+  testWidgets('no cash figure appears before the count begins', (tester) async {
+    await state.save(_record());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(tester, state, server);
+
+    expect(find.text('A shift is open in this business.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('shift-expected-cash')), findsNothing);
   });
 
   testWidgets('renders nothing without an authorized session', (tester) async {
@@ -318,6 +581,25 @@ Map<String, Object?> _document({Map<String, Object?>? overrides}) {
   if (overrides != null) data.addAll(overrides);
   return data;
 }
+
+/// One closing summary with a tender split, as the ledger would have built it.
+ShiftSalesSummary _summary({
+  required int totalMinor,
+  required int transactionCount,
+  Map<CheckoutTender, ShiftTenderTotals> recorded =
+      const <CheckoutTender, ShiftTenderTotals>{},
+  ShiftTenderTotals unrecorded = ShiftTenderTotals.empty,
+  ShiftTenderTotals unrecognised = ShiftTenderTotals.empty,
+}) => ShiftSalesSummary(
+  transactionCount: transactionCount,
+  totalMinor: totalMinor,
+  unsettledCount: 0,
+  tenders: ShiftTenderSplit(
+    recorded: recorded,
+    unrecorded: unrecorded,
+    unrecognised: unrecognised,
+  ),
+);
 
 TenantShiftLocalRecord _record({
   String uid = 'user-a',
