@@ -414,6 +414,22 @@ flutter run --dart-define=USE_FIREBASE_EMULATORS=true --dart-define=FIREBASE_EMU
 The switch is refused outside a debug build - it throws at startup rather than
 silently falling back to the real project. See `lib/dev/firebase_emulators.dart`.
 
+On Android, deriving the right host is not enough on its own. The emulators
+serve plain HTTP and Android has refused cleartext by default since API 28, so
+a debug build also needs
+`android/app/src/debug/res/xml/network_security_config.xml`, which names
+`10.0.2.2` and `127.0.0.1` and is merged only by the debug manifest. Without it
+sign-in fails with:
+
+```text
+An internal error has occurred. [ Cleartext HTTP traffic to 10.0.2.2 not permitted
+```
+
+A **physical handset** reached at a LAN address is deliberately not covered:
+add that address to that config for the duration, and take it out again. A
+release build never merges the file at all, which is the same guarantee the
+Dart switch makes by throwing.
+
 `scripts/seed-dev-emulator.js` refuses to run unless `FIRESTORE_EMULATOR_HOST`
 and `FIREBASE_AUTH_EMULATOR_HOST` are already set, which is what makes
 `firebase-admin` itself incapable of reaching a real project. Re-running it is
