@@ -163,6 +163,12 @@ class SpiritPOSApp extends StatelessWidget {
     final stockActions = TenantStockActions(
       adjustCallable: FirebaseAdjustStockCallable(),
     );
+    // The only path in the app that can ask the server to reconcile. It is
+    // owner- and administrator-only, which the callable itself enforces, and
+    // it is narrower than the roles that read the surface it is offered on.
+    final reconciliationActions = TenantReconciliationActions(
+      requestCallable: FirebaseRequestReconciliationCallable(),
+    );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -246,6 +252,7 @@ class SpiritPOSApp extends StatelessWidget {
               TenantReconciliationStatusScreen(
                 reader: reader,
                 businessDate: businessDate,
+                actions: reconciliationActions,
               ),
           reconciliationRoles:
               TenantReconciliationStatusRepository.allowedRoles,

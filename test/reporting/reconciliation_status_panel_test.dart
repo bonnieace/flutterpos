@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
@@ -362,6 +363,236 @@ void main() {
     );
   });
 
+  group('asking the server to reconcile', () {
+    testWidgets('is not offered when no callable was injected', (tester) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+      await _pump(tester, _controller(role: TenantRole.owner), reader);
+
+      expect(
+        find.byKey(const ValueKey('reconciliation-request-form')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('reconciliation-request-forbidden')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a manager is told who can ask rather than shown nothing', (
+      tester,
+    ) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+      final callable = _Callable(_queued());
+
+      // The server's request roles are narrower than the roles that read this
+      // page, which is surprising enough to state.
+      await _pump(tester, _controller(), reader, callable: callable);
+
+      expect(
+        find.byKey(const ValueKey('reconciliation-request-form')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('reconciliation-request-forbidden')),
+        findsOne,
+      );
+      expect(callable.payloads, isEmpty);
+    });
+
+    testWidgets('says the request covers the business, not the day shown', (
+      tester,
+    ) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.owner),
+        reader,
+        callable: _Callable(_queued()),
+      );
+
+      // The handler files a manual job under today's business date and the
+      // runners take the oldest outstanding day first, so promising this day
+      // would be a promise the server never made.
+      expect(
+        _text(tester, 'reconciliation-request-scope'),
+        'A request covers the whole business, not the day above. The server '
+        'files it under today and works through the outstanding days oldest '
+        'first, so it may regenerate a different day before this one.',
+      );
+    });
+
+    testWidgets('a confirmed request sends the mode and reports the job', (
+      tester,
+    ) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+      final callable = _Callable(_queued(mode: 'full'));
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.admin),
+        reader,
+        callable: callable,
+      );
+      final readsBefore = reader.queries.length;
+
+      await _choose(tester, 'Full check');
+      await _tap(tester, 'reconciliation-request-submit');
+      await _tap(tester, 'reconciliation-request-confirm');
+
+      expect(callable.payloads.single, <String, Object?>{
+        'tenantId': 'tenant-a',
+        'mode': 'full',
+        'requestId': 'reconcile-fixed-1',
+      });
+      expect(
+        _text(tester, 'reconciliation-request-notice'),
+        startsWith('Queued as rj_abc.'),
+      );
+      // The page is re-read so what is shown is the server's own record.
+      expect(reader.queries.length, greaterThan(readsBefore));
+    });
+
+    testWidgets('a cancelled confirmation sends nothing', (tester) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+      final callable = _Callable(_queued());
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.owner),
+        reader,
+        callable: callable,
+      );
+
+      await _tap(tester, 'reconciliation-request-submit');
+      await _tap(tester, 'reconciliation-request-cancel');
+
+      expect(callable.payloads, isEmpty);
+      expect(
+        find.byKey(const ValueKey('reconciliation-request-notice')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a cooldown refusal names both allowances', (tester) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.owner),
+        reader,
+        callable: _Callable.failing(
+          FirebaseFunctionsException(
+            code: 'resource-exhausted',
+            message: 'too soon',
+          ),
+        ),
+      );
+
+      await _tap(tester, 'reconciliation-request-submit');
+      await _tap(tester, 'reconciliation-request-confirm');
+
+      expect(
+        _text(tester, 'reconciliation-request-notice'),
+        'A check of this kind was asked for too recently, so nothing was '
+        'queued. The server allows one catch-up every 5 minutes and one full '
+        'check every 24 hours.',
+      );
+    });
+
+    testWidgets('an unknown outcome reloads and keeps its request ID', (
+      tester,
+    ) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+      final callable = _Callable.failing(
+        FirebaseFunctionsException(code: 'unavailable', message: 'down'),
+      );
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.owner),
+        reader,
+        callable: callable,
+        requestIds: <String>['reconcile-first11', 'reconcile-second2'],
+      );
+      final readsBefore = reader.queries.length;
+
+      await _tap(tester, 'reconciliation-request-submit');
+      await _tap(tester, 'reconciliation-request-confirm');
+      await _tap(tester, 'reconciliation-request-submit');
+      await _tap(tester, 'reconciliation-request-confirm');
+
+      // The job may already exist, so a second attempt must address the same
+      // idempotency record rather than spend the cooldown again.
+      expect(callable.payloads.map((payload) => payload['requestId']), <String>[
+        'reconcile-first11',
+        'reconcile-first11',
+      ]);
+      expect(
+        _text(tester, 'reconciliation-request-notice'),
+        startsWith('The result is unknown.'),
+      );
+      expect(reader.queries.length, greaterThan(readsBefore));
+    });
+
+    testWidgets('a settled refusal starts the next attempt fresh', (
+      tester,
+    ) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+      final callable = _Callable.failing(
+        FirebaseFunctionsException(
+          code: 'resource-exhausted',
+          message: 'too soon',
+        ),
+      );
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.owner),
+        reader,
+        callable: callable,
+        requestIds: <String>['reconcile-first11', 'reconcile-second2'],
+      );
+
+      await _tap(tester, 'reconciliation-request-submit');
+      await _tap(tester, 'reconciliation-request-confirm');
+      await _tap(tester, 'reconciliation-request-submit');
+      await _tap(tester, 'reconciliation-request-confirm');
+
+      // Nothing was queued, so reusing the first ID would make the retry fail
+      // as a duplicate of an attempt that changed nothing.
+      expect(callable.payloads.map((payload) => payload['requestId']), <String>[
+        'reconcile-first11',
+        'reconcile-second2',
+      ]);
+    });
+
+    testWidgets('an untrustworthy answer reloads rather than claiming a job', (
+      tester,
+    ) async {
+      final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+      await _pump(
+        tester,
+        _controller(role: TenantRole.owner),
+        reader,
+        // The handler only ever answers `queued`; anything else is refused.
+        callable: _Callable(_queued(overrides: {'status': 'running'})),
+      );
+      final readsBefore = reader.queries.length;
+
+      await _tap(tester, 'reconciliation-request-submit');
+      await _tap(tester, 'reconciliation-request-confirm');
+
+      expect(
+        _text(tester, 'reconciliation-request-notice'),
+        startsWith('The server answer could not be trusted.'),
+      );
+      expect(reader.queries.length, greaterThan(readsBefore));
+    });
+  });
+
   testWidgets('a tenant switch discards an outstanding load', (tester) async {
     final controller = _controller();
     final reader = _Reader.deferred();
@@ -410,11 +641,14 @@ Future<void> _pump(
   int pageSize = 20,
   String businessDate = '2026-07-31',
   bool settle = true,
+  _Callable? callable,
+  List<String> requestIds = const <String>['reconcile-fixed-1'],
 }) async {
   tester.view.physicalSize = const Size(1400, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+  var index = 0;
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
@@ -424,6 +658,13 @@ Future<void> _pump(
             reader: reader,
             businessDate: businessDate,
             pageSize: pageSize,
+            actions: callable == null
+                ? null
+                : TenantReconciliationActions(requestCallable: callable),
+            requestIdFactory: () =>
+                requestIds[index++ < requestIds.length
+                    ? index - 1
+                    : requestIds.length - 1],
           ),
         ),
       ),
@@ -433,6 +674,59 @@ Future<void> _pump(
   await tester.pump();
   await tester.pump();
   await tester.pump();
+}
+
+Future<void> _tap(WidgetTester tester, String key) async {
+  await tester.tap(find.byKey(ValueKey(key)));
+  await tester.pump();
+  await tester.pump();
+  await tester.pump();
+}
+
+/// Selects one labelled segment of the mode chooser.
+Future<void> _choose(WidgetTester tester, String label) async {
+  await tester.tap(
+    find.descendant(
+      of: find.byKey(const ValueKey('reconciliation-request-mode')),
+      matching: find.text(label),
+    ),
+  );
+  await tester.pump();
+  await tester.pump();
+}
+
+String _text(WidgetTester tester, String key) =>
+    tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+Map<String, Object?> _queued({
+  String mode = 'incremental',
+  Map<String, Object?>? overrides,
+}) {
+  final data = <String, Object?>{
+    'tenantId': 'tenant-a',
+    'jobId': 'rj_abc',
+    'mode': mode,
+    'status': 'queued',
+  };
+  if (overrides != null) data.addAll(overrides);
+  return data;
+}
+
+final class _Callable implements RequestReconciliationCallable {
+  _Callable(this._response) : _error = null;
+  _Callable.failing(Object error) : _response = null, _error = error;
+
+  final Object? _response;
+  final Object? _error;
+  final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(payload);
+    final error = _error;
+    if (error != null) throw error;
+    return _response;
+  }
 }
 
 TenantSessionController _controller({TenantRole role = TenantRole.manager}) =>

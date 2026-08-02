@@ -8005,3 +8005,129 @@ android/gradle.properties
 pubspec.lock dependency-resolution updates for characters, matcher,
 material_color_utilities, meta, test_api, and the Dart SDK constraint
 ```
+
+---
+
+## Reconciliation can be asked for - 2026-08-02
+
+### Completed in this session
+
+`requestTenantReconciliation` has a caller. It was the second row of the
+"Built, tested, and unreachable" table near the top of this file - server-side
+complete with passing tests and no client entry point - and the recommended
+order there was the checkout screen first, then the smaller unreachable rows.
+The checkout screen is done, so this is that row.
+
+An owner or administrator can now ask the server to reconcile from the
+reconciliation status route, choosing a catch-up or a full check. Nothing else
+about reconciliation became reachable: no retry, no cancel, no re-ordering, and
+no way to aim a run at a particular day.
+
+Implemented behavior and safety decisions:
+
+- **The request is described as what the server actually does, not as what the
+  page is about.** This is the decision that shaped the whole surface.
+  `requestTenantReconciliation` files one job for the **whole business** under
+  **today's** business date, and `processMetricsPage` then takes the oldest
+  outstanding day in the business rather than the day the run was queued for. A
+  button on a page titled "Reconciliation for 2026-07-15" therefore does not
+  reconcile 2026-07-15, and a run queued from that page will not even appear in
+  the list below it. The surface says so in its own keyed sentence, and the
+  success notice repeats it. Labelling it "reconcile this day" would have been a
+  promise the server never made.
+- **Requesting is owner and administrator only, and a manager is told why.**
+  `RECONCILIATION_REQUEST_ROLES` is `["owner", "admin"]`, deliberately narrower
+  than the owner/admin/manager who may *read* this page. The sibling stock
+  surface hides its form from anyone who cannot use it; this one shows a
+  sentence instead, because a role boundary that is narrower than the page it
+  sits on is surprising, and silence would read as a missing feature. The client
+  refuses before the callable is reached, so an unauthorized session spends no
+  round trip and creates no idempotency record.
+- **The business is never an input.** The gateway is bound to one captured
+  session and the only thing a caller chooses is the mode, so nothing can ask
+  the server to reconcile another business. An intent created against one tenant
+  and submitted through a gateway bound to another raises a `StateError` before
+  the callable is reached, and a test proves nothing was sent.
+- **Only an unknown outcome may have queued anything.** The handler enqueues the
+  Cloud Task **after** its transaction commits, so a transport failure can leave
+  a real job document behind. `mayHaveQueued` is true for `ambiguous` alone, and
+  only that case keeps its request ID so a retry addresses the same idempotency
+  record instead of spending the cooldown twice. Every settled refusal - denied,
+  cooled down, duplicate, invalid - drops the ID, because reusing it would make
+  the next attempt fail as a duplicate of an attempt that changed nothing.
+- **`aborted` is classified as unknown, not refused.** It is the idempotency
+  helper reporting that this exact request is still in flight, which means a job
+  may already exist for it. Unlike the stock gateway, no case here is decided by
+  matching an error *message*: every distinct condition the handler raises
+  already carries its own code, so the classification is a pure code switch and
+  cannot drift when server wording changes.
+- **The response is reconciled against the intent.** It must name this business,
+  the mode that was asked for, and the status `queued` - the only status the
+  handler ever writes. A response failing any of those is a `FormatException`,
+  and the page then says the answer could not be trusted, re-reads itself, and
+  does **not** claim a job. Telling an owner their business is being re-checked
+  on the strength of an answer that named another business would be worse than
+  saying nothing.
+- **Both cooldowns are stated before the tap and after a refusal.** The server
+  allows one catch-up every 5 minutes and one full check every 24 hours, and the
+  app cannot shorten either. The confirmation dialog names the cost, and the
+  `resource-exhausted` notice names both allowances so the person knows how long
+  the door is shut.
+- The page re-reads itself after a success, an unknown outcome, and an
+  untrustworthy answer, for the same reason the stock surface re-reads: what is
+  shown must be the server's own record rather than an optimistic local one.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Nothing here retries, cancels, quarantines, or re-orders a run, and nothing
+  can target a specific business day. Those belong to the reconciliation
+  workers.
+- `getSalesComparison`, the subscription surfaces, and product cost/profit
+  remain the unreached rows of that table. Password reset is still blocked on
+  the App Check decision.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/main.dart
+lib/reporting/reconciliation_actions.dart
+lib/reporting/reconciliation_request.dart
+lib/reporting/reconciliation_status_panel.dart
+lib/reporting/reporting.dart
+test/reporting/reconciliation_request_test.dart
+test/reporting/reconciliation_status_panel_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **886/886**, up from 850, adding **36** tests: 27 gateway
+  cases - including all 13 error codes classified one by one - and 9 widget
+  cases covering the role boundary, the scope sentence, confirmation and
+  cancellation, the cooldown notice, request-ID retention in both directions,
+  and an untrustworthy answer.
+- `git diff --check` was clean.
+
+Meaningful failures and their resolutions:
+
+- **The first gateway test failed on its first run** because the fixture
+  response said `mode: incremental` while the intent asked for `full`. The
+  failure was the response check working exactly as designed - a response naming
+  another mode is refused - so the fixture was corrected rather than the check.
+- No other assertion failed.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
