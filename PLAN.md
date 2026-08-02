@@ -8885,13 +8885,26 @@ The reporting routes are now complete against every server capability they have:
 `getSalesComparison` has no unreached parameter, and every figure names its
 currency. The next work is elsewhere, and there are two honest candidates:
 
-1. **Split `lib/reporting/sales_totals_panel.dart` before adding to it.** It now
-   holds three choosers, three session-scoped reads, a currency notice, a
-   category-basis sentence, and the failure surface in one file. Nothing in it
-   is wrong, and it is the third file in this codebase to reach that point after
-   the checkout cart panel. A refactor-only chunk - the chooser row and the
-   session-context loader extracted, no behavior changed, the existing 61 tests
-   passing untouched as the proof - is cheap now and expensive later.
+1. **Split `lib/reporting/sales_totals_panel.dart` before adding to it.** At 592
+   lines it now holds three choosers, three session-scoped reads, a currency
+   notice, a category-basis sentence, and the failure surface in one file.
+   Nothing in it is wrong, and it is the third file in this codebase to reach
+   that point after the checkout cart panel. Do it as a **refactor-only** chunk:
+   - Extract the three option types (`_CategoryOptions`, `_StaffOptions`, and
+     the view record) and `_loadSessionContext`/`_readStaff` into one
+     session-context file, since all three obey the single degrade/rethrow/cache
+     rule stated below and that rule should live in one place.
+   - Extract the chooser row - period, member, category chips plus the
+     unavailable/truncated notices - into its own widget, taking the current
+     selections and the three callbacks.
+   - Change no behavior and add no test. The proof is the **existing 48 cases
+     across `test/reporting/sales_totals_test.dart` (24) and
+     `test/reporting/sales_totals_panel_test.dart` (24) passing untouched**, and
+     `test/reporting` staying at **154**. If a test needs editing, the split has
+     changed something it should not have.
+
+   Cheap now, expensive later.
+
 2. **A per-tender reporting breakdown**, which is the largest remaining gap that
    real users would feel: `recordSaleTender` has stored `cash`, `mpesa`, or
    `card` on every v2 sale since 2026-07-29, and nothing anywhere reports it.
@@ -8922,3 +8935,30 @@ Practical notes carried forward:
   categories, staff, and currency: degrade on failure, rethrow
   `TenantScopeViolation`, cache by UID/tenant/epoch. Any fourth should join it
   rather than invent a fourth policy.
+
+### State at handover
+
+The session ended here deliberately, with the chunk above **not started**.
+Nothing is in flight and no work is half-applied.
+
+Four chunks were committed, each with its own green Dart run first:
+
+```text
+de14c38  Tell an owner what the business has taken today
+731062a  Break the sales totals down by category
+c26a65f  Say which currency a reported figure is in
+f25515b  Total one colleague sales separately
+```
+
+Baselines for the next session to measure against:
+
+| | Session start | Session end |
+| --- | --- | --- |
+| `flutter test` over the 17 in-scope paths | 901 | **972** |
+| `test/reporting` alone | 123 | **154** |
+| Rules / integration / Functions | 125 / 12 / 166 | **125 / 12 / 166** |
+
+`git status --porcelain` shows exactly the three pre-existing user-owned edits
+it showed at session start - `.vscode/settings.json`,
+`android/gradle.properties`, and `pubspec.lock`. They were never staged and must
+not be. Everything else in the working tree is committed.
