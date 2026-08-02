@@ -8212,3 +8212,121 @@ SKUs are unique. `HiveCheckoutCatalogCache.write` rejects duplicate product
 a unique SKU either. If two products can share one, step 2's "exactly one match"
 rule is doing real work and needs a test with a genuine collision, not a
 theoretical one.
+
+---
+
+## A till that holds a real catalog - 2026-08-02
+
+### Completed in this session
+
+The chunk defined immediately above, implemented in the same session. One file
+and its test changed; no contract, no rule, and no Functions source was touched.
+
+Implemented behavior and safety decisions:
+
+- **A SKU is not unique, and the till is built on that fact.** This was the
+  question the previous section said to check rather than assume, and the answer
+  is that nothing enforces uniqueness: `firestore.rules` never mentions `SKU`,
+  and `HiveCheckoutCatalogCache.write` refuses only duplicate product **IDs**.
+  Two products really can carry one code, so code entry refuses that case
+  outright instead of adding the first match. A widget test uses a genuine
+  collision rather than a hypothetical one.
+- **Submitting the search adds a product; it never guesses.** A retail barcode
+  scanner presents as a keyboard, so a scan arrives as typed text plus a submit,
+  and that is all this needs - no plugin, no permission, no Android build. The
+  resolution order is: exactly one product whose code matches exactly, else
+  exactly one product visible in the list, else nothing plus a sentence naming
+  which of the two ambiguities occurred. Camera scanning stays out; it would
+  need a plugin and the Android validation this session excludes.
+- **A code is matched across the whole cached catalog, not the filtered view.**
+  A scanned code is unambiguous evidence about what is in the cashier's hand, so
+  a category chip set ten minutes ago must not make the scanner useless. The
+  filter is left exactly as it was afterwards rather than silently reset,
+  because a cashier scanning through one category should stay in it.
+- **The search clears after a successful add and the field is left alone after
+  a refusal.** The first is so the next scan starts clean. The second is the
+  same rule the quantity field follows: text the cashier can correct must stay
+  on screen.
+- **Only 60 product buttons are drawn, and the count is stated.** A `Wrap`
+  builds every child eagerly even inside a `ListView`, and
+  `CheckoutCatalogCacheRefresher` caches up to `maximumProducts = 2000`, so the
+  unbounded version built two thousand buttons every frame. The cap bounds
+  drawing only: a test proves a product past the cap is still sellable by its
+  code, so nothing became unreachable.
+- **A sale can be abandoned in one action.** A customer who walks away
+  previously cost one tap per line. The control appears only when there is
+  something to abandon, sits behind a confirmation, and clears the cart and the
+  tender together. Nothing is persisted before `saveDraft`, so this destroys no
+  record - and the dialog says so rather than implying otherwise.
+- **Clearing a sale leaves the last receipt on screen.** It describes a
+  different, finished sale, which is the same rule the previous chunk
+  established for cart edits.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/checkout/checkout_cart_panel.dart
+test/checkout/checkout_cart_panel_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub` over the 17 in-scope lib/test paths reported one
+  pre-existing issue and nothing else: the Sentry `profilesSampleRate` warning
+  at `lib/main.dart:28`.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **901/901**, up from 886, adding **15** cart tests: 8 for
+  code entry including the shared-SKU collision, 3 for the render cap, and 4 for
+  clearing a sale.
+- `git diff --check` was clean.
+- The three backend suites were **not** re-run for this chunk. They were run
+  green earlier in this same session - Rules **125/125**, integration **12/12**,
+  Functions **166/166** - and `git diff --stat 3cb7588..HEAD -- functions
+  firestore.rules rules-tests firestore.indexes.json` is still empty. Android
+  build and Android emulator validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The truncation edit produced a collection-`if` that no longer closed.**
+  Wrapping the product `Wrap` in a spread list needed a matching `]`, which the
+  analyzer caught immediately at the next statement rather than at the edit.
+  Caught before any test ran.
+- No test assertion failed in this chunk.
+
+### Next bounded chunk
+
+The till and the reconciliation request are both done, so the next work is not
+in the checkout at all. Two candidates, in the order recommended:
+
+1. **`getSalesComparison` has no caller** and has been excluded by name for
+   roughly sixteen consecutive chunks - the longest-standing row of the "Built,
+   tested, and unreachable" table near the top of this file. Read the handler
+   before scoping it: decide what question it answers that
+   `TenantDailyMetricsRepository` does not, which roles may ask it, and whether
+   its answer is a read model that needs the same strict decoding the
+   reconciliation request result got. If it turns out to duplicate the daily
+   summary, say so and delete the row rather than building a surface nobody
+   needs.
+2. **The subscription surfaces.** `TenantPaths.currentSubscription` exists and
+   Rules exist, and no repository reads either. Spec line 14 names subscription
+   as a per-business concern, so this is a real gap rather than an oversight -
+   but it is a larger chunk than it looks, and it should start with a read-only
+   surface, never a write.
+
+Leave outside either chunk: receipt printing, the printed receipt body,
+discounts, camera barcode scanning, a per-tender reporting breakdown, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, deployment, and Android build/emulator validation.
+
+Two practical notes for whoever picks this up:
+
+- The emulator prelude in the session-validation table above is not optional on
+  this machine any more. The default `java` is JDK 17 and every emulator command
+  fails immediately without it.
+- The checkout cart panel is now over 900 lines and holds search, filtering,
+  quantity entry, code entry, tender, saving, and the receipt. It is coherent,
+  but the next feature added to it should probably arrive with a split rather
+  than after one.

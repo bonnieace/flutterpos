@@ -442,6 +442,266 @@ void main() {
     });
   });
 
+  group('entering a code', () {
+    setUp(() {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        categories: <TenantCategory>[_category('tenant-a', 'drinks')],
+        products: <TenantProduct>[
+          _product('tenant-a', 'cola', price: 60, categoryId: 'drinks'),
+          _product('tenant-a', 'water', price: 40, categoryId: 'drinks'),
+          _product('tenant-a', 'loaf', price: 55, categoryId: 'bread'),
+        ],
+      );
+    });
+
+    testWidgets('a scanned code adds the product and clears the field', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      // A retail scanner types the code and submits, which is exactly this.
+      await _submit(tester, 'checkout-search', 'sku-loaf');
+
+      expect(find.byKey(const ValueKey('checkout-line-loaf')), findsOne);
+      // Cleared so the next scan starts from the whole catalog.
+      expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
+      expect(find.byKey(const ValueKey('checkout-code-notice')), findsNothing);
+    });
+
+    testWidgets('a code is matched whatever the category filter is set to', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-category-drinks');
+      await _submit(tester, 'checkout-search', 'sku-loaf');
+
+      // A scanned code is evidence about what is in the cashier's hand; a chip
+      // set earlier must not make the scanner useless.
+      expect(find.byKey(const ValueKey('checkout-line-loaf')), findsOne);
+      // The filter itself is left exactly as it was.
+      expect(find.byKey(const ValueKey('checkout-product-loaf')), findsNothing);
+    });
+
+    testWidgets('a code no product carries adds nothing and says so', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _submit(tester, 'checkout-search', 'sku-nothing');
+
+      expect(
+        _text(tester, 'checkout-code-notice'),
+        'Nothing on this device matches that. Check the code and try again.',
+      );
+      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
+    });
+
+    testWidgets('a code two products share is refused rather than guessed', (
+      tester,
+    ) async {
+      // Nothing makes a SKU unique: Firestore Rules do not mention it and the
+      // cache only refuses duplicate product IDs, so this is a real state.
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        products: <TenantProduct>[
+          _product('tenant-a', 'cola-330', sku: 'SHARED'),
+          _product('tenant-a', 'cola-500', sku: 'SHARED'),
+        ],
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _submit(tester, 'checkout-search', 'SHARED');
+
+      expect(
+        _text(tester, 'checkout-code-notice'),
+        'More than one product on this device carries that code, so nothing '
+        'was added. Pick the right one from the list.',
+      );
+      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
+      expect(drafts.requests, isEmpty);
+    });
+
+    testWidgets('a search naming exactly one product adds it too', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      // Not a code, but no less unambiguous: one product is left on screen.
+      await _submit(tester, 'checkout-search', 'water');
+
+      expect(find.byKey(const ValueKey('checkout-line-water')), findsOne);
+    });
+
+    testWidgets('a search naming several products adds none of them', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _submit(tester, 'checkout-search', 'name');
+
+      expect(
+        _text(tester, 'checkout-code-notice'),
+        'That matches more than one product, so nothing was added. Pick one '
+        'from the list, or enter its exact code.',
+      );
+      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
+    });
+
+    testWidgets('an empty search does nothing at all', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _submit(tester, 'checkout-search', '');
+
+      expect(find.byKey(const ValueKey('checkout-code-notice')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
+    });
+
+    testWidgets('scanning the same code twice sells two of it', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _submit(tester, 'checkout-search', 'sku-cola');
+      await _submit(tester, 'checkout-search', 'sku-cola');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(drafts.requests.single.lines.single.quantity, 2);
+    });
+  });
+
+  group('a catalog too large to draw', () {
+    setUp(() {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        products: <TenantProduct>[
+          for (var index = 0; index < maximumRenderedCheckoutProducts + 5; index++)
+            _product(
+              'tenant-a',
+              'product-${index.toString().padLeft(3, '0')}',
+              price: 5,
+            ),
+        ],
+      );
+    });
+
+    testWidgets('draws only the bounded number and says how many matched', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(
+        find.byKey(const ValueKey('checkout-product-product-000')),
+        findsOne,
+      );
+      // A Wrap builds every child eagerly, so the cap is what keeps a real
+      // catalog from building thousands of buttons every frame.
+      expect(
+        find.byKey(
+          ValueKey(
+            'checkout-product-product-'
+            '${maximumRenderedCheckoutProducts.toString().padLeft(3, '0')}',
+          ),
+        ),
+        findsNothing,
+      );
+      expect(
+        _text(tester, 'checkout-catalog-truncated'),
+        'Showing $maximumRenderedCheckoutProducts of '
+        '${maximumRenderedCheckoutProducts + 5} matching products. Narrow the '
+        'search, or enter a code to add one directly.',
+      );
+    });
+
+    testWidgets('a product past the cap is still sellable by its code', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      // The cap bounds what is drawn, never what can be sold.
+      await _submit(tester, 'checkout-search', 'sku-product-064');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(drafts.requests.single.lines.single.productId, 'product-064');
+    });
+
+    testWidgets('a narrowed search drops the cap message', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _enter(tester, 'checkout-search', 'product-01');
+
+      expect(
+        find.byKey(const ValueKey('checkout-catalog-truncated')),
+        findsNothing,
+      );
+    });
+  });
+
+  group('clearing a sale', () {
+    testWidgets('is offered only once there is something to abandon', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(find.byKey(const ValueKey('checkout-clear-sale')), findsNothing);
+
+      await _tap(tester, 'checkout-product-product-a');
+
+      expect(find.byKey(const ValueKey('checkout-clear-sale')), findsOne);
+    });
+
+    testWidgets('a confirmed clear empties the cart and the tender', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-clear-sale');
+      await _tap(tester, 'checkout-clear-confirm');
+
+      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
+      // The tender goes with the cart so it is never carried into the next
+      // customer unobserved.
+      expect(
+        _text(tester, 'checkout-save-blocked'),
+        'Add at least one item to save this sale.',
+      );
+      // Nothing was ever persisted, so nothing was destroyed.
+      expect(drafts.requests, isEmpty);
+    });
+
+    testWidgets('a cancelled clear keeps every line', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-clear-sale');
+      await _tap(tester, 'checkout-clear-cancel');
+
+      expect(find.byKey(const ValueKey('checkout-line-product-a')), findsOne);
+    });
+
+    testWidgets('clearing a sale leaves the last receipt on screen', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-clear-sale');
+      await _tap(tester, 'checkout-clear-confirm');
+
+      // The receipt describes a different, finished sale.
+      expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+    });
+  });
+
   group('typing a quantity', () {
     testWidgets('sells twelve of something in one entry', (tester) async {
       await _pump(tester, sessions, catalog, drafts);
@@ -891,6 +1151,13 @@ Future<void> _enter(WidgetTester tester, String key, String value) async {
   await _settle(tester);
 }
 
+/// Types [value] then submits, which is what a barcode scanner produces.
+Future<void> _submit(WidgetTester tester, String key, String value) async {
+  await tester.enterText(find.byKey(ValueKey(key)), value);
+  await tester.testTextInput.receiveAction(TextInputAction.done);
+  await _settle(tester);
+}
+
 String _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
@@ -984,12 +1251,13 @@ TenantProduct _product(
   double price = 10,
   int quantity = 12,
   String categoryId = 'drinks',
+  String? sku,
 }) => TenantProduct.fromSnapshot(
   TenantQueryDocumentSnapshot(
     path: 'tenants/$tenantId/products/$productId',
     data: <String, Object?>{
       'name': '$productId name',
-      'SKU': 'sku-$productId',
+      'SKU': sku ?? 'sku-$productId',
       'price': price,
       'quantity': quantity,
       'categoryId': categoryId,

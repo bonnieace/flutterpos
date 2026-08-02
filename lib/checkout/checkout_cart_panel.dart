@@ -10,6 +10,14 @@ import 'checkout_refusal.dart';
 import 'checkout_sale.dart';
 import 'checkout_tender.dart';
 
+/// The largest number of product buttons the till draws at once.
+///
+/// `CheckoutCatalogCacheRefresher` caches up to two thousand products, and the
+/// products are laid out in a `Wrap`, which builds every child eagerly even
+/// inside a `ListView`. This bounds the drawing only: a product past the cap is
+/// still reachable by search and still reachable by its exact code.
+const int maximumRenderedCheckoutProducts = 60;
+
 /// Guarded point-of-sale route for the selected tenant session.
 final class TenantCheckoutScreen extends StatelessWidget {
   const TenantCheckoutScreen({super.key, required this.cache, this.drafts});
@@ -58,6 +66,20 @@ final class TenantCheckoutScreen extends StatelessWidget {
 /// - **Search and filtering read only the cached snapshot.** The till issues no
 ///   Firestore read of its own; a sale must be buildable with no network at
 ///   all, which is the entire reason the offline catalog exists.
+/// - **Submitting the search adds a product by its code, and refuses to
+///   guess.** A retail barcode scanner presents itself as a keyboard, so a scan
+///   arrives here as typed text followed by a submit. Nothing is added unless
+///   the query resolves to exactly one product, because a till that picks one
+///   of two candidates sells the wrong thing silently. Nothing in Firestore
+///   Rules or in [HiveCheckoutCatalogCache] makes a SKU unique - only the
+///   product ID is checked for duplicates - so two products really can carry
+///   one code, and that case is refused rather than resolved.
+/// - **Only a bounded number of products is drawn.** A `Wrap` builds every
+///   child eagerly even inside a `ListView`, and the cache admits up to two
+///   thousand products, so the list is capped at
+///   [maximumRenderedCheckoutProducts] and says how many matched. This changes
+///   what is drawn and never what can be sold: a capped-out product is still
+///   reachable by search and still reachable by its code.
 final class TenantCheckoutPanel extends StatefulWidget {
   const TenantCheckoutPanel({super.key, required this.cache, this.drafts});
 
@@ -170,6 +192,9 @@ final class _CartEditorState extends State<_CartEditor> {
   CheckoutSavedDraft? _saved;
   bool _receiptCopied = false;
 
+  /// Why the last submitted search added nothing. Cleared by the next edit.
+  String? _codeNotice;
+
   CheckoutCatalogSnapshot get _snapshot => widget.snapshot;
 
   @override
@@ -213,6 +238,80 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _categoryId = uncachedOnly ? null : categoryId;
       _uncachedCategoriesOnly = uncachedOnly;
+      _codeNotice = null;
+    });
+  }
+
+  /// Adds the one product the submitted search names, or explains why it did
+  /// not. A barcode scanner arrives here: it types the code and submits.
+  ///
+  /// The code lookup deliberately spans the whole cached catalog rather than
+  /// the filtered view. A scanned code is unambiguous evidence about which
+  /// product is in the cashier's hand, and refusing it because a category chip
+  /// happens to be set would make the scanner useless the moment anyone
+  /// filtered. The category filter is therefore left exactly as it was.
+  void _submitSearch() {
+    final query = _search.text.trim();
+    if (query.isEmpty) return;
+
+    final byCode = <TenantProduct>[
+      for (final product in _snapshot.products)
+        if (product.sku.toLowerCase() == query.toLowerCase()) product,
+    ];
+    // Nothing makes a SKU unique - not Firestore Rules, not the cache, which
+    // only refuses duplicate product IDs - so a shared code is a real state and
+    // is refused rather than resolved by picking the first one.
+    if (byCode.length > 1) {
+      setState(() {
+        _codeNotice =
+            'More than one product on this device carries that code, so '
+            'nothing was added. Pick the right one from the list.';
+      });
+      return;
+    }
+    if (byCode.length == 1) {
+      _addFromSearch(byCode.single);
+      return;
+    }
+
+    // No code matched, so fall back to the list the cashier is looking at.
+    // One visible product is as unambiguous as a code; more than one is not.
+    final visible = _visibleProducts;
+    if (visible.length == 1) {
+      _addFromSearch(visible.single);
+      return;
+    }
+    setState(() {
+      _codeNotice = visible.isEmpty
+          ? 'Nothing on this device matches that. Check the code and try '
+                'again.'
+          : 'That matches more than one product, so nothing was added. Pick '
+                'one from the list, or enter its exact code.';
+    });
+  }
+
+  /// Adds [product] and clears the search so the next scan starts clean.
+  void _addFromSearch(TenantProduct product) {
+    _add(product);
+    if (!mounted) return;
+    setState(() {
+      _search.clear();
+      _codeNotice = null;
+    });
+  }
+
+  /// Empties the cart without saving anything.
+  ///
+  /// Nothing is persisted until [_save], so this destroys no record - only the
+  /// lines a cashier rang up for a customer who left. The saved receipt is
+  /// deliberately untouched: it describes a different, finished sale.
+  void _clearSale() {
+    setState(() {
+      _quantities.clear();
+      _unusableQuantities.clear();
+      _tender = null;
+      _codeNotice = null;
+      _clearRefusal();
     });
   }
 
@@ -222,6 +321,7 @@ final class _CartEditorState extends State<_CartEditor> {
     if (!_quantities.containsKey(product.id) &&
         _quantities.length >= maximumCheckoutSaleLines) {
       setState(() {
+        _codeNotice = null;
         _refusal = CheckoutRefusal.forCode('invalid_line_count');
       });
       return;
@@ -281,11 +381,13 @@ final class _CartEditorState extends State<_CartEditor> {
     });
   }
 
-  /// Clears the previous attempt's refusal so it can never sit beside a cart
-  /// the cashier has since changed. The saved receipt is deliberately not
-  /// cleared here; it describes a sale that is already finished.
+  /// Clears the previous attempt's refusal and code notice so neither can sit
+  /// beside a cart the cashier has since changed. The saved receipt is
+  /// deliberately not cleared here; it describes a sale that is already
+  /// finished.
   void _clearRefusal() {
     _refusal = null;
+    _codeNotice = null;
   }
 
   void _dismissReceipt() {
@@ -507,7 +609,13 @@ final class _CartEditorState extends State<_CartEditor> {
 
   List<Widget> _catalogSection(BuildContext context, String currency) {
     final text = Theme.of(context).textTheme;
-    final visible = _visibleProducts;
+    final matches = _visibleProducts;
+    // A `Wrap` builds every child eagerly even inside a `ListView`, and the
+    // cache admits two thousand products. Only what is drawn is bounded; every
+    // match stays sellable by narrowing the search or entering its code.
+    final visible = matches.length > maximumRenderedCheckoutProducts
+        ? matches.sublist(0, maximumRenderedCheckoutProducts)
+        : matches;
     return <Widget>[
       Text('Products', style: text.titleSmall),
       const SizedBox(height: 4),
@@ -529,12 +637,19 @@ final class _CartEditorState extends State<_CartEditor> {
       TextField(
         key: const ValueKey('checkout-search'),
         controller: _search,
-        onChanged: (_) => setState(() {}),
+        textInputAction: TextInputAction.done,
+        onChanged: (_) => setState(() => _codeNotice = null),
+        onSubmitted: (_) => _submitSearch(),
         decoration: const InputDecoration(
           labelText: 'Search by name or code',
+          helperText: 'Scan or enter a code and press enter to add it.',
           isDense: true,
         ),
       ),
+      if (_codeNotice case final notice?) ...[
+        const SizedBox(height: 4),
+        Text(key: const ValueKey('checkout-code-notice'), notice),
+      ],
       if (_snapshot.categories.isNotEmpty || _hasUncachedCategories) ...[
         const SizedBox(height: 8),
         Wrap(
@@ -577,7 +692,17 @@ final class _CartEditorState extends State<_CartEditor> {
           'No product on this device matches that search. Clear it to see the '
           'whole list.',
         )
-      else
+      else ...[
+        if (matches.length > visible.length) ...[
+          Text(
+            key: const ValueKey('checkout-catalog-truncated'),
+            'Showing ${visible.length} of ${matches.length} matching '
+            'products. Narrow the search, or enter a code to add one '
+            'directly.',
+            style: text.bodySmall,
+          ),
+          const SizedBox(height: 8),
+        ],
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -601,6 +726,7 @@ final class _CartEditorState extends State<_CartEditor> {
               ),
           ],
         ),
+      ],
       const SizedBox(height: 20),
     ];
   }
@@ -649,8 +775,44 @@ final class _CartEditorState extends State<_CartEditor> {
             : 'Total: $currency ${_money(total)}',
         style: text.titleMedium,
       ),
+      // Offered only when there is something to abandon, and never for a saved
+      // sale: nothing here is persisted, so this destroys no record.
+      if (_quantities.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        OutlinedButton(
+          key: const ValueKey('checkout-clear-sale'),
+          onPressed: _saving ? null : () => _confirmClearSale(context),
+          child: const Text('Clear this sale'),
+        ),
+      ],
       const SizedBox(height: 20),
     ];
+  }
+
+  Future<void> _confirmClearSale(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear this sale?'),
+        content: const Text(
+          'Every item is removed and the payment method is cleared. Nothing '
+          'has been saved yet, so no record is lost.',
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('checkout-clear-cancel'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            key: const ValueKey('checkout-clear-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear it'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) _clearSale();
   }
 
   List<Widget> _tenderSection(BuildContext context) => <Widget>[
