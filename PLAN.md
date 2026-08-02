@@ -9038,3 +9038,164 @@ Baselines for the next session to measure against:
 it showed at session start - `.vscode/settings.json`,
 `android/gradle.properties`, and `pubspec.lock`. They were never staged and must
 not be. Everything else in the working tree is committed.
+
+---
+
+## The app can reach the emulators - 2026-08-02
+
+### Completed in this session
+
+Chunk 1 of 3 from the queue immediately above, implemented in the same session.
+The app can now be run end to end against a local emulator suite with one
+`--dart-define` and one command, against a business that actually exists. This
+chunk adds no feature: it adds a way to run what already exists.
+
+**The standing Android exclusion was not lifted.** The previous handover asked
+for that answer before starting, and the answer given for this session was to
+skip Android build and Android emulator validation. So the `10.0.2.2` path ships
+proved by unit tests and not by execution on a device. That is recorded here as
+a known gap rather than presented as validated: the derivation is provable
+without a device, the connection from a running Android emulator is not, and
+nobody has run it.
+
+Implemented behavior and safety decisions:
+
+- **The switch cannot be enabled outside a debug build.** This is the whole
+  safety argument. A switch that silently fails to redirect writes test data
+  into a real project; one that silently redirects makes a real user's data
+  vanish. `resolveFirebaseEmulatorTarget` therefore throws `not_a_debug_build`
+  rather than degrading, and the gate is `kDebugMode` rather than
+  `!kReleaseMode` so a **profile** build is refused too. Both the define and
+  `kDebugMode` are compile-time constants, so a release binary built with the
+  define throws at startup instead of quietly reaching production.
+- **The refusal is checked before anything else.** A test passes a release build
+  an invalid host *and* an invalid port and asserts the build-mode code still
+  comes back: that is the failure a developer has to fix first, and reporting a
+  port problem to somebody who is about to ship an emulator build would bury it.
+- **Nothing is enabled by default, and a test proves it in this binary.** The
+  test suite passes no define, so `firebaseEmulatorTargetFromEnvironment()`
+  returns `null` and `firebaseEmulatorsConnected` is false. A future edit that
+  makes the switch default-on fails that test.
+- **The host is derived, and the derivation is the one piece with real unit
+  tests.** An Android emulator reaches its host machine at `10.0.2.2`; every
+  other target reaches it on loopback. A **web build running in a browser on
+  Android** is loopback too, because it runs on the developer machine's own
+  network stack - so the rule is the pair (`isWeb`, platform), not the reported
+  platform alone. An explicit `FIREBASE_EMULATOR_HOST` overrides it for a
+  physical handset on the LAN.
+- **Both plugins' `automaticHostMapping` is turned off.** `cloud_firestore`,
+  `firebase_auth`, and `cloud_functions` each silently rewrite `localhost` and
+  `127.0.0.1` to `10.0.2.2` on Android. Leaving that on would mean the tested
+  derivation is not the one in effect, so the derivation would be unprovable.
+  One authority, tested.
+- **A host that is not a bare address is refused, never guessed.** A scheme, an
+  embedded port, a path, untrimmed whitespace, a leading hyphen or dot, and an
+  over-long name all fail as `invalid_host`; a port outside 1-65535 fails as
+  `invalid_port` for each of the three services separately.
+- **The connect call sits deliberately *after* `firestore.settings` is
+  assigned.** `useFirestoreEmulator` records its host by `copyWith` **inside**
+  those same settings (`cloud_firestore-6.1.1/lib/src/firestore.dart:152`), so
+  assigning a whole `Settings` object afterwards would discard the redirect and
+  send a local run's writes to the real project. The ordering carries a comment
+  saying so, because it looks arbitrary and is not.
+- **Connecting twice is refused, and the flag is raised before the first call
+  rather than after the last.** A partially applied redirect must not be retried
+  into a mixed state where Auth is local and Firestore is not.
+- **`firebase.json` gained the `emulators` block; neither test config was
+  touched.** `firebase.test.json` and `firebase.invitation-test.json` keep their
+  own ports (9199/8180/5101), so a developer's local run and the test harness
+  cannot break each other. The dev ports are the Firebase defaults - 9099, 8080,
+  5001 - and a unit test asserts the Dart constants equal them, because the app
+  cannot read that file at runtime.
+- **The seed script cannot run outside an emulator.** It requires
+  `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST` and aborts when
+  either is absent. That is not a check but the guarantee itself: those two
+  variables are what make `firebase-admin` incapable of reaching a real project.
+  A set `GOOGLE_APPLICATION_CREDENTIALS` is refused as a second signal.
+- **`configuration/checkout` is written first, deliberately.** Without it
+  `CheckoutCatalogCacheRefresher` refuses with `configurationUnavailable` and no
+  sale can be rung up however complete the catalog is.
+- **The seed models the cases the till was built to handle**, so they can be
+  seen rather than only asserted: two products sharing the SKU `5901234123457`
+  (the collision the scan path refuses outright), a product with zero stock, one
+  with **negative** stock, and one naming a category the catalog does not hold
+  (the `Other` chip).
+- **The seed verifies itself.** It re-reads `configuration/checkout`, the owner
+  staff record, and the `tenant_memberships` mirror, and counts the products. A
+  half-applied seed produces a confusing app - no till, no access, or no
+  business in the list - rather than an obvious failure, so it is checked
+  instead of assumed.
+- The runner writes local-only secret and parameter files, refuses to overwrite
+  either, and removes both on exit - the same pattern
+  `run-invitation-emulator-tests.js` established. Neither is ever committed:
+  `functions/.gitignore` already ignores `*.local`.
+
+Deliberately outside this chunk:
+
+- Nothing about what the app *does* changed. No route, no read model, no rule.
+- Camera scanning, receipt printing, and every other standing exclusion are
+  untouched.
+
+Files in this chunk:
+
+```text
+PLAN.md
+firebase.json
+lib/dev/firebase_emulators.dart               (new)
+lib/main.dart
+rules-tests/README.md
+rules-tests/package.json
+rules-tests/scripts/run-dev-emulators.js      (new)
+rules-tests/scripts/seed-dev-emulator.js      (new)
+test/dev/firebase_emulators_test.dart         (new)
+```
+
+Validation evidence:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the now **19** in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy` | **987/987**, up from 972, adding **15** emulator-switch tests |
+| `node scripts/run-dev-emulators.js --no-hold` from `rules-tests` | exit 0: Auth, Firestore, and Functions started, every endpoint initialized, the seed applied and verified, clean shutdown |
+| `node scripts/seed-dev-emulator.js` with no emulator environment | exit 1 with the refusal sentence, nothing written |
+| `git diff --check` | clean |
+
+The Rules, Functions, and integration suites were **not** re-run for this chunk.
+It changed no `firestore.rules`, no `functions/src`, and no `rules-tests/test`
+file, and the live emulator run above exercised the same Functions build those
+suites cover. Android build and Android emulator validation were skipped as
+requested; see the note at the top of this section.
+
+Meaningful failures and their resolutions:
+
+- **The first two runs hung for over ten minutes each and produced no error.**
+  Both stopped immediately after `Serving at port 8712`, which is HTTP function
+  discovery *succeeding*. The cause was the next step: `functions/src` declares
+  five secrets and six `defineString` parameters **with no default**, and the
+  emulator stops at startup to ask for each one. With no terminal to answer, the
+  run waits forever and prints nothing further. The invitation harness never hits
+  this because its codebase exports only seven functions and loads none of the
+  email configuration; this one loads `index.ts` entire. Resolved by writing both
+  `functions/.secret.local` and `functions/.env.local` with local-only values,
+  which is now documented in `rules-tests/README.md` as the reason and not just
+  the fix. `CI=true` was added to the child environment in the same pass,
+  matching the invitation runner.
+- **Killing a hung run left `functions/.secret.local` behind**, and the next run
+  refused to start because of it - the overwrite guard working exactly as
+  intended on the file its own crash left. The cleanup now removes both files
+  and tolerates either being absent.
+- **`MetadataLookupWarning: 169.254.169.254` appears on every start** and is
+  expected: the project ID is real, so `firebase-tools` probes for application
+  default credentials before falling back. It costs one network timeout at
+  startup and nothing else. The project ID cannot be swapped for a `demo-` one,
+  because the emulators namespace data by project and the app is built against
+  `multitenant-pos-b8326`; a demo namespace would be seeded and then invisible.
+- No test assertion failed. Both Dart commands were green on first execution.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```

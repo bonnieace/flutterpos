@@ -13,6 +13,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'audit/audit.dart';
 import 'checkout/checkout.dart';
+import 'dev/firebase_emulators.dart';
 import 'inventory/inventory.dart';
 import 'reporting/reporting.dart';
 import 'returns/returns.dart';
@@ -82,6 +83,13 @@ Future<void> main() async {
         cacheSizeBytes:
             Settings.CACHE_SIZE_UNLIMITED, // Optional: unlimited cache
       );
+
+      // Deliberately after the assignment above and before the first Firebase
+      // call: `useFirestoreEmulator` records its host inside those same
+      // settings, so assigning a whole `Settings` afterwards would discard the
+      // redirect and send a local run's writes to the real project. Without
+      // the `--dart-define` this does nothing at all.
+      await connectFirebaseEmulatorsFromEnvironment();
 
       final tenantGateway = FirebaseTenantGateway();
       final bootstrapService = TenantBootstrapService(

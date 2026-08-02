@@ -377,6 +377,48 @@ For focused diagnosis, set `INTEGRATION_TEST_NAME_PATTERN` to a Node test-name
 pattern before launching the runner. On memory-constrained Windows hosts, set
 `NODE_OPTIONS=--max-old-space-size=512` for the Functions emulator workers.
 
+## Running the Flutter app against local emulators
+
+The suites above serve tests only. To drive the real app locally, start the
+emulators declared in `firebase.json` - a different config from the two test
+ones on purpose, so a local run and the test harness cannot break each other:
+
+```powershell
+npm --prefix rules-tests run emulators:dev
+```
+
+That builds Functions, writes local-only `functions/.secret.local` and
+`functions/.env.local` values, starts Auth, Firestore, and Functions, seeds one
+complete business, prints the sign-in details, and holds until Ctrl+C. Both
+local files are removed on exit and neither is ever committed. The command
+refuses to start if either already exists, so a real local configuration is
+never overwritten.
+
+Every `defineSecret`/`defineString` parameter without a default is supplied
+there. Without them the emulator stops at startup to ask for values and, with no
+terminal to answer, the run appears to hang after `Serving at port ...`.
+
+Then run the app with the switch:
+
+```powershell
+flutter run --dart-define=USE_FIREBASE_EMULATORS=true
+```
+
+The host is derived: `10.0.2.2` for a native Android target, `127.0.0.1` for
+everything else. A physical handset needs the machine's LAN address instead:
+
+```powershell
+flutter run --dart-define=USE_FIREBASE_EMULATORS=true --dart-define=FIREBASE_EMULATOR_HOST=192.168.1.24
+```
+
+The switch is refused outside a debug build - it throws at startup rather than
+silently falling back to the real project. See `lib/dev/firebase_emulators.dart`.
+
+`scripts/seed-dev-emulator.js` refuses to run unless `FIRESTORE_EMULATOR_HOST`
+and `FIREBASE_AUTH_EMULATOR_HOST` are already set, which is what makes
+`firebase-admin` itself incapable of reaching a real project. Re-running it is
+safe: it overwrites the same fixed document IDs and repairs the owner account.
+
 ## Rules-language boundary
 
 Firestore Rules do not provide a general loop or `every` operation for lists.
