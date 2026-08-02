@@ -6,6 +6,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'reconciliation_actions.dart';
+import 'reconciliation_anomalies_panel.dart';
 import 'reconciliation_request.dart';
 import 'reconciliation_status.dart';
 
@@ -277,6 +278,13 @@ final class _TenantReconciliationStatusPanelState
         onRequest: () => _request(session),
         onNextPage: () => _nextPage(view.day.runs.nextCursor),
         onPreviousPage: _previousPage,
+        // A run reports how many differences it found; this is which ones. The
+        // list is business-wide because a difference belongs to a product, a
+        // shift, or a sale rather than to a day, and it says so itself.
+        onOpenAnomalies: () => openTenantReconciliationAnomalies(
+          context,
+          reader: widget.reader,
+        ),
       ),
     );
   }
@@ -319,6 +327,7 @@ final class _ReconciliationContents extends StatelessWidget {
     required this.onRequest,
     required this.onNextPage,
     required this.onPreviousPage,
+    required this.onOpenAnomalies,
   });
 
   final _ReconciliationView view;
@@ -333,6 +342,7 @@ final class _ReconciliationContents extends StatelessWidget {
   final VoidCallback onRequest;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
+  final VoidCallback onOpenAnomalies;
 
   TenantReconciliationDay get day => view.day;
 
@@ -443,6 +453,16 @@ final class _ReconciliationContents extends StatelessWidget {
         )
       else
         for (final run in day.runs.items) _run(context, run),
+      const SizedBox(height: 16),
+      // A run states how many differences it found and could not resolve. This
+      // is the only place that says which ones, so the count above is
+      // actionable rather than merely alarming.
+      OutlinedButton.icon(
+        key: const ValueKey('reconciliation-status-anomalies'),
+        onPressed: onOpenAnomalies,
+        icon: const Icon(Icons.report_gmailerrorred_outlined),
+        label: const Text('View unresolved differences'),
+      ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,

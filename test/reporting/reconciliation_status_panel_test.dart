@@ -363,6 +363,28 @@ void main() {
     );
   });
 
+  testWidgets('opens the differences behind the counts a run reports', (
+    tester,
+  ) async {
+    // A run says how many differences it found; this is the only route to
+    // which ones, and it opens under the same session scope as every other.
+    final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-status-anomalies')),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(TenantReconciliationAnomalyScreen), findsOneWidget);
+    expect(
+      reader.queries.last.collectionPath,
+      'tenants/tenant-a/reconciliation_anomalies',
+    );
+  });
+
   group('asking the server to reconcile', () {
     testWidgets('is not offered when no callable was injected', (tester) async {
       final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);

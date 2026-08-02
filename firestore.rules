@@ -538,6 +538,25 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // The differences those runs found and could not resolve. A run already
+      // reports how many it found; this is which ones, so it is read by the
+      // same set for the same reason and is the detail behind a count that set
+      // can already see.
+      //
+      // A record carries no business date - a stock or shift anomaly is about a
+      // product or a shift, not a day - so a client lists them business-wide on
+      // the ascending key order, optionally narrowed by one `anomalyType ==`
+      // equality. Both shapes are served by the automatic single-field index.
+      //
+      // Writing stays server-only. Nothing here mutates stock or a shift: the
+      // records themselves say `mutatesStock: false` and `mutatesShift: false`,
+      // and a client that could write one could invent a discrepancy or erase
+      // the only record of a real one.
+      match /reconciliation_anomalies/{anomalyId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
       // The whole business's event trail: every tenant request, lifecycle
       // change, staff invitation, acceptance, cancellation, role or status
       // change, owner recovery, administrative alert, stock correction,

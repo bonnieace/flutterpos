@@ -29,7 +29,13 @@ enum TenantCollection {
   /// One record per business day stating whether that day's sales are still
   /// waiting to be regenerated. Written by the same reconciliation code and
   /// keyed by the business date itself, so a day is read by exact path.
-  reconciliationDirtyDays('reconciliation_dirty_days');
+  reconciliationDirtyDays('reconciliation_dirty_days'),
+
+  /// The differences reconciliation found and could not resolve: a sale with
+  /// unusable lines, a product whose stock disagrees with its ledger, a shift
+  /// whose totals disagree with its sales. The same workers are the only
+  /// writers, and nothing here changes stock or a shift.
+  reconciliationAnomalies('reconciliation_anomalies');
 
   const TenantCollection(this.segment);
 
@@ -72,6 +78,7 @@ final class TenantPaths {
     TenantCollection.dailyMetrics,
     TenantCollection.reconciliationJobs,
     TenantCollection.reconciliationDirtyDays,
+    TenantCollection.reconciliationAnomalies,
   ];
 
   final String tenantId;
@@ -96,6 +103,8 @@ final class TenantPaths {
   String get stockAdjustments =>
       collectionPath(TenantCollection.stockAdjustments);
   String get dailyMetrics => collectionPath(TenantCollection.dailyMetrics);
+  String get reconciliationAnomalies =>
+      collectionPath(TenantCollection.reconciliationAnomalies);
   String get reconciliationJobs =>
       collectionPath(TenantCollection.reconciliationJobs);
   String get reconciliationDirtyDays =>

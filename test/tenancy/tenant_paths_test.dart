@@ -72,6 +72,12 @@ void main() {
             'tenants/tenant-a/reconciliation_jobs',
         TenantCollection.reconciliationDirtyDays:
             'tenants/tenant-a/reconciliation_dirty_days',
+        // The differences that work found and could not resolve. Added
+        // deliberately as part of the guarded anomaly surface; the same
+        // reconciliation workers are the only writers, and nothing the client
+        // can reach changes stock, a shift, or a sale.
+        TenantCollection.reconciliationAnomalies:
+            'tenants/tenant-a/reconciliation_anomalies',
       };
 
       expect(TenantPaths.businessCollections.toSet(), expected.keys.toSet());

@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/control-plane.test.js test/stock-and-sales.test.js test/tenant-isolation.test.js test/checkout-confirmation.test.js test/checkout-submission.test.js test/checkout-receipt.test.js test/shift-lifecycle.test.js test/shift-sale-attribution.test.js test/shift-history.test.js test/sale-history.test.js test/staff-directory-read.test.js test/daily-metrics.test.js test/tenant-returns.test.js test/receipt-lookup.test.js test/stock-movements.test.js test/stock-movement-feed.test.js test/stock-adjustments.test.js test/audit-logs.test.js test/reconciliation-status.test.js",
+    "test": "node --test --test-concurrency=1 test/control-plane.test.js test/stock-and-sales.test.js test/tenant-isolation.test.js test/checkout-confirmation.test.js test/checkout-submission.test.js test/checkout-receipt.test.js test/shift-lifecycle.test.js test/shift-sale-attribution.test.js test/shift-history.test.js test/sale-history.test.js test/staff-directory-read.test.js test/daily-metrics.test.js test/tenant-returns.test.js test/receipt-lookup.test.js test/stock-movements.test.js test/stock-movement-feed.test.js test/stock-adjustments.test.js test/audit-logs.test.js test/reconciliation-status.test.js test/reconciliation-anomalies.test.js",
     "test:emulator": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"npm test\"",
     "test:emulator:checkout-confirmation": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/checkout-confirmation.test.js\"",
     "test:emulator:checkout-submission": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/checkout-submission.test.js\"",
@@ -25,6 +25,7 @@
     "test:emulator:stock-adjustments": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/stock-adjustments.test.js\"",
     "test:emulator:audit-logs": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/audit-logs.test.js\"",
     "test:emulator:reconciliation-status": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/reconciliation-status.test.js\"",
+    "test:emulator:reconciliation-anomalies": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/reconciliation-anomalies.test.js\"",
     "test:emulator:invitations": "npm --prefix ../functions run build && node scripts/run-invitation-emulator-tests.js",
     "emulators:dev": "npm --prefix ../functions run build && node scripts/run-dev-emulators.js",
     "seed:dev": "node scripts/seed-dev-emulator.js"

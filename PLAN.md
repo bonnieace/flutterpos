@@ -9867,3 +9867,201 @@ Meaningful failures and their resolutions:
   had happened - the call count was already correct - so the assertion, not the
   code, was one frame early.
 - No other assertion failed.
+
+---
+
+## Which differences reconciliation found - 2026-08-02
+
+### Completed in this session
+
+The chunk specified after the reconciliation status surface and deferred when
+the account-verification lockout was found. A run already reported **how many**
+stock and shift differences it found; nothing said **which ones**, so a count
+was alarming rather than actionable. It is now readable.
+
+No checkout screen, payment integration, receipt printing, product cost or
+profit surface, `platform_audit_logs` surface, subscription surface, or client
+path that queues, retries, or cancels a run became reachable. Nothing on this
+surface changes stock, a shift, or a sale.
+
+Implemented behavior and safety decisions:
+
+- **The four writers were read before anything was designed**, and they are the
+  only authority on the field names: `jobs.ts` records an unusable sale, and
+  `processors.ts` records an unreadable product quantity, three stock outcomes,
+  and two shift outcomes. Seven kinds, four shapes.
+- **Only the business and the kind are common, so only those are required.** The
+  sale record carries no `jobId` and no `updatedAt`; the product-quantity record
+  carries no figures at all; the stock and shift records carry different ones.
+  Requiring a union of them would have refused three of the four real shapes.
+- **Everything else is checked against the writer that produces it, and a record
+  that contradicts that writer is refused.** `variance` is exactly
+  `observedQuantity - expectedQuantity` in the one transaction that writes all
+  three, so a stock record that misstates its own difference fails the page
+  closed - the same rule the stock correction feed applies, and for the same
+  reason: a record about a discrepancy that gets the discrepancy wrong is not
+  evidence of anything.
+- **The two kinds that look symmetrical are not, and both were pinned.**
+  `stock_variance` is chosen only once the checkpoint chain is valid and every
+  movement was readable, which leaves a non-zero variance as the sole remaining
+  reason the record exists - so a zero variance there is refused. A
+  `checkpoint_chain_invalid` record may legitimately have none, and a test says
+  so. Likewise `invalid_or_missing_shift` must carry **neither** variance,
+  because the writer computes both only when all four figures could be read, and
+  `shift_variance` must carry both and not both zero.
+- **A missing `createdAt` degrades the row rather than failing the page**, which
+  is the opposite call from the figures above and deliberately so: a record
+  without a time still proves the difference was found and says what it was,
+  while a record that cannot explain its own difference proves nothing. That is
+  the same split the activity log and the adjustment feed already record.
+- **An unmodelled kind is carried verbatim.** A server deploy that records a new
+  difference is not evidence of anything wrong, and hiding a real difference
+  from the only surface that lists them would be far worse than naming it. It
+  cannot be filtered for - `other` identifies no stored value - and the
+  unnarrowed page still lists it, exactly as the movement feed handles sources.
+- **The list is business-wide and says so on screen.** This decided the shape of
+  the surface: a record carries **no business date**, because a stock anomaly is
+  about a product and a shift anomaly is about a shift. It is reached from a
+  page titled "Reconciliation for 2026-07-31", so narrowing it to that day would
+  have silently hidden differences that are still open - and there is no field
+  to narrow it by even if that were wanted.
+- **The page computes no count of its own.** A page is bounded, so a tally over
+  it would be a second and weaker figure that disagrees with the run at every
+  page boundary. The run states the count; this states which ones.
+- **Both query shapes need no composite index**, which is why
+  `firestore.indexes.json` was not touched: the business-wide page carries no
+  filter and the narrowed page carries exactly one `anomalyType ==` equality,
+  both on ascending `__name__`, which is the automatic single-field index shape.
+  The focused emulator suite issues both exact client queries.
+- **The Rules boundary is owner/admin/manager**, the same set that reads the runs
+  whose counts this explains and the `daily_metrics` those runs regenerate - a
+  test asserts the two role lists are identical rather than merely similar. It
+  is deliberately wider than the owner/admin `audit_logs`: this is reporting, not
+  governance. The role check touches no document field, so an absent anomaly and
+  a business that has never had one both still answer instead of raising an
+  evaluation error. Writing stays server-only.
+- **`TenantCollection` gained one frozen segment**, `reconciliation_anomalies`.
+  That is a deliberate path-contract change, and the enumerated path-contract
+  test was updated with it rather than around it - it failed first, exactly as
+  that guard is designed to.
+- **The route needs no injected builder.** Both it and the run list that points
+  at it belong to the reporting domain, so nothing crosses a domain boundary;
+  it opens under the caller's own `TenantSessionScope`, so a business switch
+  discards an outstanding page before it can label another business's screen.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Nothing here resolves a difference. A stock figure is still corrected from the
+  product it belongs to, and a shift variance has no correction path at all.
+- Product and shift IDs are shown, not resolved to names. A product name would
+  be one document read per row for a label the ID already identifies.
+- `reconciliation_sale_receipts`, `shift_expectations`, `stock_checkpoints`, and
+  `platform_reconciliation_sweeps` still have no client surface.
+
+Files in this chunk:
+
+```text
+PLAN.md
+firestore.rules
+lib/reporting/reconciliation_anomalies.dart              (new)
+lib/reporting/reconciliation_anomalies_panel.dart        (new)
+lib/reporting/reconciliation_status_panel.dart
+lib/reporting/reporting.dart
+lib/tenancy/tenant_paths.dart
+rules-tests/package.json
+rules-tests/test/reconciliation-anomalies.test.js        (new)
+test/reporting/reconciliation_anomalies_panel_test.dart  (new)
+test/reporting/reconciliation_anomalies_test.dart        (new)
+test/reporting/reconciliation_status_panel_test.dart
+test/tenancy/tenant_paths_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 19 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy test/theme_test.dart` | **1079/1079**, up from 1044, adding **35** tests |
+| `npm --prefix rules-tests run test:emulator:reconciliation-anomalies` | **6/6** during development |
+| `npm --prefix rules-tests run test:emulator` | **131/131**, up from 125 |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `git diff --check` | clean |
+
+The 35 new Dart tests are 24 read-model and repository cases, 10 panel widget
+cases, and 1 status-panel case for the entry point; `test/reporting` went from
+169 to **204**. `npm --prefix functions test` was not re-run: `git diff --stat
+HEAD -- functions` is empty, so all 171 Functions tests remain byte-identical to
+the previous session's green run and no Dart or Rules change can reach them.
+`firestore.indexes.json` was deliberately not touched. Android build and Android
+emulator validation were skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The frozen path-contract test failed, exactly as it should have.**
+  `tenant_paths_test.dart` enumerates every business collection, so adding
+  `reconciliation_anomalies` broke it until the segment was declared there too,
+  with a comment recording why the contract changed. That guard is working as
+  designed and must not be loosened.
+- **A cross-tenant repository test expected the wrong refusal, and the code was
+  right.** The base repository's exact-child proof answers before the read model
+  does, so the response fails as `TenantScopeViolation` rather than as a bad
+  path - the stronger answer, since a transport replying outside this tenant is
+  a broken boundary rather than one unreadable record. The assertion was
+  corrected and a second test now covers a record that sits at the right path
+  while naming another business, which is what `anomaly_identity_mismatch` is
+  for.
+- No other assertion failed.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+Two candidates, in the order recommended:
+
+1. **Run the app again, and this time watch a sale reach Firestore without a
+   restart.** The first chunk of this session fixed exactly the defect the last
+   real run found, and it is proved by tests rather than by use. That run also
+   left two things unverified: the `10.0.2.2` Android path has still never been
+   executed by anybody, and nothing has exercised the new anomaly surface
+   against real seeded data. Ask first whether the Android exclusion is lifted;
+   a Windows or web run exercises only the loopback path.
+2. **A correction path for a shift variance.** The anomaly surface now names one
+   and offers nothing to do about it, which is honest but incomplete. A stock
+   difference is corrected from the product; a shift difference has no answer at
+   all today. Decide on the **server** first - whether a closed shift's summary
+   may ever be amended, and by whom - because nothing in `firestore.rules`
+   currently permits it and the frozen contract makes a closed shift terminal.
+
+Leave outside either chunk: the subscription surfaces (examined and declined
+earlier in this file - start on the server, not in Flutter), receipt printing,
+the printed receipt body, discounts, camera barcode scanning, password reset
+(still blocked on the App Check decision recorded near the top of this file),
+product cost/profit fields, a `platform_audit_logs` surface, branding surfaces,
+and deployment.
+
+Practical notes carried forward:
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it:
+
+```powershell
+$env:DEBUG = $null
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:Path"
+```
+
+- A local `firebase emulators:exec` against `firebase.json` needs both
+  `functions/.secret.local` and `functions/.env.local`; `run-dev-emulators.js`
+  writes and removes them, and refuses to overwrite leftovers from a killed run.
+- Collection-page test fakes must answer in **ascending document-ID order**, be
+  keyed **per business**, and model the equality-filter contract in **both**
+  directions - a fake that honours filters cannot exercise a check that exists
+  for a transport ignoring them, and a fake that ignores them makes every
+  narrowed page prove the wrong thing. Both mistakes have now cost a debugging
+  cycle each.
