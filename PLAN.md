@@ -9537,7 +9537,7 @@ defects surfaced. Two are fixed here; the other two are below.
   asserted a theme colour. The app bar went from white-on-light to the dark
   surface, which is what the scaffold was always asking for.
 
-#### Chunk 2: what the drawer should hold (`__CHUNK2__`)
+#### Chunk 2: what the drawer should hold (`60a372f`)
 
 The queued chunk was "a per-tender figure where a cashier needs it: the shift
 close", and it was queued as server-first. **It is not server work at all.**
