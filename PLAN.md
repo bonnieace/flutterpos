@@ -9199,3 +9199,90 @@ The existing user-owned local edits remain separate and were never staged:
 android/gradle.properties
 pubspec.lock
 ```
+
+---
+
+## The totals panel, split - 2026-08-02
+
+### Completed in this session
+
+Chunk 2 of 3 from the queue above, implemented in the same session as chunk 1
+and committed separately. **Refactor only: no behavior changed and no test was
+added or edited.**
+
+The proof is exactly what that chunk asked for: `test/reporting` still passes
+**154/154**, the 24 cases in `test/reporting/sales_totals_test.dart` and the 24
+in `test/reporting/sales_totals_panel_test.dart` untouched. Had any test needed
+editing, the split would have changed something it should not have.
+
+`lib/reporting/sales_totals_panel.dart` went from 636 lines holding three
+choosers, three session-scoped reads, a currency notice, a category-basis
+sentence and the failure surface, to 404 lines holding the route, the loader,
+and the figure.
+
+What moved, and why it moved together:
+
+- **`sales_totals_session_context.dart`** holds `SalesTotalsCategoryOptions`,
+  `SalesTotalsStaffOptions`, the new `SalesTotalsSessionContext`, the view
+  record, and `SalesTotalsSessionContextLoader`. The three reads were already
+  obeying one rule - degrade on failure, rethrow `TenantScopeViolation`, cache
+  by UID/tenant/epoch - stated three times in three `catch` blocks and a
+  hand-rolled cache key. It is now stated once, on the class that owns all
+  three, which is the point the previous handover made when it said a fourth
+  session-scoped read should join them rather than invent a fourth policy.
+- **`sales_totals_choosers.dart`** holds the period, member, and category chips
+  with their unavailable and truncated notices. They travel together because
+  they are one control surface: all three stay on screen through a failure,
+  since a period holding too many sales is refused precisely so a shorter one
+  can be picked.
+
+Two mechanical consequences worth recording, because both are behavior-neutral
+and both look like changes:
+
+- The three separate nullable fields (`_categories`, `_staff`, `_currency`)
+  became one nullable `SalesTotalsSessionContext`. That is exactly equivalent:
+  the old code assigned all three together after all three reads had finished,
+  so no state existed in which one was present and another was not. The failure
+  path's `?? unreadable` triple became one `?? SalesTotalsSessionContext.empty`
+  built from the same three unreadable constants.
+- The choosers are now a `Column` inside the same `ListView`, rather than
+  children spliced directly into it. Every `ValueKey` is unchanged and in the
+  same order, which is why no test moved.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/reporting/reporting.dart
+lib/reporting/sales_totals_choosers.dart          (new)
+lib/reporting/sales_totals_panel.dart
+lib/reporting/sales_totals_session_context.dart   (new)
+```
+
+Validation evidence:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/reporting test/reporting` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/reporting` | **154/154**, unchanged, no test file edited |
+| `flutter analyze --no-pub` over the 19 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 9 in-scope test paths | **987/987** |
+| `git diff --check` | clean |
+
+The full analyze and test commands above cover chunks 1 and 2 together; they
+were run once after both were frozen, and chunk 1 was committed from that same
+green state. No backend suite was re-run: neither chunk changed
+`firestore.rules`, `functions/src`, or any `rules-tests/test` file.
+
+Meaningful failures and their resolutions:
+
+- None. The split analyzed and passed on its first run, which is the outcome a
+  refactor-only chunk is supposed to have.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
