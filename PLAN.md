@@ -8879,47 +8879,120 @@ android/gradle.properties
 pubspec.lock
 ```
 
-### Next bounded chunk
+### The queue, and why it was re-ordered
 
 The reporting routes are now complete against every server capability they have:
 `getSalesComparison` has no unreached parameter, and every figure names its
-currency. The next work is elsewhere, and there are two honest candidates:
+currency. Three chunks are queued below **in order**. The first was added on
+2026-08-02 after a question that turned up a real gap; the two behind it were
+already queued and are unchanged, only pushed back.
 
-1. **Split `lib/reporting/sales_totals_panel.dart` before adding to it.** At 592
-   lines it now holds three choosers, three session-scoped reads, a currency
-   notice, a category-basis sentence, and the failure surface in one file.
-   Nothing in it is wrong, and it is the third file in this codebase to reach
-   that point after the checkout cart panel. Do it as a **refactor-only** chunk:
-   - Extract the three option types (`_CategoryOptions`, `_StaffOptions`, and
-     the view record) and `_loadSessionContext`/`_readStaff` into one
-     session-context file, since all three obey the single degrade/rethrow/cache
-     rule stated below and that rule should live in one place.
-   - Extract the chooser row - period, member, category chips plus the
-     unavailable/truncated notices - into its own widget, taking the current
-     selections and the three callbacks.
-   - Change no behavior and add no test. The proof is the **existing 48 cases
-     across `test/reporting/sales_totals_test.dart` (24) and
-     `test/reporting/sales_totals_panel_test.dart` (24) passing untouched**, and
-     `test/reporting` staying at **154**. If a test needs editing, the split has
-     changed something it should not have.
+**The gap.** Everything built across the last several sessions has been verified
+by tests and never once by running the app. That is not an oversight in the
+tests - it is that **the app cannot be pointed at the emulators at all**,
+checked rather than assumed:
 
-   Cheap now, expensive later.
+- `lib/` contains no `useAuthEmulator`, `useFirestoreEmulator`, or
+  `useFunctionsEmulator` call anywhere. `lib/main.dart:36` calls
+  `Firebase.initializeApp` and connects to the real dev project
+  `multitenant-pos-b8326`.
+- `firebase.json` has no `emulators` block. The suites run through
+  `firebase emulators:exec --config ../firebase.test.json --project
+  demo-multitenant-rules`, a separate config with a demo project, so there is no
+  declared port a client could target.
 
-2. **A per-tender reporting breakdown**, which is the largest remaining gap that
-   real users would feel: `recordSaleTender` has stored `cash`, `mpesa`, or
-   `card` on every v2 sale since 2026-07-29, and nothing anywhere reports it.
-   Unlike every chunk in this session, it is **backend work first**:
-   `aggregateSales` in `functions/src/operations/domain.ts` returns no tender
-   split, so the honest sequence is a Functions change with its own unit tests,
-   then the Rules check, then a client surface. Scope the server half alone
-   before touching Dart.
+So the emulators serve tests only, and the sole way to exercise the till today
+is against a real project. That is the wrong default for local work and it is
+why chunk 1 below now comes first.
 
-Leave outside either chunk: the subscription surfaces (examined and declined
+### Next bounded chunk (1 of 3): reach the emulators from the app
+
+Make the app runnable end-to-end locally, and nothing else.
+
+1. **Declare the emulator ports.** Add an `emulators` block to `firebase.json`
+   for auth, firestore, and functions with fixed ports. Do **not** touch
+   `firebase.test.json`: every suite in this file depends on it, and a shared
+   config would couple a developer's local run to the test harness.
+2. **Add a debug-only switch**, ideally its own small file rather than more
+   weight in `main.dart`. It must connect exactly once, before any Firebase call
+   the app makes, behind an explicit `--dart-define` - never on by default.
+3. **The host is derived, not hardcoded.** An Android emulator reaches the host
+   machine at `10.0.2.2`, every other target at `localhost`. This is the one
+   piece of the chunk that is pure logic, so it is the one piece that can carry
+   real unit tests: platform to host, define-absent to disabled, and the release
+   refusal below.
+4. **Make it impossible to enable in a release build.** This is the whole safety
+   argument for the chunk. A switch that silently fails to redirect writes test
+   data into a real project; one that silently *does* redirect makes a real
+   user's data vanish. Neither may be possible from a release binary - refuse
+   loudly at startup rather than degrading to the real project.
+5. **Add a seed script**, because an empty emulator cannot demonstrate anything:
+   - `configuration/checkout` with a currency **first**. Without it
+     `CheckoutCatalogCacheRefresher` refuses with `configurationUnavailable` and
+     no sale can be rung up at all.
+   - A tenant root with `ownerUid`, the owner's `staff` record, categories, and
+     products carrying `SKU` and `price` - the scan path needs a real SKU, and
+     the shared-SKU refusal is worth being able to see.
+   - An Auth user with a known password and **`emailVerified` set**, or the
+     account is stuck behind the verification gate at
+     `lib/tenancy/tenant_request.dart:68` and never reaches a business.
+   - Reuse the existing Node setup and its `firebase-admin` rather than adding a
+     package; `rules-tests/scripts/run-invitation-emulator-tests.js` is the
+     precedent for how such a script is invoked here.
+   - **The script must refuse to run against anything but an emulator.** Seeding
+     is destructive by nature and a mis-pointed run is unrecoverable; require
+     the emulator host environment variables and abort when they are absent.
+6. Leave outside it: any change to what the app *does*. This chunk adds a way to
+   run it, not a feature.
+
+**One standing exclusion has to be revisited for this chunk only.** Android
+build and Android emulator validation have been skipped by instruction for
+several sessions, including the one that added this. That is fine for Dart-only
+work, but chunk 1 exists *precisely* so the app can be driven on Android - so
+either the exclusion is lifted for it, or it ships a `10.0.2.2` path that has
+never been executed. Ask before starting; do not quietly assume either answer.
+
+### Then (2 of 3): split `lib/reporting/sales_totals_panel.dart`
+
+Unchanged from when it was queued, only pushed back one place, and still worth
+doing before anything new lands in that file. At 592 lines it holds three
+choosers, three session-scoped reads, a currency notice, a category-basis
+sentence, and the failure surface in one file. Nothing in it is wrong, and it is
+the third file in this codebase to reach that point after the checkout cart
+panel. Do it as a **refactor-only** chunk:
+
+- Extract the three option types (`_CategoryOptions`, `_StaffOptions`, and the
+  view record) and `_loadSessionContext`/`_readStaff` into one session-context
+  file, since all three obey the single degrade/rethrow/cache rule stated below
+  and that rule should live in one place.
+- Extract the chooser row - period, member, category chips plus the
+  unavailable/truncated notices - into its own widget, taking the current
+  selections and the three callbacks.
+- Change no behavior and add no test. The proof is the **existing 48 cases
+  across `test/reporting/sales_totals_test.dart` (24) and
+  `test/reporting/sales_totals_panel_test.dart` (24) passing untouched**, and
+  `test/reporting` staying at **154**. If a test needs editing, the split has
+  changed something it should not have.
+
+Cheap now, expensive later.
+
+### Then (3 of 3): a per-tender reporting breakdown
+
+The largest remaining gap that real users would feel: `recordSaleTender` has
+stored `cash`, `mpesa`, or `card` on every v2 sale since 2026-07-29, and nothing
+anywhere reports it. Unlike every chunk in this session, it is **backend work
+first**: `aggregateSales` in `functions/src/operations/domain.ts` returns no
+tender split, so the honest sequence is a Functions change with its own unit
+tests, then the Rules check, then a client surface. Scope the server half alone
+before touching Dart.
+
+Leave outside all three chunks: the subscription surfaces (examined and declined
 earlier in this file - start on the server, not in Flutter), receipt printing,
 the printed receipt body, discounts, camera barcode scanning, password reset
 (still blocked on the App Check decision recorded near the top of this file),
 product cost/profit fields, a `platform_audit_logs` surface, branding surfaces,
-deployment, and Android build/emulator validation.
+and deployment. Android build and emulator validation stay excluded from chunks
+2 and 3; chunk 1 is the deliberate exception described above.
 
 Practical notes carried forward:
 
@@ -8938,8 +9011,11 @@ Practical notes carried forward:
 
 ### State at handover
 
-The session ended here deliberately, with the chunk above **not started**.
-Nothing is in flight and no work is half-applied.
+The session ended here deliberately, with **none of the three queued chunks
+started**. Nothing is in flight and no work is half-applied. The queue was
+re-ordered after the session's implementation work was already committed and
+validated, so the re-ordering changed documentation only - the four commits
+below are unaffected by it.
 
 Four chunks were committed, each with its own green Dart run first:
 
