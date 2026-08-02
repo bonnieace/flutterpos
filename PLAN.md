@@ -8642,3 +8642,139 @@ Two practical notes carried forward:
   category choosers plus the failure surface. It is still coherent at its
   current size, but a third filter should arrive with a split of the chooser
   row rather than after one - the same note the checkout cart panel carries.
+
+---
+
+## Every reported figure now names its currency - 2026-08-02
+
+### Completed in this session
+
+Candidate 1 of the chunk above, implemented in the same session. Both reporting
+routes printed bare amounts; both now print the code the business published, or
+say plainly that there is none.
+
+Implemented behavior and safety decisions:
+
+- **No currency is ever assumed, and there is no default.** The app targets no
+  single country and the frozen model records the code per business in
+  `configuration/checkout` precisely so nothing has to guess. A business trading
+  in one currency and reported in another is a worse error than an unlabelled
+  number, so a missing, unreadable, or malformed configuration produces a bare
+  figure plus one sentence saying why - never `KES`, never a symbol.
+- **The unlabelled case is genuinely the unconfigured one.** A business that has
+  published no `configuration/checkout` cannot use the till at all:
+  `CheckoutCatalogCacheRefresher` refuses with `configurationUnavailable`. So a
+  business with sales to report has a currency, and the notice is a real
+  configuration gap rather than routine noise. This is recorded in the read
+  model itself, because it is the reason the degrade is acceptable.
+- **A label may never cost a figure.** The currency is read after the figures on
+  both routes and its failure is swallowed, so an offline or denied
+  configuration read leaves the daily summary and the totals working exactly as
+  before. The one exception is `TenantScopeViolation`, which is rethrown - the
+  same rule the category list follows, for the same reason: a reader answering
+  outside this tenant is a broken boundary, not a missing label.
+- **A malformed code is dropped, not printed.** `TenantCheckoutConfiguration`
+  already refuses anything that is not exactly `^[A-Z]{3}$`, so `shillings`,
+  `kes`, and `7` all produce an unlabelled figure. A test proves the rejected
+  value never reaches the screen.
+- **The code is read once per session, not once per filter.** It is cached
+  beside the category list on the totals route and keyed by UID, tenant, and
+  epoch, so changing period, scope, or category spends no extra document read
+  and no cached label can survive into another business. A widget test asserts
+  the exact document paths read across a period change.
+- The formatting is one shared `format` on the read model rather than a helper
+  copied into each panel, so the two routes cannot drift apart.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/reporting/daily_metrics_panel.dart
+lib/reporting/reporting.dart
+lib/reporting/reporting_currency.dart          (new)
+lib/reporting/sales_totals_panel.dart
+test/reporting/daily_metrics_panel_test.dart
+test/reporting/reporting_currency_test.dart    (new)
+test/reporting/sales_totals_panel_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 17 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:28` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy` | **964/964**, up from 901 at session start |
+| `npm --prefix rules-tests run test:emulator` | **125/125** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `npm --prefix functions test` | **166/166** |
+| `git diff --check` | clean |
+
+This is the second full backend sequence of the session; the first ran after the
+category chunk was frozen and both were green. `git diff --stat
+3cb7588..HEAD -- functions firestore.rules rules-tests firestore.indexes.json`
+is empty throughout - all three chunks changed only Dart. Android build and
+Android emulator validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **One assertion was wrong about floating point, and the code was right.** The
+  formatter test asserted `7.005` renders as `7.01`; the nearest double to 7.005
+  is below it, so `toStringAsFixed(2)` correctly gives `7.00`. Asserting IEEE
+  half-way behaviour proves nothing about this surface, so the case was replaced
+  with `7.004` and `7.006`, which are unambiguous.
+- No other assertion failed.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+**A per-cashier picker for the totals surface**, which is now the only obvious
+gap left in the reporting routes:
+
+1. `TenantSalesScope` is currently `everyone` or `mine`. The server accepts any
+   `soldById`, and `TenantStaffDirectoryRepository` already lists canonical
+   staff with display names, so a real picker is a small step from what exists.
+2. **Check one thing before scoping it.** `TenantStaffDirectoryRepository
+   .loadPage` reads the **tenant root** document to find the owner UID and
+   throws a `FormatException` when it cannot. Confirm in `firestore.rules` that
+   a manager may read the tenant root before assuming the picker works for every
+   role the totals surface is open to. If a manager may not, the picker is
+   owner/admin-only and the surface must say so rather than fail.
+3. Apply the two rules the last two chunks established, which are now the
+   pattern for any filter on this surface: a UID not in this business's own
+   canonical directory is **never sent**, and a directory that cannot be read
+   removes the picker rather than the total. `TenantScopeViolation` still fails
+   the route.
+4. Reuse `tenantStaffLabel` so the signed-in member reads as "You" and an
+   unresolved name degrades to the authoritative UID, exactly as the sale
+   history and reconciliation surfaces already do.
+5. Add coverage for the payload carrying the chosen `soldById`, a staff member
+   outside the directory never being sent, an unreadable directory leaving the
+   total, the role boundary if step 2 finds one, and the picker surviving a
+   period and a category change.
+
+Leave outside it: the subscription surfaces (examined and declined earlier in
+this file - start on the server, not in Flutter), receipt printing, the printed
+receipt body, discounts, camera barcode scanning, a per-tender reporting
+breakdown, password reset (still blocked on the App Check decision recorded near
+the top of this file), product cost/profit fields, a `platform_audit_logs`
+surface, branding surfaces, deployment, and Android build/emulator validation.
+
+Practical notes carried forward:
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it.
+- `lib/reporting/sales_totals_panel.dart` holds the period, scope, and category
+  choosers, the currency notice, and the failure surface. A fourth chooser is
+  the point at which the chooser row should become its own widget - add the
+  split with the cashier picker, not after it.
+- Collection-page test fakes must answer in **ascending document-ID order**.
+  `TenantReadRepository` proves it and raises `TenantScopeViolation` otherwise,
+  which surfaces as a degraded or failed route rather than an obvious error.
+  This cost one debugging cycle in this session.

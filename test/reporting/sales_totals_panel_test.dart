@@ -10,7 +10,12 @@ void main() {
   testWidgets('today is totalled from what the server holds', (tester) async {
     final callable = _Callable(<Object?>[_response()]);
 
-    await _pump(tester, _controller(TenantRole.manager), callable);
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      callable,
+      reader: _Reader(currency: 'KES'),
+    );
 
     expect(
       tester
@@ -22,7 +27,11 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('sales-totals-amount')))
           .data,
-      'Sales: 4820.75 over 37 sales',
+      'Sales: KES 4820.75 over 37 sales',
+    );
+    expect(
+      find.byKey(const ValueKey('sales-totals-currency-unknown')),
+      findsNothing,
     );
     expect(callable.payloads.single, <String, Object?>{
       'tenantId': 'tenant-a',
@@ -71,6 +80,51 @@ void main() {
           .data,
       '2026-07-31 • your sales only',
     );
+  });
+
+  testWidgets('an unpublished currency is stated, never guessed', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response()]);
+
+    await _pump(tester, _controller(TenantRole.manager), callable);
+
+    expect(
+      find.byKey(const ValueKey('sales-totals-currency-unknown')),
+      findsOne,
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-amount')))
+          .data,
+      'Sales: 4820.75 over 37 sales',
+    );
+  });
+
+  testWidgets('the currency is read once, not once per filter', (tester) async {
+    final callable = _Callable(<Object?>[_response(), _response()]);
+    final reader = _Reader(currency: 'KES');
+
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: reader,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('sales-totals-period-last7Days')),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    // Neither the code nor the category list depends on the filters, so a
+    // second period must not spend a second document read on either.
+    expect(reader.documentPaths, <String>[
+      'tenants/tenant-a/configuration/checkout',
+    ]);
+    expect(reader.queries, hasLength(1));
+    expect(find.textContaining('KES 4820.75'), findsOne);
   });
 
   testWidgets('a cashier is denied and nothing is asked for', (tester) async {
@@ -439,9 +493,13 @@ Future<void> _pump(
 final class _Reader implements TenantDataReader {
   _Reader({
     Map<String, List<String>> categories = const <String, List<String>>{},
+    this.currency,
     this.throws = false,
     this.answersOutsideTenant = false,
   }) : categories = Map<String, List<String>>.of(categories);
+
+  /// The code published in `configuration/checkout`, or none at all.
+  final String? currency;
 
   /// Category IDs by tenant, named `<id> shelf` so a label is provable.
   final Map<String, List<String>> categories;
@@ -450,10 +508,22 @@ final class _Reader implements TenantDataReader {
   /// Answers with a document belonging to another business.
   final bool answersOutsideTenant;
   final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
+  final List<String> documentPaths = <String>[];
 
   @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) =>
-      Future<TenantDocumentSnapshot?>.value();
+  Future<TenantDocumentSnapshot?> getDocument(String path) {
+    documentPaths.add(path);
+    final code = currency;
+    if (code == null || !path.endsWith('/configuration/checkout')) {
+      return Future<TenantDocumentSnapshot?>.value();
+    }
+    return Future<TenantDocumentSnapshot?>.value(
+      TenantDocumentSnapshot(
+        path: path,
+        data: <String, Object?>{'currency': code},
+      ),
+    );
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(

@@ -4,6 +4,7 @@ import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import 'reporting_currency.dart';
 import 'sales_totals.dart';
 
 /// Route showing what a business has taken over a chosen stretch of days.
@@ -62,12 +63,17 @@ final class _CategoryOptions {
   }
 }
 
-/// One period's totals with the categories the surface offers alongside them.
+/// One period's totals with the categories and the code they are labelled with.
 final class _SalesTotalsView {
-  const _SalesTotalsView({required this.totals, required this.categories});
+  const _SalesTotalsView({
+    required this.totals,
+    required this.categories,
+    required this.currency,
+  });
 
   final TenantSalesTotals totals;
   final _CategoryOptions categories;
+  final TenantReportingCurrency currency;
 }
 
 /// Reads one period's totals for the selected tenant session.
@@ -111,10 +117,12 @@ final class _TenantSalesTotalsPanelState
   String? _loaderKey;
   TenantGuardedLoader<_SalesTotalsView>? _loader;
 
-  /// One category list per session, so a list read for one business can never
-  /// label - or filter - another's figures.
+  /// One category list and one currency per session, so neither can label - or
+  /// filter - another business's figures. Both are cached because the filters
+  /// change often and neither depends on the period, scope, or category.
   _CategoryOptions? _categories;
-  String? _categoriesSessionKey;
+  TenantReportingCurrency? _currency;
+  String? _sessionCacheKey;
 
   static String _sessionKey(TenantSession session) =>
       '${session.uid}:${session.tenantId}:${session.epoch}';
@@ -140,15 +148,17 @@ final class _TenantSalesTotalsPanelState
   /// never duplicate anything the way a reconciliation request could.
   void _retry() => setState(() => _generation++);
 
-  /// Reads this session's categories once, and never fails the route with them.
+  /// Reads this session's categories and currency once, and never fails the
+  /// route with either.
   ///
-  /// The figure a manager came for does not depend on the filter list, so an
-  /// unreadable list removes the filter and says so rather than replacing the
-  /// total with an error.
-  Future<_CategoryOptions> _categoriesFor(TenantSession session) async {
+  /// The figure a manager came for depends on neither the filter list nor its
+  /// label, so an unreadable one removes that affordance and says so rather
+  /// than replacing the total with an error.
+  Future<void> _loadSessionContext(TenantSession session) async {
     final key = _sessionKey(session);
-    final cached = _categories;
-    if (cached != null && key == _categoriesSessionKey) return cached;
+    if (key == _sessionCacheKey && _categories != null && _currency != null) {
+      return;
+    }
     _CategoryOptions options;
     try {
       final page = await TenantCatalogRepository(
@@ -163,8 +173,13 @@ final class _TenantSalesTotalsPanelState
     } catch (_) {
       options = const _CategoryOptions.unreadable();
     }
-    _categoriesSessionKey = key;
-    return _categories = options;
+    final currency = await TenantReportingCurrency.read(
+      session: session,
+      reader: widget.reader,
+    );
+    _sessionCacheKey = key;
+    _categories = options;
+    _currency = currency;
   }
 
   /// One loader per guard key, so a closure rebuilt every frame cannot spend
@@ -176,7 +191,8 @@ final class _TenantSalesTotalsPanelState
     final scope = _scope;
     final chosenCategory = _categoryId;
     return _loader = (session) async {
-      final categories = await _categoriesFor(session);
+      await _loadSessionContext(session);
+      final categories = _categories!;
       // A category filters the figures only while this business's own canonical
       // list still contains it. A selection carried across a tenant switch, or
       // one that has since been deleted, silently reverts to the whole catalog
@@ -199,6 +215,7 @@ final class _TenantSalesTotalsPanelState
           ),
         ),
         categories: categories,
+        currency: _currency!,
       );
     };
   }
@@ -223,6 +240,7 @@ final class _TenantSalesTotalsPanelState
         scope: _scope,
         categoryId: _categoryId,
         categories: _categories ?? const _CategoryOptions.unreadable(),
+        currency: _currency ?? TenantReportingCurrency.unknown,
         onChoosePeriod: _choosePeriod,
         onChooseScope: _chooseScope,
         onChooseCategory: _chooseCategory,
@@ -237,6 +255,7 @@ final class _TenantSalesTotalsPanelState
         // with - including when a stale selection was dropped.
         categoryId: view.totals.query.categoryId,
         categories: view.categories,
+        currency: view.currency,
         onChoosePeriod: _choosePeriod,
         onChooseScope: _chooseScope,
         onChooseCategory: _chooseCategory,
@@ -282,6 +301,7 @@ final class _SalesTotalsContents extends StatelessWidget {
     required this.scope,
     required this.categoryId,
     required this.categories,
+    required this.currency,
     required this.onChoosePeriod,
     required this.onChooseScope,
     required this.onChooseCategory,
@@ -294,6 +314,7 @@ final class _SalesTotalsContents extends StatelessWidget {
   final TenantSalesScope scope;
   final String? categoryId;
   final _CategoryOptions categories;
+  final TenantReportingCurrency currency;
   final ValueChanged<TenantSalesPeriod> onChoosePeriod;
   final ValueChanged<TenantSalesScope> onChooseScope;
   final ValueChanged<String?> onChooseCategory;
@@ -316,6 +337,13 @@ final class _SalesTotalsContents extends StatelessWidget {
         'still waiting on a device is not in them. They are not the reconciled '
         'figures the daily summary reports.',
       ),
+      if (!currency.isKnown) ...[
+        const SizedBox(height: 8),
+        const Text(
+          key: ValueKey('sales-totals-currency-unknown'),
+          TenantReportingCurrency.unknownNotice,
+        ),
+      ],
       const SizedBox(height: 16),
       // Chips rather than a segmented button: four periods do not fit across a
       // phone, and a chooser that overflows is a chooser that cannot be used.
@@ -394,7 +422,7 @@ final class _SalesTotalsContents extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   key: const ValueKey('sales-totals-amount'),
-                  'Sales: ${answer.sales.toStringAsFixed(2)} over '
+                  'Sales: ${currency.format(answer.sales)} over '
                   '${answer.transactions} '
                   '${answer.transactions == 1 ? 'sale' : 'sales'}',
                 ),

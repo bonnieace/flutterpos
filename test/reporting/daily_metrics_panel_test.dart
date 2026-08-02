@@ -14,17 +14,25 @@ void main() {
       'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
         businessDate: '2026-07-30',
       ),
+      'tenants/tenant-a/configuration/checkout': <String, Object?>{
+        'currency': 'KES',
+      },
     });
 
     await _pump(tester, _controller(TenantRole.manager), reader);
 
+    // The code the business published, never one this app assumed.
     expect(
       tester
           .widget<Text>(
             find.byKey(const ValueKey('daily-summary-sales-2026-07-30')),
           )
           .data,
-      'Sales: 1250.50 over 12 transactions in 2 shifts',
+      'Sales: KES 1250.50 over 12 transactions in 2 shifts',
+    );
+    expect(
+      find.byKey(const ValueKey('daily-summary-currency-unknown')),
+      findsNothing,
     );
     // Today has no document yet and must still be listed as pending.
     expect(
@@ -58,6 +66,50 @@ void main() {
     );
     expect(find.textContaining('430.25'), findsNothing);
     expect(find.textContaining('Profit'), findsNothing);
+  });
+
+  testWidgets('an unpublished currency is stated, never guessed', (
+    tester,
+  ) async {
+    final reader = _Reader(<String, Map<String, Object?>>{
+      'tenants/tenant-a/daily_metrics/2026-07-31': _metrics(),
+    });
+
+    await _pump(tester, _controller(TenantRole.manager), reader);
+
+    expect(
+      find.byKey(const ValueKey('daily-summary-currency-unknown')),
+      findsOne,
+    );
+    // A bare figure, not an assumed code. The figure itself still arrives.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('daily-summary-sales-2026-07-31')),
+          )
+          .data,
+      'Sales: 1250.50 over 12 transactions in 2 shifts',
+    );
+  });
+
+  testWidgets('a malformed currency loses the label, not the figures', (
+    tester,
+  ) async {
+    final reader = _Reader(<String, Map<String, Object?>>{
+      'tenants/tenant-a/daily_metrics/2026-07-31': _metrics(),
+      'tenants/tenant-a/configuration/checkout': <String, Object?>{
+        'currency': 'shillings',
+      },
+    });
+
+    await _pump(tester, _controller(TenantRole.manager), reader);
+
+    expect(
+      find.byKey(const ValueKey('daily-summary-currency-unknown')),
+      findsOne,
+    );
+    expect(find.textContaining('1250.50'), findsOne);
+    expect(find.textContaining('shillings'), findsNothing);
   });
 
   testWidgets('a cashier is denied and starts no read', (tester) async {
