@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -299,6 +300,531 @@ void main() {
     );
   });
 
+  group('finding a product', () {
+    setUp(() {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        categories: <TenantCategory>[
+          _category('tenant-a', 'drinks'),
+          _category('tenant-a', 'bread'),
+        ],
+        products: <TenantProduct>[
+          _product('tenant-a', 'cola', categoryId: 'drinks'),
+          _product('tenant-a', 'water', categoryId: 'drinks'),
+          _product('tenant-a', 'loaf', categoryId: 'bread'),
+          // Names a category this device does not hold; it must stay sellable.
+          _product('tenant-a', 'candle', categoryId: 'household'),
+        ],
+      );
+    });
+
+    testWidgets('searching narrows the list by name', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _enter(tester, 'checkout-search', 'wat');
+
+      expect(find.byKey(const ValueKey('checkout-product-water')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-product-loaf')), findsNothing);
+    });
+
+    testWidgets('searching matches the product code as well', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      // The cashier reads a code off the shelf label, not a product name.
+      await _enter(tester, 'checkout-search', 'SKU-LOAF');
+
+      expect(find.byKey(const ValueKey('checkout-product-loaf')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsNothing);
+    });
+
+    testWidgets('a search that matches nothing says so', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _enter(tester, 'checkout-search', 'zzz');
+
+      expect(
+        find.byKey(const ValueKey('checkout-catalog-no-matches')),
+        findsOne,
+      );
+      // Not the same thing as a device holding no catalog at all.
+      expect(find.byKey(const ValueKey('checkout-catalog-empty')), findsNothing);
+    });
+
+    testWidgets('a category chip narrows the list and combines with search', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-category-drinks');
+
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-water')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-loaf')), findsNothing);
+
+      await _enter(tester, 'checkout-search', 'cola');
+
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-water')), findsNothing);
+
+      await _tap(tester, 'checkout-category-all');
+
+      // The search survives clearing the category; only the category widened.
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-loaf')), findsNothing);
+    });
+
+    testWidgets('a product naming an uncached category stays reachable', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      // Filtering must never be able to hide something the till can sell.
+      await _tap(tester, 'checkout-category-other');
+
+      expect(find.byKey(const ValueKey('checkout-product-candle')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsNothing);
+    });
+
+    testWidgets('a filtered product can still be added and sold', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _enter(tester, 'checkout-search', 'loaf');
+      await _tap(tester, 'checkout-product-loaf');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(drafts.requests.single.lines.single.productId, 'loaf');
+      // The till returns to the whole catalog for the next customer rather
+      // than leaving it narrowed by the last one.
+      expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
+    });
+
+    testWidgets('reads the device catalog once and never again to filter', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+      expect(catalog.reads, hasLength(1));
+
+      await _enter(tester, 'checkout-search', 'co');
+      await _enter(tester, 'checkout-search', 'col');
+      await _tap(tester, 'checkout-category-drinks');
+      await _tap(tester, 'checkout-category-all');
+
+      // Searching and filtering are answered from the snapshot already in
+      // hand. A sale has to be buildable with no network at all, so neither
+      // may reach storage, let alone Firestore.
+      expect(catalog.reads, hasLength(1));
+    });
+
+    testWidgets('no category row is offered when nothing can be filtered', (
+      tester,
+    ) async {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        categories: <TenantCategory>[_category('tenant-a', 'drinks')],
+        products: <TenantProduct>[
+          _product('tenant-a', 'cola', categoryId: 'drinks'),
+        ],
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(find.byKey(const ValueKey('checkout-category-all')), findsOne);
+      expect(
+        find.byKey(const ValueKey('checkout-category-other')),
+        findsNothing,
+      );
+    });
+  });
+
+  group('typing a quantity', () {
+    testWidgets('sells twelve of something in one entry', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _enter(tester, 'checkout-line-quantity-product-b', '12');
+
+      expect(
+        _text(tester, 'checkout-line-amount-product-b'),
+        '12 x KES 7.00 = KES 84.00',
+      );
+
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(drafts.requests.single.lines.single.quantity, 12);
+    });
+
+    testWidgets('a plus tap after typing continues from the typed number', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _enter(tester, 'checkout-line-quantity-product-b', '9');
+      await _tap(tester, 'checkout-product-product-b');
+
+      expect(
+        _text(tester, 'checkout-line-amount-product-b'),
+        '10 x KES 7.00 = KES 70.00',
+      );
+      expect(
+        _field(tester, 'checkout-line-quantity-product-b').controller!.text,
+        '10',
+      );
+    });
+
+    testWidgets('an unusable quantity keeps the line and blocks saving', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-tender-cash');
+      await _enter(tester, 'checkout-line-quantity-product-b', '0');
+
+      // The last usable quantity is kept, so a half-typed number can never
+      // become the sale.
+      expect(
+        _text(tester, 'checkout-line-amount-product-b'),
+        '1 x KES 7.00 = KES 7.00',
+      );
+      expect(
+        _text(tester, 'checkout-save-blocked'),
+        'Enter a whole quantity between 1 and 1,000,000 for every item.',
+      );
+      expect(_save(tester).onPressed, isNull);
+      expect(
+        find.byKey(
+          const ValueKey('checkout-line-quantity-invalid-product-b'),
+        ),
+        findsOne,
+      );
+      // The rejected entry is left on screen to be corrected rather than
+      // silently replaced by a number the cashier did not type.
+      expect(
+        _field(tester, 'checkout-line-quantity-product-b').controller!.text,
+        '0',
+      );
+    });
+
+    testWidgets('the draft quantity bound is refused at the till', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _enter(tester, 'checkout-line-quantity-product-b', '1000001');
+
+      expect(_save(tester).onPressed, isNull);
+
+      await _enter(tester, 'checkout-line-quantity-product-b', '1000000');
+      await _tap(tester, 'checkout-tender-cash');
+
+      // Exactly the bound is a legal sale, so nothing blocks it except the
+      // money bound the next test covers.
+      expect(
+        find.byKey(
+          const ValueKey('checkout-line-quantity-invalid-product-b'),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a line beyond the recordable amount is refused legibly', (
+      tester,
+    ) async {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        products: <TenantProduct>[
+          _product('tenant-a', 'vehicle', price: 250000),
+        ],
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      // 1,000,000 x KES 250,000 is past the frozen monetary bound. Without
+      // this check the payload contract refuses it as
+      // draft_contract_violation, which tells a cashier to ask for help when
+      // the answer is a smaller number.
+      await _tap(tester, 'checkout-product-vehicle');
+      await _enter(tester, 'checkout-line-quantity-vehicle', '1000000');
+      await _tap(tester, 'checkout-tender-cash');
+
+      expect(
+        _text(tester, 'checkout-save-blocked'),
+        'This sale is larger than this till can record. Reduce a quantity.',
+      );
+      expect(_save(tester).onPressed, isNull);
+      expect(drafts.requests, isEmpty);
+    });
+
+    testWidgets('a cart total beyond the bound is refused even line by line', (
+      tester,
+    ) async {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        products: <TenantProduct>[
+          _product('tenant-a', 'estate-a', price: 600000000),
+          _product('tenant-a', 'estate-b', price: 600000000),
+        ],
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      // Each line is inside the bound; only their sum is not.
+      await _tap(tester, 'checkout-product-estate-a');
+      await _tap(tester, 'checkout-tender-cash');
+      expect(find.byKey(const ValueKey('checkout-save-blocked')), findsNothing);
+
+      await _tap(tester, 'checkout-product-estate-b');
+
+      expect(
+        _text(tester, 'checkout-save-blocked'),
+        'This sale is larger than this till can record. Reduce a quantity.',
+      );
+    });
+
+    testWidgets('an unusable entry is cleared by correcting it', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _enter(tester, 'checkout-line-quantity-product-b', '');
+      expect(_save(tester).onPressed, isNull);
+
+      await _enter(tester, 'checkout-line-quantity-product-b', '3');
+      await _tap(tester, 'checkout-tender-cash');
+
+      expect(find.byKey(const ValueKey('checkout-save-blocked')), findsNothing);
+      expect(_save(tester).onPressed, isNotNull);
+    });
+  });
+
+  group('the cached stock figure', () {
+    testWidgets('is stated on the product with when it was read', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(
+        _text(tester, 'checkout-product-stock-product-b'),
+        'KES 7.00, 12 in stock',
+      );
+      expect(
+        _text(tester, 'checkout-catalog-freshness'),
+        'Prices and stock come from this device, last synced 2026-07-31 '
+        '00:00 UTC. A sale is never blocked by a stock count.',
+      );
+    });
+
+    testWidgets('warns past the cached figure but never blocks the sale', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _enter(tester, 'checkout-line-quantity-product-b', '30');
+
+      expect(
+        _text(tester, 'checkout-line-stock-product-b'),
+        'This device last saw 12 in stock. The sale is not blocked by that '
+        'count.',
+      );
+
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      // An offline device cannot know the true figure, and the server permits
+      // signed stock, so refusing here would block a legitimate sale on stale
+      // data while guaranteeing nothing.
+      expect(drafts.requests.single.lines.single.quantity, 30);
+      expect(find.byKey(const ValueKey('checkout-saved')), findsOne);
+    });
+
+    testWidgets('a negative cached figure is stated rather than hidden', (
+      tester,
+    ) async {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        products: <TenantProduct>[
+          _product('tenant-a', 'oversold', price: 5, quantity: -3),
+        ],
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(
+        _text(tester, 'checkout-product-stock-oversold'),
+        'KES 5.00, -3 in stock',
+      );
+
+      await _tap(tester, 'checkout-product-oversold');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(drafts.requests, hasLength(1));
+    });
+
+    testWidgets('a partly synced catalog says a product may be missing', (
+      tester,
+    ) async {
+      catalog.answerWith = CheckoutCatalogSnapshot.forTesting(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        configuration: TenantCheckoutConfiguration(currency: 'KES'),
+        products: <TenantProduct>[_product('tenant-a', 'cola')],
+        complete: false,
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(find.byKey(const ValueKey('checkout-catalog-partial')), findsOne);
+    });
+  });
+
+  group('the saved receipt', () {
+    testWidgets('survives the next cart edit until it is closed', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+      expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+
+      // The cashier starts serving the next customer straight away. The number
+      // describes a sale that is already finished, so it must not vanish.
+      await _tap(tester, 'checkout-product-product-b');
+
+      expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+
+      await _tap(tester, 'checkout-dismiss-receipt');
+
+      expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
+      // Closing the receipt is not the same as clearing the cart.
+      expect(find.byKey(const ValueKey('checkout-line-product-b')), findsOne);
+    });
+
+    testWidgets('can be copied', (tester) async {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+      await _tap(tester, 'checkout-copy-receipt');
+
+      expect(copied, <String>['CT-A7F-20260731-0001']);
+      expect(find.byKey(const ValueKey('checkout-receipt-copied')), findsOne);
+    });
+
+    testWidgets('a second save replaces the first receipt', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-tender-mpesa');
+      await _tap(tester, 'checkout-save');
+
+      expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0002'));
+      expect(
+        _text(tester, 'checkout-saved'),
+        isNot(contains('CT-A7F-20260731-0001')),
+      );
+    });
+
+    testWidgets('a refused save takes the previous receipt off screen', (
+      tester,
+    ) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      drafts.refusal = 'no_open_shift';
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      // An older number beside a refusal reads as if the refused sale saved.
+      expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
+      expect(_text(tester, 'checkout-refusal'), 'Open a shift before selling.');
+    });
+
+    testWidgets('a save with no receipt number still says the sale is kept', (
+      tester,
+    ) async {
+      drafts.omitReceiptNumber = true;
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      // Silence here would have the cashier ring the same sale up again.
+      expect(
+        _text(tester, 'checkout-saved'),
+        startsWith('Saved on this device, but it could not state a receipt'),
+      );
+      expect(
+        find.byKey(const ValueKey('checkout-copy-receipt')),
+        findsNothing,
+      );
+    });
+  });
+
+  testWidgets('a business switch clears the cart, the search, and the receipt', (
+    tester,
+  ) async {
+    catalog.put(
+      uid: 'user-a',
+      tenantId: 'tenant-b',
+      products: <TenantProduct>[_product('tenant-b', 'product-a', price: 3)],
+    );
+    await _pump(tester, sessions, catalog, drafts);
+
+    await _enter(tester, 'checkout-search', 'product-a');
+    await _tap(tester, 'checkout-product-product-a');
+    await _tap(tester, 'checkout-tender-cash');
+    await _tap(tester, 'checkout-save');
+    expect(find.byKey(const ValueKey('checkout-saved')), findsOne);
+
+    sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
+    await _settle(tester);
+
+    // Nothing from the first business may be carried into the second: not a
+    // line, not a search term, and not a receipt number.
+    expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
+    expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
+    expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
+    expect(_text(tester, 'checkout-total'), 'Total: KES 0.00');
+  });
+
   testWidgets('a business switch during a save never labels the new session', (
     tester,
   ) async {
@@ -360,8 +886,22 @@ Future<void> _tap(WidgetTester tester, String key) async {
   await _settle(tester);
 }
 
+Future<void> _enter(WidgetTester tester, String key, String value) async {
+  await tester.enterText(find.byKey(ValueKey(key)), value);
+  await _settle(tester);
+}
+
 String _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+/// The single [TextField] at or under [key].
+TextField _field(WidgetTester tester, String key) => tester.widget<TextField>(
+  find.descendant(
+    of: find.byKey(ValueKey(key)),
+    matching: find.byType(TextField),
+    matchRoot: true,
+  ),
+);
 
 /// The text at [key], or a note that it is absent. Used only in failure
 /// reasons, so a missing widget explains itself rather than throwing.
@@ -386,12 +926,14 @@ final class _Catalog implements CheckoutCatalogSource {
     required String uid,
     required String tenantId,
     required List<TenantProduct> products,
+    List<TenantCategory> categories = const <TenantCategory>[],
     String currency = 'KES',
   }) {
     _snapshots['$uid:$tenantId'] = CheckoutCatalogSnapshot.forTesting(
       uid: uid,
       tenantId: tenantId,
       configuration: TenantCheckoutConfiguration(currency: currency),
+      categories: categories,
       products: products,
     );
   }
@@ -412,6 +954,9 @@ final class _Drafts implements CheckoutDraftSink {
   String? refusal;
   Object? failure;
   Future<void>? gate;
+
+  /// Stands in for a payload that somehow carried no receipt number.
+  bool omitReceiptNumber = false;
   int _sequence = 0;
 
   @override
@@ -426,22 +971,37 @@ final class _Drafts implements CheckoutDraftSink {
     _sequence++;
     return CheckoutSavedDraft(
       checkoutId: 'co-$_sequence',
-      receiptNumber: 'CT-A7F-20260731-${_sequence.toString().padLeft(4, '0')}',
+      receiptNumber: omitReceiptNumber
+          ? null
+          : 'CT-A7F-20260731-${_sequence.toString().padLeft(4, '0')}',
     );
   }
 }
 
-TenantProduct _product(String tenantId, String productId, {double price = 10}) =>
-    TenantProduct.fromSnapshot(
+TenantProduct _product(
+  String tenantId,
+  String productId, {
+  double price = 10,
+  int quantity = 12,
+  String categoryId = 'drinks',
+}) => TenantProduct.fromSnapshot(
+  TenantQueryDocumentSnapshot(
+    path: 'tenants/$tenantId/products/$productId',
+    data: <String, Object?>{
+      'name': '$productId name',
+      'SKU': 'sku-$productId',
+      'price': price,
+      'quantity': quantity,
+      'categoryId': categoryId,
+    },
+  ),
+);
+
+TenantCategory _category(String tenantId, String categoryId) =>
+    TenantCategory.fromSnapshot(
       TenantQueryDocumentSnapshot(
-        path: 'tenants/$tenantId/products/$productId',
-        data: <String, Object?>{
-          'name': '$productId name',
-          'SKU': 'sku-$productId',
-          'price': price,
-          'quantity': 12,
-          'categoryId': 'drinks',
-        },
+        path: 'tenants/$tenantId/categories/$categoryId',
+        data: <String, Object?>{'name': '$categoryId category'},
       ),
     );
 

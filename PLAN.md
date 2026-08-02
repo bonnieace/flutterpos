@@ -7860,3 +7860,148 @@ usable at a real till, and nothing else:
    `getSalesComparison`, a `platform_audit_logs` surface, subscription and
    branding surfaces, deployment, and Android build/emulator validation outside
    that chunk.
+
+---
+
+## Usable till handoff - search, quantity, stock, receipt - 2026-08-02
+
+### Completed in this session
+
+The till stopped being demonstration-sized. A cashier can find a product in a
+real catalog, sell twelve of it in one entry, see what this device last knew
+about its stock, and still read the receipt number after the next customer has
+been started. Only `lib/checkout/checkout_cart_panel.dart` and its test changed:
+no contract, no rule, and no Functions source was touched.
+
+Implemented behavior and safety decisions:
+
+- **The cached stock figure is stated and never blocks a sale.** This was the
+  scope question the previous handover refused to leave implicit, and the answer
+  is that the till does not refuse to sell below zero. Three facts decide it and
+  none of them is a preference: Firestore Rules deliberately permit signed
+  stock, `checkout-submission.test.js` already proves a sale below zero commits,
+  and an offline device holds a figure that was true at the last sync rather
+  than now. A refusal here would therefore guarantee nothing on the server while
+  reliably blocking a legitimate sale whenever the cache is merely stale. The
+  existing stock surface already tells operators the same thing in the same
+  words - "a sale is never blocked by a stock count" - so refusing at the till
+  would also have made two screens disagree. Instead the product tile states the
+  figure, the catalog header states when it was read, and a line that exceeds
+  the cached figure carries a warning that says explicitly it is not a block.
+  Widget tests pin both the warning and the sale going through, including a
+  product whose cached quantity is already negative.
+- **Search and filtering read the snapshot already in hand.** A test asserts the
+  catalog source is read exactly once across two searches and two category
+  changes. This is the whole point of the offline design: a sale must be
+  buildable with no network, so a keystroke may not reach storage, let alone
+  Firestore.
+- **A product naming a category this device does not hold stays reachable.**
+  Categories and products are paged separately and bounded separately, so the
+  cache can legitimately hold a product whose category it does not. Filtering by
+  the cached categories alone would have silently hidden something the till can
+  sell, so an `Other` chip appears exactly when such a product exists. The
+  filter also does not use a sentinel category ID - a real category could be
+  named anything, including the sentinel - so the selection is a nullable ID
+  plus an explicit `uncached only` flag.
+- **A typed quantity that is not usable keeps the line and is left on screen.**
+  The line retains its last usable quantity, so a half-typed number can never
+  become the sale, and saving is blocked with a sentence naming the bound. The
+  field is deliberately **not** snapped back to the last good value: doing so
+  would leave a valid number on screen beside a message saying the quantity is
+  wrong, with nothing left to correct. `_QuantityField` therefore overwrites
+  itself only when the cart actually moved the number - a plus or minus tap -
+  which is also what keeps the cursor from jumping mid-entry.
+- **The monetary bound is refused at the till rather than by the payload.**
+  Direct quantity entry makes an oversized sale reachable for the first time.
+  The frozen contract refuses it as `draft_contract_violation`, whose mapped
+  sentence tells a cashier to ask for help when the real answer is to type a
+  smaller number. The cart now checks both the per-line total and the cart total
+  against `maximumCheckoutMinorAmount`, and two tests cover them separately -
+  one line past the bound, and two lines each inside it whose sum is not.
+- **The receipt survives the next cart edit and is cleared only deliberately.**
+  This reverses the previous chunk's rule, and the reason is that the rule was
+  attached to the wrong thing: a refusal describes the cart on screen, but a
+  receipt number describes a sale that is already finished. It is now cleared by
+  the next save attempt or by the cashier closing it, and the sentence says so.
+  A refused save also takes the earlier number off screen, because an older
+  receipt sitting beside a refusal reads as if the refused sale saved.
+- **A save that carried no receipt number now reports itself.**
+  `CheckoutSavedDraft.receiptNumber` is nullable, and the previous panel rendered
+  that case as silence - a durable, syncing sale with no confirmation at all,
+  which is how the same sale gets rung up twice. It now says the sale is kept,
+  says the number is unavailable, and offers no copy button to press.
+- **A business switch destroys the cart rather than tidying it.** The cart moved
+  into a `_CartEditor` keyed by `uid:tenantId:epoch`, so a tenant switch unmounts
+  it and takes the lines, the search text, the chosen tender, and the previous
+  receipt with it. The prior design cleared state by hand and could not clear the
+  search controller safely from inside a build; a key does it structurally and
+  cannot be forgotten in a later edit.
+- **The till returns to neutral after a durable save.** The search box and the
+  category filter clear with the cart, so the next customer is not served from a
+  catalog narrowed by the previous one.
+- The discount is still pinned to zero with no control, and there is still no
+  default tender, no submit, no retry, and no cancel.
+
+Deliberately outside this chunk, and important for the next session:
+
+- No receipt is printed and no printed receipt body exists. Copying the number
+  to the clipboard is not printing it.
+- The catalog is still a flat wrap of buttons; there is no barcode entry, no
+  scanner, and no paging for a very large catalog.
+- Nothing here submits, retries, or cancels a checkout.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/checkout/checkout_cart_panel.dart
+test/checkout/checkout_cart_panel_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+- `flutter analyze --no-pub lib/audit lib/inventory lib/returns lib/reporting
+  lib/sales lib/shift lib/checkout lib/tenancy lib/main.dart test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` reported one pre-existing issue and nothing else: the Sentry
+  `profilesSampleRate` experimental warning at `lib/main.dart:28`.
+- `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit
+  test/inventory test/returns test/reporting test/sales test/shift test/checkout
+  test/tenancy` passed **850/850**, up from 825, adding **25** cart tests: 8 for
+  search and category filtering, 6 for typed quantity and the monetary bound, 4
+  for the stock display, 5 for the receipt, and 2 for what a business switch
+  destroys.
+- The focused file command
+  `flutter test --no-pub --concurrency=1 test/checkout/checkout_cart_panel_test
+  .dart` passed **41/41** during development.
+- `git diff --check` was clean.
+- **The emulator suites were not re-run for this chunk.** `git diff --stat
+  1322371..HEAD -- firestore.rules functions rules-tests` is empty, so Rules
+  **125/125**, Functions **166/166**, and integration **12/12** remain
+  byte-identical to the tender commit's green run, and this chunk changed one
+  Dart file. Android build and Android emulator validation were intentionally
+  skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The monetary-bound test failed on its first run** because the arithmetic in
+  the test was wrong, not the code: 1,000,000 x KES 120.50 is 1.205e10 minor,
+  well inside the 1e11 bound, so nothing blocked and `checkout-save-blocked` was
+  absent. Resolved by pricing a fixture product at KES 250,000 to cross the
+  line bound, and by adding a second case with two lines each inside the bound
+  whose sum is not - which also proved the cart-total branch that the first case
+  never reached.
+- **`SystemChannels` is not exported by `material.dart`.** The analyzer first
+  reported `package:flutter/services.dart` as an unnecessary import, because the
+  clipboard test had not been written yet; it is required once
+  `SystemChannels.platform` is mocked.
+- No other assertion failed.
+
+The existing user-owned local edits remain separate and must not be staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock dependency-resolution updates for characters, matcher,
+material_color_utilities, meta, test_api, and the Dart SDK constraint
+```
