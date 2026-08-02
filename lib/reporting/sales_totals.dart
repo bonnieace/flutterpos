@@ -53,18 +53,18 @@ enum TenantSalesPeriod {
 }
 
 /// Whose sales one request covers.
+///
+/// Derived from the query rather than chosen: a caller names a member, and the
+/// scope is what naming that member turned out to mean.
 enum TenantSalesScope {
   /// Every sale the business recorded in the period.
-  everyone('Whole business'),
+  everyone,
 
-  /// Only sales the signed-in member recorded, through the server's
-  /// `soldById` filter. The UID comes from the captured session, never from a
-  /// caller, so this can never be pointed at somebody else.
-  mine('Only mine');
+  /// Only sales the signed-in member recorded.
+  mine,
 
-  const TenantSalesScope(this.label);
-
-  final String label;
+  /// Only sales one named colleague recorded.
+  oneMember,
 }
 
 /// Why the server did not answer.
@@ -270,13 +270,20 @@ final class TenantSalesTotalsGateway {
   static bool canReadInSession(TenantSession session) =>
       session.canAccess(allowedRoles: allowedRoles);
 
-  /// Resolves [period] and [scope] against the live session and the clock.
+  /// Resolves [period], [soldById], and [categoryId] against the live session
+  /// and the clock.
+  ///
+  /// [soldById] names one member of this business, or is absent for all of
+  /// them. Nothing here proves the member exists - only that the server would
+  /// accept the ID - because a departed member's sales are still real sales in
+  /// the period. Proving membership is the surface's job, and it does it from
+  /// the canonical directory before calling this.
   ///
   /// Refused locally when the session may not read totals, so an unauthorized
   /// tap costs no round trip.
   TenantSalesTotalsQuery createQuery({
     required TenantSalesPeriod period,
-    required TenantSalesScope scope,
+    String? soldById,
     String? categoryId,
   }) {
     if (!canReadInSession(_session)) {
@@ -292,20 +299,27 @@ final class TenantSalesTotalsGateway {
     final startDate = checkoutBusinessDate(
       now.subtract(Duration(days: period.days - 1)),
     );
-    final soldById = switch (scope) {
-      TenantSalesScope.everyone => null,
-      TenantSalesScope.mine => _validatedSelfUid(),
-    };
+    final member = soldById == null ? null : _validatedUid(soldById);
     return TenantSalesTotalsQuery._(
       tenantId: _session.tenantId,
       period: period,
-      scope: scope,
+      // Derived, never taken from a caller: what naming this member means is a
+      // fact about the session, not a claim the surface gets to make.
+      scope: switch (member) {
+        null => TenantSalesScope.everyone,
+        final uid when uid == _session.uid => TenantSalesScope.mine,
+        _ => TenantSalesScope.oneMember,
+      },
       startDate: startDate,
       endDate: endDate,
-      soldById: soldById,
+      soldById: member,
       categoryId: categoryId == null ? null : _validatedCategoryId(categoryId),
     );
   }
+
+  /// The signed-in member's own UID, for a caller asking only for its own
+  /// sales without consulting any directory.
+  String get selfUid => _session.uid;
 
   /// Validates a category the caller chose, as the server would accept it.
   String _validatedCategoryId(String categoryId) {
@@ -318,14 +332,14 @@ final class TenantSalesTotalsGateway {
     }
   }
 
-  /// The signed-in member's own UID, as the server would accept it.
+  /// A member UID, as the server would accept it.
   ///
   /// A UID that is not a usable document ID would be rejected by the handler as
   /// an invalid argument, so it is refused here with the same meaning rather
   /// than sent and translated back.
-  String _validatedSelfUid() {
+  String _validatedUid(String uid) {
     try {
-      return validateTenantDocumentId(_session.uid, fieldName: 'uid');
+      return validateTenantDocumentId(uid, fieldName: 'soldById');
     } on ArgumentError {
       throw const TenantSalesTotalsException(
         TenantSalesTotalsFailure.invalidRequest,

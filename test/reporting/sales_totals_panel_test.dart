@@ -68,7 +68,8 @@ void main() {
     final callable = _Callable(<Object?>[_response(), _response()]);
 
     await _pump(tester, _controller(TenantRole.manager), callable);
-    await tester.tap(find.byKey(const ValueKey('sales-totals-scope-mine')));
+    await tester.tap(find.byKey(const ValueKey('sales-totals-member-self')));
+    await tester.pump();
     await tester.pump();
     await tester.pump();
 
@@ -79,6 +80,166 @@ void main() {
           .widget<Text>(find.byKey(const ValueKey('sales-totals-range')))
           .data,
       '2026-07-31 • your sales only',
+    );
+  });
+
+  testWidgets('one colleague can be totalled separately', (tester) async {
+    final callable = _Callable(<Object?>[_response(), _response()]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      callable,
+      reader: _Reader(
+        staff: const <String, Map<String, String?>>{
+          'tenant-a': <String, String?>{
+            'owner-a': 'Amina',
+            'user-a': 'The Manager',
+            'cashier-b': 'Otieno',
+          },
+        },
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('sales-totals-member-cashier-b')),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(callable.payloads.last['soldById'], 'cashier-b');
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-range')))
+          .data,
+      '2026-07-31 • Otieno (cashier-b)',
+    );
+    // The signed-in member reads as itself, not as a UID among colleagues.
+    expect(
+      tester
+          .widget<ChoiceChip>(
+            find.byKey(const ValueKey('sales-totals-member-self')),
+          )
+          .label,
+      isA<Text>().having((text) => text.data, 'label', 'You (The Manager)'),
+    );
+    expect(
+      find.byKey(const ValueKey('sales-totals-member-user-a')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a member with no recorded name shows its UID', (tester) async {
+    final callable = _Callable(<Object?>[_response()]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _Reader(
+        staff: const <String, Map<String, String?>>{
+          'tenant-a': <String, String?>{'cashier-b': null},
+        },
+      ),
+    );
+
+    // A staff record also carries an email and a phone number, and a report
+    // label is not the place to disclose either.
+    expect(
+      tester
+          .widget<ChoiceChip>(
+            find.byKey(const ValueKey('sales-totals-member-cashier-b')),
+          )
+          .label,
+      isA<Text>().having((text) => text.data, 'label', 'cashier-b'),
+    );
+    expect(find.textContaining('@example.test'), findsNothing);
+  });
+
+  testWidgets('an unreadable staff list still separates my own sales', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response(), _response()]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      callable,
+      reader: _Reader(staffUnreadable: true),
+    );
+
+    expect(
+      find.byKey(const ValueKey('sales-totals-staff-unavailable')),
+      findsOne,
+    );
+    // "Only mine" is answerable from the session alone, so no read can take it
+    // away - and the whole-business figure is untouched.
+    expect(find.byKey(const ValueKey('sales-totals-amount')), findsOne);
+    await tester.tap(find.byKey(const ValueKey('sales-totals-member-self')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(callable.payloads.last['soldById'], 'user-a');
+  });
+
+  testWidgets('a member this business does not have is never sent', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response(), _response(), _response()]);
+    final reader = _Reader(
+      staff: const <String, Map<String, String?>>{
+        'tenant-a': <String, String?>{'cashier-b': 'Otieno'},
+        // Tenant B has its own roster, and this colleague is not on it.
+        'tenant-b': <String, String?>{'cashier-c': 'Wanjiru'},
+      },
+    );
+    final controller = _controller(TenantRole.manager);
+
+    await _pump(tester, controller, callable, reader: reader);
+    await tester.tap(
+      find.byKey(const ValueKey('sales-totals-member-cashier-b')),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(callable.payloads.last['soldById'], 'cashier-b');
+
+    // Tenant B has its own directory and this UID is not in it.
+    controller.open(
+      uid: 'user-a',
+      membership: _membership('tenant-b', TenantRole.manager),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(callable.payloads.last['tenantId'], 'tenant-b');
+    expect(callable.payloads.last.containsKey('soldById'), isFalse);
+  });
+
+  testWidgets('a roster longer than one page says so', (tester) async {
+    final callable = _Callable(<Object?>[_response()]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _Reader(
+        staff: <String, Map<String, String?>>{
+          'tenant-a': <String, String?>{
+            for (var index = 0; index < 5; index++)
+              'cashier-$index': 'Cashier $index',
+          },
+        },
+      ),
+      staffPageSize: 3,
+    );
+
+    expect(
+      find.byKey(const ValueKey('sales-totals-staff-truncated')),
+      findsOne,
     );
   });
 
@@ -118,12 +279,14 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Neither the code nor the category list depends on the filters, so a
-    // second period must not spend a second document read on either.
+    // None of the code, the category list, or the roster depends on the
+    // filters, so a second period must spend no further read on any of them.
     expect(reader.documentPaths, <String>[
+      'tenants/tenant-a',
+      'tenants/tenant-a/staff/owner-a',
       'tenants/tenant-a/configuration/checkout',
     ]);
-    expect(reader.queries, hasLength(1));
+    expect(reader.queries, hasLength(2));
     expect(find.textContaining('KES 4820.75'), findsOne);
   });
 
@@ -467,6 +630,7 @@ Future<void> _pump(
   bool settle = true,
   TenantSalesPeriod period = TenantSalesPeriod.today,
   _Reader? reader,
+  int staffPageSize = 25,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -478,6 +642,7 @@ Future<void> _pump(
             reader: reader ?? _Reader(),
             clock: () => DateTime.utc(2026, 7, 31, 9),
             period: period,
+            staffPageSize: staffPageSize,
           ),
         ),
       ),
@@ -489,30 +654,84 @@ Future<void> _pump(
   await tester.pump();
 }
 
-/// Answers the canonical category page, or refuses to.
+/// Answers the canonical category, staff, and configuration reads, or refuses.
 final class _Reader implements TenantDataReader {
   _Reader({
     Map<String, List<String>> categories = const <String, List<String>>{},
+    Map<String, Map<String, String?>> staff =
+        const <String, Map<String, String?>>{},
     this.currency,
     this.throws = false,
+    this.staffUnreadable = false,
     this.answersOutsideTenant = false,
-  }) : categories = Map<String, List<String>>.of(categories);
+  }) : categories = Map<String, List<String>>.of(categories),
+       staff = Map<String, Map<String, String?>>.of(staff);
 
   /// The code published in `configuration/checkout`, or none at all.
   final String? currency;
 
   /// Category IDs by tenant, named `<id> shelf` so a label is provable.
   final Map<String, List<String>> categories;
+
+  /// Staff UIDs to display names, by business. A `null` name is a member whose
+  /// canonical record records none. Every business always has its owner,
+  /// because the directory reads that record before anything else.
+  final Map<String, Map<String, String?>> staff;
+
   final bool throws;
+
+  /// Refuses only the staff page, leaving categories readable.
+  final bool staffUnreadable;
 
   /// Answers with a document belonging to another business.
   final bool answersOutsideTenant;
   final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
   final List<String> documentPaths = <String>[];
 
+  static const String ownerUid = 'owner-a';
+
+  /// The roster of one business, always including its owner.
+  Map<String, String?> _roster(String tenantId) => <String, String?>{
+    ownerUid: null,
+    ...?staff[tenantId],
+  };
+
+  Map<String, Object?> _staffData(String tenantId, String uid) =>
+      <String, Object?>{
+        'uid': uid,
+        'email': '$uid@example.test',
+        if (_roster(tenantId)[uid] case final name?) 'name': name,
+        'role': uid == ownerUid ? 'owner' : 'cashier',
+        'status': 'active',
+        'invitationStatus': 'accepted',
+      };
+
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) {
     documentPaths.add(path);
+    final segments = path.split('/');
+    if (segments.length == 2) {
+      // The canonical tenant root, which the staff directory reads to learn
+      // which member is the owner.
+      return Future<TenantDocumentSnapshot?>.value(
+        TenantDocumentSnapshot(
+          path: path,
+          data: const <String, Object?>{'ownerUid': ownerUid},
+        ),
+      );
+    }
+    if (segments.length == 4 && segments[2] == 'staff') {
+      final tenantId = segments[1];
+      final uid = segments[3];
+      return Future<TenantDocumentSnapshot?>.value(
+        _roster(tenantId).containsKey(uid)
+            ? TenantDocumentSnapshot(
+                path: path,
+                data: _staffData(tenantId, uid),
+              )
+            : null,
+      );
+    }
     final code = currency;
     if (code == null || !path.endsWith('/configuration/checkout')) {
       return Future<TenantDocumentSnapshot?>.value();
@@ -530,14 +749,27 @@ final class _Reader implements TenantDataReader {
     TenantCollectionQuery query,
   ) {
     queries.add(query);
-    if (throws) {
+    final isStaff = query.collectionPath.endsWith('/staff');
+    if (throws || (isStaff && staffUnreadable)) {
       return Future<List<TenantQueryDocumentSnapshot>>.error(
-        StateError('categories unavailable'),
+        StateError('unavailable'),
       );
     }
     final tenantId = query.collectionPath.split('/')[1];
     // Firestore pages a collection in ascending document-ID order and the
     // repository proves it, so the fake has to answer in that order too.
+    if (isStaff) {
+      final uids = _roster(tenantId).keys.toList()..sort();
+      return Future<List<TenantQueryDocumentSnapshot>>.value(<
+        TenantQueryDocumentSnapshot
+      >[
+        for (final uid in uids.take(query.limit))
+          TenantQueryDocumentSnapshot(
+            path: '${query.collectionPath}/$uid',
+            data: _staffData(tenantId, uid),
+          ),
+      ]);
+    }
     final ids = <String>[...?categories[tenantId]]..sort();
     final collectionPath = answersOutsideTenant
         ? 'tenants/tenant-z/categories'

@@ -13,7 +13,6 @@ void main() {
 
       final query = gateway.createQuery(
         period: TenantSalesPeriod.today,
-        scope: TenantSalesScope.everyone,
       );
       await gateway.load(query);
 
@@ -38,27 +37,64 @@ void main() {
       }.entries) {
         final query = gateway.createQuery(
           period: entry.key,
-          scope: TenantSalesScope.everyone,
         );
         expect(query.startDate, entry.value, reason: entry.key.name);
         expect(query.endDate, '2026-07-31', reason: entry.key.name);
       }
     });
 
-    test('only mine filters by the session UID and nothing else', () async {
+    test('naming the signed-in member is recognised as my own sales', () async {
       final callable = _Callable(_response());
       final gateway = _gateway(callable);
 
       final query = gateway.createQuery(
         period: TenantSalesPeriod.today,
-        scope: TenantSalesScope.mine,
+        soldById: 'manager-a',
       );
       await gateway.load(query);
 
-      // The member is never an input: it comes from the captured session, so
-      // no caller can total somebody else's sales.
+      // The scope is derived from the session, never taken from the caller.
       expect(query.soldById, 'manager-a');
+      expect(query.scope, TenantSalesScope.mine);
+      expect(gateway.selfUid, 'manager-a');
       expect(callable.payloads.single['soldById'], 'manager-a');
+    });
+
+    test('naming a colleague is a different scope entirely', () async {
+      final callable = _Callable(_response());
+      final gateway = _gateway(callable);
+
+      final query = gateway.createQuery(
+        period: TenantSalesPeriod.today,
+        soldById: 'cashier-b',
+      );
+      await gateway.load(query);
+
+      expect(query.scope, TenantSalesScope.oneMember);
+      expect(callable.payloads.single['soldById'], 'cashier-b');
+    });
+
+    test('naming nobody covers the whole business', () {
+      final query = _gateway(
+        _Callable(_response()),
+      ).createQuery(period: TenantSalesPeriod.today);
+
+      expect(query.scope, TenantSalesScope.everyone);
+      expect(query.soldById, isNull);
+    });
+
+    test('a member the server would reject never leaves the app', () {
+      final callable = _Callable(_response());
+      final gateway = _gateway(callable);
+
+      expect(
+        () => gateway.createQuery(
+          period: TenantSalesPeriod.today,
+          soldById: 'staff/one',
+        ),
+        _failure(TenantSalesTotalsFailure.invalidRequest),
+      );
+      expect(callable.payloads, isEmpty);
     });
 
     test('a category is sent as the server declared it', () async {
@@ -67,7 +103,6 @@ void main() {
 
       final query = gateway.createQuery(
         period: TenantSalesPeriod.today,
-        scope: TenantSalesScope.everyone,
         categoryId: 'drinks',
       );
       await gateway.load(query);
@@ -83,7 +118,6 @@ void main() {
       final payload = gateway
           .createQuery(
             period: TenantSalesPeriod.today,
-            scope: TenantSalesScope.everyone,
           )
           .toPayload();
 
@@ -98,7 +132,6 @@ void main() {
       expect(
         () => gateway.createQuery(
           period: TenantSalesPeriod.today,
-          scope: TenantSalesScope.everyone,
           categoryId: 'drinks/cold',
         ),
         _failure(TenantSalesTotalsFailure.invalidRequest),
@@ -113,7 +146,7 @@ void main() {
       expect(
         () => gateway.createQuery(
           period: TenantSalesPeriod.today,
-          scope: TenantSalesScope.mine,
+          soldById: 'manager-a',
         ),
         _failure(TenantSalesTotalsFailure.forbidden),
       );
@@ -161,7 +194,6 @@ void main() {
       final other = _gateway(callable, tenantId: 'tenant-b');
       final query = other.createQuery(
         period: TenantSalesPeriod.today,
-        scope: TenantSalesScope.everyone,
       );
 
       await expectLater(_gateway(callable).load(query), throwsStateError);
@@ -175,7 +207,6 @@ void main() {
       return gateway.load(
         gateway.createQuery(
           period: TenantSalesPeriod.today,
-          scope: TenantSalesScope.everyone,
           categoryId: categoryId,
         ),
       );
@@ -319,7 +350,6 @@ void main() {
           gateway.load(
             gateway.createQuery(
               period: TenantSalesPeriod.today,
-              scope: TenantSalesScope.everyone,
             ),
           ),
           _failure(entry.value),
@@ -334,7 +364,6 @@ void main() {
           gateway.load(
             gateway.createQuery(
               period: TenantSalesPeriod.today,
-              scope: TenantSalesScope.everyone,
             ),
           ),
           _failure(TenantSalesTotalsFailure.unavailable),

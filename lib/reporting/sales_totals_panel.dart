@@ -4,6 +4,9 @@ import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
+import '../tenancy/tenant_staff_directory.dart';
+import '../tenancy/tenant_staff_names.dart';
 import 'reporting_currency.dart';
 import 'sales_totals.dart';
 
@@ -63,16 +66,53 @@ final class _CategoryOptions {
   }
 }
 
-/// One period's totals with the categories and the code they are labelled with.
+/// The colleagues one session may total separately, and their display names.
+///
+/// A member who has left the business is deliberately still offered: their
+/// sales are still in the period, and hiding them would make the per-member
+/// figures fail to add up to the whole-business one.
+final class _StaffOptions {
+  const _StaffOptions({
+    required this.uids,
+    required this.names,
+    required this.readable,
+    required this.truncated,
+  });
+
+  const _StaffOptions.unreadable()
+    : uids = const <String>[],
+      names = const <String, String>{},
+      readable = false,
+      truncated = false;
+
+  final List<String> uids;
+
+  /// Display names by UID. A member with no recorded name is deliberately
+  /// absent so the label degrades to the authoritative UID; a staff record also
+  /// carries an email and a phone number, and a report label is not the place
+  /// to disclose either.
+  final Map<String, String> names;
+
+  final bool readable;
+
+  /// Whether the business has more staff than one page offers.
+  final bool truncated;
+
+  bool contains(String uid) => uids.contains(uid);
+}
+
+/// One period's totals with the choosers and the code they are labelled with.
 final class _SalesTotalsView {
   const _SalesTotalsView({
     required this.totals,
     required this.categories,
+    required this.staff,
     required this.currency,
   });
 
   final TenantSalesTotals totals;
   final _CategoryOptions categories;
+  final _StaffOptions staff;
   final TenantReportingCurrency currency;
 }
 
@@ -89,6 +129,7 @@ final class TenantSalesTotalsPanel extends StatefulWidget {
     this.clock,
     this.period = TenantSalesPeriod.today,
     this.categoryPageSize = 50,
+    this.staffPageSize = 25,
   });
 
   final SalesTotalsCallable callable;
@@ -103,6 +144,10 @@ final class TenantSalesTotalsPanel extends StatefulWidget {
   /// checkout uses for the chips it filters its catalog by.
   final int categoryPageSize;
 
+  /// The most colleagues offered as filters, in one page. The same bound
+  /// `TenantStaffNameResolver` puts on the names it will resolve for one page.
+  final int staffPageSize;
+
   @override
   State<TenantSalesTotalsPanel> createState() => _TenantSalesTotalsPanelState();
 }
@@ -110,17 +155,19 @@ final class TenantSalesTotalsPanel extends StatefulWidget {
 final class _TenantSalesTotalsPanelState
     extends State<TenantSalesTotalsPanel> {
   late TenantSalesPeriod _period = widget.period;
-  TenantSalesScope _scope = TenantSalesScope.everyone;
+  String? _soldById;
   String? _categoryId;
   int _generation = 0;
 
   String? _loaderKey;
   TenantGuardedLoader<_SalesTotalsView>? _loader;
 
-  /// One category list and one currency per session, so neither can label - or
-  /// filter - another business's figures. Both are cached because the filters
-  /// change often and neither depends on the period, scope, or category.
+  /// The category list, staff list, and currency for one session, so none of
+  /// them can label - or filter - another business's figures. All three are
+  /// cached because the filters change often and none of them depends on the
+  /// period, the member, or the category.
   _CategoryOptions? _categories;
+  _StaffOptions? _staff;
   TenantReportingCurrency? _currency;
   String? _sessionCacheKey;
 
@@ -132,9 +179,9 @@ final class _TenantSalesTotalsPanelState
     setState(() => _period = period);
   }
 
-  void _chooseScope(TenantSalesScope scope) {
-    if (scope == _scope) return;
-    setState(() => _scope = scope);
+  void _chooseMember(String? soldById) {
+    if (soldById == _soldById) return;
+    setState(() => _soldById = soldById);
   }
 
   void _chooseCategory(String? categoryId) {
@@ -142,21 +189,24 @@ final class _TenantSalesTotalsPanelState
     setState(() => _categoryId = categoryId);
   }
 
-  /// Asks again for the same period, scope, and category.
+  /// Asks again for the same period, member, and category.
   ///
   /// Safe without qualification: reading totals writes nothing, so a retry can
   /// never duplicate anything the way a reconciliation request could.
   void _retry() => setState(() => _generation++);
 
-  /// Reads this session's categories and currency once, and never fails the
-  /// route with either.
+  /// Reads this session's categories, colleagues, and currency once, and never
+  /// fails the route with any of them.
   ///
-  /// The figure a manager came for depends on neither the filter list nor its
-  /// label, so an unreadable one removes that affordance and says so rather
-  /// than replacing the total with an error.
+  /// The figure a manager came for depends on none of the three, so an
+  /// unreadable one removes that affordance and says so rather than replacing
+  /// the total with an error.
   Future<void> _loadSessionContext(TenantSession session) async {
     final key = _sessionKey(session);
-    if (key == _sessionCacheKey && _categories != null && _currency != null) {
+    if (key == _sessionCacheKey &&
+        _categories != null &&
+        _staff != null &&
+        _currency != null) {
       return;
     }
     _CategoryOptions options;
@@ -173,13 +223,42 @@ final class _TenantSalesTotalsPanelState
     } catch (_) {
       options = const _CategoryOptions.unreadable();
     }
+    final staff = await _readStaff(session);
     final currency = await TenantReportingCurrency.read(
       session: session,
       reader: widget.reader,
     );
     _sessionCacheKey = key;
     _categories = options;
+    _staff = staff;
     _currency = currency;
+  }
+
+  /// Reads one bounded page of this business's canonical staff.
+  ///
+  /// Only management may read the whole roster, and only management reaches this
+  /// route, so the two agree. A page that cannot be read leaves "everyone" and
+  /// "only mine" working, because both are answerable from the session alone.
+  Future<_StaffOptions> _readStaff(TenantSession session) async {
+    try {
+      final page = await TenantStaffDirectoryRepository(
+        session: session,
+        reader: widget.reader,
+      ).loadPage(pageSize: widget.staffPageSize);
+      return _StaffOptions(
+        uids: <String>[for (final member in page.items) member.uid],
+        names: <String, String>{
+          for (final member in page.items)
+            if (member.name case final name?) member.uid: name,
+        },
+        readable: true,
+        truncated: page.hasMore,
+      );
+    } on TenantScopeViolation {
+      rethrow;
+    } catch (_) {
+      return const _StaffOptions.unreadable();
+    }
   }
 
   /// One loader per guard key, so a closure rebuilt every frame cannot spend
@@ -188,11 +267,12 @@ final class _TenantSalesTotalsPanelState
     if (key == _loaderKey && _loader != null) return _loader!;
     _loaderKey = key;
     final period = _period;
-    final scope = _scope;
+    final chosenMember = _soldById;
     final chosenCategory = _categoryId;
     return _loader = (session) async {
       await _loadSessionContext(session);
       final categories = _categories!;
+      final staff = _staff!;
       // A category filters the figures only while this business's own canonical
       // list still contains it. A selection carried across a tenant switch, or
       // one that has since been deleted, silently reverts to the whole catalog
@@ -206,15 +286,24 @@ final class _TenantSalesTotalsPanelState
         callable: widget.callable,
         clock: widget.clock,
       );
+      // The same rule for a member, with one addition: the signed-in member is
+      // always answerable from the session itself, so "only mine" survives a
+      // directory this role could not read.
+      final soldById =
+          chosenMember != null &&
+              (chosenMember == gateway.selfUid || staff.contains(chosenMember))
+          ? chosenMember
+          : null;
       return _SalesTotalsView(
         totals: await gateway.load(
           gateway.createQuery(
             period: period,
-            scope: scope,
+            soldById: soldById,
             categoryId: categoryId,
           ),
         ),
         categories: categories,
+        staff: staff,
         currency: _currency!,
       );
     };
@@ -223,7 +312,8 @@ final class _TenantSalesTotalsPanelState
   @override
   Widget build(BuildContext context) {
     final guardKey =
-        '${_period.name}:${_scope.name}:${_categoryId ?? '-'}:$_generation';
+        '${_period.name}:${_soldById ?? '-'}:${_categoryId ?? '-'}:'
+        '$_generation';
     return TenantRouteGuard<_SalesTotalsView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantSalesTotalsGateway.allowedRoles,
@@ -237,27 +327,31 @@ final class _TenantSalesTotalsPanelState
       // replacing the whole surface with an error would take that away.
       failure: (context, error) => _SalesTotalsContents(
         period: _period,
-        scope: _scope,
+        soldById: _soldById,
+        selfUid: TenantSessionScope.of(context).session?.uid,
+        staff: _staff ?? const _StaffOptions.unreadable(),
         categoryId: _categoryId,
         categories: _categories ?? const _CategoryOptions.unreadable(),
         currency: _currency ?? TenantReportingCurrency.unknown,
         onChoosePeriod: _choosePeriod,
-        onChooseScope: _chooseScope,
+        onChooseMember: _chooseMember,
         onChooseCategory: _chooseCategory,
         onRetry: _retry,
         failureMessage: _failureMessage(error),
       ),
       builder: (context, session, view) => _SalesTotalsContents(
         period: _period,
-        scope: _scope,
-        // Taken from the answer rather than from the selection, so the chip
-        // shown selected is always the filter the figure was actually read
+        // Taken from the answer rather than from the selection, so the chips
+        // shown selected are always the filters the figure was actually read
         // with - including when a stale selection was dropped.
+        soldById: view.totals.query.soldById,
+        selfUid: session.uid,
+        staff: view.staff,
         categoryId: view.totals.query.categoryId,
         categories: view.categories,
         currency: view.currency,
         onChoosePeriod: _choosePeriod,
-        onChooseScope: _chooseScope,
+        onChooseMember: _chooseMember,
         onChooseCategory: _chooseCategory,
         onRetry: _retry,
         totals: view.totals,
@@ -298,12 +392,14 @@ String _failureMessage(Object error) => switch (error) {
 final class _SalesTotalsContents extends StatelessWidget {
   const _SalesTotalsContents({
     required this.period,
-    required this.scope,
+    required this.soldById,
+    required this.selfUid,
+    required this.staff,
     required this.categoryId,
     required this.categories,
     required this.currency,
     required this.onChoosePeriod,
-    required this.onChooseScope,
+    required this.onChooseMember,
     required this.onChooseCategory,
     required this.onRetry,
     this.totals,
@@ -311,12 +407,17 @@ final class _SalesTotalsContents extends StatelessWidget {
   });
 
   final TenantSalesPeriod period;
-  final TenantSalesScope scope;
+  final String? soldById;
+
+  /// The signed-in member, so its own chip reads "You" rather than a UID.
+  final String? selfUid;
+
+  final _StaffOptions staff;
   final String? categoryId;
   final _CategoryOptions categories;
   final TenantReportingCurrency currency;
   final ValueChanged<TenantSalesPeriod> onChoosePeriod;
-  final ValueChanged<TenantSalesScope> onChooseScope;
+  final ValueChanged<String?> onChooseMember;
   final ValueChanged<String?> onChooseCategory;
   final VoidCallback onRetry;
   final TenantSalesTotals? totals;
@@ -363,19 +464,53 @@ final class _SalesTotalsContents extends StatelessWidget {
       ),
       const SizedBox(height: 12),
       Wrap(
-        key: const ValueKey('sales-totals-scope'),
+        key: const ValueKey('sales-totals-member'),
         spacing: 8,
         runSpacing: 8,
         children: [
-          for (final option in TenantSalesScope.values)
+          ChoiceChip(
+            key: const ValueKey('sales-totals-member-all'),
+            label: const Text('Whole business'),
+            selected: soldById == null,
+            onSelected: (_) => onChooseMember(null),
+          ),
+          // The signed-in member is always offered, directory or not: its UID
+          // comes from the session, which no read can make unavailable.
+          if (selfUid case final uid?)
             ChoiceChip(
-              key: ValueKey('sales-totals-scope-${option.name}'),
-              label: Text(option.label),
-              selected: option == scope,
-              onSelected: (_) => onChooseScope(option),
+              key: const ValueKey('sales-totals-member-self'),
+              label: Text(
+                tenantStaffLabel(uid, names: staff.names, selfUid: uid),
+              ),
+              selected: soldById == uid,
+              onSelected: (_) => onChooseMember(uid),
             ),
+          for (final uid in staff.uids)
+            if (uid != selfUid)
+              ChoiceChip(
+                key: ValueKey('sales-totals-member-$uid'),
+                label: Text(
+                  tenantStaffLabel(uid, names: staff.names, selfUid: selfUid),
+                ),
+                selected: soldById == uid,
+                onSelected: (_) => onChooseMember(uid),
+              ),
         ],
       ),
+      if (!staff.readable) ...[
+        const SizedBox(height: 8),
+        const Text(
+          key: ValueKey('sales-totals-staff-unavailable'),
+          'The staff list could not be read, so only your own sales can be '
+          'separated out.',
+        ),
+      ] else if (staff.truncated) ...[
+        const SizedBox(height: 8),
+        const Text(
+          key: ValueKey('sales-totals-staff-truncated'),
+          'This business has more members than are listed here.',
+        ),
+      ],
       if (!categories.readable) ...[
         const SizedBox(height: 12),
         const Text(
@@ -475,16 +610,27 @@ final class _SalesTotalsContents extends StatelessWidget {
   /// Names the exact days, whose sales were counted, and which category, so a
   /// figure is never shown without the question it answers.
   String _range(TenantSalesTotalsQuery query) {
-    final parts = <String>[
+    final parts = <String?>[
       query.startDate == query.endDate
           ? query.endDate
           : '${query.startDate} to ${query.endDate}',
-      if (query.scope == TenantSalesScope.mine) 'your sales only',
+      switch (query.scope) {
+        TenantSalesScope.everyone => null,
+        TenantSalesScope.mine => 'your sales only',
+        // Named from the same canonical directory the filter was chosen from,
+        // degrading to the authoritative UID exactly as every other surface
+        // that labels a colleague does.
+        TenantSalesScope.oneMember => tenantStaffLabel(
+          query.soldById!,
+          names: staff.names,
+          selfUid: selfUid,
+        ),
+      },
       // The name comes from the same canonical list the filter was chosen from;
       // an ID with no name is not shown as a label of its own.
       if (query.categoryId case final id?)
         categories.nameOf(id) ?? 'one category',
-    ];
+    ].nonNulls;
     return parts.join(' • ');
   }
 }

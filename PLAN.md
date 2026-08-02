@@ -8778,3 +8778,147 @@ Practical notes carried forward:
   `TenantReadRepository` proves it and raises `TenantScopeViolation` otherwise,
   which surfaces as a degraded or failed route rather than an obvious error.
   This cost one debugging cycle in this session.
+
+---
+
+## Who sold what - 2026-08-02
+
+### Completed in this session
+
+The chunk defined immediately above, implemented in the same session. The
+totals surface can now be narrowed to one named colleague.
+
+**The check that chunk demanded first, and its answer:** a manager *may* read
+the tenant root and the whole staff roster, so the picker needs no role
+restriction. `firestore.rules:236` allows `read` on `/tenants/{tenantId}` to any
+`activeStaff`, and `firestore.rules:247` allows a staff record to
+`owner`, `admin`, or `manager` for any UID. Those are exactly the three roles
+`TenantSalesTotalsGateway.allowedRoles` admits, so the surface and the roster it
+reads agree by construction rather than by luck.
+
+Implemented behavior and safety decisions:
+
+- **The scope is derived, never claimed.** `createQuery` now takes a `soldById`
+  instead of a scope and works out what naming that member *means* against the
+  live session: nobody is `everyone`, the session's own UID is `mine`, anyone
+  else is `oneMember`. A surface cannot assert that a figure is "your sales" -
+  it can only name a member and be told.
+- **A colleague is sent only if this business's own directory names them.**
+  The same rule the category filter established, with one addition: the
+  signed-in member is always answerable from the session itself, so **"only
+  mine" survives a roster this role could not read**. A widget test switches
+  businesses with a colleague selected and proves the UID is dropped rather
+  than sent to the new one.
+- **A member who has left is still offered.** Their sales are still in the
+  period, and hiding them would make the per-member figures fail to add up to
+  the whole-business one. The directory is presented as it is, not filtered by
+  current status.
+- **A label never discloses more than a name.** Only the canonical `name` is
+  used, through the existing `tenantStaffLabel`, so the signed-in member reads
+  as `You (…)` and a member with no recorded name degrades to the authoritative
+  UID. A staff record also carries an email and a phone number; a test asserts
+  no `@` address reaches the screen. This is the rule
+  `TenantStaffNameResolver` already states, applied here rather than reinvented.
+- **A roster longer than one page says so.** The page is bounded at 25 - the
+  same bound `TenantStaffNameResolver.maximumResolvedUids` puts on one page of
+  labels - and a business with more members is told the list is partial rather
+  than silently shortened.
+- **The roster is read once per session**, cached beside the category list and
+  the currency and keyed by UID, tenant, and epoch. A widget test asserts the
+  exact document paths and query count across a period change, so a third
+  cached read cannot quietly become a read per filter.
+- An unreadable roster removes the colleagues and says so; a
+  `TenantScopeViolation` still fails the route. Three session-scoped reads now
+  follow one rule, stated once.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/reporting/sales_totals.dart
+lib/reporting/sales_totals_panel.dart
+test/reporting/sales_totals_panel_test.dart
+test/reporting/sales_totals_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 17 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:28` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy` | **972/972**, up from 901 at session start |
+| `npm --prefix rules-tests run test:emulator` | **125/125** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `npm --prefix functions test` | **166/166** |
+| `git diff --check` | clean |
+
+This is the third full backend sequence of the session. `git diff --stat
+3cb7588..HEAD -- functions firestore.rules rules-tests firestore.indexes.json`
+is empty throughout: all four chunks changed only Dart. Android build and
+Android emulator validation were intentionally skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The cross-business test failed and found a fixture that could not express
+  the claim.** The staff fake held one flat roster shared by every business, so
+  a colleague selected in tenant A really was in tenant B's directory and was
+  correctly sent. The fake was made per-business - which is what Firestore is -
+  and the test then proved what it was written to prove. The production rule was
+  never in doubt; the fixture could not exercise it.
+- **One assertion was stale rather than wrong.** The "read once per filter" test
+  listed only the configuration document; the roster adds the tenant root and
+  the owner's record. Both new reads are real and happen once, so the expected
+  list was extended rather than the caching relaxed.
+- No other assertion failed.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+The reporting routes are now complete against every server capability they have:
+`getSalesComparison` has no unreached parameter, and every figure names its
+currency. The next work is elsewhere, and there are two honest candidates:
+
+1. **Split `lib/reporting/sales_totals_panel.dart` before adding to it.** It now
+   holds three choosers, three session-scoped reads, a currency notice, a
+   category-basis sentence, and the failure surface in one file. Nothing in it
+   is wrong, and it is the third file in this codebase to reach that point after
+   the checkout cart panel. A refactor-only chunk - the chooser row and the
+   session-context loader extracted, no behavior changed, the existing 61 tests
+   passing untouched as the proof - is cheap now and expensive later.
+2. **A per-tender reporting breakdown**, which is the largest remaining gap that
+   real users would feel: `recordSaleTender` has stored `cash`, `mpesa`, or
+   `card` on every v2 sale since 2026-07-29, and nothing anywhere reports it.
+   Unlike every chunk in this session, it is **backend work first**:
+   `aggregateSales` in `functions/src/operations/domain.ts` returns no tender
+   split, so the honest sequence is a Functions change with its own unit tests,
+   then the Rules check, then a client surface. Scope the server half alone
+   before touching Dart.
+
+Leave outside either chunk: the subscription surfaces (examined and declined
+earlier in this file - start on the server, not in Flutter), receipt printing,
+the printed receipt body, discounts, camera barcode scanning, password reset
+(still blocked on the App Check decision recorded near the top of this file),
+product cost/profit fields, a `platform_audit_logs` surface, branding surfaces,
+deployment, and Android build/emulator validation.
+
+Practical notes carried forward:
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it.
+- Collection-page test fakes must answer in **ascending document-ID order**, and
+  must be keyed **per business**. `TenantReadRepository` proves the ordering and
+  raises `TenantScopeViolation` otherwise, which surfaces as a degraded or
+  failed route rather than an obvious error; a fake with one shared roster
+  silently makes a cross-business test pass for the wrong reason. Each cost one
+  debugging cycle in this session.
+- Three session-scoped reads now follow one rule on the totals route -
+  categories, staff, and currency: degrade on failure, rethrow
+  `TenantScopeViolation`, cache by UID/tenant/epoch. Any fourth should join it
+  rather than invent a fourth policy.
