@@ -263,8 +263,10 @@ class SpiritPOSApp extends StatelessWidget {
           // Reached from the summary rather than the landing screen for the
           // same reason: the summary is where somebody learns that today has
           // no reconciled figures yet, and this is the answer to that.
-          salesTotalsRoute: () =>
-              TenantSalesTotalsScreen(callable: salesTotalsCallable),
+          salesTotalsRoute: () => TenantSalesTotalsScreen(
+            callable: salesTotalsCallable,
+            reader: reader,
+          ),
           salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
         ),
         dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,

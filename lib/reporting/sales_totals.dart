@@ -115,6 +115,7 @@ final class TenantSalesTotalsQuery {
     required this.startDate,
     required this.endDate,
     required this.soldById,
+    required this.categoryId,
   });
 
   /// The business the query was created against. The gateway refuses a query
@@ -132,24 +133,37 @@ final class TenantSalesTotalsQuery {
   /// The member whose sales are counted, or `null` for the whole business.
   final String? soldById;
 
+  /// The category whose lines are counted, or `null` for every line.
+  ///
+  /// A category changes what the figure *means*, not just how much of it there
+  /// is: the handler sums the matching lines instead of the recorded sale
+  /// totals, and skips a sale that holds no matching line at all.
+  final String? categoryId;
+
+  /// Whether this query asks for one category's lines rather than whole sales.
+  bool get isCategoryFiltered => categoryId != null;
+
   Map<String, Object?> toPayload() => <String, Object?>{
     'tenantId': tenantId,
     'previousStartDate': startDate,
     'previousEndDate': endDate,
     if (soldById != null) 'soldById': soldById,
+    if (categoryId != null) 'categoryId': categoryId,
   };
 }
 
 /// Strictly decoded totals for one period.
 ///
-/// The response is reconciled against the query it answers: the server counts
-/// one transaction per sale it read whenever no category filter is sent, and
-/// nothing here ever sends one, so a `transactions` figure that disagrees with
-/// `scannedTransactions` describes some other request. It is refused rather
-/// than shown, because this is the surface an owner reads takings from.
+/// The response is reconciled against the query it answers. Without a category
+/// the server counts one transaction per sale it read, so the two counts must
+/// agree exactly; with one it skips a sale holding no matching line, so it may
+/// count fewer but can never count more than it read. Either way a count the
+/// query cannot explain describes some other request, and it is refused rather
+/// than shown - this is the surface an owner reads takings from.
 final class TenantSalesTotals {
   const TenantSalesTotals._({
     required this.query,
+    required this.scannedTransactions,
     required this.sales,
     required this.profit,
     required this.transactions,
@@ -169,13 +183,17 @@ final class TenantSalesTotals {
       );
     }
     final transactions = _requiredCount(previous, 'transactions');
-    if (transactions != scanned) {
+    final counted = query.isCategoryFiltered
+        ? transactions <= scanned
+        : transactions == scanned;
+    if (!counted) {
       throw const FormatException(
         'getSalesComparison counted a different number of sales than it read.',
       );
     }
     return TenantSalesTotals._(
       query: query,
+      scannedTransactions: scanned,
       sales: _requiredNonNegativeNumber(previous, 'sales'),
       // Parsed so the figure is validated rather than ignored, and deliberately
       // never displayed: no product in this app carries a cost, so every sale
@@ -197,12 +215,23 @@ final class TenantSalesTotals {
   /// The exact request these totals answer.
   final TenantSalesTotalsQuery query;
 
+  /// How many sales the server read to produce this answer.
+  ///
+  /// Equal to [transactions] unless a category was requested, in which case the
+  /// difference is the sales in the period that held nothing in it.
+  final int scannedTransactions;
+
   /// Major-unit revenue, exactly as the server added it up.
+  ///
+  /// Without a category this is the recorded total of each sale. With one it is
+  /// the sum of the matching **lines**, which is a smaller and different figure:
+  /// the rest of each sale is not in it.
   final double sales;
 
   /// Never displayed; see [TenantSalesTotals.fromCallable].
   final double profit;
 
+  /// How many sales contributed to [sales].
   final int transactions;
 
   /// How many sale lines lacked the cost data a profit figure needs.
@@ -248,6 +277,7 @@ final class TenantSalesTotalsGateway {
   TenantSalesTotalsQuery createQuery({
     required TenantSalesPeriod period,
     required TenantSalesScope scope,
+    String? categoryId,
   }) {
     if (!canReadInSession(_session)) {
       throw const TenantSalesTotalsException(
@@ -273,7 +303,19 @@ final class TenantSalesTotalsGateway {
       startDate: startDate,
       endDate: endDate,
       soldById: soldById,
+      categoryId: categoryId == null ? null : _validatedCategoryId(categoryId),
     );
+  }
+
+  /// Validates a category the caller chose, as the server would accept it.
+  String _validatedCategoryId(String categoryId) {
+    try {
+      return validateTenantDocumentId(categoryId, fieldName: 'categoryId');
+    } on ArgumentError {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.invalidRequest,
+      );
+    }
   }
 
   /// The signed-in member's own UID, as the server would accept it.

@@ -61,6 +61,51 @@ void main() {
       expect(callable.payloads.single['soldById'], 'manager-a');
     });
 
+    test('a category is sent as the server declared it', () async {
+      final callable = _Callable(_response(overrides: {'transactions': 12}));
+      final gateway = _gateway(callable);
+
+      final query = gateway.createQuery(
+        period: TenantSalesPeriod.today,
+        scope: TenantSalesScope.everyone,
+        categoryId: 'drinks',
+      );
+      await gateway.load(query);
+
+      expect(query.categoryId, 'drinks');
+      expect(query.isCategoryFiltered, isTrue);
+      expect(callable.payloads.single['categoryId'], 'drinks');
+    });
+
+    test('no category means the field is absent, not null', () {
+      final gateway = _gateway(_Callable(_response()));
+
+      final payload = gateway
+          .createQuery(
+            period: TenantSalesPeriod.today,
+            scope: TenantSalesScope.everyone,
+          )
+          .toPayload();
+
+      expect(payload.containsKey('categoryId'), isFalse);
+      expect(payload.containsKey('soldById'), isFalse);
+    });
+
+    test('a category the server would reject never leaves the app', () {
+      final callable = _Callable(_response());
+      final gateway = _gateway(callable);
+
+      expect(
+        () => gateway.createQuery(
+          period: TenantSalesPeriod.today,
+          scope: TenantSalesScope.everyone,
+          categoryId: 'drinks/cold',
+        ),
+        _failure(TenantSalesTotalsFailure.invalidRequest),
+      );
+      expect(callable.payloads, isEmpty);
+    });
+
     test('a cashier is refused before anything is sent', () {
       final callable = _Callable(_response());
       final gateway = _gateway(callable, role: TenantRole.cashier);
@@ -125,12 +170,13 @@ void main() {
   });
 
   group('decoding the answer', () {
-    Future<TenantSalesTotals> load(Object? response) {
+    Future<TenantSalesTotals> load(Object? response, {String? categoryId}) {
       final gateway = _gateway(_Callable(response));
       return gateway.load(
         gateway.createQuery(
           period: TenantSalesPeriod.today,
           scope: TenantSalesScope.everyone,
+          categoryId: categoryId,
         ),
       );
     }
@@ -150,11 +196,39 @@ void main() {
       expect(totals.query.period, TenantSalesPeriod.today);
     });
 
-    test('a count that disagrees with what was read is refused', () async {
-      // No category filter is ever sent, so the server counts one transaction
-      // per sale it read. A different count describes another request.
+    test('without a category the two counts must agree exactly', () async {
+      // The server counts one transaction per sale it read, so any difference
+      // describes another request.
       await expectRefused(
         _response(scanned: 37, overrides: {'transactions': 36}),
+      );
+      await expectRefused(
+        _response(scanned: 37, overrides: {'transactions': 38}),
+      );
+    });
+
+    test('with a category, fewer counted than read is correct', () async {
+      // `aggregateSales` skips a sale holding no matching line, so 37 sales
+      // read and 12 counted is exactly what a category answer looks like.
+      final totals = await load(
+        _response(scanned: 37, overrides: {'transactions': 12}),
+        categoryId: 'drinks',
+      );
+
+      expect(totals.transactions, 12);
+      expect(totals.scannedTransactions, 37);
+      expect(totals.query.isCategoryFiltered, isTrue);
+    });
+
+    test('with a category, more counted than read is still refused', () async {
+      // Nothing the handler can do produces this; it cannot count a sale it
+      // never read.
+      await expectLater(
+        load(
+          _response(scanned: 12, overrides: {'transactions': 13}),
+          categoryId: 'drinks',
+        ),
+        throwsA(isA<FormatException>()),
       );
     });
 

@@ -8499,3 +8499,146 @@ One defect found while building the surface above and deliberately left alone:
 correctly, from `TenantCheckoutConfiguration.currency`. Fixing it means giving
 both reporting routes the configuration read, and it should be one chunk that
 fixes both rather than a detail smuggled into a filter.
+
+---
+
+## Which category is actually selling - 2026-08-02
+
+### Completed in this session
+
+The chunk defined immediately above, implemented in the same session.
+`getSalesComparison` now has no unreached parameter left: `tenantId`,
+`previousStartDate`, `previousEndDate`, `soldById`, and `categoryId` are all
+sent from the app.
+
+Implemented behavior and safety decisions:
+
+- **The count invariant is now conditional, and both directions are proved.**
+  Without a category the server counts one transaction per sale it read, so the
+  two counts must agree exactly - a difference either way is refused. With a
+  category `aggregateSales` skips a sale holding no matching line, so fewer
+  counted than read is the normal answer and is accepted, while *more* counted
+  than read is still refused: the handler cannot count a sale it never read.
+  The chunk above deliberately shipped the strict version; relaxing it was the
+  precondition for reaching `categoryId` at all.
+- **A category total is a different figure, and the screen says so in
+  numbers.** Without a category the handler prefers each sale's recorded total;
+  with one it sums the matching **lines** and leaves the rest of every sale out.
+  The surface states which, and states how many of the sales read held nothing
+  in that category - `scannedTransactions - transactions`, which is exactly
+  what the relaxed invariant now permits to be non-zero.
+- **A filter is applied only while this business's own canonical list still
+  contains it.** The loader reads the categories first and drops a selection the
+  list does not name, so a category chosen in one business can never filter
+  another's sales after a tenant switch, and a deleted category silently reverts
+  to the whole catalog instead of filtering by an ID that no longer exists. The
+  chip shown as selected is read back from the answer's own query, so what is
+  highlighted is always the filter the figure was actually read with.
+- **An unreadable category list does not remove the total.** The figure a
+  manager came for does not depend on the filter list, so a failed category read
+  degrades to "no filter available" and leaves the totals working. The one
+  exception is `TenantScopeViolation`, which is rethrown: a reader answering
+  outside this tenant is a broken boundary, not an unavailable label, and it
+  fails the route with no figure shown.
+- **A business with no categories is offered no chooser at all** - distinct from
+  one whose list could not be read, which says so.
+- **An invalid category never leaves the app.** It is validated with
+  `validateTenantDocumentId` and refused locally as `invalidRequest`, the same
+  meaning the handler would return, rather than spent on a round trip.
+- `categoryId` and `soldById` are **absent** from the payload rather than sent
+  as `null` when unused, which a test asserts: the handler's optional-field
+  parsing and a `null` are not the same thing over the wire.
+
+Files in this chunk:
+
+```text
+PLAN.md
+lib/main.dart
+lib/reporting/sales_totals.dart
+lib/reporting/sales_totals_panel.dart
+test/reporting/sales_totals_panel_test.dart
+test/reporting/sales_totals_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 17 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:28` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy` | **953/953**, up from 901 at session start |
+| `npm --prefix rules-tests run test:emulator` | **125/125** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `npm --prefix functions test` | **166/166** |
+| `git diff --check` | clean |
+
+The three backend suites cover **both** chunks of this session and were run once
+after the second was frozen. `git diff --stat 3cb7588..HEAD -- functions
+firestore.rules rules-tests firestore.indexes.json` is empty: this session
+changed only Dart. They were run anyway rather than inherited, for the same
+reason the previous session gave - one more green sequence is cheaper than an
+assumption. Android build and Android emulator validation were intentionally
+skipped as requested. The emulator prelude recorded further up this file
+(JDK 21 at `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8`, portable Node 24,
+`DEBUG` cleared) was required and worked unchanged.
+
+Meaningful failures and their resolutions:
+
+- **The first category widget test failed, and the repository was right.**
+  `TenantReadRepository` proves that a collection page arrives in ascending
+  document-ID order, and the test fake answered `['drinks', 'bread']` in map
+  order. The repository raised `TenantScopeViolation`, the category load
+  degraded, and the chip the test tapped was never built. The fake was corrected
+  to sort - Firestore does - rather than the proof relaxed. This is the ordering
+  check doing exactly its job on a fixture that did not model the real reader.
+- **One assertion was over-strict and was corrected, not the code.** The
+  scope-violation test asserted the "category list unavailable" note was absent
+  on a failed route. It is present, and truthfully so: that read is precisely
+  what failed. The test now asserts the generic failure sentence and that no
+  figure and no chip are shown.
+- No other assertion failed.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+Two candidates, in the order recommended:
+
+1. **Print the currency on both reporting routes.** Recorded as a defect one
+   section above and still true: the daily summary and the totals screen both
+   show a bare `1250.50`, while the checkout correctly prints
+   `TenantCheckoutConfiguration.currency`. Give both reporting routes the same
+   configuration read, decide what a missing or unreadable configuration
+   document shows - a bare number is the honest fallback, an assumed `KES` is
+   not - and cover both. Small, self-contained, and it removes an ambiguity from
+   every figure the app reports.
+2. **A per-cashier picker for the totals surface.** `TenantSalesScope` is
+   currently `everyone` or `mine`; the server accepts any `soldById`, and
+   `TenantStaffDirectoryRepository` already lists canonical staff with names.
+   Check one thing before scoping it: that repository reads the **tenant root**
+   document to find the owner UID, so confirm a manager may read it before
+   assuming the picker works for every role the totals surface is open to. If
+   not, the picker is owner/admin-only and the surface must say so rather than
+   fail. Apply the same rule this chunk established for categories: a UID not in
+   this business's own directory is never sent.
+
+Leave outside either chunk: the subscription surfaces (examined and declined
+above - start on the server, not in Flutter), receipt printing, the printed
+receipt body, discounts, camera barcode scanning, a per-tender reporting
+breakdown, password reset (still blocked on the App Check decision recorded near
+the top of this file), product cost/profit fields, a `platform_audit_logs`
+surface, branding surfaces, deployment, and Android build/emulator validation.
+
+Two practical notes carried forward:
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it.
+- `lib/reporting/sales_totals_panel.dart` now holds the period, scope, and
+  category choosers plus the failure surface. It is still coherent at its
+  current size, but a third filter should arrive with a split of the chooser
+  row rather than after one - the same note the checkout cart panel carries.
