@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -352,6 +353,13 @@ final class _SalesTotalsContents extends StatelessWidget {
                     'recorded, so no profit figure is shown.',
                   ),
                 ],
+                if (answer.tenderBreakdown case final breakdown?) ...[
+                  const SizedBox(height: 12),
+                  _TenderBreakdown(
+                    breakdown: breakdown,
+                    currency: _currency,
+                  ),
+                ],
               ],
             ),
           ),
@@ -401,4 +409,74 @@ final class _SalesTotalsContents extends StatelessWidget {
     ].nonNulls;
     return parts.join(' • ');
   }
+}
+
+/// How the takings above split across the ways they were paid for.
+///
+/// Only buckets that hold something are listed. A period with no card sales is
+/// better described by their absence than by a row of zeroes, and the figures
+/// above already say what the whole is.
+final class _TenderBreakdown extends StatelessWidget {
+  const _TenderBreakdown({required this.breakdown, required this.currency});
+
+  final TenantSalesTenderBreakdown breakdown;
+  final TenantReportingCurrency currency;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    key: const ValueKey('sales-totals-tender'),
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Paid by', style: Theme.of(context).textTheme.titleSmall),
+      const SizedBox(height: 4),
+      for (final entry in breakdown.recorded.entries)
+        if (!entry.value.isEmpty)
+          Text(
+            key: ValueKey('sales-totals-tender-${entry.key.wireValue}'),
+            _row(entry.key.label, entry.value),
+          ),
+      if (!breakdown.unrecorded.isEmpty)
+        Text(
+          key: const ValueKey('sales-totals-tender-unrecorded'),
+          _row('Not recorded', breakdown.unrecorded),
+        ),
+      if (!breakdown.unrecognised.isEmpty)
+        Text(
+          key: const ValueKey('sales-totals-tender-other'),
+          _row('Unrecognised', breakdown.unrecognised),
+        ),
+      if (breakdown.hasRecordedTenders) ...[
+        const SizedBox(height: 8),
+        const Text(
+          key: ValueKey('sales-totals-tender-disclaimer'),
+          checkoutTenderDisclaimer,
+        ),
+      ],
+      // Deliberately a different sentence from the one a single sale carries.
+      // `checkoutTenderUnrecordedMessage` says "This sale", which is a claim
+      // about one record and would be wrong over a period; the fact it states
+      // is the same one, so it is stated again rather than reused wrongly.
+      if (!breakdown.unrecorded.isEmpty) ...[
+        const SizedBox(height: 8),
+        const Text(
+          key: ValueKey('sales-totals-tender-unrecorded-note'),
+          'Sales recorded before payment methods were captured name none, so '
+          'they are listed separately rather than as unpaid.',
+        ),
+      ],
+      if (!breakdown.unrecognised.isEmpty) ...[
+        const SizedBox(height: 8),
+        const Text(
+          key: ValueKey('sales-totals-tender-other-note'),
+          'Some sales name a payment method this app does not recognise. Their '
+          'takings are still inside the total above.',
+        ),
+      ],
+    ],
+  );
+
+  String _row(String label, TenantSalesTenderTotals totals) =>
+      '$label: ${currency.format(totals.sales)} over '
+      '${totals.transactions} '
+      '${totals.transactions == 1 ? 'sale' : 'sales'}';
 }

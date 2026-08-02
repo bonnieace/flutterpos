@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -321,6 +322,189 @@ void main() {
     });
   });
 
+  group('decoding the tender split', () {
+    Future<TenantSalesTotals> load(Object? response, {String? categoryId}) {
+      final gateway = _gateway(_Callable(response));
+      return gateway.load(
+        gateway.createQuery(
+          period: TenantSalesPeriod.today,
+          categoryId: categoryId,
+        ),
+      );
+    }
+
+    Future<void> expectRefused(Object? byTender) => expectLater(
+      load(_response(byTender: byTender)),
+      throwsA(isA<FormatException>()),
+    );
+
+    test('a server that reports no split leaves the totals alone', () async {
+      // Absent is not a failure: the figure the manager came for does not
+      // depend on the split, so it is shown without one.
+      final totals = await load(_response());
+
+      expect(totals.tenderBreakdown, isNull);
+      expect(totals.sales, 4820.75);
+      expect(totals.transactions, 37);
+    });
+
+    test('every bucket is decoded and the whole split is kept', () async {
+      final totals = await load(_response(byTender: _byTender()));
+      final breakdown = totals.tenderBreakdown!;
+
+      expect(breakdown.recorded[CheckoutTender.cash]!.sales, 2000.25);
+      expect(breakdown.recorded[CheckoutTender.cash]!.transactions, 20);
+      expect(breakdown.recorded[CheckoutTender.mpesa]!.sales, 1800.5);
+      expect(breakdown.recorded[CheckoutTender.mpesa]!.transactions, 10);
+      expect(breakdown.recorded[CheckoutTender.card]!.sales, 900);
+      expect(breakdown.recorded[CheckoutTender.card]!.transactions, 5);
+      expect(breakdown.unrecorded.sales, 100);
+      expect(breakdown.unrecorded.transactions, 1);
+      expect(breakdown.unrecognised.sales, 20);
+      expect(breakdown.unrecognised.transactions, 1);
+      expect(breakdown.hasRecordedTenders, isTrue);
+    });
+
+    test('a split that does not add up is refused', () async {
+      // The one figure an owner acts on must not be described by a split that
+      // disagrees with it, in either direction and in either dimension.
+      await expectRefused(_byTender(cashSales: 2000.26));
+      await expectRefused(_byTender(cashSales: 2000.24));
+      await expectRefused(_byTender(cashTransactions: 21));
+      await expectRefused(_byTender(cashTransactions: 19));
+    });
+
+    test('the sum is compared in minor units, not in doubles', () async {
+      // 0.1 + 0.2 is 0.30000000000000004 as doubles, so comparing the amounts
+      // directly would refuse a split that is exactly right. The server adds
+      // whole minor units, and so does this check.
+      final totals = await load(
+        _response(
+          scanned: 2,
+          overrides: {'sales': 0.3, 'profit': 0.3, 'transactions': 2},
+          byTender: _byTender(
+            cashSales: 0.1,
+            cashTransactions: 1,
+            mpesaSales: 0.2,
+            mpesaTransactions: 1,
+            cardSales: 0,
+            cardTransactions: 0,
+            unrecordedSales: 0,
+            unrecordedTransactions: 0,
+            otherSales: 0,
+            otherTransactions: 0,
+          ),
+        ),
+      );
+
+      expect(totals.tenderBreakdown, isNotNull);
+      expect(0.1 + 0.2 == 0.3, isFalse);
+    });
+
+    test('the check is on the sum, which is all the client can know', () async {
+      // One bucket a cent low and another a cent high still adds up, and is
+      // accepted: nothing here can independently know what any single bucket
+      // should be, so claiming to check one would be a check in name only.
+      final totals = await load(
+        _response(byTender: _byTender(cashSales: 2000.24, cardSales: 900.01)),
+      );
+
+      expect(totals.tenderBreakdown!.recorded[CheckoutTender.cash]!.sales,
+          2000.24);
+    });
+
+    test('a bucket set that is not the expected five is refused', () async {
+      final missing = _byTender()..remove('card');
+      await expectRefused(missing);
+      final extra = _byTender()
+        ..['voucher'] = <String, Object?>{'sales': 0, 'transactions': 0};
+      await expectRefused(extra);
+      await expectRefused(<String, Object?>{});
+    });
+
+    test('a bucket that is not the expected shape is refused', () async {
+      await expectRefused(_byTender()..['cash'] = 'lots');
+      await expectRefused(
+        _byTender()..['cash'] = <String, Object?>{'sales': 2000.25},
+      );
+      await expectRefused(
+        _byTender()
+          ..['cash'] = <String, Object?>{
+            'sales': -1,
+            'transactions': 20,
+          },
+      );
+      await expectRefused(
+        _byTender()
+          ..['cash'] = <String, Object?>{
+            'sales': 2000.25,
+            'transactions': 20.0,
+          },
+      );
+      await expectRefused('cash');
+    });
+
+    test('an empty period splits into nothing and still adds up', () async {
+      final totals = await load(
+        _response(
+          scanned: 0,
+          overrides: {
+            'sales': 0,
+            'profit': 0,
+            'transactions': 0,
+            'incompleteCostLineCount': 0,
+          },
+          byTender: _byTender(
+            cashSales: 0,
+            cashTransactions: 0,
+            mpesaSales: 0,
+            mpesaTransactions: 0,
+            cardSales: 0,
+            cardTransactions: 0,
+            unrecordedSales: 0,
+            unrecordedTransactions: 0,
+            otherSales: 0,
+            otherTransactions: 0,
+          ),
+        ),
+      );
+      final breakdown = totals.tenderBreakdown!;
+
+      expect(breakdown.hasRecordedTenders, isFalse);
+      expect(breakdown.unrecorded.isEmpty, isTrue);
+      expect(breakdown.unrecognised.isEmpty, isTrue);
+    });
+
+    test('a category answer is checked against its own narrower total',
+        () async {
+      // With a category the server counts fewer sales than it read, and the
+      // split must add up to what it counted rather than to what it scanned.
+      final totals = await load(
+        _response(
+          scanned: 37,
+          overrides: {'transactions': 12, 'sales': 300},
+          byTender: _byTender(
+            cashSales: 200,
+            cashTransactions: 8,
+            mpesaSales: 100,
+            mpesaTransactions: 4,
+            cardSales: 0,
+            cardTransactions: 0,
+            unrecordedSales: 0,
+            unrecordedTransactions: 0,
+            otherSales: 0,
+            otherTransactions: 0,
+          ),
+        ),
+        categoryId: 'drinks',
+      );
+
+      expect(totals.tenderBreakdown!.recorded[CheckoutTender.cash]!.sales, 200);
+      expect(totals.scannedTransactions, 37);
+      expect(totals.transactions, 12);
+    });
+  });
+
   group('classifying a refusal', () {
     final cases = <String, TenantSalesTotalsFailure>{
       'permission-denied': TenantSalesTotalsFailure.forbidden,
@@ -406,6 +590,7 @@ Matcher _failure(TenantSalesTotalsFailure failure) => throwsA(
 Map<String, Object?> _response({
   int scanned = 37,
   Map<String, Object?>? overrides,
+  Object? byTender,
 }) {
   final previous = <String, Object?>{
     'sales': 4820.75,
@@ -417,8 +602,44 @@ Map<String, Object?> _response({
   return <String, Object?>{
     'previous': previous,
     'scannedTransactions': scanned,
+    if (byTender != null) 'byTender': byTender,
   };
 }
+
+/// The five buckets the handler returns, summing to the default `_response`.
+Map<String, Object?> _byTender({
+  double cashSales = 2000.25,
+  int cashTransactions = 20,
+  double mpesaSales = 1800.5,
+  int mpesaTransactions = 10,
+  double cardSales = 900,
+  int cardTransactions = 5,
+  double unrecordedSales = 100,
+  int unrecordedTransactions = 1,
+  double otherSales = 20,
+  int otherTransactions = 1,
+}) => <String, Object?>{
+  'cash': <String, Object?>{
+    'sales': cashSales,
+    'transactions': cashTransactions,
+  },
+  'mpesa': <String, Object?>{
+    'sales': mpesaSales,
+    'transactions': mpesaTransactions,
+  },
+  'card': <String, Object?>{
+    'sales': cardSales,
+    'transactions': cardTransactions,
+  },
+  'unrecorded': <String, Object?>{
+    'sales': unrecordedSales,
+    'transactions': unrecordedTransactions,
+  },
+  'other': <String, Object?>{
+    'sales': otherSales,
+    'transactions': otherTransactions,
+  },
+};
 
 final class _Callable implements SalesTotalsCallable {
   _Callable(this._response) : _error = null;

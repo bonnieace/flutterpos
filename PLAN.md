@@ -9286,3 +9286,194 @@ The existing user-owned local edits remain separate and were never staged:
 android/gradle.properties
 pubspec.lock
 ```
+
+---
+
+## What the business was paid with - 2026-08-02
+
+### Completed in this session
+
+Chunk 3 of 3 from the queue above, implemented in the same session as the two
+before it. `recordSaleTender` has stored `cash`, `mpesa`, or `card` on every
+schema v2 sale since 2026-07-29 and nothing anywhere reported it. It is now
+reported.
+
+This was **backend first**, as that chunk required: `aggregateSales` returned no
+tender split, so the server half was scoped, written, and unit-tested before any
+Dart was touched.
+
+Implemented behavior and safety decisions:
+
+- **`daily_metrics` documents were deliberately left alone.** The obvious
+  implementation - add the split to `PeriodMetrics` - would have changed what
+  the reconciliation processor **writes**, because `DailyMetrics extends
+  PeriodMetrics` and `aggregateDailyMetrics` spreads the whole record into the
+  stored document (`functions/src/reconciliation/model.ts:272`). That is a
+  stored-schema change with a Rules surface and a strict Dart read model behind
+  it, for a figure nothing asked for there. The split is instead a new
+  `byTender` field on the **comparison response** only, where the question was
+  actually asked. `PeriodMetrics` is byte-identical.
+- **One definition of what a sale contributes, used by both.**
+  `saleContribution` was extracted from `aggregateSales` and is what both the
+  aggregate and the split are built from. A sale a category filter skips is
+  skipped in both, and the revenue basis - recorded sale total without a
+  category, matching lines with one - is decided once. The buckets therefore sum
+  to the total by construction rather than by two implementations staying in
+  step, and a unit test asserts the sum for both the filtered and unfiltered
+  cases.
+- **`unrecorded` and `other` are separate buckets, because they are different
+  facts.** A sale with no `tender` at all is a schema v1 sale written before the
+  field existed. A sale carrying a value nothing here models - an import, a rule
+  rollback - is a data problem. Folding the second into the first would report a
+  defect as history. Eleven near-miss values are driven through
+  `saleTenderBucket` in a test: `"Cash"`, `" cash"`, `"CASH"`, `"cheque"`, `""`,
+  a number, a boolean, a map, a list, `undefined`, and `null`.
+- **An unrecognised tender does not fail the report.** The `TenantSale` read
+  model refuses a single sale naming one, and that is right for a receipt
+  lookup. Refusing here would deny a manager the whole period's takings because
+  of one bad row, so the money is counted, bucketed as `other`, and the surface
+  says plainly that some sales name a method the app does not recognise and that
+  their takings are still inside the total.
+- **The client checks the split rather than trusting it.** The counts must sum
+  to the answer's own `transactions` and the amounts to its own `sales`, exactly.
+  A split that does not add up is not a smaller version of the truth - it is a
+  different figure wearing the same label, on the one surface an owner reads
+  takings from - so it is a `FormatException` and the whole answer is refused. A
+  widget test proves the figure disappears with it.
+- **Sums are compared in whole minor units, never as doubles.** The server adds
+  integers, so an exact split matches to the cent. A test pins the case that
+  makes this necessary: buckets of 0.1 and 0.2 against a total of 0.3, which a
+  double comparison would refuse even though the split is exactly right.
+- **The check is on the sum, and the test says so.** One bucket a cent low and
+  another a cent high is accepted, because nothing on the client can know
+  independently what any single bucket should be; claiming to check one would be
+  a check in name only.
+- **The bucket set is closed and an unknown bucket is refused.** Ignoring a
+  bucket this build does not know would silently report less money than the
+  business took. A missing bucket, an extra one, and an empty object all fail.
+- **An absent `byTender` is not a failure.** A server that reports no split is a
+  server this surface shows no split for; the figure the manager came for is
+  unaffected. This is the same rule this route already applies to its currency
+  and its category list - a label may never cost a figure - and it is what makes
+  the server field additive rather than a flag day.
+- **The disclaimer is the shared constant, and the unrecorded note is not.**
+  `checkoutTenderDisclaimer` is reused verbatim, so the claim that the payment
+  is unverified cannot drift between the till, the sale history, the receipt
+  lookup, and this report. `checkoutTenderUnrecordedMessage` was deliberately
+  **not** reused: it says "This sale", which is a claim about one record and
+  would be false over a period. The same fact is stated again in the plural, and
+  a test asserts the word "unpaid sale" appears nowhere.
+- **A method nobody used is absent, not a zero row.** A period with no card
+  sales is better described by their absence, and the total above already says
+  what the whole is.
+- **The disclaimer appears only when a modelled tender was actually recorded.**
+  A period of nothing but schema v1 sales would otherwise carry a sentence about
+  nothing on screen.
+- **No Firestore Rules change was needed, and this was checked rather than
+  assumed.** `getSalesComparison` runs in a Cloud Function under the Admin SDK,
+  so Rules are not evaluated on its read at all; and `tender` is a field of a
+  `sales` document that `firestore.rules:319` already allows any active member
+  to read whole. `validSaleTender` already constrains the write. The Rules suite
+  was run anyway and is unchanged at 125/125.
+
+Deliberately outside this chunk:
+
+- No per-tender figure appears on the daily summary, the shift close, or any
+  receipt. Reconciliation still stores no split.
+- Nothing verifies a payment. This reports what a cashier asserted, and every
+  surface that shows it says so.
+
+Files in this chunk:
+
+```text
+PLAN.md
+functions/src/operations/domain.test.ts
+functions/src/operations/domain.ts
+functions/src/operations/reports.ts
+lib/reporting/sales_totals.dart
+lib/reporting/sales_totals_panel.dart
+test/reporting/sales_totals_panel_test.dart
+test/reporting/sales_totals_test.dart
+```
+
+Validation evidence after implementation code was frozen:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 19 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy` | **1002/1002**, up from 987, adding **15** tests: 9 gateway cases and 6 widget cases |
+| `npm --prefix functions test` | **171/171**, up from 166, adding **5** aggregation cases |
+| `npm --prefix rules-tests run test:emulator` | **125/125**, unchanged |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `git diff --check` | clean |
+
+`test/reporting` alone went from 154 to **169**. Android build and Android
+emulator validation were skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **Two test fixtures did not add up, and the read model was right both times.**
+  A gateway case meant to prove the minor-unit comparison used one bucket a cent
+  low and another a cent high, which sums correctly and is therefore accepted -
+  the test asserted the opposite of what it had built. It was replaced by the
+  case that actually needs minor units (0.1 + 0.2 against 0.3) plus an explicit
+  case recording that the check is on the sum. A widget fixture then zeroed
+  three buckets without moving their money anywhere, so the split genuinely did
+  not add up and the whole breakdown was correctly refused; the fixture was
+  corrected to redistribute rather than the check relaxed.
+- No other assertion failed. The Functions unit tests, the panel tests after the
+  fixture correction, and all four suite-level commands were green.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+The three queued chunks are all done. Two candidates, in the order recommended:
+
+1. **Run the app.** Chunk 1 of this session made that possible for the first
+   time and nobody has done it. Start the emulators, seed them, sign in as the
+   seeded owner, open a shift, ring up a sale, and read it back on the totals
+   route. Everything in this codebase has been proved by tests and never once by
+   use, so the first run is very likely to find something no test models - a
+   layout that does not fit, a route that cannot be reached, a message that is
+   wrong in context. **Ask first whether the Android exclusion is lifted for it:**
+   the `10.0.2.2` path still has never been executed, so on Android that is what
+   would be exercised, while a Windows or web run exercises only the loopback
+   path. Fix what the run finds; do not add features in the same chunk.
+2. **A per-tender figure where a cashier needs it: the shift close.** The report
+   added here answers a manager's question over a period. The other place the
+   split matters is counting a drawer, where only the cash bucket for one shift
+   is relevant. That is a different query - one shift, not a date range - and
+   `getSalesComparison` cannot express it, so scope the server half first as
+   this chunk did.
+
+Leave outside either chunk: the subscription surfaces (examined and declined
+earlier in this file - start on the server, not in Flutter), receipt printing,
+the printed receipt body, discounts, camera barcode scanning, password reset
+(still blocked on the App Check decision recorded near the top of this file),
+product cost/profit fields, a `platform_audit_logs` surface, branding surfaces,
+and deployment.
+
+Practical notes carried forward:
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it.
+- **A local `firebase emulators:exec` against `firebase.json` needs both
+  `functions/.secret.local` and `functions/.env.local`.** `functions/src`
+  declares five secrets and six string parameters with no default, and the
+  emulator stops at startup to ask for each one; with no terminal to answer, the
+  run hangs silently after `Serving at port ...`. `run-dev-emulators.js` writes
+  and removes both. If a run is killed, delete the leftovers before retrying -
+  the script refuses to overwrite them, which is what it is for.
+- Collection-page test fakes must answer in **ascending document-ID order**, and
+  must be keyed **per business**.
+- Three session-scoped reads on the totals route - categories, staff, currency -
+  now live in `SalesTotalsSessionContextLoader` and obey one rule: degrade on
+  failure, rethrow `TenantScopeViolation`, cache by UID/tenant/epoch. Any fourth
+  should join it rather than invent a fourth policy.

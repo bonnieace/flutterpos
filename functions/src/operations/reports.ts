@@ -8,10 +8,12 @@ import {
 } from "../core/validation";
 import {
   aggregateSales,
+  aggregateSalesByTender,
   assertDateRange,
   PeriodMetrics,
   requireIsoDate,
   SaleLike,
+  TenderBreakdown,
 } from "./domain";
 
 interface SalesComparisonRequest {
@@ -25,6 +27,12 @@ interface SalesComparisonRequest {
 export interface SalesComparisonResponse {
   previous: PeriodMetrics;
   scannedTransactions: number;
+  /**
+   * The same takings split by how each sale was paid for. Additive: a client
+   * that does not read it is unaffected, and one that does can check the split
+   * against `previous` rather than trust it.
+   */
+  byTender: TenderBreakdown;
 }
 
 const SALES_QUERY_LIMIT = 5_000;
@@ -67,6 +75,7 @@ export const getTenantSalesComparison = onCall<
   return {
     previous: aggregateSales(sales, categoryId),
     scannedTransactions: snapshot.size,
+    byTender: aggregateSalesByTender(sales, categoryId),
   };
 });
 

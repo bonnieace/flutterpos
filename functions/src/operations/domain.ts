@@ -36,6 +36,7 @@ export interface SaleLike {
   totalAmount?: unknown;
   soldById?: unknown;
   shiftId?: unknown;
+  tender?: unknown;
   items?: unknown;
 }
 
@@ -45,6 +46,36 @@ export interface PeriodMetrics {
   transactions: number;
   incompleteCostLineCount: number;
 }
+
+/** The exact values Firestore Rules allow a schema v2 sale to record. */
+export const SALE_TENDERS = ["cash", "mpesa", "card"] as const;
+
+export type SaleTender = (typeof SALE_TENDERS)[number];
+
+/**
+ * The buckets a period's takings are split into.
+ *
+ * `unrecorded` and `other` are separate on purpose, because they are different
+ * facts. A sale with no `tender` at all is a schema v1 sale written before the
+ * field existed, which says nothing about how it was paid for. A sale carrying
+ * a value this system does not model - an import, a rule rollback - means
+ * something wrote a tender nothing here recognises, which is a data problem.
+ * Folding the second into the first would report a defect as history.
+ */
+export const TENDER_BUCKETS = [
+  ...SALE_TENDERS,
+  "unrecorded",
+  "other",
+] as const;
+
+export type SaleTenderBucket = (typeof TENDER_BUCKETS)[number];
+
+export interface TenderTotals {
+  sales: number;
+  transactions: number;
+}
+
+export type TenderBreakdown = Record<SaleTenderBucket, TenderTotals>;
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MAX_RETURN_LINES = 50;
@@ -272,6 +303,61 @@ function lineCost(line: SaleLineLike, quantity: number): number | undefined {
   return Number.isFinite(total) && total <= MAX_MONETARY_VALUE ? total : undefined;
 }
 
+interface SaleContribution {
+  /** False only when a category was requested and this sale holds no line in it. */
+  counted: boolean;
+  revenue: number;
+  cost: number;
+  incompleteCostLines: number;
+}
+
+/**
+ * What exactly one sale contributes to a period.
+ *
+ * This is the single definition of that, so an aggregate and any split of the
+ * same sales agree by construction rather than by two implementations staying
+ * in step.
+ */
+function saleContribution(
+  sale: SaleLike,
+  categoryId?: string
+): SaleContribution {
+  const lines = Array.isArray(sale.items) ? sale.items as SaleLineLike[] : [];
+  const selected = categoryId ?
+    lines.filter((line) => line.categoryId === categoryId) :
+    lines;
+  if (categoryId && selected.length === 0) {
+    return {counted: false, revenue: 0, cost: 0, incompleteCostLines: 0};
+  }
+
+  let lineRevenueTotal = 0;
+  let hasLineRevenue = false;
+  let cost = 0;
+  let incompleteCostLines = 0;
+  for (const line of selected) {
+    const quantity = lineQuantity(line);
+    if (quantity === undefined) continue;
+    const lineRevenueValue = lineRevenue(line, quantity);
+    if (lineRevenueValue !== undefined) {
+      lineRevenueTotal = addMonetaryValue(lineRevenueTotal, lineRevenueValue);
+      hasLineRevenue = true;
+    }
+    const lineCostValue = lineCost(line, quantity);
+    if (lineCostValue === undefined) incompleteCostLines += 1;
+    else cost = addMonetaryValue(cost, lineCostValue);
+  }
+
+  const recordedTotal = nonNegativeNumber(sale.total) ?? nonNegativeNumber(sale.totalAmount);
+  return {
+    counted: true,
+    revenue: categoryId ?
+      lineRevenueTotal :
+      recordedTotal ?? (hasLineRevenue ? lineRevenueTotal : 0),
+    cost,
+    incompleteCostLines,
+  };
+}
+
 /**
  * Aggregates immutable sale snapshots. Category comparisons include only matching
  * lines; unfiltered comparisons prefer the server-recorded transaction total.
@@ -286,33 +372,11 @@ export function aggregateSales(
   let incompleteCostLineCount = 0;
 
   for (const sale of sales) {
-    const lines = Array.isArray(sale.items) ? sale.items as SaleLineLike[] : [];
-    const selected = categoryId ?
-      lines.filter((line) => line.categoryId === categoryId) :
-      lines;
-    if (categoryId && selected.length === 0) continue;
-
-    let lineRevenueTotal = 0;
-    let hasLineRevenue = false;
-    for (const line of selected) {
-      const quantity = lineQuantity(line);
-      if (quantity === undefined) continue;
-      const lineRevenueValue = lineRevenue(line, quantity);
-      if (lineRevenueValue !== undefined) {
-        lineRevenueTotal = addMonetaryValue(lineRevenueTotal, lineRevenueValue);
-        hasLineRevenue = true;
-      }
-      const lineCostValue = lineCost(line, quantity);
-      if (lineCostValue === undefined) incompleteCostLineCount += 1;
-      else cost = addMonetaryValue(cost, lineCostValue);
-    }
-
-    const recordedTotal = nonNegativeNumber(sale.total) ?? nonNegativeNumber(sale.totalAmount);
-    if (categoryId) revenue = addMonetaryValue(revenue, lineRevenueTotal);
-    else revenue = addMonetaryValue(
-      revenue,
-      recordedTotal ?? (hasLineRevenue ? lineRevenueTotal : 0)
-    );
+    const contribution = saleContribution(sale, categoryId);
+    if (!contribution.counted) continue;
+    revenue = addMonetaryValue(revenue, contribution.revenue);
+    cost = addMonetaryValue(cost, contribution.cost);
+    incompleteCostLineCount += contribution.incompleteCostLines;
     transactions += 1;
   }
 
@@ -322,6 +386,46 @@ export function aggregateSales(
     transactions,
     incompleteCostLineCount,
   };
+}
+
+/** Which bucket one stored `tender` value belongs to. Nothing is coerced. */
+export function saleTenderBucket(value: unknown): SaleTenderBucket {
+  if (value === undefined || value === null) return "unrecorded";
+  return (SALE_TENDERS as readonly unknown[]).includes(value) ?
+    value as SaleTender :
+    "other";
+}
+
+export function emptyTenderBreakdown(): TenderBreakdown {
+  const breakdown = {} as TenderBreakdown;
+  for (const bucket of TENDER_BUCKETS) {
+    breakdown[bucket] = {sales: 0, transactions: 0};
+  }
+  return breakdown;
+}
+
+/**
+ * Splits the same sales `aggregateSales` totals by how they were paid for.
+ *
+ * Every bucket is filled from [saleContribution], and a sale skipped by a
+ * category filter is skipped here too, so the buckets sum exactly to the
+ * aggregate over the same arguments. That is arithmetic rather than
+ * coincidence: money is added in whole minor units, and integer addition does
+ * not care how it is grouped.
+ */
+export function aggregateSalesByTender(
+  sales: readonly SaleLike[],
+  categoryId?: string
+): TenderBreakdown {
+  const breakdown = emptyTenderBreakdown();
+  for (const sale of sales) {
+    const contribution = saleContribution(sale, categoryId);
+    if (!contribution.counted) continue;
+    const totals = breakdown[saleTenderBucket(sale.tender)];
+    totals.sales = addMonetaryValue(totals.sales, contribution.revenue);
+    totals.transactions += 1;
+  }
+  return breakdown;
 }
 
 export function immutableLedgerId(parts: readonly string[]): string {

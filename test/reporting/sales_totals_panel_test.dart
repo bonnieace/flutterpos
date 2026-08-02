@@ -373,6 +373,185 @@ void main() {
     expect(find.byKey(const ValueKey('sales-totals-cost')), findsNothing);
   });
 
+  testWidgets('the takings are split by how they were paid for', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response(byTender: _byTender())]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _Reader(currency: 'KES'),
+    );
+
+    String rowFor(String key) => tester
+        .widget<Text>(find.byKey(ValueKey('sales-totals-tender-$key')))
+        .data!;
+
+    expect(rowFor('cash'), 'Cash: KES 2000.25 over 20 sales');
+    expect(rowFor('mpesa'), 'M-Pesa: KES 1800.50 over 10 sales');
+    expect(rowFor('card'), 'Card: KES 900.00 over 5 sales');
+    expect(rowFor('unrecorded'), 'Not recorded: KES 100.00 over 1 sale');
+    expect(rowFor('other'), 'Unrecognised: KES 20.00 over 1 sale');
+    // Nothing here has confirmed any money arrived, and the surface says so in
+    // the one shared sentence every tender surface uses.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sales-totals-tender-disclaimer')),
+          )
+          .data,
+      'Recorded by the cashier at the till; the payment itself is not '
+      'verified.',
+    );
+  });
+
+  testWidgets('a method nobody used is not listed as zero', (tester) async {
+    final callable = _Callable(<Object?>[
+      _response(
+        // Cash and M-Pesa only, still summing to 4820.75 over 37 sales.
+        byTender: _byTender(
+          cashSales: 3020.25,
+          cashTransactions: 27,
+          cardSales: 0,
+          cardTransactions: 0,
+          unrecordedSales: 0,
+          unrecordedTransactions: 0,
+          otherSales: 0,
+          otherTransactions: 0,
+        ),
+      ),
+    ]);
+
+    await _pump(tester, _controller(TenantRole.owner), callable);
+
+    expect(find.byKey(const ValueKey('sales-totals-tender-cash')), findsOne);
+    expect(find.byKey(const ValueKey('sales-totals-tender-mpesa')), findsOne);
+    expect(find.byKey(const ValueKey('sales-totals-tender-card')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sales-totals-tender-unrecorded')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('sales-totals-tender-other')),
+      findsNothing,
+    );
+    // No unrecorded sales means no note about them either.
+    expect(
+      find.byKey(const ValueKey('sales-totals-tender-unrecorded-note')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('sales-totals-tender-other-note')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an old sale with no method is never called unpaid', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[
+      _response(
+        // Every sale in the period predates the tender field.
+        byTender: _byTender(
+          cashSales: 0,
+          cashTransactions: 0,
+          mpesaSales: 0,
+          mpesaTransactions: 0,
+          cardSales: 0,
+          cardTransactions: 0,
+          unrecordedSales: 4800.75,
+          unrecordedTransactions: 36,
+          otherSales: 20,
+          otherTransactions: 1,
+        ),
+      ),
+    ]);
+
+    await _pump(tester, _controller(TenantRole.owner), callable);
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('sales-totals-tender-unrecorded-note'),
+            ),
+          )
+          .data,
+      'Sales recorded before payment methods were captured name none, so they '
+      'are listed separately rather than as unpaid.',
+    );
+    expect(find.textContaining('unpaid sale'), findsNothing);
+    // Nothing modelled was recorded, so the verification disclaimer would be
+    // about nothing that is on screen.
+    expect(
+      find.byKey(const ValueKey('sales-totals-tender-disclaimer')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an unrecognised method is reported, not hidden', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response(byTender: _byTender())]);
+
+    await _pump(tester, _controller(TenantRole.owner), callable);
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sales-totals-tender-other-note')),
+          )
+          .data,
+      'Some sales name a payment method this app does not recognise. Their '
+      'takings are still inside the total above.',
+    );
+  });
+
+  testWidgets('a server that reports no split still reports the total', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[_response()]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _Reader(currency: 'KES'),
+    );
+
+    expect(find.byKey(const ValueKey('sales-totals-tender')), findsNothing);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-amount')))
+          .data,
+      'Sales: KES 4820.75 over 37 sales',
+    );
+  });
+
+  testWidgets('a split that does not add up costs the whole answer', (
+    tester,
+  ) async {
+    // Deliberately harsher than a missing split: a breakdown that disagrees
+    // with the figure it accompanies means the answer is not internally
+    // consistent, and this is the surface an owner reads takings from.
+    final callable = _Callable(<Object?>[
+      _response(byTender: _byTender(cashSales: 1999.25)),
+    ]);
+
+    await _pump(tester, _controller(TenantRole.owner), callable);
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-failure')))
+          .data,
+      'The server answer could not be trusted, so no total is shown.',
+    );
+    expect(find.textContaining('4820.75'), findsNothing);
+    expect(find.byKey(const ValueKey('sales-totals-tender')), findsNothing);
+  });
+
   testWidgets('an answer that cannot be trusted shows no figure', (
     tester,
   ) async {
@@ -807,7 +986,10 @@ TenantMembership _membership(String tenantId, TenantRole role) =>
       canonicalMembershipExists: true,
     );
 
-Map<String, Object?> _response({Map<String, Object?>? overrides}) {
+Map<String, Object?> _response({
+  Map<String, Object?>? overrides,
+  Object? byTender,
+}) {
   final previous = <String, Object?>{
     'sales': 4820.75,
     'profit': 4820.75,
@@ -818,8 +1000,44 @@ Map<String, Object?> _response({Map<String, Object?>? overrides}) {
   return <String, Object?>{
     'previous': previous,
     'scannedTransactions': 37,
+    if (byTender != null) 'byTender': byTender,
   };
 }
+
+/// The five buckets the handler returns, summing to `_response`.
+Map<String, Object?> _byTender({
+  double cashSales = 2000.25,
+  int cashTransactions = 20,
+  double mpesaSales = 1800.5,
+  int mpesaTransactions = 10,
+  double cardSales = 900,
+  int cardTransactions = 5,
+  double unrecordedSales = 100,
+  int unrecordedTransactions = 1,
+  double otherSales = 20,
+  int otherTransactions = 1,
+}) => <String, Object?>{
+  'cash': <String, Object?>{
+    'sales': cashSales,
+    'transactions': cashTransactions,
+  },
+  'mpesa': <String, Object?>{
+    'sales': mpesaSales,
+    'transactions': mpesaTransactions,
+  },
+  'card': <String, Object?>{
+    'sales': cardSales,
+    'transactions': cardTransactions,
+  },
+  'unrecorded': <String, Object?>{
+    'sales': unrecordedSales,
+    'transactions': unrecordedTransactions,
+  },
+  'other': <String, Object?>{
+    'sales': otherSales,
+    'transactions': otherTransactions,
+  },
+};
 
 /// Answers each call with the next scripted outcome; a thrown entry is thrown.
 final class _Callable implements SalesTotalsCallable {

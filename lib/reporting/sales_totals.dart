@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
@@ -152,6 +153,125 @@ final class TenantSalesTotalsQuery {
   };
 }
 
+/// One bucket of a period's takings: what was taken, over how many sales.
+final class TenantSalesTenderTotals {
+  const TenantSalesTenderTotals({
+    required this.sales,
+    required this.transactions,
+  });
+
+  /// Major-unit takings in this bucket, on the same basis as
+  /// [TenantSalesTotals.sales] - whole sales, or one category's lines.
+  final double sales;
+
+  final int transactions;
+
+  bool get isEmpty => transactions == 0;
+}
+
+/// How a period's takings split across the ways they were paid for.
+///
+/// The split is checked against the total it claims to describe rather than
+/// trusted: the counts must sum to the answer's own transaction count and the
+/// amounts to its own takings, exactly, in whole minor units. A split that does
+/// not add up is not a smaller version of the truth - it is a different figure
+/// wearing the same label, on the one surface an owner reads takings from.
+///
+/// The bucket set is closed. An unknown bucket is refused rather than ignored,
+/// because ignoring one would silently report less money than was taken.
+final class TenantSalesTenderBreakdown {
+  const TenantSalesTenderBreakdown._({
+    required this.recorded,
+    required this.unrecorded,
+    required this.unrecognised,
+  });
+
+  /// Decodes the server's `byTender`, or returns `null` when it sent none.
+  ///
+  /// Absent is not a failure: a server that does not report a split is a server
+  /// this surface simply shows no split for, and the figure the manager came
+  /// for is unaffected. Present and wrong *is* a failure.
+  static TenantSalesTenderBreakdown? tryDecode(
+    Object? value, {
+    required double sales,
+    required int transactions,
+  }) {
+    if (value == null) return null;
+    final data = _strictMap(value, 'byTender');
+    final expected = <String>{
+      ...checkoutTenderWireValues,
+      unrecordedBucket,
+      unrecognisedBucket,
+    };
+    if (data.keys.toSet().length != data.length ||
+        !data.keys.toSet().containsAll(expected) ||
+        data.length != expected.length) {
+      throw const FormatException(
+        'getSalesComparison returned an unexpected set of tender buckets.',
+      );
+    }
+    final buckets = <String, TenantSalesTenderTotals>{
+      for (final key in expected) key: _bucket(data[key], key),
+    };
+    var countedTransactions = 0;
+    var countedMinor = 0;
+    for (final bucket in buckets.values) {
+      countedTransactions += bucket.transactions;
+      countedMinor += _minorUnits(bucket.sales);
+    }
+    if (countedTransactions != transactions ||
+        countedMinor != _minorUnits(sales)) {
+      throw const FormatException(
+        'getSalesComparison returned a tender split that does not add up to '
+        'the totals it accompanies.',
+      );
+    }
+    return TenantSalesTenderBreakdown._(
+      recorded: <CheckoutTender, TenantSalesTenderTotals>{
+        for (final tender in CheckoutTender.values)
+          tender: buckets[tender.wireValue]!,
+      },
+      unrecorded: buckets[unrecordedBucket]!,
+      unrecognised: buckets[unrecognisedBucket]!,
+    );
+  }
+
+  /// The server's bucket for a sale carrying no tender at all.
+  static const String unrecordedBucket = 'unrecorded';
+
+  /// The server's bucket for a sale carrying a tender nothing here models.
+  static const String unrecognisedBucket = 'other';
+
+  /// One entry per modelled payment method, always all three.
+  final Map<CheckoutTender, TenantSalesTenderTotals> recorded;
+
+  /// Sales written before payment methods were captured at all.
+  ///
+  /// A statement about the record rather than about the payment: these are
+  /// schema v1 sales, and they are never presented as unpaid.
+  final TenantSalesTenderTotals unrecorded;
+
+  /// Sales naming a payment method this app does not model.
+  ///
+  /// Kept separate from [unrecorded] because it is a different fact: something
+  /// wrote a tender nothing here recognises, which is a data problem rather
+  /// than history. Their money is still inside the total, and the surface says
+  /// so instead of quietly dropping it.
+  final TenantSalesTenderTotals unrecognised;
+
+  /// Whether any sale in the period named a payment method this app models.
+  bool get hasRecordedTenders =>
+      recorded.values.any((totals) => !totals.isEmpty);
+
+  static TenantSalesTenderTotals _bucket(Object? value, String field) {
+    final data = _strictMap(value, 'byTender.$field');
+    return TenantSalesTenderTotals(
+      sales: _requiredNonNegativeNumber(data, 'sales'),
+      transactions: _requiredCount(data, 'transactions'),
+    );
+  }
+}
+
 /// Strictly decoded totals for one period.
 ///
 /// The response is reconciled against the query it answers. Without a category
@@ -168,6 +288,7 @@ final class TenantSalesTotals {
     required this.profit,
     required this.transactions,
     required this.incompleteCostLineCount,
+    required this.tenderBreakdown,
   });
 
   factory TenantSalesTotals.fromCallable(
@@ -191,10 +312,11 @@ final class TenantSalesTotals {
         'getSalesComparison counted a different number of sales than it read.',
       );
     }
+    final sales = _requiredNonNegativeNumber(previous, 'sales');
     return TenantSalesTotals._(
       query: query,
       scannedTransactions: scanned,
-      sales: _requiredNonNegativeNumber(previous, 'sales'),
+      sales: sales,
       // Parsed so the figure is validated rather than ignored, and deliberately
       // never displayed: no product in this app carries a cost, so every sale
       // line reaches the server without one and the server's profit equals its
@@ -204,6 +326,14 @@ final class TenantSalesTotals {
       incompleteCostLineCount: _requiredCount(
         previous,
         'incompleteCostLineCount',
+      ),
+      // Deliberately read from the top level, beside `scannedTransactions`,
+      // rather than from `previous`: it is a property of the whole answer, and
+      // it is checked against the two figures above rather than trusted.
+      tenderBreakdown: TenantSalesTenderBreakdown.tryDecode(
+        data['byTender'],
+        sales: sales,
+        transactions: transactions,
       ),
     );
   }
@@ -236,6 +366,10 @@ final class TenantSalesTotals {
 
   /// How many sale lines lacked the cost data a profit figure needs.
   final int incompleteCostLineCount;
+
+  /// How [sales] and [transactions] split by how each sale was paid for, or
+  /// `null` when the server reported no split at all.
+  final TenantSalesTenderBreakdown? tenderBreakdown;
 
   bool get hasCompleteCostData => incompleteCostLineCount == 0;
 }
@@ -431,6 +565,13 @@ double _requiredFiniteNumber(Map<String, Object?> data, String field) {
   }
   return value.toDouble();
 }
+
+/// Whole minor units, rounded exactly as the server rounds.
+///
+/// Comparing sums here rather than as doubles: the server adds money as
+/// integers, so a split that really adds up matches to the cent, and comparing
+/// doubles would need a tolerance that could hide a genuine disagreement.
+int _minorUnits(double amount) => (amount * 100).round();
 
 const int _maximumCount = 1000000000;
 
