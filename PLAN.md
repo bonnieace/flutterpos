@@ -11515,10 +11515,31 @@ No `functions/src`, Rules, or index change. Nothing needed a device or emulator.
 | the same with the evidence panel's `loading` reverted to `SizedBox.shrink()` | the refresh test fails, as it must |
 | `git diff --check` | clean |
 
-The 9 new tests are 3 evidence-panel cases and 6 singular-count cases. The
-Functions, Rules, and both integration suites were not re-run: nothing outside
-`lib/` and `test/` changed. Android build and Android emulator validation were
-skipped as requested.
+The 9 new tests are 3 evidence-panel cases and 6 singular-count cases. Android
+build and Android emulator validation were skipped as requested.
+
+### Cross-chunk validation for all four chunks in this session
+
+Run once at the end, after every chunk was committed, so the four are known to
+hold together and not only one at a time:
+
+| Command | Result |
+| --- | --- |
+| `flutter test --no-pub --concurrency=1` over the 10 in-scope test paths | **1175/1175** |
+| `npm --prefix functions test` | **206/206** |
+| `npm --prefix rules-tests run test:emulator` | **139/139** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **5/5** |
+
+Session totals: **1537 tests** across five suites, up from 1476 at the start of
+the session, adding **61**. Nothing was left failing and no suite was skipped
+except the Android build and Android emulator runs.
+
+One practical note from that sequence: **the invitation suite alone takes about
+nine minutes**, so running it and the reconciliation suite in one shell exceeds a
+ten-minute command budget. Run them separately. A run killed that way left no
+`.secret.local`, no `.env.local`, and no listening emulator port behind, which is
+the first thing to check before starting another.
 
 ### Meaningful failures and their resolutions
 
