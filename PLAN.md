@@ -11616,3 +11616,195 @@ files, and deployment.
   of one.
 - `TenantRouteGuard`'s `loading` widget replaces the whole subtree. Any panel that
   re-reads on a signal blanks unless it passes its last value as that widget.
+
+---
+
+## The shift half of the pipeline, proved end to end - 2026-08-04
+
+### Completed in this session
+
+The chunk above: **the reconciliation integration runner now carries a real sale
+through the shift-verification phase and out the other side through
+`amendShiftSummary`.** Its five tests stopped after the metrics phase; there are
+now seven, and the whole chain - sale, dirty day, job, metric, shift
+expectation, verification, difference, correction - is proved by tests rather
+than by the one manual run recorded four handovers above.
+
+No production code changed. The two new tests exercise code that was already
+shipped and already unit-tested; what they add is the first evidence that it
+does what the pure tests say when a real Firestore, a real task queue, and a
+real callable are involved. That is the same gap that let
+`mergeSaleReconciliationJob` throw on every sale for eleven sessions.
+
+### What the shifts phase had never actually done in this harness
+
+The fixture seeded a tenant and a product and no `shifts` document at all. Every
+run therefore *did* reach the shifts phase - and found the shift its own
+expectation named missing, recorded `invalid_or_missing_shift`, and moved on
+without a single assertion noticing. **The variance path had never run against a
+real server**, which is the reason this chunk existed.
+
+The seeded shift records 0.00 over 0 transactions: the state a shift is left in
+when it closes before the sale filed against it reaches the server, which is
+what `scripts/plant-late-sale.js` engineers by hand. Both recorded figures are
+then wrong, so the verifier's two comparisons, the two figures it records, and
+the amendment's two rewrites are each individually observable. A fixture that
+got one of them right by accident would have proved half as much.
+
+Decisions worth recording:
+
+- **The anomaly is found by querying `shiftId`, not by recomputing its digest.**
+  The verifier and the amendment callable derive `shiftAnomalyId` in two
+  different modules from the same shift and generation. A test that recomputed
+  the digest would agree with whichever one it copied; a test that queries by
+  field and then asserts `clearedAnomalyId` equals the ID it found proves the
+  two modules agree with *each other*. If they ever stopped agreeing, the listed
+  difference would survive its own correction and that assertion fails.
+- **The counted cash is asserted unchanged.** `closingCashMinor` is a physical
+  count of a drawer and the single property that makes this path safe to expose
+  is that it can never rewrite one. The fixture uses 12000 minor units so a test
+  would notice it moving.
+- **The job's completion is waited for, not sampled.** The file's existing rule
+  is that anything the pipeline is still writing must not be asserted; the new
+  test extends that rule rather than bending it, by waiting until the job is
+  `completed` - after which nothing rewrites its counters - and only then
+  asserting `shiftsProcessed` and `shiftVarianceCount`.
+- **Idempotency and non-repeatability are different properties, and both are
+  asserted.** Replaying the same `requestId` returns the stored answer and leaves
+  `summaryAmendmentCount` at 1. A *fresh* `requestId` is refused with
+  `FAILED_PRECONDITION`, because settling the expectation as `amended` in the
+  same transaction makes a second correction of that generation impossible
+  rather than merely pointless.
+- **The seeded actor is an `admin`, not an `owner`.** `amendShiftSummary` admits
+  both, but an `owner` staff record must also be named by the tenant's
+  `ownerUid`, and these fixtures are owned by a uid with no Auth account. The
+  authorization path is otherwise identical.
+
+### The fixture's third export, and the rule it had to satisfy
+
+`functions/reconciliation-integration/index.js` now exports `amendShiftSummary`
+beside the trigger and the task worker. Its require closure was checked first:
+`core/authorization`, `core/idempotency`, `core/validation`,
+`operations/domain`, `reconciliation/model` - and not one reaches
+`firebase-functions/params`. That matters because a `defineSecret` or
+`defineString` without a default makes the emulator stop at startup to ask for a
+value, and with no terminal to answer it looks like a run that hangs forever
+after `Serving at port ...`. The rule and how to check it are now written in the
+fixture and in the README rather than being folklore.
+
+### Files in this chunk
+
+```text
+PLAN.md
+functions/reconciliation-integration/index.js
+rules-tests/README.md
+rules-tests/test/sale-reconciliation.integration.test.js
+```
+
+No `functions/src`, Rules, index, or Dart change. Nothing needed a device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1175/1175**, unchanged - no Dart was touched |
+| `npm --prefix functions test` | **206/206** |
+| `npm --prefix rules-tests run test:emulator` | **139/139** |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **7/7**, up from 5, adding **2** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `git diff --check` | clean |
+
+Session totals: **1539 tests** across five suites, up from 1537. Android build
+and Android emulator validation were skipped as requested. Each emulator command
+was run in its own shell; the invitation suite alone takes about four minutes on
+this host and the Rules suite about three, so they still do not belong in one
+ten-minute command budget together.
+
+During development the two new tests were run alone with
+`INTEGRATION_TEST_NAME_PATTERN=shift`, which matches only their names.
+
+### Meaningful failures and their resolutions
+
+- **The first full run failed, and the failure was a real flake this chunk made
+  more likely.** `TRIGGER_TIMEOUT_MILLISECONDS` was 30 seconds, and the *first*
+  trigger delivery of a cold run is the only one that pays for the Functions
+  emulator starting a Node worker: it was measured at 25.4 and 23.0 seconds on
+  this host, while every later delivery in the same run appeared in about 310ms.
+  Adding one more function to the fixture was enough to take the first test over
+  the bound. Raised to 60 seconds with the measurement written down. The bound
+  exists so a trigger that never runs fails with a description of what it was
+  waiting for rather than hanging; it was never a performance assertion, and the
+  diagnostic line still reports the time actually taken.
+- **A callable error's `status` is `FAILED_PRECONDITION`, not
+  `failed-precondition`.** The wire contract uppercases it, which the invitation
+  suite already knew and this one had to learn.
+- No assertion in the shipped code failed. Both new tests passed on their first
+  focused run.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**A `shiftId`-narrowed entry point into the corrections trail from shift
+history.** The repository already supports the narrowed read and nothing opens
+it, so a manager looking at one corrected shift in history cannot see the
+correction that was made to it - they can only find it by opening the whole
+business's trail and reading down. The amendment now has server-side end-to-end
+evidence; this is the surface that makes one shift's correction reachable from
+the shift itself.
+
+1. `shift_history_panel` already renders each closed shift with its recorded
+   sales and counted cash. A shift that carries `summaryAmendmentId` is one that
+   was corrected, and that field is on the document the panel already reads, so
+   the entry point needs no extra query to decide whether to offer itself.
+   Confirm that before designing around it - the history read model may drop the
+   field, in which case widening it is part of the chunk.
+2. Open the existing corrections trail narrowed to that `shiftId`, the way the
+   differences panel opens the trail today.
+3. Say plainly on the history row that this shift's summary was corrected, and
+   how many times, before offering the link. A silent link is worse than none:
+   the row's own figures are the amended ones, and nothing currently says so.
+4. Cover the un-corrected row offering nothing, the corrected row offering the
+   link, the count agreeing with `summaryAmendmentCount`, and the narrowed trail
+   opening with the right `shiftId`.
+
+Then, in preference order:
+
+- **The landing screen's `Center` inside `SingleChildScrollView`**, if the
+  evidence panel's cut-off is judged worth changing. It is a look-and-feel
+  decision about the whole safe landing route, not a defect in the panel, so it
+  wants a deliberate answer rather than a quiet edit.
+- **The stock half of the reconciliation runner.** The integration suite now
+  covers metrics and shifts; `processStockPage` and its checkpoint chain are the
+  remaining phase, and it is the one that mutates nothing but is hardest to
+  reason about from pure tests.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous four sessions' lists still applies.
+- A green integration suite is no evidence a phase did the work it was named
+  for. This one reached the shifts phase on every run for as long as it existed
+  and recorded `invalid_or_missing_shift` every time, because the fixture never
+  seeded the document the phase compares against. Assert what the phase
+  concluded, not that it ran.
+- The first trigger delivery of a cold emulator run costs about 25 seconds on
+  this host. Any new timeout in that harness has to be set from that, not from
+  the ~310ms every later delivery takes.

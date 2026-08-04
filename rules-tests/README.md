@@ -377,6 +377,55 @@ For focused diagnosis, set `INTEGRATION_TEST_NAME_PATTERN` to a Node test-name
 pattern before launching the runner. On memory-constrained Windows hosts, set
 `NODE_OPTIONS=--max-old-space-size=512` for the Functions emulator workers.
 
+## Sale reconciliation integration tests
+
+```powershell
+npm --prefix rules-tests run test:emulator:reconciliation
+```
+
+The second Auth/Firestore/Functions harness, under its own
+`demo-multitenant-reconciliation-integration` project, its own ports, and its own
+`firebase.reconciliation-test.json`, so it cannot collide with the invitation
+suite or with an `emulators:dev` run. It exists because every other
+reconciliation test in this repository is pure, and a pure test cannot see a
+`FieldValue.delete()` sentinel: one in a `transaction.create` payload made
+`mergeSaleReconciliationJob` throw on **every** sale - no dirty day, no job, no
+regenerated metric - through eleven sessions of green tests, and was found by
+using the app.
+
+The suite writes real sales and asserts what a real server does with them: the
+trigger-owned sale receipt, dirty day, bucket job, and stock movement; both
+branches of `saleTriggerJobFields`, including the requeue that must clear a
+previous pass's cursor; that a replayed delivery is registered once; and that a
+sale with an unusable line is recorded as an anomaly rather than dropped.
+
+Two tests carry the same chain through the shift-verification phase, which is
+the half that produces the differences a business is asked to correct. They seed
+a **closed shift whose recorded summary disagrees with the sales filed against
+it** - the state `scripts/plant-late-sale.js` engineers by hand - then assert the
+settled `shift_expectations` record, the `shift_verifications` evidence, and the
+listed `shift_variance` difference with the figures on both sides of it. The
+second then signs an administrator in and calls the real `amendShiftSummary`,
+asserting the four writes it makes in one transaction: the rewritten shift, the
+expectation settled as `amended`, the resolved difference removed from the list,
+and the immutable `shift_amendments` record beside its audit entry. The counted
+cash is asserted **unchanged**, which is the one property that makes the
+correction path safe to expose at all. A repeated request returns the stored
+answer, and a fresh one is refused.
+
+The fixture at `functions/reconciliation-integration/index.js` exports only the
+three entry points those tests reach. Exporting the whole index would pull in
+every `defineSecret`/`defineString` parameter in the codebase, and each one
+without a default makes the emulator stop and ask for a value at startup -
+which, with no terminal to answer, looks like a run that hangs forever after
+`Serving at port ...`. Check any addition's require closure against that before
+adding it. Because none of the three reaches such a parameter, this runner needs
+no `.secret.local` or `.env.local` at all, so a killed run leaves nothing behind
+to clean up.
+
+`FUNCTIONS_DISCOVERY_TIMEOUT` and `INTEGRATION_TEST_NAME_PATTERN` behave as they
+do for the invitation runner.
+
 ## Running the Flutter app against local emulators
 
 The suites above serve tests only. To drive the real app locally, start the

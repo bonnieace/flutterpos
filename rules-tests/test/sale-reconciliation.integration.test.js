@@ -17,14 +17,24 @@
  * so writing a sale starts the real job pipeline, and it runs while the test is
  * still making assertions. Anything the pipeline also writes - a job's `status`,
  * `generation`, `revision`, or a dirty day's `status` - is therefore a race and is
- * deliberately not asserted. What is asserted is either trigger-owned and never
- * rewritten (`revision`, `saleReceiptCount`, `lastSaleId`, the stock movement) or
- * waited for properly (`daily_metrics`).
+ * deliberately not asserted *while it is still moving*. What is asserted is either
+ * trigger-owned and never rewritten (`revision`, `saleReceiptCount`, `lastSaleId`,
+ * the stock movement), or waited for until it reaches a state nothing rewrites
+ * (`daily_metrics`, a settled `shift_expectations` record, a completed job).
+ *
+ * The last two tests carry the chain past the metrics phase into the half that
+ * produces the differences a business is asked to correct: a closed shift whose
+ * recorded summary disagrees with the immutable sales filed against it, the
+ * `shift_variance` the verifier records for it, and the four writes
+ * `amendShiftSummary` makes to resolve it. Every link - sale, dirty day, job,
+ * metric, shift expectation, verification, difference, correction - is then proved
+ * by a test rather than by one manual run.
  */
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import { deleteApp, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 
 const PROJECT_ID = "demo-multitenant-reconciliation-integration";
@@ -42,7 +52,22 @@ const BUCKET_MILLISECONDS = 300_000;
  */
 const BUCKET_HEADROOM_MILLISECONDS = 60_000;
 
-const TRIGGER_TIMEOUT_MILLISECONDS = 30_000;
+/**
+ * How long a trigger-owned document may take to appear.
+ *
+ * Wide enough for the **first** delivery of a cold run, which is the only one
+ * that pays for the Functions emulator starting a Node worker: measured at 25.4
+ * seconds on this host against the previous 30-second bound, while every later
+ * delivery in the same run appeared in about 310ms. That margin was thin enough
+ * that adding one more function to the fixture was sometimes enough to take the
+ * first test over it - a failure that says nothing about the trigger.
+ *
+ * Raising it costs nothing that matters. The bound exists so a trigger that
+ * never runs fails with a description of what was being waited for instead of
+ * hanging, and the diagnostic line reports the time actually taken, so a run
+ * that slows down is still visible.
+ */
+const TRIGGER_TIMEOUT_MILLISECONDS = 60_000;
 const PIPELINE_TIMEOUT_MILLISECONDS = 90_000;
 const POLL_INTERVAL_MILLISECONDS = 250;
 
@@ -55,7 +80,32 @@ const POLL_INTERVAL_MILLISECONDS = 250;
  */
 const REPLAY_SETTLE_MILLISECONDS = 8_000;
 
+/**
+ * The single sale the two shift tests file against their closed shift.
+ *
+ * Two units at 150.00, so the sales prove 300.00 over one transaction. Both
+ * tests name the figure rather than recomputing it, because the whole point of
+ * the assertions is that the server derived it from the sale and not from
+ * anything the test told it.
+ */
+const SHIFT_SALE_QUANTITY = 2;
+const SHIFT_SALE_TOTAL = 300;
+const SHIFT_SALE_TOTAL_MINOR = 30_000;
+
+/**
+ * The drawer count on a seeded closed shift.
+ *
+ * Asserted unchanged after an amendment. `closingCashMinor` is a physical count
+ * of a drawer, and the single property that makes the correction path safe to
+ * expose is that it can never rewrite one, so the figure has to be one a test
+ * would notice moving.
+ */
+const CLOSED_SHIFT_CASH_MINOR = 12_000;
+
+const PASSWORD = "Local-emulator-password-123!";
+
 let app;
+let auth;
 let firestore;
 
 before(async () => {
@@ -64,6 +114,7 @@ before(async () => {
   requireEmulator("FUNCTIONS_EMULATOR_HOST");
   assert.equal(process.env.GCLOUD_PROJECT, PROJECT_ID);
   app = initializeApp({ projectId: PROJECT_ID }, "reconciliation-integration");
+  auth = getAuth(app);
   firestore = getFirestore(app);
 });
 
@@ -320,6 +371,214 @@ test("a sale with an unusable line is recorded as an anomaly, not dropped", asyn
   assert.equal(dirtyDay.get("invalidLineCount"), 1);
 });
 
+test("the shifts phase reports a closed shift that its sales disagree with", async (t) => {
+  // The half of the pipeline the five tests above stop short of. A sale-trigger
+  // job runs metrics then shifts, and until this test the fixture seeded no
+  // `shifts` document at all - so every run reached the shifts phase, found the
+  // shift its expectation named missing, and recorded `invalid_or_missing_shift`
+  // without anything noticing. The variance path had never run against a real
+  // server.
+  //
+  // The seeded shift records 0.00 over 0 transactions: the state a shift is left
+  // in when it closes before the sale filed against it reaches the server, which
+  // is exactly what `scripts/plant-late-sale.js` engineers by hand. Both recorded
+  // figures are then wrong, so the verifier's two comparisons and the two figures
+  // it records are individually observable rather than one of them being zero by
+  // accident.
+  const fixture = await seedTenant("shift-variance", {
+    closedShift: { totalSalesMinor: 0, transactionCount: 0 },
+  });
+  await firestore.doc(`tenants/${fixture.tenantId}/sales/sale-variance`).create(
+    saleFields(fixture, {
+      checkoutId: "sale-variance",
+      quantity: SHIFT_SALE_QUANTITY,
+    }),
+  );
+
+  const receipt = await waitForDocument(
+    `tenants/${fixture.tenantId}/reconciliation_sale_receipts/sale-variance`,
+    "the sale receipt the trigger writes",
+    t,
+  );
+  const expectation = await waitForVerifiedExpectation(fixture, t);
+  const generation = expectation.get("generation");
+
+  // What the sales prove, and that verification settled against that exact
+  // generation rather than an older one.
+  assert.equal(expectation.get("sales"), SHIFT_SALE_TOTAL);
+  assert.equal(expectation.get("transactions"), 1);
+  assert.equal(expectation.get("verificationStatus"), "variance");
+  assert.equal(expectation.get("verifiedGeneration"), generation);
+
+  // The verification record is the evidence the difference was measured, kept
+  // whatever is later done about it.
+  const verifications = await firestore
+    .collection(`tenants/${fixture.tenantId}/shift_verifications`)
+    .where("shiftId", "==", fixture.shiftId)
+    .get();
+  assert.equal(verifications.size, 1);
+  const verification = verifications.docs[0];
+  assert.equal(verification.get("status"), "variance");
+  assert.equal(verification.get("generation"), generation);
+  assert.equal(verification.get("businessDate"), fixture.businessDate);
+  assert.equal(verification.get("expectedSalesMinor"), SHIFT_SALE_TOTAL_MINOR);
+  assert.equal(verification.get("observedSalesMinor"), 0);
+  assert.equal(verification.get("salesVarianceMinor"), -SHIFT_SALE_TOTAL_MINOR);
+  assert.equal(verification.get("salesVariance"), -SHIFT_SALE_TOTAL);
+  assert.equal(verification.get("expectedTransactions"), 1);
+  assert.equal(verification.get("observedTransactions"), 0);
+  assert.equal(verification.get("transactionVariance"), -1);
+  // Reconciliation reports; it never rewrites the shift on its own.
+  assert.equal(verification.get("mutatesShift"), false);
+
+  // And the difference is listed where the app reads unresolved ones from.
+  const anomalies = await listShiftAnomalies(fixture);
+  assert.equal(anomalies.length, 1);
+  assert.equal(anomalies[0].get("anomalyType"), "shift_variance");
+  assert.equal(anomalies[0].get("salesVariance"), -SHIFT_SALE_TOTAL);
+  assert.equal(anomalies[0].get("transactionVariance"), -1);
+  assert.equal(anomalies[0].get("mutatesShift"), false);
+  assert.equal(anomalies[0].get("jobId"), receipt.get("jobId"));
+
+  // Waited for rather than raced: once the job is `completed` nothing rewrites
+  // its counters, and this tenant holds exactly one expectation, so the phase
+  // having run once with one difference is a stable fact rather than a snapshot.
+  const job = await waitForCompletedJob(fixture, receipt.get("jobId"), t);
+  assert.equal(job.get("phase"), "finalize");
+  assert.equal(job.get("shiftsProcessed"), 1);
+  assert.equal(job.get("shiftVarianceCount"), 1);
+});
+
+test("an administrator amends the shift to the total its sales prove", async (t) => {
+  // The correction the difference above exists to be resolved by, against a real
+  // server: one transaction that rewrites the shift, settles the expectation,
+  // removes the listed difference, and files the immutable record of what it did.
+  const fixture = await seedTenant("shift-amendment", {
+    closedShift: { totalSalesMinor: 0, transactionCount: 0 },
+  });
+  await firestore.doc(`tenants/${fixture.tenantId}/sales/sale-amendment`).create(
+    saleFields(fixture, {
+      checkoutId: "sale-amendment",
+      quantity: SHIFT_SALE_QUANTITY,
+    }),
+  );
+
+  const expectation = await waitForVerifiedExpectation(fixture, t);
+  assert.equal(expectation.get("verificationStatus"), "variance");
+  const generation = expectation.get("generation");
+  const listed = await listShiftAnomalies(fixture);
+  assert.equal(listed.length, 1);
+  const anomalyId = listed[0].id;
+
+  const actor = await seedAmendmentActor(fixture);
+  const idToken = await signIn(actor.email);
+  const request = {
+    tenantId: fixture.tenantId,
+    shiftId: fixture.shiftId,
+    reason: "A sale reached the server after this shift closed.",
+    requestId: "shift-amendment-emulator-1",
+  };
+  const response = await callFunction("amendShiftSummary", idToken, request);
+
+  assert.equal(response.tenantId, fixture.tenantId);
+  assert.equal(response.shiftId, fixture.shiftId);
+  assert.equal(response.businessDate, fixture.businessDate);
+  assert.equal(response.previousTotalSalesMinor, 0);
+  assert.equal(response.previousTransactionCount, 0);
+  assert.equal(response.totalSalesMinor, SHIFT_SALE_TOTAL_MINOR);
+  assert.equal(response.transactionCount, 1);
+  assert.equal(response.salesVarianceMinor, -SHIFT_SALE_TOTAL_MINOR);
+  assert.equal(response.transactionVariance, -1);
+  // The verifier and the amendment callable derive this ID from the same shift
+  // and generation in two different modules. If they ever disagreed, the listed
+  // difference would survive its own correction and this would be null.
+  assert.equal(response.clearedAnomalyId, anomalyId);
+
+  // First write: the shift now holds what its sales prove - and still holds the
+  // cash somebody counted, which this path must never be able to move.
+  const shift = await firestore
+    .doc(`tenants/${fixture.tenantId}/shifts/${fixture.shiftId}`)
+    .get();
+  assert.equal(shift.get("totalSalesMinor"), SHIFT_SALE_TOTAL_MINOR);
+  assert.equal(shift.get("totalSales"), SHIFT_SALE_TOTAL);
+  assert.equal(shift.get("transactionCount"), 1);
+  assert.equal(shift.get("summaryAmendmentId"), response.amendmentId);
+  assert.equal(shift.get("summaryAmendedGeneration"), generation);
+  assert.equal(shift.get("summaryAmendmentCount"), 1);
+  assert.equal(shift.get("closingCashMinor"), CLOSED_SHIFT_CASH_MINOR);
+  assert.equal(shift.get("closingCash"), CLOSED_SHIFT_CASH_MINOR / 100);
+  assert.equal(shift.get("status"), "closed");
+
+  // Second write: the expectation is settled as amended rather than left pending,
+  // because verification happened inside that same transaction.
+  const settled = await expectation.ref.get();
+  assert.equal(settled.get("needsVerification"), false);
+  assert.equal(settled.get("verificationStatus"), "amended");
+  assert.equal(settled.get("amendmentId"), response.amendmentId);
+  assert.equal(settled.get("generation"), generation);
+
+  // Third write: the resolved difference leaves the list of open ones.
+  assert.equal((await listShiftAnomalies(fixture)).length, 0);
+  assert.equal(
+    (await firestore
+      .doc(`tenants/${fixture.tenantId}/reconciliation_anomalies/${anomalyId}`)
+      .get()).exists,
+    false,
+  );
+
+  // Fourth write: the record that keeps the difference after the list drops it.
+  const amendment = await firestore
+    .doc(`tenants/${fixture.tenantId}/shift_amendments/${response.amendmentId}`)
+    .get();
+  assert.equal(amendment.exists, true, "the amendment must be recorded");
+  assert.equal(amendment.get("tenantId"), fixture.tenantId);
+  assert.equal(amendment.get("shiftId"), fixture.shiftId);
+  assert.equal(amendment.get("staffId"), `cashier-${fixture.tenantId}`);
+  assert.equal(amendment.get("businessDate"), fixture.businessDate);
+  assert.equal(amendment.get("sourceType"), "reconciliation_shift_variance");
+  assert.equal(amendment.get("expectationId"), expectation.id);
+  assert.equal(amendment.get("expectationGeneration"), generation);
+  assert.equal(amendment.get("previousTotalSalesMinor"), 0);
+  assert.equal(amendment.get("previousTotalSales"), 0);
+  assert.equal(amendment.get("previousTransactionCount"), 0);
+  assert.equal(amendment.get("previousRepresentationsAgreed"), true);
+  assert.equal(amendment.get("totalSalesMinor"), SHIFT_SALE_TOTAL_MINOR);
+  assert.equal(amendment.get("transactionCount"), 1);
+  assert.equal(amendment.get("salesVarianceMinor"), -SHIFT_SALE_TOTAL_MINOR);
+  assert.equal(amendment.get("transactionVariance"), -1);
+  assert.equal(amendment.get("clearedAnomalyId"), anomalyId);
+  assert.equal(amendment.get("mutatesCountedCash"), false);
+  assert.equal(amendment.get("reason"), request.reason);
+  assert.equal(amendment.get("actorUid"), actor.uid);
+
+  const audit = await firestore
+    .doc(`tenants/${fixture.tenantId}/audit_logs/${response.amendmentId}`)
+    .get();
+  assert.equal(audit.get("eventType"), "shift_summary_amended");
+  assert.equal(audit.get("actorUid"), actor.uid);
+  assert.equal(audit.get("mutatesCountedCash"), false);
+
+  // A repeated delivery of the same request returns the stored answer and does
+  // not amend anything a second time. The shift's amendment count is where a
+  // second application would show.
+  const replay = await callFunction("amendShiftSummary", idToken, request);
+  assert.deepEqual(replay, response);
+  assert.equal(
+    (await firestore
+      .doc(`tenants/${fixture.tenantId}/shifts/${fixture.shiftId}`)
+      .get()).get("summaryAmendmentCount"),
+    1,
+  );
+
+  // And a *fresh* request is refused, because settling the expectation as
+  // `amended` in the same transaction makes a second correction of this
+  // generation impossible rather than merely pointless.
+  await assertCallableError("amendShiftSummary", idToken, {
+    ...request,
+    requestId: "shift-amendment-emulator-2",
+  }, "FAILED_PRECONDITION");
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
@@ -349,7 +608,7 @@ function businessDateFor(instant) {
  * emulator: the dirty-day counters are per business, and a shared tenant would
  * make every assertion about `saleReceiptCount` depend on what ran before it.
  */
-async function seedTenant(suffix) {
+async function seedTenant(suffix, options = {}) {
   const tenantId = `tenant-${suffix}`;
   const productId = `product-${suffix}`;
   const shiftId = `shift-${suffix}`;
@@ -376,8 +635,134 @@ async function seedTenant(suffix) {
     createdAt: now,
     updatedAt: now,
   });
+  if (options.closedShift) {
+    batch.set(firestore.doc(`tenants/${tenantId}/shifts/${shiftId}`), {
+      shiftId,
+      tenantId,
+      // The cashier `saleFields` names, so the amendment record's `staffId` is
+      // the person the corrected shift actually belongs to.
+      staffId: `cashier-${tenantId}`,
+      deviceId: `device-${tenantId}`,
+      businessDate,
+      status: "closed",
+      // Both instants are server-owned in `firestore.rules`; the fixture writes
+      // them through the Admin SDK, which is the only writer that may.
+      startTime: now,
+      endTime: now,
+      closingCashMinor: CLOSED_SHIFT_CASH_MINOR,
+      closingCash: CLOSED_SHIFT_CASH_MINOR / 100,
+      ...closedShiftSummary(options.closedShift),
+    });
+  }
   await batch.commit();
   return { tenantId, productId, shiftId, businessDate };
+}
+
+/**
+ * The three summary fields a close writes, from one figure.
+ *
+ * `TenantShiftCloseIntent.updateData` in `lib/shift/tenant_shift.dart` derives
+ * `totalSales` from `totalSalesMinor`, and the shift verifier compares the
+ * major-unit figure, so a fixture that let the two disagree would be testing an
+ * internally inconsistent shift rather than a reconciliation variance.
+ */
+function closedShiftSummary({ totalSalesMinor, transactionCount }) {
+  return {
+    totalSalesMinor,
+    totalSales: totalSalesMinor / 100,
+    transactionCount,
+  };
+}
+
+/**
+ * An administrator of the seeded business, able to sign in and be authorized.
+ *
+ * `amendShiftSummary` admits owners and administrators only - deliberately
+ * narrower than the owner/admin/manager set that *reads* the difference it
+ * resolves. The seeded role is `admin` because an `owner` staff record must also
+ * be named by the tenant's `ownerUid`, and these fixtures are owned by a uid
+ * with no Auth account; the authorization path is otherwise identical.
+ */
+async function seedAmendmentActor(fixture) {
+  const uid = `admin-${fixture.tenantId}`;
+  const email = `${uid}@integration.example.test`;
+  const now = Timestamp.now();
+  await auth.createUser({ uid, email, password: PASSWORD, emailVerified: true });
+  await Promise.all([
+    firestore.doc(`users/${uid}`).set({
+      email,
+      accountType: "tenant_user",
+      identityOrigin: "tenant_signup",
+      globalStatus: "active",
+      createdAt: now,
+      updatedAt: now,
+    }),
+    firestore.doc(`tenants/${fixture.tenantId}/staff/${uid}`).set({
+      uid,
+      tenantId: fixture.tenantId,
+      email,
+      role: "admin",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    }),
+  ]);
+  return { uid, email };
+}
+
+async function signIn(email) {
+  const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  const response = await fetch(
+    `http://${host}/identitytoolkit.googleapis.com/v1/` +
+      "accounts:signInWithPassword?key=fake-api-key",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password: PASSWORD, returnSecureToken: true }),
+    },
+  );
+  const body = await response.json();
+  assert.equal(response.ok, true, JSON.stringify(body));
+  assert.equal(typeof body.idToken, "string");
+  return body.idToken;
+}
+
+async function callFunction(functionName, idToken, data) {
+  const host = process.env.FUNCTIONS_EMULATOR_HOST;
+  const response = await fetch(
+    `http://${host}/${PROJECT_ID}/us-central1/${functionName}`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${idToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ data }),
+    },
+  );
+  const body = await response.json();
+  assert.equal(response.ok, true, JSON.stringify(body));
+  assert.equal(body.error, undefined, JSON.stringify(body));
+  assert.equal(typeof body.result, "object", JSON.stringify(body));
+  return body.result;
+}
+
+async function assertCallableError(functionName, idToken, data, expectedStatus) {
+  const host = process.env.FUNCTIONS_EMULATOR_HOST;
+  const response = await fetch(
+    `http://${host}/${PROJECT_ID}/us-central1/${functionName}`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${idToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ data }),
+    },
+  );
+  const body = await response.json();
+  assert.equal(response.ok, false, JSON.stringify(body));
+  assert.equal(body.error?.status, expectedStatus, JSON.stringify(body));
 }
 
 /**
@@ -449,25 +834,81 @@ async function waitForDocument(
   t,
   timeoutMilliseconds = TRIGGER_TIMEOUT_MILLISECONDS,
 ) {
+  return waitFor(async () => {
+    const snapshot = await firestore.doc(path).get();
+    return snapshot.exists ? snapshot : undefined;
+  }, `${description} at ${path}`, t, timeoutMilliseconds);
+}
+
+/**
+ * Polls `read` until it answers with something rather than `undefined`.
+ *
+ * The predicate lives in the caller because "has this appeared" and "has this
+ * stopped moving" are different questions and the phases past the trigger need
+ * the second one: a `shift_expectations` record exists from the moment the
+ * metrics phase writes it, and only says what verification concluded once the
+ * shifts phase has settled it.
+ */
+async function waitFor(read, description, t, timeoutMilliseconds) {
   const startedAt = Timestamp.now().toMillis();
   const deadline = startedAt + timeoutMilliseconds;
   for (;;) {
-    const snapshot = await firestore.doc(path).get();
-    if (snapshot.exists) {
+    const answer = await read();
+    if (answer !== undefined) {
       const waited = Timestamp.now().toMillis() - startedAt;
       if (waited > POLL_INTERVAL_MILLISECONDS) {
-        t.diagnostic(`${description} appeared after ${waited}ms`);
+        t.diagnostic(`${description} after ${waited}ms`);
       }
-      return snapshot;
+      return answer;
     }
     if (Timestamp.now().toMillis() >= deadline) {
       throw new Error(
-        `Timed out after ${timeoutMilliseconds}ms waiting for ${description} at ` +
-          `${path}. If the trigger threw, the Functions emulator log says so.`,
+        `Timed out after ${timeoutMilliseconds}ms waiting for ${description}. ` +
+          "If the trigger or the task worker threw, the Functions emulator log says so.",
       );
     }
     await settle(POLL_INTERVAL_MILLISECONDS);
   }
+}
+
+/**
+ * The tenant's one shift expectation, once the shifts phase has verified it.
+ *
+ * Queried by `shiftId` rather than addressed by the digest `shiftExpectationId`
+ * produces, so that the verifier and the amendment callable agreeing on that
+ * digest stays something these tests can observe rather than something they
+ * assume. Each test has its own tenant and one shift, so a size other than one
+ * means the metrics phase has not written it yet.
+ */
+async function waitForVerifiedExpectation(fixture, t) {
+  return waitFor(async () => {
+    const snapshot = await firestore
+      .collection(`tenants/${fixture.tenantId}/shift_expectations`)
+      .where("shiftId", "==", fixture.shiftId)
+      .get();
+    if (snapshot.size !== 1) return undefined;
+    const expectation = snapshot.docs[0];
+    return expectation.get("needsVerification") === false ? expectation : undefined;
+  }, `the verified expectation for ${fixture.shiftId}`, t, PIPELINE_TIMEOUT_MILLISECONDS);
+}
+
+/** The job the sale enqueued, once nothing further will rewrite its counters. */
+async function waitForCompletedJob(fixture, jobId, t) {
+  return waitFor(async () => {
+    const job = await firestore
+      .doc(`tenants/${fixture.tenantId}/reconciliation_jobs/${jobId}`)
+      .get();
+    return job.get("status") === "completed" ? job : undefined;
+  }, `reconciliation job ${jobId} to complete`, t, PIPELINE_TIMEOUT_MILLISECONDS);
+}
+
+/** Every difference currently listed against one shift. */
+async function listShiftAnomalies(fixture) {
+  const snapshot = await firestore
+    .collection(`tenants/${fixture.tenantId}/reconciliation_anomalies`)
+    .where("shiftId", "==", fixture.shiftId)
+    .get();
+  return snapshot.docs;
 }
 
 async function settle(milliseconds) {
