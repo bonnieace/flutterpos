@@ -22,13 +22,19 @@
  * the stock movement), or waited for until it reaches a state nothing rewrites
  * (`daily_metrics`, a settled `shift_expectations` record, a completed job).
  *
- * The last two tests carry the chain past the metrics phase into the half that
+ * Two later tests carry the chain past the metrics phase into the half that
  * produces the differences a business is asked to correct: a closed shift whose
  * recorded summary disagrees with the immutable sales filed against it, the
  * `shift_variance` the verifier records for it, and the four writes
  * `amendShiftSummary` makes to resolve it. Every link - sale, dirty day, job,
  * metric, shift expectation, verification, difference, correction - is then proved
  * by a test rather than by one manual run.
+ *
+ * The last test enters the third and final phase, which **no sale can reach**: a
+ * sale-trigger job goes metrics then shifts, so the stock phase is only ever
+ * started by `requestTenantReconciliation`. It needs two runs rather than one,
+ * because a product with no carried state is baselined rather than compared, so
+ * the first honest comparison is the second run.
  */
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -69,6 +75,20 @@ const BUCKET_HEADROOM_MILLISECONDS = 60_000;
  */
 const TRIGGER_TIMEOUT_MILLISECONDS = 60_000;
 const PIPELINE_TIMEOUT_MILLISECONDS = 90_000;
+
+/**
+ * How long a whole manual reconciliation may take to reach `completed`.
+ *
+ * A manual `full` job is much longer than anything else this suite starts.
+ * `initializeFullReconciliationWindow` marks 35 trailing dates dirty and the
+ * metrics phase drains them five at a time, so one run costs about eleven task
+ * dispatches - one initialization, seven metrics pages, one stock page, one
+ * shifts page, and the finalize - against the two or three a sale-trigger job
+ * takes. As with every bound here this is not a performance assertion: it exists
+ * so a run that never advances fails saying what it was waiting for, and the
+ * diagnostic line still reports the time actually taken.
+ */
+const MANUAL_RUN_TIMEOUT_MILLISECONDS = 180_000;
 const POLL_INTERVAL_MILLISECONDS = 250;
 
 /**
@@ -101,6 +121,30 @@ const SHIFT_SALE_TOTAL_MINOR = 30_000;
  * would notice moving.
  */
 const CLOSED_SHIFT_CASH_MINOR = 12_000;
+
+/**
+ * The on-hand quantity every seeded product carries.
+ *
+ * Named because the stock test measures a variance against it and against what
+ * one sale moved, and a bare 100 in three assertions would hide which figure the
+ * server derived and which the fixture chose.
+ */
+const SEEDED_PRODUCT_QUANTITY = 100;
+
+/** Units the stock test's sale takes off the ledger, and nothing off the product. */
+const STOCK_SALE_QUANTITY = 3;
+
+/**
+ * How long before now a settled product was last written.
+ *
+ * `reconcileProduct` defers any product written within the last five minutes and
+ * records `recent_write_deferred` instead of comparing it - the guard that stops
+ * a sale's own product decrement from being read as a variance during the window
+ * before its movement lands. A fixture that seeds `updatedAt: now` therefore
+ * never reaches the comparison at all, which is worth stating: the stock phase
+ * would appear to run and would assert nothing about stock.
+ */
+const SETTLED_PRODUCT_AGE_MILLISECONDS = 10 * 60 * 1000;
 
 const PASSWORD = "Local-emulator-password-123!";
 
@@ -470,7 +514,7 @@ test("an administrator amends the shift to the total its sales prove", async (t)
   assert.equal(listed.length, 1);
   const anomalyId = listed[0].id;
 
-  const actor = await seedAmendmentActor(fixture);
+  const actor = await seedAdministrator(fixture);
   const idToken = await signIn(actor.email);
   const request = {
     tenantId: fixture.tenantId,
@@ -579,6 +623,213 @@ test("an administrator amends the shift to the total its sales prove", async (t)
   }, "FAILED_PRECONDITION");
 });
 
+test("a full run baselines stock, and a later run reports what a sale moved", async (t) => {
+  // The third and last phase of the runner, and the only one no test had ever
+  // entered. A sale-trigger job goes metrics then shifts, so writing a sale can
+  // never reach `processStockPage`; `requestTenantReconciliation` is the entry
+  // point that starts a job whose phases include it, which is why the fixture now
+  // exports that callable.
+  //
+  // The two runs are one story, and it has to be told in that order. A product
+  // with no carried state is *baselined* rather than compared - the run records
+  // what it found as the truth to measure the next one against - so a variance is
+  // unreachable in a single run by construction. The first run establishes that
+  // baseline and checkpoints it; the sale then moves the ledger and nothing moves
+  // the product; the second run is the first comparison that can disagree.
+  const fixture = await seedTenant("stock-variance", { settledStock: true });
+  const actor = await seedAdministrator(fixture);
+  const idToken = await signIn(actor.email);
+  const productIds = [fixture.productId, fixture.untouchedProductId];
+
+  const baseline = await callFunction("requestTenantReconciliation", idToken, {
+    tenantId: fixture.tenantId,
+    mode: "full",
+    requestId: "stock-baseline-emulator-1",
+  });
+  assert.equal(baseline.tenantId, fixture.tenantId);
+  assert.equal(baseline.mode, "full");
+  assert.equal(baseline.status, "queued");
+
+  const baselineJob = await waitForCompletedJob(
+    fixture,
+    baseline.jobId,
+    t,
+    MANUAL_RUN_TIMEOUT_MILLISECONDS,
+  );
+  assert.equal(baselineJob.get("phase"), "finalize");
+  assert.equal(baselineJob.get("source"), "manual");
+  assert.equal(baselineJob.get("productsProcessed"), productIds.length);
+  // Nothing to disagree with yet, which is the point of asserting it: a phase
+  // that reported a difference here would be reporting one it invented.
+  assert.equal(baselineJob.get("stockVarianceCount"), 0);
+  // A `full` manual job checkpoints under its own ID. Reconciliation reads stock
+  // and never writes it, and the job says so.
+  assert.equal(baselineJob.get("checkpointKind"), "manual");
+  assert.equal(baselineJob.get("checkpointKey"), baseline.jobId);
+  assert.equal(baselineJob.get("mutatesStock"), false);
+
+  const baselineHashes = new Map();
+  for (const productId of productIds) {
+    const verification = await stockVerification(fixture, baseline.jobId, productId);
+    assert.equal(verification.exists, true, `${productId} must have been read`);
+    assert.equal(verification.get("status"), "baseline_established");
+    assert.equal(verification.get("expectedQuantity"), SEEDED_PRODUCT_QUANTITY);
+    assert.equal(verification.get("observedQuantity"), SEEDED_PRODUCT_QUANTITY);
+    assert.equal(verification.get("variance"), 0);
+    assert.equal(verification.get("invalidMovementCount"), 0);
+    assert.equal(verification.get("checkpointChainValid"), true);
+    // No movement existed to resume from, and the cursor names that rather than
+    // being absent - so a later run can tell "start at the beginning" from
+    // "somebody wrote an empty cursor".
+    assert.equal(verification.get("movementCursor"), "baseline:none");
+    assert.equal(verification.get("mutatesStock"), false);
+
+    const checkpoint = await stockCheckpoint(fixture, baseline.jobId, productId);
+    assert.equal(checkpoint.exists, true, `${productId} must be checkpointed`);
+    // The root of the chain: the first checkpoint has nothing behind it, and says
+    // so explicitly rather than by omitting the fields.
+    assert.equal(checkpoint.get("previousCheckpointHash"), null);
+    assert.equal(checkpoint.get("previousCheckpointPath"), null);
+    assert.equal(typeof checkpoint.get("checkpointHash"), "string");
+    assert.equal(checkpoint.get("checkpointChainValid"), true);
+    assert.equal(checkpoint.get("expectedQuantity"), SEEDED_PRODUCT_QUANTITY);
+    assert.equal(checkpoint.get("observedQuantity"), SEEDED_PRODUCT_QUANTITY);
+    assert.equal(checkpoint.get("checkpointKey"), baseline.jobId);
+    assert.equal(checkpoint.get("mutatesStock"), false);
+    baselineHashes.set(productId, checkpoint.get("checkpointHash"));
+
+    // The carried state is what the next run resumes from, and it must point at
+    // the checkpoint this run just wrote or the chain has no link to verify.
+    const state = await stockState(fixture, productId);
+    assert.equal(state.get("status"), "baseline_established");
+    assert.equal(state.get("expectedQuantity"), SEEDED_PRODUCT_QUANTITY);
+    assert.equal(state.get("lastVariance"), 0);
+    assert.equal(state.get("lastVerificationCompleted"), true);
+    assert.equal(state.get("lastVerificationHadVariance"), false);
+    assert.equal(state.get("lastCheckpointHash"), checkpoint.get("checkpointHash"));
+    assert.equal(state.get("lastCheckpointPath"), checkpoint.ref.path);
+
+    assert.equal(
+      (await listProductAnomalies(fixture, productId)).length,
+      0,
+      "a baseline is not a difference",
+    );
+  }
+
+  // The sale files three units against one product. The trigger writes the ledger
+  // movement and deliberately nothing else: the till is what decrements the
+  // product, and this fixture is the state left behind when that never happened.
+  await firestore.doc(`tenants/${fixture.tenantId}/sales/sale-stock`).create(
+    saleFields(fixture, {
+      checkoutId: "sale-stock",
+      quantity: STOCK_SALE_QUANTITY,
+    }),
+  );
+  const movement = await waitForDocument(
+    `tenants/${fixture.tenantId}/products/${fixture.productId}` +
+      "/stock_movements/sale_sale-stock",
+    "the ledger movement the second run has to read",
+    t,
+  );
+  assert.equal(movement.get("quantityDelta"), -STOCK_SALE_QUANTITY);
+
+  // An `incremental` manual job takes no checkpoint of its own, which makes this
+  // the sharper of the two runs to assert the chain on: it has to read the
+  // earlier checkpoint, recompute its hash, and agree with it while writing
+  // nothing that could paper over a disagreement.
+  const rerun = await callFunction("requestTenantReconciliation", idToken, {
+    tenantId: fixture.tenantId,
+    mode: "incremental",
+    requestId: "stock-variance-emulator-2",
+  });
+  assert.equal(rerun.mode, "incremental");
+  assert.notEqual(rerun.jobId, baseline.jobId);
+
+  const job = await waitForCompletedJob(
+    fixture,
+    rerun.jobId,
+    t,
+    MANUAL_RUN_TIMEOUT_MILLISECONDS,
+  );
+  assert.equal(job.get("phase"), "finalize");
+  assert.equal(job.get("checkpointKind"), "none");
+  assert.equal(job.get("productsProcessed"), productIds.length);
+  // One difference out of two products read. Both halves matter: a phase that
+  // reported none would have missed the sale, and one that reported two would be
+  // reporting a difference for a product nothing touched.
+  assert.equal(job.get("stockVarianceCount"), 1);
+  assert.equal(job.get("mutatesStock"), false);
+
+  const expectedQuantity = SEEDED_PRODUCT_QUANTITY - STOCK_SALE_QUANTITY;
+  const verification = await stockVerification(fixture, rerun.jobId, fixture.productId);
+  assert.equal(verification.get("status"), "variance");
+  // The ledger accounts for three fewer than the product holds, because the sale
+  // moved the first and nothing moved the second.
+  assert.equal(verification.get("expectedQuantity"), expectedQuantity);
+  assert.equal(verification.get("observedQuantity"), SEEDED_PRODUCT_QUANTITY);
+  assert.equal(verification.get("variance"), STOCK_SALE_QUANTITY);
+  assert.equal(verification.get("invalidMovementCount"), 0);
+  // The chain the first run wrote was recomputed by the second and agreed. If the
+  // two modules ever derived that hash differently this is false and the product
+  // is reported as a broken chain rather than as a stock difference.
+  assert.equal(verification.get("checkpointChainValid"), true);
+  assert.equal(verification.get("mutatesStock"), false);
+  assert.equal(
+    (await stockCheckpoint(fixture, rerun.jobId, fixture.productId)).exists,
+    false,
+    "an incremental run must checkpoint nothing",
+  );
+
+  // The state now resumes from the movement itself rather than from the baseline,
+  // and still names the checkpoint the only run that wrote one left behind.
+  const state = await stockState(fixture, fixture.productId);
+  assert.equal(state.get("status"), "variance");
+  assert.equal(state.get("expectedQuantity"), expectedQuantity);
+  assert.equal(state.get("lastVariance"), STOCK_SALE_QUANTITY);
+  assert.equal(state.get("lastVerificationHadVariance"), true);
+  assert.equal(state.get("lastMovementId"), "sale_sale-stock");
+  assert.equal(state.get("checkpointChainValid"), true);
+  assert.equal(
+    state.get("lastCheckpointHash"),
+    baselineHashes.get(fixture.productId),
+  );
+
+  // And the difference is listed where the app reads unresolved ones from, with
+  // the figures the ledger and the product actually differ by.
+  const anomalies = await listProductAnomalies(fixture, fixture.productId);
+  assert.equal(anomalies.length, 1);
+  assert.equal(anomalies[0].get("anomalyType"), "stock_variance");
+  assert.equal(anomalies[0].get("expectedQuantity"), expectedQuantity);
+  assert.equal(anomalies[0].get("observedQuantity"), SEEDED_PRODUCT_QUANTITY);
+  assert.equal(anomalies[0].get("variance"), STOCK_SALE_QUANTITY);
+  assert.equal(anomalies[0].get("jobId"), rerun.jobId);
+  // Reconciliation reports a stock difference; correcting one is a stock
+  // adjustment made from the product, and nothing here may move a quantity.
+  assert.equal(anomalies[0].get("mutatesStock"), false);
+  assert.equal(
+    (await firestore
+      .doc(`tenants/${fixture.tenantId}/products/${fixture.productId}`)
+      .get()).get("quantity"),
+    SEEDED_PRODUCT_QUANTITY,
+    "the run must not have moved the stock it disagreed with",
+  );
+
+  // The product no sale named agreed with its ledger and produced no record.
+  const untouched = await stockVerification(
+    fixture,
+    rerun.jobId,
+    fixture.untouchedProductId,
+  );
+  assert.equal(untouched.get("status"), "matched");
+  assert.equal(untouched.get("expectedQuantity"), SEEDED_PRODUCT_QUANTITY);
+  assert.equal(untouched.get("variance"), 0);
+  assert.equal(untouched.get("checkpointChainValid"), true);
+  assert.equal(
+    (await listProductAnomalies(fixture, fixture.untouchedProductId)).length,
+    0,
+  );
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
@@ -614,6 +865,15 @@ async function seedTenant(suffix, options = {}) {
   const shiftId = `shift-${suffix}`;
   const now = Timestamp.now();
   const businessDate = businessDateFor(now.toDate());
+  // A product the stock phase is allowed to compare rather than defer, and a
+  // second one no sale ever names. See `SETTLED_PRODUCT_AGE_MILLISECONDS` for why
+  // the first matters; the second is there so that a phase reporting a difference
+  // for everything is distinguishable from one reporting it only where there is
+  // one to report.
+  const settled = options.settledStock === true;
+  const productUpdatedAt = settled ?
+    Timestamp.fromMillis(now.toMillis() - SETTLED_PRODUCT_AGE_MILLISECONDS) : now;
+  const untouchedProductId = settled ? `untouched-${suffix}` : undefined;
   const batch = firestore.batch();
   batch.set(firestore.doc(`tenants/${tenantId}`), {
     tenantId,
@@ -625,16 +885,18 @@ async function seedTenant(suffix, options = {}) {
     createdAt: now,
     updatedAt: now,
   });
-  batch.set(firestore.doc(`tenants/${tenantId}/products/${productId}`), {
-    productId,
-    tenantId,
-    name: `Product ${suffix}`,
-    priceMinor: 15_000,
-    price: 150,
-    quantity: 100,
-    createdAt: now,
-    updatedAt: now,
-  });
+  for (const id of [productId, ...(untouchedProductId ? [untouchedProductId] : [])]) {
+    batch.set(firestore.doc(`tenants/${tenantId}/products/${id}`), {
+      productId: id,
+      tenantId,
+      name: `Product ${id}`,
+      priceMinor: 15_000,
+      price: 150,
+      quantity: SEEDED_PRODUCT_QUANTITY,
+      createdAt: now,
+      updatedAt: productUpdatedAt,
+    });
+  }
   if (options.closedShift) {
     batch.set(firestore.doc(`tenants/${tenantId}/shifts/${shiftId}`), {
       shiftId,
@@ -655,7 +917,7 @@ async function seedTenant(suffix, options = {}) {
     });
   }
   await batch.commit();
-  return { tenantId, productId, shiftId, businessDate };
+  return { tenantId, productId, untouchedProductId, shiftId, businessDate };
 }
 
 /**
@@ -677,13 +939,14 @@ function closedShiftSummary({ totalSalesMinor, transactionCount }) {
 /**
  * An administrator of the seeded business, able to sign in and be authorized.
  *
- * `amendShiftSummary` admits owners and administrators only - deliberately
- * narrower than the owner/admin/manager set that *reads* the difference it
- * resolves. The seeded role is `admin` because an `owner` staff record must also
- * be named by the tenant's `ownerUid`, and these fixtures are owned by a uid
- * with no Auth account; the authorization path is otherwise identical.
+ * `amendShiftSummary` and `requestTenantReconciliation` both admit owners and
+ * administrators only - deliberately narrower, in the amendment's case, than the
+ * owner/admin/manager set that *reads* the difference it resolves. The seeded role
+ * is `admin` because an `owner` staff record must also be named by the tenant's
+ * `ownerUid`, and these fixtures are owned by a uid with no Auth account; the
+ * authorization path is otherwise identical.
  */
-async function seedAmendmentActor(fixture) {
+async function seedAdministrator(fixture) {
   const uid = `admin-${fixture.tenantId}`;
   const email = `${uid}@integration.example.test`;
   const now = Timestamp.now();
@@ -893,13 +1156,18 @@ async function waitForVerifiedExpectation(fixture, t) {
 }
 
 /** The job the sale enqueued, once nothing further will rewrite its counters. */
-async function waitForCompletedJob(fixture, jobId, t) {
+async function waitForCompletedJob(
+  fixture,
+  jobId,
+  t,
+  timeoutMilliseconds = PIPELINE_TIMEOUT_MILLISECONDS,
+) {
   return waitFor(async () => {
     const job = await firestore
       .doc(`tenants/${fixture.tenantId}/reconciliation_jobs/${jobId}`)
       .get();
     return job.get("status") === "completed" ? job : undefined;
-  }, `reconciliation job ${jobId} to complete`, t, PIPELINE_TIMEOUT_MILLISECONDS);
+  }, `reconciliation job ${jobId} to complete`, t, timeoutMilliseconds);
 }
 
 /** Every difference currently listed against one shift. */
@@ -909,6 +1177,45 @@ async function listShiftAnomalies(fixture) {
     .where("shiftId", "==", fixture.shiftId)
     .get();
   return snapshot.docs;
+}
+
+/** Every difference currently listed against one product. */
+async function listProductAnomalies(fixture, productId) {
+  const snapshot = await firestore
+    .collection(`tenants/${fixture.tenantId}/reconciliation_anomalies`)
+    .where("productId", "==", productId)
+    .get();
+  return snapshot.docs;
+}
+
+/** The carried state one product's stock comparison resumes from. */
+function stockState(fixture, productId) {
+  return firestore
+    .doc(`tenants/${fixture.tenantId}/stock_reconciliation_state/${productId}`)
+    .get();
+}
+
+/** What one run concluded about one product. */
+function stockVerification(fixture, jobId, productId) {
+  return firestore
+    .doc(`tenants/${fixture.tenantId}/stock_verifications/${jobId}` +
+      `/products/${productId}`)
+    .get();
+}
+
+/**
+ * The tamper-evident record one run left for one product.
+ *
+ * Written only by a run whose `checkpointKind` is not `none`, which for a manual
+ * job means `full`. Its hash is deliberately never recomputed here: a test that
+ * derived it would agree with whichever module it copied, and the property worth
+ * proving is that the *next* run recomputes it and agrees.
+ */
+function stockCheckpoint(fixture, checkpointKey, productId) {
+  return firestore
+    .doc(`tenants/${fixture.tenantId}/stock_checkpoints/${checkpointKey}` +
+      `/products/${productId}`)
+    .get();
 }
 
 async function settle(milliseconds) {

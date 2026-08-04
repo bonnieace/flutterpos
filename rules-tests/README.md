@@ -413,13 +413,31 @@ cash is asserted **unchanged**, which is the one property that makes the
 correction path safe to expose at all. A repeated request returns the stored
 answer, and a fresh one is refused.
 
+One further test carries the runner into its **stock phase**, which no sale can
+reach: a sale-trigger job goes metrics then shifts, so the only way in is
+`requestTenantReconciliation`. It tells one story in two runs, because a variance
+is unreachable in a single one. A product with no carried state is *baselined*
+rather than compared, so the first run - a manual `full` one - records what it
+found and checkpoints it; a sale then moves the ledger while nothing moves the
+product; and a second, `incremental` run is the first comparison that can
+disagree. It asserts the baseline, the checkpoint at the root of its chain, the
+`stock_variance` difference with the figures the ledger and the product differ
+by, that the earlier checkpoint was recomputed and agreed with, that the product
+no sale named produced **no** record at all, and that the run moved no stock.
+
+Two details of that test are load-bearing and easy to lose. `reconcileProduct`
+defers any product written in the last five minutes, so the fixture seeds a
+settled `updatedAt` or the phase records `recent_write_deferred` and asserts
+nothing about stock. And the checkpoint hash is never recomputed by the test: the
+property worth proving is that the *next* run recomputes it and agrees.
+
 The fixture at `functions/reconciliation-integration/index.js` exports only the
-three entry points those tests reach. Exporting the whole index would pull in
+four entry points those tests reach. Exporting the whole index would pull in
 every `defineSecret`/`defineString` parameter in the codebase, and each one
 without a default makes the emulator stop and ask for a value at startup -
 which, with no terminal to answer, looks like a run that hangs forever after
 `Serving at port ...`. Check any addition's require closure against that before
-adding it. Because none of the three reaches such a parameter, this runner needs
+adding it. Because none of the four reaches such a parameter, this runner needs
 no `.secret.local` or `.env.local` at all, so a killed run leaves nothing behind
 to clean up.
 

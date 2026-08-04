@@ -12002,3 +12002,234 @@ files, and deployment.
   amendment path existed, and no test could have noticed.
 - Do not rewrite a source file with PowerShell unless the BOM is preserved
   explicitly. Check `git diff` for a changed first line afterwards.
+
+---
+
+## The stock half of the runner, entered for the first time - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **the reconciliation integration suite now enters the stock
+phase.** It had never been entered by any test, and it could not have been:
+`processStockPage` is unreachable from a sale.
+
+That is the finding, and it is the same shape as the one two handovers above.
+A sale-trigger job advances metrics then **shifts** - the runner's own
+`advanceReconciliationJob` chooses `job.source === "sale_trigger" ? "shifts" :
+"stock"` - so every sale this suite has ever written skipped the phase entirely.
+The file even said so in a comment, used as a reason an absent `productCursor`
+was a stable fact. The only entry point that starts a job whose phases include
+stock is `requestTenantReconciliation`, which is why the fixture now exports it.
+
+### Why it takes two runs, and why that is not a workaround
+
+A product with no carried `stock_reconciliation_state` is **baselined**, not
+compared: the run records what it found as the truth to measure the next one
+against, sets `expectedQuantity = observedQuantity`, and writes
+`baseline_established`. So a stock variance is unreachable in a single run *by
+construction*, and a test that expected one from a first run would be asserting
+something the design forbids.
+
+The test therefore tells one story in two runs:
+
+1. A manual **`full`** run baselines both seeded products and checkpoints what it
+   read. `full` is what makes `checkpointKind` `manual` rather than `none`, so it
+   is the only manual mode that writes a `stock_checkpoints` record at all.
+2. A sale files three units against one product. The trigger writes the ledger
+   movement and deliberately nothing else - the till is what decrements a product
+   - so this is the state left behind when that never happened.
+3. A manual **`incremental`** run is the first comparison that can disagree. It
+   finds the ledger accounting for three fewer than the product holds and records
+   the `stock_variance`.
+
+Decisions worth recording:
+
+- **The second run is `incremental` on purpose, and it is the sharper of the
+  two.** It takes no checkpoint of its own, so it has to read the earlier
+  checkpoint, recompute its hash, and agree with it while writing nothing that
+  could paper over a disagreement. `checkpointChainValid: true` on a run that
+  wrote no checkpoint is the chain actually being verified. The test also asserts
+  that run wrote **no** checkpoint document.
+- **The checkpoint hash is never recomputed by the test.** `stockCheckpointHash`
+  is one function in one module; a test that derived the hash would agree with
+  whatever it copied. What is asserted instead is that the *next* run recomputed
+  it and agreed, and that the carried state points at the exact checkpoint path
+  the earlier run wrote. Same reasoning as the shift anomaly being found by query
+  rather than by digest.
+- **Two products, one sale.** The product no sale named is asserted `matched`
+  with no listed difference, and the job's `stockVarianceCount` is asserted to be
+  exactly 1 of 2 products processed. A phase that reported a difference for
+  everything would be as broken as one that reported none, and only a second
+  product makes both observable in one run.
+- **The stock the run disagreed with is asserted unmoved.** `mutatesStock: false`
+  is on the job, the verification, and the anomaly, and the product's `quantity`
+  is re-read and asserted unchanged. Reconciliation reports a stock difference;
+  correcting one is a stock adjustment made from the product.
+- **The fixture export needed no closure check.**
+  `requestTenantReconciliation` lives in the same `reconciliation/handlers`
+  module the task worker already comes from, so exporting it loads nothing that
+  was not already loaded and cannot reach a new `defineSecret` parameter. That is
+  recorded in the fixture beside the rule it satisfies.
+
+### The guard that would have made the whole test vacuous
+
+`reconcileProduct` defers any product whose `updatedAt` is inside the last five
+minutes and records `recent_write_deferred` instead of comparing it. It exists so
+a sale's own product decrement is not read as a variance during the window before
+its movement lands.
+
+Every fixture in this file seeded `updatedAt: now`, which is inside that window.
+**The stock phase would have run, deferred both products, and asserted nothing
+about stock** - a green test proving only that the phase can decline to answer.
+The fixture now seeds a settled product ten minutes in the past behind an
+explicit `settledStock` option, with the reason written at the constant.
+
+Confirmed by mutating the fixture back to `updatedAt: now`: the test fails with
+`recent_write_deferred` where it expects `baseline_established`.
+
+### Files in this chunk
+
+```text
+PLAN.md
+functions/reconciliation-integration/index.js
+rules-tests/README.md
+rules-tests/test/sale-reconciliation.integration.test.js
+```
+
+No `functions/src`, Rules, index, or Dart change. No production code changed at
+all: the new test exercises code that was already shipped and already
+unit-tested, and what it adds is the first evidence that the phase does what the
+pure tests say when a real Firestore, a real task queue, and a real callable are
+involved.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **8/8**, up from 7, adding **1** |
+| the same with the fixture's product seeded inside the deferral window | the new test fails with `recent_write_deferred`, as it must |
+| `npm --prefix functions test` | **206/206** |
+| `npm --prefix rules-tests run test:emulator` | **139/139** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1185/1185**, unchanged - no Dart was touched |
+| `git diff --check` | clean |
+
+During development the new test was run alone with
+`INTEGRATION_TEST_NAME_PATTERN='baselines stock'`, which matches only its name.
+
+Measured cost of the new test: **15.9 seconds** inside a warm suite, of which the
+`full` run's eleven task dispatches were about 13 seconds cold and under a second
+warm. The reconciliation suite as a whole is now **56 seconds**. The
+`MANUAL_RUN_TIMEOUT_MILLISECONDS` bound of 180 seconds is set well above that on
+purpose: like every bound in this file it exists so a run that never advances
+fails saying what it was waiting for, and the diagnostic line still reports the
+time actually taken.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` over the 10 in-scope paths | 1185 |
+| `npm --prefix functions test` | 206 |
+| `npm --prefix rules-tests run test:emulator` | 139 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 8 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1550 tests across five suites**, up from 1539 at the start of the session,
+adding **11** across the two chunks. Nothing was left failing and no suite was
+skipped except the Android build and the Android emulator runs.
+
+### Meaningful failures and their resolutions
+
+- **The emulator refused to start**: `firebase-tools no longer supports Java
+  version before 21`. The machine's default `java` is older; this workspace's
+  portable Temurin JDK 21 and Node 24 live under `D:\firebase-emulator-tools`.
+  Every emulator command in this session was run with `JAVA_HOME` and `PATH`
+  pointed at them, which is what earlier handovers meant by "the pinned Node
+  24/JDK 21 environment". The exact prelude is recorded below.
+- **`npm --prefix rules-tests` failed with ENOENT on
+  `rules-tests/rules-tests/package.json`.** The Bash and PowerShell tools share
+  one working directory, and an earlier `cd rules-tests` had persisted into it.
+  Set the location explicitly at the start of an emulator command.
+- No assertion in the shipped code failed. The new test passed on its first
+  focused run.
+
+### The pinned emulator environment on this workstation
+
+```powershell
+Set-Location 'd:\flutterpos'
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:JAVA_HOME\bin;$env:Path"
+$env:DEBUG = ''
+```
+
+`DEBUG` is cleared because this machine sets `DEBUG=release`, and the Firebase
+CLI treats any non-empty value as debug mode and then prints complete
+environments and expected-denial traces.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**A `shiftId`-narrowed entry point from the differences list**, the mirror of the
+one shift history got in this session's first chunk. The differences list already
+holds a `shift_variance` row that names one shift, and its "View shift
+corrections already made" button opens the whole business's trail unnarrowed -
+so an operator who has just corrected the shift in front of them has to read down
+a business-wide list to find the record of what they did.
+
+1. `openTenantShiftAmendments` already takes a `shiftId`; nothing on that surface
+   passes one. The row's `anomaly.shiftId` is already proved non-null by the read
+   model before the correction is offered.
+2. Offer it per row rather than replacing the page-level button: the page-level
+   one is the right thing for a list covering several shifts, and the narrowed
+   one answers a different question.
+3. After a correction succeeds, the row is gone - the difference is deleted - so
+   the notice that names the new `shift_amendments` ID is the only place the
+   narrowed trail can be reached from at that moment. Decide deliberately whether
+   the notice should carry that link, and say which way and why.
+4. Cover the row offering the narrowed trail, the trail opening with that exact
+   `shiftId`, a row of another kind offering nothing, and a manager who may read
+   the trail but not correct anything still reaching it.
+
+Then, in preference order:
+
+- **The landing screen's `Center` inside `SingleChildScrollView`.** Still a
+  look-and-feel decision about the whole safe landing route rather than a defect,
+  and it still wants a deliberate answer rather than a quiet edit. Ask first.
+- **A stock difference the stock phase found, reached from the product it belongs
+  to.** The runner now proves the `stock_variance` record exists with real
+  figures; the product stock surface is where somebody would answer for it, and
+  nothing there mentions that a difference is listed.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **A phase can only be tested from a job whose mode reaches it.** Two chunks in
+  a row have now found a phase that ran on every sale and concluded nothing, or
+  that no sale could reach at all. Before asserting a phase's output, check which
+  `source` and `mode` actually advance into it.
+- **A first run of anything that carries state establishes a baseline.** Stock,
+  and anything modelled on it, cannot report a difference until there is a stored
+  expectation to differ from. Two runs are the minimum, and that is the design
+  rather than a limitation of the harness.
+- `reconcileProduct` defers a product written in the last five minutes. Any stock
+  fixture has to seed a settled `updatedAt` or it tests the deferral instead.

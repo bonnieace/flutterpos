@@ -15,12 +15,21 @@ if (getApps().length === 0) initializeApp();
 // one of them reaches `firebase-functions/params`. Anything added later must be
 // checked the same way: follow its `require` calls in `functions/lib` until they
 // close, and confirm none of them reaches that module.
+//
+// `requestTenantReconciliation` needed no closure check at all: it lives in the
+// same `reconciliation/handlers` module the task worker already comes from, so
+// exporting it loads nothing that was not already loaded. It is the only entry
+// point that starts a job whose phases include stock - a sale-trigger job goes
+// metrics then shifts and never enters that phase - so without it the stock half
+// of the runner is unreachable from this harness.
 const {
   mergeSaleReconciliationJob,
+  requestTenantReconciliation,
   runTenantReconciliationTask,
 } = require("./lib/reconciliation/handlers");
 const { amendShiftSummary } = require("./lib/reconciliation/amendments");
 
 exports.mergeSaleReconciliationJob = mergeSaleReconciliationJob;
+exports.requestTenantReconciliation = requestTenantReconciliation;
 exports.runTenantReconciliationTask = runTenantReconciliationTask;
 exports.amendShiftSummary = amendShiftSummary;
