@@ -503,6 +503,10 @@ async function reconcileProduct(
     } else if (previousCheckpointHash || previousCheckpointPath) {
       chainValid = false;
     }
+    // An unreadable movement invalidates the chain's guarantee: no checkpoint can
+    // claim to describe a ledger part of which could not be read. The difference
+    // recorded below therefore has to name the movement rather than the chain -
+    // see the comment on `anomalyType`.
     if (cumulativeInvalidMovementCount > 0) chainValid = false;
     const shouldCheckpoint = job.checkpointKind !== "none";
     const checkpointHash = shouldCheckpoint ? stockCheckpointHash({
@@ -607,8 +611,15 @@ async function reconcileProduct(
         tenantId: job.tenantId,
         productId,
         jobId: job.jobId,
-        anomalyType: !chainValid ? "checkpoint_chain_invalid" :
-          cumulativeInvalidMovementCount > 0 ? "invalid_stock_movement" : "stock_variance",
+        // The most specific cause first. An unreadable movement always
+        // invalidates the chain, so testing the chain first made
+        // `invalid_stock_movement` unreachable and reported every unreadable
+        // ledger entry as a broken checkpoint chain - a different and more
+        // alarming finding, pointing an operator at the wrong evidence. The
+        // chain's own verdict is not lost: `checkpointChainValid` is recorded
+        // on the verification and the carried state either way.
+        anomalyType: cumulativeInvalidMovementCount > 0 ? "invalid_stock_movement" :
+          !chainValid ? "checkpoint_chain_invalid" : "stock_variance",
         expectedQuantity,
         observedQuantity,
         variance,

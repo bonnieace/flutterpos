@@ -12622,3 +12622,204 @@ files, and deployment.
   the first and one the second.
 - `Select-Object -First N` terminates the command upstream of it in PowerShell.
   Do not use it to trim a test run's output; capture with `Out-String` first.
+
+---
+
+## The kind that could never be recorded - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **the stock phase's other two outcomes, against a real server.**
+Writing the test found that one of them was unreachable, and that is the result -
+a fix worth more than the coverage that produced it.
+
+### `invalid_stock_movement` had never been written and could not be
+
+`reconcileProduct` chose the difference's kind like this:
+
+```ts
+anomalyType: !chainValid ? "checkpoint_chain_invalid" :
+  cumulativeInvalidMovementCount > 0 ? "invalid_stock_movement" : "stock_variance",
+```
+
+Twelve lines above it: `if (cumulativeInvalidMovementCount > 0) chainValid = false;`
+
+So the second branch required `chainValid && cumulativeInvalidMovementCount > 0`,
+which the line above made impossible. **Every unreadable ledger entry was
+reported as a broken checkpoint chain** - a different and more alarming finding
+that points an operator at the wrong evidence entirely: at a tamper-evident chain
+of checks rather than at the one ledger row that could not be read.
+
+The string appeared exactly once in `functions/src`, in that expression, and
+nowhere in any test. `processors.ts` has no unit-test file at all - `amendment`,
+`jobs`, and `model` each have one - so the integration suite is its only coverage,
+which is why a dead branch survived there and not elsewhere.
+
+Confirmed empirically **before** changing anything: the new test failed with
+`actual: 'checkpoint_chain_invalid', expected: 'invalid_stock_movement'` against a
+real server, and passed after the reorder.
+
+### The fix, and what it deliberately does not change
+
+The most specific cause is now tested first:
+
+```ts
+anomalyType: cumulativeInvalidMovementCount > 0 ? "invalid_stock_movement" :
+  !chainValid ? "checkpoint_chain_invalid" : "stock_variance",
+```
+
+- **`chainValid` is still set false by an unreadable movement.** That is correct
+  and was never the bug: no checkpoint can claim to describe a ledger part of
+  which could not be read. The comment there now says why the kind must
+  nevertheless name the movement.
+- **The chain's verdict is not lost.** `checkpointChainValid: false` is recorded on
+  the verification record and the carried state either way, and the new test
+  asserts it on the unreadable-movement product.
+- **No client change was needed.** Both kinds were already modelled, and the
+  product stock surface built earlier in this session already words them
+  differently - "the ledger entry is what needs looking at" against "not a
+  quantity disagreement". That wording was written for a kind that could not
+  occur; it can now.
+
+### Two products, one run, so the distinction is what is observed
+
+The test engineers both outcomes in the same run on different products, so the
+phase telling them apart is the property under test rather than an assumption:
+
+- One product's ledger gains a movement whose `quantityDelta` is a string, with a
+  real `recordedAt` so the cursor still advances past it. That makes the count of
+  unreadable movements exactly one, which the test asserts.
+- The other product's checkpoint from the first run is corrupted by changing its
+  `expectedQuantity` so its stored hash no longer describes its contents. The hash
+  itself is left alone: this is the next run recomputing it and disagreeing, not
+  the test asserting a digest.
+
+Neither product's quantity changed, so both records carry `variance: 0` and exist
+only because the comparison could not be trusted. The test asserts `variance ==
+observedQuantity - expectedQuantity` on both, which is the identity the Dart read
+model refuses a record for breaking, so these two server-written shapes are known
+to be decodable by the surfaces that render them.
+
+### One thing observed and deliberately left alone
+
+The corrupted-chain product's verification record has `status: "matched"` while
+`checkpointChainValid` is `false`. The status describes the quantity comparison,
+which did match, and the chain has its own field - but "matched" for a product
+whose chain does not verify reads wrong at a glance. Nothing in the app renders
+that field today, and changing what `status` means is a second decision rather
+than part of this chunk. It is recorded as the next chunk's first question.
+
+### Files in this chunk
+
+```text
+PLAN.md
+functions/src/reconciliation/processors.ts
+rules-tests/test/sale-reconciliation.integration.test.js
+```
+
+No Rules, index, or Dart change. Nothing needed a device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix functions run build` | clean |
+| `npm --prefix functions test` | **206/206** |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **9/9**, up from 8, adding **1** |
+| the same before the reorder | the new test fails naming `checkpoint_chain_invalid`, as it must |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12**, re-run because it shares the rebuilt `functions/lib` |
+| `npm --prefix rules-tests run test:emulator` | **140/140** |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/reporting test/inventory` | **374/374**, the two suites that render these two kinds |
+| `git diff --check` | clean |
+
+The whole reconciliation integration suite now takes **68 seconds** for nine
+tests. During development the new test was run alone with
+`INTEGRATION_TEST_NAME_PATTERN='unreadable ledger entry'`.
+
+### Meaningful failures and their resolutions
+
+- **The intended failure**: the first run of the new test reported
+  `checkpoint_chain_invalid` where `invalid_stock_movement` was expected. That was
+  the defect, not the test, and it is the only reason this chunk changed
+  production code.
+- No other assertion failed. The corrupted-checkpoint half of the test passed on
+  its first run.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` over the 10 in-scope paths | 1197 |
+| `npm --prefix functions test` | 206 |
+| `npm --prefix rules-tests run test:emulator` | 140 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 9 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1564 tests across five suites**, up from 1539 at the start of the session,
+adding **25** across five chunks. Nothing was left failing and no suite was
+skipped except the Android build and the Android emulator runs.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**What a stock verification's `status` should say when the chain does not
+verify**, and the unit-test file `processors.ts` has never had.
+
+1. Decide whether `status: "matched"` beside `checkpointChainValid: false` is
+   right. The argument for it is that the field describes the quantity
+   comparison, which did match. The argument against is that nothing else in this
+   codebase reports a check as passed while recording that its own evidence could
+   not be trusted, and the moment any surface renders the field the reading
+   becomes wrong. Whichever way it goes, write the reason down: this is the
+   second such question in `reconcileProduct` in one session.
+2. Add `functions/src/reconciliation/processors.test.ts`. It is the only module in
+   that directory without one, and it is the module where a dead branch survived
+   for as long as it existed. The kind-selection expression is a pure decision
+   over three inputs - the invalid-movement count, the chain verdict, and the
+   variance - and is worth pinning as a unit even though the integration suite now
+   covers all three outcomes.
+3. Do not restructure `reconcileProduct` to make it testable. Extract only the
+   decision the tests need, if anything, and leave the transaction alone.
+
+Then, in preference order:
+
+- **The landing screen's `Center` inside `SingleChildScrollView`.** Still a
+  look-and-feel decision about the whole safe landing route rather than a defect,
+  and it still wants a deliberate answer rather than a quiet edit. Ask first.
+- **`invalid_product_quantity` against a real server.** The fourth thing the stock
+  phase can conclude, and the only one now without end-to-end evidence: a product
+  whose `quantity` is not a whole number. The product stock surface already words
+  it.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **A branch guarded by a condition another line has already forced is dead, and
+  reads as live.** Two lines twelve apart did that here. When a kind, status, or
+  reason is chosen by a chain of ternaries, check every earlier assignment to the
+  values it tests.
+- **Order a cause chain most-specific first.** A generic condition that a specific
+  one implies will mask it forever, and the symptom is a plausible-looking
+  diagnosis pointing at the wrong evidence.
+- The module in a directory with no test file is the one to be suspicious of.
+  `processors.ts` is the largest file in `functions/src/reconciliation` and the
+  only one without a unit test.

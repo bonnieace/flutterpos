@@ -830,6 +830,145 @@ test("a full run baselines stock, and a later run reports what a sale moved", as
   );
 });
 
+test("the stock phase tells an unreadable ledger entry from a broken chain", async (t) => {
+  // The stock phase can conclude three things, and the test above proves one of
+  // them. These are the other two, and they are asserted in the same run on two
+  // different products so that the phase distinguishing them is the thing being
+  // observed rather than assumed.
+  //
+  // Neither is a quantity disagreement: both products still hold exactly what
+  // they held, and the difference recorded against each says the comparison
+  // itself could not be trusted. That is why the two kinds have to be told apart
+  // - an adjustment resolves neither, and they point at different evidence.
+  const fixture = await seedTenant("stock-untrusted", { settledStock: true });
+  const actor = await seedAdministrator(fixture);
+  const idToken = await signIn(actor.email);
+
+  const baseline = await callFunction("requestTenantReconciliation", idToken, {
+    tenantId: fixture.tenantId,
+    mode: "full",
+    requestId: "stock-untrusted-emulator-1",
+  });
+  await waitForCompletedJob(
+    fixture,
+    baseline.jobId,
+    t,
+    MANUAL_RUN_TIMEOUT_MILLISECONDS,
+  );
+
+  // One product's ledger gains an entry the phase cannot read. `recordedAt` is a
+  // real instant so the cursor still advances past it: the only thing wrong is
+  // the quantity, which makes the count of unreadable movements exactly one.
+  await firestore
+    .doc(`tenants/${fixture.tenantId}/products/${fixture.productId}` +
+      "/stock_movements/mv_unreadable")
+    .create({
+      movementId: "mv_unreadable",
+      tenantId: fixture.tenantId,
+      productId: fixture.productId,
+      sourceType: "sale",
+      sourceId: "sale-unreadable",
+      quantityDelta: "three",
+      lineCount: 1,
+      recordedAt: Timestamp.now(),
+      createdAt: Timestamp.now(),
+    });
+
+  // The other product's checkpoint is corrupted: its stored hash no longer
+  // describes its own contents, which is exactly what the chain exists to detect.
+  // The hash itself is left alone, so this is the next run recomputing it and
+  // disagreeing rather than the test asserting any particular digest.
+  const corrupted = await stockCheckpoint(
+    fixture,
+    baseline.jobId,
+    fixture.untouchedProductId,
+  );
+  await corrupted.ref.update({
+    expectedQuantity: SEEDED_PRODUCT_QUANTITY + 50,
+  });
+
+  const rerun = await callFunction("requestTenantReconciliation", idToken, {
+    tenantId: fixture.tenantId,
+    mode: "incremental",
+    requestId: "stock-untrusted-emulator-2",
+  });
+  const job = await waitForCompletedJob(
+    fixture,
+    rerun.jobId,
+    t,
+    MANUAL_RUN_TIMEOUT_MILLISECONDS,
+  );
+  assert.equal(job.get("productsProcessed"), 2);
+  assert.equal(job.get("stockVarianceCount"), 2, "both products are untrusted");
+  assert.equal(job.get("mutatesStock"), false);
+
+  // The unreadable ledger entry. The specific cause is what is reported, not the
+  // broken chain it also causes: an unreadable movement always invalidates the
+  // chain, so a run that named the chain here would never name this at all.
+  const unreadable = await stockVerification(
+    fixture,
+    rerun.jobId,
+    fixture.productId,
+  );
+  assert.equal(unreadable.get("status"), "invalid_movements");
+  assert.equal(unreadable.get("invalidMovementCount"), 1);
+  assert.equal(unreadable.get("checkpointChainValid"), false);
+  // The entry moved nothing, so the expected quantity is what the readable
+  // movements account for and the product still holds it.
+  assert.equal(unreadable.get("expectedQuantity"), SEEDED_PRODUCT_QUANTITY);
+  assert.equal(unreadable.get("observedQuantity"), SEEDED_PRODUCT_QUANTITY);
+  assert.equal(unreadable.get("variance"), 0);
+  assert.equal(unreadable.get("mutatesStock"), false);
+
+  const ledgerAnomalies = await listProductAnomalies(fixture, fixture.productId);
+  assert.equal(ledgerAnomalies.length, 1);
+  assert.equal(ledgerAnomalies[0].get("anomalyType"), "invalid_stock_movement");
+  assert.equal(ledgerAnomalies[0].get("variance"), 0);
+  assert.equal(ledgerAnomalies[0].get("mutatesStock"), false);
+
+  // The corrupted checkpoint. Nothing was unreadable here, so the chain is the
+  // only remaining reason a difference was recorded at all.
+  const broken = await stockVerification(
+    fixture,
+    rerun.jobId,
+    fixture.untouchedProductId,
+  );
+  assert.equal(broken.get("invalidMovementCount"), 0);
+  assert.equal(broken.get("checkpointChainValid"), false);
+  assert.equal(broken.get("variance"), 0);
+
+  const chainAnomalies = await listProductAnomalies(
+    fixture,
+    fixture.untouchedProductId,
+  );
+  assert.equal(chainAnomalies.length, 1);
+  assert.equal(
+    chainAnomalies[0].get("anomalyType"),
+    "checkpoint_chain_invalid",
+  );
+  assert.equal(chainAnomalies[0].get("mutatesStock"), false);
+
+  // Every figure a client renders for these two records is present, and the
+  // variance is exactly observed minus expected on both - the identity the Dart
+  // read model refuses a record for breaking.
+  for (const anomaly of [ledgerAnomalies[0], chainAnomalies[0]]) {
+    assert.equal(
+      anomaly.get("variance"),
+      anomaly.get("observedQuantity") - anomaly.get("expectedQuantity"),
+    );
+  }
+
+  // And nothing moved the stock either record disagreed about.
+  for (const productId of [fixture.productId, fixture.untouchedProductId]) {
+    assert.equal(
+      (await firestore
+        .doc(`tenants/${fixture.tenantId}/products/${productId}`)
+        .get()).get("quantity"),
+      SEEDED_PRODUCT_QUANTITY,
+    );
+  }
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
