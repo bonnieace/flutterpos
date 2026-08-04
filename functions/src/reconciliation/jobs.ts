@@ -10,6 +10,7 @@ import {
 } from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v2/https";
 import {
+  DirtyJobDecision,
   DirtyJobInput,
   fiveMinuteBucket,
   isoWeekKey,
@@ -287,6 +288,83 @@ function saleMovements(items: unknown): {movements: SaleMovement[]; invalidLineC
  * Merges the dirty date and five-minute job with deterministic sale movements.
  * Replays overwrite only the trigger-owned deterministic movement documents.
  */
+export interface SaleTriggerJobFields {
+  /**
+   * Written when no job exists for this five-minute bucket yet.
+   *
+   * It must never contain a `FieldValue.delete()` sentinel. Firestore rejects
+   * one outright in `create()` and in `set()` without `{merge: true}`, and a
+   * brand-new job has no cursor to clear in the first place.
+   */
+  create: DocumentData;
+
+  /** Written when one does. This is the only branch that may clear a cursor. */
+  update: DocumentData;
+}
+
+/**
+ * The two payloads the sale trigger writes for a bucket's reconciliation job.
+ *
+ * They are built together and returned separately because they are **not** the
+ * same document. Sharing one object between the create and the update is what
+ * broke this trigger for every first sale of a bucket: the requeue branch clears
+ * `productCursor` and `pendingProductId` with `FieldValue.delete()`, which is
+ * legal in `update()` and rejected in `create()`. The failure surfaced only
+ * against a real Firestore, because a sentinel is an ordinary object until the
+ * write is serialized.
+ */
+export function saleTriggerJobFields(input: {
+  tenantId: string;
+  bucket: number;
+  businessDate: string;
+  decision: DirtyJobDecision;
+}): SaleTriggerJobFields {
+  const {decision} = input;
+  const common: DocumentData = {
+    tenantId: input.tenantId,
+    source: "sale_trigger",
+    sourceKey: `${input.bucket}`,
+    mode: "incremental",
+    checkpointKind: "none",
+    checkpointKey: `${input.bucket}`,
+    localDate: input.businessDate,
+    requestedBy: "system:sale_trigger",
+    status: decision.status,
+    phase: decision.phase,
+    generation: decision.generation,
+    revision: decision.revision,
+    rerunRequested: decision.rerunRequested,
+    fullInitialized: true,
+    nextAttemptAt: Timestamp.now(),
+    authority: "canonical_tenant_data",
+    mutatesStock: false,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  return {
+    create: {
+      ...common,
+      attemptCount: 0,
+      consecutiveFailureCount: 0,
+      metricsProcessed: 0,
+      productsProcessed: 0,
+      stockVarianceCount: 0,
+      shiftsProcessed: 0,
+      shiftVarianceCount: 0,
+      createdAt: FieldValue.serverTimestamp(),
+    },
+    update: {
+      ...common,
+      // A job returning to `queued` starts its phases again, so any cursor a
+      // previous pass left behind describes work this pass has not done.
+      ...(decision.status === "queued" ? {
+        productCursor: FieldValue.delete(),
+        pendingProductId: FieldValue.delete(),
+        consecutiveFailureCount: 0,
+      } : {}),
+    },
+  };
+}
+
 export async function registerSaleReceipt(
   db: Firestore,
   input: {
@@ -356,45 +434,16 @@ export async function registerSaleReceipt(
     if (!dirtySnapshot.exists) dirtyData.createdAt = FieldValue.serverTimestamp();
     transaction.set(dirtyRef, dirtyData, {merge: true});
 
-    const commonJobData = {
+    const jobFields = saleTriggerJobFields({
       tenantId: input.tenantId,
-      source: "sale_trigger",
-      sourceKey: `${bucket}`,
-      mode: "incremental",
-      checkpointKind: "none",
-      checkpointKey: `${bucket}`,
-      localDate: input.businessDate,
-      requestedBy: "system:sale_trigger",
-      status: decision.status,
-      phase: decision.phase,
-      generation: decision.generation,
-      revision: decision.revision,
-      rerunRequested: decision.rerunRequested,
-      fullInitialized: true,
-      nextAttemptAt: Timestamp.now(),
-      authority: "canonical_tenant_data",
-      mutatesStock: false,
-      updatedAt: FieldValue.serverTimestamp(),
-      ...(decision.status === "queued" ? {
-        productCursor: FieldValue.delete(),
-        pendingProductId: FieldValue.delete(),
-        consecutiveFailureCount: 0,
-      } : {}),
-    };
+      bucket,
+      businessDate: input.businessDate,
+      decision,
+    });
     if (jobSnapshot.exists) {
-      transaction.update(ref, commonJobData);
+      transaction.update(ref, jobFields.update);
     } else {
-      transaction.create(ref, {
-        ...commonJobData,
-        attemptCount: 0,
-        consecutiveFailureCount: 0,
-        metricsProcessed: 0,
-        productsProcessed: 0,
-        stockVarianceCount: 0,
-        shiftsProcessed: 0,
-        shiftVarianceCount: 0,
-        createdAt: FieldValue.serverTimestamp(),
-      });
+      transaction.create(ref, jobFields.create);
     }
 
     for (const movement of movements) {

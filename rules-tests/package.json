@@ -29,7 +29,8 @@
     "test:emulator:shift-amendments": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/shift-amendments.test.js\"",
     "test:emulator:invitations": "npm --prefix ../functions run build && node scripts/run-invitation-emulator-tests.js",
     "emulators:dev": "npm --prefix ../functions run build && node scripts/run-dev-emulators.js",
-    "seed:dev": "node scripts/seed-dev-emulator.js"
+    "seed:dev": "node scripts/seed-dev-emulator.js",
+    "plant:late-sale": "node scripts/plant-late-sale.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1",

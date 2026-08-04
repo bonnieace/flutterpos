@@ -250,24 +250,19 @@ class SpiritPOSApp extends StatelessWidget {
             cache: checkoutCatalogCache,
             reader: tenantDataReader,
           );
-          // Uncertain prior attempts are settled before any new batch commit.
-          // The derived catalog cache refreshes last; it never gates evidence.
+          // The order these run in is a tested contract, not a comment here.
+          final pass = CheckoutSyncPass(
+            recover: coordinator.recoverSelectedSession,
+            submit: submissionWorker.submitDueCheckouts,
+            refreshCatalog: catalogRefresher.refreshSelectedSession,
+            reportEvidenceChanged: checkoutSyncSignals.reportEvidenceChanged,
+          );
           return (trigger) async {
-            try {
-              await coordinator.recoverSelectedSession();
-              await submissionWorker.submitDueCheckouts();
-              // A sale saved at the till needs submitting; it does not need the
-              // whole product catalog re-read. Refreshing it here would make a
-              // till pay for every product in the business on every customer.
-              if (trigger is! CheckoutSaveSyncRequest) {
-                await catalogRefresher.refreshSelectedSession();
-              }
-            } finally {
-              // Whatever the run settled - or got part-way through before
-              // failing - is now worth re-reading. This is not a second sync
-              // request: a run must never ask for another run.
-              checkoutSyncSignals.reportEvidenceChanged();
-            }
+            // A sale saved at the till needs submitting and confirming; it does
+            // not need the whole product catalog re-read.
+            await pass.run(
+              refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
+            );
             return null;
           };
         },

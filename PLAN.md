@@ -10519,3 +10519,282 @@ $env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64
 - A test helper with default parameters cannot test an absent document, and a
   table of "invalid" inputs is worth re-reading: two entries in this session's
   first draft were valid.
+
+---
+
+## The first run that corrected a real shift - 2026-08-04
+
+### Completed in this session
+
+Candidate 1 of the chunk above. The Android exclusion was lifted at the user's
+request, so the app was driven end to end on an API 35 emulator against the
+local Firebase suite: sign in as the seeded owner, open a shift, ring up a sale,
+watch it reach Firestore, close the shift, plant a late-arriving sale, let
+reconciliation find the variance, and correct it from the differences list.
+
+**It found three defects. Two were severe and one of those means reconciliation
+has never worked at all.** All three are fixed here, each with a regression test
+that fails on the original code. No feature was added.
+
+The chunk is worth recording as vindication of its own premise: eleven sessions
+of test-driven work produced 1125 green Dart tests, 185 Functions tests, 139
+Rules tests and 12 integration tests, and one hour of use found a server bug that
+disabled an entire subsystem.
+
+### Defect 1: the sale trigger has never once succeeded
+
+`mergeSaleReconciliationJob` crashed on **every** sale:
+
+```text
+Error: Value for argument "data" is not a valid Firestore document.
+FieldValue.delete() must appear at the top-level and can only be used in
+update() or set() with {merge:true} (found in field "productCursor").
+  at functions/lib/reconciliation/jobs.js:189
+```
+
+- `registerSaleReceipt` built **one** `commonJobData` object and passed it to
+  `transaction.update` on one branch and `transaction.create` on the other. The
+  requeue half of it clears `productCursor` and `pendingProductId` with
+  `FieldValue.delete()`, which is legal in `update()` and rejected outright in
+  `create()`.
+- The create branch is the **first sale of every five-minute bucket**, and
+  `mergeDirtyJob(undefined)` always returns `queued`, so the sentinels were always
+  present and the write always threw. The trigger has `retry: true`, so it then
+  failed forever.
+- The consequence is not cosmetic. No `reconciliation_dirty_days` and no
+  `reconciliation_jobs` were ever written from a sale, so **no daily metric was
+  ever regenerated from sale activity and no stock or shift verification ever
+  ran**. The nightly sweep creates jobs through a different path and is
+  unaffected, but on this project nightly is a pub/sub schedule the emulator does
+  not run, so nothing reconciled anything until this was fixed.
+- **Why no test caught it.** A `FieldValue.delete()` is an ordinary object until
+  the write is serialized, so the payload compiles, type-checks, and inspects
+  fine. Only a real Firestore rejects it. Every one of the 185 Functions tests is
+  pure.
+- **The fix** extracts `saleTriggerJobFields`, which returns the create and
+  update payloads **separately** because they are not the same document. The
+  create payload cannot carry a sentinel because a brand-new job has no cursor to
+  clear. `jobs.test.ts` asserts that property over every decision status, and was
+  confirmed to fail (2 of 5 cases) when the sentinel is put back.
+
+### Defect 2: a shift could not be closed on the day it sold anything
+
+- A saved sale reached Firestore immediately - the previous chunk's fix works, and
+  this run is the proof by use - but the local outbox record stopped at
+  `awaiting_confirmation`, so the shift reported "1 sale on this device is not
+  synchronized yet" and **refused to close**. A restart fixed it, which is what
+  identified the cause.
+- The composition root ran recovery **before** submission and never again, so a
+  commit inside a pass left a record that only a *later* trigger could confirm.
+  Submission and confirmation are two halves of the pipeline and only the first
+  half was reachable from a save. A connectivity toggle did not settle it either;
+  only session-open recovery did.
+- **The fix** is `CheckoutSyncPass`: recover, submit, **recover again**, then
+  refresh derived data. It is a tested unit rather than a closure in `main.dart`
+  precisely because the order is the whole content. Running recovery twice is
+  cheap and safe - a bounded local scan that confirms only what the server can be
+  read to hold, and leaves anything it cannot settle exactly as it was.
+- Verified on the device after the fix: the same flow now reports "Confirmed
+  sales: 1 transactions, 6500 minor units" with no restart.
+
+### Defect 3: the differences list needed no fix, and that is the finding
+
+The correction path built in the two previous chunks worked first time, against
+real seeded data, with no change required. Recorded because it is evidence about
+those chunks rather than about this one:
+
+- The row read "Its sales total is 230 short and its transaction count is 2 short
+  against the sales recorded during it" - exactly the server's figures.
+- The dialog carried both safety sentences, required a reason, and refused to
+  submit without one.
+- The success notice read "now records 345.00 instead of 115.00, over 3
+  transactions rather than 1. The counted cash was not changed."
+- The list re-read and reported "The server has recorded no unresolved
+  differences for this business."
+- Server state afterwards: `shift_amendments` recorded 11500/1 â†’ 34500/3 with
+  `mutatesCountedCash: false`, the reason, and the cleared anomaly ID;
+  `audit_logs` recorded `shift_summary_amended` with `salesVarianceMinor: -23000`;
+  `reconciliation_anomalies` was **empty**; and `closingCashMinor` was still
+  11500, untouched.
+- The amended shift is still readable by the strict client model - the invariant
+  the planner was written to guarantee. Shift history renders "Counted cash:
+  115.00 / Recorded sales: 345.00 over 3 transactions / Counted cash is short by
+  230.00", which is the truthful outcome: the late sales' cash never went into the
+  drawer.
+
+### `plant-late-sale.js`
+
+A late-arriving sale is the one state nothing in the repository could produce -
+the till refuses to sell without an open shift, and a shift refuses to close
+while any sale is unsettled - so the correction path could only ever be proved by
+tests. The new script writes one, and it is the scenario the `sales` create rule
+was deliberately written to permit.
+
+- It **clones a sale the app itself wrote** rather than inventing one, so every
+  field has exactly the shape `_saleFields` produces and a mistake in the script
+  cannot be mistaken for a defect in the surface being exercised. Only the
+  identity fields move: a fresh checkout ID, the next receipt sequence, and the
+  receipt number those two derive.
+- It decrements the product in the same write the app would have used. Without
+  that the trigger-owned stock movement would have nothing to account for and the
+  run would report a *stock* difference beside the shift one - noise that looks
+  like a defect.
+- It carries the same emulator-only guard as the seeder: the two host variables
+  are what make `firebase-admin` incapable of reaching a real project, so
+  requiring them is the guarantee rather than a check.
+
+### Also observed, and deliberately not fixed
+
+- **The evidence panel renders inconsistently.** Under "Checkouts stored on this
+  device" it sometimes lists all five states with their counts and sometimes only
+  "Saved offline: 0", with at least one record present. Reproducible across two
+  screenshots each way; not diagnosed.
+- **"1 transactions".** The shift panel does not singularise its transaction
+  count.
+- **The login screen keeps a stale error across edits**, and the message it
+  showed was a raw platform-channel name
+  (`dev.flutter.pigeon.firebase_auth_platform_interface...`). It appeared only
+  after a mistyped sign-in and did not recur on a clean run, so it was not chased;
+  a raw channel name is not a sentence to show a user either way.
+- The Sentry DSN is still an `http://` URL that Android blocks in every build, as
+  the previous run recorded.
+- The differences list still shows bare amounts with no currency code.
+
+### Files in this chunk
+
+```text
+PLAN.md
+functions/src/reconciliation/jobs.ts
+functions/src/reconciliation/jobs.test.ts        (new)
+lib/checkout/checkout.dart
+lib/checkout/checkout_sync_pass.dart             (new)
+lib/main.dart
+rules-tests/package.json
+rules-tests/scripts/plant-late-sale.js           (new)
+test/checkout/checkout_sync_pass_test.dart       (new)
+test/checkout/checkout_sync_signals_test.dart
+```
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 21 in-scope lib/test paths | 2 pre-existing issues: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` and the unused `cloud_firestore` import at `lib/theme.dart:2` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy test/theme_test.dart` | **1131/1131**, up from 1125, adding **6** tests |
+| `npm --prefix functions test` | **190/190**, up from 185, adding **5** tests |
+| `npm --prefix rules-tests run test:emulator` | **139/139**, unchanged |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `flutter build apk --debug --no-pub --target-platform android-x64 --dart-define=USE_FIREBASE_EMULATORS=true` | built twice, installed and driven on the API 35 emulator |
+| `git diff --check` | clean |
+
+The 6 new Dart tests are 5 sync-pass ordering cases and 1 seam case that wires a
+real encrypted outbox, a real submission worker, and a real recovery coordinator
+and asserts a saved sale ends **confirmed**. The 5 new Functions tests pin the
+create payload against sentinels over every decision status. The Rules suite is
+unchanged because no rule changed; it was re-run because `functions/src` did.
+
+### Meaningful failures and their resolutions
+
+Beyond the three defects above, the run itself cost time in ways worth recording:
+
+- **`adb shell input text` silently truncates at the first space.** The password
+  landed in the email field and a reason arrived as one word. Use `%s` for each
+  space, and screenshot after every field rather than after a chain.
+- **Tapping by coordinate is fragile because the layout moves.** Selecting a
+  tender removes the "Choose how the customer paid" line and shifts the save
+  button up; adding cart lines pushes the tender chips off screen entirely.
+  Screenshot, then tap, then screenshot.
+- **`Get-NetTCPConnection` had to be used to clear orphaned emulator ports**
+  after a killed run, in addition to the two local config files the previous
+  handover already documented.
+- **`JAVA_TOOL_OPTIONS=-Xmx512m` let the Firebase emulators start beside a
+  running Android emulator** on this 2-3 GB host. Gradle still must not run at
+  the same time as either.
+- The Firestore emulator's REST API with a `Bearer owner` token bypasses Rules
+  and was how every server assertion in this handover was made.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+**Audit every other `FieldValue.delete()` for the same defect.** Defect 1 was
+found by use, not by search, and there are roughly forty more sentinel sites. The
+specific hazard is a payload object shared between a `create`/`set`-without-merge
+and an `update`. Three were checked by hand this session and are safe -
+`processors.ts:583` is inside `set(..., {merge: true})`, and
+`membershipMirrorStore`'s `initialRunData` carries no sentinel while its
+`progressData` is update-only - but `email/*`, `platform/*`, and the remaining
+`jobs.ts` sites were **not** verified. Do it properly:
+
+1. Enumerate every `FieldValue.delete()` and classify its write kind. A sentinel
+   is only legal in `update()` or `set(..., {merge: true})`.
+2. Where a payload is shared between branches, split it as
+   `saleTriggerJobFields` now does, and pin the create half with a test that
+   asserts no sentinel - the pattern in `jobs.test.ts`, which was confirmed to
+   fail on the original defect.
+3. Consider one shared test helper for that assertion rather than repeating the
+   `isEqual(FieldValue.delete())` walk.
+4. Nothing about this needs a device. It is a bounded, mechanical audit with a
+   real defect class behind it.
+
+Then, in preference order:
+
+- **A second integration runner for the sale trigger and reconciliation.** The
+  invitation suite is the only Auth/Firestore/Functions harness, and defect 1
+  would have been caught instantly by one test that creates a sale and asserts a
+  dirty day appears. This is the harness gap the defect exposed.
+- **The `shift_amendments` read surface**, still the untouched candidate 2 from
+  the previous handover: written, readable by owner/admin/manager, listed nowhere.
+- The evidence-panel rendering inconsistency and the "1 transactions" plural.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels on the differences list, the subscription surfaces
+(examined and declined earlier in this file - start on the server, not in
+Flutter), receipt printing, the printed receipt body, discounts, camera barcode
+scanning, password reset (still blocked on the App Check decision recorded near
+the top of this file), product cost/profit fields, a `platform_audit_logs`
+surface, branding surfaces, the Sentry DSN, and deployment.
+
+### Practical notes carried forward
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it:
+
+```powershell
+$env:DEBUG = $null
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:Path"
+```
+
+- **Driving the app end to end**, in the order that works on this host:
+  1. `flutter build apk --debug --no-pub --target-platform android-x64
+     --dart-define=USE_FIREBASE_EMULATORS=true`, and let Gradle exit.
+  2. Start the Android emulator: `ANDROID_AVD_HOME=D:\android-avds`,
+     `D:\android-emulator-sdk\emulator\emulator.exe -avd chilltent_api35
+     -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect -memory 1536`.
+  3. Wait on `adb shell getprop sys.boot_completed`, then
+     `adb shell settings put secure stylus_handwriting_enabled 0` or the first
+     text entry is stolen.
+  4. `npm --prefix rules-tests run emulators:dev` with
+     `JAVA_TOOL_OPTIONS=-Xmx512m` so the Firestore JVM fits beside it.
+  5. `adb install -r -t`, then `adb shell pm clear` before signing in if the Auth
+     emulator has been restarted - its UIDs do not survive.
+- Use Flutter's own `adb` at
+  `C:\Users\BonifaceMasota\develop\android-sdk\platform-tools\adb.exe`; the one
+  first on `PATH` is a different binary and the two servers fight.
+- Do not run Gradle and either emulator at the same time on this host.
+- After killing an emulator run, delete `functions/.secret.local` and
+  `functions/.env.local` **and** clear anything still listening on 9099, 8080,
+  5001, 4000, and 9150.
+- `npm --prefix rules-tests run plant:late-sale` needs
+  `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST` in the shell, and
+  a closed shift with at least one sale to clone.
+- A `FieldValue.delete()` sentinel is an ordinary object until the write is
+  serialized. No pure test can catch one in the wrong write kind; only a real
+  Firestore or an explicit `isEqual(FieldValue.delete())` assertion can.

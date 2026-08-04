@@ -11,6 +11,7 @@ export 'checkout_refusal.dart';
 export 'checkout_sale.dart';
 export 'checkout_submission.dart';
 export 'checkout_sync.dart';
+export 'checkout_sync_pass.dart';
 export 'checkout_sync_signals.dart';
 export 'checkout_tender.dart';
 export 'secure_checkout_outbox_key.dart';

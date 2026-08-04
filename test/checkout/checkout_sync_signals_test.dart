@@ -287,6 +287,54 @@ void _seamGroup() {
       );
       expect(stored!.state, CheckoutOutboxState.savedOffline);
     });
+
+    test('one pass also confirms it, so the shift can be closed', () async {
+      final submissions = _FakeGateway(
+        (_) async => const CheckoutSubmissionResult.committed(),
+      );
+      final confirmations = _FakeConfirmationGateway();
+      final pass = CheckoutSyncPass(
+        recover: CheckoutRecoveryCoordinator(
+          sessionController: sessions,
+          outbox: outbox,
+          confirmationGateway: confirmations,
+        ).recoverSelectedSession,
+        submit: CheckoutSubmissionWorker(
+          sessionController: sessions,
+          outbox: outbox,
+          submissionGateway: submissions,
+          isOnline: () async => true,
+        ).submitDueCheckouts,
+        refreshCatalog: () async {},
+        reportEvidenceChanged: () {},
+      );
+      // Exactly what the composition root wires, including the trigger's effect
+      // on derived data.
+      signals.syncRequests.listen((trigger) => pass.run(
+        refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
+      ));
+      final sink = CheckoutSyncOnSaveDraftSink(
+        delegate: _OutboxSink(outbox),
+        signals: signals,
+      );
+
+      await sink.saveDraft(_request());
+      await _settle();
+
+      // Observed on a real device before the second recovery existed: the sale
+      // reached Firestore immediately and stopped at `awaiting_confirmation`, so
+      // the shift reported it unsynchronized and refused to close until the app
+      // was restarted.
+      final stored = await outbox.read(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        checkoutId: 'checkout-a',
+      );
+      expect(stored!.state, CheckoutOutboxState.confirmed);
+      expect(submissions.submissions, hasLength(1));
+      // The first recovery had nothing to settle; only the second one did.
+      expect(confirmations.checked, ['checkout-a']);
+    });
   });
 }
 
@@ -366,6 +414,18 @@ final class _OutboxSink implements CheckoutDraftSink {
       checkoutId: checkoutId,
       receiptNumber: receiptNumber,
     );
+  }
+}
+
+/// Answers that the server holds exactly the sale the record describes, which is
+/// what a real confirmation read finds immediately after an acknowledged commit.
+final class _FakeConfirmationGateway implements CheckoutConfirmationGateway {
+  final List<String> checked = <String>[];
+
+  @override
+  Future<CheckoutConfirmationResult> check(CheckoutOutboxRecord record) async {
+    checked.add(record.checkoutId);
+    return CheckoutConfirmationResult.matching(record.payloadHash);
   }
 }
 
