@@ -11139,7 +11139,7 @@ validation were skipped as requested.
   which is the only reason it was caught at all. A green integration test whose
   assertions touch pipeline-owned state is not evidence.
 - **The Write tool put two literal control bytes in the runner** where a
-  `[ -]` character class was intended, which made the file a binary as
+  `[\u0000-\u001f]` character class was intended, which made the file a binary as
   far as git and grep were concerned. Replaced with `/[^ -~]/` - printable ASCII
   only - which expresses the same guard with no escapes to mangle, and is the
   right test anyway for a string spliced into a command line.
@@ -11197,3 +11197,202 @@ surface, branding surfaces, the Sentry DSN, and deployment.
   assertions will fail for that reason and not a real one.
 - `INTEGRATION_TEST_NAME_PATTERN` narrows it to one test, exactly as the
   invitation runner does.
+
+---
+
+## The corrections a business can finally see - 2026-08-04
+
+### Completed in this session
+
+The chunk above: **the `shift_amendments` read surface.** It was written by
+`amendShiftSummary`, its Rules boundary was committed and tested, it was readable
+by owner, admin, and manager - and it was listed nowhere. A correction that
+rewrites a closed shift and then cannot be seen is not answerable, and the
+differences list makes it worse: **a resolved difference is deleted from that
+list**, so until now a correction left no visible trace anywhere in the app.
+
+No server code changed. No rule changed. This is a read surface over a collection
+that was already there.
+
+### The read model, and what it refuses
+
+`TenantShiftAmendmentRecord` decodes strictly, on the same principle the stock
+correction feed and the differences list already hold: a row that misstates a
+correction is worse than no row. Three refusals are worth recording as decisions
+rather than validation:
+
+- **`mutatesCountedCash` must be exactly `false`.** This is the one property that
+  makes the whole collection safe to show, and the entire amendment path was built
+  around never touching a drawer count. A record claiming otherwise is either a
+  server that changed its guarantee without this client knowing, or a document no
+  server wrote. Neither may be presented beside truthful corrections, so the page
+  fails closed. `true`, `null`, `'false'`, `0`, and an absent field are all
+  refused.
+- **The transaction identity is exact and is asserted.**
+  `transactionVariance == previousTransactionCount - transactionCount`, because
+  those are whole counts from a single comparison. A record that breaks it did not
+  come from `amendShiftSummary`.
+- **The money identity is asserted only when the record says it applies.** The
+  recorded variance is measured from the **major-unit** total the verifier
+  compares, which may legitimately differ from the shift's stored minor units.
+  When it does, the amendment records that through
+  `previousRepresentationsAgreed: false` and overwrites both. So the identity is
+  held only when that flag is `true`. Asserting it unconditionally would refuse
+  exactly the internally inconsistent shifts this correction exists to repair -
+  and those are the ones nothing else in the app reports at all.
+
+That last one is a check the amendment *callable* cannot make: its response
+carries no `previousRepresentationsAgreed`, so the stored record can be verified
+more strictly than the answer that created it.
+
+`sourceType` is carried verbatim rather than required to be
+`reconciliation_shift_variance`, so a server that starts recording another kind of
+correction here is named honestly instead of taking the trail down. An absent
+`createdAt` or `requestId` is accepted: the correction happened, and hiding a
+rewrite of a closed shift because its clock reading is missing is the worse
+outcome.
+
+### The repository and the surface
+
+`TenantShiftAmendmentFeedRepository` is modelled on
+`TenantStockAdjustmentFeedRepository`: a bounded business-wide page and a page
+narrowed by one `shiftId ==` equality, both on ascending document-ID order, both
+servable by Firestore's automatic single-field index and needing no composite
+index. `rules-tests/test/shift-amendments.test.js` already proves both shapes,
+which is why this needed no new Rules work.
+
+- **Its role set is `owner`, `admin`, `manager` - deliberately wider than the
+  owner-and-administrator set that may *make* a correction.** Rewriting a record
+  every client treats as terminal is governance; seeing that it was rewritten, and
+  why, is operational information a manager answering for that shift needs. The
+  read and write surfaces disagreeing here is the design, and both a repository
+  test and a widget test pin it.
+- The page is **not** presented as chronological. An amendment ID is a digest of
+  the actor, the operation, the business, and the request, so document order
+  carries no time information; each record states its own instant.
+- **The surface resolves no staff names.** `tenantStaffLabel` degrades to the bare
+  UID, so the actor reads as "You" for the person who made the correction and as a
+  UID otherwise. That keeps the correction trail readable when the staff directory
+  is not, and costs no second read. Every other record in the business attributes
+  its actor by UID for the same reason.
+- The panel writes nothing and cannot: `shift_amendments` is `allow write: if
+  false` for every client.
+
+What a row says is derived from what actually moved. A correction may change the
+money, the transaction count, or both, so the sentence names only the figures that
+changed - and for a shift whose two money representations disagreed, it says the
+totals were rewritten without either figure changing, which is the truth in that
+case. The transaction count is singularised.
+
+The entry point is on the differences list, beside the correction that produces
+these records. It needs no injected capability, unlike the correction itself:
+it is a read of the same business through the same reader, so there is nothing for
+a composition root to grant or withhold.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/reporting/reconciliation_anomalies_panel.dart
+lib/reporting/reporting.dart
+lib/reporting/shift_amendment_feed.dart               (new)
+lib/reporting/shift_amendment_feed_panel.dart         (new)
+lib/tenancy/tenant_paths.dart
+test/reporting/shift_amendment_feed_test.dart         (new)
+test/reporting/shift_amendment_feed_panel_test.dart   (new)
+test/tenancy/tenant_paths_test.dart
+```
+
+No `functions/src`, Rules, or index change. Nothing needed a device or an
+emulator.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/reporting lib/tenancy test/reporting test/tenancy` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy test/theme_test.dart` | **1166/1166**, up from 1131, adding **35** tests |
+| `git diff --check` | clean |
+
+The 35 new tests are 20 read-model and repository cases and 15 widget cases. The
+Functions, Rules, and both integration suites were not re-run: no `functions/src`
+file, no rule, and no emulator fixture changed in this chunk. Android build and
+Android emulator validation were skipped as requested.
+
+A repo-wide `flutter analyze --no-pub lib test` reports **477 pre-existing
+issues**, all in files outside every chunk in this file - `thermal_printer_service`,
+`glass_card`, `pill_input`, `theme.dart`, and a `test/widget_test.dart` that
+references a `MyApp` class which no longer exists. Analysing the in-scope paths is
+the precedent every handover here has followed; the repo-wide figure is recorded so
+nobody mistakes it for something this work introduced.
+
+### Meaningful failures and their resolutions
+
+- **The path contract's exhaustiveness guard failed first, as designed.**
+  `tenant_paths_test.dart` asserts `TenantPaths.businessCollections` matches an
+  explicit map, so adding `shiftAmendments` to the enum without adding it there
+  fails - which is what forced the collection to be documented in both places.
+- **The Write tool put a literal NUL byte in the read-model test** where the
+  "reason contains a control character" case needed `\u0000`, which silently made
+  that case pass a perfectly valid string. Fixed by rewriting it as the Dart
+  escape. This is the same tool behaviour that mangled the reconciliation runner
+  earlier in this session; the lesson is to check for control bytes after writing
+  any file containing an escape in that range.
+- Adding a required `onOpenAmendments` to the differences panel's private contents
+  widget broke nothing: the existing panel tests build the public widget, so the
+  599 reporting and tenancy tests passed unchanged.
+- No assertion in the shipped code failed.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**The two defects the real run observed and left alone**, both recorded two
+handovers above and neither yet chased:
+
+1. **"1 transactions".** The shift panel does not singularise its transaction
+   count. The differences panel and the new corrections trail both do, so this is
+   an inconsistency with the surfaces beside it as much as a wording bug. Find
+   every count in the shift surfaces that is rendered without a plural rule, not
+   only the one that was seen.
+2. **The evidence panel renders inconsistently.** Under "Checkouts stored on this
+   device" it sometimes lists all five states with their counts and sometimes only
+   "Saved offline: 0" with at least one record present. Reproducible across two
+   screenshots each way and **not diagnosed**, so start by reproducing it in a
+   widget test rather than by reading the panel: a rendering that differs between
+   two builds of the same state is a state question, not a layout one.
+
+Then, in preference order:
+
+- Extending the reconciliation runner to the shift-verification phase, which is
+  the half of the pipeline its five tests stop short of - and the half that
+  produces the differences the new trail records corrections to.
+- A `shiftId`-narrowed entry point into the corrections trail from shift history,
+  which the repository already supports and which nothing yet opens.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels on the differences list or the corrections trail, the
+subscription surfaces (examined and declined earlier in this file - start on the
+server, not in Flutter), receipt printing, the printed receipt body, discounts,
+camera barcode scanning, password reset (still blocked on the App Check decision
+recorded near the top of this file), product cost/profit fields, a
+`platform_audit_logs` surface, branding surfaces, the Sentry DSN, the 477
+pre-existing analyzer issues in the legacy files named above, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous two sessions' lists still applies.
+- `flutter analyze --no-pub lib test` is not a useful signal on this repository.
+  Analyse the paths a chunk touched.
+- After writing any file whose content includes a `\u00xx` escape, check it for
+  literal control bytes before trusting it. Two files in this session needed
+  repairing for exactly that.

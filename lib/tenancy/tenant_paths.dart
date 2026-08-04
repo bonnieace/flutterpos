@@ -35,7 +35,14 @@ enum TenantCollection {
   /// unusable lines, a product whose stock disagrees with its ledger, a shift
   /// whose totals disagree with its sales. The same workers are the only
   /// writers, and nothing here changes stock or a shift.
-  reconciliationAnomalies('reconciliation_anomalies');
+  reconciliationAnomalies('reconciliation_anomalies'),
+
+  /// The immutable trail of every closed shift whose summary was corrected.
+  /// `amendShiftSummary` is the only writer, and it appends only: a client can
+  /// never create, amend, or erase one. Each record states what the shift said
+  /// before, what it says now, why, and who asked - and that the counted cash
+  /// was left alone.
+  shiftAmendments('shift_amendments');
 
   const TenantCollection(this.segment);
 
@@ -79,6 +86,7 @@ final class TenantPaths {
     TenantCollection.reconciliationJobs,
     TenantCollection.reconciliationDirtyDays,
     TenantCollection.reconciliationAnomalies,
+    TenantCollection.shiftAmendments,
   ];
 
   final String tenantId;
@@ -109,6 +117,8 @@ final class TenantPaths {
       collectionPath(TenantCollection.reconciliationJobs);
   String get reconciliationDirtyDays =>
       collectionPath(TenantCollection.reconciliationDirtyDays);
+  String get shiftAmendments =>
+      collectionPath(TenantCollection.shiftAmendments);
 
   String product(String productId) =>
       documentPath(TenantCollection.products, productId);
@@ -134,6 +144,8 @@ final class TenantPaths {
       documentPath(TenantCollection.dailyMetrics, businessDate);
   String reconciliationJob(String jobId) =>
       documentPath(TenantCollection.reconciliationJobs, jobId);
+  String shiftAmendment(String amendmentId) =>
+      documentPath(TenantCollection.shiftAmendments, amendmentId);
 
   /// The intake record for one business day. Its document ID **is** the
   /// business date, so a day is addressed rather than searched for.

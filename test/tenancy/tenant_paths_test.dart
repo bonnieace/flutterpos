@@ -78,6 +78,11 @@ void main() {
         // can reach changes stock, a shift, or a sale.
         TenantCollection.reconciliationAnomalies:
             'tenants/tenant-a/reconciliation_anomalies',
+        // The immutable trail of every closed shift whose summary was
+        // corrected. Added deliberately as part of the guarded correction
+        // trail; `amendShiftSummary` is the only writer, it only ever appends,
+        // and the client can never create, change, or erase one.
+        TenantCollection.shiftAmendments: 'tenants/tenant-a/shift_amendments',
       };
 
       expect(TenantPaths.businessCollections.toSet(), expected.keys.toSet());
@@ -111,6 +116,7 @@ void main() {
         paths.reconciliationDirtyDays,
         'tenants/tenant-a/reconciliation_dirty_days',
       );
+      expect(paths.shiftAmendments, 'tenants/tenant-a/shift_amendments');
     });
 
     test('document factories cannot escape the tenant root', () {
@@ -131,6 +137,7 @@ void main() {
         // The intake record's document ID is the business date itself, so a
         // day is addressed by path rather than searched for.
         paths.reconciliationDirtyDay('2026-07-31'),
+        paths.shiftAmendment('amend_abc'),
       ];
 
       for (final document in documents) {

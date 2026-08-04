@@ -7,6 +7,7 @@ import '../tenancy/tenant_session_controller.dart';
 import 'reconciliation_actions.dart';
 import 'reconciliation_anomalies.dart';
 import 'shift_amendment.dart';
+import 'shift_amendment_feed_panel.dart';
 
 /// Opens the list under the caller's own session scope, so a tenant switch
 /// invalidates it exactly as it does every other guarded route rather than
@@ -274,6 +275,11 @@ final class _TenantReconciliationAnomalyPanelState
         amendOffered: widget.actions?.amendShiftSummaryCallable != null,
         onAmend: (anomaly, reason) => _amend(session, anomaly, reason),
         onNarrow: _narrow,
+        // The trail is a read of the same business under the same reader, so it
+        // needs no injected capability: unlike the correction itself, there is
+        // nothing here for a composition root to grant or withhold.
+        onOpenAmendments: () =>
+            openTenantShiftAmendments(context, reader: widget.reader),
         onNextPage: () => _nextPage(page.nextCursor),
         onPreviousPage: _previousPage,
       ),
@@ -337,6 +343,7 @@ final class _AnomalyContents extends StatelessWidget {
     required this.amendOffered,
     required this.onAmend,
     required this.onNarrow,
+    required this.onOpenAmendments,
     required this.onNextPage,
     required this.onPreviousPage,
   });
@@ -351,6 +358,11 @@ final class _AnomalyContents extends StatelessWidget {
   final void Function(TenantReconciliationAnomaly anomaly, String reason)
   onAmend;
   final ValueChanged<TenantReconciliationAnomalyKind?> onNarrow;
+
+  /// Opens the trail of corrections already made. A resolved difference is
+  /// deleted from this list, so this is the only place they remain visible.
+  final VoidCallback onOpenAmendments;
+
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
 
@@ -422,6 +434,17 @@ final class _AnomalyContents extends StatelessWidget {
         'This list is not in time order: a record is addressed by what it is '
         'about, not by when it was found. Each one states its own instants.',
         style: Theme.of(context).textTheme.bodySmall,
+      ),
+      const SizedBox(height: 16),
+      // A resolved difference is deleted from this list, so without this the
+      // corrections made here would leave no visible trace. The trail is
+      // readable by every role that reads this list, including the managers who
+      // may not make one.
+      OutlinedButton.icon(
+        key: const ValueKey('reconciliation-anomalies-amendments'),
+        onPressed: onOpenAmendments,
+        icon: const Icon(Icons.history_edu_outlined),
+        label: const Text('View shift corrections already made'),
       ),
       const SizedBox(height: 16),
       Wrap(
