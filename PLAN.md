@@ -10798,3 +10798,203 @@ $env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64
 - A `FieldValue.delete()` sentinel is an ordinary object until the write is
   serialized. No pure test can catch one in the wrong write kind; only a real
   Firestore or an explicit `isEqual(FieldValue.delete())` assertion can.
+
+---
+
+## The sentinel audit, and a guard that keeps it done - 2026-08-04
+
+### Completed in this session
+
+The chunk above: **audit every other `FieldValue.delete()` for defect 1's
+shape.** All 129 sites were enumerated and classified, one fragile payload was
+split, and the class is now closed by a test rather than by this paragraph.
+
+**No second live instance of the defect existed.** That is the finding, and it is
+worth stating plainly because the audit's value is not the bug it did not find -
+it is that the class can no longer come back silently.
+
+### What the audit actually found
+
+Classified by the write each sentinel reaches:
+
+| Verdict | Count | Meaning |
+| --- | --- | --- |
+| inside `update(...)` | 108 | always legal |
+| inside `set(..., {merge: true})` | 7 | legal; every options argument read and confirmed |
+| built away from its write | 13 | resolved by hand, below |
+| inside `create(...)` or `set(...)` without a merge | **0** | the defect; none remained |
+
+The 13 that are not lexically inside their write are the only ones that could
+hide anything, because their legality depends on code elsewhere. They belong to
+four payload builders:
+
+- `jobs.ts#saleTriggerJobFields` (2) - the split fixed last session.
+- `jobs.ts#advanceReconciliationJob` (5) - one `update` object handed to
+  `transaction.update`; no create branch exists.
+- `membershipMirrorStore.ts#progressData` (5) - **all eleven** call sites are
+  `update(...)`, and a repair run document is created by `initialRunData`, which
+  carries no sentinel.
+- `membershipMirrorStore.ts#mirrorWriteData` (1) - **the one real hazard.**
+
+`mirrorWriteData` was a single payload shared between `batch.update` and
+`batch.create`, which is defect 1 exactly. It was not broken: its sentinel sat
+behind `mirrorSnapshot.exists`, and the create branch runs only when
+`!mirrorSnapshot.exists`, so the two conditions happened to agree. **Safety by
+two `exists` reads agreeing in two places is not safety**, and nothing recorded
+that they had to. It is now `mirrorWriteFields`, returning a tagged
+`{kind, data}` pair built by two separate functions, so the create payload cannot
+express a sentinel at all - the same structural remedy `saleTriggerJobFields`
+got. The refactor is behaviour-preserving; the diff was checked case by case
+against the four combinations of `exists` and `membershipStatus`, and the
+redundant `{invitationStatus: decision.value.invitationStatus}` branch it
+dropped was a re-set of a key the spread above it already supplied.
+
+The three files whose `create` payloads spread a variable from a sentinel-bearing
+file - `globalStatusStore.ts:216`, `revokePlatformAdmin.ts:240`,
+`processors.ts:190`/`206` - were checked too. Each spreads a parsed input or a
+computed metric, never a payload builder, so no sentinel can arrive that way.
+
+### The guard, and why it needed two assertions
+
+`functions/src/testing/sentinelAudit.ts` reads the source and classifies every
+sentinel by bracket matching. Its test asserts two things, and the second is the
+one that matters:
+
+1. No sentinel sits inside a `create(...)` or an unmerged `set(...)`.
+2. Every sentinel **built away from its write** belongs to one of four reviewed
+   builders, each recorded with the reason it is safe.
+
+Verified by putting a sentinel back into `mirrorCreateData`: **assertion 1 still
+passed** and assertion 2 failed. A payload built away from its write is precisely
+what defect 1 was, so the flat "reaches a rejecting write" check would never have
+caught it. Assertion 2 fails whenever a new payload builder appears, which forces
+somebody to go and look at where it is written. Three targeted mirror tests
+failed at the same time, so the reintroduction is caught four ways.
+
+Safety decisions in the scanner worth keeping:
+
+- It blanks comments and string literals **preserving every offset** before
+  matching. `FieldValue.delete()` is named in the doc comments of the very
+  functions under audit, including the one whose defect started this, so a naive
+  scan reports its own documentation.
+- It skips `*.test.ts` and its own `testing/` directory, so every site it reports
+  is one a deployed function can really write - otherwise the reviewed list
+  becomes a list of test helpers.
+- `owner` is the enclosing declaration name, not a line number, so the reviewed
+  list survives any edit above it.
+- A third test asserts the audit still reaches >100 sites in >10 files. A scanner
+  that quietly read nothing would satisfy both real assertions perfectly.
+
+`deleteSentinelPaths` in `functions/src/testing/writeSentinels.ts` is the shared
+`isEqual` walk the handover asked for; `jobs.test.ts` now imports it instead of
+carrying its own copy. It reports dotted paths rather than a boolean, and refuses
+to walk into `Timestamp` or `DocumentReference` - the latter holds a live
+`Firestore`, so a naive recursion is unbounded.
+
+### Files in this chunk
+
+```text
+PLAN.md
+functions/src/reconciliation/jobs.test.ts
+functions/src/repair/membershipMirrorStore.ts
+functions/src/repair/membershipMirrorStore.test.ts
+functions/src/testing/sentinelAudit.ts            (new)
+functions/src/testing/sentinelAudit.test.ts       (new)
+functions/src/testing/writeSentinels.ts           (new)
+```
+
+No Dart, Rules, or index changes. Nothing about this chunk needed a device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix functions test` | **206/206**, up from 190, adding **16** tests |
+| `npm --prefix rules-tests run test:emulator` | **139/139**, unchanged |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `git diff --check` | clean |
+
+The 16 new tests are 9 mirror payload cases and 7 audit cases. Dart was not
+re-run because no Dart file changed. The Rules suite was re-run because
+`functions/src` did, and the invitation runner because the membership mirror
+repair path it exercises is the code that changed. Android build and Android
+emulator validation were skipped as requested.
+
+### Meaningful failures and their resolutions
+
+- **The scanner called seven legal `set(..., {merge: true})` sites illegal.**
+  `verdictForWrite` read the call frame's `close` offset, but a sentinel is
+  reached *before* its call's closing paren, so `close` was always `undefined`
+  and the options argument was parsed out of the entire rest of the file. It now
+  matches the paren on demand. This is the whole reason the classifier is tested
+  against synthetic source: the repo-wide assertion passed throughout, because
+  those seven were being over-reported rather than missed.
+- **The owner scan ate two names.** `progressData`'s own parameter type is an
+  object literal, so the brace that should have opened its body had already been
+  consumed; and `advanceReconciliationJob` declares `const update = {...}` several
+  statements before the sentinel, which then mislabelled the next block that
+  opened one. Fixed by pushing an anonymous scope for any brace opened while an
+  argument or parameter list is still open, and by discarding a pending name at a
+  top-level `;`. Both mistakes are now pinned by a test named after them.
+- **A `Select-Object -First` in the pipeline made `npm` exit 255** on the Rules
+  run and looked exactly like a suite failure. Truncating a pipe kills the
+  producer. Redirect to a file, then filter the file.
+- No assertion in the shipped code failed.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**A second integration runner: the sale trigger and reconciliation.** This is the
+harness gap defect 1 exposed, and it is now the only preference-ordered item left
+that no test covers. `run-invitation-emulator-tests.js` is the only
+Auth/Firestore/Functions harness in the repository, and one test that writes a
+sale and asserts a `reconciliation_dirty_days` document appears would have caught
+defect 1 in seconds instead of after eleven sessions.
+
+1. Model the runner on `scripts/run-invitation-emulator-tests.js`, including the
+   `FUNCTIONS_DISCOVERY_TIMEOUT` allowance and the local `.env.local` /
+   `.secret.local` handling that `run-dev-emulators.js` already gets right.
+2. Assert what the pure tests cannot: a sale write produces a
+   `reconciliation_dirty_days` entry **and** a `reconciliation_jobs` document, and
+   the second sale in the same five-minute bucket takes the *update* branch
+   without throwing. Both branches of `saleTriggerJobFields` in one run.
+3. Drive one job to completion so a `daily_metrics` document is regenerated from
+   sale activity - the thing that was silently never happening.
+4. Keep it to the trigger and the job lifecycle. The nightly pub/sub schedule the
+   emulator does not run stays out.
+
+Then, in preference order:
+
+- **The `shift_amendments` read surface**, still untouched: written, its Rules
+  boundary committed and tested, readable by owner/admin/manager, listed nowhere.
+  Model it on `TenantStockAdjustmentRepository` and refuse a record that cannot
+  explain its own correction.
+- The evidence-panel rendering inconsistency and the "1 transactions" plural.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels on the differences list, the subscription surfaces
+(examined and declined earlier in this file - start on the server, not in
+Flutter), receipt printing, the printed receipt body, discounts, camera barcode
+scanning, password reset (still blocked on the App Check decision recorded near
+the top of this file), product cost/profit fields, a `platform_audit_logs`
+surface, branding surfaces, the Sentry DSN, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous session's list still applies, in particular the
+  emulator prelude and the two local config files.
+- The sentinel audit is `npm --prefix functions test`; it needs no emulator. To
+  see the classification rather than the pass/fail, call
+  `auditDeleteSentinels()` from `lib/testing/sentinelAudit.js`.
+- Do not filter a long `npm` run through `Select-Object -First`. Redirect with
+  `*>` to a file and filter that, or the exit code is meaningless.

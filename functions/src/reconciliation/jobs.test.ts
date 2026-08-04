@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {DocumentData, FieldValue} from "firebase-admin/firestore";
+import {deleteSentinelPaths} from "../testing/writeSentinels";
 import {saleTriggerJobFields} from "./jobs";
 import {DirtyJobDecision, mergeDirtyJob} from "./model";
 
@@ -15,20 +15,6 @@ function fields(decision: DirtyJobDecision) {
   });
 }
 
-/**
- * Whether a payload carries a `FieldValue.delete()` sentinel anywhere.
- *
- * `isEqual` is the public way to ask: a sentinel is an ordinary object until the
- * write is serialized, which is exactly why the original defect compiled, passed
- * every unit test, and then failed against a real Firestore.
- */
-function deletedKeys(payload: DocumentData): string[] {
-  const sentinel = FieldValue.delete();
-  return Object.entries(payload)
-    .filter(([, value]) => value instanceof FieldValue && value.isEqual(sentinel))
-    .map(([key]) => key);
-}
-
 test("a new bucket's job is created without any delete sentinel", () => {
   // The regression. `mergeDirtyJob(undefined)` returns `queued`, which is the
   // decision every first sale of a five-minute bucket produces, and the create
@@ -40,7 +26,7 @@ test("a new bucket's job is created without any delete sentinel", () => {
 
   const {create} = fields(decision);
 
-  assert.deepEqual(deletedKeys(create), []);
+  assert.deepEqual(deleteSentinelPaths(create), []);
   assert.equal(create.status, "queued");
   assert.equal(create.phase, "metrics");
   assert.equal(create.source, "sale_trigger");
@@ -82,7 +68,7 @@ test("no decision status can put a delete sentinel in the create payload", () =>
       rerunRequested: true,
       enqueue: false,
     });
-    assert.deepEqual(deletedKeys(create), [], status);
+    assert.deepEqual(deleteSentinelPaths(create), [], status);
   }
 });
 
@@ -99,7 +85,7 @@ test("an existing job returning to queued clears the cursors it left behind", ()
   }));
 
   assert.deepEqual(
-    deletedKeys(update).sort(),
+    deleteSentinelPaths(update),
     ["pendingProductId", "productCursor"],
   );
   assert.equal(update.status, "queued");
@@ -121,7 +107,7 @@ test("an existing job that stays running keeps its cursors", () => {
     rerunRequested: false,
   }));
 
-  assert.deepEqual(deletedKeys(update), []);
+  assert.deepEqual(deleteSentinelPaths(update), []);
   assert.equal(update.status, "running");
   assert.equal(update.rerunRequested, true);
 });

@@ -454,31 +454,85 @@ function mirrorMetadataDrift(
     (staff?.status === "active" && !isTimestamp(data.joinedAt));
 }
 
-function mirrorWriteData(
-  decision: Exclude<MirrorRepairDecision, {action: "delete"}>,
-  staff: StaffDocument,
-  mirrorSnapshot: DocumentSnapshot<DocumentData>
+type MirrorUpsertDecision = Exclude<MirrorRepairDecision, {action: "delete"}>;
+
+/** Which write a mirror payload was built for, and the payload itself. */
+export interface MirrorWrite {
+  kind: "create" | "update";
+  data: DocumentData;
+}
+
+/**
+ * The mirror payload for a document that does not exist yet.
+ *
+ * It carries no `FieldValue.delete()`, and cannot: a mirror being created has no
+ * stale `invitationStatus` to clear, and Firestore rejects a sentinel in
+ * `create()` outright. That rejection is invisible until a real write is
+ * serialized, so the guarantee has to be structural. One object shared between a
+ * create branch and an update branch is exactly what made the sale
+ * reconciliation trigger throw on every sale.
+ */
+function mirrorCreateData(
+  decision: MirrorUpsertDecision,
+  staff: StaffDocument
 ): DocumentData {
-  const current = mirrorSnapshot.exists ? mirrorSnapshot.data() ?? {} : {};
-  const repairCreatedAt = !isTimestamp(current.createdAt);
-  const repairJoinedAt = decision.value.membershipStatus === "active" &&
-    !isTimestamp(current.joinedAt);
+  return {
+    ...decision.value,
+    createdAt: isTimestamp(staff.createdAt) ?
+      staff.createdAt : FieldValue.serverTimestamp(),
+    joinedAt: decision.value.membershipStatus === "active" ?
+      isTimestamp(staff.joinedAt) ? staff.joinedAt : FieldValue.serverTimestamp() :
+      null,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+/**
+ * The mirror payload for a document that already exists.
+ *
+ * This is the branch a sentinel belongs in, and the only one: a mirror whose
+ * canonical staff record has stopped carrying an invitation status has a stale
+ * field to remove, and only an existing document can have one. Transport
+ * metadata is rewritten only where the stored value is unusable, so an ordinary
+ * repair leaves `createdAt` and `joinedAt` as they were.
+ */
+function mirrorUpdateData(
+  decision: MirrorUpsertDecision,
+  staff: StaffDocument,
+  current: DocumentData
+): DocumentData {
   return {
     ...decision.value,
     ...(decision.value.invitationStatus === undefined ?
-      mirrorSnapshot.exists ? {invitationStatus: FieldValue.delete()} : {} :
-      {invitationStatus: decision.value.invitationStatus}),
-    ...(repairCreatedAt ? {
+      {invitationStatus: FieldValue.delete()} : {}),
+    ...(isTimestamp(current.createdAt) ? {} : {
       createdAt: isTimestamp(staff.createdAt) ?
         staff.createdAt : FieldValue.serverTimestamp(),
-    } : {}),
-    ...(repairJoinedAt ? {
+    }),
+    ...(decision.value.membershipStatus === "active" && !isTimestamp(current.joinedAt) ? {
       joinedAt: isTimestamp(staff.joinedAt) ?
         staff.joinedAt : FieldValue.serverTimestamp(),
     } : {}),
-    ...(!mirrorSnapshot.exists && !repairJoinedAt ? {joinedAt: null} : {}),
     updatedAt: FieldValue.serverTimestamp(),
   };
+}
+
+/**
+ * The mirror payload and the write it is for, chosen by whether the mirror
+ * exists. `current` is `undefined` when it does not.
+ *
+ * The two halves are built by separate expressions rather than one object with
+ * conditional spreads so that "the create payload has no sentinel" is a property
+ * of the code instead of a coincidence of two `exists` checks agreeing.
+ */
+export function mirrorWriteFields(
+  decision: MirrorUpsertDecision,
+  staff: StaffDocument,
+  current: DocumentData | undefined
+): MirrorWrite {
+  return current === undefined ?
+    {kind: "create", data: mirrorCreateData(decision, staff)} :
+    {kind: "update", data: mirrorUpdateData(decision, staff, current)};
 }
 
 function applyMirrorDecision(
@@ -495,15 +549,19 @@ function applyMirrorDecision(
   }
   if (decision.action === "upsert") {
     if (!staff) throw new HttpsError("internal", "An upsert requires canonical staff data.");
-    const data = mirrorWriteData(decision, staff, mirrorSnapshot);
-    if (mirrorSnapshot.exists) {
+    const write = mirrorWriteFields(
+      decision,
+      staff,
+      mirrorSnapshot.exists ? mirrorSnapshot.data() ?? {} : undefined
+    );
+    if (write.kind === "update") {
       batch.update(
         mirrorSnapshot.ref,
-        data,
+        write.data,
         {lastUpdateTime: mirrorSnapshot.updateTime as Timestamp}
       );
     } else {
-      batch.create(mirrorSnapshot.ref, data);
+      batch.create(mirrorSnapshot.ref, write.data);
     }
   }
 }
