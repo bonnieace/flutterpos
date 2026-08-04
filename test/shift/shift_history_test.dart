@@ -93,6 +93,133 @@ void main() {
       );
     });
 
+    test('a shift closed and never corrected carries no correction', () {
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(),
+      );
+
+      expect(entry.amendment, isNull);
+    });
+
+    test('reports the correction a server made and how many it has had', () {
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(overrides: _amended()),
+      );
+
+      final amendment = entry.amendment!;
+      expect(amendment.latestId, 'sm_abc');
+      expect(amendment.generation, 'generation-one');
+      expect(amendment.count, 2);
+      expect(amendment.amendedAt, DateTime.utc(2026, 7, 31, 19));
+      // The correction rewrote the summary; the counted cash is untouched, so
+      // the difference this surface names is still the one it always was.
+      expect(entry.summary!.totalSalesMinor, 98750);
+      expect(entry.cashVarianceMinor, 26250);
+    });
+
+    test('a correction with no recorded instant is still a correction', () {
+      // The instant is a server timestamp. Its absence limits what a row can say
+      // about when, and must never put the correction itself in doubt.
+      final entry = TenantShiftHistoryEntry.fromDocument(
+        path: 'tenants/tenant-a/shifts/shift-a',
+        data: _closed(
+          overrides: <String, Object?>{
+            ..._amended(),
+            'summaryAmendedAt': null,
+          },
+        ),
+      );
+
+      expect(entry.amendment!.count, 2);
+      expect(entry.amendment!.amendedAt, isNull);
+    });
+
+    test('refuses a partial or incoherent correction record', () {
+      final refused = <String, Map<String, Object?>>{
+        // No client can write any of these fields, so a partial set is either a
+        // server that changed its contract or a document no server wrote.
+        'missing-id': <String, Object?>{'summaryAmendmentId': null},
+        'missing-generation': <String, Object?>{
+          'summaryAmendedGeneration': null,
+        },
+        'missing-count': <String, Object?>{'summaryAmendmentCount': null},
+        'count-below-one': <String, Object?>{'summaryAmendmentCount': 0},
+        'negative-count': <String, Object?>{'summaryAmendmentCount': -1},
+        'fractional-count': <String, Object?>{'summaryAmendmentCount': 1.5},
+        'string-count': <String, Object?>{'summaryAmendmentCount': '2'},
+        'id-with-separator': <String, Object?>{
+          'summaryAmendmentId': 'shift_amendments/sm_abc',
+        },
+        'id-not-a-string': <String, Object?>{'summaryAmendmentId': 7},
+        'empty-generation': <String, Object?>{'summaryAmendedGeneration': ''},
+        'padded-generation': <String, Object?>{
+          'summaryAmendedGeneration': ' generation-one ',
+        },
+        // Built from a code unit rather than written as an escape, so this source
+        // file can never carry a literal control byte of its own.
+        'control-character-generation': <String, Object?>{
+          'summaryAmendedGeneration': 'generation${String.fromCharCode(1)}one',
+        },
+        'generation-not-a-string': <String, Object?>{
+          'summaryAmendedGeneration': 1,
+        },
+        'instant-not-a-timestamp': <String, Object?>{
+          'summaryAmendedAt': '2026-07-31T19:00:00Z',
+        },
+      };
+
+      for (final entry in refused.entries) {
+        expect(
+          () => TenantShiftHistoryEntry.fromDocument(
+            path: 'tenants/tenant-a/shifts/shift-a',
+            data: _closed(
+              overrides: <String, Object?>{..._amended(), ...entry.value},
+            ),
+          ),
+          throwsA(isA<TenantShiftException>()),
+          reason: entry.key,
+        );
+      }
+    });
+
+    test('refuses an instant that accounts for no correction at all', () {
+      expect(
+        () => TenantShiftHistoryEntry.fromDocument(
+          path: 'tenants/tenant-a/shifts/shift-a',
+          data: _closed(
+            overrides: <String, Object?>{
+              'summaryAmendedAt': Timestamp.fromDate(
+                DateTime.utc(2026, 7, 31, 19),
+              ),
+            },
+          ),
+        ),
+        _code('incomplete_shift_amendment'),
+      );
+    });
+
+    test('refuses a corrected shift that recorded no totals', () {
+      // The correction rewrites the three summary fields, so this document could
+      // not have come from one - and the row would have to say both that no
+      // totals were recorded and that the totals were corrected.
+      expect(
+        () => TenantShiftHistoryEntry.fromDocument(
+          path: 'tenants/tenant-a/shifts/shift-a',
+          data: _closed(
+            overrides: <String, Object?>{
+              ..._amended(),
+              'totalSalesMinor': null,
+              'totalSales': null,
+              'transactionCount': null,
+            },
+          ),
+        ),
+        _code('amended_shift_without_summary'),
+      );
+    });
+
     test('a zero summary is coherent and balances against no cash', () {
       final entry = TenantShiftHistoryEntry.fromDocument(
         path: 'tenants/tenant-a/shifts/shift-a',
@@ -313,6 +440,16 @@ Map<String, Object?> _closed({
   data.removeWhere((key, value) => value == null);
   return data;
 }
+
+/// The four fields `amendShiftSummary` leaves on a shift it corrected, exactly as
+/// `functions/src/reconciliation/amendments.ts` writes them. The count is 2 so a
+/// test cannot pass by reading a hard-coded one.
+Map<String, Object?> _amended() => <String, Object?>{
+  'summaryAmendmentId': 'sm_abc',
+  'summaryAmendedGeneration': 'generation-one',
+  'summaryAmendmentCount': 2,
+  'summaryAmendedAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 19)),
+};
 
 /// A transport that answers the repository's own bounded queries.
 ///

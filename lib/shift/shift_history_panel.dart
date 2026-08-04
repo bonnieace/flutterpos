@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 
+import '../reporting/shift_amendment_feed.dart';
+import '../reporting/shift_amendment_feed_panel.dart';
 import '../returns/return_actions.dart';
 import '../sales/sale_history.dart';
 import '../sales/sale_history_panel.dart';
@@ -134,10 +136,17 @@ final class _TenantShiftHistoryPanelState
         page: named.page,
         staffNames: named.names,
         pageIndex: _pageIndex,
+        // The trail's own repository is the authority on who may read it, not
+        // this surface's management set. The two happen to name the same roles
+        // today, and offering a link this session's server would refuse would
+        // teach a cashier nothing except that the app guesses.
+        canReadCorrections:
+            TenantShiftAmendmentFeedRepository.canReadInSession(session),
         onScopeChanged: _setScope,
         onNextPage: () => _nextPage(named.page.nextCursor),
         onPreviousPage: _previousPage,
         onViewSales: (request) => _openSales(context, request),
+        onViewCorrections: (shiftId) => _openCorrections(context, shiftId),
       ),
     );
   }
@@ -159,6 +168,28 @@ final class _TenantShiftHistoryPanelState
       ),
     );
   }
+
+  /// Opens the business's corrections trail narrowed to one shift, under the same
+  /// session scope, so that route's guard sees the exact controller this page was
+  /// authorized against.
+  ///
+  /// It needs no injected capability: the trail is a read of the same business
+  /// through the same reader, so there is nothing here for a composition root to
+  /// grant or withhold - the same reason the differences list opens it directly.
+  void _openCorrections(BuildContext context, String shiftId) {
+    final sessions = TenantSessionScope.read(context);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: sessions,
+          child: TenantShiftAmendmentScreen(
+            reader: widget.reader,
+            shiftId: shiftId,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 final class _ShiftHistoryContents extends StatelessWidget {
@@ -167,20 +198,33 @@ final class _ShiftHistoryContents extends StatelessWidget {
     required this.page,
     required this.staffNames,
     required this.pageIndex,
+    required this.canReadCorrections,
     required this.onScopeChanged,
     required this.onNextPage,
     required this.onPreviousPage,
     required this.onViewSales,
+    required this.onViewCorrections,
   });
 
   final TenantSession session;
   final TenantShiftHistoryPage page;
   final Map<String, String> staffNames;
   final int pageIndex;
+
+  /// Whether this session may read the corrections trail itself. A cashier is
+  /// still told that their shift was corrected - the shift document they can
+  /// already read says so, and the figures on the row are the corrected ones -
+  /// but the record of who asked for it and why is the business's governance and
+  /// is deliberately not theirs to read.
+  final bool canReadCorrections;
+
   final ValueChanged<TenantShiftHistoryScope> onScopeChanged;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
   final ValueChanged<TenantSaleHistoryRequest> onViewSales;
+
+  /// Opens the trail narrowed to one shift, by its document ID.
+  final ValueChanged<String> onViewCorrections;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -193,8 +237,11 @@ final class _ShiftHistoryContents extends StatelessWidget {
       ),
       const SizedBox(height: 4),
       const Text(
-        'Counted cash and recorded sales are shown exactly as they were '
-        'closed. Reconciliation resolves any difference.',
+        key: ValueKey('shift-history-scope-note'),
+        'Counted cash and recorded sales are shown exactly as the server holds '
+        'them, and are never recomputed here. Reconciliation resolves any '
+        'difference. A shift whose recorded sales it corrected says so on its '
+        'own row.',
       ),
       const SizedBox(height: 16),
       if (TenantShiftHistoryRepository.canReadEveryCashier(session))
@@ -230,54 +277,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
           'No closed shifts were found.',
         )
       else
-        for (final entry in page.items)
-          Card(
-            key: ValueKey('shift-history-entry-${entry.id}'),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${entry.businessDate} - ${_staffLabel(entry)}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    key: ValueKey('shift-history-counted-${entry.id}'),
-                    'Counted cash: ${_money(entry.closingCashMinor)}',
-                  ),
-                  if (entry.summary case final summary?) ...[
-                    Text(
-                      key: ValueKey('shift-history-sales-${entry.id}'),
-                      'Recorded sales: ${_money(summary.totalSalesMinor)} '
-                      'over ${summary.transactionCount} '
-                      '${summary.transactionCount == 1 ? 'transaction' : 'transactions'}',
-                    ),
-                    Text(
-                      key: ValueKey('shift-history-variance-${entry.id}'),
-                      _varianceLabel(entry.cashVarianceMinor!),
-                    ),
-                  ] else
-                    Text(
-                      key: ValueKey('shift-history-no-summary-${entry.id}'),
-                      'No closing summary was recorded for this shift.',
-                    ),
-                  const SizedBox(height: 8),
-                  Text(_closedLabel(entry), style: _mutedStyle(context)),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton(
-                      key: ValueKey('shift-history-sales-link-${entry.id}'),
-                      onPressed: () => onViewSales(_salesRequest(entry)),
-                      child: const Text('View sales'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        for (final entry in page.items) _entry(context, entry),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -297,6 +297,81 @@ final class _ShiftHistoryContents extends StatelessWidget {
         ],
       ),
     ],
+  );
+
+  /// One closed shift, its recorded figures, and what can be reached from it.
+  Widget _entry(BuildContext context, TenantShiftHistoryEntry entry) => Card(
+    key: ValueKey('shift-history-entry-${entry.id}'),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${entry.businessDate} - ${_staffLabel(entry)}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            key: ValueKey('shift-history-counted-${entry.id}'),
+            'Counted cash: ${_money(entry.closingCashMinor)}',
+          ),
+          if (entry.summary case final summary?) ...[
+            Text(
+              key: ValueKey('shift-history-sales-${entry.id}'),
+              'Recorded sales: ${_money(summary.totalSalesMinor)} '
+              'over ${summary.transactionCount} '
+              '${summary.transactionCount == 1 ? 'transaction' : 'transactions'}',
+            ),
+            Text(
+              key: ValueKey('shift-history-variance-${entry.id}'),
+              _varianceLabel(entry.cashVarianceMinor!),
+            ),
+          ] else
+            Text(
+              key: ValueKey('shift-history-no-summary-${entry.id}'),
+              'No closing summary was recorded for this shift.',
+            ),
+          // Said before anything is offered, and said to everyone who can read
+          // the shift: the recorded sales on this row are the corrected figure,
+          // and no other line here discloses that.
+          if (entry.amendment case final amendment?) ...[
+            const SizedBox(height: 8),
+            Text(
+              key: ValueKey('shift-history-amended-${entry.id}'),
+              _amendedLabel(amendment),
+            ),
+            if (!canReadCorrections)
+              Text(
+                key: ValueKey('shift-history-corrections-denied-${entry.id}'),
+                'The record of who corrected it, and why, is available to '
+                'managers, administrators, and owners.',
+                style: _mutedStyle(context),
+              ),
+          ],
+          const SizedBox(height: 8),
+          Text(_closedLabel(entry), style: _mutedStyle(context)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              OutlinedButton(
+                key: ValueKey('shift-history-sales-link-${entry.id}'),
+                onPressed: () => onViewSales(_salesRequest(entry)),
+                child: const Text('View sales'),
+              ),
+              if (entry.amendment != null && canReadCorrections)
+                OutlinedButton(
+                  key: ValueKey('shift-history-corrections-link-${entry.id}'),
+                  onPressed: () => onViewCorrections(entry.id),
+                  child: const Text('View this shift\'s corrections'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    ),
   );
 
   String _staffLabel(TenantShiftHistoryEntry entry) => tenantStaffLabel(
@@ -323,6 +398,23 @@ final class _ShiftHistoryContents extends StatelessWidget {
 
   TextStyle? _mutedStyle(BuildContext context) =>
       Theme.of(context).textTheme.bodySmall;
+}
+
+/// What a server-side correction did to the recorded sales on this row.
+///
+/// The counted cash is named explicitly because it is the figure a cashier is
+/// accountable for and the one property the correction path guarantees it never
+/// touches. Saying only that the shift "was corrected" would leave a reader to
+/// wonder whether their drawer count had been rewritten too.
+String _amendedLabel(ShiftSummaryAmendment amendment) {
+  final times = amendment.count == 1 ? 'once' : '${amendment.count} times';
+  final amendedAt = amendment.amendedAt;
+  final when = amendedAt == null
+      ? 'The time of the last correction was not recorded.'
+      : 'Last corrected ${_instant(amendedAt)}.';
+  return 'The recorded sales above were corrected $times after this shift '
+      'closed, to the total its own sales prove. The counted cash was not '
+      'changed. $when';
 }
 
 /// The difference between two recorded figures, named rather than recomputed.

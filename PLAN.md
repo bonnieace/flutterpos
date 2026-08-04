@@ -11808,3 +11808,197 @@ files, and deployment.
 - The first trigger delivery of a cold emulator run costs about 25 seconds on
   this host. Any new timeout in that harness has to be set from that, not from
   the ~310ms every later delivery takes.
+
+---
+
+## One shift's correction, reachable from the shift itself - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **shift history now says on the row when a closed shift's
+recorded sales were corrected, how many times, and when - and opens the
+corrections trail narrowed to that one shift.**
+
+Step 1 of that chunk said to confirm the field was on the document the panel
+already reads before designing around it. It was on the document and **not in
+the read model**, so widening `TenantShiftHistoryEntry` was part of the work
+rather than a lookup.
+
+### The row says it before it offers anything
+
+The link was never the point. `amendShiftSummary` rewrites `totalSales`,
+`totalSalesMinor`, and `transactionCount`, so **the "Recorded sales" figure on a
+corrected row is the rewritten one** - and until this chunk nothing on that row,
+or on the whole page, said so. A manager reading a corrected shift saw a figure
+presented exactly like every uncorrected one beside it.
+
+So the row now states the correction first, and the link is offered after it:
+
+```text
+The recorded sales above were corrected 2 times after this shift closed, to the
+total its own sales prove. The counted cash was not changed. Last corrected
+2026-07-31 19:00 UTC.
+```
+
+Decisions worth recording:
+
+- **A cashier is told, and is not offered the trail.** The trail is
+  owner/admin/manager by both `firestore.rules` and its repository, deliberately
+  excluding the cashier whose shift it is. But the *shift document* is readable
+  by that cashier and carries the correction fields, and the figures on their own
+  row are the rewritten ones. Hiding the correction from the person accountable
+  for the shift would have been worse than withholding the reason, so the
+  sentence is shown to every role that can read the shift and a second sentence
+  names the roles that may read the record of who asked and why. This is the same
+  shape the differences list already uses for a manager who may read it but not
+  act on it.
+- **The counted cash is named in the sentence, not left to be inferred.** It is
+  the figure a cashier is accountable for and the one thing the amendment path
+  guarantees it never writes. "This shift was corrected" alone would leave a
+  reader wondering whether their drawer count had been rewritten too.
+- **The gate is the trail's own repository, not this surface's management set.**
+  `TenantShiftAmendmentFeedRepository.canReadInSession` and
+  `TenantShiftHistoryRepository.canReadEveryCashier` name the same three roles
+  today. They mean different things, and the authority on who may read the trail
+  is the trail.
+- **The page header was corrected too.** It claimed figures were "shown exactly
+  as they were closed", which a corrected row makes false. It now says they are
+  shown as the server holds them, never recomputed here, and that a corrected
+  shift says so on its own row.
+- **No injected capability, no route builder.** `_openCorrections` sits beside
+  `_openSales` and is built the same way: the trail is a read of the same
+  business through the same reader, so there is nothing for a composition root to
+  grant or withhold. `main.dart` did not change.
+
+### What the read model had to refuse
+
+The four fields (`summaryAmendmentId`, `summaryAmendedGeneration`,
+`summaryAmendmentCount`, `summaryAmendedAt`) are written by one transaction and
+by one writer. **No client can write any of them**: the close rule restricts a
+cashier's single update to the seven closing keys, and
+`rules-tests/test/shift-amendments.test.js` already proves a forged
+`summaryAmendmentId` is denied to both the cashier and the owner. So a partial or
+incoherent set is either a server that changed its contract without this client
+knowing or a document no server wrote, and it is refused rather than read as an
+uncorrected shift - reporting a rewritten total as an original one is the single
+outcome this surface must not produce.
+
+Three lines drawn deliberately:
+
+- **The three deterministic fields are required together; the instant is not.**
+  `summaryAmendedAt` is a server timestamp, and every instant in this read model
+  is decoded as absent-or-valid for that reason. Its absence limits what the row
+  can say about *when*; it never puts the correction itself in doubt, and the row
+  says so in words.
+- **A corrected shift with no summary is refused**
+  (`amended_shift_without_summary`). The correction rewrites the three summary
+  fields, so this document could not have come from one, and the row would
+  otherwise have to say both that no totals were recorded and that the totals
+  were corrected.
+- **`summaryAmendmentCount` below 1 is refused.** The server writes the ID and
+  increments the count in the same update, so a corrected shift has had at least
+  one correction.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/shift/shift_history.dart
+lib/shift/shift_history_panel.dart
+test/shift/shift_history_panel_test.dart
+test/shift/shift_history_test.dart
+```
+
+No `functions/src`, Rules, index, or composition-root change. Nothing needed a
+device or an emulator: the amended shift shape is already pinned on the server
+side by `rules-tests/test/shift-amendments.test.js` and by the integration
+suite's `amendShiftSummary` assertions from the previous chunk.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/shift lib/reporting test/shift test/reporting` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1185/1185**, up from 1175, adding **10** tests |
+| the same with `shiftId:` dropped from `_openCorrections` | the narrowed-trail test fails, as it must |
+| the same with `canReadCorrections` forced to `true` | the cashier test fails, as it must |
+| `git diff --check` | clean |
+
+The 10 new tests are 6 read-model cases and 4 panel cases.
+
+### Meaningful failures and their resolutions
+
+- **A control-character escape written into a test file became a literal control
+  byte**, exactly as the note carried forward two handovers above warned. The
+  refused-generation case now builds the character with `String.fromCharCode(1)`
+  and a comment saying why, so the source file can never carry one. The whole
+  file was re-scanned for control bytes afterwards; none remain.
+- **A `[IO.File]::WriteAllText` round-trip silently stripped the UTF-8 BOM** from
+  `lib/shift/shift_history_panel.dart`, which showed up as a one-line change to
+  the import at the top of the diff. Restored by prepending the three bytes, and
+  the analyzer and the suite were re-run afterwards. Some files in this
+  repository carry a BOM and some do not; a PowerShell rewrite is not
+  byte-preserving and the diff is what catches it.
+- **A PowerShell `Replace` using a CR-LF newline matched nothing**: these files
+  use LF endings.
+- No assertion in the shipped code failed.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**The stock half of the reconciliation integration runner.** The suite now
+carries a real sale through the metrics phase and the shift-verification phase;
+`processStockPage` and its checkpoint chain are the remaining phase, and it is
+the one that mutates nothing but is hardest to reason about from pure tests.
+
+1. Seed a product whose `stockOnHand` deliberately disagrees with what the sale
+   filed against it moved, exactly as the shift fixture seeds a summary that is
+   deliberately wrong.
+2. Assert a `reconciliation_anomalies` record of kind `stock_variance` with the
+   expected, observed, and variance figures the ledger and the product actually
+   differ by - found by querying `productId`, not by recomputing its digest, for
+   the same reason the shift anomaly is found that way.
+3. Assert the phase's checkpoint and counters on the completed job, waiting for
+   `completed` rather than sampling, as the shifts phase does.
+4. Assert that a product whose ledger agrees produces **no** record. A phase that
+   reports a difference for everything is as broken as one that reports none, and
+   the fixture should make both observable in one run.
+
+Then, in preference order:
+
+- **The landing screen's `Center` inside `SingleChildScrollView`.** Still a
+  look-and-feel decision about the whole safe landing route rather than a defect,
+  and it still wants a deliberate answer rather than a quiet edit. Ask before
+  changing it.
+- **A `shiftId`-narrowed entry point from the differences list.** That list opens
+  the trail unnarrowed even when the row it was clicked beside names one shift.
+  It is the same narrowing this chunk added to history, applied to the other
+  surface that already knows the shift ID.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- A read model that drops a field the server writes is invisible until a surface
+  needs it. `TenantShiftHistoryEntry` had dropped four for as long as the
+  amendment path existed, and no test could have noticed.
+- Do not rewrite a source file with PowerShell unless the BOM is preserved
+  explicitly. Check `git diff` for a changed first line afterwards.

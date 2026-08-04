@@ -1,3 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
@@ -24,6 +27,42 @@ final class ShiftClosingSummary {
   double get totalSales => totalSalesMinor / 100;
 }
 
+/// The account a corrected shift carries of its own correction.
+///
+/// `functions/src/reconciliation/amendments.ts` writes these four fields in the
+/// same transaction that rewrites the shift's totals, settles its expectation,
+/// and removes the listed difference. It is the only writer that can:
+/// `firestore.rules` limits a cashier's one close update to the seven closing
+/// keys and denies every other client write, so a shift carrying them was
+/// corrected by `amendShiftSummary` and by nothing else.
+///
+/// They matter on a history row because the totals a corrected shift reports
+/// **are** the rewritten ones. A row that showed them without saying so would
+/// present a figure the cashier never closed as the figure they closed.
+final class ShiftSummaryAmendment {
+  const ShiftSummaryAmendment._({
+    required this.latestId,
+    required this.generation,
+    required this.count,
+    required this.amendedAt,
+  });
+
+  /// The most recent `shift_amendments` record written for this shift.
+  final String latestId;
+
+  /// The `shift_expectations` generation the corrected figure was read from. The
+  /// trail's own `expectationGeneration` names the same one, which is what makes
+  /// a second correction of the same comparison impossible.
+  final String generation;
+
+  /// How many corrections this shift's summary has had. The server increments
+  /// it, so it counts every one rather than only the latest.
+  final int count;
+
+  /// The server instant of the latest correction.
+  final DateTime? amendedAt;
+}
+
 /// Strict read model for one closed `tenants/{tenantId}/shifts/{shiftId}`.
 ///
 /// Identity, path, device, business date, and status are proved by
@@ -43,10 +82,21 @@ final class TenantShiftHistoryEntry {
     if (closingCashMinor == null) {
       throw const TenantShiftException('invalid_shift_document');
     }
+    final summary = _closingSummary(data);
+    final amendment = _summaryAmendment(data);
+    // A correction is read from the sale-derived expectation and rewrites the
+    // three summary fields, so a corrected shift always carries a summary. A
+    // document claiming otherwise cannot account for the figures it reports, and
+    // this surface would have to say both that no totals were recorded and that
+    // the totals were corrected.
+    if (amendment != null && summary == null) {
+      throw const TenantShiftException('amended_shift_without_summary');
+    }
     return TenantShiftHistoryEntry._(
       shift: shift,
       closingCashMinor: closingCashMinor,
-      summary: _closingSummary(data),
+      summary: summary,
+      amendment: amendment,
     );
   }
 
@@ -54,6 +104,7 @@ final class TenantShiftHistoryEntry {
     required this.shift,
     required this.closingCashMinor,
     required this.summary,
+    required this.amendment,
   });
 
   final TenantShift shift;
@@ -61,6 +112,9 @@ final class TenantShiftHistoryEntry {
 
   /// Absent only when the shift was closed without a sale-derived summary.
   final ShiftClosingSummary? summary;
+
+  /// Absent for every shift whose summary still says what its close said.
+  final ShiftSummaryAmendment? amendment;
 
   String get id => shift.id;
   String get tenantId => shift.tenantId;
@@ -116,6 +170,85 @@ final class TenantShiftHistoryEntry {
       transactionCount: transactionCount,
     );
   }
+
+  /// The three deterministic correction fields are written by one transaction, so
+  /// a document carries all of them or none. A partial set is refused rather than
+  /// read as an uncorrected shift: no client can write any of these fields at
+  /// all, so a partial set is either a server that changed its contract without
+  /// this client knowing or a document no server wrote - and reporting a
+  /// rewritten total as an original one is the single outcome this surface must
+  /// not produce.
+  ///
+  /// `summaryAmendedAt` is a server timestamp, and every instant in this read
+  /// model is decoded as absent-or-valid for that reason. Its absence limits what
+  /// a row can say about when the correction happened; it never puts the
+  /// correction itself in doubt.
+  static ShiftSummaryAmendment? _summaryAmendment(Map<String, Object?> data) {
+    final latestId = data['summaryAmendmentId'];
+    final generation = data['summaryAmendedGeneration'];
+    final count = data['summaryAmendmentCount'];
+    final present = <Object?>[latestId, generation, count]
+        .where((value) => value != null)
+        .length;
+    if (present == 0) {
+      // An instant on its own records a correction that nothing else accounts
+      // for, which is exactly the shape this check exists to catch.
+      if (data['summaryAmendedAt'] != null) {
+        throw const TenantShiftException('incomplete_shift_amendment');
+      }
+      return null;
+    }
+    if (present != 3) {
+      throw const TenantShiftException('incomplete_shift_amendment');
+    }
+    // The server writes the amendment ID and increments the count in the same
+    // update, so a corrected shift has had at least one correction. A count below
+    // that contradicts the record beside it.
+    if (count is! int || count < 1) {
+      throw const TenantShiftException('invalid_shift_amendment');
+    }
+    return ShiftSummaryAmendment._(
+      latestId: _amendmentDocumentId(latestId),
+      generation: _amendmentGeneration(generation),
+      count: count,
+      amendedAt: _amendmentInstant(data['summaryAmendedAt']),
+    );
+  }
+}
+
+String _amendmentDocumentId(Object? value) {
+  if (value is! String) {
+    throw const TenantShiftException('invalid_shift_amendment');
+  }
+  try {
+    return validateTenantDocumentId(value, fieldName: 'summaryAmendmentId');
+  } on ArgumentError {
+    throw const TenantShiftException('invalid_shift_amendment');
+  }
+}
+
+/// A bounded printable identifier, held to the shape the corrections trail holds
+/// its own copy of the same generation to.
+String _amendmentGeneration(Object? value) {
+  if (value is! String ||
+      value.isEmpty ||
+      value.length > 200 ||
+      value != value.trim()) {
+    throw const TenantShiftException('invalid_shift_amendment');
+  }
+  for (final codeUnit in value.codeUnits) {
+    if (codeUnit < 0x20 || codeUnit == 0x7f) {
+      throw const TenantShiftException('invalid_shift_amendment');
+    }
+  }
+  return value;
+}
+
+DateTime? _amendmentInstant(Object? value) {
+  if (value == null) return null;
+  if (value is Timestamp) return value.toDate().toUtc();
+  if (value is DateTime) return value.toUtc();
+  throw const TenantShiftException('invalid_shift_amendment');
 }
 
 /// Whose closed shifts a history page covers.

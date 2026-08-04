@@ -247,6 +247,130 @@ void main() {
     });
   });
 
+  testWidgets('a corrected shift says so and opens its own corrections', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-a', overrides: _amended()),
+      ])
+      ..respond(
+        'tenants/tenant-a/shift_amendments',
+        <TenantQueryDocumentSnapshot>[_amendmentSnapshot()],
+      );
+
+    await _pumpPanel(tester, _controller(TenantRole.manager), reader);
+
+    // Said before the link, and about the figures on this row rather than in
+    // general: the recorded sales above are the corrected ones.
+    _expectText(
+      tester,
+      'shift-history-amended-shift-a',
+      'The recorded sales above were corrected 2 times after this shift '
+          'closed, to the total its own sales prove. The counted cash was not '
+          'changed. Last corrected 2026-07-31 19:00 UTC.',
+    );
+    expect(
+      find.byKey(const ValueKey('shift-history-corrections-denied-shift-a')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('shift-history-corrections-link-shift-a')),
+    );
+    await tester.pumpAndSettle();
+
+    // The trail opens narrowed to this exact shift, and says which one it is
+    // showing rather than implying it is the whole business's record.
+    expect(find.text('Corrections to shift shift-a'), findsOne);
+    expect(
+      reader.queries.last.collectionPath,
+      'tenants/tenant-a/shift_amendments',
+    );
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'shiftId': 'shift-a',
+    });
+    expect(find.byKey(const ValueKey('shift-amendment-sm_abc')), findsOne);
+  });
+
+  testWidgets('a shift nobody corrected offers nothing about corrections', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-a'),
+      ]);
+
+    await _pumpPanel(tester, _controller(TenantRole.manager), reader);
+
+    expect(
+      find.byKey(const ValueKey('shift-history-amended-shift-a')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('shift-history-corrections-link-shift-a')),
+      findsNothing,
+    );
+    // The row it does offer is unaffected.
+    expect(
+      find.byKey(const ValueKey('shift-history-sales-link-shift-a')),
+      findsOne,
+    );
+  });
+
+  testWidgets('one correction is counted in the singular', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot(
+          'shift-b',
+          overrides: <String, Object?>{
+            ..._amended(),
+            'summaryAmendmentCount': 1,
+            // A correction whose instant the server never recorded still says
+            // what it did.
+            'summaryAmendedAt': null,
+          },
+        ),
+      ]);
+
+    await _pumpPanel(tester, _controller(TenantRole.admin), reader);
+
+    _expectText(
+      tester,
+      'shift-history-amended-shift-b',
+      'The recorded sales above were corrected once after this shift closed, '
+          'to the total its own sales prove. The counted cash was not changed. '
+          'The time of the last correction was not recorded.',
+    );
+  });
+
+  testWidgets('a cashier is told their shift was corrected and why they cannot '
+      'read the trail', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot('shift-a', overrides: _amended()),
+      ]);
+
+    await _pumpPanel(tester, _controller(TenantRole.cashier), reader);
+
+    // Their own figures were rewritten, so hiding that would be worse than the
+    // link they may not have: the shift document they can already read says so.
+    expect(
+      find.byKey(const ValueKey('shift-history-amended-shift-a')),
+      findsOne,
+    );
+    expect(
+      find.byKey(const ValueKey('shift-history-corrections-link-shift-a')),
+      findsNothing,
+    );
+    _expectText(
+      tester,
+      'shift-history-corrections-denied-shift-a',
+      'The record of who corrected it, and why, is available to managers, '
+          'administrators, and owners.',
+    );
+  });
+
   testWidgets('no session renders the denied state and starts no load', (
     tester,
   ) async {
@@ -349,6 +473,44 @@ TenantQueryDocumentSnapshot _snapshot(
     data: data,
   );
 }
+
+/// The four fields `amendShiftSummary` leaves on a shift it corrected. The count
+/// is 2 so the plural cannot pass by accident.
+Map<String, Object?> _amended() => <String, Object?>{
+  'summaryAmendmentId': 'sm_abc',
+  'summaryAmendedGeneration': 'generation-one',
+  'summaryAmendmentCount': 2,
+  'summaryAmendedAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 19)),
+};
+
+/// One `shift_amendments` record the trail's own strict read model accepts, so
+/// the narrowed page this panel opens renders rather than failing closed.
+TenantQueryDocumentSnapshot _amendmentSnapshot() => TenantQueryDocumentSnapshot(
+  path: 'tenants/tenant-a/shift_amendments/sm_abc',
+  data: <String, Object?>{
+    'amendmentId': 'sm_abc',
+    'tenantId': 'tenant-a',
+    'shiftId': 'shift-a',
+    'staffId': 'user-a',
+    'businessDate': _businessDate,
+    'sourceType': 'reconciliation_shift_variance',
+    'expectationId': 'exp-a',
+    'expectationGeneration': 'generation-one',
+    'previousTotalSalesMinor': 98750,
+    'previousTransactionCount': 3,
+    'previousRepresentationsAgreed': true,
+    'totalSalesMinor': 98250,
+    'transactionCount': 3,
+    'salesVarianceMinor': 500,
+    'transactionVariance': 0,
+    'clearedAnomalyId': null,
+    'mutatesCountedCash': false,
+    'reason': 'A late sale arrived after the shift closed',
+    'actorUid': 'user-a',
+    'requestId': 'amend-shift-abcdefgh',
+    'createdAt': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 19)),
+  },
+);
 
 final class _Reader implements TenantDataReader {
   _Reader({this.deferred = false, this.deniedStaff = false});
