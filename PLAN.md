@@ -12233,3 +12233,174 @@ files, and deployment.
   rather than a limitation of the harness.
 - `reconcileProduct` defers a product written in the last five minutes. Any stock
   fixture has to seed a settled `updatedAt` or it tests the deferral instead.
+
+---
+
+## The same narrowing, from the other side - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **the differences list now opens the corrections trail narrowed
+to the shift the row names**, and keeps it reachable after the row has been
+deleted.
+
+`openTenantShiftAmendments` has taken a `shiftId` since the trail was written and
+nothing had ever passed one. Shift history got the first caller earlier in this
+session; this is the surface where the question is asked most often, because it is
+the surface the correction is made from.
+
+### Three places it is now offered, and one where it deliberately is not
+
+- **Per row, for every row that names a shift** - not only the one kind that can
+  be corrected. A shift corrected at a later generation can still be listed under
+  an earlier one, because a `reconciliation_anomalies` record is keyed by shift
+  *and generation* and a correction deletes only the generation it settled. So
+  "has this already been dealt with?" is a real question on an
+  `invalid_or_missing_shift` row, and the answer - including "never" - comes from
+  the trail rather than from this list. A test pins that row offering the link
+  while offering no correction.
+- **Beside the notice, after a correction succeeds.** The row it resolved has
+  been deleted by the server, so without this the correction just made would be
+  reachable only by opening the whole business's trail and reading down. It is
+  narrowed to the shift **the server's answer named**, not the shift this page
+  asked about, which is the same rule the notice text already follows.
+- **Beside the notice, after an outcome nobody knows.** Whether a correction was
+  recorded is precisely the open question there, and the trail is the only place
+  that answers it. Both the ambiguous refusal and the untrustworthy-answer path
+  now offer it, and the untrustworthy-answer sentence was reworded to say so.
+- **Not after a refusal that certainly changed nothing.** A definite refusal left
+  the shift exactly as it was, so there is nothing new to look at, and a link
+  there would imply otherwise. Pinned by its own test.
+
+Two more decisions worth recording:
+
+- **No role check was added, and adding one would have been wrong.**
+  `TenantReconciliationAnomalyRepository.allowedRoles` and
+  `TenantShiftAmendmentFeedRepository.allowedRoles` are the same three roles, so
+  anyone who can read this page can read the trail. The manager who may read the
+  list but not correct anything is the case that matters, and a test asserts that
+  manager gets the trail link and no correction button.
+- **The page-level button stays.** A list covering several shifts and one shift's
+  own trail answer different questions, so the narrowed link was added beside the
+  business-wide one rather than replacing it.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/reporting/reconciliation_anomalies_panel.dart
+test/reporting/reconciliation_anomalies_panel_test.dart
+```
+
+No `functions/src`, Rules, index, or composition-root change. Nothing needed a
+device or an emulator.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/reporting test/reporting` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1191/1191**, up from 1185, adding **6** tests |
+| the same with the row's link passing `null` instead of the shift, and the refusal branch keeping the shift | exactly the three tests that pin those two properties fail, as they must |
+| `git diff --check` | clean |
+
+The emulator suites were not re-run for this chunk: it changed one Flutter widget
+and its test, and the four server suites had already been run green after the
+previous chunk froze. Their totals are unchanged at 206, 139, 8, and 12.
+
+### Meaningful failures and their resolutions
+
+- **The panel test's fake reader answered every collection from one page.** It
+  returns documents by cursor and filter but ignored the collection path, so the
+  trail this page opens would have been served the differences list's own
+  documents and failed its strict read model closed - a route that opened
+  correctly would have looked broken. It now keys pages by exact collection path
+  and falls back to the single page, so every existing test is unaffected.
+- No assertion in the shipped code failed. All six new tests passed on their first
+  run.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` over the 10 in-scope paths | 1191 |
+| `npm --prefix functions test` | 206 |
+| `npm --prefix rules-tests run test:emulator` | 139 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 8 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1556 tests across five suites**, up from 1539 at the start of the session,
+adding **17** across three chunks. Nothing was left failing and no suite was
+skipped except the Android build and the Android emulator runs.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**A stock difference, reached from the product it belongs to.** The runner now has
+end-to-end evidence that a `stock_variance` record exists with real expected,
+observed, and variance figures, and the differences list renders it - but the
+product stock surface, which is where somebody answers for a product's on-hand,
+says nothing about a difference being listed against it. The correction for a
+stock difference is a stock adjustment made from that surface, so the operator who
+can act on it is the one who cannot currently see it.
+
+1. `TenantProductStockRepository` reads the product; the difference lives in
+   `reconciliation_anomalies` filtered by `productId ==`. Confirm that read is
+   allowed to the roles the product stock surface is granted to before designing
+   around it - the differences list is owner/admin/manager, and the stock surface
+   may be wider.
+2. State the figures the record carries and never recompute them: the ledger's
+   expected quantity, the product's observed quantity, and which way they differ.
+   The existing `_detail` sentence in the differences panel is the wording to
+   match.
+3. Distinguish the three stock kinds the phase can record -`stock_variance`,
+   `invalid_stock_movement`, and `checkpoint_chain_invalid`. The last two are not
+   quantity disagreements and an adjustment does not resolve them, so saying
+   "correct this" for them would be wrong.
+4. Do not add a resolution path. Recording an adjustment already exists on that
+   surface; this chunk is about the difference being visible where the adjustment
+   is made, and the existing excluded work stays excluded.
+5. Cover a product with no difference showing nothing, one with a
+   `stock_variance` showing the figures, one of each other kind saying what it is,
+   and a failed or denied anomaly read leaving the stock surface itself readable.
+
+Then, in preference order:
+
+- **The landing screen's `Center` inside `SingleChildScrollView`.** Still a
+  look-and-feel decision about the whole safe landing route rather than a defect,
+  and it still wants a deliberate answer rather than a quiet edit. Ask first.
+- **The stock phase's other two outcomes, against a real server.** The integration
+  suite now proves the variance path; `invalid_stock_movement` and
+  `checkpoint_chain_invalid` are the two the fixture could engineer next, and the
+  second is the one that would catch two modules disagreeing about a checkpoint
+  hash.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **A fake reader that ignores the collection path makes any route this surface
+  opens untestable.** Two panel fakes in this repository now key pages by exact
+  path; a third that does not will fail the next route it opens for the wrong
+  reason.
+- A narrowing parameter that no caller passes is not a feature. Two surfaces in
+  this session were the first callers of one that had existed, untested from the
+  caller's side, since the trail was written.

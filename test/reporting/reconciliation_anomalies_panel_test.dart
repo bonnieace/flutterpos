@@ -460,6 +460,211 @@ void main() {
     );
   });
 
+  testWidgets('a shift difference opens the trail narrowed to that shift', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('shift_b', _shiftAnomaly()),
+      ])
+      ..respondAt(
+        'tenants/tenant-a/shift_amendments',
+        <TenantQueryDocumentSnapshot>[_amendmentSnapshot()],
+      );
+
+    // A manager reads this list and the trail, and may correct nothing. The
+    // narrowed trail is the read, so it is offered here exactly as it is to an
+    // owner: both surfaces are granted to the same three roles.
+    await _pump(tester, _controller(), reader);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-amend-shift_b')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-anomaly-corrections-shift_b')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Corrections to shift shift-a'), findsOne);
+    expect(
+      reader.queries.last.collectionPath,
+      'tenants/tenant-a/shift_amendments',
+    );
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'shiftId': 'shift-a',
+    });
+    expect(find.byKey(const ValueKey('shift-amendment-sm_abc')), findsOne);
+  });
+
+  testWidgets('a difference about no shift offers no trail of its own', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('product_b', _stockAnomaly()),
+        _snapshot('sale_b', _saleAnomaly()),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    for (final id in <String>['product_b', 'sale_b']) {
+      expect(
+        find.byKey(ValueKey('reconciliation-anomaly-corrections-$id')),
+        findsNothing,
+        reason: id,
+      );
+    }
+    // The business-wide trail is still reachable; only the per-row narrowing is
+    // absent, because these rows name no shift to narrow to.
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomalies-amendments')),
+      findsOne,
+    );
+  });
+
+  testWidgets('a shift difference nothing can correct still reaches the trail', (
+    tester,
+  ) async {
+    // Deliberate: the trail is offered for every row that names a shift, not only
+    // the one kind that can be corrected. A shift corrected at a later generation
+    // can still be listed under an earlier one, so whether this has already been
+    // dealt with is a real question - and the answer, including "never", comes
+    // from the trail rather than from this list.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('invalid_b', _invalidShiftAnomaly()),
+      ])
+      ..respondAt(
+        'tenants/tenant-a/shift_amendments',
+        <TenantQueryDocumentSnapshot>[],
+      );
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.owner),
+      reader,
+      callable: _Callable(_response()),
+    );
+    // Its totals were unreadable, so there is no figure the sales prove and no
+    // correction to offer.
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-amend-invalid_b')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-anomaly-corrections-invalid_b')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'shiftId': 'shift-b',
+    });
+    expect(
+      _text(tester, 'shift-amendments-empty'),
+      'This shift\'s summary has never been corrected.',
+    );
+  });
+
+  testWidgets('a correction stays reachable after its row is deleted', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('shift_b', _shiftAnomaly()),
+      ])
+      ..respondAt(
+        'tenants/tenant-a/shift_amendments',
+        <TenantQueryDocumentSnapshot>[_amendmentSnapshot()],
+      );
+    final callable = _Callable(
+      _response(),
+      onCall: () => reader.respond(<TenantQueryDocumentSnapshot>[]),
+    );
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.owner),
+      reader,
+      callable: callable,
+    );
+    await _amend(tester, 'shift_b', 'Late offline sale');
+
+    // The row is gone - the server deleted the difference - so without this the
+    // correction just made would be reachable only by opening the whole
+    // business's trail and reading down.
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-shift_b')),
+      findsNothing,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-amend-notice-trail')),
+    );
+    await tester.pumpAndSettle();
+
+    // Narrowed to the shift the server's own answer named, not to the one this
+    // page asked about.
+    expect(reader.queries.last.equalityFilters, <String, Object?>{
+      'shiftId': 'shift-a',
+    });
+    expect(find.byKey(const ValueKey('shift-amendment-sm_abc')), findsOne);
+  });
+
+  testWidgets('an unknown outcome offers the trail that would settle it', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('shift_b', _shiftAnomaly()),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.owner),
+      reader,
+      callable: _Callable.failing(
+        FirebaseFunctionsException(code: 'unavailable', message: 'down'),
+      ),
+    );
+    await _amend(tester, 'shift_b', 'Late offline sale');
+
+    // Whether a correction was recorded is the open question, and the trail is
+    // the only place that answers it.
+    expect(
+      find.byKey(const ValueKey('reconciliation-amend-notice-trail')),
+      findsOne,
+    );
+  });
+
+  testWidgets('a refusal that changed nothing offers nothing to look at', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('shift_b', _shiftAnomaly()),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.owner),
+      reader,
+      callable: _Callable.failing(
+        FirebaseFunctionsException(
+          code: 'failed-precondition',
+          message: 'refused',
+        ),
+      ),
+    );
+    await _amend(tester, 'shift_b', 'Late offline sale');
+
+    expect(find.byKey(const ValueKey('reconciliation-amend-notice')), findsOne);
+    expect(
+      find.byKey(const ValueKey('reconciliation-amend-notice-trail')),
+      findsNothing,
+    );
+  });
+
   testWidgets('a record that contradicts itself fails the page closed', (
     tester,
   ) async {
@@ -622,6 +827,36 @@ Map<String, Object?> _document(
   return data;
 }
 
+/// One `shift_amendments` record the trail's own strict read model accepts, so a
+/// narrowed page this surface opens renders rather than failing closed.
+TenantQueryDocumentSnapshot _amendmentSnapshot({String shiftId = 'shift-a'}) =>
+    TenantQueryDocumentSnapshot(
+      path: 'tenants/tenant-a/shift_amendments/sm_abc',
+      data: <String, Object?>{
+        'amendmentId': 'sm_abc',
+        'tenantId': 'tenant-a',
+        'shiftId': shiftId,
+        'staffId': 'cashier-a',
+        'businessDate': '2026-07-31',
+        'sourceType': 'reconciliation_shift_variance',
+        'expectationId': 'exp-a',
+        'expectationGeneration': 'generation-one',
+        'previousTotalSalesMinor': 120050,
+        'previousTransactionCount': 9,
+        'previousRepresentationsAgreed': true,
+        'totalSalesMinor': 135025,
+        'transactionCount': 10,
+        'salesVarianceMinor': -14975,
+        'transactionVariance': -1,
+        'clearedAnomalyId': null,
+        'mutatesCountedCash': false,
+        'reason': 'A late sale arrived after the shift closed',
+        'actorUid': 'manager-a',
+        'requestId': 'amend-shift-abcdefgh',
+        'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 3)),
+      },
+    );
+
 TenantQueryDocumentSnapshot _snapshot(String id, Map<String, Object?> data) =>
     TenantQueryDocumentSnapshot(
       path: 'tenants/tenant-a/reconciliation_anomalies/$id',
@@ -692,7 +927,16 @@ final class _Reader implements TenantDataReader {
   Completer<List<TenantQueryDocumentSnapshot>>? _pending;
   final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
 
+  /// Pages keyed by the exact collection a repository asks for, so a route this
+  /// page opens reads its own collection rather than this one's documents under
+  /// another name.
+  final Map<String, List<TenantQueryDocumentSnapshot>> _pagesByPath =
+      <String, List<TenantQueryDocumentSnapshot>>{};
+
   void respond(List<TenantQueryDocumentSnapshot> page) => _page = page;
+
+  void respondAt(String collectionPath, List<TenantQueryDocumentSnapshot> page) =>
+      _pagesByPath[collectionPath] = page;
 
   /// Holds the next page open so a business switch can happen mid-read.
   void defer() =>
@@ -716,7 +960,7 @@ final class _Reader implements TenantDataReader {
     if (pending != null) await pending.future;
     final cursor = query.startAfterDocumentId;
     final matches = <TenantQueryDocumentSnapshot>[];
-    for (final snapshot in _page) {
+    for (final snapshot in _pagesByPath[query.collectionPath] ?? _page) {
       final id = snapshot.path.split('/').last;
       if (cursor != null && id.compareTo(cursor) <= 0) continue;
       // A fake that ignored the repository's own filter would make a narrowed

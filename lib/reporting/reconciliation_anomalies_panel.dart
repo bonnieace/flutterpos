@@ -106,6 +106,16 @@ final class _TenantReconciliationAnomalyPanelState
   int _generation = 0;
   bool _busy = false;
   String? _notice;
+
+  /// The shift the current notice is about, when its corrections trail is worth
+  /// offering beside it.
+  ///
+  /// Set after a correction that succeeded - the row it resolved has been deleted,
+  /// so the trail is the only remaining account of it - and after one whose
+  /// outcome is unknown, where whether a correction was recorded is exactly the
+  /// open question. Left null for a refusal that certainly changed nothing.
+  String? _noticeShiftId;
+
   TenantReconciliationAnomalyKind? _kind;
 
   /// Retained only across an ambiguous attempt, so a retry addresses the same
@@ -186,6 +196,7 @@ final class _TenantReconciliationAnomalyPanelState
     setState(() {
       _busy = true;
       _notice = null;
+      _noticeShiftId = null;
     });
     try {
       final gateway = TenantShiftAmendmentGateway(
@@ -199,7 +210,13 @@ final class _TenantReconciliationAnomalyPanelState
       );
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
-      setState(() => _notice = _amendedNotice(result));
+      setState(() {
+        _notice = _amendedNotice(result);
+        // The server's own answer, not the shift this page asked about, so the
+        // trail offered beside the notice is narrowed to the shift that was
+        // actually corrected.
+        _noticeShiftId = result.shiftId;
+      });
       _reload();
     } on TenantShiftAmendmentException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
@@ -207,17 +224,25 @@ final class _TenantReconciliationAnomalyPanelState
       // request ID. Every other refusal left the shift exactly as it was, and
       // reusing its ID would make a later attempt fail as a duplicate.
       if (!error.mayHaveAmended) _requestId = null;
-      setState(() => _notice = _refusalNotice(error.failure));
+      setState(() {
+        _notice = _refusalNotice(error.failure);
+        // Whether a correction was recorded is the open question after an unknown
+        // outcome, and the trail is where it is answered. A refusal that certainly
+        // changed nothing has nothing to look at.
+        _noticeShiftId = error.mayHaveAmended ? shiftId : null;
+      });
       if (error.mayHaveAmended) _reload();
     } on FormatException {
       if (!_stillCurrent(capturedKey)) return;
       // The shift may well have been amended; only the answer was unusable.
-      setState(
-        () => _notice =
+      setState(() {
+        _notice =
             'The server answer could not be trusted. The shift may have been '
             'corrected; this list has been read again, so check whether the '
-            'difference is still listed before trying once more.',
-      );
+            'difference is still listed - or this shift\'s corrections - before '
+            'trying once more.';
+        _noticeShiftId = shiftId;
+      });
       _reload();
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -263,6 +288,7 @@ final class _TenantReconciliationAnomalyPanelState
         pageIndex: _pageIndex,
         busy: _busy,
         notice: _notice,
+        noticeShiftId: _noticeShiftId,
         // The correction appears only when the composition root injected the
         // callable and the session holds a role the server would accept.
         // Offering it otherwise would teach an operator nothing except that the
@@ -277,9 +303,14 @@ final class _TenantReconciliationAnomalyPanelState
         onNarrow: _narrow,
         // The trail is a read of the same business under the same reader, so it
         // needs no injected capability: unlike the correction itself, there is
-        // nothing here for a composition root to grant or withhold.
-        onOpenAmendments: () =>
-            openTenantShiftAmendments(context, reader: widget.reader),
+        // nothing here for a composition root to grant or withhold. It also needs
+        // no role check of its own - this list and the trail are granted to the
+        // same three roles, so anyone reading this page can read the trail.
+        onOpenAmendments: (shiftId) => openTenantShiftAmendments(
+          context,
+          reader: widget.reader,
+          shiftId: shiftId,
+        ),
         onNextPage: () => _nextPage(page.nextCursor),
         onPreviousPage: _previousPage,
       ),
@@ -339,6 +370,7 @@ final class _AnomalyContents extends StatelessWidget {
     required this.pageIndex,
     required this.busy,
     required this.notice,
+    required this.noticeShiftId,
     required this.canAmend,
     required this.amendOffered,
     required this.onAmend,
@@ -353,15 +385,20 @@ final class _AnomalyContents extends StatelessWidget {
   final int pageIndex;
   final bool busy;
   final String? notice;
+
+  /// The shift the notice is about, when its trail is worth offering beside it.
+  final String? noticeShiftId;
+
   final bool canAmend;
   final bool amendOffered;
   final void Function(TenantReconciliationAnomaly anomaly, String reason)
   onAmend;
   final ValueChanged<TenantReconciliationAnomalyKind?> onNarrow;
 
-  /// Opens the trail of corrections already made. A resolved difference is
-  /// deleted from this list, so this is the only place they remain visible.
-  final VoidCallback onOpenAmendments;
+  /// Opens the trail of corrections already made, for one shift or - with null -
+  /// for the whole business. A resolved difference is deleted from this list, so
+  /// this is the only place they remain visible.
+  final ValueChanged<String?> onOpenAmendments;
 
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
@@ -406,6 +443,21 @@ final class _AnomalyContents extends StatelessWidget {
       if (notice case final message?) ...[
         const SizedBox(height: 12),
         Text(key: const ValueKey('reconciliation-amend-notice'), message),
+        // The row this notice is about has been deleted from the list, or may
+        // have been, so without this the correction it names would be reachable
+        // only by opening the whole business's trail and reading down.
+        if (noticeShiftId case final shiftId?) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey('reconciliation-amend-notice-trail'),
+              onPressed: () => onOpenAmendments(shiftId),
+              icon: const Icon(Icons.history_edu_outlined),
+              label: const Text('View this shift\'s corrections'),
+            ),
+          ),
+        ],
       ],
       if (amendOffered && !canAmend && _listsShiftVariance) ...[
         const SizedBox(height: 12),
@@ -442,7 +494,7 @@ final class _AnomalyContents extends StatelessWidget {
       // may not make one.
       OutlinedButton.icon(
         key: const ValueKey('reconciliation-anomalies-amendments'),
-        onPressed: onOpenAmendments,
+        onPressed: () => onOpenAmendments(null),
         icon: const Icon(Icons.history_edu_outlined),
         label: const Text('View shift corrections already made'),
       ),
@@ -507,17 +559,40 @@ final class _AnomalyContents extends StatelessWidget {
                 _instants(anomaly),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              if (_canAmendRow(anomaly)) ...[
+              if (_canAmendRow(anomaly) || anomaly.shiftId != null) ...[
                 const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  key: ValueKey('reconciliation-anomaly-amend-${anomaly.id}'),
-                  onPressed: busy
-                      ? null
-                      : () => _confirmAmend(context, anomaly),
-                  icon: const Icon(Icons.rule_outlined),
-                  label: Text(
-                    busy ? 'Correcting...' : 'Correct this shift\'s totals',
-                  ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    if (_canAmendRow(anomaly))
+                      OutlinedButton.icon(
+                        key: ValueKey(
+                          'reconciliation-anomaly-amend-${anomaly.id}',
+                        ),
+                        onPressed: busy
+                            ? null
+                            : () => _confirmAmend(context, anomaly),
+                        icon: const Icon(Icons.rule_outlined),
+                        label: Text(
+                          busy ? 'Correcting...' : 'Correct this shift\'s totals',
+                        ),
+                      ),
+                    // Offered for every row that names a shift, not only the one
+                    // kind that can be corrected. A shift already corrected at a
+                    // later generation can still be listed under an earlier one,
+                    // so "has this already been dealt with" is a real question
+                    // here - and the answer, including "never", comes from the
+                    // trail rather than from this list.
+                    if (anomaly.shiftId case final shiftId?)
+                      OutlinedButton(
+                        key: ValueKey(
+                          'reconciliation-anomaly-corrections-${anomaly.id}',
+                        ),
+                        onPressed: () => onOpenAmendments(shiftId),
+                        child: const Text('View this shift\'s corrections'),
+                      ),
+                  ],
                 ),
               ],
             ],
