@@ -3,12 +3,15 @@ import test from "node:test";
 import {HttpsError} from "firebase-functions/v2/https";
 import {
   aggregateDailySales,
+  digest,
   fiveMinuteBucket,
   isoWeekKey,
   mergeDirtyJob,
   monthlyShardDay,
   reconciliationTaskId,
   requireDiscoveryPayload,
+  shiftAnomalyId,
+  shiftExpectationId,
   stockCheckpointHash,
   sweepRunId,
   trailingIsoDates,
@@ -45,6 +48,29 @@ test("dirty jobs merge while queued and request one rerun while running", () => 
   const quarantined = mergeDirtyJob({...running, status: "quarantined"});
   assert.equal(quarantined.status, "quarantined");
   assert.equal(quarantined.enqueue, false);
+});
+
+test("shift expectation and anomaly IDs are addressed by what they are about", () => {
+  // The metrics writer creates the expectation, the verifier settles it, and the
+  // amendment callable reads it; the verifier records the anomaly and the
+  // amendment clears it. All of them must agree, so both IDs live here.
+  assert.equal(
+    shiftExpectationId("2026-07-31", "shift-1"),
+    `se_${digest(["2026-07-31", "shift-1"])}`
+  );
+  assert.equal(
+    shiftAnomalyId("shift-1", "generation-one"),
+    `shift_${digest(["shift-1", "generation-one"])}`
+  );
+  // A different day, shift, or generation is a different record.
+  assert.notEqual(
+    shiftExpectationId("2026-07-31", "shift-1"),
+    shiftExpectationId("2026-07-30", "shift-1")
+  );
+  assert.notEqual(
+    shiftAnomalyId("shift-1", "generation-one"),
+    shiftAnomalyId("shift-1", "generation-two")
+  );
 });
 
 test("task IDs include generation and revision", () => {

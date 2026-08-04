@@ -97,6 +97,29 @@ export function reconciliationJobId(source: string, sourceKey: string): string {
   return `rj_${digest([source, sourceKey])}`;
 }
 
+/**
+ * The `shift_expectations` document a business date and shift are addressed by.
+ *
+ * The metrics writer creates it, the shift verifier reads it, and the amendment
+ * callable reads it to learn what the sales prove a closed shift should hold.
+ * All three must agree on one definition or the amendment would correct a shift
+ * against another shift's expectation, so this is the only one.
+ */
+export function shiftExpectationId(businessDate: string, shiftId: string): string {
+  return `se_${digest([businessDate, shiftId])}`;
+}
+
+/**
+ * The `reconciliation_anomalies` document one shift generation is recorded at.
+ *
+ * The verifier writes it when observed and expected disagree, and the amendment
+ * callable clears exactly that record once the disagreement is resolved. A
+ * second definition here would leave a resolved difference listed forever.
+ */
+export function shiftAnomalyId(shiftId: string, generation: string): string {
+  return `shift_${digest([shiftId, generation])}`;
+}
+
 export function reconciliationTaskId(payload: ReconciliationTaskPayload): string {
   return `rt_${digest([
     payload.tenantId,

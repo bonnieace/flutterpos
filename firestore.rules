@@ -557,6 +557,45 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // The business-wide immutable record of every closed shift summary that
+      // was amended to the total its own sales prove. `amendShiftSummary` writes
+      // one in the same transaction as the shift update, the settled
+      // expectation, the difference it cleared, and the audit record.
+      //
+      // The read is owner/admin/manager: the same set that reads the shift the
+      // amendment corrected and the difference that justified it, so whoever may
+      // see the corrected figure may see why it changed. Recording one is
+      // owner/admin inside the callable, which is deliberately narrower -
+      // rewriting a record every client treats as terminal is governance rather
+      // than reporting, and it is the same set that may spend the business's
+      // manual reconciliation allowance.
+      //
+      // A cashier is deliberately excluded, exactly as they are from
+      // `stock_adjustments`: the record names the owner or administrator who
+      // amended the shift and states their reason, which is the business's
+      // governance rather than one shift's operational information. The
+      // amendment never writes `closingCashMinor` or `closingCash`, so nothing a
+      // cashier counted and is accountable for is changed by a record they
+      // cannot read.
+      //
+      // A client lists these business-wide on the ascending key order,
+      // optionally narrowed by one `shiftId ==` equality. Both shapes are served
+      // by the automatic single-field index. An amendment ID is `sm_` plus a
+      // digest, so document order carries no time information and the record
+      // states its own instant.
+      //
+      // The role check touches no document field, so an absent amendment - and a
+      // business that has never amended a shift - still answers instead of
+      // raising an evaluation error.
+      //
+      // Writing stays server-only. A client that could create here could claim a
+      // correction that never happened, and one that could update or delete
+      // could erase the only record of one that did.
+      match /shift_amendments/{amendmentId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin', 'manager']);
+        allow write: if false;
+      }
+
       // The whole business's event trail: every tenant request, lifecycle
       // change, staff invitation, acceptance, cancellation, role or status
       // change, owner recovery, administrative alert, stock correction,

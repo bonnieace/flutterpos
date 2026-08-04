@@ -12,6 +12,8 @@ import {HttpsError} from "firebase-functions/v2/https";
 import {
   aggregateDailySales,
   digest,
+  shiftAnomalyId,
+  shiftExpectationId,
   stockCheckpointHash,
   trailingIsoDates,
 } from "./model";
@@ -64,10 +66,6 @@ function safeNonNegativeNumber(value: unknown): number | undefined {
 
 function dirtyRevision(value: unknown): number | undefined {
   return Number.isSafeInteger(value) && (value as number) >= 1 ? value as number : undefined;
-}
-
-function expectationId(businessDate: string, shiftId: string): string {
-  return `se_${digest([businessDate, shiftId])}`;
 }
 
 function movementCursor(timestamp: Timestamp | undefined, documentId?: string): string {
@@ -171,7 +169,7 @@ async function regenerateDailyMetric(
     );
   }
   const expectedIds = new Set(result.shifts.map((shift) =>
-    expectationId(businessDate, shift.shiftId)
+    shiftExpectationId(businessDate, shift.shiftId)
   ));
   const metricGeneration = digest([
     businessDate,
@@ -198,7 +196,7 @@ async function regenerateDailyMetric(
       updatedAt: FieldValue.serverTimestamp(),
     }, {merge: false});
     for (const shift of result.shifts) {
-      const id = expectationId(businessDate, shift.shiftId);
+      const id = shiftExpectationId(businessDate, shift.shiftId);
       const generation = digest([
         metricGeneration,
         shift.shiftId,
@@ -770,7 +768,7 @@ async function verifyShiftExpectation(
     });
     if (!matched) {
       transaction.set(tenantRef.collection("reconciliation_anomalies")
-        .doc(`shift_${digest([shiftId, generation])}`), {
+        .doc(shiftAnomalyId(shiftId, generation)), {
         tenantId: job.tenantId,
         jobId: job.jobId,
         shiftId,

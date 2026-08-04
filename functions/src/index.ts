@@ -59,6 +59,7 @@ export {
 } from "./operations";
 
 export {
+  amendShiftSummary,
   mergeSaleReconciliationJob,
   requestTenantReconciliation,
   retryTenantReconciliationTasks,

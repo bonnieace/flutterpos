@@ -10065,3 +10065,246 @@ $env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64
   for a transport ignoring them, and a fake that ignores them makes every
   narrowed page prove the wrong thing. Both mistakes have now cost a debugging
   cycle each.
+
+---
+
+## A closed shift may be corrected to what its sales prove - 2026-08-04
+
+### Completed in this session
+
+The previous session's anomaly surface names a `shift_variance` and offers
+nothing to do about it. The handover said to decide the **server** first -
+whether a closed shift's summary may ever be amended, and by whom - because
+nothing in `firestore.rules` permitted it and the frozen contract makes a closed
+shift terminal. That decision is now made, implemented, and tested. No client
+surface was added; the callable has no caller yet, which is the next chunk.
+
+The decision, in one sentence: **yes, but only to the figure the immutable sales
+already prove, only by an owner or administrator, and never to the counted
+cash.**
+
+Implemented behavior and safety decisions:
+
+- **`amendShiftSummary` accepts no figure.** The caller names a shift and states
+  a reason. The amended total is read from the settled `shift_expectations`
+  record the metrics writer derived from the sales themselves, so the only
+  reachable outcome is a shift that agrees with its own sales. A callable that
+  took a total would be a way to write any number onto a closed shift.
+- **The counted cash is out of reach, and the record says so.**
+  `closingCashMinor` and `closingCash` are a physical count of a drawer.
+  Amending one would erase a cash discrepancy, which is the single thing this
+  path must be unable to do. The plan object never contains a cash key - a test
+  asserts that over `Object.keys`, so the property is checked rather than
+  intended - and both the amendment record and the audit entry carry
+  `mutatesCountedCash: false`, in the same spirit as the existing
+  `mutatesStock: false` and `mutatesShift: false`.
+- **The expectation must be the settled one for this exact shift.** Verification
+  must have finished (`needsVerification == false`), the generation it settled
+  must still be the generation the record carries, and the outcome it settled on
+  must be `variance`. A pending record is about to be recomputed, so a total
+  taken from it is a total nothing has verified; `matched`, `quarantined`,
+  `invalid_or_missing_shift`, and an already-amended record are all refused too.
+  That last one is what makes a second amendment of one generation impossible
+  rather than merely pointless.
+- **`invalid_or_missing_shift` deliberately has no amendment path.** A shift
+  that recorded no readable summary has no difference to resolve - nothing could
+  be compared in the first place - so there is no figure the sales prove it
+  should hold. Only a shift that recorded a summary can have one corrected.
+- **The "nothing to amend" test is the verifier's own comparison, asked again.**
+  The verifier compares major units, so this does too. The consequence is
+  deliberate and documented: a shift whose stored *minor* units are broken while
+  its major units are correct is **not** amendable here. That is a different
+  defect from a reconciliation variance, and giving a governance callable a
+  second purpose is worse than leaving it. A shift whose two representations
+  disagree *and* whose major figure is genuinely wrong is amended - both are
+  rewritten from one figure - and the record states
+  `previousRepresentationsAgreed: false` so the second defect is not silently
+  absorbed.
+- **The amended total can never be one the client refuses to read.** The plan
+  bounds it by the client's own `maximumShiftSalesMinor` and refuses takings over
+  no transactions, which are exactly the two invariants `firestore.rules` and
+  `ShiftClosingSummary._closingSummary` enforce. An amendment that left a shift
+  no device could display would be worse than the variance it corrected.
+- **The resolved difference is removed from the list, and only that one.**
+  `reconciliation_anomalies` is the surface named for differences that are still
+  open, and the verifier never deletes one, so a resolved variance would
+  otherwise be listed forever. The record is read inside the transaction and
+  cleared only when it names this business, this shift, and `shift_variance`; a
+  record at that ID naming anything else is corruption rather than this shift's
+  difference, so it is left exactly where it is and the amendment records
+  `clearedAnomalyId: null`. Nothing is lost either way: the immutable
+  `shift_amendments` record and the `audit_logs` entry both carry the
+  difference, its direction, and the figures on both sides of it.
+- **Deleting rather than flagging keeps the frozen query shape.** A `resolved`
+  flag would require an `anomalyType ==` plus `resolved ==` page, which is the
+  one composite index the previous chunk was careful not to need.
+- **The expectation is settled in the same transaction, not marked pending.**
+  Both figures were read there and the shift holds the expected one by
+  construction, so recording the amended status is simply true, and it avoids a
+  record left pending forever if no further run happens. A later metrics
+  regeneration - an offline sale arriving after the close, which the sale rule
+  deliberately accepts - produces a *new* generation, a fresh verification, and
+  if it disagrees a new anomaly under a different digest. A later divergence is a
+  new difference, not this one reopening.
+- **Roles are owner/admin, deliberately narrower than the owner/admin/manager
+  set that reads the difference.** Rewriting a record every client treats as
+  terminal is governance rather than reporting, so it matches the set that may
+  spend the manual reconciliation allowance and that reads `audit_logs`. A
+  manager may see that a shift disagrees with its sales without being able to
+  rewrite the shift. Authorization runs before the idempotency cache is
+  consulted and again inside the transaction, as `adjustStock` does.
+- **Two IDs became one definition each.** `shiftExpectationId` and
+  `shiftAnomalyId` moved into `reconciliation/model.ts`, and `processors.ts` now
+  imports them. Three writers must agree on the expectation document and two on
+  the anomaly document; a second definition of either would amend a shift
+  against another shift's expectation, or clear nothing and leave a resolved
+  difference listed. Both are pinned by a test against the digest shape.
+- **`shift_amendments` is readable by owner/admin/manager and writable by
+  nobody.** Whoever may see the corrected figure may see why it changed. A
+  cashier is excluded exactly as they are from `stock_adjustments`: the record
+  names the owner who amended the shift and states their reason, which is the
+  business's governance rather than one shift's operational information - and
+  because the amendment never touches the counted cash, nothing the cashier
+  counted and answers for is changed by a record they cannot read. The corrected
+  shift itself stays readable to them.
+- **The amendment opened no second way into a closed shift.** It adds fields to
+  a closed document, so the Rules suite proves the cashier still cannot restate
+  the corrected summary, re-close the shift, touch the counted cash, claim an
+  amendment of their own, or reopen it - and that an owner cannot reach the shift
+  document either. Amending runs through the callable or not at all.
+
+Deliberately outside this chunk, and important for the next session:
+
+- Nothing in the app calls `amendShiftSummary` yet. There is no gateway, no
+  action on the anomaly row, and no `shift_amendments` read surface.
+- No end-to-end emulator test exercises the callable. The only
+  Auth/Firestore/Functions integration suite is the invitation one, and adding a
+  second runner is its own piece of work.
+- A `checkpoint_chain_invalid`, `invalid_stock_movement`, `invalid_sale_lines`,
+  or `invalid_product_quantity` difference still has no resolution path. A stock
+  figure is still corrected from the product it belongs to.
+
+Files in this chunk:
+
+```text
+PLAN.md
+firestore.rules
+functions/src/index.ts
+functions/src/reconciliation/amendment.ts        (new)
+functions/src/reconciliation/amendment.test.ts   (new)
+functions/src/reconciliation/amendments.ts       (new)
+functions/src/reconciliation/index.ts
+functions/src/reconciliation/model.ts
+functions/src/reconciliation/model.test.ts
+functions/src/reconciliation/processors.ts
+rules-tests/package.json
+rules-tests/test/shift-amendments.test.js        (new)
+```
+
+Validation evidence after implementation code was frozen:
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix functions run build` | clean |
+| `node --test lib/reconciliation/amendment.test.js lib/reconciliation/model.test.js` | **22/22** during development |
+| `npm --prefix rules-tests run test:emulator:shift-amendments` | **8/8** during development |
+| `npm --prefix functions test` | **185/185**, up from 171, adding **14** tests |
+| `npm --prefix rules-tests run test:emulator` | **139/139**, up from 131, adding **8** tests |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `git diff --check` | clean |
+
+The 14 new Functions tests are 13 planner cases and 1 shared-identity case.
+`flutter analyze` and `flutter test` were not re-run: `git diff --stat HEAD --
+lib test` is empty, so no Dart code changed and no TypeScript or Rules change
+can reach it. `firestore.indexes.json` was deliberately not touched - the
+amendment feed's business-wide page and its one `shiftId ==` narrowing are both
+the automatic single-field index shape, and the Rules suite issues both exact
+client queries. Android build and Android emulator validation were skipped as
+requested.
+
+Meaningful failures and their resolutions:
+
+- **The first focused run failed on two missing-document cases, and the test
+  helper was at fault rather than the planner.** The helper gave its `shift` and
+  `expectation` parameters defaults, so passing an explicit `undefined` silently
+  substituted a *valid* document: JavaScript default parameters fire on an
+  explicit `undefined`. Both cases passed without ever running the code they
+  named. The defaults were removed and every call site now states both
+  arguments, with a comment recording why the parameters are required. This is
+  worth remembering - a defaulted test helper can make an absent-document case
+  prove nothing at all.
+- **One design decision was reversed while writing its test.** The "nothing to
+  amend" check first required all three stored figures to match, which made a
+  shift with correct major units and broken minor units amendable. That state
+  cannot arise from the verifier - it would have settled as matched - so acting
+  on it meant acting on a record contradicting its own writer. The check now
+  asks exactly the verifier's question, and the test asserts the refusal and
+  says why.
+- No other assertion failed.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+**Make the correction reachable, from the row that reports the difference.**
+The server now has exactly one way to resolve a shift variance and nothing calls
+it. Implement, in this order:
+
+1. A session-bound shift-amendment gateway in the reporting domain, modelled on
+   `TenantReconciliationRequestGateway`: owner/admin only, business from the
+   captured live session so no caller can name another, one intent per attempt
+   carrying one server-pattern request ID, and a typed failure enum that
+   distinguishes forbidden, not-amendable (`failed-precondition`), missing shift
+   (`not-found`), duplicate request, and the genuinely ambiguous transport codes.
+   Unlike the reconciliation request, this callable is a single Firestore
+   transaction with no post-commit enqueue, so an ambiguous outcome is settled by
+   re-reading the shift rather than being permanently unknowable - say so in the
+   type.
+2. Strict decoding of the response against the intent it was sent for: it must
+   name this shift and business, and its `totalSalesMinor` and
+   `transactionCount` must be the figures it claims to have written.
+3. A bounded action on the `shift_variance` row of the existing anomalies panel,
+   granted through `TenantReconciliationActions` exactly as the request callable
+   is, so a build with no capability stays the read-only list it is today. It
+   must require a typed reason, state plainly that the counted cash is not
+   changed, and refresh the page after a success so the resolved difference
+   disappears.
+4. Widget coverage for: the action absent without the capability, absent for a
+   manager, absent on every non-`shift_variance` kind, each typed refusal shown
+   as a distinct message, and a tenant switch during an outstanding call
+   discarding the result.
+
+Leave outside that chunk: a `shift_amendments` read surface (the list of
+corrections, as distinct from making one), any resolution path for the four
+stock and sale differences, a second Auth/Firestore/Functions integration
+runner, the subscription surfaces (examined and declined earlier in this file -
+start on the server, not in Flutter), receipt printing, the printed receipt body,
+discounts, camera barcode scanning, password reset (still blocked on the App
+Check decision recorded near the top of this file), product cost/profit fields, a
+`platform_audit_logs` surface, branding surfaces, and deployment.
+
+Practical notes carried forward:
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it:
+
+```powershell
+$env:DEBUG = $null
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:Path"
+```
+
+- A local `firebase emulators:exec` against `firebase.json` needs both
+  `functions/.secret.local` and `functions/.env.local`; `run-dev-emulators.js`
+  writes and removes them, and refuses to overwrite leftovers from a killed run.
+- Collection-page test fakes must answer in **ascending document-ID order**, be
+  keyed **per business**, and model the equality-filter contract in **both**
+  directions.
+- A test helper with default parameters cannot test an absent document. Require
+  the parameters instead.
