@@ -28,6 +28,7 @@
     "test:emulator:reconciliation-anomalies": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/reconciliation-anomalies.test.js\"",
     "test:emulator:shift-amendments": "firebase emulators:exec --config ../firebase.test.json --project demo-multitenant-rules --only firestore \"node --test --test-concurrency=1 test/shift-amendments.test.js\"",
     "test:emulator:invitations": "npm --prefix ../functions run build && node scripts/run-invitation-emulator-tests.js",
+    "test:emulator:reconciliation": "npm --prefix ../functions run build && node scripts/run-reconciliation-emulator-tests.js",
     "emulators:dev": "npm --prefix ../functions run build && node scripts/run-dev-emulators.js",
     "seed:dev": "node scripts/seed-dev-emulator.js",
     "plant:late-sale": "node scripts/plant-late-sale.js"

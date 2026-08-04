@@ -10998,3 +10998,202 @@ surface, branding surfaces, the Sentry DSN, and deployment.
   `auditDeleteSentinels()` from `lib/testing/sentinelAudit.js`.
 - Do not filter a long `npm` run through `Select-Object -First`. Redirect with
   `*>` to a file and filter that, or the exit code is meaningless.
+
+---
+
+## The harness that would have caught it - 2026-08-04
+
+### Completed in this session
+
+The first preference-ordered item of the chunk above: **a second integration
+runner for the sale trigger and reconciliation.** It exists because defect 1 was
+found by using the app rather than by any test, and the gap was structural - the
+invitation suite was the only Auth/Firestore/Functions harness in the repository,
+and reconciliation had no representation in it at all.
+
+**The new suite reproduces defect 1 exactly.** Putting the two sentinels back into
+`saleTriggerJobFields.create` fails all five tests, and the Functions emulator log
+carries the original error verbatim:
+
+```text
+Error: Value for argument "data" is not a valid Firestore document.
+FieldValue.delete() must appear at the top-level and can only be used in
+update() or set() with {merge:true} (found in field "productCursor").
+```
+
+That is the point of the chunk. No production code changed.
+
+### What the suite asserts
+
+Five tests, in one emulator run, against real Auth, Firestore, and Functions:
+
+1. **A sale creates the dirty day and the bucket job.** The regression: before the
+   fix not one of the four documents existed. Asserts the receipt, the dirty day's
+   trigger-owned counters, the job's identity, and the trigger-owned stock
+   movement with its deterministic ID.
+2. **The job a sale enqueues regenerates the day's metric.** The consequence the
+   defect actually had, asserted directly - `daily_metrics` for the business date,
+   with the sale's own figures, plus the dirty day turning `clean` and the shift
+   expectation the verifier will later need. **No daily metric had ever been
+   regenerated from sale activity on this project**, and nothing else would have
+   done it: the nightly sweep is a pub/sub schedule the emulator does not run.
+3. **A second sale in the same bucket clears the cursor the last pass left.** The
+   `update` half of `saleTriggerJobFields`, where a sentinel is correct, proved by
+   planting a cursor and watching it go.
+4. **A replayed sale is registered once.** The trigger is `retry: true`, so the
+   receipt document is the idempotency record.
+5. **A sale with an unusable line is an anomaly, not a dropped sale.** The good
+   line still moves stock.
+
+### The races that had to be designed out, which is the real finding
+
+**The task queue is emulated.** `runTenantReconciliationTask` really is dispatched
+by `emulators:exec`, so writing a sale starts the whole job pipeline and it runs
+while the test is still asserting. The first draft of this suite passed on the
+first attempt **by luck**: it asserted `status == "queued"`, `revision == 0`, and
+`attemptCount == 0` on a job that a worker was already claiming. Reading the
+emulator log to find out whether tasks dispatched at all is what exposed it.
+
+The rules the suite now follows, and the reason each holds:
+
+- **Assert only trigger-owned fields.** A dirty day's `revision`,
+  `saleReceiptCount`, `lastSaleId`, and `invalidLineCount` are written by
+  `registerSaleReceipt` and by nothing else. Its `status` is not - the metrics
+  phase sets it `clean` - so `status` is asserted only after waiting for the
+  metric that changes it.
+- **Assert only the job's immutable identity.** `source`, `sourceKey`, `mode`,
+  `localDate`, `requestedBy`, `authority`, `mutatesStock`, `checkpointKind`, and
+  `checkpointKey` are written identically by both branches and rewritten by no
+  processor. `status`, `generation`, `revision`, and `attemptCount` are all live.
+- **Make the update branch deterministic by hand.** The job is put into
+  `completed` with a planted cursor before the second sale, so `mergeDirtyJob`
+  returns `queued` - and therefore the sentinel-bearing payload - regardless of
+  what the pipeline was doing. Waiting for a real pass instead would make a
+  one-field assertion depend on the entire task chain.
+- **The cleared cursor is safe to assert as absent**, because a `sale_trigger` job
+  goes metrics then shifts and never enters the stock phase, so nothing
+  downstream can put a cursor back. That is a property of `handlers.ts`, not an
+  accident.
+- **Wait out a nearly-finished five-minute bucket.** Both sales must share a
+  bucket or the second takes the create branch again and proves nothing. The
+  bucket comes from wall-clock time, so the test waits when fewer than 60 seconds
+  remain.
+- **One tenant per test.** The counters are per business, and a shared tenant
+  would make every `saleReceiptCount` assertion depend on execution order.
+
+Timings, consistent across two consecutive runs: the first receipt takes ~12-13s
+(trigger cold start), the daily metric ~16s, and every later receipt ~300ms. The
+timeouts are 30s and 90s, so roughly 2x and 5x headroom on this host.
+
+### Harness decisions
+
+- **Its own project, ports, and Functions codebase**, so it cannot collide with
+  the invitation suite or a developer's `emulators:dev`: project
+  `demo-multitenant-reconciliation-integration`, ports 9299/8280/5201, codebase
+  `reconciliation-integration`.
+- **The fixture exports two functions**, `mergeSaleReconciliationJob` and
+  `runTenantReconciliationTask`. Exporting the whole index would pull in every
+  `defineSecret`/`defineString` parameter, and each one without a default makes
+  the emulator stop and wait for an answer that never comes - a run that looks
+  like a hang after "Serving at port ...". The reconciliation dependency closure
+  was checked and reaches none of the four parameter-bearing modules, which is why
+  this harness needs **no** `.secret.local` or `.env.local` at all. A killed run
+  therefore leaves nothing behind to clean up, unlike `emulators:dev`.
+- **The fixture has no `node_modules` of its own**, unlike `functions/integration`.
+  Node resolution walks up to `functions/node_modules`, which is the same install
+  the copied `lib/` was compiled against - the version this suite ought to be
+  exercising. Recorded because it is a real dependency on the parent install.
+
+### Files in this chunk
+
+```text
+PLAN.md
+firebase.reconciliation-test.json                          (new)
+functions/reconciliation-integration/.gitignore            (new)
+functions/reconciliation-integration/index.js              (new)
+functions/reconciliation-integration/package.json          (new)
+rules-tests/package.json
+rules-tests/scripts/run-reconciliation-emulator-tests.js   (new)
+rules-tests/test/sale-reconciliation.integration.test.js   (new)
+```
+
+No Dart, Rules, index, or `functions/src` change. Nothing needed a device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **5/5** real Auth, Firestore, and Functions emulator tests, run twice with identical results |
+| the same, with defect 1 reintroduced | **0/5**, with the original Firestore error in the Functions log |
+| `npm --prefix functions test` | **206/206**, unchanged |
+| `git diff --check` | clean |
+
+The Dart, Rules, and invitation suites were not re-run: no Dart file, no rule, and
+no `functions/src` file changed in this chunk. Android build and Android emulator
+validation were skipped as requested.
+
+### Meaningful failures and their resolutions
+
+- **The suite passed while containing three races**, described above. Diagnosed by
+  grepping the emulator log for task-queue activity rather than by a failure,
+  which is the only reason it was caught at all. A green integration test whose
+  assertions touch pipeline-owned state is not evidence.
+- **The Write tool put two literal control bytes in the runner** where a
+  `[ -]` character class was intended, which made the file a binary as
+  far as git and grep were concerned. Replaced with `/[^ -~]/` - printable ASCII
+  only - which expresses the same guard with no escapes to mangle, and is the
+  right test anyway for a string spliced into a command line.
+- No assertion in the shipped suite failed.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**The `shift_amendments` read surface.** Written by `amendShiftSummary`, its Rules
+boundary committed and tested by `rules-tests/test/shift-amendments.test.js`,
+readable by the owner/admin/manager set - and listed nowhere. The correction trail
+is invisible to the people allowed to see it.
+
+1. A read model that refuses a record which cannot explain its own correction -
+   the same rule the differences read model applies. An amendment names what it
+   changed from, what to, whether it touched counted cash, and why.
+2. A repository modelled on `TenantStockAdjustmentRepository`: a bounded
+   business-wide page, and a page narrowed by one `shiftId ==` equality. Both were
+   already proved servable without a composite index by the Rules suite.
+3. A surface that lists them, beside the differences list the corrections come
+   from.
+
+Then, in preference order:
+
+- The evidence-panel rendering inconsistency and the "1 transactions" plural, both
+  observed during the real run two handovers ago.
+- Extending the new reconciliation runner to the shift-verification phase, which
+  is the half of the pipeline these five tests stop short of.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels on the differences list, the subscription surfaces
+(examined and declined earlier in this file - start on the server, not in
+Flutter), receipt printing, the printed receipt body, discounts, camera barcode
+scanning, password reset (still blocked on the App Check decision recorded near
+the top of this file), product cost/profit fields, a `platform_audit_logs`
+surface, branding surfaces, the Sentry DSN, and deployment.
+
+### Practical notes carried forward
+
+- `npm --prefix rules-tests run test:emulator:reconciliation` needs the emulator
+  prelude and takes about 45 seconds. `JAVA_TOOL_OPTIONS=-Xmx512m` is what lets it
+  start on this host.
+- It uses fixed tenant IDs and does not import or export emulator data, so every
+  run starts empty. If a persisted emulator is ever pointed at it, the counter
+  assertions will fail for that reason and not a real one.
+- `INTEGRATION_TEST_NAME_PATTERN` narrows it to one test, exactly as the
+  invitation runner does.
