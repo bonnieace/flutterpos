@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
 import 'checkout_outbox.dart';
 
 /// Read-only counts of locally retained checkout evidence for one session.
@@ -113,6 +114,21 @@ final class _CheckoutPendingEvidencePanelState
   int _loaderGeneration = -1;
   TenantGuardedLoader<CheckoutEvidenceSummary>? _load;
 
+  /// The last counts read for [_lastSessionKey], kept so a refresh does not
+  /// blank the panel.
+  ///
+  /// Every refresh signal changes the loader's identity, which restarts the
+  /// guard and puts it back into its loading state - so without this the whole
+  /// panel vanishes and reappears on each signal. `CheckoutSyncPass` reports a
+  /// change more than once per sale, so a cashier watching the counts after a
+  /// sale sees them come and go rather than settle. Slightly stale counts, said
+  /// to be stale, are better than counts that disappear.
+  CheckoutEvidenceSummary? _last;
+  String? _lastSessionKey;
+
+  static String _sessionKey(TenantSession session) =>
+      '${session.uid}:${session.tenantId}:${session.epoch}';
+
   @override
   void initState() {
     super.initState();
@@ -154,21 +170,49 @@ final class _CheckoutPendingEvidencePanelState
       _loaderGeneration = _generation;
       _load = (session) => widget.source.summarize(session);
     }
+    // A refresh re-reads the same session's counts, so the previous ones are
+    // still the best thing to show while it is in flight. A session change is
+    // not a refresh: one business's counts must never appear under another
+    // business's name, so they are dropped the moment the session key moves.
+    final session = TenantSessionScope.of(context).session;
+    final sessionKey = session == null ? null : _sessionKey(session);
+    if (sessionKey != _lastSessionKey) {
+      _lastSessionKey = sessionKey;
+      _last = null;
+    }
+    final previous = _last;
     return TenantRouteGuard<CheckoutEvidenceSummary>(
       load: _load!,
-      loading: const SizedBox.shrink(),
+      loading: previous == null
+          ? const SizedBox.shrink()
+          : _EvidenceContents(previous, rereading: true),
       denied: const SizedBox.shrink(),
       failure: (context, error) =>
           const Text('Local checkout evidence is unavailable.'),
-      builder: (context, session, summary) => _EvidenceContents(summary),
+      builder: (context, session, summary) {
+        // Caching the answer for the next refresh's loading frame. This assigns
+        // a field rather than calling `setState`, so it adds no build cycle.
+        _last = summary;
+        return _EvidenceContents(summary);
+      },
     );
   }
 }
 
+/// The five counts, always all five of them.
+///
+/// Every state is named even when its count is zero. A cashier reading this is
+/// answering "where did my sale go", and a list that omitted the empty buckets
+/// would make an absent line and a zero indistinguishable.
 final class _EvidenceContents extends StatelessWidget {
-  const _EvidenceContents(this.summary);
+  const _EvidenceContents(this.summary, {this.rereading = false});
 
   final CheckoutEvidenceSummary summary;
+
+  /// Whether these counts are the previous read, shown while a fresh one is in
+  /// flight. Said out loud rather than left to be inferred, because the figures
+  /// are about work the device may be in the middle of moving.
+  final bool rereading;
 
   @override
   Widget build(BuildContext context) {
@@ -193,6 +237,14 @@ final class _EvidenceContents extends StatelessWidget {
         Text('Awaiting confirmation: ${summary.awaitingConfirmation}'),
         Text('Needs attention: ${summary.needsAttention}'),
         Text('Confirmed: ${summary.confirmed}'),
+        if (rereading) ...[
+          const SizedBox(height: 6),
+          const Text(
+            key: ValueKey('pending-checkout-evidence-rereading'),
+            'Re-reading this device\'s records; these counts may be a moment '
+            'old.',
+          ),
+        ],
         const SizedBox(height: 6),
         const Text(
           'This panel is read-only. Submission and confirmation remain '

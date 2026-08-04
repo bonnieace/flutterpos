@@ -68,6 +68,43 @@ void main() {
     expect(find.textContaining('Profit'), findsNothing);
   });
 
+  testWidgets('a day with one of everything reads in the singular', (
+    tester,
+  ) async {
+    // The transaction count sat beside an already-singularised shift count in
+    // the same sentence, which is how "12 transactions in 1 shift" and "1
+    // transactions in 2 shifts" could both be produced by one line.
+    final reader = _Reader(<String, Map<String, Object?>>{
+      'tenants/tenant-a/daily_metrics/2026-07-31': _metrics(
+        overrides: <String, Object?>{
+          'transactions': 1,
+          'transactionCount': 1,
+          'shiftCount': 1,
+          'incompleteCostLineCount': 1,
+        },
+      ),
+    });
+
+    await _pump(tester, _controller(TenantRole.owner), reader);
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('daily-summary-sales-2026-07-31')),
+          )
+          .data,
+      'Sales: 1250.50 over 1 transaction in 1 shift',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('daily-summary-cost-2026-07-31')),
+          )
+          .data,
+      '1 sale line has no cost recorded.',
+    );
+  });
+
   testWidgets('an unpublished currency is stated, never guessed', (
     tester,
   ) async {

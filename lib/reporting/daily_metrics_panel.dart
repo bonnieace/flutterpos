@@ -231,15 +231,17 @@ final class _DailySummaryContents extends StatelessWidget {
                   Text(
                     key: ValueKey('daily-summary-sales-${day.businessDate}'),
                     'Sales: ${currency.format(metrics.sales)} over '
-                    '${metrics.transactions} transactions in '
-                    '${metrics.shiftCount} '
+                    '${metrics.transactions} '
+                    '${metrics.transactions == 1 ? 'transaction' : 'transactions'} '
+                    'in ${metrics.shiftCount} '
                     '${metrics.shiftCount == 1 ? 'shift' : 'shifts'}',
                   ),
                   if (!metrics.hasCompleteCostData)
                     Text(
                       key: ValueKey('daily-summary-cost-${day.businessDate}'),
-                      '${metrics.incompleteCostLineCount} sale lines have no '
-                      'cost recorded.',
+                      '${metrics.incompleteCostLineCount} sale '
+                      '${metrics.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
+                      'no cost recorded.',
                     ),
                   const SizedBox(height: 8),
                   Text(

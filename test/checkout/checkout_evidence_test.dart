@@ -173,6 +173,106 @@ void main() {
       expect(find.text('Saved offline: 1'), findsOneWidget);
     });
 
+    testWidgets('every state is named even when its count is zero', (
+      tester,
+    ) async {
+      // A real run reported this panel showing "Saved offline: 0" and seemingly
+      // nothing else while a record was present. There is no such state: the
+      // five lines are siblings, so any record at all renders all five. Pinned
+      // here so an omission can never become the explanation for that report.
+      await _pumpPanel(
+        tester,
+        const _FakeSource(CheckoutEvidenceSummary(awaitingConfirmation: 1)),
+      );
+
+      expect(find.text('Saved offline: 0'), findsOneWidget);
+      expect(find.text('Submitting: 0'), findsOneWidget);
+      expect(find.text('Awaiting confirmation: 1'), findsOneWidget);
+      expect(find.text('Needs attention: 0'), findsOneWidget);
+      expect(find.text('Confirmed: 0'), findsOneWidget);
+      expect(
+        find.text('No checkouts are stored on this device.'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a refresh keeps the previous counts on screen', (
+      tester,
+    ) async {
+      // The defect this closes: every refresh signal changes the loader's
+      // identity, which puts the guard back into its loading state - and the
+      // loading state was `SizedBox.shrink()`. `CheckoutSyncPass` reports a
+      // change more than once per sale, so the panel vanished and reappeared
+      // repeatedly while a cashier was watching for their sale.
+      final signals = StreamController<Object?>.broadcast();
+      addTearDown(signals.close);
+      final source = _DeferredSource();
+      await _pumpPanel(tester, source, refreshSignals: signals.stream);
+
+      // One pump lets the completed read resume, the next renders its answer.
+      source.complete(const CheckoutEvidenceSummary(savedOffline: 1));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Saved offline: 1'), findsOneWidget);
+
+      signals.add(null);
+      await tester.pump();
+      await tester.pump();
+
+      // Mid-refresh: the counts are still there, and the panel says they may be
+      // stale rather than leaving that to be inferred.
+      expect(source.calls, 2);
+      expect(find.text('Saved offline: 1'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('pending-checkout-evidence-rereading')),
+        findsOne,
+      );
+
+      source.complete(const CheckoutEvidenceSummary(savedOffline: 3));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Saved offline: 3'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('pending-checkout-evidence-rereading')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a business switch drops the other business\'s counts', (
+      tester,
+    ) async {
+      // Retaining counts across a refresh must never retain them across a
+      // session change: one business's local work shown under another
+      // business's name would be a worse defect than the blanking it replaces.
+      final controller = TenantSessionController()
+        ..open(uid: 'user-a', membership: _membership('tenant-a'));
+      addTearDown(controller.dispose);
+      final source = _DeferredSource();
+      await _pumpPanel(tester, source, controller: controller);
+
+      source.complete(const CheckoutEvidenceSummary(savedOffline: 1));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Saved offline: 1'), findsOneWidget);
+
+      controller.open(uid: 'user-a', membership: _membership('tenant-b'));
+      await tester.pump();
+
+      // The second read is outstanding, so nothing may be shown at all.
+      expect(source.calls, 2);
+      expect(find.text('Saved offline: 1'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('pending-checkout-evidence')),
+        findsNothing,
+      );
+
+      source.complete(const CheckoutEvidenceSummary(confirmed: 7));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Confirmed: 7'), findsOneWidget);
+    });
+
     testWidgets('a signal after disposal reads nothing', (tester) async {
       final signals = StreamController<Object?>.broadcast();
       addTearDown(signals.close);
@@ -194,14 +294,17 @@ Future<void> _pumpPanel(
   WidgetTester tester,
   CheckoutEvidenceSource source, {
   Stream<Object?>? refreshSignals,
+  TenantSessionController? controller,
 }) async {
-  final controller = TenantSessionController()
-    ..open(uid: 'user-a', membership: _membership('tenant-a'));
-  addTearDown(controller.dispose);
+  final sessions =
+      controller ??
+      (TenantSessionController()
+        ..open(uid: 'user-a', membership: _membership('tenant-a')));
+  if (controller == null) addTearDown(sessions.dispose);
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(
-        controller: controller,
+        controller: sessions,
         child: Scaffold(
           body: CheckoutPendingEvidencePanel(
             source: source,
@@ -256,6 +359,27 @@ final class _CountingSource implements CheckoutEvidenceSource {
   Future<CheckoutEvidenceSummary> summarize(TenantSession session) async {
     final index = calls++;
     return _summaries[index < _summaries.length ? index : _summaries.length - 1];
+  }
+}
+
+/// Hands out a future per read and lets the test decide when each answers, so a
+/// loading frame can be observed rather than raced past.
+final class _DeferredSource implements CheckoutEvidenceSource {
+  final List<Completer<CheckoutEvidenceSummary>> _pending =
+      <Completer<CheckoutEvidenceSummary>>[];
+  int calls = 0;
+
+  @override
+  Future<CheckoutEvidenceSummary> summarize(TenantSession session) {
+    calls++;
+    final completer = Completer<CheckoutEvidenceSummary>();
+    _pending.add(completer);
+    return completer.future;
+  }
+
+  void complete(CheckoutEvidenceSummary summary) {
+    if (_pending.isEmpty) return;
+    _pending.removeAt(0).complete(summary);
   }
 }
 

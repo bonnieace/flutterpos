@@ -129,6 +129,30 @@ void main() {
     );
   });
 
+  testWidgets('a single sale is counted in the singular', (tester) async {
+    // The defect a real run found: this line read "Confirmed sales: 1
+    // transactions". Every surface beside it - the differences list, the daily
+    // summary, the corrections trail - already agreed one is singular.
+    await state.save(_record(closeInProgress: true, countedCashMinor: 900));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: const ShiftSalesSummary(
+        transactionCount: 1,
+        totalMinor: 1,
+        unsettledCount: 0,
+      ),
+    );
+
+    expect(
+      find.text('Confirmed sales: 1 transaction, 1 minor unit.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('shows the expected cash beside the count', (tester) async {
     await state.save(_record(closeInProgress: true, countedCashMinor: 900));
     server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
@@ -242,6 +266,47 @@ void main() {
       reason: 'money left out of the cash figure is stated, never dropped',
     );
     expect(find.textContaining('unpaid'), findsNothing);
+  });
+
+  testWidgets('one cash sale and one unattributed sale read in the singular', (
+    tester,
+  ) async {
+    // The same agreement rule applied to the drawer figure, including the
+    // pronoun: one sale is "It is inside", not "They are inside".
+    await state.save(_record(closeInProgress: true));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+
+    await _pumpPanel(
+      tester,
+      state,
+      server,
+      sales: _summary(
+        totalMinor: 3001,
+        transactionCount: 2,
+        recorded: const <CheckoutTender, ShiftTenderTotals>{
+          CheckoutTender.cash: ShiftTenderTotals(
+            totalMinor: 1,
+            transactionCount: 1,
+          ),
+        },
+        unrecorded: const ShiftTenderTotals(
+          totalMinor: 3000,
+          transactionCount: 1,
+        ),
+      ),
+    );
+
+    expect(
+      find.text('Expected cash: 1 minor unit over 1 sale.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        '1 sale names no recognised payment method, worth 3000 minor units. '
+        'It is inside the confirmed sales above but not in the expected cash.',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a shift that recorded no method carries no disclaimer', (

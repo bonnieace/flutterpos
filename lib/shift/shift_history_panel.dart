@@ -251,7 +251,8 @@ final class _ShiftHistoryContents extends StatelessWidget {
                     Text(
                       key: ValueKey('shift-history-sales-${entry.id}'),
                       'Recorded sales: ${_money(summary.totalSalesMinor)} '
-                      'over ${summary.transactionCount} transactions',
+                      'over ${summary.transactionCount} '
+                      '${summary.transactionCount == 1 ? 'transaction' : 'transactions'}',
                     ),
                     Text(
                       key: ValueKey('shift-history-variance-${entry.id}'),

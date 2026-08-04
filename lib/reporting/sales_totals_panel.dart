@@ -341,16 +341,18 @@ final class _SalesTotalsContents extends StatelessWidget {
                     'This adds up only the lines in this category, not the '
                     'whole of each sale. '
                     '${answer.scannedTransactions - answer.transactions} of '
-                    'the ${answer.scannedTransactions} sales read held nothing '
-                    'in it.',
+                    'the ${answer.scannedTransactions} '
+                    '${answer.scannedTransactions == 1 ? 'sale' : 'sales'} '
+                    'read held nothing in it.',
                   ),
                 ],
                 if (!answer.hasCompleteCostData) ...[
                   const SizedBox(height: 8),
                   Text(
                     key: const ValueKey('sales-totals-cost'),
-                    '${answer.incompleteCostLineCount} sale lines have no cost '
-                    'recorded, so no profit figure is shown.',
+                    '${answer.incompleteCostLineCount} sale '
+                    '${answer.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
+                    'no cost recorded, so no profit figure is shown.',
                   ),
                 ],
                 if (answer.tenderBreakdown case final breakdown?) ...[

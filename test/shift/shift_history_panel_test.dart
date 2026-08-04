@@ -50,6 +50,27 @@ void main() {
     );
   });
 
+  testWidgets('a shift that sold once is counted in the singular', (
+    tester,
+  ) async {
+    // The same agreement rule the shift panel and every reporting surface hold.
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/shifts', <TenantQueryDocumentSnapshot>[
+        _snapshot(
+          'shift-a',
+          overrides: <String, Object?>{'transactionCount': 1},
+        ),
+      ]);
+
+    await _pumpPanel(tester, _controller(TenantRole.manager), reader);
+
+    _expectText(
+      tester,
+      'shift-history-sales-shift-a',
+      'Recorded sales: 987.50 over 1 transaction',
+    );
+  });
+
   testWidgets('a shift closed without a summary states that plainly', (
     tester,
   ) async {

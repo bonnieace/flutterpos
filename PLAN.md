@@ -11396,3 +11396,202 @@ pre-existing analyzer issues in the legacy files named above, and deployment.
 - After writing any file whose content includes a `\u00xx` escape, check it for
   literal control bytes before trusting it. Two files in this session needed
   repairing for exactly that.
+
+---
+
+## The two defects the real run left alone - 2026-08-04
+
+### Completed in this session
+
+The chunk above: **the "1 transactions" plural and the evidence panel's
+inconsistent rendering**, both observed during the first real run three handovers
+above and neither chased at the time.
+
+One of them turned out to be a different defect from the one reported, and saying
+so is the more useful outcome than a fix that matched the guess.
+
+### The plural: eight sentences, not one
+
+The reported symptom was one line in the shift panel. Searching for the class
+rather than the instance found **eight** unpluralised counts across the shift and
+reporting surfaces, several sitting beside counts that were already correct:
+
+| Where | Was |
+| --- | --- |
+| `shift_panel` confirmed sales | `1 transactions, 1 minor units` |
+| `shift_panel` expected cash | `1 minor units over 1 sale` |
+| `shift_panel` unattributed tender | `worth 1 minor units. They are inside...` |
+| `shift_history_panel` recorded sales | `over 1 transactions` |
+| `daily_metrics_panel` daily sales | `over 1 transactions in 1 shift` |
+| `daily_metrics_panel` cost data | `1 sale lines have no cost recorded` |
+| `sales_totals_panel` category basis | `0 of the 1 sales read` |
+| `sales_totals_panel` cost data | `1 sale lines have no cost` |
+
+The daily summary line is the sharpest example: it pluralised `shiftCount`
+correctly and `transactions` not at all, **in the same sentence**, so it could
+produce both "12 transactions in 1 shift" and "1 transactions in 2 shifts".
+
+Two decisions worth recording:
+
+- **The agreement rule covers pronouns and verbs, not only nouns.** The
+  unattributed-tender line now reads "It is inside the confirmed sales above" for
+  one sale, matching what the unsettled-sales line beside it already did. That
+  line was checked and is correct as written: `count == 1 ? 'sale names' :
+  'sales name'` pairs a singular subject with "names" and a plural subject with
+  "name", which reads wrong at a glance and is right.
+- **"minor unit" was pluralised too**, even though the money presentation is
+  part of the excluded currency work. Fixing "1 transaction" while leaving "1
+  minor units" in the same sentence would have been worse than either.
+- **Inline ternaries, not a helper.** The codebase already expresses this rule
+  inline in a dozen places; a new shared helper would have made these eight sites
+  the odd ones out.
+
+**Every plural form is byte-identical to what it produced before**, which is why
+the 979 existing shift, reporting, sales, checkout, and tenancy tests passed
+unchanged after the edit. That is also the finding: **no test pinned any of these
+sentences at a count of one.** Seven new tests do now.
+
+### The evidence panel: the reported symptom was not the defect
+
+The report was that the panel "sometimes lists all five states with their counts
+and sometimes only `Saved offline: 0`, with at least one record present."
+
+**There is no such state.** `_EvidenceContents` renders either the empty sentence
+or all five lines as siblings of one `Column`; no input produces a subset. A test
+now pins that, so an omission can never become the explanation. The most likely
+reading of the screenshots is the landing screen's layout: the panel sits inside a
+`Center` within a `SingleChildScrollView`, so tall content is cut off at both ends
+and the lines below "Saved offline: 0" were simply below the fold. That is
+recorded rather than changed - it is a deliberate look for a mostly-empty screen,
+and the content is reachable by scrolling.
+
+**But looking for it found a real defect beside it.** Every refresh signal changes
+the loader's identity, which restarts `TenantRouteGuard` and puts it back into its
+loading state - and that state was `SizedBox.shrink()`. So **the whole panel
+vanished and reappeared on every signal**, and `CheckoutSyncPass` reports a change
+more than once per sale, so a cashier watching for their sale saw the counts
+flicker away repeatedly. That matches "sometimes lists all five states and
+sometimes does not" at least as well as the layout does.
+
+The fix keeps the last counts on screen while a fresh read is in flight, and says
+they may be a moment old rather than leaving that to be inferred. Two safety
+properties came with it:
+
+- **The retained counts are dropped the instant the session key moves.** One
+  business's local work shown under another business's name would be a worse
+  defect than the blanking it replaces. Pinned by a test that switches business
+  mid-read and asserts the previous counts disappear and nothing is shown until
+  the new read answers.
+- The cache is written by assigning a field inside the guard's builder, not by
+  `setState`, so it adds no build cycle.
+
+Confirmed by reverting the `loading` widget to `SizedBox.shrink()`: the refresh
+test fails, the other ten pass.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/checkout/checkout_evidence.dart
+lib/reporting/daily_metrics_panel.dart
+lib/reporting/sales_totals_panel.dart
+lib/shift/shift_history_panel.dart
+lib/shift/shift_panel.dart
+test/checkout/checkout_evidence_test.dart
+test/reporting/daily_metrics_panel_test.dart
+test/reporting/sales_totals_panel_test.dart
+test/shift/shift_history_panel_test.dart
+test/shift/shift_panel_test.dart
+```
+
+No `functions/src`, Rules, or index change. Nothing needed a device or emulator.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/checkout lib/shift lib/reporting test/checkout test/shift test/reporting` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy test/theme_test.dart` | **1175/1175**, up from 1166, adding **9** tests |
+| the same with the evidence panel's `loading` reverted to `SizedBox.shrink()` | the refresh test fails, as it must |
+| `git diff --check` | clean |
+
+The 9 new tests are 3 evidence-panel cases and 6 singular-count cases. The
+Functions, Rules, and both integration suites were not re-run: nothing outside
+`lib/` and `test/` changed. Android build and Android emulator validation were
+skipped as requested.
+
+### Meaningful failures and their resolutions
+
+- **A deferred-source widget test needs two pumps after completing a future**,
+  not one: the first lets the guard's `await` resume, the second renders the
+  frame. Both new evidence tests failed on the first assertion until that was
+  understood.
+- **`_controller(TenantRole.owner)` throws in the shift-history test.** Its
+  `_membership` helper hard-codes `isOwner: false`, and a session refuses an
+  `owner` role that is not the canonical owner. `TenantRole.manager` is the role
+  that surface's management scope is tested with; the new test uses it.
+- **`_response(overrides: ...)` in the sales-totals test reaches only the inner
+  `previous` map**, so `scannedTransactions` silently kept its default and the
+  assertion measured the wrong sentence. It is now an explicit parameter, with a
+  comment saying why it is not an override.
+- No assertion in the shipped code failed.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**Extend the reconciliation integration runner to the shift-verification phase.**
+Its five tests stop after the metrics phase, and the shifts phase is the half that
+produces the `shift_variance` differences the corrections trail now records
+corrections to. The whole chain - sale, dirty day, job, metric, shift
+expectation, verification, difference, correction - would then be proved end to
+end by tests rather than by one manual run.
+
+1. `processShiftPage` needs a real closed `shifts` document to verify an
+   expectation against; the current fixture seeds only a tenant and a product, so
+   the shift the sale names does not exist. Seed one whose summary is
+   deliberately wrong, exactly as the manual run did by hand.
+2. Assert a `reconciliation_anomalies` record of kind `shift_variance` appears
+   with the figures the shift and its sales actually differ by.
+3. Then call `amendShiftSummary` against it and assert the `shift_amendments`
+   record, the rewritten shift, the settled expectation, and the removed
+   difference - the four writes the correction makes in one transaction.
+4. This needs a third export in the fixture (`amendShiftSummary`) and a check
+   that its dependency closure still reaches no `defineSecret` parameter.
+
+Then, in preference order:
+
+- **A `shiftId`-narrowed entry point into the corrections trail from shift
+  history.** The repository already supports it and nothing opens it, so a
+  manager looking at one corrected shift cannot see its correction from there.
+- **The landing screen's `Center` inside `SingleChildScrollView`**, if the
+  evidence panel's cut-off is judged worth changing. It is a look-and-feel
+  decision about the whole safe landing route, not a defect in the panel, so it
+  wants a deliberate answer rather than a quiet edit.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous three sessions' lists still applies.
+- A plural fix that changes no plural form breaks no existing test, which means a
+  green suite is no evidence the singular form was ever correct. Assert the count
+  of one.
+- `TenantRouteGuard`'s `loading` widget replaces the whole subtree. Any panel that
+  re-reads on a signal blanks unless it passes its last value as that widget.

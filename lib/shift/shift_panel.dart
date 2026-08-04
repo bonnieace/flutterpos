@@ -182,8 +182,10 @@ final class _ShiftContents extends StatelessWidget {
       if (state.sales case final sales?) ...[
         Text(
           key: const ValueKey('shift-sales-summary'),
-          'Confirmed sales: ${sales.transactionCount} transactions, '
-          '${sales.totalMinor} minor units.',
+          'Confirmed sales: ${sales.transactionCount} '
+          '${sales.transactionCount == 1 ? 'transaction' : 'transactions'}, '
+          '${sales.totalMinor} minor '
+          '${sales.totalMinor == 1 ? 'unit' : 'units'}.',
         ),
         // Stated here rather than only after the close is refused. A real run
         // found this surface reporting "Confirmed sales: 0" beside a drawer
@@ -318,7 +320,8 @@ final class _ExpectedCash extends StatelessWidget {
     children: [
       Text(
         key: const ValueKey('shift-expected-cash'),
-        'Expected cash: ${split.cash.totalMinor} minor units over '
+        'Expected cash: ${split.cash.totalMinor} minor '
+        '${split.cash.totalMinor == 1 ? 'unit' : 'units'} over '
         '${split.cash.transactionCount} '
         '${split.cash.transactionCount == 1 ? 'sale' : 'sales'}.',
       ),
@@ -331,8 +334,10 @@ final class _ExpectedCash extends StatelessWidget {
           '${split.unattributed.transactionCount} '
           '${split.unattributed.transactionCount == 1 ? 'sale names' : 'sales name'} '
           'no recognised payment method, worth '
-          '${split.unattributed.totalMinor} minor units. They are inside the '
-          'confirmed sales above but not in the expected cash.',
+          '${split.unattributed.totalMinor} minor '
+          '${split.unattributed.totalMinor == 1 ? 'unit' : 'units'}. '
+          '${split.unattributed.transactionCount == 1 ? 'It is' : 'They are'} '
+          'inside the confirmed sales above but not in the expected cash.',
         ),
       if (split.hasRecordedTenders)
         const Text(

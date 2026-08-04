@@ -363,6 +363,24 @@ void main() {
     expect(find.textContaining('Profit'), findsNothing);
   });
 
+  testWidgets('one incomplete cost line is named in the singular', (
+    tester,
+  ) async {
+    // The same agreement rule every count on every reporting surface holds.
+    final callable = _Callable(<Object?>[
+      _response(overrides: <String, Object?>{'incompleteCostLineCount': 1}),
+    ]);
+
+    await _pump(tester, _controller(TenantRole.owner), callable);
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-cost')))
+          .data,
+      '1 sale line has no cost recorded, so no profit figure is shown.',
+    );
+  });
+
   testWidgets('a complete day says nothing about cost', (tester) async {
     final callable = _Callable(<Object?>[
       _response(overrides: <String, Object?>{'incompleteCostLineCount': 0}),
@@ -614,6 +632,40 @@ void main() {
           .data,
       'This adds up only the lines in this category, not the whole of each '
       'sale. 25 of the 37 sales read held nothing in it.',
+    );
+  });
+
+  testWidgets('a single sale read is described in the singular', (tester) async {
+    final callable = _Callable(<Object?>[
+      _response(
+        overrides: <String, Object?>{'transactions': 1},
+        scannedTransactions: 1,
+      ),
+    ]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.manager),
+      callable,
+      reader: _Reader(categories: <String, List<String>>{
+        'tenant-a': <String>['drinks'],
+      }),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('sales-totals-category-drinks')),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sales-totals-category-basis')),
+          )
+          .data,
+      'This adds up only the lines in this category, not the whole of each '
+      'sale. 0 of the 1 sale read held nothing in it.',
     );
   });
 
@@ -989,6 +1041,7 @@ TenantMembership _membership(String tenantId, TenantRole role) =>
 Map<String, Object?> _response({
   Map<String, Object?>? overrides,
   Object? byTender,
+  int scannedTransactions = 37,
 }) {
   final previous = <String, Object?>{
     'sales': 4820.75,
@@ -999,7 +1052,8 @@ Map<String, Object?> _response({
   if (overrides != null) previous.addAll(overrides);
   return <String, Object?>{
     'previous': previous,
-    'scannedTransactions': 37,
+    // Named separately from `overrides`, which only reaches the inner figures.
+    'scannedTransactions': scannedTransactions,
     if (byTender != null) 'byTender': byTender,
   };
 }
