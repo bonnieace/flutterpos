@@ -385,6 +385,40 @@ void main() {
     );
   });
 
+  testWidgets('the shift correction travels with that route', (tester) async {
+    // The route is the only way to reach a shift difference, so a capability
+    // that did not travel with it would be a callable nothing could ever call.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[])
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[
+        TenantQueryDocumentSnapshot(
+          path: 'tenants/tenant-a/reconciliation_anomalies/shift_b',
+          data: <String, Object?>{
+            'tenantId': 'tenant-a',
+            'shiftId': 'shift-a',
+            'anomalyType': 'shift_variance',
+            'salesVariance': -12.5,
+            'transactionVariance': 2,
+          },
+        ),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.owner),
+      reader,
+      amendCallable: _AmendCallable(),
+    );
+    await _tap(tester, 'reconciliation-status-anomalies');
+
+    expect(
+      find.byKey(
+        const ValueKey('reconciliation-anomaly-amend-shift_b'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   group('asking the server to reconcile', () {
     testWidgets('is not offered when no callable was injected', (tester) async {
       final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
@@ -664,6 +698,7 @@ Future<void> _pump(
   String businessDate = '2026-07-31',
   bool settle = true,
   _Callable? callable,
+  AmendShiftSummaryCallable? amendCallable,
   List<String> requestIds = const <String>['reconcile-fixed-1'],
 }) async {
   tester.view.physicalSize = const Size(1400, 4000);
@@ -680,9 +715,12 @@ Future<void> _pump(
             reader: reader,
             businessDate: businessDate,
             pageSize: pageSize,
-            actions: callable == null
+            actions: callable == null && amendCallable == null
                 ? null
-                : TenantReconciliationActions(requestCallable: callable),
+                : TenantReconciliationActions(
+                    requestCallable: callable,
+                    amendShiftSummaryCallable: amendCallable,
+                  ),
             requestIdFactory: () =>
                 requestIds[index++ < requestIds.length
                     ? index - 1
@@ -832,6 +870,14 @@ TenantQueryDocumentSnapshot _run(
   );
 }
 
+/// Granted only to prove the capability reaches the differences route; nothing
+/// in this suite calls it.
+final class _AmendCallable implements AmendShiftSummaryCallable {
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async =>
+      throw StateError('The status route must not correct a shift itself.');
+}
+
 final class _Reader implements TenantDataReader {
   _Reader({
     Map<String, Map<String, Object?>> documents =
@@ -850,6 +896,8 @@ final class _Reader implements TenantDataReader {
   final bool _defer;
   List<TenantQueryDocumentSnapshot> _page =
       const <TenantQueryDocumentSnapshot>[];
+  List<TenantQueryDocumentSnapshot> _anomalyPage =
+      const <TenantQueryDocumentSnapshot>[];
   final List<Completer<List<TenantQueryDocumentSnapshot>>> _pendingPages =
       <Completer<List<TenantQueryDocumentSnapshot>>>[];
   final List<(String, Completer<TenantDocumentSnapshot?>)> _pendingDocuments =
@@ -858,6 +906,11 @@ final class _Reader implements TenantDataReader {
   final List<String> documentPaths = <String>[];
 
   void respond(List<TenantQueryDocumentSnapshot> page) => _page = page;
+
+  /// The differences list is a second collection reached from this route, so it
+  /// answers separately: one shared page would let a run answer as a difference.
+  void respondAnomalies(List<TenantQueryDocumentSnapshot> page) =>
+      _anomalyPage = page;
 
   void completeFirstPage(List<TenantQueryDocumentSnapshot> page) {
     if (_pendingPages.isEmpty) return;
@@ -913,7 +966,10 @@ final class _Reader implements TenantDataReader {
     }
     final cursor = query.startAfterDocumentId;
     final matches = <TenantQueryDocumentSnapshot>[];
-    for (final snapshot in _page) {
+    final source = query.collectionPath.endsWith('/reconciliation_anomalies')
+        ? _anomalyPage
+        : _page;
+    for (final snapshot in source) {
       final id = snapshot.path.split('/').last;
       if (cursor != null && id.compareTo(cursor) <= 0) continue;
       // The fake models the repository's filter contract in both directions:

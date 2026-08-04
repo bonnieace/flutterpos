@@ -29,6 +29,15 @@ interface AmendShiftSummaryRequest {
 
 export interface AmendShiftSummaryResponse {
   amendmentId: string;
+
+  /**
+   * The business the amendment was applied in.
+   *
+   * Echoed so a client can prove the server acted on the business it asked
+   * about before it labels that business's screen with the answer.
+   */
+  tenantId: string;
+
   shiftId: string;
   businessDate: string;
   previousTotalSalesMinor: number;
@@ -212,6 +221,7 @@ export const amendShiftSummary = onCall<
 
     return {
       amendmentId,
+      tenantId,
       shiftId,
       businessDate: amendment.businessDate,
       previousTotalSalesMinor: amendment.previousTotalSalesMinor,

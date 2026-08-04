@@ -281,9 +281,13 @@ final class _TenantReconciliationStatusPanelState
         // A run reports how many differences it found; this is which ones. The
         // list is business-wide because a difference belongs to a product, a
         // shift, or a sale rather than to a day, and it says so itself.
+        // The same capabilities travel with the route: correcting a shift is
+        // granted by the composition root exactly as requesting a run is, so a
+        // build without it opens the read-only list it always was.
         onOpenAnomalies: () => openTenantReconciliationAnomalies(
           context,
           reader: widget.reader,
+          actions: widget.actions,
         ),
       ),
     );

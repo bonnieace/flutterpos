@@ -181,11 +181,15 @@ class SpiritPOSApp extends StatelessWidget {
     final stockActions = TenantStockActions(
       adjustCallable: FirebaseAdjustStockCallable(),
     );
-    // The only path in the app that can ask the server to reconcile. It is
-    // owner- and administrator-only, which the callable itself enforces, and
-    // it is narrower than the roles that read the surface it is offered on.
+    // The only two paths in the app that can ask the server to reconcile and to
+    // correct a shift whose totals disagree with its sales. Both are owner- and
+    // administrator-only, which the callables themselves enforce, and both are
+    // narrower than the roles that read the surfaces they are offered on. The
+    // correction can name no figure: the server reads it from the sale-derived
+    // total it verified, and never touches the cash counted at close.
     final reconciliationActions = TenantReconciliationActions(
       requestCallable: FirebaseRequestReconciliationCallable(),
+      amendShiftSummaryCallable: FirebaseAmendShiftSummaryCallable(),
     );
     // The only path in the app that totals sales the server currently holds,
     // rather than the reconciled figures. It is management-only, which the

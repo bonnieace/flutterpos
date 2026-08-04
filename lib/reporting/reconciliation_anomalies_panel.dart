@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import 'reconciliation_actions.dart';
 import 'reconciliation_anomalies.dart';
+import 'shift_amendment.dart';
 
 /// Opens the list under the caller's own session scope, so a tenant switch
 /// invalidates it exactly as it does every other guarded route rather than
@@ -15,13 +18,18 @@ void openTenantReconciliationAnomalies(
   BuildContext context, {
   required TenantDataReader reader,
   TenantReconciliationAnomalyKind? kind,
+  TenantReconciliationActions? actions,
 }) {
   final controller = TenantSessionScope.of(context);
   Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => TenantSessionScope(
         controller: controller,
-        child: TenantReconciliationAnomalyScreen(reader: reader, kind: kind),
+        child: TenantReconciliationAnomalyScreen(
+          reader: reader,
+          kind: kind,
+          actions: actions,
+        ),
       ),
     ),
   );
@@ -36,6 +44,7 @@ final class TenantReconciliationAnomalyScreen extends StatelessWidget {
     super.key,
     required this.reader,
     this.kind,
+    this.actions,
   });
 
   final TenantDataReader reader;
@@ -43,29 +52,46 @@ final class TenantReconciliationAnomalyScreen extends StatelessWidget {
   /// Opens the list already narrowed to one kind.
   final TenantReconciliationAnomalyKind? kind;
 
+  final TenantReconciliationActions? actions;
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Unresolved differences')),
-    body: TenantReconciliationAnomalyPanel(reader: reader, kind: kind),
+    body: TenantReconciliationAnomalyPanel(
+      reader: reader,
+      kind: kind,
+      actions: actions,
+    ),
   );
 }
 
 /// Shows one bounded page of recorded differences, optionally narrowed to one
-/// kind.
+/// kind, and - for an owner or administrator - resolves a shift difference.
 ///
 /// The route guard owns authorization and stale-session rejection: a tenant
 /// switch during an outstanding page discards it before it can update the UI.
+///
+/// Correcting a shift is the one write here, and it is deliberately the only
+/// resolution offered. A stock difference is corrected from the product it
+/// belongs to, and the other four kinds are reports of unreadable data rather
+/// than of a figure that can be put right.
 final class TenantReconciliationAnomalyPanel extends StatefulWidget {
   const TenantReconciliationAnomalyPanel({
     super.key,
     required this.reader,
     this.kind,
+    this.actions,
     this.pageSize = 20,
+    this.requestIdFactory,
   });
 
   final TenantDataReader reader;
   final TenantReconciliationAnomalyKind? kind;
+  final TenantReconciliationActions? actions;
   final int pageSize;
+
+  /// One fresh request ID per confirmed correction.
+  final String Function()? requestIdFactory;
 
   @override
   State<TenantReconciliationAnomalyPanel> createState() =>
@@ -76,7 +102,14 @@ final class _TenantReconciliationAnomalyPanelState
     extends State<TenantReconciliationAnomalyPanel> {
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
+  int _generation = 0;
+  bool _busy = false;
+  String? _notice;
   TenantReconciliationAnomalyKind? _kind;
+
+  /// Retained only across an ambiguous attempt, so a retry addresses the same
+  /// idempotency record instead of writing a second amendment.
+  String? _requestId;
   String? _loaderKey;
   TenantGuardedLoader<TenantReconciliationAnomalyPage>? _loader;
 
@@ -116,6 +149,80 @@ final class _TenantReconciliationAnomalyPanelState
     setState(() => _pageIndex--);
   }
 
+  /// Restarts the guarded load from the first page.
+  ///
+  /// A resolved difference is deleted by the server, so the list must be read
+  /// again rather than edited locally: what is shown has to be the server's own
+  /// record of what is still open.
+  void _reload() {
+    setState(() {
+      _cursors = <String?>[null];
+      _pageIndex = 0;
+      _generation++;
+    });
+  }
+
+  static String _sessionKey(TenantSession session) =>
+      '${session.uid}:${session.tenantId}:${session.epoch}';
+
+  /// Whether the session this work was authorized against is still selected.
+  bool _stillCurrent(String capturedKey) {
+    if (!mounted) return false;
+    final current = TenantSessionScope.of(context).session;
+    return current != null && _sessionKey(current) == capturedKey;
+  }
+
+  /// Corrects one closed shift's summary to the total its own sales prove.
+  Future<void> _amend(
+    TenantSession session,
+    TenantReconciliationAnomaly anomaly,
+    String reason,
+  ) async {
+    final callable = widget.actions?.amendShiftSummaryCallable;
+    final shiftId = anomaly.shiftId;
+    if (callable == null || shiftId == null || _busy) return;
+    final capturedKey = _sessionKey(session);
+    setState(() {
+      _busy = true;
+      _notice = null;
+    });
+    try {
+      final gateway = TenantShiftAmendmentGateway(
+        session: session,
+        callable: callable,
+        requestIdFactory: () => _requestId ??=
+            (widget.requestIdFactory ?? secureShiftAmendmentRequestId)(),
+      );
+      final result = await gateway.submit(
+        gateway.createIntent(shiftId: shiftId, reason: reason),
+      );
+      if (!_stillCurrent(capturedKey)) return;
+      _requestId = null;
+      setState(() => _notice = _amendedNotice(result));
+      _reload();
+    } on TenantShiftAmendmentException catch (error) {
+      if (!_stillCurrent(capturedKey)) return;
+      // Only an unknown outcome may have amended anything, so only it keeps the
+      // request ID. Every other refusal left the shift exactly as it was, and
+      // reusing its ID would make a later attempt fail as a duplicate.
+      if (!error.mayHaveAmended) _requestId = null;
+      setState(() => _notice = _refusalNotice(error.failure));
+      if (error.mayHaveAmended) _reload();
+    } on FormatException {
+      if (!_stillCurrent(capturedKey)) return;
+      // The shift may well have been amended; only the answer was unusable.
+      setState(
+        () => _notice =
+            'The server answer could not be trusted. The shift may have been '
+            'corrected; this list has been read again, so check whether the '
+            'difference is still listed before trying once more.',
+      );
+      _reload();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// One loader per guard key, so a closure rebuilt every frame cannot restart
   /// the load on an unrelated `setState`.
   TenantGuardedLoader<TenantReconciliationAnomalyPage> _loaderFor(String key) {
@@ -133,7 +240,8 @@ final class _TenantReconciliationAnomalyPanelState
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
-    final guardKey = '${_kind?.wireValue}:$_pageIndex:$cursor';
+    final guardKey =
+        '${_kind?.wireValue}:$_generation:$_pageIndex:$cursor';
     return TenantRouteGuard<TenantReconciliationAnomalyPage>(
       key: ValueKey(guardKey),
       allowedRoles: TenantReconciliationAnomalyRepository.allowedRoles,
@@ -152,6 +260,19 @@ final class _TenantReconciliationAnomalyPanelState
         page: page,
         selected: _kind,
         pageIndex: _pageIndex,
+        busy: _busy,
+        notice: _notice,
+        // The correction appears only when the composition root injected the
+        // callable and the session holds a role the server would accept.
+        // Offering it otherwise would teach an operator nothing except that the
+        // app guesses.
+        canAmend:
+            widget.actions?.amendShiftSummaryCallable != null &&
+            TenantShiftAmendmentGateway.canAmendInSession(session),
+        // Distinguished from `canAmend` so a manager - who may read this list
+        // but not act on it - is told why rather than shown nothing.
+        amendOffered: widget.actions?.amendShiftSummaryCallable != null,
+        onAmend: (anomaly, reason) => _amend(session, anomaly, reason),
         onNarrow: _narrow,
         onNextPage: () => _nextPage(page.nextCursor),
         onPreviousPage: _previousPage,
@@ -160,11 +281,61 @@ final class _TenantReconciliationAnomalyPanelState
   }
 }
 
+/// What one successful correction actually changed, stated from the server's own
+/// answer rather than from what was asked for.
+String _amendedNotice(TenantShiftAmendmentResult result) {
+  final from = _money(result.previousTotalSalesMinor);
+  final to = _money(result.totalSalesMinor);
+  final counts = result.previousTransactionCount == result.transactionCount
+      ? 'over the same ${result.transactionCount} '
+            '${result.transactionCount == 1 ? 'transaction' : 'transactions'}'
+      : 'over ${result.transactionCount} '
+            '${result.transactionCount == 1 ? 'transaction' : 'transactions'} '
+            'rather than ${result.previousTransactionCount}';
+  return 'Shift ${result.shiftId} on ${result.businessDate} now records $to '
+      'instead of $from, $counts. The counted cash was not changed. Recorded as '
+      '${result.amendmentId}.';
+}
+
+/// The notice shown for one refused correction.
+String _refusalNotice(TenantShiftAmendmentFailure failure) => switch (failure) {
+  TenantShiftAmendmentFailure.forbidden =>
+    'Only an owner or administrator can correct a shift. Nothing was changed.',
+  TenantShiftAmendmentFailure.invalidReason =>
+    'A reason of between 3 and 500 characters is required, and it cannot '
+        'contain control characters. Nothing was sent.',
+  TenantShiftAmendmentFailure.notAmendable =>
+    'The server refused: this shift cannot be corrected. It is still open, it '
+        'already agrees with its sales, its difference has not been settled by '
+        'a completed check yet, or it recorded no readable totals at all. '
+        'Nothing was changed.',
+  TenantShiftAmendmentFailure.shiftNotFound =>
+    'No such shift exists in this business, so nothing was changed.',
+  TenantShiftAmendmentFailure.duplicateRequest =>
+    'An earlier attempt already used this request. Nothing was changed a '
+        'second time; try again to start a new one.',
+  TenantShiftAmendmentFailure.invalidRequest =>
+    'The server rejected this request as invalid, so nothing was changed.',
+  TenantShiftAmendmentFailure.refused =>
+    'The correction was refused and nothing was changed.',
+  TenantShiftAmendmentFailure.ambiguous =>
+    'The result is unknown. The shift may have been corrected; this list has '
+        'been read again, so check whether the difference is still listed '
+        'before trying once more.',
+};
+
+String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+
 final class _AnomalyContents extends StatelessWidget {
   const _AnomalyContents({
     required this.page,
     required this.selected,
     required this.pageIndex,
+    required this.busy,
+    required this.notice,
+    required this.canAmend,
+    required this.amendOffered,
+    required this.onAmend,
     required this.onNarrow,
     required this.onNextPage,
     required this.onPreviousPage,
@@ -173,9 +344,23 @@ final class _AnomalyContents extends StatelessWidget {
   final TenantReconciliationAnomalyPage page;
   final TenantReconciliationAnomalyKind? selected;
   final int pageIndex;
+  final bool busy;
+  final String? notice;
+  final bool canAmend;
+  final bool amendOffered;
+  final void Function(TenantReconciliationAnomaly anomaly, String reason)
+  onAmend;
   final ValueChanged<TenantReconciliationAnomalyKind?> onNarrow;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
+
+  /// Whether this page lists a difference the correction could act on. The
+  /// explanation for a manager is shown once, and only when there is something
+  /// on screen it would apply to.
+  bool get _listsShiftVariance => page.items.any(
+    (anomaly) =>
+        anomaly.kind == TenantReconciliationAnomalyKind.shiftVariance,
+  );
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -195,10 +380,30 @@ final class _AnomalyContents extends StatelessWidget {
         'narrowed to the day you came from.',
       ),
       const SizedBox(height: 4),
-      const Text(
-        'Nothing here changed stock, a shift, or a sale, and nothing on this '
-        'page can. Correct a stock figure from the product it belongs to.',
+      Text(
+        key: const ValueKey('reconciliation-anomalies-writes'),
+        canAmend
+            ? 'A shift whose totals disagree with its sales can be corrected '
+                  'here, to the total those sales prove and nothing else. Its '
+                  'counted cash is never changed. Correct a stock figure from '
+                  'the product it belongs to.'
+            : 'Nothing here changed stock, a shift, or a sale, and nothing on '
+                  'this page can. Correct a stock figure from the product it '
+                  'belongs to.',
       ),
+      if (notice case final message?) ...[
+        const SizedBox(height: 12),
+        Text(key: const ValueKey('reconciliation-amend-notice'), message),
+      ],
+      if (amendOffered && !canAmend && _listsShiftVariance) ...[
+        const SizedBox(height: 12),
+        const Text(
+          key: ValueKey('reconciliation-amend-forbidden'),
+          'Correcting a shift\'s totals is available to owners and '
+          'administrators. This list is readable by managers as well, so '
+          'nothing here is hidden from you except that one correction.',
+        ),
+      ],
       const SizedBox(height: 16),
       _KindChips(selected: selected, onNarrow: onNarrow),
       const SizedBox(height: 16),
@@ -239,6 +444,15 @@ final class _AnomalyContents extends StatelessWidget {
     ],
   );
 
+  /// True only for the one kind the server can resolve, and only when this
+  /// session may ask it to. A shift ID is required because the correction names
+  /// the shift; a record of that kind without one is refused by the read model
+  /// long before it reaches here.
+  bool _canAmendRow(TenantReconciliationAnomaly anomaly) =>
+      canAmend &&
+      anomaly.kind == TenantReconciliationAnomalyKind.shiftVariance &&
+      anomaly.shiftId != null;
+
   Widget _anomaly(BuildContext context, TenantReconciliationAnomaly anomaly) =>
       Card(
         key: ValueKey('reconciliation-anomaly-${anomaly.id}'),
@@ -270,10 +484,102 @@ final class _AnomalyContents extends StatelessWidget {
                 _instants(anomaly),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (_canAmendRow(anomaly)) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  key: ValueKey('reconciliation-anomaly-amend-${anomaly.id}'),
+                  onPressed: busy
+                      ? null
+                      : () => _confirmAmend(context, anomaly),
+                  icon: const Icon(Icons.rule_outlined),
+                  label: Text(
+                    busy ? 'Correcting...' : 'Correct this shift\'s totals',
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       );
+
+  /// Requires a reason and an explicit confirmation.
+  ///
+  /// The confirmation is not ceremony. This rewrites a record every other part
+  /// of the app treats as final, and the reason is stored in the business's
+  /// immutable amendment trail beside the name of whoever asked for it.
+  Future<void> _confirmAmend(
+    BuildContext context,
+    TenantReconciliationAnomaly anomaly,
+  ) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => _AmendShiftDialog(anomaly: anomaly),
+    );
+    if (reason != null) onAmend(anomaly, reason);
+  }
+}
+
+/// Collects the one input a correction takes, and says what it will do.
+final class _AmendShiftDialog extends StatefulWidget {
+  const _AmendShiftDialog({required this.anomaly});
+
+  final TenantReconciliationAnomaly anomaly;
+
+  @override
+  State<_AmendShiftDialog> createState() => _AmendShiftDialogState();
+}
+
+final class _AmendShiftDialogState extends State<_AmendShiftDialog> {
+  final TextEditingController _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Correct this shift\'s totals?'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // The two sentences that decide whether this is safe to agree to: the
+        // figure is not a choice, and the drawer count is untouched.
+        Text(
+          key: const ValueKey('reconciliation-amend-explanation'),
+          'Shift ${widget.anomaly.shiftId} will record the sales total the '
+          'server aggregated from the sales filed against it. You cannot '
+          'choose the figure, and the cash counted at close is not changed.',
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const ValueKey('reconciliation-amend-reason'),
+          controller: _reason,
+          autofocus: true,
+          maxLength: 500,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Why is this being corrected?',
+            helperText: 'Kept in the business\'s record of the correction.',
+          ),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        key: const ValueKey('reconciliation-amend-cancel'),
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        key: const ValueKey('reconciliation-amend-confirm'),
+        onPressed: () => Navigator.of(context).pop(_reason.text),
+        child: const Text('Correct it'),
+      ),
+    ],
+  );
 }
 
 /// What the difference is about. The identity is the ID the rest of the app

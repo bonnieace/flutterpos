@@ -10308,3 +10308,214 @@ $env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64
   directions.
 - A test helper with default parameters cannot test an absent document. Require
   the parameters instead.
+
+---
+
+## The correction is reachable from the row that reports it - 2026-08-04
+
+### Completed in this session
+
+The chunk immediately above gave the server exactly one way to resolve a shift
+variance and nothing called it. It is now reachable from the only surface that
+names such a difference, granted by the composition root exactly as the
+reconciliation request is, so a build without the capability is still the
+read-only list it was.
+
+Implemented behavior and safety decisions:
+
+- **`TenantShiftAmendmentGateway` is session-bound and takes no business.** The
+  business comes from one captured live session, so no caller can correct a shift
+  somewhere else, and the only things a caller chooses are which shift and why.
+  The corrected figure is not an input at any layer: the payload carries
+  `tenantId`, `shiftId`, `reason`, and `requestId`, and a test pins that exact
+  map.
+- **Owner and administrator only, refused locally first.** The client enforces
+  the server's own `SHIFT_AMENDMENT_ROLES` before anything is sent, so a manager
+  reading the list gets an immediate, explained refusal rather than a round trip.
+  A cashier never reaches the surface at all.
+- **The reason is normalized exactly as `normalizeReason` will normalize it**,
+  in the same order: trim, check the trimmed length against 3 and 500, collapse
+  whitespace runs, then refuse remaining control characters. Sending the
+  already-normalized value is what makes a retry hash to the *same* idempotency
+  record instead of being refused as one request with two different inputs. Both
+  boundary lengths and two non-whitespace control characters are tested.
+- **`failed-precondition` is its own outcome, not a generic refusal.** It is the
+  server saying this shift cannot be corrected - open, already agreeing with its
+  sales, no settled variance yet, or no readable totals at all - which is the
+  most likely refusal in practice and the one a person can act on. `not-found`
+  is separated from it for the same reason.
+- **The response is reconciled against the intent it was sent for.** It must
+  name this business and this shift; `amendmentId`, `businessDate`, and every
+  figure are strictly typed and bounded by the same `maximumShiftSalesMinor` the
+  shift history read model enforces. The transaction identity
+  `transactionVariance == previousTransactionCount - transactionCount` is
+  asserted because both counts come from one comparison and it is exact.
+- **The money identity is deliberately *not* asserted, and a test says why.**
+  The recorded variance is measured from the shift's major-unit total, which may
+  legitimately disagree with its stored minor units, so an identity that can fail
+  honestly would refuse a real amendment. Two further reachable-but-surprising
+  responses are accepted on purpose and tested: `clearedAnomalyId: null` (no
+  difference was listed under this generation, or the record there described
+  something else), and an amendment whose previous and new totals are equal.
+- **Only the `shift_variance` row offers a correction.** `invalid_or_missing_shift`
+  does not - with no readable totals nothing could be compared, so there is no
+  figure the sales prove the shift should hold - and neither do the three stock
+  kinds or the sale kind. A test asserts the button's presence on the one and its
+  absence on the other four.
+- **A manager is told about the one thing they cannot do, once.** The explanation
+  appears only when the capability exists, the session cannot use it, *and* the
+  page actually lists a shift variance, so a page of stock differences does not
+  carry an irrelevant notice.
+- **The dialog states the two facts that make agreeing to this safe:** the
+  figure is not a choice, and the cash counted at close is not changed. A reason
+  is required and is kept in the business's immutable amendment record beside the
+  name of whoever asked for it.
+- **The list is re-read from the server after a success, never edited locally.**
+  The server deletes a resolved difference, so the second read is the proof that
+  it is gone. A refusal that left the shift untouched deliberately does *not*
+  re-read: showing a difference as resolved when it is not would be worse than
+  showing it unresolved. An ambiguous outcome and an untrustworthy answer both
+  re-read and say what they do not know.
+- **One request ID survives only an ambiguous attempt.** Every other refusal
+  clears it, because reusing an ID that settled nothing would make the next
+  attempt fail as a duplicate. This mirrors the reconciliation request gateway.
+- **A business switch during an outstanding correction discards it.** The session
+  key is captured before the call and re-checked after it, and a widget test
+  proves tenant A's correction never reports itself on tenant B's screen - and
+  asserts the call was actually made first, so a missing notice cannot be a
+  correction that was never sent.
+- **The capability travels with the route.** The differences list is only
+  reachable from the reconciliation status page, so the status panel passes its
+  actions through, and a test on that route proves the button arrives. A
+  capability that did not travel would be a callable nothing could ever call.
+- **One server field was added:** `amendShiftSummary` now echoes `tenantId` in
+  its response. Without it the client could not prove the server acted on the
+  business it asked about before labelling that business's screen with the
+  answer, which is the same guard the reconciliation request gateway applies.
+
+Deliberately outside this chunk, and important for the next session:
+
+- There is still no `shift_amendments` read surface. The corrections are
+  recorded, readable by owner/admin/manager under the Rules committed in the
+  previous chunk, and listed nowhere.
+- No end-to-end emulator test exercises the callable. The only
+  Auth/Firestore/Functions integration suite is the invitation one.
+- The four stock and sale differences still have no resolution path.
+- The differences list shows no currency code on its figures, exactly as before.
+  It reads no `configuration/checkout` document, so the amounts in the row detail
+  and in the success notice are bare, which is what that surface already did.
+
+Files in this chunk:
+
+```text
+PLAN.md
+functions/src/reconciliation/amendments.ts
+lib/main.dart
+lib/reporting/reconciliation_actions.dart
+lib/reporting/reconciliation_anomalies_panel.dart
+lib/reporting/reconciliation_status_panel.dart
+lib/reporting/reporting.dart
+lib/reporting/shift_amendment.dart                        (new)
+test/reporting/reconciliation_anomalies_panel_test.dart
+test/reporting/reconciliation_status_panel_test.dart
+test/reporting/shift_amendment_test.dart                  (new)
+```
+
+Validation evidence after implementation code was frozen:
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/main.dart lib/reporting test/reporting` | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/reporting` | **250/250** during development, up from 204 |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/audit test/dev test/inventory test/returns test/reporting test/sales test/shift test/checkout test/tenancy test/theme_test.dart` | **1125/1125**, up from 1079, adding **46** tests |
+| `npm --prefix functions test` | **185/185** |
+| `npm --prefix rules-tests run test:emulator` | **139/139** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** real Auth, Firestore, and Functions emulator tests |
+| `git diff --check` | clean |
+
+The 46 new Dart tests are 35 gateway cases, 10 panel widget cases, and 1
+status-route case proving the capability travels. The Functions and Rules suites
+were re-run because `amendments.ts` gained the echoed `tenantId`;
+`firestore.rules` and `rules-tests` are byte-identical to the previous chunk's
+green run. `firestore.indexes.json` was not touched. Android build and Android
+emulator validation were skipped as requested.
+
+Meaningful failures and their resolutions:
+
+- **The widget suite would not compile: `FirebaseFunctionsException` was not
+  imported** into the panel test, which had never needed `cloud_functions`
+  before. Adding the import was the whole fix.
+- **Two reasons in the "unusable reason" table were actually valid.** The list
+  originally held `'Late sale '` and `'Late sale'`, both of which normalize to a
+  perfectly good nine-character reason, so the case would have failed for the
+  right reason only by accident. They were replaced with the two things that are
+  genuinely refused - a NUL and a BEL, which whitespace collapsing does not
+  remove - which is what the server's `\p{Cc}` check is actually for.
+- **The status-panel reader fake answered one page for two collections.** The new
+  route test seeded a shift difference and the runs query would have answered
+  with it. The fake now answers `reconciliation_anomalies` separately, for the
+  same reason its filter contract is modelled in both directions: a fake that
+  conflates two collections makes a test prove the wrong thing.
+- No other assertion failed.
+
+The existing user-owned local edits remain separate and were never staged:
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+```
+
+### Next bounded chunk
+
+Two candidates, in the order recommended:
+
+1. **Run the app and correct a real shift.** Two chunks of server and client work
+   are now proved by tests and by nothing else. Seed a business date with sales
+   whose shift summary is deliberately wrong, let a manual reconciliation settle
+   the variance, then correct it from the differences list and watch the row
+   disappear. This also exercises the two things the last real run left
+   unverified: the `10.0.2.2` Android path has still never been executed by
+   anybody, and nothing has exercised the anomaly surface against real seeded
+   data. Ask first whether the Android exclusion is lifted; a Windows or web run
+   exercises only the loopback path. `rules-tests/scripts/seed-dev-emulator.js`
+   and `emulators:dev` are the existing way in.
+2. **The list of corrections.** `shift_amendments` is written, its Rules boundary
+   is committed and tested, and nothing reads it. A read model plus a bounded
+   business-wide page narrowed by one `shiftId ==` equality - both already proved
+   servable without a composite index by the Rules suite - would make the
+   correction trail visible to the owner/admin/manager set that may see it,
+   exactly as `stock_adjustments` is. Model it on
+   `TenantStockAdjustmentRepository` and refuse a record that cannot explain its
+   own correction, the same rule the differences read model applies.
+
+Leave outside either chunk: any resolution path for the four stock and sale
+differences, a second Auth/Firestore/Functions integration runner, currency
+labels on the differences list, the subscription surfaces (examined and declined
+earlier in this file - start on the server, not in Flutter), receipt printing, the
+printed receipt body, discounts, camera barcode scanning, password reset (still
+blocked on the App Check decision recorded near the top of this file), product
+cost/profit fields, a `platform_audit_logs` surface, branding surfaces, and
+deployment.
+
+Practical notes carried forward:
+
+- The emulator prelude is not optional on this machine. The default `java` is
+  JDK 17 and every emulator command fails immediately without it:
+
+```powershell
+$env:DEBUG = $null
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "$env:JAVA_HOME\bin;D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:Path"
+```
+
+- A local `firebase emulators:exec` against `firebase.json` needs both
+  `functions/.secret.local` and `functions/.env.local`; `run-dev-emulators.js`
+  writes and removes them, and refuses to overwrite leftovers from a killed run.
+- Collection-page test fakes must answer in **ascending document-ID order**, be
+  keyed **per business**, model the equality-filter contract in **both**
+  directions, and answer **per collection**. All four mistakes have now cost a
+  debugging cycle.
+- A test helper with default parameters cannot test an absent document, and a
+  table of "invalid" inputs is worth re-reading: two entries in this session's
+  first draft were valid.
