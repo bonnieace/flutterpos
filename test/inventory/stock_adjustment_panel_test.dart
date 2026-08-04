@@ -72,8 +72,8 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(find.byKey(const ValueKey('product-stock-empty')), findsOne);
-    expect(reader.queries.single.descending, isFalse);
-    expect(reader.queries.single.equalityFilters, isEmpty);
+    expect(reader.movementQueries.single.descending, isFalse);
+    expect(reader.movementQueries.single.equalityFilters, isEmpty);
   });
 
   testWidgets('a cashier is denied and issues no read at all', (tester) async {
@@ -120,8 +120,9 @@ void main() {
       'Stock changed from 7 to 11.',
     );
     // The page is re-read, so what is shown is the server's evidence rather
-    // than an optimistic local figure.
-    expect(reader.queries.length, 2);
+    // than an optimistic local figure. Counted on the ledger's own queries: this
+    // route reads the product's recorded differences on every load too.
+    expect(reader.movementQueries.length, 2);
   });
 
   testWidgets('a removal-only type never offers the add direction', (
@@ -184,7 +185,7 @@ void main() {
     );
     // The page is re-read after an unknown outcome, because only the server
     // can say whether stock moved.
-    expect(reader.queries.length, 2);
+    expect(reader.movementQueries.length, 2);
 
     await _submit(tester, units: '4', reason: 'Delivery received');
     expect(callable.payloads.map((payload) => payload['requestId']), <String>[
@@ -294,7 +295,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.byKey(const ValueKey('product-stock-entry-mv-3')), findsOne);
-    expect(reader.queries.last.startAfterDocumentId, 'mv-2');
+    expect(reader.movementQueries.last.startAfterDocumentId, 'mv-2');
 
     await tester.tap(find.byKey(const ValueKey('product-stock-previous')));
     await tester.pump();
@@ -323,6 +324,201 @@ void main() {
     expect(reader.queries.last.equalityFilters, <String, Object?>{
       'productId': 'product-1',
     });
+  });
+
+  testWidgets('a stock difference is stated where the correction is made', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respondMovements(<TenantQueryDocumentSnapshot>[_sale('mv-1')])
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[_stockAnomaly('stock_a')]);
+
+    await _pump(tester, _controller(), reader);
+
+    // Narrowed to this exact product, by one equality filter so Firestore's
+    // automatic single-field index still serves it.
+    expect(
+      reader.anomalyQuery.collectionPath,
+      'tenants/tenant-a/reconciliation_anomalies',
+    );
+    expect(reader.anomalyQuery.equalityFilters, <String, Object?>{
+      'productId': 'product-1',
+    });
+    expect(reader.anomalyQuery.limit, 6, reason: 'a bounded page of five');
+
+    _expectText(
+      tester,
+      'product-stock-difference-kind-stock_a',
+      'Stock does not match its ledger',
+    );
+    // The same sentence the differences list uses for this record, and every
+    // figure is the server's own.
+    _expectText(
+      tester,
+      'product-stock-difference-detail-stock_a',
+      'Its ledger expects 10, and the product records 7: 3 fewer than the '
+          'ledger accounts for. An adjustment recorded below is how this is put '
+          'right.',
+    );
+    _expectText(
+      tester,
+      'product-stock-difference-found-stock_a',
+      'Found by run rj_abc, first recorded 2026-08-01T02:30:00.000Z.',
+    );
+    // Nothing deletes one of these, so the surface says so rather than letting
+    // an old record read as a live one.
+    expect(find.textContaining('may already have been put right'), findsOne);
+    expect(
+      find.byKey(const ValueKey('product-stock-differences-truncated')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a product with nothing recorded against it says nothing', (
+    tester,
+  ) async {
+    // An exception report: a permanent "no differences" line on every product
+    // would make the one that matters easier to miss rather than harder.
+    final reader = _Reader()
+      ..respondMovements(<TenantQueryDocumentSnapshot>[_sale('mv-1')])
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(const ValueKey('product-stock-differences-scope')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('product-stock-differences-unreadable')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('product-stock-quantity')), findsOne);
+  });
+
+  testWidgets('a difference an adjustment cannot resolve says so', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respondMovements(<TenantQueryDocumentSnapshot>[])
+      // Ascending document ID: the repository proves its own page ordering, so a
+      // fixture listed in any other order fails the read rather than the
+      // assertion it was written for.
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[
+        _stockAnomaly(
+          'chain_a',
+          overrides: <String, Object?>{
+            'anomalyType': 'checkpoint_chain_invalid',
+          },
+        ),
+        _stockAnomaly(
+          'movement_a',
+          overrides: <String, Object?>{
+            'anomalyType': 'invalid_stock_movement',
+          },
+        ),
+        _snapshot('quantity_a', <String, Object?>{
+          'tenantId': 'tenant-a',
+          'productId': 'product-1',
+          'jobId': 'rj_abc',
+          'anomalyType': 'invalid_product_quantity',
+        }),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    // Three of the four kinds a product can hold are reports that the comparison
+    // could not be trusted. Offering "correct this" for them would be wrong.
+    expect(
+      _text(tester, 'product-stock-difference-detail-movement_a'),
+      contains('An adjustment will not resolve this'),
+    );
+    expect(
+      _text(tester, 'product-stock-difference-detail-chain_a'),
+      contains('an adjustment will not resolve it'),
+    );
+    expect(
+      _text(tester, 'product-stock-difference-detail-quantity_a'),
+      contains('could not be read as a whole number'),
+    );
+    // And no time at all is a real answer rather than a blank.
+    _expectText(
+      tester,
+      'product-stock-difference-found-quantity_a',
+      'Found by run rj_abc.',
+    );
+  });
+
+  testWidgets('a bounded page names what it is not showing', (tester) async {
+    final reader = _Reader()
+      ..respondMovements(<TenantQueryDocumentSnapshot>[])
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[
+        for (var index = 0; index < 6; index++) _stockAnomaly('stock_$index'),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(const ValueKey('product-stock-difference-stock_4')),
+      findsOne,
+    );
+    expect(
+      find.byKey(const ValueKey('product-stock-difference-stock_5')),
+      findsNothing,
+    );
+    expect(
+      _text(tester, 'product-stock-differences-truncated'),
+      contains('not a list in time order'),
+    );
+  });
+
+  testWidgets('an unreadable difference leaves the stock and ledger readable', (
+    tester,
+  ) async {
+    // The recorded quantity is what this route exists for. A reconciliation read
+    // that fails must never take it off the screen.
+    final reader = _Reader(failAnomalies: true)
+      ..respondMovements(<TenantQueryDocumentSnapshot>[_sale('mv-1')]);
+
+    await _pump(tester, _controller(), reader);
+
+    _expectText(
+      tester,
+      'product-stock-differences-unreadable',
+      'Whether reconciliation recorded a difference for this product could not '
+          'be read. The stock and ledger below are unaffected.',
+    );
+    expect(find.byKey(const ValueKey('product-stock-failure')), findsNothing);
+    _expectText(tester, 'product-stock-quantity', 'Recorded stock: 7');
+    expect(find.byKey(const ValueKey('product-stock-entry-mv-1')), findsOne);
+  });
+
+  testWidgets('a difference about another product is never shown here', (
+    tester,
+  ) async {
+    // A stock figure is answered for by whoever owns the product, so a record
+    // about a different one appearing on this page would be worse than none.
+    final reader = _Reader(ignoreFilters: true)
+      ..respondMovements(<TenantQueryDocumentSnapshot>[])
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[
+        _stockAnomaly(
+          'stock_b',
+          overrides: <String, Object?>{'productId': 'product-9'},
+        ),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(find.textContaining('product-9'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('product-stock-difference-stock_b')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('product-stock-differences-unreadable')),
+      findsOne,
+    );
+    _expectText(tester, 'product-stock-quantity', 'Recorded stock: 7');
   });
 
   testWidgets('a ledger entry outside this product hides the page', (
@@ -408,6 +604,39 @@ Future<void> _submit(
   } else {
     await tester.pump();
   }
+}
+
+/// One `reconciliation_anomalies` record about this product, in the shape
+/// `processors.ts` writes it: `variance` is exactly observed minus expected, and
+/// the read model refuses a record where it is not.
+TenantQueryDocumentSnapshot _stockAnomaly(
+  String anomalyId, {
+  Map<String, Object?>? overrides,
+}) => _snapshot(anomalyId, <String, Object?>{
+  'tenantId': 'tenant-a',
+  'productId': 'product-1',
+  'jobId': 'rj_abc',
+  'anomalyType': 'stock_variance',
+  'expectedQuantity': 10,
+  'observedQuantity': 7,
+  'variance': -3,
+  'createdAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 30)),
+  ...?overrides,
+});
+
+TenantQueryDocumentSnapshot _snapshot(
+  String anomalyId,
+  Map<String, Object?> data,
+) => TenantQueryDocumentSnapshot(
+  path: 'tenants/tenant-a/reconciliation_anomalies/$anomalyId',
+  data: data,
+);
+
+String _text(WidgetTester tester, String key) =>
+    tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+void _expectText(WidgetTester tester, String key, String value) {
+  expect(_text(tester, key), value);
 }
 
 TenantProduct _product() => TenantProduct.fromDocument(
@@ -532,16 +761,47 @@ final class _Callable implements AdjustStockCallable {
 }
 
 final class _Reader implements TenantDataReader {
-  _Reader({this.staffNames = const <String, String>{}});
+  _Reader({
+    this.staffNames = const <String, String>{},
+    this.failAnomalies = false,
+    this.ignoreFilters = false,
+  });
 
   final Map<String, String> staffNames;
+
+  /// Stands in for a difference read this session cannot make or that fails.
+  /// The stock figure and the ledger must still be readable.
+  final bool failAnomalies;
+
+  /// Stands in for a transport that answers outside the filter it was given.
+  final bool ignoreFilters;
+
   List<TenantQueryDocumentSnapshot> _movements =
+      const <TenantQueryDocumentSnapshot>[];
+  List<TenantQueryDocumentSnapshot> _anomalies =
       const <TenantQueryDocumentSnapshot>[];
   final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
   final List<String> documentPaths = <String>[];
 
   void respondMovements(List<TenantQueryDocumentSnapshot> page) =>
       _movements = page;
+
+  void respondAnomalies(List<TenantQueryDocumentSnapshot> page) =>
+      _anomalies = page;
+
+  /// Only the ledger's own queries. This route also reads the differences
+  /// recorded against the product, so an assertion about the ledger has to say
+  /// which query it means.
+  List<TenantCollectionQuery> get movementQueries => queries
+      .where((query) => query.collectionPath.endsWith('/stock_movements'))
+      .toList();
+
+  TenantCollectionQuery get anomalyQuery => queries
+      .where(
+        (query) =>
+            query.collectionPath == 'tenants/tenant-a/reconciliation_anomalies',
+      )
+      .single;
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
@@ -564,11 +824,29 @@ final class _Reader implements TenantDataReader {
     TenantCollectionQuery query,
   ) async {
     queries.add(query);
+    final isMovements = query.collectionPath.endsWith('/stock_movements');
+    if (!isMovements && failAnomalies) {
+      throw StateError('permission-denied');
+    }
+    // The ledger comes from `respondMovements`; every other collection this route
+    // or a route it opens reads must be registered, so a page can never be served
+    // another collection's documents under its own name.
+    final page = isMovements
+        ? _movements
+        : query.collectionPath == 'tenants/tenant-a/reconciliation_anomalies'
+        ? _anomalies
+        : const <TenantQueryDocumentSnapshot>[];
     final cursor = query.startAfterDocumentId;
     final matches = <TenantQueryDocumentSnapshot>[];
-    for (final snapshot in _movements) {
+    for (final snapshot in page) {
       final id = snapshot.path.split('/').last;
       if (cursor != null && id.compareTo(cursor) <= 0) continue;
+      final matchesFilters =
+          ignoreFilters ||
+          query.equalityFilters.entries.every(
+            (filter) => snapshot.data[filter.key] == filter.value,
+          );
+      if (!matchesFilters) continue;
       matches.add(snapshot);
       if (matches.length >= query.limit) break;
     }

@@ -299,6 +299,7 @@ final class TenantReconciliationAnomalyPage {
     required this.nextCursor,
     required this.hasMore,
     required this.kind,
+    this.productId,
   }) : items = List<TenantReconciliationAnomaly>.unmodifiable(items);
 
   final List<TenantReconciliationAnomaly> items;
@@ -307,6 +308,11 @@ final class TenantReconciliationAnomalyPage {
 
   /// The kind this page was narrowed to, or null for every kind.
   final TenantReconciliationAnomalyKind? kind;
+
+  /// The exact product this page was narrowed to, or null for the whole
+  /// business. A surface states which one it is showing rather than implying a
+  /// filtered page is everything that was recorded.
+  final String? productId;
 }
 
 /// Guarded read boundary over the differences reconciliation recorded.
@@ -355,6 +361,37 @@ final class TenantReconciliationAnomalyRepository extends TenantReadRepository {
     TenantReconciliationAnomalyKind? kind,
     int pageSize = 20,
     String? cursor,
+  }) => _load(kind: kind, productId: null, pageSize: pageSize, cursor: cursor);
+
+  /// Reads the differences recorded against one product.
+  ///
+  /// One equality filter, on `productId`, so it is served by the same automatic
+  /// single-field index every other shape here relies on. It deliberately takes
+  /// no `kind`: two equality filters on this ascending key order would need a
+  /// composite index, and the surface that asks about one product wants every
+  /// difference listed against it rather than one kind of them.
+  ///
+  /// The kinds it can answer with are not all quantity disagreements. A caller
+  /// must distinguish them: `invalid_product_quantity`,
+  /// `invalid_stock_movement`, and `checkpoint_chain_invalid` are reports that
+  /// the comparison could not be trusted, and an adjustment resolves none of
+  /// them.
+  Future<TenantReconciliationAnomalyPage> loadProductPage({
+    required String productId,
+    int pageSize = 20,
+    String? cursor,
+  }) => _load(
+    kind: null,
+    productId: productId,
+    pageSize: pageSize,
+    cursor: cursor,
+  );
+
+  Future<TenantReconciliationAnomalyPage> _load({
+    required TenantReconciliationAnomalyKind? kind,
+    required String? productId,
+    required int pageSize,
+    required String? cursor,
   }) async {
     if (!canReadInSession(session)) {
       throw const TenantReconciliationException('anomalies_forbidden');
@@ -365,14 +402,23 @@ final class TenantReconciliationAnomalyRepository extends TenantReadRepository {
     if (kind == TenantReconciliationAnomalyKind.other) {
       throw const TenantReconciliationException('unfilterable_anomaly_kind');
     }
+    final String? filteredProductId;
+    try {
+      filteredProductId = productId == null
+          ? null
+          : validateTenantDocumentId(productId, fieldName: 'productId');
+    } on ArgumentError {
+      throw const TenantReconciliationException('invalid_product_filter');
+    }
     final page = await readCollectionPage(
       TenantCollection.reconciliationAnomalies,
       collectionReader: _collectionReader,
       pageSize: pageSize,
       cursor: cursor,
-      equalityFilters: kind == null
-          ? const <String, Object?>{}
-          : <String, Object?>{'anomalyType': kind.wireValue},
+      equalityFilters: <String, Object?>{
+        if (kind != null) 'anomalyType': kind.wireValue,
+        if (filteredProductId != null) 'productId': filteredProductId,
+      },
     );
     final items = <TenantReconciliationAnomaly>[];
     for (final snapshot in page.items) {
@@ -388,6 +434,12 @@ final class TenantReconciliationAnomalyRepository extends TenantReadRepository {
       if (kind != null && anomaly.kind != kind) {
         throw const TenantReconciliationException('foreign_anomaly_kind');
       }
+      // The same rule for the product filter. A stock figure is answered for by
+      // whoever owns the product, so a record about another one appearing on
+      // that page would be worse than an empty one.
+      if (filteredProductId != null && anomaly.productId != filteredProductId) {
+        throw const TenantReconciliationException('foreign_product_anomaly');
+      }
       items.add(anomaly);
     }
     return TenantReconciliationAnomalyPage(
@@ -395,6 +447,7 @@ final class TenantReconciliationAnomalyRepository extends TenantReadRepository {
       nextCursor: page.nextCursor,
       hasMore: page.hasMore,
       kind: kind,
+      productId: filteredProductId,
     );
   }
 }

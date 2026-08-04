@@ -195,6 +195,51 @@ test("the page narrows to one kind and resumes from a document ID", async () => 
   }
 });
 
+test("the page narrows to one product for the surface that answers for it", async () => {
+  // The shape the product stock surface issues, so a manager standing where a
+  // stock adjustment is recorded can see what reconciliation found there. One
+  // equality filter on the same ascending key order, which is still the
+  // automatic single-field index shape - a second filter beside it would need a
+  // composite index, so the client deliberately never sends `anomalyType` with
+  // this one. If that ever stopped being servable the emulator rejects it here
+  // rather than a client failing in production.
+  await seedAnomalies();
+  const firestore = authenticatedFirestore(testEnvironment, "manager-a");
+
+  const narrowed = await assertSucceeds(
+    getDocs(
+      anomalyPage(firestore, "tenant-a", [
+        where("productId", "==", "product-a"),
+      ]),
+    ),
+  );
+  if (narrowed.docs.map((entry) => entry.id).join(",") !== "stock_ccc") {
+    throw new Error("Unexpected product-narrowed anomaly page.");
+  }
+
+  // A product with nothing recorded against it answers with an empty page, which
+  // is what lets that surface say nothing at all rather than reporting a failure.
+  const none = await assertSucceeds(
+    getDocs(
+      anomalyPage(firestore, "tenant-a", [
+        where("productId", "==", "product-z"),
+      ]),
+    ),
+  );
+  if (none.docs.length !== 0) throw new Error("Expected an empty product page.");
+
+  // And a cashier cannot reach it, exactly as they cannot reach the unnarrowed
+  // page: the product stock surface is management-only for the same reason.
+  const cashier = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertFails(
+    getDocs(
+      anomalyPage(cashier, "tenant-a", [
+        where("productId", "==", "product-a"),
+      ]),
+    ),
+  );
+});
+
 test("a business with no differences answers rather than raising", async () => {
   // The role check touches no document field, so an empty collection - and an
   // anomaly that does not exist - both answer instead of failing evaluation.

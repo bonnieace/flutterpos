@@ -12404,3 +12404,221 @@ files, and deployment.
 - A narrowing parameter that no caller passes is not a feature. Two surfaces in
   this session were the first callers of one that had existed, untested from the
   caller's side, since the trail was written.
+
+---
+
+## A stock difference, where the correction is made - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **the product stock surface now states what reconciliation
+recorded against the product**, narrowed to that product, with the figures the
+ledger and the product actually differ by.
+
+The integration suite proved earlier in this session that the record exists with
+real figures, and the differences list renders it business-wide. But the surface
+where somebody answers for a product's on-hand - and where the adjustment that
+resolves it is recorded - said nothing about it. The operator who can act on a
+stock difference was the one who could not see it.
+
+### The read is a secondary one and is not allowed to fail the page
+
+The recorded quantity and the stock ledger are what that route exists for. So the
+difference read is carried as a value, not thrown:
+
+- **A failed or refused read reports itself in place** - "Whether reconciliation
+  recorded a difference for this product could not be read. The stock and ledger
+  below are unaffected." - and the route guard's failure state is never entered.
+  The same degrade-rather-than-fail rule the staff-name resolver beside it already
+  follows.
+- **Unreadable and empty are different answers and the surface never conflates
+  them.** `_ProductDifferences` carries an explicit `readable` flag for exactly
+  that reason.
+- **A broken boundary degrades the same way.** The repository refuses a page that
+  answers with another product's record, and that refusal becomes "could not be
+  read" rather than a foreign product's figures on this page. A test drives it
+  with a filter-ignoring transport and asserts the other product's ID never
+  appears anywhere on screen while the stock figure stays readable.
+
+### Nothing is shown for a product with nothing recorded
+
+This is an exception report. A permanent "no differences" line on every product
+would make the one that matters easier to miss rather than harder, so a clean
+product renders no section at all.
+
+### The wording had to answer a question the shift trail does not
+
+A shift correction deletes the difference it resolved. **Nothing deletes a stock
+one.** `reconcileProduct` writes `stock_{digest(productId, jobId)}` per run that
+found a difference and never removes an older record, so a product put right
+months ago still lists what was found then. Presenting those as open differences
+would be false, so the section says so:
+
+> A record is kept for each run that found a difference here, and none is ever
+> removed: a later run that agrees simply records nothing new. So an older entry
+> may already have been put right. Each one names the run that found it.
+
+Each row therefore names its `jobId` and its own instants, and the bounded page
+says plainly that what it shows is neither everything nor the most recent - the
+order is by digest, so it carries no time information at all.
+
+### Only one of four kinds is a difference an adjustment resolves
+
+A product can hold `stock_variance`, `invalid_stock_movement`,
+`checkpoint_chain_invalid`, and `invalid_product_quantity`. Only the first is a
+quantity disagreement:
+
+| Kind | What the row says |
+| --- | --- |
+| `stock_variance` | the ledger's expected figure, the product's, which way they differ, and that an adjustment below is how it is put right |
+| `invalid_stock_movement` | the expected figure does not account for everything that moved; **an adjustment will not resolve this** |
+| `checkpoint_chain_invalid` | the chain does not join up so the expected figure cannot be trusted; not a quantity disagreement |
+| `invalid_product_quantity` | the quantity could not be read as a whole number, so nothing can be added to it |
+
+The `stock_variance` sentence is byte-identical in wording to the differences
+list's, so the two surfaces describe one record the same way. It is written
+locally rather than shared: the panels are in different domains and a shared
+string would have made one of them depend on the other for a sentence.
+
+### The narrowed read, and why it takes no kind
+
+`loadProductPage` filters on `productId` and nothing else. Two equality filters on
+this ascending key order would need a composite index, and the surface wants every
+difference listed against the product rather than one kind of them. A new Rules
+emulator test issues the exact shape, proves an unknown product answers with an
+empty page rather than an error - which is what lets the surface say nothing at
+all - and proves a cashier still cannot reach it.
+
+The product stock surface and the differences repository are granted the same
+three roles, so no session that reaches this panel is refused the read. The
+refusal path is still handled rather than asserted away, because that equality is
+a fact about today's two role lists and not a property either surface owns.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/inventory/stock_adjustment_panel.dart
+lib/reporting/reconciliation_anomalies.dart
+rules-tests/test/reconciliation-anomalies.test.js
+test/inventory/stock_adjustment_panel_test.dart
+```
+
+No `functions/src`, Rules, index, or composition-root change. Nothing needed a
+device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/inventory lib/reporting test/inventory test/reporting` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1197/1197**, up from 1191, adding **6** |
+| the same with the read unnarrowed and its failure rethrown | exactly the three tests that pin those properties fail, as they must |
+| `npm --prefix rules-tests run test:emulator` | **140/140**, up from 139, adding **1** |
+| `npm --prefix functions test` | **206/206** |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **8/8** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `git diff --check` | clean |
+
+### Meaningful failures and their resolutions
+
+- **Two existing tests counted `reader.queries.length` and got twice what they
+  expected.** They were counting ledger reads, and this route now issues a second
+  query on every load. The fake reader grew a `movementQueries` view so an
+  assertion about the ledger says which query it means, rather than the count
+  being quietly right for the wrong reason.
+- **A three-record fixture listed out of ascending document ID order failed the
+  read, not the assertion.** `readCollectionPage` proves its own page ordering, so
+  `movement_a, chain_a, quantity_a` was rejected as an unordered page and the
+  whole section degraded to "could not be read". Reordered, with a comment saying
+  why the order is part of the fixture.
+- **The panel test's fake reader answered every collection from the ledger's
+  page**, the same defect the differences-panel fake had. It now serves the ledger
+  from `respondMovements`, the differences from `respondAnomalies`, and an
+  unregistered collection from an empty page.
+- **A `Select-Object -First` in a PowerShell pipeline reported exit 255 on a run
+  whose tests all passed.** It closes the pipeline and terminates npm. Capture the
+  output with `Out-String` first and filter afterwards.
+- No assertion in the shipped code failed.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` over the 10 in-scope paths | 1197 |
+| `npm --prefix functions test` | 206 |
+| `npm --prefix rules-tests run test:emulator` | 140 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 8 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1563 tests across five suites**, up from 1539 at the start of the session,
+adding **24** across four chunks. Nothing was left failing and no suite was
+skipped except the Android build and the Android emulator runs.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**The stock phase's other two outcomes, against a real server.** The integration
+suite now proves the variance path end to end. `invalid_stock_movement` and
+`checkpoint_chain_invalid` are the two remaining outcomes, and the second is the
+one worth the most: it is the only assertion that would catch two modules
+disagreeing about a checkpoint hash, which is the failure the whole chain exists
+to detect.
+
+1. `invalid_stock_movement` is engineered by writing a movement whose
+   `quantityDelta` is unreadable - a string, or a missing `recordedAt` - directly
+   through the Admin SDK into a product's `stock_movements`. Assert the recorded
+   kind, that `checkpointChainValid` is **false** as a consequence, and that the
+   `expectedQuantity` reported is the one the readable movements account for.
+2. `checkpoint_chain_invalid` is engineered by corrupting a checkpoint the first
+   run wrote - change its `expectedQuantity` so its stored `checkpointHash` no
+   longer describes it - and then running again. Assert the kind, and that the
+   variance figures are still recorded beside it.
+3. Both need the second run to be one that carries a chain, so the fixture's
+   two-run shape from this session's third chunk is the starting point.
+4. Assert that neither outcome moved any stock, as the variance test already
+   does.
+
+Then, in preference order:
+
+- **The landing screen's `Center` inside `SingleChildScrollView`.** Still a
+  look-and-feel decision about the whole safe landing route rather than a defect,
+  and it still wants a deliberate answer rather than a quiet edit. Ask first.
+- **A `productId`-narrowed entry point into the stock movement feed**, the last of
+  the three narrowings this session found unused. The movement feed is
+  collection-group and business-wide; the product surface already pages that
+  product's own ledger, so confirm there is a question the narrowed feed answers
+  that the ledger does not before building it.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **A secondary read on a page that exists for something else must degrade, not
+  throw.** Three surfaces now follow that rule - staff names, the evidence
+  panel's retained counts, and this one - and in each case the test that matters
+  is the one asserting the primary information is still on screen.
+- A fake reader that ignores the collection path, or a fixture listed out of
+  document-ID order, both fail a read for a reason that has nothing to do with
+  the assertion being written. Three panel fakes in this repository have now hit
+  the first and one the second.
+- `Select-Object -First N` terminates the command upstream of it in PowerShell.
+  Do not use it to trim a test run's output; capture with `Out-String` first.
