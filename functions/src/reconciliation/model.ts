@@ -301,6 +301,74 @@ export function aggregateDailySales(
   };
 }
 
+/**
+ * What one product's stock comparison concluded, from the four facts that decide
+ * it.
+ *
+ * Extracted from `reconcileProduct` because it is the whole of that decision and
+ * none of the transaction around it, and because it is where a branch guarded by
+ * a condition another line had already forced went unnoticed for as long as it
+ * existed: an unreadable movement always invalidates the chain, the chain was
+ * tested first, and so `invalid_stock_movement` could never be recorded.
+ */
+export interface StockComparisonFacts {
+  /**
+   * `verified` when the carried state was usable. Anything else names why a
+   * baseline had to be established or re-established, and outranks everything
+   * below: a run that had no trustworthy figure to compare against did not
+   * compare anything.
+   */
+  baselineStatus: string;
+
+  /** Whether the checkpoint behind this product recomputed to its stored hash. */
+  chainValid: boolean;
+
+  /** Movements in this product's ledger that could not be read at all. */
+  invalidMovementCount: number;
+
+  /** Observed minus expected. Zero means the two figures agree. */
+  variance: number;
+}
+
+export interface StockComparisonOutcome {
+  /** Recorded on the verification record and the carried state. */
+  status: string;
+
+  /**
+   * The kind of difference to record, or undefined when there is nothing to
+   * record. A run that found nothing wrong writes no difference at all.
+   */
+  anomalyType?: string;
+}
+
+/**
+ * Names the most specific cause first, in both fields.
+ *
+ * A generic condition that a specific one implies will mask it forever, and the
+ * symptom is a plausible-looking diagnosis pointing an operator at the wrong
+ * evidence - a tamper-evident chain of checks rather than the one ledger row that
+ * could not be read. The chain's own verdict is never lost: `chainValid` is
+ * recorded beside this outcome either way.
+ *
+ * A quantity that agrees with a figure derived from evidence that did not verify
+ * is deliberately **not** reported as `matched`. Nothing else in this codebase
+ * records a check as passed while recording that its own evidence could not be
+ * trusted.
+ */
+export function stockComparisonOutcome(
+  facts: StockComparisonFacts
+): StockComparisonOutcome {
+  const status = facts.baselineStatus !== "verified" ? facts.baselineStatus :
+    facts.invalidMovementCount > 0 ? "invalid_movements" :
+    !facts.chainValid ? "checkpoint_chain_invalid" :
+    facts.variance === 0 ? "matched" : "variance";
+  const anomalyType = facts.invalidMovementCount > 0 ?
+    "invalid_stock_movement" :
+    !facts.chainValid ? "checkpoint_chain_invalid" :
+    facts.variance !== 0 ? "stock_variance" : undefined;
+  return anomalyType === undefined ? {status} : {status, anomalyType};
+}
+
 export function stockCheckpointHash(input: StockCheckpointInput): string {
   return digest([
     "stock-checkpoint-v1",

@@ -13,9 +13,18 @@ import {
   shiftAnomalyId,
   shiftExpectationId,
   stockCheckpointHash,
+  stockComparisonOutcome,
   sweepRunId,
   trailingIsoDates,
 } from "./model";
+
+/** A comparison with nothing wrong with it, for one fact at a time to be varied. */
+const CLEAN_COMPARISON = {
+  baselineStatus: "verified",
+  chainValid: true,
+  invalidMovementCount: 0,
+  variance: 0,
+};
 
 test("sale receipt buckets are stable five-minute windows", () => {
   assert.equal(
@@ -138,4 +147,82 @@ test("checkpoint hashes chain expected and observed values separately", () => {
   const first = stockCheckpointHash(input);
   assert.notEqual(first, stockCheckpointHash({...input, observedQuantity: 10}));
   assert.notEqual(first, stockCheckpointHash({...input, previousCheckpointHash: first}));
+});
+
+test("a stock comparison with nothing wrong records no difference", () => {
+  assert.deepEqual(stockComparisonOutcome(CLEAN_COMPARISON), {status: "matched"});
+});
+
+test("a quantity that disagrees with its ledger is a stock variance", () => {
+  assert.deepEqual(
+    stockComparisonOutcome({...CLEAN_COMPARISON, variance: 3}),
+    {status: "variance", anomalyType: "stock_variance"}
+  );
+});
+
+test("an unreadable movement names itself, not the chain it breaks", () => {
+  // The regression. An unreadable movement always invalidates the chain, so a
+  // decision that tested the chain first could never record this kind at all and
+  // reported every unreadable ledger row as a broken checkpoint chain.
+  assert.deepEqual(
+    stockComparisonOutcome({
+      ...CLEAN_COMPARISON,
+      chainValid: false,
+      invalidMovementCount: 1,
+    }),
+    {status: "invalid_movements", anomalyType: "invalid_stock_movement"}
+  );
+
+  // It outranks a quantity disagreement too: the figure it would be compared
+  // against does not account for everything that moved.
+  assert.equal(
+    stockComparisonOutcome({
+      ...CLEAN_COMPARISON,
+      chainValid: false,
+      invalidMovementCount: 2,
+      variance: -5,
+    }).anomalyType,
+    "invalid_stock_movement"
+  );
+});
+
+test("a quantity that agrees with untrustworthy evidence is not matched", () => {
+  // Nothing else in this codebase records a check as passed while recording that
+  // its own evidence could not be trusted.
+  assert.deepEqual(
+    stockComparisonOutcome({...CLEAN_COMPARISON, chainValid: false}),
+    {status: "checkpoint_chain_invalid", anomalyType: "checkpoint_chain_invalid"}
+  );
+  assert.equal(
+    stockComparisonOutcome({
+      ...CLEAN_COMPARISON,
+      chainValid: false,
+      variance: 4,
+    }).status,
+    "checkpoint_chain_invalid"
+  );
+});
+
+test("a baseline names itself, and still reports a broken chain", () => {
+  // A run with no trustworthy figure to compare against did not compare
+  // anything, so the status says which baseline it established - but a chain that
+  // did not verify is still a difference somebody has to be told about.
+  assert.deepEqual(
+    stockComparisonOutcome({
+      ...CLEAN_COMPARISON,
+      baselineStatus: "baseline_established",
+    }),
+    {status: "baseline_established"}
+  );
+  assert.deepEqual(
+    stockComparisonOutcome({
+      ...CLEAN_COMPARISON,
+      baselineStatus: "baseline_reestablished_invalid_state",
+      chainValid: false,
+    }),
+    {
+      status: "baseline_reestablished_invalid_state",
+      anomalyType: "checkpoint_chain_invalid",
+    }
+  );
 });

@@ -12823,3 +12823,177 @@ files, and deployment.
 - The module in a directory with no test file is the one to be suspicious of.
   `processors.ts` is the largest file in `functions/src/reconciliation` and the
   only one without a unit test.
+
+---
+
+## One decision, in one place, with tests - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **the stock comparison's conclusion is now one pure function
+with unit tests**, and the question the previous chunk left open - what `status`
+should say when the chain does not verify - is answered.
+
+### The status question, answered
+
+A product whose quantity agreed with its expected figure while its checkpoint
+chain did not verify was recorded as `matched`.
+
+**It is now `checkpoint_chain_invalid`.** The argument for `matched` was that the
+field describes the quantity comparison, and the quantities did agree. The
+argument against it wins: they agreed with a figure derived from evidence that did
+not verify, and nothing else in this codebase records a check as passed while
+recording that its own evidence could not be trusted. The status now agrees with
+the difference recorded beside it instead of contradicting it.
+
+Two facts made this safe to change rather than a judgement to defer:
+
+- **No client can read the field.** `stock_verifications` and
+  `stock_reconciliation_state` are not matched by any rule in `firestore.rules`, so
+  the catch-all `allow read, write: if false` covers them. The change is
+  observable only to the server and to anyone reading Firestore directly.
+- **Nothing reads the stored `status` back.** `baselineStatus` is recomputed from
+  the carried state's own validity on every run; the only field read back across
+  runs is `lastVerificationHadVariance`, and its meaning is unchanged.
+
+### The extraction, and what it is for
+
+`stockComparisonOutcome` in `model.ts` takes the four facts that settle a stock
+comparison - the baseline status, the chain verdict, the count of unreadable
+movements, and the variance - and returns the status and the kind of difference to
+record, or no kind at all when there is nothing wrong.
+
+It replaces three separate expressions in `reconcileProduct` that each restated
+the same condition: the status ternary, the anomaly-kind ternary, and
+`!chainValid || cumulativeInvalidMovementCount > 0 || variance !== 0` written out
+twice more for whether to write the record and what to return. **That duplication
+is how the previous chunk's defect survived**: one copy could be reordered
+without the others noticing, and the branch it made unreachable looked live.
+
+Decisions worth recording:
+
+- **It went in `model.ts`, not a new `processors.test.ts`.** The previous
+  handover asked for the latter. `model.ts` is where the pure reconciliation
+  decisions already live and `model.test.ts` already tests them; a
+  `processors.test.ts` that only tested a function defined elsewhere would have
+  been the odd one out, and it still could not have touched the transaction.
+- **`reconcileProduct` was not restructured.** The extraction is the decision and
+  nothing around it; the transaction, its reads, and its writes are untouched
+  apart from consuming the result.
+- **The absent kind is `undefined`, not a sentinel.** "There is nothing to record"
+  is exactly the shape a caller needs - `if (outcome.anomalyType)` - and it made
+  the two duplicated conditions disappear rather than move.
+
+### Files in this chunk
+
+```text
+PLAN.md
+functions/src/reconciliation/model.test.ts
+functions/src/reconciliation/model.ts
+functions/src/reconciliation/processors.ts
+```
+
+No Rules, index, or Dart change. Nothing needed a device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix functions run build` | clean |
+| `npm --prefix functions test` | **211/211**, up from 206, adding **5** |
+| the same with both ternaries reordered back to the masked form | exactly the two tests that pin the ordering fail, as they must |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **9/9**, unchanged - the behaviour it observes is the same |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `npm --prefix rules-tests run test:emulator` | **140/140** |
+| `git diff --check` | clean |
+
+The Dart suites were not re-run: this chunk changed only `functions/src`, and the
+integration suite is what proves the server's behaviour to the client's read
+models. Their total stands at 1197 from earlier in this session.
+
+### Meaningful failures and their resolutions
+
+- **`npm --prefix functions run lint` does not exist.** The package has `build`
+  and `test` only; `tsc` is the lint gate on this project.
+- No assertion in the shipped code failed. All five unit tests passed on their
+  first run, and the integration suite was unchanged by the refactor, which is the
+  evidence that the extraction preserved behaviour apart from the one `status`
+  value it deliberately changed.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` over the 10 in-scope paths | 1197 |
+| `npm --prefix functions test` | 211 |
+| `npm --prefix rules-tests run test:emulator` | 140 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 9 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1569 tests across five suites**, up from 1539 at the start of the session,
+adding **30** across six chunks. Nothing was left failing and no suite was skipped
+except the Android build and the Android emulator runs.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**`invalid_product_quantity` against a real server** - the fourth and last thing
+the stock phase can conclude, and now the only one with no end-to-end evidence.
+
+1. Engineer it by writing a non-integer `quantity` onto a seeded product through
+   the Admin SDK. `reconcileProduct` reads it with `safeInteger`, and the record it
+   writes is addressed `product_quantity_{digest(productId)}` - **not** by job, so
+   unlike every other stock difference there is exactly one per product forever.
+   Assert that, because it is the one shape of stock difference that does not
+   accumulate.
+2. Assert the verification record's `invalid_observed_quantity` status and that
+   the product's quantity was not touched.
+3. Assert what the phase does **not** do: no checkpoint is written for that
+   product, and its carried state is not advanced, because there was no figure to
+   carry. Confirm that against the code before asserting it.
+4. The product stock surface already words this kind and the differences list
+   already renders it, so no Dart change should be needed. If one is, that is the
+   finding.
+
+Then, in preference order:
+
+- **The landing screen's `Center` inside `SingleChildScrollView`.** Still a
+  look-and-feel decision about the whole safe landing route rather than a defect,
+  and it still wants a deliberate answer rather than a quiet edit. **Ask before
+  changing it** - it has been deferred for three sessions now and will keep being
+  deferred until somebody decides.
+- **A `productId`-narrowed entry point into the stock movement feed.** The last of
+  the three narrowings this session found unused. Confirm there is a question the
+  narrowed collection-group feed answers that the product's own ledger page does
+  not, before building it.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **One condition written out four times is four places to reorder wrongly.**
+  `reconcileProduct` had the same predicate as a status ternary, a kind ternary, a
+  write guard, and a return value. Extracting the decision removed three of them
+  and made the remaining one testable.
+- A pure decision extracted from a transaction belongs where the other pure
+  decisions live, not in a test file named after the module it was extracted from.
+- `npm --prefix functions run lint` does not exist on this project. `tsc` via
+  `npm --prefix functions run build` is the gate.

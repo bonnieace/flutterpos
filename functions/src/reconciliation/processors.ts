@@ -15,6 +15,7 @@ import {
   shiftAnomalyId,
   shiftExpectationId,
   stockCheckpointHash,
+  stockComparisonOutcome,
   trailingIsoDates,
 } from "./model";
 import {ClaimedReconciliationJob} from "./jobs";
@@ -504,9 +505,9 @@ async function reconcileProduct(
       chainValid = false;
     }
     // An unreadable movement invalidates the chain's guarantee: no checkpoint can
-    // claim to describe a ledger part of which could not be read. The difference
-    // recorded below therefore has to name the movement rather than the chain -
-    // see the comment on `anomalyType`.
+    // claim to describe a ledger part of which could not be read. What is then
+    // *reported* still has to name the movement rather than the chain, which is
+    // `stockComparisonOutcome`'s job.
     if (cumulativeInvalidMovementCount > 0) chainValid = false;
     const shouldCheckpoint = job.checkpointKind !== "none";
     const checkpointHash = shouldCheckpoint ? stockCheckpointHash({
@@ -520,9 +521,15 @@ async function reconcileProduct(
     }) : undefined;
     const checkpointRef = shouldCheckpoint ? tenantRef.collection("stock_checkpoints")
       .doc(job.checkpointKey).collection("products").doc(productId) : undefined;
-    const status = baselineStatus !== "verified" ? baselineStatus :
-      cumulativeInvalidMovementCount > 0 ? "invalid_movements" :
-      variance === 0 ? "matched" : "variance";
+    // One decision, in one place, over the four facts that settle it: what this
+    // comparison concluded and whether it is a difference worth recording.
+    const outcome = stockComparisonOutcome({
+      baselineStatus,
+      chainValid,
+      invalidMovementCount: cumulativeInvalidMovementCount,
+      variance,
+    });
+    const status = outcome.status;
 
     transaction.set(verificationParent, {
       tenantId: job.tenantId,
@@ -596,8 +603,9 @@ async function reconcileProduct(
       lastVerificationJobId: job.jobId,
       lastVerificationGeneration: job.generation,
       lastVerificationCompleted: true,
-      lastVerificationHadVariance:
-        variance !== 0 || !chainValid || cumulativeInvalidMovementCount > 0,
+      // Exactly "a difference was recorded", from the one decision above rather
+      // than from a second copy of its condition.
+      lastVerificationHadVariance: outcome.anomalyType !== undefined,
       activeVerificationJobId: job.jobId,
       activeVerificationGeneration: job.generation,
       activeInvalidMovementCount: cumulativeInvalidMovementCount,
@@ -605,21 +613,13 @@ async function reconcileProduct(
       updatedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
     }, {merge: true});
-    if (!chainValid || cumulativeInvalidMovementCount > 0 || variance !== 0) {
+    if (outcome.anomalyType) {
       transaction.set(tenantRef.collection("reconciliation_anomalies")
         .doc(`stock_${digest([productId, job.jobId])}`), {
         tenantId: job.tenantId,
         productId,
         jobId: job.jobId,
-        // The most specific cause first. An unreadable movement always
-        // invalidates the chain, so testing the chain first made
-        // `invalid_stock_movement` unreachable and reported every unreadable
-        // ledger entry as a broken checkpoint chain - a different and more
-        // alarming finding, pointing an operator at the wrong evidence. The
-        // chain's own verdict is not lost: `checkpointChainValid` is recorded
-        // on the verification and the carried state either way.
-        anomalyType: cumulativeInvalidMovementCount > 0 ? "invalid_stock_movement" :
-          !chainValid ? "checkpoint_chain_invalid" : "stock_variance",
+        anomalyType: outcome.anomalyType,
         expectedQuantity,
         observedQuantity,
         variance,
@@ -630,7 +630,7 @@ async function reconcileProduct(
     }
     return {
       completed: true,
-      variance: variance !== 0 || !chainValid || cumulativeInvalidMovementCount > 0,
+      variance: outcome.anomalyType !== undefined,
     };
   });
 }
