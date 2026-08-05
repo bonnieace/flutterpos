@@ -8,6 +8,7 @@ import '../tenancy/tenant_staff_names.dart';
 import 'reconciliation_actions.dart';
 import 'reconciliation_anomalies_panel.dart';
 import 'reconciliation_request.dart';
+import 'reconciliation_run_panel.dart';
 import 'reconciliation_status.dart';
 
 /// Route explaining how one business day reached the state the daily summary
@@ -222,11 +223,7 @@ final class _TenantReconciliationStatusPanelState
       final day = await TenantReconciliationStatusRepository(
         session: session,
         reader: widget.reader,
-      ).loadDay(
-        widget.businessDate,
-        pageSize: widget.pageSize,
-        cursor: cursor,
-      );
+      ).loadDay(widget.businessDate, pageSize: widget.pageSize, cursor: cursor);
       // A scheduled sweep and a sale trigger name no member of the business.
       return _ReconciliationView(
         day: day,
@@ -241,8 +238,7 @@ final class _TenantReconciliationStatusPanelState
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
-    final guardKey =
-        '${widget.businessDate}:$_generation:$_pageIndex:$cursor';
+    final guardKey = '${widget.businessDate}:$_generation:$_pageIndex:$cursor';
     return TenantRouteGuard<_ReconciliationView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantReconciliationStatusRepository.allowedRoles,
@@ -488,57 +484,12 @@ final class _ReconciliationContents extends StatelessWidget {
     ],
   );
 
-  Widget _run(BuildContext context, TenantReconciliationRun run) => Card(
-    key: ValueKey('reconciliation-status-run-${run.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            key: ValueKey('reconciliation-status-run-state-${run.id}'),
-            '${_statusLabel(run)} • ${_sourceLabel(run)}',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            key: ValueKey('reconciliation-status-run-progress-${run.id}'),
-            _progress(run),
-          ),
-          if (run.lastErrorCode case final code?)
-            Text(
-              key: ValueKey('reconciliation-status-run-error-${run.id}'),
-              'Server code: $code',
-            ),
-          if (run.hasVariances)
-            Text(
-              key: ValueKey('reconciliation-status-run-variance-${run.id}'),
-              '${run.stockVarianceCount} stock and ${run.shiftVarianceCount} '
-              'shift differences were recorded.',
-            ),
-          if (run.rerunRequested)
-            Text(
-              key: ValueKey('reconciliation-status-run-rerun-${run.id}'),
-              'A change arrived while this run was working, so it will run '
-              'again.',
-            ),
-          Text(
-            key: ValueKey('reconciliation-status-run-requested-${run.id}'),
-            'Requested by ${_requestedByLabel(run)}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    ),
-  );
-
-  /// A member's UID resolves to a name; a `system:` actor names no member of
-  /// the business and is shown as the server work it is.
-  String _requestedByLabel(TenantReconciliationRun run) {
-    final actorUid = run.actorUid;
-    if (actorUid == null) return 'the server (${run.requestedBy})';
-    return tenantStaffLabel(actorUid, names: view.names, selfUid: selfUid);
-  }
+  Widget _run(BuildContext context, TenantReconciliationRun run) =>
+      TenantReconciliationRunCard(
+        run: run,
+        names: view.names,
+        selfUid: selfUid,
+      );
 }
 
 /// Chooses one mode and requires an explicit confirmation.
@@ -680,40 +631,6 @@ String _instants(TenantReconciliationIntake intake) {
         ? 'Never regenerated'
         : 'Last regenerated ${_instant(regenerated)}',
   ].join(' • ');
-}
-
-/// An unmodelled value is shown as itself: hiding a real run, or renaming its
-/// state, would be worse than naming what the server actually recorded.
-String _statusLabel(TenantReconciliationRun run) =>
-    run.status == TenantReconciliationRunStatus.other
-    ? run.statusValue
-    : run.status.label;
-
-String _sourceLabel(TenantReconciliationRun run) =>
-    run.source == TenantReconciliationRunSource.other
-    ? run.sourceValue
-    : run.source.label;
-
-String _phaseLabel(TenantReconciliationRun run) =>
-    run.phase == TenantReconciliationRunPhase.other
-    ? run.phaseValue
-    : run.phase.label;
-
-String _modeLabel(TenantReconciliationRun run) => switch (run.mode) {
-  'incremental' => 'Incremental',
-  'full' => 'Full check',
-  final other => other,
-};
-
-String _progress(TenantReconciliationRun run) {
-  final attempts =
-      '${run.attemptCount} '
-      '${run.attemptCount == 1 ? 'attempt' : 'attempts'}';
-  final failures = run.consecutiveFailureCount == 0
-      ? ''
-      : ', ${run.consecutiveFailureCount} in a row failed';
-  return '${_modeLabel(run)} • reached ${_phaseLabel(run)} • '
-      '$attempts$failures';
 }
 
 String _instant(DateTime value) {

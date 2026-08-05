@@ -18,23 +18,31 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(_text(tester, 'reconciliation-anomaly-kind-sale_a'),
-        'Sale lines could not be read');
-    expect(_text(tester, 'reconciliation-anomaly-subject-sale_a'),
-        'Sale checkout-a');
+    expect(
+      _text(tester, 'reconciliation-anomaly-kind-sale_a'),
+      'Sale lines could not be read',
+    );
+    expect(
+      _text(tester, 'reconciliation-anomaly-subject-sale_a'),
+      'Sale checkout-a',
+    );
     expect(
       _text(tester, 'reconciliation-anomaly-detail-sale_a'),
       '2 sale lines could not be read, so they moved no stock.',
     );
-    expect(_text(tester, 'reconciliation-anomaly-subject-stock_c'),
-        'Product product-a');
+    expect(
+      _text(tester, 'reconciliation-anomaly-subject-stock_c'),
+      'Product product-a',
+    );
     expect(
       _text(tester, 'reconciliation-anomaly-detail-stock_c'),
       'Its ledger expects 10, and the product records 7: 3 fewer than the '
       'ledger accounts for.',
     );
-    expect(_text(tester, 'reconciliation-anomaly-subject-shift_b'),
-        'Shift shift-a');
+    expect(
+      _text(tester, 'reconciliation-anomaly-subject-shift_b'),
+      'Shift shift-a',
+    );
     expect(
       _text(tester, 'reconciliation-anomaly-detail-shift_b'),
       'Its sales total is 12.5 short and its transaction count is 2 over '
@@ -67,10 +75,14 @@ void main() {
       ]);
 
     await _pump(tester, _controller(), reader, pageSize: 2);
-    await tester.tap(find.byKey(const ValueKey('reconciliation-anomalies-next')));
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-anomalies-next')),
+    );
     await _settle(tester);
-    expect(find.byKey(const ValueKey('reconciliation-anomaly-stock_c')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-stock_c')),
+      findsOneWidget,
+    );
 
     await tester.tap(
       find.byKey(const ValueKey('reconciliation-anomaly-kind-stock_variance')),
@@ -83,10 +95,14 @@ void main() {
     expect(reader.queries.last.equalityFilters, {
       'anomalyType': 'stock_variance',
     });
-    expect(find.byKey(const ValueKey('reconciliation-anomaly-stock_c')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('reconciliation-anomaly-sale_a')),
-        findsNothing);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-stock_c')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-sale_a')),
+      findsNothing,
+    );
   });
 
   testWidgets('offers no chip for a kind it cannot ask for', (tester) async {
@@ -94,15 +110,19 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(find.byKey(const ValueKey('reconciliation-anomaly-kind-all')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-kind-all')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('reconciliation-anomaly-kind-stock_variance')),
       findsOneWidget,
     );
     // `other` names every unmodelled kind, so it identifies no stored value.
-    expect(find.byKey(const ValueKey('reconciliation-anomaly-kind-')),
-        findsNothing);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-kind-')),
+      findsNothing,
+    );
   });
 
   testWidgets('shows an unmodelled kind verbatim rather than hiding it', (
@@ -119,10 +139,14 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(_text(tester, 'reconciliation-anomaly-kind-other_a'),
-        'Unrecognised difference: price_drift');
-    expect(_text(tester, 'reconciliation-anomaly-subject-other_a'),
-        'This business');
+    expect(
+      _text(tester, 'reconciliation-anomaly-kind-other_a'),
+      'Unrecognised difference: price_drift',
+    );
+    expect(
+      _text(tester, 'reconciliation-anomaly-subject-other_a'),
+      'This business',
+    );
   });
 
   testWidgets('states a difference with no recorded time as such', (
@@ -160,8 +184,10 @@ void main() {
 
     await _pump(tester, _controller(role: TenantRole.cashier), reader);
 
-    expect(find.byKey(const ValueKey('reconciliation-anomalies-denied')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomalies-denied')),
+      findsOneWidget,
+    );
     expect(reader.queries, isEmpty);
   });
 
@@ -178,8 +204,10 @@ void main() {
     await _settle(tester);
 
     // Tenant A's page must never label tenant B's screen.
-    expect(find.byKey(const ValueKey('reconciliation-anomaly-sale_a')),
-        findsNothing);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-sale_a')),
+      findsNothing,
+    );
   });
 
   testWidgets('offers a correction only on a shift difference', (tester) async {
@@ -232,7 +260,9 @@ void main() {
     );
   });
 
-  testWidgets('a manager is told why rather than shown nothing', (tester) async {
+  testWidgets('a manager is told why rather than shown nothing', (
+    tester,
+  ) async {
     final reader = _Reader()
       ..respond(<TenantQueryDocumentSnapshot>[
         _snapshot('shift_b', _shiftAnomaly()),
@@ -311,8 +341,10 @@ void main() {
     );
     expect(reader.queries.length, 2);
     expect(reader.queries.last.startAfterDocumentId, isNull);
-    expect(find.byKey(const ValueKey('reconciliation-anomaly-shift_b')),
-        findsNothing);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-shift_b')),
+      findsNothing,
+    );
   });
 
   testWidgets('a refusal names itself and leaves the list alone', (
@@ -343,8 +375,10 @@ void main() {
       contains('this shift cannot be corrected'),
     );
     expect(reader.queries.length, 1);
-    expect(find.byKey(const ValueKey('reconciliation-anomaly-shift_b')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-shift_b')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('an unknown outcome re-reads the list and says so', (
@@ -444,7 +478,9 @@ void main() {
       find.byKey(const ValueKey('reconciliation-amend-reason')),
       'Late offline sale',
     );
-    await tester.tap(find.byKey(const ValueKey('reconciliation-amend-confirm')));
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-amend-confirm')),
+    );
     await tester.pumpAndSettle();
     // Proved before the switch, so a missing notice below cannot be a
     // correction that was never sent at all.
@@ -554,7 +590,9 @@ void main() {
     );
 
     await tester.tap(
-      find.byKey(const ValueKey('reconciliation-anomaly-corrections-invalid_b')),
+      find.byKey(
+        const ValueKey('reconciliation-anomaly-corrections-invalid_b'),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -665,6 +703,86 @@ void main() {
     );
   });
 
+  testWidgets('a difference opens the run that found it', (tester) async {
+    // The row already names the run. Until this existed that was the end of the
+    // trail: the day page is addressed by business date and a difference carries
+    // a product or a shift instead, so nothing could be asked about the run.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('shift_b', _shiftAnomaly()),
+      ])
+      ..respondDocument('tenants/tenant-a/reconciliation_jobs/rj_abc', _job());
+
+    await _pump(tester, _controller(), reader);
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-anomaly-run-shift_b')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reconciliation run'), findsOne);
+    expect(
+      reader.documentPaths,
+      contains('tenants/tenant-a/reconciliation_jobs/rj_abc'),
+    );
+    // Described by the same card the day page uses, so the two cannot disagree
+    // about what the run's state means.
+    expect(
+      _text(tester, 'reconciliation-status-run-state-rj_abc'),
+      'Completed • Nightly sweep',
+    );
+    expect(
+      _text(tester, 'reconciliation-status-run-variance-rj_abc'),
+      '0 stock and 1 shift differences were recorded.',
+    );
+  });
+
+  testWidgets('a run that is no longer stored says so rather than failing', (
+    tester,
+  ) async {
+    // A difference outlives the run that found it, so an absent run is an
+    // ordinary answer and what the difference records still stands.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('shift_b', _shiftAnomaly()),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+    await tester.tap(
+      find.byKey(const ValueKey('reconciliation-anomaly-run-shift_b')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('reconciliation-run-missing')), findsOne);
+    expect(
+      find.byKey(const ValueKey('reconciliation-run-failure')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a difference that names no run offers nothing to open', (
+    tester,
+  ) async {
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot(
+          'shift_b',
+          _shiftAnomaly(overrides: <String, Object?>{'jobId': null}),
+        ),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-run-shift_b')),
+      findsNothing,
+    );
+    // The row itself still renders, and still says the difference is real.
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomaly-shift_b')),
+      findsOne,
+    );
+  });
+
   testWidgets('a record that contradicts itself fails the page closed', (
     tester,
   ) async {
@@ -678,8 +796,10 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(find.byKey(const ValueKey('reconciliation-anomalies-failure')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomalies-failure')),
+      findsOneWidget,
+    );
     expect(find.textContaining('inconsistent_anomaly'), findsNothing);
   });
 }
@@ -751,8 +871,10 @@ Future<void> _pump(
 }
 
 TenantSessionController _controller({TenantRole role = TenantRole.manager}) =>
-    TenantSessionController()
-      ..open(uid: 'manager-a', membership: _membership('tenant-a', role: role));
+    TenantSessionController()..open(
+      uid: 'manager-a',
+      membership: _membership('tenant-a', role: role),
+    );
 
 TenantMembership _membership(
   String tenantId, {
@@ -826,6 +948,35 @@ Map<String, Object?> _document(
   data.removeWhere((key, value) => value == null);
   return data;
 }
+
+/// The run one of these differences names, in the shape `jobs.ts` writes it, so
+/// the route this page opens renders rather than failing closed.
+Map<String, Object?> _job() => <String, Object?>{
+  'tenantId': 'tenant-a',
+  'source': 'nightly',
+  'sourceKey': 'nightly:2026-07-31',
+  'mode': 'incremental',
+  'checkpointKind': 'none',
+  'checkpointKey': '2026-07-31',
+  'localDate': '2026-07-31',
+  'requestedBy': 'system:nightly',
+  'status': 'completed',
+  'phase': 'finalize',
+  'generation': 0,
+  'revision': 4,
+  'attemptCount': 1,
+  'consecutiveFailureCount': 0,
+  'rerunRequested': false,
+  'metricsProcessed': 1,
+  'productsProcessed': 0,
+  'stockVarianceCount': 0,
+  'shiftsProcessed': 2,
+  'shiftVarianceCount': 1,
+  'authority': 'canonical_tenant_data',
+  'mutatesStock': false,
+  'completedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 31)),
+  'updatedAt': Timestamp.fromDate(DateTime.utc(2026, 8, 1, 2, 31)),
+};
 
 /// One `shift_amendments` record the trail's own strict read model accepts, so a
 /// narrowed page this surface opens renders rather than failing closed.
@@ -923,7 +1074,8 @@ final class _Callable implements AmendShiftSummaryCallable {
 }
 
 final class _Reader implements TenantDataReader {
-  List<TenantQueryDocumentSnapshot> _page = const <TenantQueryDocumentSnapshot>[];
+  List<TenantQueryDocumentSnapshot> _page =
+      const <TenantQueryDocumentSnapshot>[];
   Completer<List<TenantQueryDocumentSnapshot>>? _pending;
   final List<TenantCollectionQuery> queries = <TenantCollectionQuery>[];
 
@@ -935,12 +1087,13 @@ final class _Reader implements TenantDataReader {
 
   void respond(List<TenantQueryDocumentSnapshot> page) => _page = page;
 
-  void respondAt(String collectionPath, List<TenantQueryDocumentSnapshot> page) =>
-      _pagesByPath[collectionPath] = page;
+  void respondAt(
+    String collectionPath,
+    List<TenantQueryDocumentSnapshot> page,
+  ) => _pagesByPath[collectionPath] = page;
 
   /// Holds the next page open so a business switch can happen mid-read.
-  void defer() =>
-      _pending = Completer<List<TenantQueryDocumentSnapshot>>();
+  void defer() => _pending = Completer<List<TenantQueryDocumentSnapshot>>();
 
   void complete(List<TenantQueryDocumentSnapshot> page) {
     _page = page;
@@ -948,8 +1101,20 @@ final class _Reader implements TenantDataReader {
     _pending = null;
   }
 
+  /// Documents a route this page opens reads by exact path, keyed by that path.
+  final Map<String, Map<String, Object?>> documents =
+      <String, Map<String, Object?>>{};
+  final List<String> documentPaths = <String>[];
+
+  void respondDocument(String path, Map<String, Object?> data) =>
+      documents[path] = data;
+
   @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) async => null;
+  Future<TenantDocumentSnapshot?> getDocument(String path) async {
+    documentPaths.add(path);
+    final data = documents[path];
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
+  }
 
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(

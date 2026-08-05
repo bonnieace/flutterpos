@@ -199,6 +199,47 @@ test("management reads a day's state and the runs behind it", async () => {
   }
 });
 
+test("one run is read by its own ID, and only by management", async () => {
+  await seedReconciliation();
+
+  // A difference names the run that found it and carries no business date, so
+  // the client addresses that one run instead of listing a day. `allow read`
+  // covers the list and the get together, and only the get proves the second.
+  for (const uid of ["manager-a", "owner-a"]) {
+    const firestore = authenticatedFirestore(testEnvironment, uid);
+    const run = await assertSucceeds(
+      getDoc(doc(firestore, jobPath("tenant-a", "rj_abc"))),
+    );
+    if (run.data().localDate !== BUSINESS_DATE) {
+      throw new Error(`Unexpected run document for ${uid}.`);
+    }
+
+    // A difference outlives the run that found it, so "no run is recorded at
+    // this ID" has to be answered rather than denied for the surface to be able
+    // to say so. The rule touches no document field, which is what allows it.
+    const missing = await assertSucceeds(
+      getDoc(doc(firestore, jobPath("tenant-a", "rj_gone"))),
+    );
+    if (missing.exists()) {
+      throw new Error(`An unrecorded run unexpectedly existed for ${uid}.`);
+    }
+  }
+
+  const cashier = authenticatedFirestore(testEnvironment, "cashier-a");
+  await assertFails(getDoc(doc(cashier, jobPath("tenant-a", "rj_abc"))));
+
+  // The other business holds a run at the very same ID, so a leak across the
+  // boundary here would arrive looking like an ordinary answer.
+  const foreign = authenticatedFirestore(testEnvironment, "manager-b");
+  await assertFails(getDoc(doc(foreign, jobPath("tenant-a", "rj_abc"))));
+  const own = await assertSucceeds(
+    getDoc(doc(foreign, jobPath("tenant-b", "rj_abc"))),
+  );
+  if (own.data().tenantId !== "tenant-b") {
+    throw new Error("Unexpected own-business run document.");
+  }
+});
+
 test("the runs page resumes from a document ID", async () => {
   await seedReconciliation();
   const firestore = authenticatedFirestore(testEnvironment, "manager-a");

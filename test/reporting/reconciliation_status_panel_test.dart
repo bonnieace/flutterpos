@@ -105,6 +105,18 @@ void main() {
           .data,
       'Full check • reached Finishing • 1 attempt',
     );
+    // The page is ordered by document ID, and a run ID carries no time, so each
+    // run states its own instants rather than implying one from its position.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-instants-rj_abc'),
+            ),
+          )
+          .data,
+      'Completed 2026-08-01 02:31 UTC • Last updated 2026-08-01 02:31 UTC',
+    );
     expect(reader.queries.single.equalityFilters, <String, Object?>{
       'localDate': '2026-07-31',
     });

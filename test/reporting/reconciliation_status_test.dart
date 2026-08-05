@@ -510,16 +510,16 @@ void main() {
         ],
       );
 
-      final first = await _repository(reader).loadDay('2026-07-31', pageSize: 2);
+      final first = await _repository(
+        reader,
+      ).loadDay('2026-07-31', pageSize: 2);
       expect(first.runs.items.map((run) => run.id), <String>['rj_1', 'rj_2']);
       expect(first.runs.hasMore, isTrue);
       expect(first.runs.nextCursor, 'rj_2');
 
-      final second = await _repository(reader).loadDay(
-        '2026-07-31',
-        pageSize: 2,
-        cursor: first.runs.nextCursor,
-      );
+      final second = await _repository(
+        reader,
+      ).loadDay('2026-07-31', pageSize: 2, cursor: first.runs.nextCursor);
       expect(second.runs.items.map((run) => run.id), <String>['rj_3']);
       expect(second.runs.hasMore, isFalse);
       expect(second.runs.nextCursor, isNull);
@@ -533,6 +533,87 @@ void main() {
         _repository(reader).loadDay('2026-07-31', pageSize: 51),
         throwsRangeError,
       );
+    });
+  });
+
+  group('one run read by its own ID', () {
+    test('reads the exact run a difference names', () async {
+      // Every difference carries a `jobId`. It carries no business date, so the
+      // day page cannot be reached from one and this read is the only way in.
+      final reader = _Reader(
+        documents: <String, Map<String, Object?>>{
+          'tenants/tenant-a/reconciliation_jobs/rj_abc': _job(),
+        },
+      );
+
+      final run = await _repository(reader).readRun('rj_abc');
+
+      expect(run!.id, 'rj_abc');
+      expect(run.businessDate, '2026-07-31');
+      expect(run.status, TenantReconciliationRunStatus.completed);
+      expect(run.shiftsProcessed, 2);
+      // Addressed by exact path, so no query is issued and no other run can be
+      // returned in its place.
+      expect(reader.documentPaths, <String>[
+        'tenants/tenant-a/reconciliation_jobs/rj_abc',
+      ]);
+      expect(reader.queries, isEmpty);
+    });
+
+    test('a run that is no longer stored is an answer, not a failure', () async {
+      // A difference outlives the run that found it, and nothing in this app
+      // deletes a run - so a caller has to be able to say it is not there rather
+      // than fail the page it is explaining.
+      expect(await _repository(_Reader()).readRun('rj_gone'), isNull);
+    });
+
+    test('refuses a cashier, an unusable ID, and another business', () async {
+      final reader = _Reader(
+        documents: <String, Map<String, Object?>>{
+          'tenants/tenant-a/reconciliation_jobs/rj_abc': _job(),
+        },
+      );
+
+      await expectLater(
+        _repository(reader, role: TenantRole.cashier).readRun('rj_abc'),
+        _code('reconciliation_forbidden'),
+      );
+      expect(reader.documentPaths, isEmpty, reason: 'refused before reading');
+
+      await expectLater(
+        _repository(reader).readRun('reconciliation_jobs/rj_abc'),
+        _code('invalid_run_id'),
+      );
+
+      final foreign = _Reader(
+        documents: <String, Map<String, Object?>>{
+          'tenants/tenant-a/reconciliation_jobs/rj_abc': _job(
+            tenantId: 'tenant-b',
+          ),
+        },
+      );
+      await expectLater(
+        _repository(foreign).readRun('rj_abc'),
+        // The document names another business, which its own path check catches
+        // before this repository's does.
+        _code('run_identity_mismatch'),
+      );
+    });
+
+    test('every role that reads a day reads a run', () async {
+      final reader = _Reader(
+        documents: <String, Map<String, Object?>>{
+          'tenants/tenant-a/reconciliation_jobs/rj_abc': _job(),
+        },
+      );
+
+      for (final role in TenantReconciliationStatusRepository.allowedRoles) {
+        expect(
+          (await _repository(reader, role: role).readRun('rj_abc'))?.id,
+          'rj_abc',
+          reason: role.wireValue,
+        );
+      }
     });
   });
 }

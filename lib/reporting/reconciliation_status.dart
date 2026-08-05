@@ -563,6 +563,49 @@ final class TenantReconciliationStatusRepository extends TenantReadRepository {
     );
   }
 
+  /// Reads one exact run by its own ID.
+  ///
+  /// Every difference this business records names the run that found it, and
+  /// until this existed there was no way to ask anything about that run: the day
+  /// page is reached by business date, and a difference carries a product or a
+  /// shift rather than a date. A run is addressed by an exact document path for
+  /// the same reason the intake record is - its ID is the answer, and a query
+  /// cannot distinguish "no such run" from "a run this session may not read".
+  ///
+  /// Null is a real answer. A run is not immutable and nothing in this app
+  /// deletes one, but a difference outlives the retention of anything else, so a
+  /// caller has to be able to say the run is no longer there.
+  Future<TenantReconciliationRun?> readRun(String jobId) async {
+    if (!canReadInSession(session)) {
+      throw const TenantReconciliationException('reconciliation_forbidden');
+    }
+    final String safeJobId;
+    try {
+      safeJobId = validateTenantDocumentId(jobId, fieldName: 'jobId');
+    } on ArgumentError {
+      throw const TenantReconciliationException('invalid_run_id');
+    }
+    final data = await readDocument(
+      TenantCollection.reconciliationJobs,
+      safeJobId,
+    );
+    if (data == null) return null;
+    final run = TenantReconciliationRun.fromDocument(
+      path: paths.reconciliationJob(safeJobId),
+      data: data,
+    );
+    // The last of three agreeing proofs, and the only one a caller could break:
+    // `readDocument` refuses a snapshot returned at any other path, and
+    // `fromDocument` refuses a document naming another business at this one. This
+    // is what would still catch a foreign run if the path above ever stopped
+    // being derived from the session, which is the same reason `_readIntake`
+    // keeps its own.
+    if (run.tenantId != session.tenantId) {
+      throw const TenantReconciliationException('cross_tenant_run');
+    }
+    return run;
+  }
+
   String _validatedBusinessDate(String businessDate) {
     try {
       return validateCheckoutBusinessDate(businessDate);

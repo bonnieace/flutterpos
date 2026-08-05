@@ -6,6 +6,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'reconciliation_actions.dart';
 import 'reconciliation_anomalies.dart';
+import 'reconciliation_run_panel.dart';
 import 'shift_amendment.dart';
 import 'shift_amendment_feed_panel.dart';
 
@@ -256,18 +257,16 @@ final class _TenantReconciliationAnomalyPanelState
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
     final kind = _kind;
-    return _loader = (session) =>
-        TenantReconciliationAnomalyRepository(
-          session: session,
-          reader: widget.reader,
-        ).loadPage(kind: kind, pageSize: widget.pageSize, cursor: cursor);
+    return _loader = (session) => TenantReconciliationAnomalyRepository(
+      session: session,
+      reader: widget.reader,
+    ).loadPage(kind: kind, pageSize: widget.pageSize, cursor: cursor);
   }
 
   @override
   Widget build(BuildContext context) {
     final cursor = _cursors[_pageIndex];
-    final guardKey =
-        '${_kind?.wireValue}:$_generation:$_pageIndex:$cursor';
+    final guardKey = '${_kind?.wireValue}:$_generation:$_pageIndex:$cursor';
     return TenantRouteGuard<TenantReconciliationAnomalyPage>(
       key: ValueKey(guardKey),
       allowedRoles: TenantReconciliationAnomalyRepository.allowedRoles,
@@ -310,6 +309,14 @@ final class _TenantReconciliationAnomalyPanelState
           context,
           reader: widget.reader,
           shiftId: shiftId,
+        ),
+        // Each row already names the run that found it. This is the same read of
+        // the same business under the same reader, granted to the same three
+        // roles, so like the trail it needs no injected capability.
+        onOpenRun: (jobId) => openTenantReconciliationRun(
+          context,
+          reader: widget.reader,
+          jobId: jobId,
         ),
         onNextPage: () => _nextPage(page.nextCursor),
         onPreviousPage: _previousPage,
@@ -376,6 +383,7 @@ final class _AnomalyContents extends StatelessWidget {
     required this.onAmend,
     required this.onNarrow,
     required this.onOpenAmendments,
+    required this.onOpenRun,
     required this.onNextPage,
     required this.onPreviousPage,
   });
@@ -400,6 +408,9 @@ final class _AnomalyContents extends StatelessWidget {
   /// this is the only place they remain visible.
   final ValueChanged<String?> onOpenAmendments;
 
+  /// Opens the run a row names as having found it.
+  final ValueChanged<String> onOpenRun;
+
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
 
@@ -407,8 +418,7 @@ final class _AnomalyContents extends StatelessWidget {
   /// explanation for a manager is shown once, and only when there is something
   /// on screen it would apply to.
   bool get _listsShiftVariance => page.items.any(
-    (anomaly) =>
-        anomaly.kind == TenantReconciliationAnomalyKind.shiftVariance,
+    (anomaly) => anomaly.kind == TenantReconciliationAnomalyKind.shiftVariance,
   );
 
   @override
@@ -528,77 +538,89 @@ final class _AnomalyContents extends StatelessWidget {
       anomaly.kind == TenantReconciliationAnomalyKind.shiftVariance &&
       anomaly.shiftId != null;
 
-  Widget _anomaly(BuildContext context, TenantReconciliationAnomaly anomaly) =>
-      Card(
-        key: ValueKey('reconciliation-anomaly-${anomaly.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                key: ValueKey('reconciliation-anomaly-kind-${anomaly.id}'),
-                anomaly.kind == TenantReconciliationAnomalyKind.other
-                    ? 'Unrecognised difference: ${anomaly.kindValue}'
-                    : anomaly.kind.label,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                key: ValueKey('reconciliation-anomaly-subject-${anomaly.id}'),
-                _subject(anomaly),
-              ),
-              if (_detail(anomaly) case final detail?)
-                Text(
-                  key: ValueKey('reconciliation-anomaly-detail-${anomaly.id}'),
-                  detail,
-                ),
-              const SizedBox(height: 4),
-              Text(
-                key: ValueKey('reconciliation-anomaly-instants-${anomaly.id}'),
-                _instants(anomaly),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (_canAmendRow(anomaly) || anomaly.shiftId != null) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    if (_canAmendRow(anomaly))
-                      OutlinedButton.icon(
-                        key: ValueKey(
-                          'reconciliation-anomaly-amend-${anomaly.id}',
-                        ),
-                        onPressed: busy
-                            ? null
-                            : () => _confirmAmend(context, anomaly),
-                        icon: const Icon(Icons.rule_outlined),
-                        label: Text(
-                          busy ? 'Correcting...' : 'Correct this shift\'s totals',
-                        ),
-                      ),
-                    // Offered for every row that names a shift, not only the one
-                    // kind that can be corrected. A shift already corrected at a
-                    // later generation can still be listed under an earlier one,
-                    // so "has this already been dealt with" is a real question
-                    // here - and the answer, including "never", comes from the
-                    // trail rather than from this list.
-                    if (anomaly.shiftId case final shiftId?)
-                      OutlinedButton(
-                        key: ValueKey(
-                          'reconciliation-anomaly-corrections-${anomaly.id}',
-                        ),
-                        onPressed: () => onOpenAmendments(shiftId),
-                        child: const Text('View this shift\'s corrections'),
-                      ),
-                  ],
-                ),
-              ],
-            ],
+  Widget _anomaly(
+    BuildContext context,
+    TenantReconciliationAnomaly anomaly,
+  ) => Card(
+    key: ValueKey('reconciliation-anomaly-${anomaly.id}'),
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            key: ValueKey('reconciliation-anomaly-kind-${anomaly.id}'),
+            anomaly.kind == TenantReconciliationAnomalyKind.other
+                ? 'Unrecognised difference: ${anomaly.kindValue}'
+                : anomaly.kind.label,
+            style: Theme.of(context).textTheme.titleSmall,
           ),
-        ),
-      );
+          const SizedBox(height: 4),
+          Text(
+            key: ValueKey('reconciliation-anomaly-subject-${anomaly.id}'),
+            _subject(anomaly),
+          ),
+          if (_detail(anomaly) case final detail?)
+            Text(
+              key: ValueKey('reconciliation-anomaly-detail-${anomaly.id}'),
+              detail,
+            ),
+          const SizedBox(height: 4),
+          Text(
+            key: ValueKey('reconciliation-anomaly-instants-${anomaly.id}'),
+            _instants(anomaly),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (_canAmendRow(anomaly) ||
+              anomaly.shiftId != null ||
+              anomaly.jobId != null) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                if (_canAmendRow(anomaly))
+                  OutlinedButton.icon(
+                    key: ValueKey('reconciliation-anomaly-amend-${anomaly.id}'),
+                    onPressed: busy
+                        ? null
+                        : () => _confirmAmend(context, anomaly),
+                    icon: const Icon(Icons.rule_outlined),
+                    label: Text(
+                      busy ? 'Correcting...' : 'Correct this shift\'s totals',
+                    ),
+                  ),
+                // Offered for every row that names a shift, not only the one
+                // kind that can be corrected. A shift already corrected at a
+                // later generation can still be listed under an earlier one,
+                // so "has this already been dealt with" is a real question
+                // here - and the answer, including "never", comes from the
+                // trail rather than from this list.
+                if (anomaly.shiftId case final shiftId?)
+                  OutlinedButton(
+                    key: ValueKey(
+                      'reconciliation-anomaly-corrections-${anomaly.id}',
+                    ),
+                    onPressed: () => onOpenAmendments(shiftId),
+                    child: const Text('View this shift\'s corrections'),
+                  ),
+                // The row already names the run above; this is the only way
+                // to ask anything about it. Whether that run finished, and
+                // what else it found, is what decides whether this difference
+                // is the whole of a problem or one symptom of it.
+                if (anomaly.jobId case final jobId?)
+                  OutlinedButton(
+                    key: ValueKey('reconciliation-anomaly-run-${anomaly.id}'),
+                    onPressed: () => onOpenRun(jobId),
+                    child: const Text('About this run'),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
 
   /// Requires a reason and an explicit confirmation.
   ///

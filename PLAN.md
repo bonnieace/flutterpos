@@ -13909,3 +13909,241 @@ files, and deployment.
   directions in this file, and they are consistent: the anomalies sentence stays
   local because the panels are in different domains, and the movement labels
   move because they are in the same domain and render the same document.
+
+---
+
+## The run behind the difference, finished - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **finish or discard the in-flight reconciliation-run surface.**
+It was read first, as instructed, and the answer was **finish it** - so it is now
+committed with the route's own test file and the two loose ends closed.
+
+### Why finishing was the right half of that choice
+
+The tree held a coherent surface, not an abandoned experiment. Read on its own it
+already had a repository read, a shared card, a route, an entry point from a
+difference, and tests for the read and the entry point; `flutter analyze` was
+clean over `lib/reporting` and `test/reporting`, and `test/reporting` passed
+**301/301** before anything was added here. What it did not have was a test file
+of its own, so nine of the route's own behaviours - every refusal, every failure,
+every label - were unproved. That is a surface worth finishing, and discarding it
+would have thrown away the queued "surface for the runs that found the
+differences" that six handovers had asked for.
+
+### What the in-flight work already was, and is now committed as
+
+- **`TenantReconciliationStatusRepository.readRun`** reads one run by its own ID,
+  by exact document path. Null is a real answer: a difference outlives the run
+  that found it, so "no run is recorded at this ID" has to be sayable without
+  failing the page that is explaining it.
+- **`TenantReconciliationRunCard` moved out of the day page into its own
+  library**, so the day page and the run route describe one record identically.
+  Two descriptions that disagreed about what `completed` or `quarantined` means
+  would be worse than either. Same domain, same document - the sharing rule this
+  file recorded one session ago, applied again.
+- **A difference opens the run that found it.** Every recorded difference already
+  named a `jobId` and there was nothing to do with it: the day page is addressed
+  by business date and a difference is about a product or a shift instead, so
+  that name was the end of the trail.
+- **The route is read-only and says so on the page.** Asking for a run is done
+  from the day it belongs to, where the cooldown the request spends is explained.
+
+### What this session added
+
+- **`test/reporting/reconciliation_run_panel_test.dart`, 20 cases.** The route is
+  now proved to address one run rather than search for one (the fake reader
+  *throws* on any query, so a future rewrite into a page cannot pass quietly), to
+  name the server for a `system:` actor without reading a staff path that cannot
+  exist, to resolve a member and to degrade to the authoritative UID when it
+  cannot, to state a failed run's server code without dressing it as a sentence,
+  to show an unmodelled status/source/phase verbatim, to refuse a cashier and an
+  unusable job ID **before any read is issued**, to leak no internal code on
+  failure, to render no control of any kind, to reload on a tenant switch rather
+  than keep the previous business's answer, and to open under the caller's own
+  session scope.
+- **Each run now states its own instants**, on both surfaces, because the card is
+  shared. `_loadRuns` has always documented that the runs page is ordered by
+  document ID, that a run ID carries no time - a digest, or a five-minute bucket -
+  and that "each run states its own instants instead". It did not. It does now,
+  and a run that records none says that rather than leaving a silent gap.
+- **One Rules test for the read shape this chunk introduced.**
+  `reconciliation_jobs` was only ever *listed* by this app; `readRun` issues the
+  first single-document `get`. `allow read` covers both, but only a `getDoc`
+  proves the second - including that an absent run is *answered* rather than
+  denied, which is what makes the null path reachable at all, and that the other
+  business's run at the very same ID is refused.
+- **The class comment was retracted.** It claimed the day page and the
+  differences list both *open* the route. They do not: the day page lists the
+  shared card for every run it holds, so opening one from there would answer a
+  question already on screen. Only a difference opens it, and the comment now
+  says why - the same "no second surface onto the same rows" call this file made
+  about the `productId` narrowing.
+
+### Safety decisions worth keeping
+
+- **`readRun` keeps its `cross_tenant_run` check even though three proofs now
+  agree.** `readDocument` refuses a snapshot returned at any other path, and
+  `TenantReconciliationRun.fromDocument` refuses a document naming another
+  business at this one, so `run_identity_mismatch` is what actually fires - a
+  test says so at the assertion. The check is kept, and commented as the third of
+  three, because it is the only one that would still catch a foreign run if the
+  path stopped being derived from the session. `_readIntake` twenty lines below
+  keeps its own for the same reason.
+- **A job ID is validated before it can become a path.** It arrives from a
+  difference row rather than from a decoded run. `TenantReconciliationAnomaly`
+  already decodes it through `_optionalDocumentId`, so `invalid_run_id` is
+  unreachable *from that row* - which is exactly why it is tested at the
+  repository and at the panel rather than trusted.
+- **`readRun` is granted the roles that read the day, and no more.** A cashier
+  does not read business-wide revenue, so a cashier does not read why it is what
+  it is. Proved in Dart for all three allowed roles and against real rules for
+  two.
+- **`loadDay` was not widened.** The run route reads one document; nothing about
+  it needed the day page to change.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/reporting/reconciliation_anomalies_panel.dart
+lib/reporting/reconciliation_run_panel.dart              (new)
+lib/reporting/reconciliation_status.dart
+lib/reporting/reconciliation_status_panel.dart
+lib/reporting/reporting.dart
+rules-tests/test/reconciliation-status.test.js
+test/reporting/reconciliation_anomalies_panel_test.dart
+test/reporting/reconciliation_run_panel_test.dart        (new)
+test/reporting/reconciliation_status_panel_test.dart
+test/reporting/reconciliation_status_test.dart
+```
+
+No `functions/src` and no index change: `git diff --stat HEAD -- functions
+firestore.indexes.json` is empty, and `firestore.rules` itself is untouched. The
+single-document read needs no index and no new rule. Nothing needed a device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/reporting lib/tenancy lib/inventory lib/main.dart test/reporting` | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 9 test directories plus `test/theme_test.dart` | **1251/1251** |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/reporting` | **321/321**, up from 294 at `HEAD` |
+| `npm --prefix rules-tests run test:emulator:reconciliation-status` | **9/9**, up from 8 |
+| `npm --prefix rules-tests run test:emulator` | **141/141**, up from 140 |
+| `npm --prefix functions test` | **211/211** |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **10/10** |
+| `npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `git diff --check` | clean |
+
+**1625 tests across five suites.** This commit's own additions are **28**: 20
+route cases in the new Dart file, 7 that arrived with the in-flight work being
+finished (4 repository cases and 3 differences-list cases), and 1 Rules case. One
+further assertion was added to an existing day-page test rather than a new test,
+because it pins a new line on a card that page already rendered.
+
+Both emulator suites ran under the machine-local portable Node.js 24 and Temurin
+JDK 21 at `D:\firebase-emulator-tools`, with inherited `DEBUG` stripped from the
+Firebase child environment and full output captured to an out-of-tree log.
+Android build and Android emulator validation were skipped as requested.
+
+### Meaningful failures and their resolutions
+
+- **`test/widget_test.dart` does not compile, and has not since December 2025.**
+  `flutter test test` fails to load it with "Couldn't find constructor 'MyApp'" -
+  it is the untouched `flutter create` scaffold and `lib/main.dart` has no
+  `MyApp`. `git log -1 -- test/widget_test.dart` is `f7d8791`, months before this
+  branch's work. It is why every handover in this file names in-scope test paths
+  instead of running `test`; the run above does the same, and the other **1251**
+  pass. Deleting or repairing it is somebody's chunk, not this one's.
+- **Two of the new cases passed for the wrong reason and were rewritten.**
+  `TenantRouteGuard` reloads on a *session* change, not on a rebuild, so a second
+  `pumpWidget` into the same tree keeps the first answer: a variance assertion
+  "passed" against the previous run's card, and a per-role loop re-asserted one
+  role's card three times. The variance case is now two tests, and the role loop
+  tears the tree down between roles **and** asserts each role's own reader was
+  actually read. This is worth carrying forward - it will pass for the wrong
+  reason in any panel test that re-pumps.
+- **The tenant-switch case was strengthened after it went green.** Absence of a
+  card also describes a page that never loaded, so the test now asserts the guard
+  issued a second read at `tenants/tenant-b/...` before the first is completed
+  and discarded. The switch is proved to have been observed, not assumed.
+- No assertion in the shipped code failed.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+Nothing else is left in flight. The reporting files the previous handover listed
+as another session's uncommitted work are all in this commit.
+
+### Next bounded chunk
+
+**`processors.ts` still has no unit-test file.** It is the oldest untouched item
+in this file - four handovers - and at 30KB it is the largest server module whose
+paging, cursor, and lease behaviour is proved only by the integration suite. The
+pure decisions extracted from it are tested in `model.test.ts`; its four exported
+entry points are not:
+
+1. Add `functions/src/reconciliation/processors.test.ts` beside the existing
+   `model.test.ts`, `jobs.test.ts`, and `amendment.test.ts`, and run it through
+   `npm --prefix functions test` - no emulator, no Flutter.
+2. Cover the four exports - `initializeFullReconciliationWindow`,
+   `processMetricsPage`, `processStockPage`, `processShiftPage` - on the
+   behaviour the integration suite can only reach end to end: the cursor a
+   partial page resumes from, a page that ends exactly on its own boundary, a
+   lease lost mid-page, and a page that finds nothing.
+3. Construct Firestore, `FieldValue`, and every Admin object from the Functions
+   package's own `firebase-admin` installation. Mixing installations produces
+   foreign sentinel and prototype failures that do not represent production -
+   recorded near the top of this file, and still true.
+4. Run `npm --prefix functions run build` immediately after every TypeScript
+   edit; do not let the compiled output drift from the source under test.
+
+Then, in preference order:
+
+- **Run the app against the emulators and look at the reconciliation and stock
+  surfaces.** Neither the deleted-product ledger nor the run route this chunk
+  finished has ever been seen: the seed script writes no deleted product, and
+  nothing has opened a run outside a widget test. Seeding a day, letting a run
+  record a difference, and opening that run from the difference is a five-minute
+  check of the one path this chunk exists for. Ask first whether the Android
+  exclusion is lifted; a Windows or web run exercises only the loopback path.
+- **`test/widget_test.dart` has been uncompilable for eight months.** Either
+  delete it or point it at the real root widget. It is one line either way, and
+  it is the reason no session in this file can run `flutter test` without naming
+  paths.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous seven sessions' lists still applies.
+- **A widget test that re-pumps into the same tree proves nothing about the
+  second pump.** `TenantRouteGuard` reloads on a UID/tenant/epoch change, and a
+  fresh controller with the same UID, tenant, and epoch is deliberately *not*
+  one. Tear the tree down with `pumpWidget(const SizedBox.shrink())` between
+  cases, or assert the reader was read again - both, for a role loop.
+- **A comment that promises a behaviour is a defect when the behaviour is
+  missing.** `_loadRuns` said each run states its own instants for as long as the
+  card showed none. The cheap fix was deleting the sentence; the right one was
+  making it true, because the sentence was correct about what the surface needed.
+- **`allow read` is two permissions, and a list does not prove the get.** This
+  app listed `reconciliation_jobs` for months before it read one. When a new read
+  *shape* appears against an existing rule, the Rules suite has something new to
+  prove even though the rule itself is untouched.
