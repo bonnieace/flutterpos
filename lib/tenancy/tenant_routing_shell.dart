@@ -1124,6 +1124,131 @@ TenantMembershipDisplayStatus tenantMembershipDisplayStatus(
   };
 }
 
+/// The landing route's scrollable region, which says when it has more below it.
+///
+/// The centring is deliberate and is kept: a mostly-empty landing screen looks
+/// right with its one panel in the middle, and when the content is short it is
+/// exactly what a reader sees.
+///
+/// What it never did was say anything when the content was **taller** than the
+/// space. `Center` passes loose constraints down, so a scroll view whose content
+/// overflows sizes to the full height and starts at offset zero - centred and
+/// top-aligned are the same layout in that case, and the only visible result was
+/// a line of text sliced through mid-glyph at the bottom edge with no indication
+/// that four more lines followed it. A cashier looking for the sale they had just
+/// rung up saw a heading and no counts.
+///
+/// So the fix is not an alignment. It is saying that there is more, which this
+/// does with a fade into the surface the screen is already drawn on, shown only
+/// while something is actually below the fold.
+final class _LandingScrollArea extends StatefulWidget {
+  const _LandingScrollArea({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_LandingScrollArea> createState() => _LandingScrollAreaState();
+}
+
+final class _LandingScrollAreaState extends State<_LandingScrollArea> {
+  /// Ignore a sub-pixel remainder: a viewport that is a rounding error short of
+  /// its content has nothing to tell anybody about.
+  static const double _foldTolerance = 1;
+  static const double _fadeHeight = 32;
+
+  final ScrollController _controller = ScrollController();
+  bool _moreBelow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_readPosition);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Whether anything is below the viewport, asked of the position itself.
+  ///
+  /// Read after the frame rather than from a notification. A
+  /// `ScrollMetricsNotification` is dispatched when the metrics *change*, and the
+  /// first layout of this route does not reliably produce one - which is exactly
+  /// the case that matters, because a screen is over the fold from the moment it
+  /// opens or not at all. Asking the position after layout answers for every
+  /// frame, including the first.
+  void _readPosition() {
+    if (!_controller.hasClients) return;
+    _apply(_controller.position.extentAfter > _foldTolerance);
+  }
+
+  void _apply(bool moreBelow) {
+    if (!mounted || moreBelow == _moreBelow) return;
+    setState(() => _moreBelow = moreBelow);
+  }
+
+  /// The content of this route changes height on its own - the checkout counts
+  /// are re-read on every sync signal - and that relayout rebuilds the panel
+  /// rather than this widget, so its own build never runs. A metrics change is
+  /// the only signal for it, and it arrives outside layout.
+  bool _handle(Notification notification) {
+    if (notification is ScrollMetricsNotification) {
+      _apply(notification.metrics.extentAfter > _foldTolerance);
+    }
+    // Never absorbed: an ancestor may be listening for its own reasons.
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = Theme.of(context).scaffoldBackgroundColor;
+    // Whether the content overflows is decided by the layout this build is part
+    // of, which has not happened yet, so the answer is read once it has.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _readPosition());
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: _handle,
+      child: Stack(
+        children: [
+          // The scroll view is the only unpositioned child, so it sizes the
+          // stack and the fade is measured against it.
+          Center(
+            child: SingleChildScrollView(
+              controller: _controller,
+              child: widget.child,
+            ),
+          ),
+          if (_moreBelow)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              // The fade is decoration. It must never eat the drag that scrolls
+              // the content it is drawn over.
+              child: IgnorePointer(
+                child: Container(
+                  key: const ValueKey('landing-more-below'),
+                  height: _fadeHeight,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[
+                        surface.withValues(alpha: 0),
+                        surface,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 final class TenantSafeLandingScreen extends StatelessWidget {
   const TenantSafeLandingScreen({
     super.key,
@@ -1224,25 +1349,23 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: Center(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TenantBrandingPanel(
-                      reader: reader,
-                      fallbackName: membership.tenantName,
-                    ),
-                    if (shiftPanel != null) ...[
-                      const SizedBox(height: 24),
-                      shiftPanel!,
-                    ],
-                    if (pendingCheckoutPanel != null) ...[
-                      const SizedBox(height: 24),
-                      pendingCheckoutPanel!,
-                    ],
+            child: _LandingScrollArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TenantBrandingPanel(
+                    reader: reader,
+                    fallbackName: membership.tenantName,
+                  ),
+                  if (shiftPanel != null) ...[
+                    const SizedBox(height: 24),
+                    shiftPanel!,
                   ],
-                ),
+                  if (pendingCheckoutPanel != null) ...[
+                    const SizedBox(height: 24),
+                    pendingCheckoutPanel!,
+                  ],
+                ],
               ),
             ),
           ),

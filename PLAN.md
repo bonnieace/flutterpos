@@ -11465,6 +11465,14 @@ and the lines below "Saved offline: 0" were simply below the fold. That is
 recorded rather than changed - it is a deliberate look for a mostly-empty screen,
 and the content is reachable by scrolling.
 
+> **Corrected on 2026-08-05, after rendering it.** The conclusion - below the
+> fold - was right. The mechanism stated here is wrong in two ways, and acting on
+> it would have changed nothing. Only the **bottom** is cut, never both ends: a
+> scroll view starts at offset zero. And the `Center` is not the cause: it passes
+> loose constraints down, so content taller than the viewport fills the height and
+> starts at the top, which makes centred and top-aligned the same layout in
+> exactly the case being complained about. See the last handover in this file.
+
 **But looking for it found a real defect beside it.** Every refresh signal changes
 the loader's identity, which restarts `TenantRouteGuard` and puts it back into its
 loading state - and that state was `SizedBox.shrink()`. So **the whole panel
@@ -13177,3 +13185,194 @@ files, and deployment.
 - A manual reconciliation's cooldown is per mode: `full` for a day, `incremental`
   for five minutes. Two manual runs of one business inside a test have to use
   different modes.
+
+---
+
+## Saying there is more, after looking at it - 2026-08-05
+
+### Completed in this session
+
+The chunk deferred for four sessions: **the landing route now says when its
+content runs past the fold.** It was answered by rendering the screen rather than
+by reasoning about it, and the rendering corrected the recorded diagnosis before
+anything was changed.
+
+### The recorded diagnosis was wrong, and acting on it would have fixed nothing
+
+Four handovers in this file describe the defect as "the panel sits inside a
+`Center` within a `SingleChildScrollView`, so tall content is cut off at both
+ends". A widget test rendering the real `TenantSafeLandingScreen` at 411x731 with
+real fonts loaded shows otherwise:
+
+- **Only the bottom is cut, never both ends.** A scroll view starts at offset
+  zero, so the top is never clipped; the branding panel sits flush under the app
+  bar in the rendering.
+- **The `Center` is not the cause.** It passes loose constraints down, so a scroll
+  view whose content overflows sizes to the full height and starts at the top -
+  centred and top-aligned are *the same layout* in exactly the case being
+  complained about. The `Center` only has an effect when the content is short,
+  which is the case that already looks right.
+
+So the change that four handovers pointed at - replace the `Center` with a top
+alignment - would have produced a pixel-identical screen. The correction is
+marked inline at the original claim as well as recorded here.
+
+What is actually wrong is narrower and duller: content taller than the viewport,
+with **nothing on screen saying so**. What a cashier saw was a heading sliced
+through mid-glyph and no counts under it, and the fold is ~120 logical pixels
+higher than it needs to be because the two buttons below the scroll area are
+pinned outside it.
+
+### What was changed
+
+`_LandingScrollArea` replaces the bare `Center(child: SingleChildScrollView(...))`
+and fades the bottom 32 pixels into the surface the screen is already drawn on,
+**only while something is below the fold**. The centring is kept exactly as it
+was: a mostly-empty landing screen with one panel in the middle is what it is
+for, and a permanent "there is more" on a screen with nothing more would be worse
+than the silence it replaces.
+
+Decisions worth recording:
+
+- **The position is asked, not awaited.** The first implementation listened for
+  `ScrollMetricsNotification`, and it worked in a unit test and silently did
+  nothing on the real screen: the notification is dispatched when metrics
+  *change*, and the first layout of this route does not reliably produce one.
+  That is the case that matters, because a screen is over the fold from the
+  moment it opens or not at all. It now reads `extentAfter` from its own
+  `ScrollController` in a post-frame callback scheduled by every build, which
+  answers for every frame including the first.
+- **The notification listener was kept anyway, for the one case the controller
+  misses.** This route's content changes height on its own - the checkout counts
+  are re-read on every sync signal - and that relayout rebuilds the panel rather
+  than this widget, so its own build never runs. A metrics change is the only
+  signal for that, and a test pins it.
+- **The fade is behind an `IgnorePointer`.** It is drawn over the bottom edge of a
+  scrollable, which is exactly where a thumb lands; swallowing that drag would
+  make the content it points at harder to reach than before it existed. Asserted
+  by dragging from the fade and checking the content moved, not by looking for an
+  `IgnorePointer` in the tree - Material puts several of its own in there, so the
+  structure proves nothing and the behaviour proves everything.
+- **The scroll view now has an explicit controller**, so it is no longer eligible
+  to be the `PrimaryScrollController`. On iOS that removes tap-status-bar-to-top
+  for this one route. Recorded rather than worked around; this is an Android
+  point-of-sale app and the route is one screen tall.
+
+### How the rendering was produced, since it is worth repeating
+
+A throwaway widget test built the real screen at `411x731` logical pixels with
+`FontLoader` reading Roboto and MaterialIcons from
+`<flutter>/bin/cache/artifacts/material_fonts`, and captured it with
+`matchesGoldenFile` under `--update-goldens`. **Without loading those fonts a
+widget test renders every glyph as a filled box**, which is useless for looking at
+a layout. The shift panel's slot held a stand-in of representative height - the
+real one needs Hive, a temp directory, and a fake server - which is honest here
+because the container's behaviour depends on the height of its child and nothing
+else. The test and its goldens were deleted afterwards; they are not part of the
+suite.
+
+The first rendering after the change was **pixel-identical** to the one before it,
+which is how the notification defect above was found. Comparing the two PNGs
+rather than trusting a green test is the reason this chunk shipped something that
+works.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/tenancy/tenant_routing_shell.dart
+test/tenancy/tenant_safe_landing_test.dart
+```
+
+No `functions/src`, Rules, index, or composition-root change. Nothing needed a
+device or an emulator.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/tenancy test/tenancy` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1202/1202**, up from 1197, adding **5** |
+| the same with the fade suppressed | **4 of the 5** new tests fail, as they must |
+| a rendered before/after comparison of the same screen | the fade is present where the heading was sliced |
+| `git diff --check` | clean |
+
+The server suites were not re-run: this chunk changed one Flutter widget and its
+test. They stand at 211, 140, 10, and 12 from earlier in this session, for
+**1575 tests across five suites**.
+
+### Meaningful failures and their resolutions
+
+- **The first implementation was green and did nothing.** Five unit tests passed
+  against a `ScrollMetricsNotification` listener, and the rendered screen was
+  unchanged to the pixel. The unit tests only exercised content that was tall from
+  the very first layout with a synchronous child; the real screen's evidence panel
+  resolves asynchronously, and no metrics notification reached the listener in
+  time. Fixed by reading the position after the frame instead. **A widget test
+  that pumps a fixed-height child is not evidence that a layout responds to real
+  content.**
+- **A structural assertion found Material's own `IgnorePointer`s**, three of them,
+  and was replaced by a behavioural one.
+- **A PowerShell restore stripped the file's UTF-8 BOM again**, exactly as it did
+  in this session's first chunk, and was caught by the same check - `git diff`
+  showing a changed first line.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**The pinned button row below the landing route's scroll area.** It sits outside
+the scrollable and costs about 120 of 731 logical pixels on a phone, which is
+what puts the fold where it is. Now that the screen says when it has more below,
+the question is whether those two buttons - "Make default" and "View read-only
+catalog", plus "Change business" when there is one to change to - earn being
+always visible at that price.
+
+1. Measure it first: render the route at 411x731 with the row inside the scroll
+   view and compare. If the fold moves far enough that a typical cashier's screen
+   stops overflowing at all, that is the answer.
+2. If they move, "Change business" is the one with a claim to staying pinned -
+   it is the route's escape hatch. Decide that separately from the other two.
+3. This is a look-and-feel decision like the last one. Render it, then ask.
+
+Then, in preference order:
+
+- **A `productId`-narrowed entry point into the stock movement feed.** The last of
+  the three narrowings this session found unused. Confirm there is a question the
+  narrowed collection-group feed answers that the product's own ledger page does
+  not, before building it; if there is not, delete the parameter rather than
+  leaving a third unused narrowing behind.
+- **A surface for the runs that found the differences.** Every stock difference
+  now names the run that found it, and nothing opens that run from the difference.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **Render the screen before diagnosing the screen.** A layout claim that survived
+  four handovers was wrong in its mechanism, and one rendered image settled it in
+  a minute.
+- **To render one: load real fonts.** `FontLoader` over
+  `<flutter>/bin/cache/artifacts/material_fonts`, then `matchesGoldenFile` with
+  `--update-goldens`. Without the fonts every glyph is a filled box.
+- **Compare the before and after images, not just the test result.** A green suite
+  and an unchanged screen is a real combination, and it happened here.
+- `ScrollMetricsNotification` fires when metrics *change*. For "is this over the
+  fold when it opens", read the position after the frame instead.
