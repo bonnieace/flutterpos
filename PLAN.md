@@ -12997,3 +12997,183 @@ files, and deployment.
   decisions live, not in a test file named after the module it was extracted from.
 - `npm --prefix functions run lint` does not exist on this project. `tsc` via
   `npm --prefix functions run build` is the gate.
+
+---
+
+## The last thing the stock phase can conclude - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **`invalid_product_quantity`, against a real server.** All four
+outcomes of the stock phase now have end-to-end evidence, and the phase that no
+test could reach at the start of this session is completely covered.
+
+No production code changed. The test exercises a path that was already shipped,
+and what it adds is the first proof that the path behaves as the pure reading of
+it says when a real Firestore and a real task queue are involved.
+
+### The one stock difference that does not accumulate
+
+Every other stock difference is addressed `stock_{digest(productId, jobId)}`, so a
+neglected product collects one record per run that found it - which is why the
+product stock surface built earlier in this session has to say that an older entry
+may already have been put right.
+
+This one is addressed `product_quantity_{digest(productId)}`: **one record per
+product, forever, rewritten in place by each run that still finds it.** That is a
+different contract from its four siblings, and the test proves it by running twice
+and asserting there is still exactly one record, with the same ID, now naming the
+later run.
+
+The second run is a manual `full` one rather than another `incremental` one
+because manual admission control holds one cooldown per mode, and a second
+incremental request inside five minutes is refused by design. That is worth
+knowing before writing any test that wants two manual runs of one business.
+
+### Two things this outcome does differently, recorded rather than endorsed
+
+- **It writes no `stock_verifications/{jobId}` parent document.** Every other
+  outcome creates it before writing the product's record beneath it; this branch
+  returns before that. Firestore is content with a subcollection under a
+  non-existent document, so nothing breaks - but anything that ever lists runs by
+  that parent would miss exactly the runs that found an unreadable quantity. The
+  test asserts the current behaviour and says so, so a change either way is a
+  decision rather than a surprise.
+- **It records no quantity figures at all**, and the test asserts their absence.
+  There was no figure to compare, and a zero here would be a number the phase
+  never read. The Dart read model requires only the product for this kind, which
+  is what makes that shape decodable.
+
+### Files in this chunk
+
+```text
+PLAN.md
+rules-tests/test/sale-reconciliation.integration.test.js
+```
+
+No `functions/src`, Rules, index, or Dart change. Nothing needed a device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | **10/10**, up from 9, adding **1** |
+| the same with the anomaly ID given a `jobId` like its four siblings | the new test fails with 2 records where 1 is expected, as it must |
+| `npm --prefix functions test` | **211/211** |
+| `npm --prefix rules-tests run test:emulator` | **140/140** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `git diff --check` | clean |
+
+The Dart suites were not re-run: this chunk changed one integration test and
+nothing else. Their total stands at 1197 from earlier in this session.
+
+**The reconciliation suite's wall clock is now the thing to watch.** Its ten tests
+took 135 seconds of test time in the final run, against 68 for nine a chunk
+earlier, and the whole command - build, emulator start, Functions discovery,
+tests, teardown - exceeded a ten-minute wrapper. Two of the tests are visibly
+variable on this host: the amendment test took 43 seconds in that run against 10
+in the previous one, and the metrics test 22 against 9. **Give this command a
+bound above ten minutes, or run it in the background and collect the result.**
+During development the new test alone took 23 seconds.
+
+### Meaningful failures and their resolutions
+
+- **The final full run exceeded a 600-second command wrapper and had to be
+  collected as a background task.** It had passed in 68 seconds two chunks
+  earlier. Nothing was wrong - the suite genuinely got slower and this host is
+  variable - but a wrapper set from the old measurement would have killed a
+  healthy run and orphaned an emulator, which is the failure pattern the test
+  discipline near the top of this file warns about.
+- **`Out-String` buffers everything until the command exits**, so a background run
+  filtered that way shows an empty output file while it is running. Read the task
+  output when it completes rather than trying to watch it.
+- No assertion in the shipped code failed. The new test passed on its first
+  focused run.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` over the 10 in-scope paths | 1197 |
+| `npm --prefix functions test` | 211 |
+| `npm --prefix rules-tests run test:emulator` | 140 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 10 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1570 tests across five suites**, up from 1539 at the start of the session,
+adding **31** across seven chunks. Nothing was left failing and no suite was
+skipped except the Android build and the Android emulator runs.
+
+### What this session did, end to end
+
+Seven chunks, and they close one theme. At the start, the reconciliation pipeline
+had server-side evidence for its metrics phase and its shift phase; the stock
+phase had never been entered by any test and could not be reached from a sale.
+Now:
+
+- Every phase has end-to-end evidence, and the stock phase's four outcomes each
+  have their own.
+- One real defect was found by that coverage and fixed:
+  `invalid_stock_movement` could never be recorded, so every unreadable ledger
+  entry was reported as a broken checkpoint chain.
+- The decision that produced it is now one tested function rather than four
+  copies of one predicate.
+- Three surfaces that reported a corrected or disagreeing figure without saying so
+  now say so: shift history, the differences list, and the product stock page.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**The landing screen's `Center` inside `SingleChildScrollView`, and it needs an
+answer before it needs an implementation.** It has now been deferred for four
+sessions. The evidence panel's content is cut off at both ends on a short screen
+because the safe landing route centres a tall column inside a scroll view; the
+content is reachable by scrolling and the look is deliberate for a mostly-empty
+screen. Whether that trade is right is a product decision about the whole route,
+not a defect in any panel. **Ask, then implement whichever way the answer goes,
+and record the reason** - a fifth handover deferring it is worse than either
+outcome.
+
+If the answer is to leave it, then in preference order:
+
+- **A `productId`-narrowed entry point into the stock movement feed.** The last of
+  the three narrowings this session found unused. Confirm there is a question the
+  narrowed collection-group feed answers that the product's own ledger page does
+  not, before building it; if there is not, say so and delete the parameter rather
+  than leaving a third unused narrowing behind.
+- **A surface for the runs that found these differences.** The reconciliation
+  status page reports counts per day. Every stock difference now names the run
+  that found it, and nothing opens that run from the difference.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **The reconciliation integration suite needs more than ten minutes of wall
+  clock now.** Set any wrapper from a fresh measurement, not from an earlier
+  chunk's, and prefer running it in the background.
+- **Two records of the same class can have different identity contracts.** Four
+  stock differences are addressed by product and run; the fifth is addressed by
+  product alone. A surface that assumes one contract for a collection will be
+  wrong about one of them.
+- A manual reconciliation's cooldown is per mode: `full` for a day, `incremental`
+  for five minutes. Two manual runs of one business inside a test have to use
+  different modes.

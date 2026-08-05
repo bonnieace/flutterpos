@@ -969,6 +969,107 @@ test("the stock phase tells an unreadable ledger entry from a broken chain", asy
   }
 });
 
+test("a product whose quantity cannot be read is recorded once, not once a run", async (t) => {
+  // The fourth and last thing the stock phase can conclude. It is the only one
+  // reached before the phase does any comparison at all - the quantity is read
+  // first, and an unreadable one means there was nothing to compare - so unlike
+  // the three above it needs no baseline run to become reachable.
+  //
+  // It is also the only stock difference addressed by the product alone rather
+  // than by the product and the run:
+  // `product_quantity_{digest(productId)}` against
+  // `stock_{digest(productId, jobId)}`. So it does not accumulate, and that is
+  // what the second run here is for.
+  const fixture = await seedTenant("stock-unreadable-quantity");
+  const actor = await seedAdministrator(fixture);
+  const idToken = await signIn(actor.email);
+  const productRef = firestore.doc(
+    `tenants/${fixture.tenantId}/products/${fixture.productId}`,
+  );
+
+  // Written after seeding, and without touching `updatedAt`: a fractional
+  // quantity is not something any client can file, so this is the state a
+  // migration or a hand edit leaves behind.
+  await productRef.update({quantity: 7.5});
+
+  const first = await callFunction("requestTenantReconciliation", idToken, {
+    tenantId: fixture.tenantId,
+    mode: "incremental",
+    requestId: "stock-quantity-emulator-1",
+  });
+  const firstJob = await waitForCompletedJob(
+    fixture,
+    first.jobId,
+    t,
+    MANUAL_RUN_TIMEOUT_MILLISECONDS,
+  );
+  assert.equal(firstJob.get("productsProcessed"), 1);
+  assert.equal(firstJob.get("stockVarianceCount"), 1);
+  assert.equal(firstJob.get("mutatesStock"), false);
+
+  const verification = await stockVerification(
+    fixture,
+    first.jobId,
+    fixture.productId,
+  );
+  assert.equal(verification.get("status"), "invalid_observed_quantity");
+  assert.equal(verification.get("mutatesStock"), false);
+  // There was no figure to compare, so none is recorded. A zero here would be a
+  // figure the phase never read.
+  assert.equal(verification.get("expectedQuantity"), undefined);
+  assert.equal(verification.get("observedQuantity"), undefined);
+
+  // Recorded rather than endorsed: this outcome writes the product's verification
+  // without the `stock_verifications/{jobId}` parent every other outcome creates,
+  // so anything that ever lists runs by that document would miss this one.
+  assert.equal(
+    (await firestore
+      .doc(`tenants/${fixture.tenantId}/stock_verifications/${first.jobId}`)
+      .get()).exists,
+    false,
+  );
+
+  const listed = await listProductAnomalies(fixture, fixture.productId);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].get("anomalyType"), "invalid_product_quantity");
+  assert.equal(listed[0].get("jobId"), first.jobId);
+  // The client read model requires only the product for this kind, and no
+  // quantity figures, which is what the phase writes.
+  assert.equal(listed[0].get("productId"), fixture.productId);
+  assert.equal(listed[0].get("expectedQuantity"), undefined);
+
+  // A second run. `full` rather than another `incremental` one because the manual
+  // admission control holds one cooldown per mode, and a second incremental
+  // request inside five minutes is refused by design.
+  const second = await callFunction("requestTenantReconciliation", idToken, {
+    tenantId: fixture.tenantId,
+    mode: "full",
+    requestId: "stock-quantity-emulator-2",
+  });
+  await waitForCompletedJob(
+    fixture,
+    second.jobId,
+    t,
+    MANUAL_RUN_TIMEOUT_MILLISECONDS,
+  );
+
+  // Still one record, now naming the run that last saw it. Every other stock
+  // difference would be two by here, one per run.
+  const afterSecond = await listProductAnomalies(fixture, fixture.productId);
+  assert.equal(afterSecond.length, 1, "this kind is addressed by product alone");
+  assert.equal(afterSecond[0].id, listed[0].id);
+  assert.equal(afterSecond[0].get("jobId"), second.jobId);
+  assert.equal(
+    (await stockVerification(fixture, second.jobId, fixture.productId))
+      .get("status"),
+    "invalid_observed_quantity",
+  );
+
+  // And the unreadable quantity is still exactly as it was found. Reconciliation
+  // reports it; repairing it is somebody's decision, not a run's.
+  assert.equal((await productRef.get()).get("quantity"), 7.5);
+});
+
 function requireEmulator(name) {
   const value = process.env[name];
   if (!value || !/^127\.0\.0\.1:\d+$/.test(value)) {
