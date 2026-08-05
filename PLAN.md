@@ -13376,3 +13376,162 @@ files, and deployment.
   and an unchanged screen is a real combination, and it happened here.
 - `ScrollMetricsNotification` fires when metrics *change*. For "is this over the
   fold when it opens", read the position after the frame instead.
+
+---
+
+## What the pinned buttons cost, measured - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **the landing route's navigation buttons now scroll with its
+content instead of being pinned below it.** The previous handover asked for the
+measurement first, and the measurement decided it - the number was far worse than
+the estimate that motivated the question.
+
+### The measurement
+
+Rendered from the real `TenantSafeLandingScreen` at 411x731 logical pixels, with
+the shift panel slot filled and the checkout evidence panel resolved:
+
+| Who | Pinned row | Scroll viewport | Content | Hidden |
+| --- | --- | --- | --- | --- |
+| cashier, before | 108 | 519 | 700 | 181 |
+| **owner, before** | **288** | **339** | 700 | **361** |
+| cashier, after | - | 627 | 832 | 205 |
+| owner, after | - | 627 | 1012 | 385 |
+
+The previous handover estimated the row at "about 120 pixels". For an owner it is
+**288 of the 631 pixels the body has**, because eight buttons are offered and at
+411 wide the longer labels do not pair up, so the `Wrap` runs to four rows.
+
+What that left an owner looking at was the branding panel and the first two lines
+of the shift card. **"Open shift" - the one thing somebody about to trade opens
+this screen for - was below the fold, behind seven navigation buttons**, and the
+checkout evidence panel was not on screen at all.
+
+After the change the viewport is the whole body, 627, for everyone. An owner now
+sees the entire shift card including both of its actions, and four of the five
+checkout counts. More total content is below the fold than before (385 against
+361) because the buttons are now part of that content - which is the trade, and
+it is the right way round: the primary information is above the fold and the
+navigation is below it.
+
+### Nothing was pinned in their place
+
+"Change business" had the claim, as the route's escape hatch. It was not kept:
+
+- Signing out is already in the app bar, so the route is not a trap without it.
+- Switching business is the rarest control on the screen.
+- Pinning one button reintroduces a smaller version of the same cost for the
+  least-used thing on it.
+
+If anything is ever pinned here it should be **"New sale"** - the only
+write-capable action and the one this screen exists to start. That is a product
+decision about the till, not a layout one, and it is deliberately not made here.
+
+### What the short screen looks like now
+
+Unchanged in spirit and slightly better: with no shift panel the content is 532
+of 627, nothing is hidden, no fade is shown, and the whole column - buttons
+included - is centred. The buttons sit with the content they belong to rather
+than floating against the bottom edge.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/tenancy/tenant_routing_shell.dart
+test/tenancy/tenant_safe_landing_test.dart
+```
+
+No `functions/src`, Rules, index, or composition-root change. Nothing needed a
+device or an emulator.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub lib/tenancy test/tenancy` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1204/1204**, up from 1202, adding **2** |
+| the same with only the layout change stashed | both new tests fail, the second reporting `519.0` against the expected `627` - which is the measurement itself |
+| a rendered before/after at 411x731 for a cashier and an owner | the table above |
+| `git diff --check` | clean |
+
+The server suites were not re-run: this chunk changed one Flutter widget and its
+test. They stand at 211, 140, 10, and 12 from earlier in this session, for
+**1577 tests across five suites**.
+
+`git stash push -- <one file>` is the cleanest way to check that a test fails
+against the previous behaviour when the change is structural: it reverts exactly
+the implementation and keeps the new tests in place.
+
+### Meaningful failures and their resolutions
+
+- **The estimate in the previous handover was wrong by 2.4x** for the case that
+  matters. It was taken from a cashier rendering, which shows two buttons; an
+  owner is offered eight. Measure the widest case, not the one that happens to be
+  on screen.
+- No assertion in the shipped code failed. The existing 1202 tests passed
+  unchanged, including every test that taps one of the moved buttons - they run at
+  a tall test viewport where nothing overflows.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**The app bar's "Sign out" is clipped on a phone**, and it has been visible in
+every rendering made in this session. At 411 wide the title takes what it needs
+and the action is cut mid-word - the rendered screenshots show `Sign o` with the
+rest under the debug banner. It is the same class of defect as the one just
+fixed, in the one control that is always on screen, and it is now the only thing
+on this route that a phone-sized viewport gets wrong.
+
+1. Reproduce it in a widget test at 411x731 before changing anything: assert the
+   action's right edge is inside the app bar's, which is what is false today.
+2. The likely cause is a long `tenantName` title with no constraint. Decide
+   between eliding the title and moving the action into an overflow menu; the
+   title is the business name, which is what tells somebody which business they
+   are signed into, so eliding it is not free either.
+3. The same app bar shape is used by several routes in this file. Fix it where it
+   is defined rather than at one call site, and check the others render.
+
+Then, in preference order:
+
+- **A `productId`-narrowed entry point into the stock movement feed.** The last of
+  the three narrowings this session found unused. Confirm there is a question the
+  narrowed collection-group feed answers that the product's own ledger page does
+  not, before building it; if there is not, delete the parameter rather than
+  leaving a third unused narrowing behind.
+- **A surface for the runs that found the differences.** Every stock difference
+  now names the run that found it, and nothing opens that run from the difference.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **Measure the widest case.** A layout cost taken from the smallest role
+  understated this one by 2.4x, and the smallest role is not who the screen has to
+  work for.
+- **Two renderings and a printed measurement beat an argument**, and both of this
+  session's layout chunks were settled that way in minutes after four sessions of
+  deferral.
+- `git stash push -- <path>` reverts one file's implementation while keeping new
+  tests, which is the cheapest way to prove a structural test fails against the
+  behaviour it replaced.

@@ -69,6 +69,32 @@ void main() {
     expect(tester.getTopLeft(panel).dy, lessThan(before));
   });
 
+  testWidgets('the routes this screen offers scroll with it', (tester) async {
+    // They used to be pinned below the scrollable, and on a phone that was
+    // measured rather than argued about: an owner is offered eight of them, they
+    // do not pair up at 411 logical pixels wide, and the row took 288 of the 631
+    // the body has - leaving a 339-pixel viewport with "Open shift" below the
+    // fold. Nothing was pinned in their place.
+    await _pumpLanding(tester, panelHeight: 900);
+
+    expect(
+      find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.byKey(const ValueKey('make-default-tenant')),
+      ),
+      findsOne,
+    );
+  });
+
+  testWidgets('the scrollable is given the whole body', (tester) async {
+    // The measurement, as an assertion. 731 high, less a 56-pixel app bar and
+    // the route's own 24-pixel padding top and bottom, is 627 - and all of it is
+    // the scrollable's now.
+    await _pumpLanding(tester, panelHeight: 900);
+
+    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 627);
+  });
+
   testWidgets('a screen that grows past the fold starts saying so', (
     tester,
   ) async {

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -1234,10 +1234,7 @@ final class _LandingScrollAreaState extends State<_LandingScrollArea> {
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: <Color>[
-                        surface.withValues(alpha: 0),
-                        surface,
-                      ],
+                      colors: <Color>[surface.withValues(alpha: 0), surface],
                     ),
                   ),
                 ),
@@ -1344,186 +1341,199 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         TextButton(onPressed: onSignOut, child: const Text('Sign out')),
       ],
     ),
+    // Everything on this route scrolls together, including the routes below.
+    //
+    // They used to be pinned outside the scrollable, and on a phone that was
+    // measured rather than argued about: an owner sees eight of them, they do not
+    // pair up at 411 logical pixels wide, and the row took **288 of the 631**
+    // pixels the body has. The scrollable was left 339, which put "Open shift" -
+    // the thing somebody about to trade came here for - below the fold, behind
+    // seven navigation buttons. A cashier lost 108 to the same row.
+    //
+    // Nothing is pinned in their place. "Change business" was the candidate, as
+    // the route's escape hatch, but signing out is already in the app bar,
+    // switching business is rare, and pinning one button reintroduces a smaller
+    // version of the same cost for the least-used control on the screen. If
+    // anything is ever pinned here it should be "New sale", which is the one
+    // action this screen exists to start - and that is a product decision, not
+    // this one.
     body: Padding(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Expanded(
-            child: _LandingScrollArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TenantBrandingPanel(
-                    reader: reader,
-                    fallbackName: membership.tenantName,
-                  ),
-                  if (shiftPanel != null) ...[
-                    const SizedBox(height: 24),
-                    shiftPanel!,
-                  ],
-                  if (pendingCheckoutPanel != null) ...[
-                    const SizedBox(height: 24),
-                    pendingCheckoutPanel!,
-                  ],
-                ],
-              ),
+      child: _LandingScrollArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TenantBrandingPanel(
+              reader: reader,
+              fallbackName: membership.tenantName,
             ),
-          ),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: [
-              if (onSwitchTenant != null &&
-                  switchCandidates.any(
-                    (candidate) =>
-                        candidate.canAccess() &&
-                        candidate.tenantId != membership.tenantId,
-                  ))
-                OutlinedButton.icon(
-                  key: const ValueKey('change-business'),
-                  onPressed: () => _showBusinessSwitcher(context),
-                  icon: const Icon(Icons.swap_horiz),
-                  label: const Text('Change business'),
-                ),
-              if (isDefaultTenant)
-                OutlinedButton.icon(
-                  onPressed: null,
-                  icon: Icon(Icons.star),
-                  label: Text('Default business'),
-                )
-              else
-                OutlinedButton.icon(
-                  key: const ValueKey('make-default-tenant'),
-                  onPressed: () => _showDefaultConfirmation(context),
-                  icon: const Icon(Icons.star_outline),
-                  label: const Text('Make default'),
-                ),
-              // The till. It is the only write-capable operational route on
-              // this screen, and it opens under the same session scope as every
-              // other one, so a business switch invalidates a sale in progress
-              // exactly as it invalidates a read.
-              if (checkoutRoute != null)
-                FilledButton.icon(
-                  key: const ValueKey('start-checkout'),
-                  onPressed: () {
-                    final controller = TenantSessionScope.of(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => TenantSessionScope(
-                          controller: controller,
-                          child: checkoutRoute!(controller),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.point_of_sale),
-                  label: const Text('New sale'),
-                ),
-              OutlinedButton.icon(
-                onPressed: () {
-                  final controller = TenantSessionScope.of(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => TenantSessionScope(
-                        controller: controller,
-                        child: TenantCatalogScreen(
-                          reader: reader,
-                          productStockRoute: productStockRoute == null
-                              ? null
-                              : (product) => productStockRoute!(reader, product),
-                          productStockRoles: productStockRoles,
-                          adjustmentFeedRoute: stockAdjustmentFeedRoute == null
-                              ? null
-                              : () => stockAdjustmentFeedRoute!(reader),
-                          adjustmentFeedRoles: stockAdjustmentFeedRoles,
-                          movementFeedRoute: stockMovementFeedRoute == null
-                              ? null
-                              : () => stockMovementFeedRoute!(reader),
-                          movementFeedRoles: stockMovementFeedRoles,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.inventory_2_outlined),
-                label: const Text('View read-only catalog'),
-              ),
-              if (dailySummaryRoute != null &&
-                  membership.role.canAccess(dailySummaryRoles))
-                OutlinedButton.icon(
-                  key: const ValueKey('view-daily-summary'),
-                  onPressed: () {
-                    final controller = TenantSessionScope.of(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => TenantSessionScope(
-                          controller: controller,
-                          child: dailySummaryRoute!(reader),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.insights_outlined),
-                  label: const Text('View daily summary'),
-                ),
-              if (receiptLookupRoute != null &&
-                  membership.role.canAccess(receiptLookupRoles))
-                OutlinedButton.icon(
-                  key: const ValueKey('find-receipt'),
-                  onPressed: () {
-                    final controller = TenantSessionScope.of(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => TenantSessionScope(
-                          controller: controller,
-                          child: receiptLookupRoute!(reader),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  label: const Text('Find a receipt'),
-                ),
-              if (auditLogRoute != null &&
-                  membership.role.canAccess(auditLogRoles))
-                OutlinedButton.icon(
-                  key: const ValueKey('view-audit-log'),
-                  onPressed: () {
-                    final controller = TenantSessionScope.of(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => TenantSessionScope(
-                          controller: controller,
-                          child: auditLogRoute!(reader),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.fact_check_outlined),
-                  label: const Text('View activity log'),
-                ),
-              if (membership.role.canAccess(
-                TenantStaffDirectoryScreen.allowedRoles,
-              ))
-                OutlinedButton.icon(
-                  onPressed: () {
-                    final controller = TenantSessionScope.of(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => TenantSessionScope(
-                          controller: controller,
-                          child: TenantStaffDirectoryScreen(reader: reader),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.people_outline),
-                  label: const Text('View staff directory'),
-                ),
+            if (shiftPanel != null) ...[
+              const SizedBox(height: 24),
+              shiftPanel!,
             ],
-          ),
-        ],
+            if (pendingCheckoutPanel != null) ...[
+              const SizedBox(height: 24),
+              pendingCheckoutPanel!,
+            ],
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
+              children: [
+                if (onSwitchTenant != null &&
+                    switchCandidates.any(
+                      (candidate) =>
+                          candidate.canAccess() &&
+                          candidate.tenantId != membership.tenantId,
+                    ))
+                  OutlinedButton.icon(
+                    key: const ValueKey('change-business'),
+                    onPressed: () => _showBusinessSwitcher(context),
+                    icon: const Icon(Icons.swap_horiz),
+                    label: const Text('Change business'),
+                  ),
+                if (isDefaultTenant)
+                  OutlinedButton.icon(
+                    onPressed: null,
+                    icon: Icon(Icons.star),
+                    label: Text('Default business'),
+                  )
+                else
+                  OutlinedButton.icon(
+                    key: const ValueKey('make-default-tenant'),
+                    onPressed: () => _showDefaultConfirmation(context),
+                    icon: const Icon(Icons.star_outline),
+                    label: const Text('Make default'),
+                  ),
+                // The till. It is the only write-capable operational route on
+                // this screen, and it opens under the same session scope as every
+                // other one, so a business switch invalidates a sale in progress
+                // exactly as it invalidates a read.
+                if (checkoutRoute != null)
+                  FilledButton.icon(
+                    key: const ValueKey('start-checkout'),
+                    onPressed: () {
+                      final controller = TenantSessionScope.of(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TenantSessionScope(
+                            controller: controller,
+                            child: checkoutRoute!(controller),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.point_of_sale),
+                    label: const Text('New sale'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    final controller = TenantSessionScope.of(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TenantSessionScope(
+                          controller: controller,
+                          child: TenantCatalogScreen(
+                            reader: reader,
+                            productStockRoute: productStockRoute == null
+                                ? null
+                                : (product) =>
+                                      productStockRoute!(reader, product),
+                            productStockRoles: productStockRoles,
+                            adjustmentFeedRoute:
+                                stockAdjustmentFeedRoute == null
+                                ? null
+                                : () => stockAdjustmentFeedRoute!(reader),
+                            adjustmentFeedRoles: stockAdjustmentFeedRoles,
+                            movementFeedRoute: stockMovementFeedRoute == null
+                                ? null
+                                : () => stockMovementFeedRoute!(reader),
+                            movementFeedRoles: stockMovementFeedRoles,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: const Text('View read-only catalog'),
+                ),
+                if (dailySummaryRoute != null &&
+                    membership.role.canAccess(dailySummaryRoles))
+                  OutlinedButton.icon(
+                    key: const ValueKey('view-daily-summary'),
+                    onPressed: () {
+                      final controller = TenantSessionScope.of(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TenantSessionScope(
+                            controller: controller,
+                            child: dailySummaryRoute!(reader),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.insights_outlined),
+                    label: const Text('View daily summary'),
+                  ),
+                if (receiptLookupRoute != null &&
+                    membership.role.canAccess(receiptLookupRoles))
+                  OutlinedButton.icon(
+                    key: const ValueKey('find-receipt'),
+                    onPressed: () {
+                      final controller = TenantSessionScope.of(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TenantSessionScope(
+                            controller: controller,
+                            child: receiptLookupRoute!(reader),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    label: const Text('Find a receipt'),
+                  ),
+                if (auditLogRoute != null &&
+                    membership.role.canAccess(auditLogRoles))
+                  OutlinedButton.icon(
+                    key: const ValueKey('view-audit-log'),
+                    onPressed: () {
+                      final controller = TenantSessionScope.of(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TenantSessionScope(
+                            controller: controller,
+                            child: auditLogRoute!(reader),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('View activity log'),
+                  ),
+                if (membership.role.canAccess(
+                  TenantStaffDirectoryScreen.allowedRoles,
+                ))
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      final controller = TenantSessionScope.of(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TenantSessionScope(
+                            controller: controller,
+                            child: TenantStaffDirectoryScreen(reader: reader),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.people_outline),
+                    label: const Text('View staff directory'),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     ),
   );
