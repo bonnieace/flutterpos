@@ -198,6 +198,37 @@ final class TenantProductStockView {
   final TenantStockMovementPage movements;
 }
 
+/// One product's ledger page, read whether or not the product still exists.
+///
+/// A product document may be deleted - `firestore.rules` allows `delete` to an
+/// owner or an admin - while the `stock_movements` below it are `write: if
+/// false` and Firestore does not cascade a delete into a subcollection. The
+/// ledger therefore outlives the product permanently, and this is the read
+/// model that can still state it.
+final class TenantProductLedger {
+  const TenantProductLedger({
+    required this.productId,
+    required this.product,
+    required this.movements,
+  });
+
+  /// Always present: the ledger is addressed by ID, not by the document.
+  final String productId;
+
+  /// The canonical product, or `null` when it no longer exists.
+  ///
+  /// Null is a real answer here rather than a failure, and it is deliberately
+  /// distinct from the `product_unavailable` that [
+  /// TenantProductStockRepository.loadStock] still raises: reading what moved a
+  /// product is safe once it is gone, while correcting the stock of a product
+  /// that does not exist is not.
+  final TenantProduct? product;
+
+  final TenantStockMovementPage movements;
+
+  bool get productExists => product != null;
+}
+
 /// Guarded read boundary over one product and its server-written stock ledger.
 ///
 /// Every path is derived from the session's [TenantPaths] and the exact-child,
@@ -237,6 +268,57 @@ final class TenantProductStockRepository extends TenantReadRepository {
         cursor: cursor,
       ),
     );
+  }
+
+  /// Pages one product's ledger without requiring the product to still exist.
+  ///
+  /// This is the read behind the entry point from the business-wide movement
+  /// feed. It is deliberately the **path-bounded** page rather than a
+  /// `productId`-narrowed collection group: both return exactly
+  /// `tenants/{tenantId}/products/{productId}/stock_movements` in ascending
+  /// document-ID order, to the same three roles, decoded by the same read
+  /// model - so a group narrowing would answer nothing new while spending a
+  /// composite index and using the one read in this app that Firestore does not
+  /// bound by a path prefix.
+  Future<TenantProductLedger> loadLedger({
+    required String productId,
+    int pageSize = 20,
+    String? cursor,
+  }) async {
+    _requireAuthorizedSession();
+    final safeProductId = _validatedProductId(productId);
+    return TenantProductLedger(
+      productId: safeProductId,
+      product: await findProduct(safeProductId),
+      movements: await loadMovements(
+        productId: safeProductId,
+        pageSize: pageSize,
+        cursor: cursor,
+      ),
+    );
+  }
+
+  /// Reads one product by its exact canonical path, or `null` when it is gone.
+  ///
+  /// Separate from [readProduct] rather than a flag on it: every existing
+  /// caller wants a missing product to be a refusal, and turning that into a
+  /// nullable answer they would have to remember to check is how a deleted
+  /// product ends up presented as one with no stock.
+  Future<TenantProduct?> findProduct(String productId) async {
+    _requireAuthorizedSession();
+    final data = await readDocument(
+      TenantCollection.products,
+      _validatedProductId(productId),
+    );
+    if (data == null) return null;
+    final product = TenantProduct.fromDocument(
+      path: paths.product(productId),
+      data: data,
+    );
+    if (product.tenantId != session.tenantId) {
+      throw const TenantStockException('cross_tenant_product');
+    }
+    return product;
   }
 
   /// Reads one product by its exact canonical path.
@@ -304,6 +386,17 @@ final class TenantProductStockRepository extends TenantReadRepository {
   void _requireAuthorizedSession() {
     if (!session.canAccess(allowedRoles: allowedRoles)) {
       throw const TenantStockException('stock_ledger_forbidden');
+    }
+  }
+
+  /// A product ID reaching this repository from a movement row rather than from
+  /// an already-decoded catalog record has never been validated, so it is
+  /// refused here rather than concatenated into a path.
+  String _validatedProductId(String productId) {
+    try {
+      return validateTenantDocumentId(productId, fieldName: 'productId');
+    } on ArgumentError {
+      throw const TenantStockException('invalid_product_id');
     }
   }
 }

@@ -3,9 +3,19 @@ import 'package:flutter/material.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'stock_movement_feed.dart';
+import 'stock_movement_labels.dart';
 import 'stock_movements.dart';
+
+/// Opens the ledger of one product named by a feed row.
+///
+/// Supplied by the composition root, exactly like every other injected route:
+/// while it is absent the feed is precisely the read-only list it was before.
+/// It takes a product **ID** rather than a decoded product, because a row is
+/// all this surface has - and because the product may no longer exist.
+typedef TenantProductLedgerRouteBuilder = Widget Function(String productId);
 
 /// Read-only route listing everything that moved this business's stock.
 final class TenantStockMovementFeedScreen extends StatelessWidget {
@@ -14,6 +24,7 @@ final class TenantStockMovementFeedScreen extends StatelessWidget {
     required this.reader,
     required this.groupReader,
     this.source,
+    this.productLedgerRoute,
   });
 
   /// Only staff labels are read by path here; this surface issues no
@@ -27,6 +38,8 @@ final class TenantStockMovementFeedScreen extends StatelessWidget {
   /// When present, the feed opens narrowed to exactly this source.
   final TenantStockMovementSource? source;
 
+  final TenantProductLedgerRouteBuilder? productLedgerRoute;
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Stock movements')),
@@ -34,6 +47,7 @@ final class TenantStockMovementFeedScreen extends StatelessWidget {
       reader: reader,
       groupReader: groupReader,
       source: source,
+      productLedgerRoute: productLedgerRoute,
     ),
   );
 }
@@ -57,6 +71,7 @@ final class TenantStockMovementFeedPanel extends StatefulWidget {
     required this.reader,
     required this.groupReader,
     this.source,
+    this.productLedgerRoute,
     this.pageSize = 20,
   });
 
@@ -65,6 +80,7 @@ final class TenantStockMovementFeedPanel extends StatefulWidget {
   final TenantDocumentReader reader;
   final TenantCollectionGroupReader groupReader;
   final TenantStockMovementSource? source;
+  final TenantProductLedgerRouteBuilder? productLedgerRoute;
   final int pageSize;
 
   @override
@@ -193,6 +209,7 @@ final class _TenantStockMovementFeedPanelState
         onSelectSource: _selectSource,
         onNextPage: () => _nextPage(view.page.nextCursor),
         onPreviousPage: _previousPage,
+        productLedgerRoute: widget.productLedgerRoute,
       ),
     );
   }
@@ -206,6 +223,7 @@ final class _MovementFeedContents extends StatelessWidget {
     required this.onSelectSource,
     required this.onNextPage,
     required this.onPreviousPage,
+    this.productLedgerRoute,
   });
 
   final _MovementFeedView view;
@@ -214,6 +232,7 @@ final class _MovementFeedContents extends StatelessWidget {
   final ValueChanged<TenantStockMovementSource?> onSelectSource;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
+  final TenantProductLedgerRouteBuilder? productLedgerRoute;
 
   TenantStockMovementFeedPage get page => view.page;
 
@@ -330,10 +349,25 @@ final class _MovementFeedContents extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              key: ValueKey('stock-movements-feed-product-$rowKey'),
-              'Product ${movement.productId}',
-            ),
+            // The row is the only place a product ID appears with nothing
+            // behind it. Opening the ledger from here is the one entry point
+            // that survives the product being deleted, which the catalog route
+            // cannot be: it needs a decoded product the catalog no longer
+            // lists.
+            if (productLedgerRoute == null)
+              Text(
+                key: ValueKey('stock-movements-feed-product-$rowKey'),
+                'Product ${movement.productId}',
+              )
+            else
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: ValueKey('stock-movements-feed-product-$rowKey'),
+                  onPressed: () => _openLedger(context, movement.productId),
+                  child: Text('Product ${movement.productId}'),
+                ),
+              ),
             Text(
               key: ValueKey('stock-movements-feed-figures-$rowKey'),
               _figuresLabel(movement),
@@ -354,48 +388,38 @@ final class _MovementFeedContents extends StatelessWidget {
     );
   }
 
-  /// Nightly reconciliation writes a sale's movement, so it names no member of
-  /// the business. Attributing it to a missing colleague would be a fiction.
-  String _actorLabel(TenantStockMovement movement) {
-    final actorUid = movement.actorUid;
-    if (actorUid == null) return 'the server';
-    return tenantStaffLabel(actorUid, names: view.names, selfUid: selfUid);
+  /// Opens the ledger under the same session scope this route runs in, so a
+  /// tenant switch invalidates it exactly as it does every other guarded route
+  /// rather than leaving a detached screen behind.
+  void _openLedger(BuildContext context, String productId) {
+    final controller = TenantSessionScope.of(context);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantSessionScope(
+          controller: controller,
+          child: productLedgerRoute!(productId),
+        ),
+      ),
+    );
   }
-}
 
-/// An unmodelled source is shown as itself: a server deploy adding one is not
-/// evidence of anything wrong, and hiding the row would hide a real movement.
-String _sourceLabel(TenantStockMovement movement) =>
-    movement.source == TenantStockMovementSource.other
-    ? movement.sourceType
-    : movement.source.label;
+  /// An unmodelled source is shown as itself: a server deploy adding one is not
+  /// evidence of anything wrong, and hiding the row would hide a real movement.
+  String _sourceLabel(TenantStockMovement movement) =>
+      stockMovementSourceLabel(movement);
 
-/// Only the writers that read the product inside their own transaction record a
-/// before and after. A reconciled sale carries neither, which this names rather
-/// than filling in with a figure nobody recorded.
-String _figuresLabel(TenantStockMovement movement) {
-  final previousQuantity = movement.previousQuantity;
-  if (previousQuantity == null) return 'Before and after were not recorded';
-  return '$previousQuantity to ${movement.quantityAfter}';
-}
+  String _figuresLabel(TenantStockMovement movement) =>
+      stockMovementFiguresLabel(movement);
 
-String? _detailLabel(TenantStockMovement movement) {
-  if (movement.reason case final reason?) return 'Reason: $reason';
-  if (movement.sourceId case final sourceId?) return 'From $sourceId';
-  return null;
-}
+  String? _detailLabel(TenantStockMovement movement) =>
+      stockMovementDetailLabel(movement);
 
-String _recordedLabel(TenantStockMovement movement, String actorLabel) {
-  final recordedAt = movement.recordedAt ?? movement.occurredAt;
-  final when = recordedAt == null
-      ? 'Recorded instant unavailable'
-      : 'Recorded ${_instant(recordedAt)}';
-  return '$when by $actorLabel';
-}
+  String _recordedLabel(TenantStockMovement movement, String actorLabel) =>
+      stockMovementRecordedLabel(movement, actorLabel);
 
-String _instant(DateTime value) {
-  final utc = value.toUtc();
-  String pad(int part) => part.toString().padLeft(2, '0');
-  return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
-      '${pad(utc.hour)}:${pad(utc.minute)} UTC';
+  String _actorLabel(TenantStockMovement movement) => stockMovementActorLabel(
+    movement,
+    names: view.names,
+    selfUid: selfUid,
+  );
 }

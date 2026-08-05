@@ -323,6 +323,15 @@ class SpiritPOSApp extends StatelessWidget {
         stockMovementFeedRoute: (reader) => TenantStockMovementFeedScreen(
           reader: reader,
           groupReader: tenantDataReader,
+          // One product's whole ledger, entered from a row. Deliberately the
+          // path-bounded read rather than a `productId`-narrowed group page:
+          // both return the same documents in the same order to the same
+          // roles, and only this one survives the product being deleted
+          // without spending a composite index on the widest read in the app.
+          productLedgerRoute: (productId) => TenantProductLedgerScreen(
+            reader: reader,
+            productId: productId,
+          ),
         ),
         stockMovementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
         // The whole business's event trail: who was invited, deactivated, or

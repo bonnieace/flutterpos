@@ -13683,3 +13683,229 @@ files, and deployment.
   read a defect into the one app bar action that is always there.
 - Turning a retracted claim into an assertion costs almost nothing and is the only
   thing that stops it coming back. Two handovers argued about this one.
+
+---
+
+## The narrowing that was not worth having - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **a `productId`-narrowed entry point into the stock movement
+feed - or the deletion of the parameter.** Step 1 said to answer the question
+before writing anything, and answering it changed what got built.
+
+### The answer, and what it cost to reach it
+
+**A `productId`-narrowed collection group answers nothing the per-product page
+does not, so it was not built.** The two reads are the same read:
+
+| | per-product page | `productId`-narrowed group page |
+| --- | --- | --- |
+| documents | `tenants/{t}/products/{p}/stock_movements` | the same |
+| order | ascending document ID | the same |
+| roles | owner, admin, manager | the same |
+| decoded by | `TenantStockMovement` | the same |
+| index | Firestore's automatic single-field | a **new** `(tenantId, productId, __name__)` composite; `firestore.indexes.json` carries only `(tenantId, __name__)` and `(tenantId, sourceType, __name__)` |
+| boundary | bounded by path prefix | the one read in this app that Firestore does not bound by a path prefix |
+
+So the group version costs an index and the widest boundary in the codebase to
+return rows a bounded read already returns. The chunk's own instruction - "the
+honest chunk is to delete the narrowing and say why, not to build a second
+surface onto the same rows" - applies directly, and **no index was added**.
+
+There was no literal parameter to delete: `TenantStockMovementFeedRepository`
+never grew one. What was left unbuilt for three sessions was the entry point,
+not a dangling argument, and the record above is what stops it being reopened a
+fifth time.
+
+### The candidate the chunk named is real, and it is an entry-point defect
+
+Step 2 said to check whether the group feed can see movements the per-product
+page cannot. It can, and the reason is three facts that compose:
+
+- `firestore.rules` allows `delete` on `products/{productId}` to an **owner or
+  admin**.
+- The `stock_movements` below it are `allow write: if false`, and Firestore does
+  not cascade a delete into a subcollection. The ledger therefore outlives the
+  product **permanently**.
+- `TenantProductStockScreen` requires an already-decoded `TenantProduct` and is
+  reachable only from the catalog, which no longer lists the product;
+  `loadStock` refuses with `product_unavailable` before reading the ledger at
+  all.
+
+A deleted product's ledger was therefore visible in exactly one place - the
+business-wide feed - as a bare `Product {id}` line with nothing behind it and no
+hint that the product was gone. That is not a narrowing problem. It is the
+entry point missing from the read that could always have answered it.
+
+### What shipped
+
+- **`TenantProductStockRepository.loadLedger`** returns a `TenantProductLedger`
+  carrying the product ID, the product **or null**, and the ledger page. Null is
+  a real answer rather than a failure.
+- **`loadStock` still refuses the same absent product**, and a test pins that.
+  The distinction is the whole design: reading what moved a product is safe once
+  it is gone, and correcting the stock of a product that does not exist is not.
+- **`findProduct` is a separate method rather than a flag on `readProduct`.**
+  Every existing caller wants a missing product to be a refusal; turning that
+  into a nullable they must remember to check is how a deleted product ends up
+  rendered as one with no stock.
+- **The product ID is validated before it reaches a path.** It arrives from a
+  feed row, not from a decoded catalog record, so it has never been checked;
+  `invalid_product_id` refuses `''`, `a/b`, `.`, `..`, and an over-long ID
+  before any read is issued.
+- **`TenantProductLedgerScreen` is read-only.** It offers no adjustment form, no
+  filter, and - on a single-page ledger - no control at all, which a test
+  asserts by widget type. That is what lets it open for a product that cannot be
+  corrected because it no longer exists.
+- **A deleted product is named as one.** The title reads `Deleted product`, the
+  page says the ledger is kept permanently and that there is nothing left to
+  correct, and **no stock figure is shown** - there is no document to read one
+  from and inventing one would be a fiction.
+- **The row labels are now shared, not copied.** `stock_movement_labels.dart`
+  holds the six sentences both movement surfaces describe one entry with. Two
+  copies of "Before and after were not recorded" is two chances to change one
+  and not the other. They are in the same domain and render the same document,
+  which is what makes sharing right here and wrong between domains - the
+  opposite call to the one recorded for the anomalies sentence further up this
+  file, for the opposite reason.
+- **The route is injected, like every other one.** While the composition root
+  supplies none, the feed is exactly the read-only list it was before, and a
+  test asserts the row is a plain `Text` with no button anywhere on the page.
+- **It opens under the same session scope**, so a tenant switch invalidates it
+  rather than leaving a detached screen behind. A test reads the scope back out
+  of the pushed route and asserts it is the same controller.
+
+### Files in this chunk
+
+```text
+PLAN.md
+lib/inventory/inventory.dart
+lib/inventory/stock_movement_feed_panel.dart
+lib/inventory/stock_movement_labels.dart          (new)
+lib/inventory/stock_movements.dart
+lib/inventory/stock_product_ledger_panel.dart     (new)
+lib/main.dart
+test/inventory/stock_movement_feed_panel_test.dart
+test/inventory/stock_movements_test.dart
+test/inventory/stock_product_ledger_panel_test.dart  (new)
+```
+
+No `functions/src`, Rules, or index change: `git diff --stat HEAD -- functions
+firestore.rules rules-tests firestore.indexes.json` is empty. Nothing needed a
+device.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub` over the 20 in-scope lib/test paths | 1 pre-existing issue: the Sentry `profilesSampleRate` warning at `lib/main.dart:29` |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1231/1231** |
+| `flutter test --no-pub --concurrency=1 test/inventory` | **99/99** |
+| `git diff --check` | clean |
+
+**The 1231 is not all this chunk.** The working tree also holds another
+session's uncommitted reconciliation-run work, which adds tests to
+`test/reporting` and was neither staged nor touched here. This chunk's own
+additions are **19**, counted directly: **7** repository cases, **3**
+movement-feed cases, and **9** ledger-panel cases. `test/inventory` alone went
+from 80 to **99**.
+
+The server suites were not re-run: no server code exists in this chunk. They
+stand at 211, 140, 10, and 12 from earlier sessions. There is nothing new for
+Rules to prove either - the two reads used here are the product document and its
+`stock_movements`, both already covered by `stock-movements.test.js`, and a
+field of a document a rule already allows to be read whole needs no rule of its
+own. Android build and Android emulator validation were skipped as requested.
+
+### Meaningful failures and their resolutions
+
+- **Two assertions were wrong and the code was right, both times.** The
+  recorded-by label was expected as `You (manager-a)` when `tenantStaffLabel`
+  correctly resolves the name to `You (Amina)`; and a read-only assertion used
+  `find.textContaining('Record')`, which matches `Recorded stock: 7` and
+  `Recorded 2026-08-01 ...`. The second was replaced with the property actually
+  meant - a single-page ledger renders no `TextField`, `FilledButton`,
+  `OutlinedButton`, or `DropdownButtonFormField` at all - which is a stronger
+  claim than the sloppy one it replaced.
+- No other assertion failed.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+**Another session's in-flight work is also unstaged and was deliberately left
+alone**, including its untracked file:
+
+```text
+lib/reporting/reconciliation_anomalies_panel.dart
+lib/reporting/reconciliation_status.dart
+lib/reporting/reconciliation_status_panel.dart
+lib/reporting/reporting.dart
+lib/reporting/reconciliation_run_panel.dart          (untracked)
+test/reporting/reconciliation_anomalies_panel_test.dart
+test/reporting/reconciliation_status_test.dart
+```
+
+It looks like the queued "surface for the runs that found the differences". This
+chunk was chosen partly because it lives in `lib/inventory` and collides with
+none of those files.
+
+### Next bounded chunk
+
+**Finish or discard the in-flight reconciliation-run surface listed above.** It
+is the largest thing in the tree that is neither committed nor described in this
+file, and a half-applied surface is the one state no handover can reason about.
+Read its diff first and decide: it is either the queued "surface for the runs
+that found the differences" and should be completed with its own tests and
+committed, or it is abandoned and should be reverted deliberately by whoever
+owns it. Do not merge it into an unrelated chunk.
+
+Then, in preference order:
+
+- **`processors.ts` still has no unit-test file.** The pure decision extracted
+  from it is tested in `model.test.ts`; the paging, cursor, and lease behaviour
+  around it is covered only by the integration suite. Unchanged from the last
+  three handovers and now the oldest untouched item.
+- **Run the app against the emulators and look at the stock surfaces.** The
+  deleted-product ledger shipped here has never been seen: the seed script
+  writes no deleted product, and nothing has exercised the row-to-ledger route
+  outside a widget test. Seeding a product, recording an adjustment, deleting
+  the product, and opening its ledger from the feed is a five-minute check that
+  would confirm the one case this chunk exists for. Ask first whether the
+  Android exclusion is lifted; a Windows or web run exercises only the loopback
+  path.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous six sessions' lists still applies.
+- **A collection-group narrowing is almost never the answer when a path-bounded
+  read returns the same rows.** The group query exists because the ledger lives
+  below each product and no path prefix spans the business; the moment a query
+  names one product, the prefix is back and the group read is strictly worse -
+  a composite index, a wider boundary, and the same documents.
+- **Deleting a product does not delete its ledger, and never will.** Firestore
+  does not cascade into subcollections and `stock_movements` is `write: if
+  false`, so every orphaned ledger in every business is permanent. Any future
+  surface that lists products must not assume the two sets agree.
+- **A shared sentence belongs in a shared file only when both callers are in one
+  domain and describe one record.** Two calls have now been made in opposite
+  directions in this file, and they are consistent: the anomalies sentence stays
+  local because the panels are in different domains, and the movement labels
+  move because they are in the same domain and render the same document.

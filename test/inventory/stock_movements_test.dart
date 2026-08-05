@@ -244,6 +244,155 @@ void main() {
       );
     });
   });
+
+  group('the ledger of a product that may no longer exist', () {
+    test('reads the same page the stock route reads', () async {
+      // The point of the whole decision recorded in PLAN.md: this is the
+      // path-bounded page, not a `productId`-narrowed collection group, and it
+      // issues exactly the query the product stock route already issues.
+      final reader = _StockReader(
+        product: _productData(),
+        movements: <String, Map<String, Object?>>{'sa_abc': _adjustmentData()},
+      );
+
+      final ledger = await _repository(reader).loadLedger(
+        productId: 'product-1',
+      );
+
+      expect(reader.documentPaths, <String>[
+        'tenants/tenant-a/products/product-1',
+      ]);
+      expect(
+        reader.queries.single.collectionPath,
+        'tenants/tenant-a/products/product-1/stock_movements',
+      );
+      expect(reader.queries.single.descending, isFalse);
+      expect(reader.queries.single.equalityFilters, isEmpty);
+      expect(ledger.productId, 'product-1');
+      expect(ledger.productExists, isTrue);
+      expect(ledger.product!.quantity, 7);
+      expect(ledger.movements.items.single.id, 'sa_abc');
+    });
+
+    test('a deleted product still yields its permanent ledger', () async {
+      // An owner or admin may delete a product; `stock_movements` below it is
+      // `write: if false` and Firestore does not cascade, so the ledger
+      // outlives it. This is the only read in the app that can still state it.
+      final reader = _StockReader(
+        product: null,
+        movements: <String, Map<String, Object?>>{'sa_abc': _adjustmentData()},
+      );
+
+      final ledger = await _repository(reader).loadLedger(
+        productId: 'product-1',
+      );
+
+      expect(ledger.productExists, isFalse);
+      expect(ledger.product, isNull);
+      expect(ledger.productId, 'product-1');
+      expect(ledger.movements.items.single.id, 'sa_abc');
+    });
+
+    test('the stock route still refuses the same absent product', () async {
+      // Deliberately unchanged: reading what moved a product is safe once it is
+      // gone, and correcting the stock of one that does not exist is not.
+      final reader = _StockReader(
+        product: null,
+        movements: <String, Map<String, Object?>>{'sa_abc': _adjustmentData()},
+      );
+
+      await expectLater(
+        _repository(reader).loadStock(productId: 'product-1'),
+        _code('product_unavailable'),
+      );
+    });
+
+    test('a product ID that is not a document ID never reaches a path', () async {
+      // A row of the business-wide feed is where this ID comes from, so unlike
+      // the stock route it was never validated by a decoded catalog record.
+      final reader = _StockReader(
+        product: _productData(),
+        movements: const <String, Map<String, Object?>>{},
+      );
+      final repository = _repository(reader);
+
+      for (final productId in <String>['', 'a/b', '.', '..', 'x' * 1501]) {
+        await expectLater(
+          repository.loadLedger(productId: productId),
+          _code('invalid_product_id'),
+          reason: productId,
+        );
+      }
+      expect(reader.documentPaths, isEmpty);
+      expect(reader.queries, isEmpty);
+    });
+
+    test('a cashier is refused before any read is issued', () async {
+      final reader = _StockReader(
+        product: _productData(),
+        movements: const <String, Map<String, Object?>>{},
+      );
+      final repository = _repository(reader, role: TenantRole.cashier);
+
+      await expectLater(
+        repository.loadLedger(productId: 'product-1'),
+        _code('stock_ledger_forbidden'),
+      );
+      await expectLater(
+        repository.findProduct('product-1'),
+        _code('stock_ledger_forbidden'),
+      );
+      expect(reader.documentPaths, isEmpty);
+      expect(reader.queries, isEmpty);
+    });
+
+    test('a product answered from another business still fails closed', () async {
+      // Tolerating absence must not tolerate a foreign document: an absent
+      // product is a fact about this business, a foreign one is a broken
+      // boundary.
+      final reader = _StockReader(
+        product: _productData(),
+        movements: const <String, Map<String, Object?>>{},
+        productPath: 'tenants/tenant-b/products/product-1',
+      );
+
+      await expectLater(
+        _repository(reader).findProduct('product-1'),
+        throwsA(isA<TenantScopeViolation>()),
+      );
+    });
+
+    test('the ledger pages exactly as the stock route does', () async {
+      final reader = _StockReader(
+        product: null,
+        movements: <String, Map<String, Object?>>{
+          'mv-1': _saleData(),
+          'mv-2': _saleData(),
+          'mv-3': _saleData(),
+        },
+      );
+      final repository = _repository(reader);
+
+      final page = await repository.loadLedger(
+        productId: 'product-1',
+        pageSize: 2,
+      );
+      expect(page.movements.items.map((item) => item.id), <String>[
+        'mv-1',
+        'mv-2',
+      ]);
+      expect(page.movements.hasMore, isTrue);
+
+      final last = await repository.loadLedger(
+        productId: 'product-1',
+        pageSize: 2,
+        cursor: page.movements.nextCursor,
+      );
+      expect(reader.queries.last.startAfterDocumentId, 'mv-2');
+      expect(last.movements.items.single.id, 'mv-3');
+      expect(last.movements.hasMore, isFalse);
+    });
+  });
 }
 
 TenantProductStockRepository _repository(

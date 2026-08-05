@@ -316,6 +316,98 @@ void main() {
       findsOne,
     );
   });
+
+  testWidgets('the feed offers no product ledger on its own', (tester) async {
+    // Every injected route follows this rule: while the composition root
+    // supplies none, the feed is exactly the read-only list it was before.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_movement('product-1', 'sa_abc')]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(
+        const ValueKey('stock-movements-feed-product-product-1-sa_abc'),
+      ),
+      findsOne,
+    );
+    expect(find.byType(TextButton), findsNothing);
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('stock-movements-feed-product-product-1-sa_abc'),
+            ),
+          )
+          .data,
+      'Product product-1',
+    );
+  });
+
+  testWidgets('a row opens the ledger of the product it names', (tester) async {
+    // The row is the only place a product ID appears with nothing behind it,
+    // and it is the one entry point that survives the product being deleted.
+    final opened = <String>[];
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _movement('product-1', 'sa_abc'),
+        _movement('product-2', 'sa_def'),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      productLedgerRoute: (productId) {
+        opened.add(productId);
+        return Scaffold(
+          body: Text('ledger', key: ValueKey('ledger-$productId')),
+        );
+      },
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('stock-movements-feed-product-product-2-sa_def'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(opened, <String>['product-2']);
+    expect(find.byKey(const ValueKey('ledger-product-2')), findsOne);
+  });
+
+  testWidgets('the ledger opens under this session, not a detached one', (
+    tester,
+  ) async {
+    // The same rule the catalog's product route follows: a tenant switch has to
+    // invalidate the opened route rather than leave it behind.
+    TenantSessionController? scoped;
+    final controller = _controller();
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_movement('product-1', 'sa_abc')]);
+
+    await _pump(
+      tester,
+      controller,
+      reader,
+      productLedgerRoute: (productId) => Builder(
+        builder: (context) {
+          scoped = TenantSessionScope.of(context);
+          return const Scaffold(body: Text('ledger'));
+        },
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('stock-movements-feed-product-product-1-sa_abc'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(scoped, same(controller));
+  });
 }
 
 Future<void> _pump(
@@ -324,6 +416,7 @@ Future<void> _pump(
   _Reader reader, {
   int pageSize = 20,
   TenantStockMovementSource? source,
+  TenantProductLedgerRouteBuilder? productLedgerRoute,
   bool settle = true,
 }) async {
   tester.view.physicalSize = const Size(1400, 4000);
@@ -339,6 +432,7 @@ Future<void> _pump(
             reader: reader,
             groupReader: reader,
             source: source,
+            productLedgerRoute: productLedgerRoute,
             pageSize: pageSize,
           ),
         ),
