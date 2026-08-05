@@ -13504,6 +13504,14 @@ on this route that a phone-sized viewport gets wrong.
 3. The same app bar shape is used by several routes in this file. Fix it where it
    is defined rather than at one call site, and check the others render.
 
+> **Retracted on 2026-08-05. There is no defect here.** Step 1 was the right
+> instruction and it disproved the claim: the action's label occupies 346.6-399.0
+> of a bar that ends at 411.0, and a 41-character business name elides and stops
+> at 318.6, well short of the action at 334.6. `Sign o` in the screenshots is the
+> **debug banner** painted over the top-right corner - which the text above even
+> says, and then treats as clipping anyway. Nothing was changed; two assertions
+> now pin it so the claim cannot be raised a third time. See the last handover.
+
 Then, in preference order:
 
 - **A `productId`-narrowed entry point into the stock movement feed.** The last of
@@ -13535,3 +13543,143 @@ files, and deployment.
 - `git stash push -- <path>` reverts one file's implementation while keeping new
   tests, which is the cheapest way to prove a structural test fails against the
   behaviour it replaced.
+
+---
+
+## A defect that was not there - 2026-08-05
+
+### Completed in this session
+
+The chunk above: **the app bar's clipped "Sign out".** It was not clipped. No
+production code changed; what shipped is the measurement that disproves it and two
+assertions so the claim cannot be raised a third time.
+
+### The measurement
+
+The instruction in the previous handover - reproduce it in a widget test at
+411x731 *before changing anything* - is what settled it, and it settled it the
+other way:
+
+| Business name | App bar | "Sign out" label | Title |
+| --- | --- | --- | --- |
+| `Chilltent Lounge` (16 chars) | 0.0-411.0 | 346.6-399.0 | 16.0-174.7 |
+| `Chilltent Lounge Nairobi Westlands Branch` (41) | 0.0-411.0 | 346.6-399.0 | 16.0-318.6 |
+
+The action is 12 pixels clear of the bar's right edge in both cases. The long
+title elides with an ellipsis and stops at 318.6, sixteen pixels short of the
+action's `TextButton` at 334.6. Rendered with the banner switched off, the app bar
+reads `Chilltent Lounge Nairobi Wes... Sign out`, complete.
+
+`Sign o` in every rendering made this session is the **debug banner** painted over
+the top-right corner. The previous handover's own text says "the rest under the
+debug banner" and then calls it clipping in the same sentence - the observation
+was right and the conclusion did not follow from it. A banner is paint, not
+layout: it appears in no measurement and in no release build.
+
+### What shipped instead
+
+Two assertions in the landing route's layout tests, over both a short and a long
+business name: the action's label ends inside the bar, and the title ends before
+the action begins. They cost nothing, they hold today, and they convert a belief
+that survived two handovers into a checked fact.
+
+The retraction is marked inline at the claim in this file as well as recorded
+here. That is now the **second** layout claim in this file corrected by rendering
+the screen - the other being the `Center` that was not the cause of anything - and
+both had been written down confidently enough to be acted on.
+
+### Files in this chunk
+
+```text
+PLAN.md
+test/tenancy/tenant_safe_landing_test.dart
+```
+
+No `lib`, `functions/src`, Rules, index, or composition-root change. **Nothing in
+the application was changed at all**, which is the correct outcome for a chunk
+whose subject turned out not to exist.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `flutter analyze --no-pub test/tenancy` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1205/1205**, up from 1204, adding **1** |
+| a rendered app bar at 411x731 with the debug banner off, at 16 and 41 characters of business name | complete in both, table above |
+| `git diff --check` | clean |
+
+The server suites were not re-run: no server code exists in this chunk. They
+stand at 211, 140, 10, and 12 from earlier in this session, for **1578 tests
+across five suites**.
+
+The new test is one `testWidgets` looping over two names rather than two tests,
+because the two cases assert the same property of the same widget and a failure
+names which one through `reason:`.
+
+### Meaningful failures and their resolutions
+
+- **`find.text(tenantName)` is ambiguous on this route.** The branding panel names
+  the business as well as the app bar, so the finder matched two widgets and
+  `getRect` refused. Scoped with `find.descendant(of: find.byType(AppBar))`, and
+  the reason is written at the assertion because the next person will hit it.
+- No assertion in the shipped code failed, because nothing was shipped to it.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+### Next bounded chunk
+
+**A `productId`-narrowed entry point into the stock movement feed - or the
+deletion of the parameter.** This is the last of the three unused narrowings found
+this session, and unlike the other two it is not obviously worth building.
+
+1. Answer the question before writing anything: **what does the narrowed
+   collection-group movement feed tell somebody that the product's own ledger page
+   does not?** The product stock route already pages that product's
+   `stock_movements` with every figure each entry carries. If the answer is
+   "nothing", the honest chunk is to delete the narrowing and say why in the
+   commit, not to build a second surface onto the same rows.
+2. The one candidate answer worth checking: the collection-group feed is the only
+   read in the app that Firestore does not bound by a path prefix, so it may see
+   movements the per-product page cannot - a movement filed under a product
+   document that no longer exists. Check whether that is reachable; if it is, that
+   is the question the narrowed feed answers and it should say so on screen.
+3. Whichever way it goes, do not leave the parameter unused and untested for a
+   fourth session.
+
+Then, in preference order:
+
+- **A surface for the runs that found the differences.** Every stock difference
+  now names the run that found it, and nothing opens that run from the difference.
+- **`processors.ts` still has no unit-test file.** The pure decision extracted from
+  it this session is tested in `model.test.ts`; the paging, cursor, and lease
+  behaviour around it is covered only by the integration suite.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous five sessions' lists still applies.
+- **"Reproduce it before changing it" is worth writing into a chunk even when the
+  defect looks obvious.** It has now saved two changes in this file: one that
+  would have fixed nothing, and one to something that was never broken.
+- **The debug banner covers the top-right corner of every rendering.** Set
+  `debugShowCheckedModeBanner: false` when rendering a screen to look at it, or
+  read a defect into the one app bar action that is always there.
+- Turning a retracted claim into an assertion costs almost nothing and is the only
+  thing that stops it coming back. Two handovers argued about this one.

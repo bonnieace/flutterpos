@@ -95,6 +95,43 @@ void main() {
     expect(tester.getSize(find.byType(SingleChildScrollView)).height, 627);
   });
 
+  testWidgets('the app bar keeps its action inside itself at phone width', (
+    tester,
+  ) async {
+    // Recorded because a previous handover in PLAN.md claimed this was broken and
+    // it never was. Every rendering made while looking at this route showed
+    // "Sign o" with the rest of the word missing - which is the **debug banner**
+    // painted over the top-right corner, not the app bar clipping anything. The
+    // banner is paint, so it does not appear in these measurements and does not
+    // appear in a release build either.
+    //
+    // A long business name is the case that would break it if anything did, so
+    // both are asserted: the title elides and stops short of the action rather
+    // than pushing it off the edge.
+    for (final name in <String>[
+      'Chilltent Lounge',
+      'Chilltent Lounge Nairobi Westlands Branch',
+    ]) {
+      await _pumpLanding(tester, panelHeight: 120, tenantName: name);
+
+      final bar = tester.getRect(find.byType(AppBar));
+      final label = tester.getRect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Sign out'),
+        ),
+      );
+      // The branding panel names the business too, so the title is found inside
+      // the bar rather than by its text alone.
+      final title = tester.getRect(
+        find.descendant(of: find.byType(AppBar), matching: find.text(name)),
+      );
+
+      expect(label.right, lessThanOrEqualTo(bar.right), reason: name);
+      expect(label.left, greaterThan(title.right), reason: name);
+    }
+  });
+
   testWidgets('a screen that grows past the fold starts saying so', (
     tester,
   ) async {
@@ -112,14 +149,16 @@ void main() {
 Future<void> _pumpLanding(
   WidgetTester tester, {
   required double panelHeight,
+  String tenantName = 'Chilltent Lounge',
 }) async {
   tester.view.physicalSize = _phone;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
+  final membership = _membership(tenantName: tenantName);
   final controller = TenantSessionController()
-    ..open(uid: 'user-a', membership: _membership());
+    ..open(uid: 'user-a', membership: membership);
   addTearDown(controller.dispose);
 
   await tester.pumpWidget(
@@ -127,7 +166,7 @@ Future<void> _pumpLanding(
       home: TenantSessionScope(
         controller: controller,
         child: TenantSafeLandingScreen(
-          membership: _membership(),
+          membership: membership,
           reader: _EmptyReader(),
           onSignOut: () async {},
           // The slot the shift panel occupies on a real device. What the fold
@@ -157,18 +196,19 @@ final class _EmptyReader implements TenantDataReader {
   ) async => const <TenantQueryDocumentSnapshot>[];
 }
 
-TenantMembership _membership() => TenantMembership(
-  tenantId: 'tenant-a',
-  tenantName: 'Chilltent Lounge',
-  tenantSlug: 'chilltent-lounge',
-  role: TenantRole.cashier,
-  membershipStatus: MembershipStatus.active,
-  tenantStatus: TenantStatus.active,
-  isOwner: false,
-  mirrorVersion: 1,
-  createdAt: DateTime.utc(2026, 8, 1),
-  updatedAt: DateTime.utc(2026, 8, 1),
-  serverCanAccess: true,
-  canonicalTenantExists: true,
-  canonicalMembershipExists: true,
-);
+TenantMembership _membership({String tenantName = 'Chilltent Lounge'}) =>
+    TenantMembership(
+      tenantId: 'tenant-a',
+      tenantName: tenantName,
+      tenantSlug: 'chilltent-lounge',
+      role: TenantRole.cashier,
+      membershipStatus: MembershipStatus.active,
+      tenantStatus: TenantStatus.active,
+      isOwner: false,
+      mirrorVersion: 1,
+      createdAt: DateTime.utc(2026, 8, 1),
+      updatedAt: DateTime.utc(2026, 8, 1),
+      serverCanAccess: true,
+      canonicalTenantExists: true,
+      canonicalMembershipExists: true,
+    );
