@@ -14147,3 +14147,273 @@ files, and deployment.
   app listed `reconciliation_jobs` for months before it read one. When a new read
   *shape* appears against an existing rule, the Rules suite has something new to
   prove even though the rule itself is untouched.
+
+---
+
+## The largest module's first unit tests - 2026-08-06
+
+### Completed in this session
+
+The chunk above: **`processors.ts` has unit tests.** It was the oldest untouched
+item in this file - four handovers - and, exactly as two chunks ago, most of it
+was already in the tree. Three untracked files were waiting at `HEAD`:
+
+```text
+functions/src/reconciliation/processors.test.ts
+functions/src/testing/fakeFirestore.ts
+functions/src/testing/fakeFirestore.test.ts
+```
+
+They were read before anything else, and the answer was **finish them** - the
+same call, and for the same reasons, as the reconciliation-run surface. What was
+there was coherent rather than abandoned: `npm --prefix functions test` was
+**247/247** against it before a character was changed, up from the 211 recorded
+at the end of the last session, and discarding it would have thrown away the
+queued item four handovers had asked for.
+
+### What was already there, and what it is worth
+
+- **`fakeFirestore.ts`** - an in-memory Firestore the processors can be run
+  against as units. The four page sizes are 5, 25, 200, and 50, so every boundary
+  assertion against a real emulator would mean seeding tens or hundreds of
+  documents per run; this is what makes "a page that ends exactly on its own
+  boundary" and "a lease revoked between two products of one page" cheap enough
+  to assert at all.
+- **`fakeFirestore.test.ts`** - the double's own semantics, fifteen cases, each
+  named for the processor behaviour that depends on it. This is the part that
+  makes the rest trustworthy. Three panel fakes in this repository have already
+  made a Dart test pass for the wrong reason by answering a question they were
+  never asked, and this is the largest fake in the project; its claims about
+  Firestore are written down as assertions rather than left as comments.
+- **`processors.test.ts`** - twenty-one cases over the four exports, covering the
+  four behaviours the previous handover named: the cursor a partial page resumes
+  from, a page that ends exactly on its own boundary, a lease lost mid-page, and
+  a phase that finds nothing.
+
+The double's design decision worth repeating: **where Firestore's semantics
+decide an outcome it implements them, and everything else throws.** A document
+with no value at an ordered field is invisible to that query; a transaction
+refuses a read after its first write; `FieldValue.delete()` is rejected in an
+unmerged `set`; `update` refuses a document that does not exist. Any operator but
+`==`, any `FieldPath` but `documentId()`, any unrecognised sentinel, and any
+unorderable value stop the test instead of being guessed at. A silently-ignored
+`where` clause is the single worst thing a Firestore double can do.
+
+### The three branches it left, now closed
+
+Reading `reconcileProduct` against the new file found three paths nothing
+reaches - not this file, not the integration suite, not `model.test.ts`:
+
+- **A product this job already finished is counted again but not verified
+  again.** A task queue retries a *page*, not the product it stopped at, so the
+  second attempt meets products this job's own generation already settled. The
+  carried state is what says so. The new test asserts the page re-counts the
+  difference from what the earlier attempt concluded - dropping it would leave the
+  job's own `stockVarianceCount` short of the records it wrote - and that **nothing
+  at all is written a second time**. Its second half proves the guard is scoped to
+  this job *at this generation*: a rerun compares the product again, which is also
+  the only route that reads a ledger from the beginning.
+- **A product written moments ago is deferred rather than compared.** The trap
+  every fixture in this file is settled to avoid, and the one that already cost
+  this repository a whole integration test that asserted nothing. It is now pinned
+  where pinning it is cheap, including that the deferral carries **nothing**
+  forward - no expectation for the next run to measure against, and the ledger
+  below it was never read.
+- **Carried state that names no ledger position is re-baselined and reported.**
+  The one stock status nothing had ever covered, over five shapes of broken state.
+  It is the branch that quietly forgives a difference: a state that cannot say
+  where in the ledger it stopped cannot be resumed from, so the run takes the
+  product's own quantity as the new expectation and the comparison then agrees
+  with itself by construction. The test seeds a movement that *would* have made
+  the expectation 7 if it had been replayed, and asserts it is 10 - and that the
+  run records `checkpoint_chain_invalid` rather than reporting agreement it never
+  established.
+
+### Every new assertion was proved to fail against the behaviour it names
+
+Five mutations, each built and run, each failing exactly what it should and
+nothing else:
+
+| Mutation to `processors.ts` | What failed |
+| --- | --- |
+| the generation dropped from the already-finished guard | the retry test, alone |
+| the deferral window collapsed from five minutes to zero | the deferral test, alone |
+| the re-baseline branch stopped resuming past the ledger | the re-baseline test, alone, reporting an expectation of 7 against 10 |
+| `hasMore` inferred from the metrics page size instead of probed | the boundary test **and** the re-marked-day test |
+| the movement cursor's `startAfter` removed | the backlog-resume test, alone |
+
+The fourth is the one worth keeping: it names both halves of a distinction this
+file's tests draw deliberately - the metrics phase probes for a remainder, the
+stock phase infers one from a full page - so a change to either is caught twice.
+
+### One finding, recorded rather than fixed
+
+**`retryDelayMilliseconds` has no producer anywhere in the pipeline.**
+`ProductResult` declares it, `processStockPage` forwards it,
+`handlers.ts` passes it into `JobAdvance`, and `advanceReconciliationJob` turns
+it into `nextAttemptAt` with `Date.now() + Math.max(0, advance.retryDelayMilliseconds ?? 0)`.
+Nothing ever assigns it a value, so every continuation this pipeline schedules is
+scheduled for now.
+
+It was not deleted, and the reason is that the default it produces is the correct
+one: a movement backlog has more work waiting and should be picked up
+immediately. Whether *anything* should ever ask for a delay - the deferral is the
+only candidate, and it returns `completed: true` rather than asking to be retried
+- is a design question about the job-advance contract across three modules, not
+something to settle inside a test chunk. The current behaviour is pinned by an
+assertion with the reasoning written at it, and the decision is the next chunk.
+
+This is the third dead thing this file has found in `reconcileProduct`'s
+neighbourhood in two sessions, after the unreachable `invalid_stock_movement`
+branch and the four copies of one predicate.
+
+### Files in this chunk
+
+```text
+PLAN.md
+functions/src/reconciliation/processors.test.ts   (new)
+functions/src/testing/fakeFirestore.test.ts       (new)
+functions/src/testing/fakeFirestore.ts            (new)
+```
+
+**No production code changed at all.** `git diff --stat HEAD -- functions/src/reconciliation/processors.ts`
+is empty, and so are Rules, the indexes, and every Dart path. The previous
+handover's step 3 - "do not restructure `reconcileProduct` to make it testable" -
+was honoured without needing a seam: the four exports take a `Firestore` and the
+double is one.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix functions run build` (inside `test`) | clean |
+| `npm --prefix functions test` | **250/250**, up from 211, adding **39** |
+| five separate mutations of `processors.ts`, each built and run | each failed exactly the test(s) named in the table above |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope test paths | **1251/1251**, unchanged - no Dart was touched |
+| `npm --prefix rules-tests run test:emulator` | **141/141** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:reconciliation` | **10/10** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `git diff --check` | clean |
+
+Of the 39 new unit tests, **36 arrived with the in-flight work** - 21 processor
+cases and 15 double cases - and **3 were added here**, counted directly rather
+than inferred from the total.
+
+The three emulator suites were re-run even though this chunk changed no
+production code, because it adds two new modules under `functions/src` that the
+build compiles into the `functions/lib` every one of them loads, and because the
+sentinel audit walks the whole source tree.
+
+During development a single mutation was checked with
+`node --test --test-reporter=tap lib/reconciliation/processors.test.js` after one
+`npm run build`, which is about four seconds of test time against the full
+command's forty.
+
+### Meaningful failures and their resolutions
+
+- **No assertion failed that was not made to.** The in-flight work was green on
+  its first run in this session and the three added tests passed on theirs; every
+  red run in this session was a deliberate mutation, reverted with
+  `git checkout -- functions/src/reconciliation/processors.ts` so the file is
+  byte-identical to `HEAD`.
+- **`node --test`'s default reporter names a failure with `✖`, not `not ok`.**
+  Filtering a run for `^not ok` reports nothing and looks like a pass with a
+  non-zero exit. Pass `--test-reporter=tap` when the output is going to be
+  filtered by a script.
+- **A PowerShell parenthesised command group across two native commands is a
+  parse error.** `$a = (npm run build; node --test ...)` does not parse; assign
+  each to its own variable and concatenate.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` over the 10 in-scope paths | 1251 |
+| `npm --prefix functions test` | 250 |
+| `npm --prefix rules-tests run test:emulator` | 141 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 10 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1664 tests across five suites**, up from 1625 at the start of the session,
+adding **39** in one chunk. Nothing was left failing and no suite was skipped
+except the Android build and the Android emulator runs.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+Nothing else is left in flight. The three untracked `functions/src` files the
+session started with are all in this commit.
+
+### Next bounded chunk
+
+**Decide what `retryDelayMilliseconds` is for, and either produce it or delete
+it.** It is a hook with no producer, described in full above, and it is now the
+only thing in the reconciliation pipeline that reads as live and is not.
+
+1. The only branch with a claim to asking for a delay is
+   `recent_write_deferred`, and it does not ask: it returns `completed: true`,
+   records the deferral, and steps past the product. So the honest question is
+   whether a deferred product should instead leave the phase pending until
+   `safeAfter`, or stay as it is and lose the field.
+2. Answering "stay as it is" means deleting the field from `ProductResult`,
+   `StockPageResult`, and `JobAdvance`, and simplifying `nextAttemptAt` to
+   `Timestamp.now()`. That is three modules and a contract, which is why it was
+   not folded into a test chunk.
+3. Answering the other way means a product deferred at the end of a page holds
+   the cursor for up to five minutes, which is a real cost on a large catalog -
+   measure it against the current behaviour before choosing.
+4. Whichever way it goes, `jobs.test.ts` already covers `advanceReconciliationJob`
+   and is where the answer gets pinned.
+
+Then, in preference order:
+
+- **Run the app against the emulators and look at the reconciliation and stock
+  surfaces.** Unchanged from the last handover and now the oldest item: neither
+  the deleted-product ledger nor the run route has ever been seen outside a widget
+  test. Ask first whether the Android exclusion is lifted; a Windows or web run
+  exercises only the loopback path.
+- **`test/widget_test.dart` has been uncompilable for eight months.** Either
+  delete it or point it at the real root widget. It is one line either way, and it
+  is the reason no session in this file can run `flutter test` without naming
+  paths.
+- **The two bounded limits in `regenerateDailyMetric` are unasserted anywhere.**
+  A day with more than 5,000 sales or more than 200 shift expectations throws
+  `resource-exhausted`, and neither bound is reachable from a fixture of a
+  sensible size. If they are worth proving, the page sizes have to become
+  injectable, which is a change to production code for a test's benefit and should
+  be decided as one.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous eight sessions' lists still applies.
+- **A Firestore double is worth exactly its fidelity, so assert the fidelity.**
+  `fakeFirestore.test.ts` is fifteen claims about Firestore, each named for the
+  processor behaviour that leans on it. Where one is wrong, every processor test
+  that leans on it is wrong in the same direction - which is the argument for
+  writing them down rather than trusting them.
+- **A page size is why a phase is untestable end to end.** 25 products, 200
+  movements, 50 expectations, 5 days: the boundaries are exactly what a real
+  emulator makes too expensive to assert, and exactly what a double makes free.
+  That is the division of labour between these two suites, not a preference.
+- **`node --test` needs `--test-reporter=tap` before its output is filtered.**
+  The default reporter's failure marker is `✖`.
+- Mutate the production code and revert with `git checkout -- <path>`. Five
+  mutations in this session each named one test, which is the only evidence that a
+  green suite is watching anything.
