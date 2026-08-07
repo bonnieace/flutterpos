@@ -15204,3 +15204,233 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## The callable that corrects a price - 2026-08-07
+
+### Chunk chosen, and why not the queued one
+
+The queued "next bounded chunk" was the intermittent Flutter failure at
+`test/checkout/checkout_sync_signals_test.dart`. `PLAN.md` explicitly allowed taking
+`updateProduct` first — "if a session would rather move a capability than chase a
+flake, take `updateProduct` first and come back to this" — and that is what happened,
+for two reasons the queued text already names. The flake hunt is bounded by a
+deliverable rather than a duration and may end in a written diagnosis with no code;
+`updateProduct` is a `functions/` chunk that is blocked on nothing, whose decision was
+settled the same week, and which does not need the Flutter suite to be trustworthy.
+The flake still blocks any *Flutter* capability chunk, which is why it goes straight
+back to the head of the queue: the surface that calls this callable is the next
+capability, and it is Dart.
+
+### Completed in this session
+
+**`updateProduct`, the only way a product's descriptive fields ever change.** Before
+it, a product's name, code, price, and category were permanent once written: `allow
+update` on `products/{productId}` permits a strictly decreasing `quantity` with
+`affectedKeys().hasOnly(['quantity', 'updatedAt'])` — the checkout decrement — and no
+callable touched a descriptive field. A mistyped price needed an operator with the
+Admin SDK.
+
+It is the **twenty-fourth callable and the forty-seventh export**. It changes
+`firestore.rules` **not at all**, which was the first of the three grounds the decision
+turned on and is now a verified fact rather than an intention: `git status` shows
+`firestore.rules` unmodified, and the 160-test rules suite was run anyway to say so
+with a measurement.
+
+```text
+updateProduct({tenantId, productId, name?, sku?, price?, categoryId?, requestId})
+```
+
+Split in two, following `amendment.ts` / `amendments.ts` rather than `stock.ts`:
+`operations/productUpdate.ts` holds every decision as pure functions, and
+`operations/products.ts` is the callable, the shared authorization and idempotency
+wrappers, and the two writes. `stock.ts` has never had a unit test because its logic
+and its Firestore calls are one function; this chunk deliberately did not repeat that.
+
+### The eight things it is responsible for
+
+1. **It never writes `quantity`, and refuses a payload that mentions it.** This is the
+   guarantee everything else rests on: a callable that could write a price *and* a
+   quantity would be a second way to move stock with no `stock_movements` entry, which
+   is the property `adjustStock` exists to provide. The refusal names `adjustStock` in
+   its message.
+2. **An unknown key is refused rather than dropped.** Silently ignoring one would make
+   "this never writes `quantity`" something a caller takes on trust instead of
+   something it can observe from outside.
+3. **A price is validated against the till's own arithmetic.**
+   `productPriceMinorUnits` is `checkoutMinorUnitsFromMajor` from
+   `lib/checkout/checkout_draft.dart`, tolerance included, so `19.999` is refused where
+   it is typed rather than at the till with a customer standing there. The stored
+   major-unit figure is derived from the minor units, never from what was sent.
+4. **The *resulting* document must parse and be sellable, not just the fields being
+   written.** `readSellableProduct` is the server-side twin of
+   `TenantProduct.fromDocument` plus the price conversion, run against the document as
+   it will exist. One unparseable product makes the whole cached catalog a miss, so
+   quietly making an already-broken product less broken would report success while the
+   business stayed unable to sell anything. The contract is: name every broken field in
+   one request, or none of them.
+5. **A price change needs an owner or an administrator; everything else needs the
+   operational three.** This is its own decision, not one inherited from create
+   (owner/admin/manager) or delete (owner/admin). It is read from the *requested*
+   fields, not from the resulting diff — a manager whose permission depended on the
+   value already stored would be a rule nobody could explain, and would let a manager
+   discover a price by binary search over refusals.
+6. **A named category is checked against this business, whenever it is named.** Nothing
+   on the server enforced this before; the client create surface could only file a
+   product under a category it had read. A product filed under a category that does not
+   exist is invisible to every grouped catalog surface without being unreadable, which
+   is the hardest kind of wrong to notice.
+7. **A stored legacy `category` alias moves with `categoryId`.** The client's read model
+   refuses a product whose two category fields disagree, so leaving the alias behind
+   would take the whole cached catalog down. A product filed only under the alias is
+   read through it, and asking for the category it already holds records no change.
+8. **The before and after of every changed field is audited.** One `audit_logs` entry
+   at `pu_<40 hex>`, carrying `changes`, `changedFields`, actor, request ID, and
+   `mutatesQuantity: false` — the same idiom `amendShiftSummary` uses for
+   `mutatesCountedCash`. Without it a price correction would be the one money-changing
+   operation in this system that leaves no record of what it replaced. No
+   `stock_movements` entry and no `stock_adjustments` record, because nothing moves.
+
+Two smaller decisions, recorded so they are not re-litigated. A request that changes
+nothing is **refused** rather than audited as a no-op; it is reachable only with a
+fresh request ID, because a genuine retry answers off the idempotency record. And a
+product whose stored `quantity` is not an integer, or whose `image` is not an HTTPS
+URL, is refused with a message saying it needs an operator — neither this callable nor
+`adjustStock` can correct either, and saying so beats a green result that changes
+nothing the till can observe.
+
+### The tests were proved able to fail, and one of them could not
+
+Five guarantees were mutated in turn, rebuilt, and re-run. Four were caught
+immediately. **The fifth was not, and it was the most important one:**
+
+```text
+the quantity refusal is removed             -> 32 pass, 0 fail   <-- caught nothing
+a manager may change a price                -> 30 pass, 2 fail
+the legacy alias is left behind             -> 30 pass, 2 fail
+the product is replaced instead of patched  -> 29 pass, 3 fail
+```
+
+Deleting the dedicated `"quantity" in data` refusal changed no test result, because
+`quantity` is refused twice over — once by name and once as a key outside the accepted
+set — and the test asserted only the error *code*, which is `invalid-argument` either
+way. The behaviour stayed correct; what would have been lost silently is the message,
+which is the only thing telling a caller that stock moves through `adjustStock`. The
+test now asserts the message, and the mutation is caught:
+
+```text
+the quantity refusal is removed             -> 31 pass, 1 fail
+```
+
+One mutation was rejected by the compiler rather than by a test and had to be
+reshaped: stubbing out the price-representability branch left `priceMinor` possibly
+undefined downstream, so `tsc` refused it under `strict`. Widening
+`PRICE_REPRESENTATION_TOLERANCE` from `1e-6` to `1` tests the same guarantee and
+compiles:
+
+```text
+the price tolerance is widened past two decimals -> 29 pass, 3 fail
+```
+
+### Files changed
+
+```text
+functions/src/operations/productUpdate.ts       (new, 561 lines - the decisions)
+functions/src/operations/products.ts            (new, 221 lines - the callable)
+functions/src/operations/productUpdate.test.ts  (new, 23 tests)
+functions/src/operations/products.test.ts       (new, 9 tests, against fakeFirestore)
+functions/src/operations/index.ts               (+1 export)
+functions/src/index.ts                          (+1 export)
+PLAN.md HISTORY.md
+```
+
+Nothing under `lib/`, **nothing in `firestore.rules`**, and no new collection — the
+frozen fifteen-collection tenant path contract is untouched, because the audit entry
+goes to `audit_logs`.
+
+### Tests
+
+```text
+npm --prefix functions test
+  -> 333 pass, 0 fail (baseline 301 + 32)
+
+flutter test --no-pub --concurrency=1 --reporter=failures-only
+  -> 1346 pass, 0 fail
+
+npm --prefix rules-tests run test:emulator
+  -> 160 pass, 0 fail
+
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+  -> 12 pass, 0 fail
+
+npm --prefix rules-tests run test:emulator:reconciliation
+  -> 10 pass, 0 fail  (2 min 35 s end to end, 93 s inside the tests)
+```
+
+Android build and Android emulator tests are excluded for now, as instructed.
+
+All five were run. Three of them justify themselves: the functions suite is the chunk,
+the rules suite proves the "changes `firestore.rules` not at all" claim with a
+measurement rather than an assertion, and the two integration suites exercise Functions
+**discovery**, which a new export in `index.ts` is exactly the kind of change to break.
+
+The Flutter run is the interesting one and it changed no Dart file: **1346 pass,
+green**, the seventh run of that suite on 2026-08-07 and the sixth green. The seam
+failure at `test/checkout/checkout_sync_signals_test.dart` has now not reproduced in
+six consecutive runs. That is not evidence it is fixed — nothing touched it — only that
+its rate is low enough that repeating the suite is a bad way to hunt it, which the
+queued chunk already says.
+
+### Failures that cost a cycle
+
+**A raw NUL byte was written into a test file.** A control-character escape intended
+for a name-validation case reached the file as a literal NUL, and `file` reported the
+source as binary. A `grep` for the surrounding text then found nothing, which is how it
+was noticed. The editing tools could not fix it — the replacement anchor would itself
+have had to contain the byte — so a small Node script replaced the line by index, and
+the character is now built with `String.fromCharCode(1)`. **No source file in this
+repository should carry a raw control character**; the standing trap about `sed` eating
+a Unicode escape in a replacement is the same failure from the other direction.
+
+**A filtered emulator run reported nothing.** `Select-String -Pattern '...|Error'` over
+the rules suite matched every `error. Code: 7 PERMISSION_DENIED` trace — the expected
+denials — and dropped the summary lines entirely, producing 115 KB of noise and no
+counts. Redirecting the whole run to a file with `*>` and filtering afterwards is the
+fix, and it is the same lesson as the existing `Select-Object -First N` trap: filter
+the capture, not the stream.
+
+### The held emulator run was found again and left alone
+
+`scripts/seed-dev-emulator.js --hold` was still up on the dev ports, with its
+`emulators:exec` parent and a Firestore JVM. Not touched. All three emulator suites
+above started, passed, and shut down their own emulators beside it.
+
+### One exclusion named, as required
+
+**Receipt printing** has been excluded for many consecutive chunks and stays excluded,
+correctly: the transport question was answered on 2026-08-07 — an external print
+service handles thermal printer onboarding over a local print server, TCP/IP, and
+Bluetooth — but the *interface* is still unknown, and what the service takes decides
+what a "body" even is. It is blocked on something no session can resolve by thinking
+about it. Nothing about it is blocking today: a sale completes, is recorded, is found
+by receipt lookup, and is returnable without anything being printed.
+
+### An unrelated edit carried into this commit
+
+`PLAN.md` arrived at this session already modified: the "Published status board"
+paragraph had been rewritten to say publishing happens **only when asked** rather than
+at the end of every session. That edit is not this chunk's, was not reverted, and is
+committed alongside this session's `PLAN.md` changes because it is the same file. It is
+recorded here so the diff is not mistaken for this chunk's work. Publishing was not
+requested this session, and the published page is now behind `PLAN.md`.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```
