@@ -84,6 +84,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.checkoutRoute,
     this.checkoutConfigurationRoute,
     this.checkoutConfigurationRoles = const <TenantRole>[],
+    this.catalogManagementRoute,
+    this.catalogManagementRoles = const <TenantRole>[],
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
@@ -173,6 +175,16 @@ final class TenantRoutingShell extends StatefulWidget {
   /// The roles that route is offered to, decided by the checkout domain. It is
   /// deliberately narrower than the roles that may sell.
   final List<TenantRole> checkoutConfigurationRoles;
+
+  /// Optional guarded catalog-management route, injected for the same reason.
+  ///
+  /// It is the only surface that puts a product in the catalog, and every other
+  /// operational route in this app already assumed one was there.
+  final Widget Function(TenantDataReader reader)? catalogManagementRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  /// Retiring is narrower still and is decided inside the route itself.
+  final List<TenantRole> catalogManagementRoles;
 
   /// Optional shift lifecycle surface rendered on the safe landing route. It is
   /// injected for the same reason: tenancy code owns routing, not operations.
@@ -729,6 +741,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       checkoutRoute: widget.checkoutRoute,
       checkoutConfigurationRoute: widget.checkoutConfigurationRoute,
       checkoutConfigurationRoles: widget.checkoutConfigurationRoles,
+      catalogManagementRoute: widget.catalogManagementRoute,
+      catalogManagementRoles: widget.catalogManagementRoles,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
       shiftPanel: widget.shiftPanel,
       dailySummaryRoute: widget.dailySummaryRoute,
@@ -1275,6 +1289,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.checkoutRoute,
     this.checkoutConfigurationRoute,
     this.checkoutConfigurationRoles = const <TenantRole>[],
+    this.catalogManagementRoute,
+    this.catalogManagementRoles = const <TenantRole>[],
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
@@ -1314,6 +1330,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// The roles that route is offered to, decided by the checkout domain. It is
   /// deliberately narrower than the roles that may sell.
   final List<TenantRole> checkoutConfigurationRoles;
+
+  /// Optional guarded catalog-management route, supplied by the composition
+  /// root. It is the one surface that can put a product in the catalog, which
+  /// is what every other operational route on this screen already assumed.
+  final Widget Function(TenantDataReader reader)? catalogManagementRoute;
+
+  /// The roles that route is offered to, decided by the inventory domain.
+  final List<TenantRole> catalogManagementRoles;
 
   final Widget? shiftPanel;
 
@@ -1486,6 +1510,28 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   icon: const Icon(Icons.inventory_2_outlined),
                   label: const Text('View read-only catalog'),
                 ),
+                // Beside the read-only catalog, because it is the same catalog
+                // seen by the one person who may change it. Nothing else in the
+                // app can put a product in, so a business with an empty catalog
+                // reaches its till through here first.
+                if (catalogManagementRoute != null &&
+                    membership.role.canAccess(catalogManagementRoles))
+                  OutlinedButton.icon(
+                    key: const ValueKey('manage-catalog'),
+                    onPressed: () {
+                      final controller = TenantSessionScope.of(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TenantSessionScope(
+                            controller: controller,
+                            child: catalogManagementRoute!(reader),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.edit_note_outlined),
+                    label: const Text('Manage catalog'),
+                  ),
                 // Beside the catalog rather than beside the till: this decides
                 // what every price in that catalog means, and the person who
                 // opens it is not the person standing at the till.

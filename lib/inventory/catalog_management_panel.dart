@@ -1,0 +1,786 @@
+import 'package:flutter/material.dart';
+
+import '../tenancy/tenant_catalog.dart';
+import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
+import 'catalog_management.dart';
+
+/// The catalog route that can add to and retire from one business's catalog.
+///
+/// It is the first surface in the migrated client that puts a product in. Every
+/// operational surface below it - the till, stock, returns, reporting,
+/// reconciliation - already assumed a product existed, and until this route
+/// nothing but `seed-dev-emulator.js` could create one.
+final class TenantCatalogManagementScreen extends StatelessWidget {
+  const TenantCatalogManagementScreen({
+    super.key,
+    required this.reader,
+    this.writer,
+    this.onChanged,
+    this.requestIdFactory,
+  });
+
+  final TenantDataReader reader;
+
+  /// Supplied by the composition root. While it is absent this route is exactly
+  /// a read-only statement of the catalog, as every other injected capability
+  /// in this app behaves.
+  final TenantCatalogWriter? writer;
+
+  /// Called after the server acknowledged a change, so the composition root can
+  /// ask the sync pass to re-read what this device caches.
+  final VoidCallback? onChanged;
+
+  /// One fresh request ID per confirmed create.
+  final TenantCatalogRequestIdFactory? requestIdFactory;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Manage catalog')),
+    body: TenantCatalogManagementPanel(
+      reader: reader,
+      writer: writer,
+      onChanged: onChanged,
+      requestIdFactory: requestIdFactory,
+    ),
+  );
+}
+
+/// Guarded catalog-management content, split out to keep it widget-testable.
+///
+/// The guard owns authorization and stale-session rejection, and its role list
+/// is the *create* list. Retiring is narrower still and is decided per render
+/// from the guarded session, so the action disappears the moment the session
+/// stops allowing it.
+final class TenantCatalogManagementPanel extends StatefulWidget {
+  const TenantCatalogManagementPanel({
+    super.key,
+    required this.reader,
+    this.writer,
+    this.onChanged,
+    this.requestIdFactory,
+    this.pageSize = 20,
+    this.categoryPageSize = 50,
+  });
+
+  final TenantDataReader reader;
+  final TenantCatalogWriter? writer;
+  final VoidCallback? onChanged;
+  final TenantCatalogRequestIdFactory? requestIdFactory;
+  final int pageSize;
+  final int categoryPageSize;
+
+  @override
+  State<TenantCatalogManagementPanel> createState() =>
+      _TenantCatalogManagementPanelState();
+}
+
+final class _TenantCatalogManagementPanelState
+    extends State<TenantCatalogManagementPanel> {
+  // The form lives above the guard on purpose. Paging and reloading both
+  // replace the guarded subtree with a loading indicator, and a half-typed
+  // product would go with it if the controllers lived below.
+  final TextEditingController _categoryName = TextEditingController();
+  final TextEditingController _productName = TextEditingController();
+  final TextEditingController _productSku = TextEditingController();
+  final TextEditingController _productPrice = TextEditingController();
+
+  String? _selectedCategoryId;
+  List<String?> _cursors = <String?>[null];
+  int _pageIndex = 0;
+  int _generation = 0;
+  bool _busy = false;
+  String? _notice;
+
+  /// Retained only across an ambiguous attempt, so a retry addresses the same
+  /// deterministic document instead of stocking the shelf twice.
+  String? _categoryRequestId;
+  String? _productRequestId;
+
+  @override
+  void dispose() {
+    _categoryName.dispose();
+    _productName.dispose();
+    _productSku.dispose();
+    _productPrice.dispose();
+    super.dispose();
+  }
+
+  static String _sessionKey(TenantSession session) =>
+      '${session.uid}:${session.tenantId}:${session.epoch}';
+
+  /// Whether the session this work was authorized against is still selected.
+  bool _stillCurrent(String capturedKey) {
+    if (!mounted) return false;
+    final current = TenantSessionScope.of(context).session;
+    return current != null && _sessionKey(current) == capturedKey;
+  }
+
+  /// Restarts the guarded read from the first page, so what is listed is the
+  /// server's own catalog rather than what was just typed.
+  void _reload() {
+    setState(() {
+      _cursors = <String?>[null];
+      _pageIndex = 0;
+      _generation++;
+    });
+  }
+
+  void _nextPage(String? cursor) {
+    if (cursor == null) return;
+    setState(() {
+      _cursors = <String?>[..._cursors.take(_pageIndex + 1), cursor];
+      _pageIndex++;
+    });
+  }
+
+  void _previousPage() {
+    if (_pageIndex == 0) return;
+    setState(() => _pageIndex--);
+  }
+
+  String _newRequestId() =>
+      (widget.requestIdFactory ?? secureTenantCatalogRequestId)();
+
+  TenantCatalogManagementRepository _repository(TenantSession session) =>
+      TenantCatalogManagementRepository(
+        session: session,
+        reader: widget.reader,
+      );
+
+  Future<void> _addCategory(TenantSession session) async {
+    final writer = widget.writer;
+    if (writer == null || _busy) return;
+    final capturedKey = _sessionKey(session);
+
+    // The intent is built before anything is confirmed, so a name this boundary
+    // would refuse is reported instead of being asked about.
+    final TenantCategoryCreateIntent intent;
+    try {
+      intent = _repository(session).buildCategoryIntent(
+        name: _categoryName.text,
+        requestId: _categoryRequestId ??= _newRequestId(),
+      );
+    } on TenantCatalogManagementException catch (error) {
+      _categoryRequestId = null;
+      setState(() => _notice = _refusalNotice(error.code));
+      return;
+    }
+    if (!await _confirmed(
+          title: 'Add the category "${intent.name}"?',
+          body:
+              'A category groups products in the catalog and filters them at '
+              'the till. Every product names one, so this is what a new product '
+              'can be filed under. It cannot be renamed or removed from here.',
+          action: 'Add category',
+        ) ||
+        !_stillCurrent(capturedKey)) {
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _notice = null;
+    });
+    try {
+      final result = await writer.createCategory(intent);
+      if (!_stillCurrent(capturedKey)) return;
+      // Only an unknown outcome may have landed, so only it keeps the request
+      // ID. A rejected or unattempted write left nothing behind, and reusing
+      // its ID would deny an edited retry as a replay.
+      if (result.kind != TenantCatalogWriteKind.ambiguous) {
+        _categoryRequestId = null;
+      }
+      setState(() => _notice = _categoryNotice(result));
+      if (result.kind != TenantCatalogWriteKind.rejected) _reload();
+      if (result.kind == TenantCatalogWriteKind.committed) {
+        _categoryName.clear();
+        widget.onChanged?.call();
+      }
+    } on TenantCatalogManagementException catch (error) {
+      if (!_stillCurrent(capturedKey)) return;
+      setState(() => _notice = _refusalNotice(error.code));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addProduct(TenantSession session, _CatalogView view) async {
+    final writer = widget.writer;
+    if (writer == null || _busy) return;
+    final capturedKey = _sessionKey(session);
+
+    final TenantProductCreateIntent intent;
+    try {
+      intent = _repository(session).buildProductIntent(
+        name: _productName.text,
+        sku: _productSku.text,
+        price: _productPrice.text,
+        categoryId: _selectedCategoryId ?? '',
+        categories: view.categories.items,
+        requestId: _productRequestId ??= _newRequestId(),
+      );
+    } on TenantCatalogManagementException catch (error) {
+      _productRequestId = null;
+      setState(() => _notice = _refusalNotice(error.code));
+      return;
+    }
+    if (!await _confirmed(
+          title: 'Add "${intent.name}" to the catalog?',
+          body:
+              '${intent.name} is filed under ${intent.categoryName}, scanned as '
+              '${intent.sku}, and priced at ${_money(intent.priceMinor)} in the '
+              'currency this business publishes. It is added holding no stock: '
+              'record the opening quantity from the product itself, so the '
+              'ledger says where those units came from.\n\n'
+              'Nothing in this app can change a name, a code, or a price '
+              'afterwards. Nothing makes a code unique either - if another '
+              'product already scans as ${intent.sku}, the till will refuse '
+              'that scan rather than pick one.',
+          action: 'Add product',
+        ) ||
+        !_stillCurrent(capturedKey)) {
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _notice = null;
+    });
+    try {
+      final result = await writer.createProduct(intent);
+      if (!_stillCurrent(capturedKey)) return;
+      if (result.kind != TenantCatalogWriteKind.ambiguous) {
+        _productRequestId = null;
+      }
+      setState(() => _notice = _productNotice(result));
+      if (result.kind != TenantCatalogWriteKind.rejected) _reload();
+      if (result.kind == TenantCatalogWriteKind.committed) {
+        _clearProductForm();
+        widget.onChanged?.call();
+      }
+    } on TenantCatalogManagementException catch (error) {
+      if (!_stillCurrent(capturedKey)) return;
+      setState(() => _notice = _refusalNotice(error.code));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _retire(TenantSession session, TenantProduct product) async {
+    final writer = widget.writer;
+    if (writer == null || _busy) return;
+    final capturedKey = _sessionKey(session);
+
+    final TenantProductRetireIntent intent;
+    try {
+      intent = _repository(session).buildRetireIntent(product);
+    } on TenantCatalogManagementException catch (error) {
+      setState(() => _notice = _refusalNotice(error.code));
+      return;
+    }
+    if (!await _confirmed(
+          title: 'Retire "${intent.name}"?',
+          body:
+              'It stops appearing in the catalog and at the till. Everything '
+              'already recorded keeps naming it: its stock ledger, every past '
+              'sale line, and every reported figure. Nothing is undone and no '
+              'money changes.\n\n'
+              'It still holds ${intent.quantity} in stock. Retiring moves that '
+              'nowhere and records no movement for it.\n\n'
+              'This is not how a mistake is corrected. A replacement product '
+              'gets its own identity, and this one keeps its whole history, so '
+              'adding one back does not repair a wrong name, code, or price.',
+          action: 'Retire product',
+          destructive: true,
+        ) ||
+        !_stillCurrent(capturedKey)) {
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _notice = null;
+    });
+    try {
+      final result = await writer.retireProduct(intent);
+      if (!_stillCurrent(capturedKey)) return;
+      setState(() => _notice = _retireNotice(result, intent));
+      if (result.kind != TenantCatalogWriteKind.rejected) _reload();
+      if (result.kind == TenantCatalogWriteKind.committed) {
+        widget.onChanged?.call();
+      }
+    } on TenantCatalogManagementException catch (error) {
+      if (!_stillCurrent(capturedKey)) return;
+      setState(() => _notice = _refusalNotice(error.code));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _clearProductForm() {
+    _productName.clear();
+    _productSku.clear();
+    _productPrice.clear();
+    _selectedCategoryId = null;
+  }
+
+  Future<bool> _confirmed({
+    required String title,
+    required String body,
+    required String action,
+    bool destructive = false,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(child: Text(body)),
+        actions: [
+          TextButton(
+            key: const ValueKey('catalog-management-cancel'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('catalog-management-confirm'),
+            style: destructive
+                ? FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  )
+                : null,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true && mounted;
+  }
+
+  /// One loader per guard key, cached so a `setState` for the busy flag or a
+  /// notice does not restart the read.
+  TenantGuardedLoader<_CatalogView> _loaderFor(String key) {
+    if (key == _loaderKey && _loader != null) return _loader!;
+    _loaderKey = key;
+    final cursor = _cursors[_pageIndex];
+    return _loader = (session) async {
+      final repository = TenantCatalogRepository(
+        session: session,
+        reader: widget.reader,
+      );
+      final categories = await repository.loadCategories(
+        pageSize: widget.categoryPageSize,
+      );
+      final products = await repository.loadProducts(
+        pageSize: widget.pageSize,
+        cursor: cursor,
+      );
+      return _CatalogView(categories: categories, products: products);
+    };
+  }
+
+  String? _loaderKey;
+  TenantGuardedLoader<_CatalogView>? _loader;
+
+  @override
+  Widget build(BuildContext context) {
+    final guardKey = 'catalog-management:$_generation:$_pageIndex';
+    return TenantRouteGuard<_CatalogView>(
+      key: ValueKey(guardKey),
+      allowedRoles: TenantCatalogManagementRepository.allowedRoles,
+      load: _loaderFor(guardKey),
+      denied: const Center(
+        key: ValueKey('catalog-management-denied'),
+        child: Text(
+          'Only an owner, administrator, or manager may change the catalog.',
+        ),
+      ),
+      failure: (context, error) => const Center(
+        key: ValueKey('catalog-management-failure'),
+        child: Text('The catalog could not be read.'),
+      ),
+      builder: (context, session, view) => _CatalogManagementContents(
+        view: view,
+        busy: _busy,
+        notice: _notice,
+        canWrite: widget.writer != null,
+        // Taken from the guarded session, never from the caller, so the action
+        // disappears the moment the session stops allowing it.
+        canRetire: TenantCatalogManagementRepository.canRetireInSession(
+          session,
+        ),
+        categoryName: _categoryName,
+        productName: _productName,
+        productSku: _productSku,
+        productPrice: _productPrice,
+        selectedCategoryId: _selectedCategoryId,
+        pageIndex: _pageIndex,
+        onCategorySelected: (categoryId) =>
+            setState(() => _selectedCategoryId = categoryId),
+        onFormChanged: () => setState(() {}),
+        onAddCategory: () => _addCategory(session),
+        onAddProduct: () => _addProduct(session, view),
+        onRetire: (product) => _retire(session, product),
+        onNextPage: () => _nextPage(view.products.nextCursor),
+        onPreviousPage: _previousPage,
+      ),
+    );
+  }
+}
+
+/// One guarded read of everything this route renders.
+final class _CatalogView {
+  const _CatalogView({required this.categories, required this.products});
+
+  final TenantCatalogPage<TenantCategory> categories;
+  final TenantCatalogPage<TenantProduct> products;
+}
+
+final class _CatalogManagementContents extends StatelessWidget {
+  const _CatalogManagementContents({
+    required this.view,
+    required this.busy,
+    required this.notice,
+    required this.canWrite,
+    required this.canRetire,
+    required this.categoryName,
+    required this.productName,
+    required this.productSku,
+    required this.productPrice,
+    required this.selectedCategoryId,
+    required this.pageIndex,
+    required this.onCategorySelected,
+    required this.onFormChanged,
+    required this.onAddCategory,
+    required this.onAddProduct,
+    required this.onRetire,
+    required this.onNextPage,
+    required this.onPreviousPage,
+  });
+
+  final _CatalogView view;
+  final bool busy;
+  final String? notice;
+  final bool canWrite;
+  final bool canRetire;
+  final TextEditingController categoryName;
+  final TextEditingController productName;
+  final TextEditingController productSku;
+  final TextEditingController productPrice;
+  final String? selectedCategoryId;
+  final int pageIndex;
+  final ValueChanged<String> onCategorySelected;
+  final VoidCallback onFormChanged;
+  final VoidCallback onAddCategory;
+  final VoidCallback onAddProduct;
+  final ValueChanged<TenantProduct> onRetire;
+  final VoidCallback onNextPage;
+  final VoidCallback onPreviousPage;
+
+  /// The category chosen, if it is still one the current page offers. A reload
+  /// can drop it, and filing a product under a grouping this surface no longer
+  /// shows would be refused later rather than here.
+  String? get _selected {
+    for (final category in view.categories.items) {
+      if (category.id == selectedCategoryId) return category.id;
+    }
+    return null;
+  }
+
+  bool get _canSubmitProduct =>
+      canWrite &&
+      !busy &&
+      _selected != null &&
+      productName.text.trim().isNotEmpty &&
+      productSku.text.trim().isNotEmpty &&
+      productPrice.text.trim().isNotEmpty;
+
+  bool get _canSubmitCategory =>
+      canWrite && !busy && categoryName.text.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final categoryNames = <String, String>{
+      for (final category in view.categories.items) category.id: category.name,
+    };
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text('Catalog', style: text.titleMedium),
+        const SizedBox(height: 4),
+        const Text(
+          key: ValueKey('catalog-management-scope'),
+          'A product added here can be sold, counted, returned, and reported '
+          'on immediately. Its name, code, and price are permanent: nothing in '
+          'this app can correct them afterwards, and retiring it does not undo '
+          'anything already recorded.',
+        ),
+        if (!canWrite) ...[
+          const SizedBox(height: 12),
+          const Text(
+            key: ValueKey('catalog-management-read-only'),
+            'This build cannot change the catalog from here.',
+          ),
+        ],
+        if (notice case final notice?) ...[
+          const SizedBox(height: 16),
+          Text(key: const ValueKey('catalog-management-notice'), notice),
+        ],
+        const SizedBox(height: 24),
+        Text('Categories', style: text.titleMedium),
+        const SizedBox(height: 8),
+        if (view.categories.items.isEmpty)
+          const Text(
+            key: ValueKey('catalog-management-no-categories'),
+            'This business has no categories yet. Every product is filed under '
+            'one, so the first category comes before the first product.',
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final category in view.categories.items)
+                ChoiceChip(
+                  key: ValueKey('catalog-management-category-${category.id}'),
+                  label: Text(category.name),
+                  selected: category.id == _selected,
+                  onSelected: canWrite && !busy
+                      ? (_) => onCategorySelected(category.id)
+                      : null,
+                ),
+            ],
+          ),
+        if (view.categories.hasMore)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              key: ValueKey('catalog-management-more-categories'),
+              'More categories exist than are shown here. A product can only be '
+              'filed under one of the categories above.',
+            ),
+          ),
+        if (canWrite) ...[
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('catalog-management-category-name'),
+            controller: categoryName,
+            enabled: !busy,
+            maxLength: maximumCatalogNameLength,
+            onChanged: (_) => onFormChanged(),
+            decoration: const InputDecoration(
+              labelText: 'New category name',
+              helperText: 'Such as Bakery, Drinks, or Household.',
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const ValueKey('catalog-management-add-category'),
+            onPressed: _canSubmitCategory ? onAddCategory : null,
+            icon: const Icon(Icons.new_label_outlined),
+            label: const Text('Add category'),
+          ),
+        ],
+        const SizedBox(height: 28),
+        Text('Add a product', style: text.titleMedium),
+        const SizedBox(height: 8),
+        if (!canWrite)
+          const Text(
+            key: ValueKey('catalog-management-product-read-only'),
+            'Products cannot be added from this build.',
+          )
+        else ...[
+          TextField(
+            key: const ValueKey('catalog-management-product-name'),
+            controller: productName,
+            enabled: !busy,
+            maxLength: maximumCatalogNameLength,
+            onChanged: (_) => onFormChanged(),
+            decoration: const InputDecoration(labelText: 'Product name'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const ValueKey('catalog-management-product-sku'),
+            controller: productSku,
+            enabled: !busy,
+            maxLength: maximumCatalogSkuLength,
+            onChanged: (_) => onFormChanged(),
+            decoration: const InputDecoration(
+              labelText: 'Code (SKU or barcode)',
+              helperText: 'What the till matches a scan against. No spaces.',
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const ValueKey('catalog-management-product-price'),
+            controller: productPrice,
+            enabled: !busy,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => onFormChanged(),
+            decoration: const InputDecoration(
+              labelText: 'Unit price',
+              helperText:
+                  'At most two decimal places, in the currency this business '
+                  'publishes. A price this app cannot record exactly is '
+                  'refused here rather than at the till.',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            key: const ValueKey('catalog-management-selected-category'),
+            _selected == null
+                ? view.categories.items.isEmpty
+                      ? 'Add a category before adding a product.'
+                      : 'Choose the category this product is filed under.'
+                : 'Filed under ${categoryNames[_selected] ?? _selected}.',
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            key: const ValueKey('catalog-management-add-product'),
+            onPressed: _canSubmitProduct ? onAddProduct : null,
+            icon: const Icon(Icons.add_box_outlined),
+            label: const Text('Add product'),
+          ),
+        ],
+        const SizedBox(height: 28),
+        Text('Products', style: text.titleMedium),
+        const SizedBox(height: 8),
+        if (view.products.items.isEmpty)
+          const Text(
+            key: ValueKey('catalog-management-no-products'),
+            'No products on this page.',
+          )
+        else
+          for (final product in view.products.items)
+            Card(
+              child: ListTile(
+                key: ValueKey('catalog-management-product-${product.id}'),
+                title: Text(product.name),
+                subtitle: Text(
+                  '${categoryNames[product.categoryId] ?? product.categoryId} '
+                  '• ${product.sku} • ${product.quantity} in stock',
+                ),
+                trailing: canRetire && canWrite
+                    ? TextButton(
+                        key: ValueKey(
+                          'catalog-management-retire-${product.id}',
+                        ),
+                        onPressed: busy ? null : () => onRetire(product),
+                        child: const Text('Retire'),
+                      )
+                    : Text(product.price.toStringAsFixed(2)),
+              ),
+            ),
+        if (!canRetire) ...[
+          const SizedBox(height: 8),
+          const Text(
+            key: ValueKey('catalog-management-retire-unavailable'),
+            'Only an owner or administrator may retire a product.',
+          ),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              key: const ValueKey('catalog-management-previous-page'),
+              onPressed: pageIndex == 0 || busy ? null : onPreviousPage,
+              child: const Text('Previous'),
+            ),
+            Text(
+              key: const ValueKey('catalog-management-page'),
+              'Page ${pageIndex + 1}',
+            ),
+            TextButton(
+              key: const ValueKey('catalog-management-next-page'),
+              onPressed: view.products.hasMore && !busy ? onNextPage : null,
+              child: const Text('Next'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+String _categoryNotice(
+  TenantCatalogWriteResult result,
+) => switch (result.kind) {
+  TenantCatalogWriteKind.committed =>
+    'Category added. It can be chosen for a product straight away.',
+  TenantCatalogWriteKind.rejected =>
+    'The category was refused and nothing was written. Only an owner, '
+        'administrator, or manager may change the catalog.',
+  TenantCatalogWriteKind.ambiguous =>
+    'The result is unknown. The categories above have been re-read; if it is '
+        'not listed, add it again - the retry addresses the same document, so '
+        'it cannot be added twice.',
+  TenantCatalogWriteKind.unavailable =>
+    'This device is offline, so nothing was written. The catalog can only be '
+        'changed while online.',
+};
+
+String _productNotice(TenantCatalogWriteResult result) => switch (result.kind) {
+  TenantCatalogWriteKind.committed =>
+    'Product added, holding no stock. Record its opening quantity from the '
+        'product itself so the ledger says where those units came from. This '
+        'device re-reads the catalog on its next sync, and every other device '
+        'picks it up when it syncs.',
+  TenantCatalogWriteKind.rejected =>
+    'The product was refused and nothing was written. Only an owner, '
+        'administrator, or manager may change the catalog, and an entry that '
+        'already exists is never overwritten.',
+  TenantCatalogWriteKind.ambiguous =>
+    'The result is unknown. The catalog below has been re-read; if the product '
+        'is not listed, add it again - the retry addresses the same document, '
+        'so it cannot be stocked twice.',
+  TenantCatalogWriteKind.unavailable =>
+    'This device is offline, so nothing was written. The catalog can only be '
+        'changed while online.',
+};
+
+String _retireNotice(
+  TenantCatalogWriteResult result,
+  TenantProductRetireIntent intent,
+) => switch (result.kind) {
+  TenantCatalogWriteKind.committed =>
+    '${intent.name} is retired. Its stock ledger and every sale that already '
+        'named it are untouched.',
+  TenantCatalogWriteKind.rejected =>
+    'Nothing was retired. Only an owner or administrator may retire a product.',
+  TenantCatalogWriteKind.ambiguous =>
+    'The result is unknown. The catalog below has been re-read; if the product '
+        'is still listed, retire it again - retiring the same product twice '
+        'does nothing further.',
+  TenantCatalogWriteKind.unavailable =>
+    'This device is offline, so nothing was retired. The catalog can only be '
+        'changed while online.',
+};
+
+String _refusalNotice(String code) => switch (code) {
+  'invalid_category_name' =>
+    'Enter a category name of at most $maximumCatalogNameLength characters.',
+  'invalid_product_name' =>
+    'Enter a product name of at most $maximumCatalogNameLength characters.',
+  'invalid_sku' =>
+    'Enter a code of at most $maximumCatalogSkuLength characters, with no '
+        'spaces - it is what the till matches a scan against.',
+  'invalid_price' =>
+    'Enter a price as a plain amount with at most two decimal places, such as '
+        '65 or 19.99.',
+  'price_not_representable' =>
+    'That price is larger than a sale in this app can record. It is refused '
+        'here rather than at the till, where it would stop a customer.',
+  'unknown_category' =>
+    'Choose one of the categories shown above before adding the product.',
+  'catalog_forbidden' =>
+    'Only an owner, administrator, or manager may change the catalog.',
+  'retire_forbidden' => 'Only an owner or administrator may retire a product.',
+  _ => 'The catalog could not be changed.',
+};
+
+String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);

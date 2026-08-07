@@ -66,6 +66,24 @@ void main() {
       expect(changes, isEmpty);
     });
 
+    test('a changed catalog asks for the same full pass', () async {
+      final requests = <Object?>[];
+      final changes = <Object?>[];
+      signals.syncRequests.listen(requests.add);
+      signals.evidenceChanges.listen(changes.add);
+
+      signals.requestSyncAfterCatalogChange();
+      await pumpEventQueue();
+
+      // For the same reason: the catalog refresh is the only thing that
+      // re-reads `products` and `categories`, and a save-shaped request skips
+      // it - leaving this device unable to sell a product that now exists and
+      // still able to sell one that no longer does.
+      expect(requests, [null]);
+      expect(requests.single, isNot(isA<CheckoutSaveSyncRequest>()));
+      expect(changes, isEmpty);
+    });
+
     test('a finished run reports evidence without asking for another run', () async {
       final requests = <Object?>[];
       final changes = <Object?>[];
@@ -85,6 +103,7 @@ void main() {
       expect(signals.requestSyncAfterSave, returnsNormally);
       expect(signals.requestSyncAfterReconnect, returnsNormally);
       expect(signals.requestSyncAfterConfigurationChange, returnsNormally);
+      expect(signals.requestSyncAfterCatalogChange, returnsNormally);
       expect(signals.reportEvidenceChanged, returnsNormally);
     });
   });

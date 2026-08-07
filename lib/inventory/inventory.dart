@@ -1,3 +1,5 @@
+export 'catalog_management.dart';
+export 'catalog_management_panel.dart';
 export 'stock_actions.dart';
 export 'stock_adjustment.dart';
 export 'stock_adjustment_feed.dart';

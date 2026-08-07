@@ -144,19 +144,75 @@ void main() {
     await _pumpLanding(tester, panelHeight: 900);
     expect(find.byKey(const ValueKey('landing-more-below')), findsOne);
   });
+
+  testWidgets('catalog management is offered only when it was injected', (
+    tester,
+  ) async {
+    // The one surface that can put a product in the catalog. Like the till, it
+    // must never appear merely because the shell reached the landing route.
+    // Asserted for an owner, so it is the missing injection that hides it and
+    // not the role.
+    await _pumpLanding(tester, panelHeight: 120, role: TenantRole.owner);
+
+    expect(find.byKey(const ValueKey('manage-catalog')), findsNothing);
+  });
+
+  testWidgets('catalog management opens under the same session scope', (
+    tester,
+  ) async {
+    await _pumpLanding(
+      tester,
+      panelHeight: 120,
+      role: TenantRole.owner,
+      catalogManagementRoute: (_) => const Scaffold(body: Text('Catalog open')),
+      catalogManagementRoles: const <TenantRole>[
+        TenantRole.owner,
+        TenantRole.admin,
+        TenantRole.manager,
+      ],
+    );
+
+    await tester.tap(find.byKey(const ValueKey('manage-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Catalog open'), findsOne);
+  });
+
+  testWidgets('a cashier is not offered catalog management at all', (
+    tester,
+  ) async {
+    // The route guards itself, but a control a cashier can never use should not
+    // be on the screen a cashier lands on.
+    await _pumpLanding(
+      tester,
+      panelHeight: 120,
+      role: TenantRole.cashier,
+      catalogManagementRoute: (_) => const Scaffold(body: Text('Catalog open')),
+      catalogManagementRoles: const <TenantRole>[
+        TenantRole.owner,
+        TenantRole.admin,
+        TenantRole.manager,
+      ],
+    );
+
+    expect(find.byKey(const ValueKey('manage-catalog')), findsNothing);
+  });
 }
 
 Future<void> _pumpLanding(
   WidgetTester tester, {
   required double panelHeight,
   String tenantName = 'Chilltent Lounge',
+  TenantRole role = TenantRole.cashier,
+  Widget Function(TenantDataReader reader)? catalogManagementRoute,
+  List<TenantRole> catalogManagementRoles = const <TenantRole>[],
 }) async {
   tester.view.physicalSize = _phone;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  final membership = _membership(tenantName: tenantName);
+  final membership = _membership(tenantName: tenantName, role: role);
   final controller = TenantSessionController()
     ..open(uid: 'user-a', membership: membership);
   addTearDown(controller.dispose);
@@ -169,6 +225,8 @@ Future<void> _pumpLanding(
           membership: membership,
           reader: _EmptyReader(),
           onSignOut: () async {},
+          catalogManagementRoute: catalogManagementRoute,
+          catalogManagementRoles: catalogManagementRoles,
           // The slot the shift panel occupies on a real device. What the fold
           // depends on is the height of what is in it.
           shiftPanel: SizedBox(
@@ -196,19 +254,21 @@ final class _EmptyReader implements TenantDataReader {
   ) async => const <TenantQueryDocumentSnapshot>[];
 }
 
-TenantMembership _membership({String tenantName = 'Chilltent Lounge'}) =>
-    TenantMembership(
-      tenantId: 'tenant-a',
-      tenantName: tenantName,
-      tenantSlug: 'chilltent-lounge',
-      role: TenantRole.cashier,
-      membershipStatus: MembershipStatus.active,
-      tenantStatus: TenantStatus.active,
-      isOwner: false,
-      mirrorVersion: 1,
-      createdAt: DateTime.utc(2026, 8, 1),
-      updatedAt: DateTime.utc(2026, 8, 1),
-      serverCanAccess: true,
-      canonicalTenantExists: true,
-      canonicalMembershipExists: true,
-    );
+TenantMembership _membership({
+  String tenantName = 'Chilltent Lounge',
+  TenantRole role = TenantRole.cashier,
+}) => TenantMembership(
+  tenantId: 'tenant-a',
+  tenantName: tenantName,
+  tenantSlug: 'chilltent-lounge',
+  role: role,
+  membershipStatus: MembershipStatus.active,
+  tenantStatus: TenantStatus.active,
+  isOwner: role == TenantRole.owner,
+  mirrorVersion: 1,
+  createdAt: DateTime.utc(2026, 8, 1),
+  updatedAt: DateTime.utc(2026, 8, 1),
+  serverCanAccess: true,
+  canonicalTenantExists: true,
+  canonicalMembershipExists: true,
+);

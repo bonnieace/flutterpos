@@ -14452,3 +14452,221 @@ android/gradle.properties
 pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 ```
+
+---
+
+## A shop can stock itself - 2026-08-07
+
+### Why this chunk
+
+It was the queued one, and checking it against the board confirmed it rather than
+displacing it: **"Add or retire a product - No write path exists anywhere in the
+migrated code"** was the last red row that stops a business operating. Everything
+downstream of a product existing already worked - the till, stock, returns,
+receipt lookup, reporting, reconciliation - and nothing but
+`rules-tests/scripts/seed-dev-emulator.js` could put one there. No capability the
+app needs in order to function was found missing and unqueued ahead of it.
+
+Client-only, exactly as the previous chunk predicted from the rules:
+`allow create` on `products` is `hasTenantRole(['owner','admin','manager']) &&
+quantity is int`, `allow delete` is `hasTenantRole(['owner','admin'])`, and
+`categories` allows create, update, and delete to all three. No rule, callable,
+export, or index changed. The **edit** half stayed out, and is still the open
+decision it was opened as.
+
+### Completed behaviour
+
+**One route adds to and retires from the catalog.** `TenantCatalogManagementScreen`
+and `TenantCatalogManagementPanel` in `lib/inventory/`, reached from the safe landing
+screen as "Manage catalog", beside the read-only catalog because it is the same
+catalog seen by the person who may change it. The guard's role list is the
+**create** list - owner, administrator, manager - so a cashier is denied and issues
+no read at all. Retiring is decided separately, per render, from the guarded
+session, so an administrator sees the action and a manager does not.
+
+**Six safety decisions, each of which could have gone the other way:**
+
+1. **The create writes exactly the shape the strict read model demands.** The rule
+   checks only `quantity is int`, so nothing on the server stops a client writing a
+   product the till cannot parse - and one unparseable product makes the *whole*
+   cached catalog a miss, which stops the business selling.
+   `TenantProductCreateIntent` is therefore the only thing preventing it, and the
+   unit suite proves it by feeding `documentData()` straight back through
+   `TenantProduct.fromDocument` rather than by comparing it to a hand-written
+   expectation.
+2. **A price is proved through the till's own function.** The typed value is bounded
+   to a plain decimal amount with at most two places - two is all `unitPriceMinor`
+   holds - and the derived minor units are then round-tripped through
+   `checkoutMinorUnitsFromMajor`, the same function the cart and the draft service
+   use. The stored major-unit figure is derived from the minor units rather than
+   from what was typed, so the two can never disagree about what a line costs.
+   `1e3`, `0x10`, `-5`, `1.005`, and an amount past `maximumCheckoutMinorAmount` are
+   all refused where they are typed instead of at the till, where the refusal is
+   `price_not_representable` with a customer standing there.
+3. **A product is always created holding nothing.** The rule would accept any
+   integer. Stock that appears without a `stock_movements` entry has no recorded
+   origin, and `adjustStock` already carries an `opening_balance` type whose whole
+   purpose is to put the first units in and say where they came from - so the create
+   names `quantity: 0`, and both the confirmation and the success notice say to
+   record the opening quantity from the product itself.
+4. **Categories are part of the chunk, create-only.** A product needs a `categoryId`
+   and the till already reports products whose category a device does not hold, so a
+   surface that could add a product but not a category would not be usable. Renaming
+   and deleting a category are **not** offered even though the rule permits both:
+   deleting one orphans the `categoryId` on every product filed under it, and nothing
+   in this app repairs that. The rules test records what the rule allows, so the gap
+   between rule and surface is deliberate rather than forgotten.
+5. **Retiring says what survives it.** The confirmation states that the stock ledger,
+   every past sale line, and every reported figure keep naming the product; that it
+   still holds *n* in stock and retiring moves that nowhere and records no movement;
+   and - the part that matters - that this is **not** how a mistake is corrected,
+   because a replacement gets its own identity and this one keeps its whole history.
+   Retiring is not blocked on non-zero stock: that would invent a rule nothing else
+   in the app has, and the figure is stated instead.
+6. **The document ID is deterministic and scoped by request, not derived from the
+   SKU.** `pd_<40 hex of sha256("createTenantProduct tenantId createdBy requestId")>`,
+   and `ct_` for a category, mirroring `_deterministicReturnId` exactly. Two reasons a
+   SKU slug was refused: the ID is permanent - `stock_movements` hangs below it, every
+   sale line names it, `daily_metrics` aggregates by it - while a SKU is neither
+   unique (two products may legitimately carry one, which the till refuses to resolve)
+   nor correctable (no client rule and no callable can change it). Deriving the
+   permanent identity from the one field this app cannot fix would make a typo
+   permanent in the ledger key. The panel retains the request ID **only** across an
+   ambiguous outcome, so a retry addresses the same document and a genuinely new
+   product gets a new one.
+
+**A replay cannot stock the shelf twice, and the rules prove why.** A `set` onto a
+document that already exists is an *update*, and `allow update` on `products` permits
+nothing but a strictly decreasing quantity with
+`affectedKeys().hasOnly(['quantity','updatedAt'])`. So a replayed create is refused by
+the server rather than quietly rewriting a product that has already sold. That is the
+whole reason the deterministic ID is safe, and it is now asserted in
+`rules-tests/test/catalog-management.test.js` rather than assumed.
+
+**A committed change asks for a full sync pass.** `requestSyncAfterCatalogChange()`
+was added beside `requestSyncAfterConfigurationChange()` and emits the same
+unnarrowed reason: the catalog refresh is the only thing that re-reads `products` and
+`categories`, and a save-shaped request sets `refreshDerivedData: false`. Without it
+this device could not sell a product that now exists and could still sell one that no
+longer does.
+
+**The form lives above the guard.** Paging and reloading both replace the guarded
+subtree with the loading indicator - the standing `TenantRouteGuard` trap - so the
+four `TextEditingController`s and the selected category are owned by the panel state
+rather than by the guarded contents. A half-typed product survives a page change, and
+only a committed create clears it.
+
+**Products page.** The read-only catalog states "More products are available." and
+stops; a management surface that could not reach the twenty-first product could not
+retire it, so this one pages by document-ID cursor as the returns history does.
+
+### Deliberately not done
+
+- **No SKU uniqueness check.** Nothing on the server enforces one, the seed script
+  seeds a deliberate collision, and the till already refuses an ambiguous scan rather
+  than picking a product. A client-side check against the loaded page would be a
+  guarantee the next device breaks, so the confirmation *states* the hazard instead:
+  if another product already scans as that code, the till will refuse that scan.
+- **No currency on the confirmation.** The amount is shown as a plain figure and
+  labelled "in the currency this business publishes". Reading `configuration/checkout`
+  here would couple the inventory domain to the checkout domain for a label.
+- **Editing anything.** Still the open decision, and this chunk makes it sharper
+  rather than smaller: a catalog typed in by hand is where a wrong price comes from.
+
+### Files changed
+
+```text
+lib/inventory/catalog_management.dart              (new)
+lib/inventory/catalog_management_panel.dart        (new)
+lib/inventory/inventory.dart                       (two exports)
+lib/checkout/checkout_sync_signals.dart            (requestSyncAfterCatalogChange)
+lib/tenancy/tenant_routing_shell.dart              (route + roles, landing button)
+lib/main.dart                                      (composition root wiring)
+rules-tests/test/catalog-management.test.js        (new)
+rules-tests/package.json                           (suite entry + focused script)
+test/inventory/catalog_management_test.dart        (new)
+test/inventory/catalog_management_panel_test.dart  (new)
+test/tenancy/tenant_safe_landing_test.dart         (three landing cases)
+test/checkout/checkout_sync_signals_test.dart      (two signal assertions)
+PLAN.md HISTORY.md
+```
+
+### Tests
+
+Fifty-six Flutter tests added: 36 unit, 16 widget, three landing-route cases, and one
+signal case. Ten Firestore Rules cases added.
+
+```text
+flutter analyze --no-pub lib/inventory lib/main.dart lib/tenancy
+  lib/checkout/checkout_sync_signals.dart test/inventory
+  test/tenancy/tenant_safe_landing_test.dart
+  test/checkout/checkout_sync_signals_test.dart
+  -> 1 issue, the pre-existing experimental profilesSampleRate warning
+
+flutter test --no-pub --concurrency=1 --reporter=failures-only
+  -> 1346 passed (baseline 1290 + 56)
+
+npm --prefix rules-tests run test:emulator
+  -> 160 pass, 0 fail (baseline 150 + 10)
+
+npm --prefix functions test
+  -> 272 pass, 0 fail (unchanged; nothing in functions/ was touched)
+
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+  -> 12 pass, 0 fail
+```
+
+The reconciliation integration suite was **not** re-run. It needs more than ten
+minutes of wall clock, and this session changed no `functions/src`, no
+`firestore.rules`, and nothing the reconciliation workers read or write; its count is
+carried forward as 10. The full `flutter analyze --no-pub lib test` baseline of 476
+was not re-measured either - only the touched paths were analysed, and they carry
+none of it.
+
+**The intermittent seam failure did not occur in this session's single full run.**
+That is not evidence: three of the four runs recorded earlier on 2026-08-07 were
+green too.
+
+### Failures that cost a cycle
+
+None, in the sense of a wrong diagnosis. Two things were caught before they became
+one:
+
+- **`Iterable.firstOrNull` is `package:collection`, not `dart:core`.** Replaced with
+  an explicit loop before it was ever compiled, rather than adding a dependency to a
+  file that needs one lookup.
+- **A stray NUL byte reached a test fixture.** A literal control character was written
+  into the SKU refusal list; the test passed - a NUL *is* a refused control character -
+  but a raw NUL in source is not a fixture anybody can read. `sed` then made it worse:
+  GNU sed treats `\u` in a replacement as "uppercase the next character", so the
+  escape intended as a no-break space was eaten, twice. The value is now a literal
+  no-break space with a comment saying so, which is the case that actually matters:
+  a paste from a spreadsheet, which `trim` leaves alone in the middle of a value.
+
+### The formatter, again
+
+`dart format` was run on the four new files only. The three pre-existing files this
+chunk edited were checked against their own `HEAD` versions first: `lib/main.dart`
+and `test/checkout/checkout_sync_signals_test.dart` were **already** unformatted at
+`HEAD` - the formatter's complaints there are all pre-existing blocks, none of them
+this chunk's - so they were left alone.
+`test/tenancy/tenant_safe_landing_test.dart` was clean at `HEAD` and was formatted,
+and its whole diff is this chunk's own additions. The standing trap holds: do not
+format a whole file in this repository to land an addition to it.
+
+### The flaky seam test moved again
+
+Adding one signal assertion above the seam group moved the intermittent failure from
+`test/checkout/checkout_sync_signals_test.dart:352` to **line 371**. The baseline in
+`PLAN.md` was updated with it. Nothing about the intermittency was investigated or
+changed.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

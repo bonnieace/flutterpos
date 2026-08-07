@@ -18,7 +18,7 @@ made.
 | --- | --- | --- |
 | **Cloud Functions** | ~95% | 46 handlers, 272 unit tests. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. `subscription` has rules and no writer. |
-| **Flutter client** | ~80% | The sell-and-settle loop works, and a business can publish the currency it sells in. No catalog management, no printing, no subscription. |
+| **Flutter client** | ~85% | The sell-and-settle loop works, a business can publish the currency it sells in, and it can stock itself. No way to correct a product, no printing, no subscription. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -37,8 +37,8 @@ callable exists, and not green if it is merely tested.
 | Invite, edit, deactivate staff | 🟢 | "View staff directory" → typed gateways |
 | Open and close a shift | 🟢 | Shift panel on the landing route |
 | Ring up a sale | 🟢 | "New sale" → cart, tender, saved offline, submitted automatically |
-| **Add or retire a product** | 🔴 | **No write path exists anywhere in the migrated code.** Catalog is read-only; the seed script is the only way a product gets in. The rules already allow both writes — this is the next chunk |
-| Edit a product's price or name | 🔴 | No client rule and no callable permits it at all. See "How a price is corrected" |
+| Add or retire a product | 🟢 | "Manage catalog" on the landing route → add a category, add a product, retire one. Adding is owner/admin/manager; retiring is owner/admin |
+| **Edit a product's price or name** | 🔴 | **No client rule and no callable permits it at all.** See "How a price is corrected" — now the sharpest open decision, because a catalog typed in by hand is where a wrong price comes from |
 | Set the currency / checkout configuration | 🟢 | "Checkout settings" on the landing route → merges `configuration/checkout`, owner/admin only |
 | Adjust stock | 🟢 | Product stock route → `adjustStock` |
 | Record a return | 🟢 | From a sale, via receipt lookup or shift history |
@@ -53,15 +53,19 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
-**The bolded row is the gap that matters: a shop cannot stock itself.** Everything
-downstream of a product existing works, and nothing puts one there except
-`rules-tests/scripts/seed-dev-emulator.js`. This was never a decision — it was
-defaulted into, one bounded chunk at a time.
+**No red row now stops a business operating.** The two that did both closed on
+2026-08-07: a business publishes its own currency, which is what the till refuses to
+sell without, and it stocks its own catalog, which every surface downstream of a
+product already assumed. Neither needed a rule, a callable, or an export — the rules
+had permitted both writes all along, and nothing had ever called them.
 
-Its sibling closed on 2026-08-07: a business now publishes its own currency, which is
-what the till refuses to sell without. Adding and retiring a product need no rule or
-server change either, which is why they are the next chunk. **Editing** one does, and
-it is an open decision rather than a queued chunk.
+**The bolded row is what is left, and it is a decision rather than a chunk.** A
+product's name, code, and price are permanent once written: `allow update` on
+`products` permits only the checkout decrement, and no callable changes a descriptive
+field. That was tolerable while an operator seeded the catalog with a script and could
+fix a typo with the Admin SDK. It is less tolerable now that a manager types the
+catalog in by hand, which is the only thing this chunk changed about it. The three
+ways out are unchanged and still undecided — see "How a price is corrected".
 
 ### Rollout position
 
@@ -79,7 +83,7 @@ The fifteen frozen steps, with what is actually true:
 | 8 | Brevo delivery, webhook normalization, action pages | ⚠️ implemented, never exercised against live Brevo |
 | 9 | `TenantSession`, switching, shift restoration, epochs | ✅ |
 | 10 | Encrypted Hive cache, single-flight checkout, receipt counters | ✅ |
-| 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription; catalog management missing (checkout configuration writing landed 2026-08-07) |
+| 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription, and no way to *edit* a product; checkout configuration writing and catalog management both landed 2026-08-07 |
 | 12 | Emulator, multi-device, Windows-offline, email, adversarial tests | ⚠️ emulator suites green; no multi-device, no Windows-offline, no live email |
 | 13 | Deploy development, then staging | ❌ not started |
 | 14 | Enable App Check on validated platforms | ❌ not started; no `firebase_app_check` dependency |
@@ -89,29 +93,34 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1290** ⚠️ |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1346** ⚠️ |
 | Functions | `npm --prefix functions test` | **272** |
-| Rules | `npm --prefix rules-tests run test:emulator` | **150** |
+| Rules | `npm --prefix rules-tests run test:emulator` | **160** |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12** |
 
-**1734 tests across five suites.** `flutter test` takes no path list — the one
+**1800 tests across five suites.** `flutter test` takes no path list — the one
 uncompilable file that forced that workaround was deleted on 2026-08-07. Flutter,
 Functions, Rules, and the invitation integration suite were all re-measured on
 2026-08-07 at those figures. Reconciliation integration is the one count carried
-forward: it needs more than ten minutes of wall clock and the session that last
-touched these baselines changed nothing it reads or writes.
+forward: it needs more than ten minutes of wall clock and neither session that has
+touched these baselines changed anything it reads or writes.
 
-⚠️ **The Flutter suite is not reliably green.** Measured four times on 2026-08-07:
+⚠️ **The Flutter suite is not reliably green.** Measured five times on 2026-08-07:
 **1250 passed with 1 failed**, then **1251 passed**, then **1290 passed twice** once
-the configuration chunk added 39. The failure is the seam case at
-`test/checkout/checkout_sync_signals_test.dart:352` — it wires a real encrypted
+the configuration chunk added 39, then **1346 passed** once the catalog chunk added
+56. The failure is the seam case at
+`test/checkout/checkout_sync_signals_test.dart:371` — it wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator and asserts a
 saved sale ends `confirmed`; it observed `awaitingConfirmation`. The file passes
-**14/14** run alone, so it is order- or state-dependent rather than a regression.
+**15/15** run alone — 14/14 before this chunk added a signal case — so it is order-
+or state-dependent rather than a regression.
 The outbox serializes on a **static** per-box lock, which is the same mechanism that
 deadlocked this file once before, so that is the first place to look. Do not read a
-single green run as proof — three of the four runs above were green.
+single green run as proof — four of the five runs above were green.
+
+The line number moves whenever anything is added above the seam group; it was 333,
+then 352, and is 371 today. Find it by the assertion, not by the number.
 
 ---
 
@@ -190,6 +199,51 @@ The hazards are settled, not open:
    write idempotent by construction, so an unknown outcome is answered by
    re-reading and, if needed, publishing the same code again.
 
+### A shop stocks itself, and a retired product keeps its history
+
+Decided and implemented 2026-08-07, the same day and for the same reason as the
+currency above: the alternative was a business that cannot trade until an operator
+runs a script. "Manage catalog" on the landing route adds a category, adds a product,
+and retires one. Adding is owner, administrator, or manager; retiring is owner or
+administrator — exactly the two role sets the Firestore rules already named, so no
+rule, callable, or export changed.
+
+The hazards are settled, not open:
+
+1. **A product is written in exactly the shape the strict read model demands.** The
+   rule checks only `quantity is int`. One product the till cannot parse makes the
+   *whole* cached catalog a miss, so `TenantProductCreateIntent` is the only thing
+   standing between a typed form and a business that has stopped selling. The unit
+   suite proves it by decoding `documentData()` back through `TenantProduct`.
+2. **A price is proved through the till's own function.** Bounded to a plain decimal
+   with at most two places — two is all `unitPriceMinor` holds — then round-tripped
+   through `checkoutMinorUnitsFromMajor`, and the stored major-unit figure is derived
+   from the minor units rather than from what was typed. The till's
+   `price_not_representable` refusal therefore happens where the price is typed, not
+   with a customer standing there.
+3. **A product is always created holding nothing.** Stock with no `stock_movements`
+   entry has no recorded origin, and `adjustStock` already carries `opening_balance`
+   for exactly this, so the opening quantity is recorded through the route that
+   writes a ledger entry.
+4. **Retiring is not an undo, and says so.** The confirmation states that the stock
+   ledger, every past sale line, and every reported figure keep naming the product;
+   that it still holds *n* in stock and nothing moves it; and that a replacement gets
+   its own identity, so this is not how a wrong name, code, or price is fixed. It is
+   **not** blocked on non-zero stock — that would invent a rule nothing else has.
+5. **The document ID is deterministic and scoped by request, never a SKU slug.**
+   `pd_<40 hex of sha256("createTenantProduct tenantId createdBy requestId")>`,
+   mirroring `_deterministicReturnId`. The ID is permanent and the ledger hangs below
+   it, while a SKU is neither unique nor correctable; deriving one from the other
+   would make a typo permanent in the ledger key. A replay lands on the same document,
+   where `allow update` refuses it — which is what makes reusing the ID safe.
+6. **Category create only.** The rule permits rename and delete to the same three
+   roles; neither is offered, because deleting a category orphans the `categoryId` on
+   every product filed under it and nothing in this app repairs that.
+7. **SKU uniqueness is stated, not enforced.** Nothing on the server makes a SKU
+   unique, the seed script seeds a deliberate collision, and the till already refuses
+   an ambiguous scan. A client-side check against one loaded page would be a guarantee
+   the next device breaks, so the confirmation names the consequence instead.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -197,12 +251,17 @@ The hazards are settled, not open:
 | `requestPasswordReset` | **Blocked on App Check.** Still no caller — see below. |
 | Subscription | `TenantPaths.currentSubscription` and rules exist; **nothing reads it and nothing writes it**. `grep -i subscription functions/src` finds nothing at all, so there is no schema to model. Start on the server, not in Flutter. |
 | Product cost / profit | `profit` is parsed at `lib/reporting/daily_metrics.dart:64` and deliberately never displayed. No product carries a cost, so the server's profit equals its revenue; showing it would report a 100% margin. |
-| Catalog management | Not "unreachable" so much as unbuilt: there is no product create, update, or delete anywhere in the migrated client. Create and delete need no rule or server change; **update does** — see the next chunk. |
+| Category rename and delete | Permitted by `allow create, update, delete` on `categories` to owner/admin/manager, and offered to nobody. Deliberate, for the orphaning reason above; recorded here so the gap between rule and surface stays a decision. |
 
 Checkout configuration writing left this table on 2026-08-07. The route is
 `TenantCheckoutConfigurationScreen`, offered as "Checkout settings" to owner and
 administrator, and it merges `configuration/checkout` rather than replacing it so a
 setting a later build adds cannot be deleted by this one.
+
+Catalog management left it the same day, and took the "Catalog management" row with
+it. The route is `TenantCatalogManagementScreen`, offered as "Manage catalog", and it
+covers the create and delete halves only — **update** was never in this table, because
+no rule permits it at all.
 
 ---
 
@@ -235,27 +294,26 @@ the whole Hive offline design exists for. Three ways out, none obviously right:
 Until this is decided, a user who forgets their password has no in-app recovery on
 any platform.
 
-### Whether the app should be able to stock itself
+### ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
 
-Never stated as a decision, which is why it went unnoticed. Every operational
-surface downstream of a product works and nothing creates one. Either a guarded
-catalog-management vertical in the client, or a deliberate statement that a catalog
-is provisioned out-of-band and the seed script is the supported route.
-
-**Half of this was resolved on 2026-08-07, in the client's favour.** The identical
-question about `configuration/checkout` was answered by building the in-app route:
-a business publishes its own currency, because refusing it would have meant a
-business that cannot trade until an operator runs a script. The same reasoning
-applies to a product, so the next chunk creates one — a decision, now stated.
+**Resolved in the client's favour, in full.** The question was never stated as a
+decision, which is why it went unnoticed for so long: every operational surface
+downstream of a product worked and nothing created one. It was answered twice on the
+same day and the same way. First for `configuration/checkout` — a business publishes
+its own currency, because refusing it would have meant a business that cannot trade
+until an operator runs a script. Then for the catalog itself, on identical reasoning.
+Both are now standing decisions above; the seed script is a development convenience
+and not the supported route.
 
 ### How a price is corrected
 
-Opened 2026-08-07 by the chunk above, and genuinely undecided. Firestore rules let a
-client **create** a product (owner/admin/manager) and **delete** one (owner/admin),
-but `allow update` on `products/{productId}` permits only a strictly decreasing
-`quantity` with `affectedKeys().hasOnly(['quantity', 'updatedAt'])` — the checkout
-decrement, and nothing else. So no client can change a name, a price, a SKU, or a
-category, and no callable does either. Three ways out:
+Opened 2026-08-07 by the configuration chunk, and genuinely undecided. Firestore
+rules let a client **create** a product (owner/admin/manager) and **delete** one
+(owner/admin) — both of which the app now does — but `allow update` on
+`products/{productId}` permits only a strictly decreasing `quantity` with
+`affectedKeys().hasOnly(['quantity', 'updatedAt'])` — the checkout decrement, and
+nothing else. So no client can change a name, a price, a SKU, or a category, and no
+callable does either. Three ways out:
 
 1. **A callable.** `updateProduct({tenantId, productId, ...})` behind
    `requireTenantMember`, with an audit record and idempotency, exactly as
@@ -266,7 +324,10 @@ category, and no callable does either. Three ways out:
    outside every audit trail this app has.
 3. **Delete and re-create.** Reachable today with no change at all, and wrong: the
    product ID is what `stock_movements`, `daily_metrics`, and every past sale line
-   refer to, so re-creating a product under a new ID severs its whole ledger.
+   refer to, so re-creating a product under a new ID severs its whole ledger. It is
+   now reachable *in the app* rather than only through the Admin SDK, which is why
+   the retire confirmation says in as many words that this is not how a mistake is
+   corrected.
 
 Until this is decided, a mistyped price is corrected by an operator with the Admin
 SDK, and a catalog surface can create and retire products but not edit one.
@@ -637,6 +698,7 @@ Role boundaries, each decided deliberately rather than by default:
 | `daily_metrics`, `stock_adjustments`, `stock_movements`, `reconciliation_*`, `shift_amendments` | owner/admin/manager |
 | `audit_logs` | owner/admin, plus platform |
 | `configuration` | any active member — a till cannot price a sale without it. Writing is owner/admin, the one client-writable settings collection |
+| `products`, `categories` | any active member — a till cannot sell what it cannot read. Writing is client-reachable and split three ways: create is owner/admin/manager on both, delete is owner/admin on `products` and owner/admin/manager on `categories`, and **update on `products` is the checkout decrement and nothing else** |
 
 App Check built-in providers cover Apple, Android, and web. Windows relies on
 authentication, canonical authorization, rate limiting, and idempotency until a
@@ -721,6 +783,10 @@ enormous expected-denial traces.
   meaningless exit code — capture with `Out-String`, then filter.
 - **Do not rewrite a source file with PowerShell** unless the BOM is preserved; check
   `git diff` for a changed first line afterwards.
+- **GNU `sed` eats `\u` in a replacement** — it means "uppercase the next character",
+  not a Unicode escape, so a replacement carrying one loses it and still reports
+  success. Fix a source line with the editing tools instead, and check the result with
+  `cat -A` whenever the character in question is invisible.
 - **Do not run `dart format` over a whole existing file.** The repository is not
   formatted with this SDK's line-breaking, so formatting a file to land a small
   addition rewrites unrelated blocks — it turned one 19-line test addition into a
@@ -750,78 +816,58 @@ These local edits are user-owned, are not this work's, and must never be staged:
 android/gradle.properties
 pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
 ```
 
 ---
 
 ## Next bounded chunk
 
-**Let a shop stock itself: create and retire a product.** The last red row that
-stops a business operating. It is a client-only chunk — `products` already carries
-`allow create: if hasTenantRole(['owner','admin','manager']) && quantity is int` and
-`allow delete: if hasTenantRole(['owner','admin'])`, so no rule, callable, or export
-changes, exactly as the configuration chunk before it. Follow that chunk's shape:
-a validated intent only a guarded repository can build, a narrow writer with the
-committed/rejected/ambiguous/unavailable split, and a route injected from
-`main.dart` into the landing screen.
+**Cover `registerSaleReceipt`'s own defences.** Carried forward through three
+handovers now, and it stays queued because nothing on the status board outranks it:
+no red row stops a business operating any more, and the one that remains — editing a
+product — is an open decision rather than a chunk. This one needs no decision at all.
 
-Five things it must get right:
+It is the entry point every reconciliation job comes from — one Firestore trigger per
+sale — and it already runs against the in-memory Firestore double, but only down its
+simplest path. Each branch below is one it takes on real data and none is asserted
+anywhere. **Do not add `collectionGroup`, `in`, or `<=` to the double for it; none of
+these needs them.**
 
-1. **The create must write exactly the shape the strict read model demands.** The
-   rule checks only `quantity is int`, so nothing on the server stops a client
-   writing a product the till cannot parse. `TenantProduct` requires `name`, `SKU`,
-   `price`, `quantity`, and `categoryId`; a product missing one is refused by the
-   cache read, which reports the **whole snapshot** as a miss — one malformed
-   product would stop the business selling.
-2. **A price must convert to exact minor units.** The till refuses a line with
-   `price_not_representable` rather than rounding, so a price this app cannot record
-   exactly must be refused where it is typed, not at the till.
-3. **A category is part of this chunk.** `categories` is client-writable to
-   owner/admin/manager, a product needs a `categoryId`, and the cart already reports
-   products whose category this device does not hold. Creating a product with no
-   category to choose is not a usable surface.
-4. **A delete is not an undo.** The per-product `stock_movements` ledger outlives
-   its product — that is what `TenantProductLedgerScreen` exists for — and every past
-   sale line still names the ID. So "retire" must say what survives, and must never
-   be offered as a way to correct a mistake, which is the open decision above.
-5. **The document ID.** `validateTenantDocumentId` bounds it; whether it is a
-   generated ID or a slug of the SKU is a decision this chunk makes and records,
-   because it is permanent and the ledger is keyed by it.
+1. **The receipt is the idempotency key.** A redelivered `onDocumentCreated` must
+   return the first delivery's task and invalid-line count without writing a second
+   movement or double-counting the dirty day; a receipt whose `tenantId`,
+   `businessDate`, or `jobId` disagrees with the retry must throw `already-exists`.
+2. **`saleMovements` combines lines per product and rejects the rest.** Two lines
+   of one product become one movement with `lineCount: 2`; a non-object line, a
+   missing or over-long or slash-bearing `productId`, a non-integer or
+   non-positive quantity, and an unsafe integer sum each count as invalid. `items`
+   that is not an array is one invalid line; anything past the hundredth is counted
+   and dropped.
+3. **Invalid lines write a `reconciliation_anomalies` document**, only when there
+   is at least one, and increment the dirty day's `invalidLineCount` by the same
+   figure — the only place a malformed sale is visible to an operator.
+4. **A bucket belonging to another source throws.** `dirty_<bucket>` is a
+   predictable ID, so a job created there by anything but the sale trigger must be
+   refused.
+5. The movement document ID switches to a hash past 120 characters of sale ID —
+   the branch that keeps a Firestore path legal.
+
+**Explicitly excluded from it:** anything in `lib/`, any change to
+`firestore.rules`, any new export, and the two `jobs.ts` gaps below. It is a
+`functions/test` chunk and nothing else.
 
 ### Then, in preference order
 
-- **Cover `registerSaleReceipt`'s own defences.** Carried forward unchanged from the
-  previous handover, and still needs no decision. It is the entry point every
-  reconciliation job comes from — one Firestore trigger per sale — and it already
-  runs against the in-memory Firestore double, but only down its simplest path. Each
-  branch below is one it takes on real data and none is asserted anywhere.
-  **Do not add `collectionGroup`, `in`, or `<=` to the double for it; none of these
-  needs them.**
-  1. **The receipt is the idempotency key.** A redelivered `onDocumentCreated` must
-     return the first delivery's task and invalid-line count without writing a second
-     movement or double-counting the dirty day; a receipt whose `tenantId`,
-     `businessDate`, or `jobId` disagrees with the retry must throw `already-exists`.
-  2. **`saleMovements` combines lines per product and rejects the rest.** Two lines
-     of one product become one movement with `lineCount: 2`; a non-object line, a
-     missing or over-long or slash-bearing `productId`, a non-integer or
-     non-positive quantity, and an unsafe integer sum each count as invalid. `items`
-     that is not an array is one invalid line; anything past the hundredth is counted
-     and dropped.
-  3. **Invalid lines write a `reconciliation_anomalies` document**, only when there
-     is at least one, and increment the dirty day's `invalidLineCount` by the same
-     figure — the only place a malformed sale is visible to an operator.
-  4. **A bucket belonging to another source throws.** `dirty_<bucket>` is a
-     predictable ID, so a job created there by anything but the sale trigger must be
-     refused.
-  5. The movement document ID switches to a hash past 120 characters of sale ID —
-     the branch that keeps a Firestore path legal.
-- **Run the app against the emulators**, looking at the reconciliation and stock
-  surfaces. Queued five times and the oldest behavioural item: neither the
+- **Run the app against the emulators**, looking at the catalog, reconciliation, and
+  stock surfaces. Queued six times and the oldest behavioural item: neither the
   deleted-product ledger nor the run route has been seen outside a widget test. A
   seeded emulator set may still be held open — check before starting a new one.
   **This needs a decision first:** whether the Android exclusion is lifted, because
-  a Windows or web run exercises only the loopback path. Ask. It is also now the only
-  way to see the "Checkout settings" route reach a real Firestore rule.
+  a Windows or web run exercises only the loopback path. Ask. It is also the only way
+  to see "Checkout settings" and "Manage catalog" reach a real Firestore rule — and
+  the catalog route is the one that would make the emulator seed script optional,
+  which is worth watching once.
 - **Chase the one intermittent Flutter failure** recorded in the baselines above.
 - **`ensureSweep` and `processTenantDiscoveryPage`** are the last two reachable
   uncovered exports in `jobs.ts` — the 50-tenant page boundary, monthly shard-day
@@ -839,19 +885,29 @@ stock and sale differences, currency labels on the differences list, the subscri
 surfaces, receipt printing and the printed receipt body, discounts, camera barcode
 scanning, password reset (blocked on the App Check decision above), product
 cost/profit fields, editing a product's descriptive fields (the open decision above),
-a `platform_audit_logs` surface, branding surfaces, the Sentry DSN, the 476
+renaming or deleting a category, SKU uniqueness, bulk catalog import, a
+`platform_audit_logs` surface, branding surfaces, the Sentry DSN, the 476
 pre-existing analyzer issues, a root-widget smoke test and the startup seams it would
 need, and deployment.
 
-**Named once, as it has been inherited for many consecutive chunks: receipt
-printing.** It is still correctly excluded, and not only for cost. A sale is already
-durably identified without a printed body — `CT-A7F-20260729-0042` is allocated
-before the sale is saved, the cart offers "Copy receipt number", and "Find a receipt"
-resolves it — so nothing about the money is lost by not printing. It also cannot be
-proved by the test pyramid this repository runs: a printer is hardware, and the only
-honest verification is a device run, which is itself still excluded. It has **not**
-become blocking. The two exclusions that have moved from cosmetic to load-bearing are
-tracked as open decisions instead: password reset, and how a price is corrected.
+Three of those are new on 2026-08-07 and are consequences of the catalog chunk rather
+than inherited: **renaming or deleting a category** (it orphans the `categoryId` on
+every product filed under it), **SKU uniqueness** (nothing on the server enforces it
+and a client-side check would be a guarantee the next device breaks), and **bulk
+catalog import** (`BULK_UPLOAD_GUIDE.md` describes a pre-migration flow that reaches
+no code in `lib/`).
+
+**Named once, as it has been inherited for many consecutive chunks: the subscription
+surfaces.** Still correctly excluded, and for a reason that has not moved:
+`grep -i subscription functions/src` finds nothing at all. A Flutter surface built now
+would invent the schema, the lifecycle, and the billing states that the server will
+later have to agree with, which is the wrong order — this one starts on the server or
+not at all. It has **not** become blocking: nothing in the sell-and-settle loop reads
+it. Receipt printing, named the same way in the previous handover, is unchanged and
+still correctly excluded. The two exclusions that have moved from cosmetic to
+load-bearing are tracked as open decisions instead: password reset, and how a price is
+corrected — and this session made the second one sharper, because a catalog typed in
+by hand is where a wrong price comes from.
 
 ---
 

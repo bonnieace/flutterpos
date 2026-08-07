@@ -407,6 +407,25 @@ class SpiritPOSApp extends StatelessWidget {
             ),
         checkoutConfigurationRoles:
             TenantCheckoutConfigurationPublisher.allowedRoles,
+        // The only path in the app that puts a product in the catalog, and the
+        // last capability every other operational surface here already assumed.
+        // Both writes are direct Firestore writes, because the rules on
+        // `products` and `categories` already name exactly the roles this route
+        // is offered to: create is owner/admin/manager, delete is owner/admin.
+        //
+        // A committed change asks for a full sync pass, because the catalog
+        // refresh is the only thing that re-reads `products` and `categories`:
+        // without it this device could not sell a product that now exists, and
+        // could still sell one that no longer does.
+        catalogManagementRoute: (reader) => TenantCatalogManagementScreen(
+          reader: reader,
+          writer: FirebaseTenantCatalogWriter(
+            firestore: FirebaseFirestore.instance,
+            isOnline: isOnline,
+          ),
+          onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
+        ),
+        catalogManagementRoles: TenantCatalogManagementRepository.allowedRoles,
         pendingCheckoutPanel: CheckoutPendingEvidencePanel(
           source: CheckoutOutboxEvidenceSource(checkoutOutbox),
           // Without this the counts are read once when the session opens, so a

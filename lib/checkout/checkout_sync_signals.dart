@@ -59,6 +59,15 @@ final class CheckoutSyncSignals {
   /// sales with the currency it was published to replace.
   void requestSyncAfterConfigurationChange() => _add(_syncRequests, null);
 
+  /// The business added or retired something in its catalog, so what this
+  /// device caches is stale.
+  ///
+  /// The same full pass, for the same reason: the catalog refresh is the only
+  /// thing that re-reads `products` and `categories`, and until it runs the till
+  /// cannot sell a product that now exists and can still sell one that no longer
+  /// does.
+  void requestSyncAfterCatalogChange() => _add(_syncRequests, null);
+
   /// A sync run finished, so what it settled is now worth re-reading.
   void reportEvidenceChanged() => _add(_evidenceChanges, null);
 
