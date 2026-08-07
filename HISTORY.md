@@ -14913,3 +14913,206 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## The sweep that decides who is reconciled tonight - 2026-08-07
+
+### Completed in this session
+
+The chunk the previous handover queued, taken unchanged: **`ensureSweep` and
+`processTenantDiscoveryPage`**. It was checked against the status board first and
+kept. No red row stops a business operating, the sharpest one left - editing a
+product - is an open decision rather than a chunk, and this one needs no decision
+at all.
+
+Fourteen tests in one new file, and **no production change of any kind**.
+`functions/src/reconciliation/jobs.ts` is byte-identical to its committed state at
+the end of this session, and `git diff` over it is empty.
+
+With this, `jobs.ts` has unit coverage over every export except the two the previous
+handover already ruled out: `listRetryableReconciliationTasks`, which needs
+`collectionGroup`, `in`, and `<=` and is out of the double's reach, and
+`reconciliationJobDocument`, which is dead inside its own module. Neither was
+touched.
+
+### Why these two and not another
+
+`ensureSweep` is what all three schedulers in `handlers.ts` call - nightly at 05:30,
+weekly at 04:30 Sunday, staggered monthly at 04:45 - and `processTenantDiscoveryPage`
+is the paginator that turns one sweep into one deterministic reconciliation task per
+active tenant. Between them they are the only route by which a tenant nobody sold
+anything through today is reconciled at all. The sale trigger is the other route, and
+it was covered in the session before this one.
+
+The integration suite reaches both, but only down the path where every boundary in
+them is invisible: one tenant, one page, one kind. Seeding fifty-three tenants per
+assertion against a real Firestore is what the double exists to avoid.
+
+The new file is `sweep.test.ts` rather than more of `jobs.test.ts`, for the same
+reason `saleReceipt.test.ts` was: `jobs.test.ts` is the job lifecycle - who may
+claim, advance, finalize, and fail one - and this is what decides a job exists.
+
+### The four groups, and what each is protecting
+
+**1. The page boundary, in both directions.** `TENANT_DISCOVERY_PAGE_SIZE` is 50. A
+page that ends exactly on it must return a continuation and a page that ends short
+must not, and both halves are silent when wrong: a full page returning nothing
+strands every tenant after the fiftieth, unreconciled, under a sweep marked
+`completed`; a short page returning one enqueues a task that scans nothing forever.
+Both are asserted in one chain over fifty-three tenants, together with the page
+documents - `pages/00000000`, `pages/00000001` - which are zero-padded so a sweep's
+history sorts in the order it ran.
+
+The empty last page is asserted separately, because it is the shape a sweep whose
+tenant count is an exact multiple of fifty always ends on: no documents, so no `last`
+to take a cursor from, and `outputCursor: last?.id ?? payload.cursor ?? null` is what
+stops the completed record claiming it never got past the first tenant.
+
+**2. The monthly shard filter.** The staggered monthly schedule fires *daily* and
+reconciles a twenty-eighth of the estate each time. Without the filter it is a second
+nightly sweep, in `full` mode, over every tenant at once - the most expensive thing
+this pipeline can do. Three assertions: today's shard gets jobs and the rest of the
+month does not; the same fixture on a nightly sweep admits everybody, so the filter
+is monthly's alone; and a full page holding one eligible tenant still continues,
+because `hasMore` is decided by what the *query* returned and not by what the filter
+kept. That last one is not a detail - on a twenty-eight-way split, most pages of a
+monthly sweep are pages the filter almost empties.
+
+The fixture partitions tenant IDs by calling `monthlyShardDay` rather than hard-coding
+a digest, and asserts both halves non-empty so it cannot pass vacuously. The function
+is pinned separately in `model.test.ts`; here it is the oracle, not the subject.
+
+**3. Page idempotency.** Cloud Tasks is at-least-once and `enqueueDiscoveryTask`
+swallows `already-exists`, so one page running twice is ordinary. The second delivery
+must write nothing at all - and it does: the tenant jobs already exist and are read
+rather than rewritten, and the `pages/{page}` guard returns before the sweep update.
+The tasks *are* re-returned, which is safe only because `reconciliationTaskId` is a
+digest of tenant, job, generation, and revision, so the test asserts the two
+deliveries produce identical task IDs rather than assuming it.
+
+**4. Sweep identity.** `sweepRunId` is a digest of kind and local date, so two
+schedule firings for one date land on one document; the second re-enters it and does
+not drag a completed sweep back to `running` or reset a counter. The same
+predictability is what would let anything else occupy the ID, so a document there
+disagreeing about either kind or date throws `already-exists` rather than being
+adopted.
+
+Two more went in beside them, because both are reached only from here: which tenants
+are scanned at all - `status == "active"`, so `tenantsScanned` is active tenants and
+not tenants - and the shape `scheduledJobDefinition` gives a tenant's job, where
+monthly is the only `full` pass and the two checkpoint kinds are what a chain
+verification is keyed by. A tenant whose job for today is already running, completed,
+or quarantined is read and not redispatched; a failed one is resumed at the generation
+and revision the document holds rather than at zero.
+
+### Each of the four was checked by breaking it
+
+A test that passes is not evidence until it can fail. Four mutations were applied to
+`jobs.ts`, built, run, and reverted:
+
+```text
+hasMore from eligible.length instead of snapshot.size  -> 1 fail (the monthly full page)
+monthly shard filter disabled                          -> 2 fail
+pages/{page} guard removed                             -> 2 fail
+sweep identity check weakened to &&                    -> 1 fail
+```
+
+One result is worth keeping. The `hasMore` mutation is **not** caught by the
+fifty-three-tenant boundary test, because on a nightly sweep `eligible` and
+`snapshot.docs` are the same array. Only the monthly full-page test catches it. If a
+later session trims that test as redundant, the page-size source goes unguarded.
+
+`jobs.ts` was restored by reverting each edit exactly, and confirmed with
+`git diff --stat functions/src/reconciliation/jobs.ts` (empty) and a byte comparison
+against a copy taken before the first mutation and held in the session scratchpad. It
+was never reverted with `git checkout --`, per the standing trap.
+
+### What the tests found
+
+**A page creates its tenant jobs before it records itself.** If the sweep document
+has disappeared under a live page, the transaction throws `not-found` - after
+`ensureScheduledTenantJob` has already created that page's tenant jobs. The test
+asserts the honest outcome rather than a tidy one: the throw is what the queue
+retries on, the orphaned jobs are queued and valid, and the retry resumes them at the
+generation they hold rather than duplicating them, because the job ID is a digest of
+kind and date. Nothing is lost; it is just not the order the code reads as having.
+
+**`tenantsEligible` is never initialized.** `ensureSweep` writes `pagesProcessed`,
+`tenantsScanned`, and `tenantJobsCreated` at zero and not `tenantsEligible`; the page
+transaction increments it into existence. That is correct - Firestore sets a missing
+field to the operand rather than treating it as zero - but a sweep read between
+opening and its first page reports three counters and not the fourth. Recorded, not
+changed: this chunk excludes `jobs.ts`.
+
+### Files changed
+
+```text
+functions/src/reconciliation/sweep.test.ts   (new, 14 tests)
+PLAN.md HISTORY.md
+```
+
+Nothing under `lib/`, nothing in `firestore.rules`, no new export, and no change to
+`functions/src/reconciliation/jobs.ts`.
+
+### Tests
+
+```text
+npm --prefix functions test
+  -> 301 pass, 0 fail (baseline 287 + 14)
+
+flutter test --no-pub --concurrency=1 --reporter=failures-only
+  -> 1346 pass, 0 fail
+
+npm --prefix rules-tests run test:emulator
+  -> 160 pass, 0 fail
+
+npm --prefix rules-tests run test:emulator:reconciliation
+  -> 10 pass, 0 fail  (1 min 32 s inside the tests)
+
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+  -> 12 pass, 0 fail
+```
+
+Android build and Android emulator tests are excluded for now, as instructed.
+
+All five suites were run even though this chunk touches only `functions/`, because
+three of the five counts in `PLAN.md` were last measured two chunks ago and a measured
+figure beats an inherited one. Three were unchanged. The Flutter one is the
+interesting measurement: **1346 pass, green**, which is the sixth run of that suite on
+2026-08-07 and the fifth green one. No Dart file changed, so the count could not have
+moved; what this run says is only that the seam failure at
+`test/checkout/checkout_sync_signals_test.dart` did not reproduce again. It is now
+1 failure in 6 runs and still unexplained.
+
+### The held emulator run was found again and left alone
+
+`scripts/seed-dev-emulator.js --hold` was still up on the dev ports with its
+`emulators:exec` parent and a Firestore JVM. Not touched. All three emulator suites
+above started, passed, and shut down their own emulators beside it.
+
+### The Android question, narrowed rather than answered
+
+`PLAN.md` has asked for seven chunks whether the Android exclusion is lifted, because
+"run the app against the emulators" is only worth doing if the run exercises more than
+the loopback path. The standing session instructions still say to skip the Android
+build and Android emulator tests, so a run scheduled today is a Windows or web run.
+That is a narrowing, not an answer: it says what the run would be, not whether it is
+worth doing in that form. The question stays open and still needs a human.
+
+### Failures that cost a cycle
+
+None in the code. One drafting error, caught by review before it ran: the job-shape
+test built its expected `checkpointKey` from `LOCAL_DATE` while the loop beneath it
+ran on a shard-derived date, so the weekly ISO week key would have been the wrong
+week's. Fixed by deriving both from the same date.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

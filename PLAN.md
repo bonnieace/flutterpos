@@ -36,7 +36,7 @@ to guess.
 
 | Track | State | What is left |
 | --- | --- | --- |
-| **Cloud Functions** | ~95% | 46 handlers, 287 unit tests. No live Brevo, no deployment. |
+| **Cloud Functions** | ~95% | 46 handlers, 301 unit tests. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. `subscription` has rules and no writer. |
 | **Flutter client** | ~85% | The sell-and-settle loop works, a business can publish the currency it sells in, and it can stock itself. No way to correct a product, no printing, no subscription. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
@@ -73,10 +73,11 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
-**No row on this board moved on the second 2026-08-07 session.** That session added
-fifteen unit tests to the sale trigger and changed no production code, so every
-capability stands exactly where it did; the only figures that moved are the Functions
-baselines below.
+**No row on this board has moved since the catalog chunk.** Neither of the two
+2026-08-07 sessions after it touched a capability: one added fifteen unit tests to the
+sale trigger, the other fourteen to the scheduled sweep, and neither changed a line of
+production code. Every capability stands exactly where it did; the only figures that
+moved are the Functions baselines below.
 
 **No red row now stops a business operating.** The two that did both closed on
 2026-08-07: a business publishes its own currency, which is what the till refuses to
@@ -119,22 +120,22 @@ The fifteen frozen steps, with what is actually true:
 | Suite | Command | Count |
 | --- | --- | --- |
 | Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1346** ⚠️ |
-| Functions | `npm --prefix functions test` | **287** |
+| Functions | `npm --prefix functions test` | **301** |
 | Rules | `npm --prefix rules-tests run test:emulator` | **160** |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12** |
 
-**1815 tests across five suites.** `flutter test` takes no path list — the one
-uncompilable file that forced that workaround was deleted on 2026-08-07. Every one
-of the five was measured on 2026-08-07: Flutter, Rules, and the invitation
-integration suite in the catalog session; Functions at **287** and reconciliation
-integration at **10** in the session after it, which added the fifteen sale-trigger
-tests. No count is carried forward un-measured any more.
+**1829 tests across five suites.** `flutter test` takes no path list — the one
+uncompilable file that forced that workaround was deleted on 2026-08-07. **All five
+were measured together in the sweep session on 2026-08-07**, so no count here is
+inherited from another session, let alone carried forward un-measured. Only Functions
+moved, from 287 to 301.
 
-⚠️ **The Flutter suite is not reliably green.** Measured five times on 2026-08-07:
+⚠️ **The Flutter suite is not reliably green.** Measured six times on 2026-08-07:
 **1250 passed with 1 failed**, then **1251 passed**, then **1290 passed twice** once
 the configuration chunk added 39, then **1346 passed** once the catalog chunk added
-56. The failure is the seam case at
+56, then **1346 passed** again in the sweep session, which changed no Dart file at
+all. One failure in six runs. The failure is the seam case at
 `test/checkout/checkout_sync_signals_test.dart:371` — it wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator and asserts a
 saved sale ends `confirmed`; it observed `awaitingConfirmation`. The file passes
@@ -142,7 +143,7 @@ saved sale ends `confirmed`; it observed `awaitingConfirmation`. The file passes
 or state-dependent rather than a regression.
 The outbox serializes on a **static** per-box lock, which is the same mechanism that
 deadlocked this file once before, so that is the first place to look. Do not read a
-single green run as proof — four of the five runs above were green.
+single green run as proof — five of the six runs above were green.
 
 The line number moves whenever anything is added above the seam group; it was 333,
 then 352, and is 371 today. Find it by the assertion, not by the number.
@@ -356,6 +357,39 @@ callable does either. Three ways out:
 
 Until this is decided, a mistyped price is corrected by an operator with the Admin
 SDK, and a catalog surface can create and retire products but not edit one.
+
+### What a receipt is printed on
+
+Opened 2026-08-07 by the sweep session, and the reason is procedural: receipt
+printing had been a standing exclusion for many consecutive chunks, was named once in
+the previous handover as "the next capability chunk this list will run out of excuses
+for", and re-excluding it a second time without saying why would be exactly the silent
+inheritance this file forbids. It is no longer correctly excluded **as a capability**.
+It is still correctly excluded from a chunk, because it needs one thing decided first.
+
+Nothing in the live shell prints. `grep -rn printer lib/tenancy lib/checkout
+lib/operations` finds nothing at all; `thermal_printer_service.dart` and
+`Receipt_service.dart` are in the disabled legacy island, reached by nothing in
+`lib/main.dart`. Three dependencies are already in `pubspec.yaml` and none is used by
+live code: `printing`, `flutter_esc_pos_network`, `flutter_esc_pos_utils`. Three ways
+out, and they are not the same size:
+
+1. **The `printing` package's system dialog.** Renders a receipt as a PDF and hands it
+   to whatever printer the operating system knows about. Works on Windows with no
+   hardware decision and no printer-configuration surface, and is the only one of the
+   three that could move the board this month. It is also not what a thermal till
+   roll wants.
+2. **Networked ESC/POS**, through `flutter_esc_pos_network`. What the legacy island
+   aimed at, and what the hardware in a shop actually is. Needs a printer address to
+   be configured, stored, and reachable offline — so it needs a settings surface and a
+   place in the encrypted Hive state, which already reserves a `printer` slot.
+3. **Neither, yet — build the body alone.** A pure function from a recorded sale to
+   the printed lines, unit-tested, with no transport. Decision-free and useful under
+   either of the two above, but it lands straight in "built, tested, and unreachable",
+   which is a table this file tries to shrink.
+
+Until this is decided, a sale is recorded, found by receipt lookup, and returned
+without anything ever being printed, and "Print a receipt" stays red.
 
 ---
 
@@ -684,6 +718,21 @@ checkpoints at 04:30 Sunday retain expected and observed quantities separately;
 staggered monthly discovery at 04:45 validates the checkpoint chain, with a
 ten-minute recovery scheduler. **Reconciliation never silently changes stock.**
 
+**A sweep is one document per kind and local date, and its pages are counted once.**
+`sweepRunId` is a digest of both, so the retry a scheduler is configured for re-enters
+the same sweep instead of restarting it, and a document at that ID disagreeing about
+either throws `already-exists`. `TENANT_DISCOVERY_PAGE_SIZE` is 50 and the
+continuation is decided by what the query returned, **not** by what the monthly shard
+filter kept — on a twenty-eight-way split most monthly pages are nearly empty, and
+deciding it the other way would end the sweep at the first of them. A redelivered
+discovery task re-returns its tenant tasks and writes nothing, which is safe because
+the job and task IDs are digests. All of it is pinned by
+`functions/src/reconciliation/sweep.test.ts`, together with one asymmetry worth
+knowing: a page creates its tenant jobs **before** it records itself, so a sweep
+document that has disappeared under a live page throws `not-found` with that page's
+jobs already committed. They are queued, valid, and resumed rather than duplicated on
+the retry, for the same digest reason.
+
 **A sale is registered once, and `reconciliation_sale_receipts/{saleId}` is what
 says so.** The trigger is declared `retry: true`, so redelivery is its documented
 behaviour, not a hazard: the receipt is `create`d in the same transaction as the
@@ -876,58 +925,65 @@ prompt.md                                          (untracked)
 
 ## Next bounded chunk
 
-**Cover `ensureSweep` and `processTenantDiscoveryPage`.** They are the last two
-uncovered exports in `jobs.ts` that do anything — checked on 2026-08-07:
-`listRetryableReconciliationTasks` is out of the double's reach, and
-`reconciliationJobDocument` is a one-line reference accessor with **no caller
-anywhere in `functions/src`**, which is a deletion for some other chunk to make and
-not a test to write. They are queued for the same reason the
-sale trigger was: nothing on the status board outranks them, because no red row stops
-a business operating and the one that matters most — editing a product — is an open
-decision rather than a chunk. This one needs no decision either, and it is the same
-shape of work as the chunk just finished, against the same in-memory double.
+**Chase the one intermittent Flutter failure**, at
+`test/checkout/checkout_sync_signals_test.dart`. It is queued now rather than another
+`functions/test` chunk because that seam is finished: with the sweep chunk,
+`functions/src/reconciliation/jobs.ts` has unit coverage over every export except
+`listRetryableReconciliationTasks`, which needs `collectionGroup`, `in`, and `<=` and
+is out of the double's reach, and `reconciliationJobDocument`, which has **no caller
+anywhere in `functions/src`** and is a deletion for some other chunk to make. Adding
+those three operators to the double to reach one function is a larger and worse chunk
+than the one it would enable.
 
-`ensureSweep` is what a scheduler calls to start a nightly, weekly, or monthly run,
-and `processTenantDiscoveryPage` is the paginator that turns a sweep into one
-deterministic task per active tenant. Between them they decide whether a tenant is
-reconciled tonight at all, and neither has a unit assertion anywhere:
+It is also queued ahead of the capability work on purpose. The head of the capability
+queue is receipt printing, and printing is a **Flutter** chunk — validated by the one
+suite in this repository that is not reliably green. Fixing the suite first is what
+makes that chunk's result mean something.
 
-1. **The 50-tenant page boundary.** `TENANT_DISCOVERY_PAGE_SIZE` is 50: a page that
-   ends exactly on it must return a continuation, and one that ends short must not.
-2. **The monthly shard-day filter.** `monthlyShardDay` decides which tenants a
-   staggered monthly run touches, so a page must enqueue the tenants of today's shard
-   and skip the rest — the branch that keeps the monthly run from becoming a nightly.
-3. **Page-document idempotency.** `pages/{page}` is the guard: a redelivered
-   discovery task must not count its page into the sweep's counters twice. It does
-   re-return the page's tenant tasks, which is safe only because the job and task IDs
-   are deterministic — assert that, rather than assuming it. A sweep document that
-   has disappeared under a live page throws `not-found`.
-4. **Sweep identity.** `sweepRunId` is derived from kind and local date, so two
-   schedulers firing for one date land on one sweep; a document at that ID disagreeing
-   about either throws `already-exists` rather than being adopted.
+What is known, and it is not much: the assertion is the one that wires a real
+encrypted outbox, a real submission worker, and a real recovery coordinator and
+expects a saved sale to end `confirmed`; it observed `awaitingConfirmation` on the
+first of the six full runs recorded above, all of them on 2026-08-07. It has not
+reproduced in the five since, and the file passes
+15/15 run alone. So it is order- or state-dependent, and the first place to look is
+the outbox's **static** per-box lock, which is the same mechanism that deadlocked this
+file once before.
 
-**Do not add `collectionGroup`, `in`, or `<=` to the double for it; none of these
-needs them.** `listRetryableReconciliationTasks` does need all three, which is why it
-stays out of reach and out of this chunk.
+The chunk is bounded by its *deliverable*, not by its duration, because a hunt has no
+duration: it ends with either a fix plus a test that fails without it, or a written
+diagnosis in `HISTORY.md` naming what was ruled out and what the next lead is. A
+session that reproduces it and understands it has succeeded even if it does not fix
+it; a session that runs the suite twice, sees green, and calls it fixed has not — five
+of six runs are green, so a green run is not evidence.
 
-**Explicitly excluded from it:** anything in `lib/`, any change to
-`firestore.rules`, any new export, any change to `jobs.ts` itself, and the
-`regenerateDailyMetric` question below. It is a `functions/test` chunk and nothing
-else.
+Start by making it reproduce: run the suite with a fixed seed and with the seam
+group's neighbours, rather than repeating the whole suite and hoping.
+
+**Explicitly excluded from it:** anything in `functions/`, any change to
+`firestore.rules`, any new export, any change to checkout submission *semantics*
+unless the diagnosis demands it (a flake is a reason to understand the lock, not a
+licence to redesign the outbox), receipt printing and the open decision above it, and
+the `regenerateDailyMetric` question below. It is one test seam and whatever
+production code the diagnosis points at.
 
 ### Then, in preference order
 
+- **Receipt printing** — but decide *what a receipt is printed on* first. It is now an
+  open decision above, promoted out of the standing exclusions on 2026-08-07 rather
+  than inherited a second time. It is the only red row that is neither blocked on the
+  server nor waiting on a rule, so it is the next capability chunk.
 - **Run the app against the emulators**, looking at the catalog, reconciliation, and
-  stock surfaces. Queued seven times and the oldest behavioural item: neither the
+  stock surfaces. Queued eight times and the oldest behavioural item: neither the
   deleted-product ledger nor the run route has been seen outside a widget test.
   **A seeded set is held open right now** — `scripts/seed-dev-emulator.js --hold` was
   found running on 2026-08-07 and left alone; use it rather than starting a second.
-  **This needs a decision first:** whether the Android exclusion is lifted, because
-  a Windows or web run exercises only the loopback path. Ask. It is also the only way
-  to see "Checkout settings" and "Manage catalog" reach a real Firestore rule — and
-  the catalog route is the one that would make the emulator seed script optional,
-  which is worth watching once.
-- **Chase the one intermittent Flutter failure** recorded in the baselines above.
+  **The Android question is narrowed but not answered.** The standing session
+  instructions still skip the Android build and Android emulator tests, so a run
+  scheduled today is a Windows or web run and exercises only the loopback path. That
+  says what the run would be, not whether it is worth doing in that form. Still ask.
+  It is also the only way to see "Checkout settings" and "Manage catalog" reach a real
+  Firestore rule — and the catalog route is the one that would make the emulator seed
+  script optional, which is worth watching once.
 - **`regenerateDailyMetric` writes `daily_metrics` with `merge: false` and no
   `createdAt`**, unlike every other document in this pipeline. Probably deliberate;
   nothing says which.
@@ -936,38 +992,45 @@ else.
 
 Outside every chunk until deliberately scheduled: a resolution path for the four
 stock and sale differences, currency labels on the differences list, the subscription
-surfaces, receipt printing and the printed receipt body, discounts, camera barcode
-scanning, password reset (blocked on the App Check decision above), product
-cost/profit fields, editing a product's descriptive fields (the open decision above),
-renaming or deleting a category, SKU uniqueness, bulk catalog import, a
-`platform_audit_logs` surface, branding surfaces, the Sentry DSN, the 476
-pre-existing analyzer issues, a root-widget smoke test and the startup seams it would
-need, and deployment.
+surfaces, discounts, camera barcode scanning, password reset (blocked on the App Check
+decision above), product cost/profit fields, editing a product's descriptive fields
+(the open decision above), renaming or deleting a category, SKU uniqueness, bulk
+catalog import, a `platform_audit_logs` surface, branding surfaces, the Sentry DSN,
+the 476 pre-existing analyzer issues, a root-widget smoke test and the startup seams
+it would need, and deployment.
 
-Three of those are new on 2026-08-07 and are consequences of the catalog chunk rather
-than inherited: **renaming or deleting a category** (it orphans the `categoryId` on
-every product filed under it), **SKU uniqueness** (nothing on the server enforces it
-and a client-side check would be a guarantee the next device breaks), and **bulk
-catalog import** (`BULK_UPLOAD_GUIDE.md` describes a pre-migration flow that reaches
-no code in `lib/`).
+Three of those are consequences of the catalog chunk on 2026-08-07 rather than
+inherited: **renaming or deleting a category** (it orphans the `categoryId` on every
+product filed under it), **SKU uniqueness** (nothing on the server enforces it and a
+client-side check would be a guarantee the next device breaks), and **bulk catalog
+import** (`BULK_UPLOAD_GUIDE.md` describes a pre-migration flow that reaches no code
+in `lib/`).
 
-**Named once, as it has been inherited for many consecutive chunks: receipt printing
-and the printed receipt body.** Still correctly excluded from a `functions/test`
-chunk, and not blocking today — a sale completes, is recorded, is found by receipt
-lookup, and is returnable without anything being printed. But it should stop being
-inherited silently, because it is now **the only red row that is neither an open
-decision nor blocked on the server**: password reset waits on App Check, editing a
-product waits on a decision, and subscription has no server schema to build against.
-Printing waits on nothing but being scheduled. It is the next capability chunk this
-list will run out of excuses for.
+**Receipt printing has left this list.** It was named once in the previous handover as
+the item this list would run out of excuses for, and re-excluding it silently a second
+time is what this section exists to prevent — so it is now the open decision "What a
+receipt is printed on" above, and the head of the preference order below the current
+chunk. Nothing about it is blocking today: a sale completes, is recorded, is found by
+receipt lookup, and is returnable without anything being printed.
 
-The subscription surfaces, named the same way in the previous handover, are unchanged
-and still correctly excluded: `grep -i subscription functions/src` still finds nothing
-at all, so a Flutter surface would invent the schema, lifecycle, and billing states
-the server later has to agree with. That one starts on the server or not at all, and
-nothing in the sell-and-settle loop reads it. The two exclusions that have moved from
-cosmetic to load-bearing are tracked as open decisions instead: password reset, and
-how a price is corrected.
+**Named once, as it has been inherited for many consecutive chunks: the 476
+pre-existing analyzer issues.** Still correctly excluded, and the reason is stronger
+than habit — every one of them is in the closed unreachable island (`lib/pos/**`,
+`lib/screens/**`, `thermal_printer_service`, `glass_card`, `pill_input`, `theme.dart`)
+plus one experimental Sentry warning, and nothing in `lib/main.dart` or the tenancy
+shell reaches any of it. Fixing them would be work on code that does not run. The one
+thing to watch: the printing decision above points at `thermal_printer_service.dart`,
+which is *in* that island, so whichever chunk takes printing is the one that has to
+say whether it revives that file or writes past it. Until then, analyse the paths a
+chunk touches and leave the island alone.
+
+The subscription surfaces, named the same way two handovers ago, are unchanged and
+still correctly excluded: `grep -i subscription functions/src` still finds nothing at
+all, so a Flutter surface would invent the schema, lifecycle, and billing states the
+server later has to agree with. That one starts on the server or not at all, and
+nothing in the sell-and-settle loop reads it. The three exclusions that have moved
+from cosmetic to load-bearing are tracked as open decisions instead: password reset,
+how a price is corrected, and what a receipt is printed on.
 
 ---
 
