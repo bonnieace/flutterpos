@@ -6,12 +6,15 @@ import {FakeFirestore} from "../testing/fakeFirestore";
 import {deleteSentinelPaths} from "../testing/writeSentinels";
 import {
   advanceReconciliationJob,
+  ClaimedReconciliationJob,
   claimReconciliationJob,
   createManualJobInTransaction,
+  finalizeReconciliationJob,
   recordReconciliationFailure,
+  registerSaleReceipt,
   saleTriggerJobFields,
 } from "./jobs";
-import {DirtyJobDecision, mergeDirtyJob} from "./model";
+import {DirtyJobDecision, mergeDirtyJob, ReconciliationTaskPayload} from "./model";
 
 const BUCKET = 1785842700000;
 
@@ -158,6 +161,14 @@ const TENANT = "tenant-a";
 const JOB = "rj_manual_advance";
 const LOCAL_DATE = "2026-08-06";
 
+/** The dispatch a freshly created job's first task carries. */
+const FIRST_TASK: ReconciliationTaskPayload = {
+  tenantId: TENANT,
+  jobId: JOB,
+  generation: 0,
+  revision: 0,
+};
+
 function jobPath(): string {
   return `tenants/${TENANT}/reconciliation_jobs/${JOB}`;
 }
@@ -193,6 +204,19 @@ function storedJob(db: FakeFirestore): DocumentData {
   const document = db.read(jobPath());
   assert.ok(document !== undefined, `Nothing was written at ${jobPath()}.`);
   return document;
+}
+
+/** The job, claimed, refusing to continue against a claim that was refused. */
+async function claimJob(
+  db: FakeFirestore,
+  payload: ReconciliationTaskPayload = FIRST_TASK,
+  now?: Timestamp
+): Promise<ClaimedReconciliationJob> {
+  const claimed = now === undefined ?
+    await claimReconciliationJob(db.asFirestore(), payload) :
+    await claimReconciliationJob(db.asFirestore(), payload, now);
+  assert.ok(claimed, `Nothing claimable at generation ${payload.generation}/${payload.revision}.`);
+  return claimed;
 }
 
 /** The instant `path`'s document is next due, as milliseconds. */
@@ -317,7 +341,9 @@ test("a page that succeeds after a failure does not inherit the failure's backof
   // Fifteen seconds of backoff belonged to the attempt that failed, not to every
   // page after it. If a successful page left the stale instant in place, a job
   // that failed once would have every remaining page refused for being early -
-  // and after the last quarantine threshold it would be refused for an hour.
+  // and at the last rung before quarantine it would be refused for sixteen
+  // minutes per page. (Earlier notes said an hour. The hour is the cap in the
+  // formula, and "the whole reachable ladder" below shows it is never reached.)
   assert.ok(
     dueAtMilliseconds(advanced) < backoffMilliseconds,
     "the successful page kept the failed attempt's backoff"
@@ -325,4 +351,364 @@ test("a page that succeeds after a failure does not inherit the failure's backof
   assert.equal(advanced.consecutiveFailureCount, 0);
   assert.equal("lastErrorCode" in advanced, false);
   assert.ok(await claimReconciliationJob(db.asFirestore(), continuation));
+});
+
+/**
+ * Who is allowed to run a job's next page, over the same in-memory Firestore.
+ *
+ * A reconciliation job is driven by a Cloud Tasks queue, and a queue guarantees
+ * at-least-once delivery of every task it accepts. So the same dispatch arrives
+ * twice, a dispatch the job has already moved past arrives late, and a worker
+ * killed at its deadline leaves a job that looks running and is not. Three
+ * fields decide all of it - `generation`, `revision`, and `leaseToken` - and
+ * `claimReconciliationJob` is where they are read.
+ *
+ * None of it had unit coverage. The suite below is the refusals, because a claim
+ * that is granted when it should not be is two workers writing one tenant's
+ * stock verifications from two different ledger positions.
+ */
+
+test("a job that no longer exists is not claimed", async () => {
+  // The task outlives its job: a tenant deleted, or a job removed by hand. The
+  // dispatch has to end quietly, because the queue will not stop delivering it
+  // for anything short of a success.
+  const db = new FakeFirestore();
+
+  assert.equal(await claimReconciliationJob(db.asFirestore(), FIRST_TASK), undefined);
+  assert.deepEqual(db.writtenPaths(), []);
+});
+
+test("a task naming a superseded generation or revision is not claimed", async () => {
+  // Every page the job finishes bumps `revision`, and every rerun bumps
+  // `generation`. A dispatch built from either of the old values describes work
+  // that has already been done, so re-running it would re-verify products
+  // against a ledger position the job has passed.
+  for (const stale of [
+    {...FIRST_TASK, generation: 1},
+    {...FIRST_TASK, revision: 1},
+  ]) {
+    const db = await firestoreWithQueuedJob();
+
+    assert.equal(
+      await claimReconciliationJob(db.asFirestore(), stale),
+      undefined,
+      `generation ${stale.generation}, revision ${stale.revision}`
+    );
+    assert.deepEqual(db.writtenPaths(), []);
+    assert.equal(storedJob(db).attemptCount, 0);
+  }
+});
+
+test("a live lease is not stolen by a duplicate dispatch", async () => {
+  const db = await firestoreWithQueuedJob();
+  const owner = await claimJob(db);
+  db.clearWrites();
+
+  // The same task, delivered twice. It is not an error and nothing is recorded
+  // against the job - the second worker simply has no work.
+  assert.equal(await claimReconciliationJob(db.asFirestore(), FIRST_TASK), undefined);
+
+  assert.deepEqual(db.writtenPaths(), []);
+  const stored = storedJob(db);
+  assert.equal(stored.attemptCount, 1);
+  assert.equal(stored.leaseToken, owner.leaseToken);
+});
+
+test("the lease outlives the deadline of the worker holding it", async () => {
+  const db = await firestoreWithQueuedJob();
+  const now = Timestamp.now();
+
+  const claimed = await claimJob(db, FIRST_TASK, now);
+
+  const leaseExpiresAt = claimed.leaseExpiresAt;
+  assert.ok(leaseExpiresAt, "a granted claim must return the lease it took");
+  // `handlers.ts` enqueues with `dispatchDeadlineSeconds: 420` and runs the
+  // worker with `timeoutSeconds: 420`, so a worker is gone by seven minutes. Ten
+  // minutes of lease is the margin: a worker still inside its own deadline never
+  // has its lease expire underneath it, which is the only way two workers reach
+  // one job's processors at the same time.
+  assert.equal(leaseExpiresAt.toMillis() - now.toMillis(), 10 * 60 * 1000);
+  assert.ok(leaseExpiresAt.toMillis() - now.toMillis() > 420 * 1000);
+  const stored = storedJob(db);
+  assert.equal(stored.status, "running");
+  assert.equal(stored.attemptCount, 1);
+  assert.ok((stored.lastAttemptAt as Timestamp).isEqual(now));
+  assert.deepEqual(db.writtenPaths(), [jobPath()]);
+});
+
+test("an expired lease is recovered, and the worker that lost it cannot commit", async () => {
+  const db = await firestoreWithQueuedJob();
+  const start = Timestamp.now();
+  const abandoned = await claimJob(db, FIRST_TASK, start);
+  const expiry = abandoned.leaseExpiresAt;
+  assert.ok(expiry);
+
+  // The boundary, both sides. One millisecond early the job is still owned.
+  assert.equal(
+    await claimReconciliationJob(
+      db.asFirestore(),
+      FIRST_TASK,
+      Timestamp.fromMillis(expiry.toMillis() - 1)
+    ),
+    undefined
+  );
+  const recovered = await claimJob(db, FIRST_TASK, expiry);
+
+  assert.notEqual(recovered.leaseToken, abandoned.leaseToken);
+  assert.equal(storedJob(db).attemptCount, 2);
+
+  // The fence, and the reason the lease is a token rather than a timestamp. A
+  // worker whose lease lapsed may still be alive and still holding a
+  // half-finished page; its writes have to be refused outright rather than
+  // interleaved with the worker that now owns the job.
+  db.clearWrites();
+  await assert.rejects(
+    advanceReconciliationJob(db.asFirestore(), abandoned, {phase: "stock"}),
+    /lease changed/
+  );
+  await assert.rejects(
+    finalizeReconciliationJob(db.asFirestore(), abandoned),
+    /lease changed/
+  );
+
+  assert.deepEqual(db.writtenPaths(), []);
+  const stored = storedJob(db);
+  assert.equal(stored.status, "running");
+  assert.equal(stored.leaseToken, recovered.leaseToken);
+});
+
+test("a finished job is unqueued from both routes that could redispatch it", async () => {
+  const db = await firestoreWithQueuedJob();
+  const claimed = await claimJob(db);
+  db.clearWrites();
+
+  assert.equal(await finalizeReconciliationJob(db.asFirestore(), claimed), undefined);
+
+  const completed = storedJob(db);
+  assert.equal(completed.status, "completed");
+  assert.equal(completed.phase, "finalize");
+  assert.ok(completed.completedAt instanceof Timestamp);
+  assert.equal("leaseToken" in completed, false);
+  assert.equal("leaseExpiresAt" in completed, false);
+  // The exact mirror of what a continuation does, and the reason both are worth
+  // one assertion each. `advance` writes `nextAttemptAt` so a job whose dispatch
+  // was lost stays findable by `listRetryableReconciliationTasks`; `finalize`
+  // removes it so the same sweep can never find this one again.
+  assert.equal("nextAttemptAt" in completed, false);
+  // The other route is the queue itself redelivering the task that finished it.
+  assert.equal(await claimReconciliationJob(db.asFirestore(), FIRST_TASK), undefined);
+  assert.equal(storedJob(db).attemptCount, 1);
+  // Finishing a job is a job-state change and nothing else.
+  assert.deepEqual(db.writtenPaths(), [jobPath()]);
+});
+
+/**
+ * The sale-trigger fixture, for the one branch a manual job cannot reach.
+ *
+ * `rerunRequested` is only ever set by a sale arriving while its bucket's job is
+ * already running, so the fixture is built by running that sale through
+ * `registerSaleReceipt` rather than by seeding the flag. Seeding it would prove
+ * that `finalize` reads a field; this proves the sale is not lost.
+ */
+const SALE_JOB = `dirty_${BUCKET}`;
+
+function saleJobPath(): string {
+  return `tenants/${TENANT}/reconciliation_jobs/${SALE_JOB}`;
+}
+
+function registerSale(db: FakeFirestore, saleId: string) {
+  return registerSaleReceipt(db.asFirestore(), {
+    tenantId: TENANT,
+    saleId,
+    businessDate: "2026-08-04",
+    receivedAt: Timestamp.fromMillis(BUCKET + 1_000),
+    saleData: {items: [{productId: "product-01", quantity: 2}]},
+  });
+}
+
+test("a sale that lands mid-run reruns the job instead of completing it", async () => {
+  const db = new FakeFirestore();
+  const first = await registerSale(db, "sale-1");
+  assert.ok(first.task, "the first sale of a bucket must enqueue its job");
+
+  // One page done, so the job has a cursor to lose and a revision to be behind.
+  const firstPage = await claimJob(db, first.task);
+  const secondPage = await advanceReconciliationJob(db.asFirestore(), firstPage, {
+    phase: "stock",
+    productCursor: "product-05",
+    productsProcessedDelta: 5,
+  });
+  const running = await claimJob(db, secondPage);
+
+  // The second sale cannot enqueue a task of its own - the pass already running
+  // would race it - so the only way it is not lost is the flag it leaves behind.
+  const second = await registerSale(db, "sale-2");
+  assert.equal(second.task, undefined);
+  assert.equal(db.read(saleJobPath())?.rerunRequested, true);
+
+  const rerun = await finalizeReconciliationJob(db.asFirestore(), running);
+
+  assert.deepEqual(rerun, {
+    tenantId: TENANT,
+    jobId: SALE_JOB,
+    generation: 1,
+    revision: 2,
+  });
+  const requeued = db.read(saleJobPath());
+  assert.ok(requeued);
+  assert.equal(requeued.status, "queued");
+  assert.equal(requeued.phase, "metrics");
+  assert.equal(requeued.rerunRequested, false);
+  assert.equal("leaseToken" in requeued, false);
+  // A rerun is a fresh pass over the whole tenant from the metrics phase, so
+  // every cursor the finished pass left behind describes work this one has not
+  // done. Keeping `productCursor` would skip the first five products.
+  assert.equal("productCursor" in requeued, false);
+  assert.equal("pendingProductId" in requeued, false);
+  // `generation`, not `revision`, is what the rerun bumps, and that is what makes
+  // the new pass's task ID distinct from every dispatch of the old one.
+  assert.ok(await claimReconciliationJob(db.asFirestore(), rerun));
+  assert.equal(await claimReconciliationJob(db.asFirestore(), first.task), undefined);
+});
+
+/**
+ * What a failed page costs the job, over the same in-memory Firestore.
+ *
+ * There are two retry schedules here and they are not the same thing. Cloud
+ * Tasks retries the *dispatch* on the `retryConfig` in `handlers.ts`; the job
+ * document carries its own `nextAttemptAt`, and `claimReconciliationJob` refuses
+ * a dispatch that arrives before it. The tests below are the second one: how deep
+ * it goes, where it stops, and what it refuses to touch.
+ */
+
+test("the whole reachable backoff ladder is fifteen seconds to sixteen minutes", async () => {
+  const db = await firestoreWithQueuedJob();
+  // Doubling from fifteen seconds. Seven rungs, because the eighth consecutive
+  // failure quarantines instead of scheduling - so the one-hour cap in the
+  // formula is unreachable, and the longest wait a job is ever given is 960s.
+  const ladder = [15_000, 30_000, 60_000, 120_000, 240_000, 480_000, 960_000];
+  let dueAt = Timestamp.now();
+
+  for (const [index, delay] of ladder.entries()) {
+    const attempt = index + 1;
+    const claimed = await claimJob(db, FIRST_TASK, dueAt);
+
+    const before = Date.now();
+    await recordReconciliationFailure(
+      db.asFirestore(),
+      claimed,
+      new HttpsError("internal", "The stock page threw.")
+    );
+    const after = Date.now();
+
+    const failed = storedJob(db);
+    assert.equal(failed.status, "failed", `attempt ${attempt}`);
+    assert.equal(failed.consecutiveFailureCount, attempt, `attempt ${attempt}`);
+    assert.equal(failed.lastErrorCode, "internal", `attempt ${attempt}`);
+    assert.equal("leaseToken" in failed, false, `attempt ${attempt}`);
+    const scheduled = dueAtMilliseconds(failed);
+    assert.ok(
+      scheduled >= before + delay && scheduled <= after + delay,
+      `attempt ${attempt}: scheduled ${scheduled - before}ms out, not ${delay}ms`
+    );
+    dueAt = Timestamp.fromMillis(scheduled);
+  }
+});
+
+test("a dispatch refused for being early is not a failure", async () => {
+  const db = await firestoreWithQueuedJob();
+  const claimed = await claimJob(db);
+  await recordReconciliationFailure(
+    db.asFirestore(),
+    claimed,
+    new HttpsError("internal", "The stock page threw.")
+  );
+  const failed = storedJob(db);
+  const backoff = dueAtMilliseconds(failed);
+
+  // The queue retries on its own schedule and knows nothing about the job's, so
+  // a task arrives early and is refused. The refusal is thrown by the claim,
+  // which is above the `try` in `executeReconciliationTask` that records
+  // failures - and it has to stay there. If an early dispatch counted, a job
+  // would quarantine itself out of retry noise alone, without ever having run a
+  // page a second time.
+  for (let early = 0; early < 3; early += 1) {
+    await assert.rejects(
+      claimReconciliationJob(db.asFirestore(), FIRST_TASK),
+      /retry backoff is still active/
+    );
+  }
+
+  const unchanged = storedJob(db);
+  assert.equal(unchanged.status, "failed");
+  assert.equal(unchanged.consecutiveFailureCount, 1);
+  assert.equal(unchanged.attemptCount, failed.attemptCount);
+  assert.equal(dueAtMilliseconds(unchanged), backoff);
+});
+
+test("the eighth consecutive failure quarantines the job and raises one alert", async () => {
+  const db = await firestoreWithQueuedJob();
+  let dueAt = Timestamp.now();
+
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    const claimed = await claimJob(db, FIRST_TASK, dueAt);
+    await recordReconciliationFailure(
+      db.asFirestore(),
+      claimed,
+      new HttpsError("data-loss", "The job document is unreadable.")
+    );
+    const stored = storedJob(db);
+    assert.equal(stored.consecutiveFailureCount, attempt, `attempt ${attempt}`);
+    assert.equal(
+      stored.status,
+      attempt < 8 ? "failed" : "quarantined",
+      `attempt ${attempt}`
+    );
+    if (attempt < 8) dueAt = Timestamp.fromMillis(dueAtMilliseconds(stored));
+  }
+
+  // Two independent locks, because there are two independent routes to a
+  // dispatch. The status refuses the queue's own redelivery, and without
+  // `nextAttemptAt` the retry sweep cannot see the job at all.
+  const quarantined = storedJob(db);
+  assert.equal("nextAttemptAt" in quarantined, false);
+  assert.equal(await claimReconciliationJob(db.asFirestore(), FIRST_TASK), undefined);
+
+  // A job that stops retrying silently is a tenant whose figures quietly stop
+  // being verified, so the last failure is also the one that tells somebody.
+  const alert = db.read(`platform_alerts/reconciliation_${TENANT}_${JOB}`);
+  assert.ok(alert, "a quarantined job that raises no alert is one nobody is told about");
+  assert.equal(alert.type, "tenant_reconciliation_quarantined");
+  assert.equal(alert.severity, "critical");
+  assert.equal(alert.notificationStatus, "pending");
+  assert.equal(alert.errorCode, "data-loss");
+  assert.equal(alert.consecutiveFailureCount, 8);
+  assert.equal(alert.tenantId, TENANT);
+  assert.equal(alert.jobId, JOB);
+});
+
+test("a failure from a worker that has lost the job writes nothing", async () => {
+  const db = await firestoreWithQueuedJob();
+  const abandoned = await claimJob(db, FIRST_TASK, Timestamp.now());
+  const expiry = abandoned.leaseExpiresAt;
+  assert.ok(expiry);
+  const owner = await claimJob(db, FIRST_TASK, expiry);
+  db.clearWrites();
+
+  // The lost worker's own error still arrives - `executeReconciliationTask`
+  // records it in a `catch` on the way out - and it must not fail a job somebody
+  // else is now running, or put a backoff on it, or spend one of its eight lives.
+  // It returns rather than throwing, because a failure handler that throws
+  // replaces the error the caller was already reporting.
+  await recordReconciliationFailure(
+    db.asFirestore(),
+    abandoned,
+    new HttpsError("internal", "The page this worker was on threw, late.")
+  );
+
+  assert.deepEqual(db.writtenPaths(), []);
+  const stored = storedJob(db);
+  assert.equal(stored.status, "running");
+  assert.equal(stored.consecutiveFailureCount, 0);
+  assert.equal(stored.leaseToken, owner.leaseToken);
 });

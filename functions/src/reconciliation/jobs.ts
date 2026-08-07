@@ -657,6 +657,14 @@ export async function recordReconciliationFailure(
       current.leaseToken !== job.leaseToken
     ) return;
     const consecutiveFailureCount = current.consecutiveFailureCount + 1;
+    // The job's own backoff, deliberately the same shape as the queue's
+    // `retryConfig` in handlers.ts: fifteen seconds, eight doublings, an hour.
+    // Quarantining at eight consecutive failures reaches only the seventh rung,
+    // so the longest wait a job is ever given is sixteen minutes and neither the
+    // exponent clamp nor the hour cap is reachable. They stay because raising the
+    // threshold must not also uncap the wait. The threshold in turn has to stay
+    // below the queue's `maxAttempts: 12`, or the queue abandons the task before
+    // the job quarantines itself and nothing writes the alert below.
     const exponent = Math.min(Math.max(consecutiveFailureCount - 1, 0), 8);
     const delayMilliseconds = Math.min(60 * 60 * 1000, 15_000 * (2 ** exponent));
     const quarantined = consecutiveFailureCount >= 8;

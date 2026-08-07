@@ -14780,3 +14780,320 @@ files, and deployment.
 - `node --test` needs `--test-reporter=tap` before its output is filtered; the
   Firebase emulator runners use the default reporter, whose totals are `pass N`
   behind an information glyph.
+
+---
+
+## Nine months of `flutter test` paths, and who may run a job's next page - 2026-08-07
+
+### Completed in this session
+
+Two chunks, both named by the previous handover: the one it queued first, and the
+second item in its preference list. The behavioural item it ranked between them -
+running the app against the emulators - still needs a human decision and is
+carried forward again, unstarted.
+
+### 1. `test/widget_test.dart` is deleted, and the path list is retired
+
+The previous session left this blocked, not unresolved: the analysis was done and
+only the deletion itself had been refused. `git rm test/widget_test.dart`
+succeeded here on the first attempt, with no workaround.
+
+The file was the untouched `flutter create` template naming a `MyApp` this project
+has never had. Nothing imported it and nothing it asserted was ever true.
+
+**The consequence is the point of the chunk.** Since December every session in
+this file has run `flutter test` with ten paths named, because bare discovery hit
+this one uncompilable file and stopped. The ten paths were
+`test/audit test/dev test/inventory test/returns test/reporting test/sales
+test/shift test/checkout test/tenancy test/theme_test.dart` - which is, exactly,
+everything in `test/` except the deleted file. So the workaround was never
+excluding anything, and the bare command now discovers and passes the same
+**1251/1251**. The validation table below names the bare command, and every future
+one should.
+
+No root-widget smoke test was built, per the previous handover's step 3. The seam
+that one would need - `SpiritPOSApp.build()` reaches `FirebaseAuth.instance` and
+`FirebaseFirestore.instance` before the first frame - is still production code
+changed for a test's benefit and is still its own decision.
+
+### 2. The reconciliation job lifecycle is watched
+
+`jobs.ts` had three exported functions with no unit coverage. All three now have
+it, over the same in-memory Firestore the previous session used for
+`advanceReconciliationJob`, and the eleven tests are the *refusals* rather than the
+happy paths.
+
+**The premise, written down once at the top of the new section: a Cloud Tasks
+queue guarantees at-least-once delivery.** So the same dispatch arrives twice, a
+dispatch the job has already moved past arrives late, and a worker killed at its
+deadline leaves a job that looks running and is not. Three fields decide every one
+of those - `generation`, `revision`, `leaseToken` - and a claim granted when it
+should not be is two workers writing one tenant's stock verifications from two
+different ledger positions.
+
+**`claimReconciliationJob`** - five refusals:
+
+- A job that no longer exists ends the dispatch quietly. The queue will not stop
+  delivering a task for anything short of a success, so this cannot throw.
+- A task naming a superseded `generation` or `revision` is refused. Both
+  directions, because a finished page bumps one and a rerun bumps the other.
+- A live lease is not stolen by a duplicate dispatch, and the refusal writes
+  nothing - not even an attempt count.
+- **The lease is ten minutes against a seven-minute worker.** `handlers.ts`
+  enqueues with `dispatchDeadlineSeconds: 420` and runs with `timeoutSeconds: 420`.
+  The three-minute margin is what stops a worker still inside its own deadline
+  from having its lease expire underneath it, which is the only way two workers
+  reach one job's processors at once. Two constants in two modules, now pinned by
+  one assertion.
+- **An expired lease is recovered with a *new* token, and that is the fence.** The
+  boundary is asserted on both sides - refused one millisecond early, granted at
+  the instant. The worker that lost the lease may still be alive and still holding
+  a half-finished page, so the test then proves both `advanceReconciliationJob`
+  and `finalizeReconciliationJob` refuse it and write nothing.
+
+**`finalizeReconciliationJob`** - both branches:
+
+- A finished job is unqueued from **both** routes that could redispatch it, and
+  they are independent. The status refuses the queue redelivering the task that
+  finished it; deleting `nextAttemptAt` is what makes it invisible to
+  `listRetryableReconciliationTasks`. That is the exact mirror of what `advance`
+  does - `advance` *writes* the field so a job whose dispatch was lost stays
+  findable - and the pair is now one assertion each.
+- **A sale that lands mid-run reruns the job instead of completing it**, and the
+  fixture is built by running two sales through `registerSaleReceipt` rather than
+  by seeding `rerunRequested`. Seeding the flag would prove that `finalize` reads
+  a field; running the sale proves the sale is not lost. The job is advanced one
+  page first so it has a real cursor to lose: a rerun starts a fresh pass from the
+  metrics phase, so keeping `productCursor` would silently skip the first five
+  products. And it is `generation`, not `revision`, that the rerun bumps - the
+  returned payload is claimable and the finished pass's is not.
+
+**`recordReconciliationFailure`** - the schedule and its two ends:
+
+- **The whole reachable backoff ladder is 15s, 30s, 60s, 120s, 240s, 480s, 960s.**
+  Seven rungs, asserted at their real figures.
+- **Earlier notes in this file said the backoff reaches an hour. It does not.**
+  The formula names 15 seconds, eight doublings, and a one-hour cap - deliberately
+  the same shape as the queue's own `retryConfig` in `handlers.ts` - but quarantine
+  at eight consecutive failures fires at the seventh rung, so neither the exponent
+  clamp nor the hour cap is reachable. Both stay, because raising the threshold
+  must not also uncap the wait; that reasoning is now a comment at the constant,
+  along with the other half of the relationship: **the threshold has to stay below
+  the queue's `maxAttempts: 12`**, or the queue abandons the task before the job
+  quarantines itself and nothing ever writes the alert.
+- **A dispatch refused for being early is not a failure.** The queue retries on its
+  own schedule and knows nothing about the job's, so early arrivals are routine.
+  The refusal is thrown by the claim, which sits *above* the `try` in
+  `executeReconciliationTask` that records failures - and it has to stay there. If
+  an early dispatch counted, a job would quarantine itself out of retry noise
+  alone, without ever having run a page a second time.
+- **The eighth consecutive failure quarantines and raises one platform alert**, at
+  a deterministic document ID with `merge: true`, and the quarantined job is then
+  locked by both routes at once: refused by status, invisible to the sweep. A job
+  that stops retrying silently is a tenant whose figures quietly stop being
+  verified, so the last failure is also the one that tells somebody.
+- **A failure from a worker that has lost the job writes nothing.** It returns
+  rather than throwing, because it is called in a `catch` and a failure handler
+  that throws replaces the error the caller was already reporting. The late error
+  must not fail a job somebody else is running, put a backoff on it, or spend one
+  of its eight lives.
+
+**No production behaviour changed in this chunk.** The only edit to `jobs.ts` is
+the eight-line comment recording why the hour cap is unreachable and what the two
+thresholds owe each other.
+
+### Every new assertion was proved to fail against the behaviour it names
+
+Thirteen mutations, each built and run:
+
+| Mutation | What failed |
+| --- | --- |
+| claim: `if (!snapshot.exists)` guard removed | "a job that no longer exists" |
+| claim: generation/revision guard removed | "a task naming a superseded generation or revision" |
+| claim: live-lease guard removed | "a live lease is not stolen" **and** "an expired lease is recovered" |
+| claim: backoff refusal removed | "a dispatch refused for being early" **and** the previous session's post-failure test |
+| claim: lease shortened to five minutes | "the lease outlives the deadline", alone |
+| claim: a recovered lease reuses the old token | "an expired lease is recovered" **and** "a failure from a worker that has lost the job" |
+| finalize: a completed job keeps `nextAttemptAt` | "a finished job is unqueued", alone |
+| finalize: a rerun does not bump the generation | "a sale that lands mid-run", alone |
+| finalize: a rerun keeps the finished pass's cursors | "a sale that lands mid-run", alone |
+| failure: backoff base raised to 20 seconds | "the whole reachable backoff ladder", alone |
+| failure: quarantine threshold raised to nine | "the eighth consecutive failure", alone |
+| failure: quarantine raises no platform alert | "the eighth consecutive failure", alone |
+| failure: stale-lease guard removed | "a failure from a worker that has lost the job", alone |
+
+Every one of the eleven new tests is named by at least one mutation. The two
+cross-kills are the honest ones and both are real: removing the live-lease guard
+breaks the recovery test's "one millisecond early is still owned" boundary, and
+reusing the lease token makes the lost worker's token match the owner's, so its
+late failure lands on a job it no longer holds.
+
+### Files in this chunk
+
+```text
+PLAN.md
+functions/src/reconciliation/jobs.ts        (comment only)
+functions/src/reconciliation/jobs.test.ts
+test/widget_test.dart                       (deleted)
+```
+
+Rules, the indexes, the configs, and every other Dart path are untouched.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix functions run build` | clean |
+| `npm --prefix functions test` | **272/272**, up from 261, adding **11** |
+| thirteen mutations, each built and run | each failed exactly the test(s) named above |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` (**no paths**) | **1251/1251**, unchanged |
+| `npm --prefix rules-tests run test:emulator` | **141/141** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:reconciliation` | **10/10** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `git diff --check`, `git diff --cached --check` | clean |
+
+Every emulator command was run with the pinned toolchain prelude and with
+inherited `DEBUG` removed:
+
+```powershell
+if (Test-Path Env:DEBUG) { Remove-Item Env:DEBUG }
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:JAVA_HOME\bin;$env:Path"
+```
+
+During development the loop was one `tsc -p functions/tsconfig.json` followed by
+`node --test --test-reporter=tap functions/lib/reconciliation/jobs.test.js`, about
+a second per run against the full command's forty. The bare Flutter run takes
+about 390 seconds and was run once before the TypeScript work and once after; no
+Dart was touched between them.
+
+### Meaningful failures and their resolutions
+
+- **The mutation harness could not spawn `npm.cmd`: `EINVAL`, with empty stdout
+  and stderr, for all thirteen mutations at once.** Node 20 and later refuse to
+  spawn a `.cmd` or `.bat` through `execFileSync` without `shell: true`. The empty
+  error text is the tell - a build that actually failed prints diagnostics. It was
+  diagnosed with one direct reproduction before any retry, and resolved by
+  invoking the compiler the way `npm run build` would have:
+  `node functions/node_modules/typescript/bin/tsc -p functions/tsconfig.json`.
+  That is also several seconds faster per mutation, which matters at thirteen.
+- **The mutation harness never used `git checkout --` to revert.** It holds the
+  original file in memory and restores from that in a `finally`, then verifies the
+  restore byte-for-byte and rebuilds. This is the previous session's correction
+  turned into something that cannot be forgotten - and it mattered here, because
+  `jobs.ts` carries a real edit this session that `git checkout --` would have
+  destroyed.
+- **No assertion failed that was not made to.** Every red run in this session was
+  a deliberate mutation.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` (bare, no paths) | 1251 |
+| `npm --prefix functions test` | 272 |
+| `npm --prefix rules-tests run test:emulator` | 141 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 10 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1686 tests across five suites**, up from 1675, adding **11**. Nothing was left
+failing and no suite was skipped except the Android build and the Android emulator
+runs.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+Also still running and deliberately left alone: the `emulators:dev` set held open
+by `seed-dev-emulator.js --hold` on ports 4400, 4500, 5001, 9099, 9299, 9499, with
+Firestore on 8080. It was verified alive on all seven ports before and after the
+three emulator suites, which ran on 8180/9199 and 9699 and did not touch it.
+
+### Next bounded chunk
+
+**Cover `registerSaleReceipt`'s own defences.** It is the entry point every
+reconciliation job comes from - one Firestore trigger per sale - and it now runs
+against the double (the rerun test above drives it), but only down its simplest
+path. Every branch below is one it takes on real data and none is asserted
+anywhere:
+
+1. **The receipt is the idempotency key.** A redelivered `onDocumentCreated` must
+   return the *first* delivery's task and invalid-line count without writing a
+   second movement or double-counting the dirty day - and a receipt whose
+   `tenantId`, `businessDate`, or `jobId` disagrees with the retry must throw
+   `already-exists` rather than be trusted.
+2. **`saleMovements` combines lines per product and rejects the rest.** Two lines
+   of the same product become one movement with `lineCount: 2`; a non-object line,
+   a missing or over-long or slash-bearing `productId`, a non-integer or
+   non-positive quantity, and an unsafe integer sum each count as invalid. `items`
+   that is not an array is one invalid line, and anything past the hundredth line
+   is counted and dropped.
+3. **Invalid lines write a `reconciliation_anomalies` document**, and only when
+   there is at least one. The dirty day's `invalidLineCount` increments by the same
+   figure, which is the only place a malformed sale is visible to an operator.
+4. **A bucket that belongs to another source throws.** `dirty_<bucket>` is a
+   predictable ID, so a job created there by anything but the sale trigger has to
+   be refused rather than merged into.
+5. The movement document ID switches to a hash past 120 characters of sale ID -
+   the branch that keeps a Firestore path legal.
+
+Do not add `collectionGroup`, `in`, or `<=` to the double for this; none of the
+above needs them.
+
+Then, in preference order:
+
+- **Run the app against the emulators and look at the reconciliation and stock
+  surfaces.** Queued for the fifth time and still the oldest behavioural item:
+  neither the deleted-product ledger nor the run route has ever been seen outside a
+  widget test. **The seeded emulator set is still held open for it** and was
+  confirmed alive at the end of this session. This needs a decision, not an
+  implementation chunk: whether the Android exclusion is lifted, because a Windows
+  or web run exercises only the loopback path. Ask before starting.
+- **`ensureSweep` and `processTenantDiscoveryPage` are the last two reachable
+  uncovered exports in `jobs.ts`.** The discovery page's `where("status", "==",
+  "active")`, `orderBy(documentId())`, `startAfter`, and `limit` are all things the
+  double already does, so the 50-tenant page boundary, the monthly shard-day
+  filter, the page-document idempotency, and the sweep identity collision are all
+  in reach. `listRetryableReconciliationTasks` remains the one that is not - it
+  needs `collectionGroup`, an `in` filter, and `<=`, and adding all three for one
+  caller is still a bigger decision than a test chunk.
+- **`regenerateDailyMetric` writes `daily_metrics` with `merge: false` and no
+  `createdAt`.** Unchanged from the last handover. Every other document in this
+  pipeline carries one; probably deliberate, but nothing says which.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, a root-widget smoke test and the startup seams it would need, and
+deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous ten sessions' lists still applies.
+- **`flutter test` no longer needs paths.** Any handover that names ten of them is
+  carrying a workaround for a file that no longer exists.
+- **A `.cmd` cannot be spawned from Node without `shell: true` on this machine's
+  Node**, and the failure is `EINVAL` with no output at all. Invoke
+  `node functions/node_modules/typescript/bin/tsc -p functions/tsconfig.json`
+  instead - it is what `npm run build` runs and it skips npm's startup.
+- **A mutation harness should hold the original in memory and restore in a
+  `finally`.** Thirteen mutations by hand is thirteen chances to leave one in, and
+  the alternative the file used to recommend - `git checkout --` - destroys the
+  session's own edits to the same file.
+- **Two constants in two modules with a relationship deserve one assertion.** The
+  ten-minute lease means nothing on its own; it means something against
+  `dispatchDeadlineSeconds: 420` in `handlers.ts`, and the test says so.
+- **When a comment states a figure, check the figure is reachable.** "15 seconds to
+  an hour" survived several sessions and three modules; the quarantine threshold
+  had made it "15 seconds to 16 minutes" all along.
