@@ -22,6 +22,12 @@ It is the same content as this file's first three sections and is derived from t
 so it is stale the moment they change. A session that cannot reach it should say so
 rather than mint a replacement, because a second URL makes both untrustworthy.
 
+Its tab icon is **🧾** and its title is **Chilltent POS — Status Board**. Both are
+recorded here for the same reason the URL is: a redeploy has to supply the icon, it
+is not readable back from the published page, and changing it makes the page look
+like a different one in a tab strip. The 2026-08-07 session that first needed it had
+to guess.
+
 ---
 
 ## Status board
