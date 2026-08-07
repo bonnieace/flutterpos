@@ -14,22 +14,40 @@ The status board, the capability list, and the rollout position below are also
 rendered as a private page:
 
 ```text
-https://claude.ai/code/artifact/8d59a3e2-820f-4d05-aae3-5d49ec3420f5
+https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03
 ```
 
-**Update that URL in place when asked — do not publish a second one.** Publishing is
-not part of a normal session. This file is the source of truth; the page is a copy of
-its first three sections, so it is stale the moment they change and stays that way
+**Republished on 2026-08-08, and this URL replaces the one this file used to carry.**
+The previous page — `8d59a3e2-820f-4d05-aae3-5d49ec3420f5` — was published from a
+different Claude account. It can still be read and can never be updated from here,
+which is exactly the situation this section warns about, so the product owner asked
+for the board to be re-minted under the account that now does the work. **That old URL
+is dead to this repository: do not publish to it, do not cite it, and do not treat a
+stale copy of it as the board.**
+
+**Update the URL above in place when asked — do not publish a second one.** Publishing
+is not part of a normal session. This file is the source of truth; the page is a copy
+of its first three sections, so it is stale the moment they change and stays that way
 until someone asks for a refresh. A session that cannot reach it — including one
 running under a different Claude account, which can read the page but never update
 it — should say so rather than mint a replacement, because a second URL makes both
-untrustworthy.
+untrustworthy. Re-minting is the product owner's call, and it has now been made once.
 
 Its tab icon is **🧾** and its title is **Chilltent POS — Status Board**. Both are
 recorded here for the same reason the URL is: a redeploy has to supply the icon, it
 is not readable back from the published page, and changing it makes the page look
 like a different one in a tab strip. The 2026-08-07 session that first needed it had
-to guess.
+to guess. Both were carried across the 2026-08-08 re-mint unchanged, deliberately —
+the page moved accounts, and it is still the same board.
+
+**Its visual direction is a heads-up readout**, asked for by the product owner on
+2026-08-08: cyan on near-black, monospace for every figure and label, corner-bracketed
+panels, a slow reticle, and one boot animation on load. Keep it if you redeploy. The
+three status colours are **reserved** and validated — good `#38D07A`, warning
+`#FF9F1C`, critical `#FF5C6C` on dark; `#0E6B3E` / `#B07E00` / `#A8232E` on light —
+and every one of them ships with a **glyph and a word**, never colour alone, because
+colour alone fails for a colourblind reader and in print. The accent cyan is structure
+and is never a status.
 
 **Pass the title as an argument, not only as a `<title>` tag.** A redeploy on
 2026-08-07 that relied on the tag alone came back registered as plain "Status Board",

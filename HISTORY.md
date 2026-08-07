@@ -15753,3 +15753,81 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## The status board moved accounts - 2026-08-08
+
+Publishing was asked for explicitly, which is the only thing that licenses it. The
+product owner also asked for the page to be **re-minted under this account**, because
+the URL `PLAN.md` carried was published from a different Claude account: readable from
+here, never updatable from here. That is precisely the case the "Published status
+board" section warns about, and its standing instruction is to *report* it rather than
+mint a replacement — so the replacement was a decision the product owner made, not one
+a session took.
+
+**New URL: `https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03`.**
+The old `8d59a3e2-820f-4d05-aae3-5d49ec3420f5` is recorded in `PLAN.md` as dead to this
+repository, by ID, so no later session tries to publish to it or cites it as the board.
+Title and tab icon were carried across unchanged - **Chilltent POS — Status Board** and
+🧾 - because the page changed accounts and is still the same board.
+
+### Every figure was sourced from the PLAN.md in this commit, not from memory
+
+Counted off the file rather than recalled: four tracks at ~95 / ~95 / ~85 / ~5; the
+capability board at **20 live, 5 not built, 1 operator-only, 26 total**; the rollout at
+**8 complete, 4 partial, 3 not started**; and the five test suites at 1358 + 346 + 161 +
+10 + 12 = **1887**.
+
+### The visual direction, and the one part of it that is not taste
+
+A heads-up readout, asked for by name. Cyan on near-black, monospace for every figure
+and label, corner-bracketed panels, a slow reticle, one boot sequence on load, and a
+light variant that is a daylight version of the same instrument rather than an
+inversion.
+
+**The status palette was computed, not eyeballed**, and the first two attempts failed:
+
+- The accent cyan was wrongly fed into the status check, which forced four hues to
+  separate and failed everything. The accent is *reserved structure* and never appears
+  as a status, so the real check is the three status colours alone.
+- On dark, amber `#F0B429` against green `#38D07A` measured **ΔE 7.1 (protan)** - inside
+  the 6-8 floor band that is legal only with secondary encoding. Pushing amber to
+  `#FF9F1C` took it to **9.2**, a clean pass, so the design does not have to lean on the
+  label.
+- On light, the first two candidate sets put warning and critical at **ΔE 9.7 and 11.1
+  for normal vision** - a hard failure that secondary encoding does not excuse.
+  `#0E6B3E` / `#B07E00` / `#A8232E` passes all five checks.
+
+Final: dark `#38D07A` / `#FF9F1C` / `#FF5C6C` (CVD 9.2, normal-vision 17.5, contrast all
+above 3:1); light `#0E6B3E` / `#B07E00` / `#A8232E` (all five checks pass). Text pairs
+measured 10.79, 15.18 and 6.56 on dark, 5.19, 14.27 and 5.45 on light. **Every status
+ships with a glyph and a word** - a disc, a triangle, a diamond - so colour never
+carries meaning alone.
+
+### Files changed
+
+```text
+PLAN.md     the new URL, the old one marked dead by ID, and the visual direction
+            recorded so a redeploy does not have to guess it
+HISTORY.md  this entry
+```
+
+The page itself was written to the session scratchpad and is **not** in the repository,
+as the publishing instructions require.
+
+### No code changed and no test was run
+
+This session published a page and edited two documents. The suites are unchanged from
+the product-cost commit `f751c51` and were not re-run, because nothing they cover was
+touched.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```
