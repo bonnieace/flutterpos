@@ -30,7 +30,7 @@ rather than mint a replacement, because a second URL makes both untrustworthy.
 
 | Track | State | What is left |
 | --- | --- | --- |
-| **Cloud Functions** | ~95% | 46 handlers, 272 unit tests. No live Brevo, no deployment. |
+| **Cloud Functions** | ~95% | 46 handlers, 287 unit tests. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. `subscription` has rules and no writer. |
 | **Flutter client** | ~85% | The sell-and-settle loop works, a business can publish the currency it sells in, and it can stock itself. No way to correct a product, no printing, no subscription. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
@@ -66,6 +66,11 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**No row on this board moved on the second 2026-08-07 session.** That session added
+fifteen unit tests to the sale trigger and changed no production code, so every
+capability stands exactly where it did; the only figures that moved are the Functions
+baselines below.
 
 **No red row now stops a business operating.** The two that did both closed on
 2026-08-07: a business publishes its own currency, which is what the till refuses to
@@ -108,17 +113,17 @@ The fifteen frozen steps, with what is actually true:
 | Suite | Command | Count |
 | --- | --- | --- |
 | Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1346** ⚠️ |
-| Functions | `npm --prefix functions test` | **272** |
+| Functions | `npm --prefix functions test` | **287** |
 | Rules | `npm --prefix rules-tests run test:emulator` | **160** |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12** |
 
-**1800 tests across five suites.** `flutter test` takes no path list — the one
-uncompilable file that forced that workaround was deleted on 2026-08-07. Flutter,
-Functions, Rules, and the invitation integration suite were all re-measured on
-2026-08-07 at those figures. Reconciliation integration is the one count carried
-forward: it needs more than ten minutes of wall clock and neither session that has
-touched these baselines changed anything it reads or writes.
+**1815 tests across five suites.** `flutter test` takes no path list — the one
+uncompilable file that forced that workaround was deleted on 2026-08-07. Every one
+of the five was measured on 2026-08-07: Flutter, Rules, and the invitation
+integration suite in the catalog session; Functions at **287** and reconciliation
+integration at **10** in the session after it, which added the fifteen sale-trigger
+tests. No count is carried forward un-measured any more.
 
 ⚠️ **The Flutter suite is not reliably green.** Measured five times on 2026-08-07:
 **1250 passed with 1 failed**, then **1251 passed**, then **1290 passed twice** once
@@ -673,6 +678,25 @@ checkpoints at 04:30 Sunday retain expected and observed quantities separately;
 staggered monthly discovery at 04:45 validates the checkpoint chain, with a
 ten-minute recovery scheduler. **Reconciliation never silently changes stock.**
 
+**A sale is registered once, and `reconciliation_sale_receipts/{saleId}` is what
+says so.** The trigger is declared `retry: true`, so redelivery is its documented
+behaviour, not a hazard: the receipt is `create`d in the same transaction as the
+movement, the dirty day, and the job, and a redelivery answers off the receipt and
+writes nothing. A receipt disagreeing about tenant, business date, or bucket throws
+`already-exists` rather than being adopted, and so does a job document sitting at the
+predictable `dirty_<bucket>` ID that another source created — refusing the whole
+transaction, so no half-written ledger entry survives. A malformed sale line is
+counted and dropped rather than thrown on, because the sale is already committed and
+throwing would leave the day unreconciled behind a poison delivery; the count reaches
+an operator through one `reconciliation_anomalies` document per sale and the dirty
+day's `invalidLineCount`. Lines past the hundredth are counted and dropped, and the
+movement document ID becomes a digest past 120 characters of sale ID. All of it is
+pinned by `functions/src/reconciliation/saleReceipt.test.ts`, including one
+asymmetry worth knowing before changing it: **a redelivery returns a task even when
+the first delivery returned none**, which is safe only because the task ID is a
+digest of tenant, job, generation, and revision, `already-exists` is swallowed on
+enqueue, and a superseded dispatch is refused by the claim.
+
 A stock comparison concludes through one tested function,
 `stockComparisonOutcome` in `reconciliation/model.ts`, ordered most-specific
 cause first: an unreadable movement outranks an unverifiable chain, which
@@ -772,8 +796,17 @@ enormous expected-denial traces.
   `C:\Users\BonifaceMasota\develop\android-sdk\platform-tools\adb.exe`; the one first
   on `PATH` is a different binary and the two servers fight.
 - **A cold emulator's first trigger delivery costs ~25 s**, every later one ~310 ms.
-  Set timeouts from the first. The reconciliation integration suite needs **more than
-  ten minutes** of wall clock — background it.
+  Set timeouts from the first. **The reconciliation integration suite takes about two
+  minutes**, measured end to end on 2026-08-07 at 2 min 09 s, 66 s of it inside the
+  tests. The "more than ten minutes" figure this file carried from 2026-08-05 is
+  retracted; it was the stated reason for carrying that suite's count forward
+  un-measured through three sessions. Backgrounding it is still fine and no longer
+  necessary.
+- **A held `emulators:dev` run may already be up.** One is, as of 2026-08-07:
+  `scripts/seed-dev-emulator.js --hold` on the dev ports. `functions/.env.local` and
+  `functions/.secret.local` exist because of it and are **not** leftovers to delete.
+  The reconciliation and invitation suites take their own projects, ports, and copy
+  of the Functions build precisely so they can run beside it, and do.
 - **Collection-page test fakes must** answer in ascending document-ID order, be keyed
   per business, be keyed per collection, and model the equality-filter contract in
   both directions. All four mistakes have cost a debugging cycle.
@@ -837,57 +870,58 @@ prompt.md                                          (untracked)
 
 ## Next bounded chunk
 
-**Cover `registerSaleReceipt`'s own defences.** Carried forward through three
-handovers now, and it stays queued because nothing on the status board outranks it:
-no red row stops a business operating any more, and the one that remains — editing a
-product — is an open decision rather than a chunk. This one needs no decision at all.
+**Cover `ensureSweep` and `processTenantDiscoveryPage`.** They are the last two
+uncovered exports in `jobs.ts` that do anything — checked on 2026-08-07:
+`listRetryableReconciliationTasks` is out of the double's reach, and
+`reconciliationJobDocument` is a one-line reference accessor with **no caller
+anywhere in `functions/src`**, which is a deletion for some other chunk to make and
+not a test to write. They are queued for the same reason the
+sale trigger was: nothing on the status board outranks them, because no red row stops
+a business operating and the one that matters most — editing a product — is an open
+decision rather than a chunk. This one needs no decision either, and it is the same
+shape of work as the chunk just finished, against the same in-memory double.
 
-It is the entry point every reconciliation job comes from — one Firestore trigger per
-sale — and it already runs against the in-memory Firestore double, but only down its
-simplest path. Each branch below is one it takes on real data and none is asserted
-anywhere. **Do not add `collectionGroup`, `in`, or `<=` to the double for it; none of
-these needs them.**
+`ensureSweep` is what a scheduler calls to start a nightly, weekly, or monthly run,
+and `processTenantDiscoveryPage` is the paginator that turns a sweep into one
+deterministic task per active tenant. Between them they decide whether a tenant is
+reconciled tonight at all, and neither has a unit assertion anywhere:
 
-1. **The receipt is the idempotency key.** A redelivered `onDocumentCreated` must
-   return the first delivery's task and invalid-line count without writing a second
-   movement or double-counting the dirty day; a receipt whose `tenantId`,
-   `businessDate`, or `jobId` disagrees with the retry must throw `already-exists`.
-2. **`saleMovements` combines lines per product and rejects the rest.** Two lines
-   of one product become one movement with `lineCount: 2`; a non-object line, a
-   missing or over-long or slash-bearing `productId`, a non-integer or
-   non-positive quantity, and an unsafe integer sum each count as invalid. `items`
-   that is not an array is one invalid line; anything past the hundredth is counted
-   and dropped.
-3. **Invalid lines write a `reconciliation_anomalies` document**, only when there
-   is at least one, and increment the dirty day's `invalidLineCount` by the same
-   figure — the only place a malformed sale is visible to an operator.
-4. **A bucket belonging to another source throws.** `dirty_<bucket>` is a
-   predictable ID, so a job created there by anything but the sale trigger must be
-   refused.
-5. The movement document ID switches to a hash past 120 characters of sale ID —
-   the branch that keeps a Firestore path legal.
+1. **The 50-tenant page boundary.** `TENANT_DISCOVERY_PAGE_SIZE` is 50: a page that
+   ends exactly on it must return a continuation, and one that ends short must not.
+2. **The monthly shard-day filter.** `monthlyShardDay` decides which tenants a
+   staggered monthly run touches, so a page must enqueue the tenants of today's shard
+   and skip the rest — the branch that keeps the monthly run from becoming a nightly.
+3. **Page-document idempotency.** `pages/{page}` is the guard: a redelivered
+   discovery task must not count its page into the sweep's counters twice. It does
+   re-return the page's tenant tasks, which is safe only because the job and task IDs
+   are deterministic — assert that, rather than assuming it. A sweep document that
+   has disappeared under a live page throws `not-found`.
+4. **Sweep identity.** `sweepRunId` is derived from kind and local date, so two
+   schedulers firing for one date land on one sweep; a document at that ID disagreeing
+   about either throws `already-exists` rather than being adopted.
+
+**Do not add `collectionGroup`, `in`, or `<=` to the double for it; none of these
+needs them.** `listRetryableReconciliationTasks` does need all three, which is why it
+stays out of reach and out of this chunk.
 
 **Explicitly excluded from it:** anything in `lib/`, any change to
-`firestore.rules`, any new export, and the two `jobs.ts` gaps below. It is a
-`functions/test` chunk and nothing else.
+`firestore.rules`, any new export, any change to `jobs.ts` itself, and the
+`regenerateDailyMetric` question below. It is a `functions/test` chunk and nothing
+else.
 
 ### Then, in preference order
 
 - **Run the app against the emulators**, looking at the catalog, reconciliation, and
-  stock surfaces. Queued six times and the oldest behavioural item: neither the
-  deleted-product ledger nor the run route has been seen outside a widget test. A
-  seeded emulator set may still be held open — check before starting a new one.
+  stock surfaces. Queued seven times and the oldest behavioural item: neither the
+  deleted-product ledger nor the run route has been seen outside a widget test.
+  **A seeded set is held open right now** — `scripts/seed-dev-emulator.js --hold` was
+  found running on 2026-08-07 and left alone; use it rather than starting a second.
   **This needs a decision first:** whether the Android exclusion is lifted, because
   a Windows or web run exercises only the loopback path. Ask. It is also the only way
   to see "Checkout settings" and "Manage catalog" reach a real Firestore rule — and
   the catalog route is the one that would make the emulator seed script optional,
   which is worth watching once.
 - **Chase the one intermittent Flutter failure** recorded in the baselines above.
-- **`ensureSweep` and `processTenantDiscoveryPage`** are the last two reachable
-  uncovered exports in `jobs.ts` — the 50-tenant page boundary, monthly shard-day
-  filter, page-document idempotency, and sweep identity collision are all in reach
-  of the double. `listRetryableReconciliationTasks` is not: it needs
-  `collectionGroup`, an `in` filter, and `<=`.
 - **`regenerateDailyMetric` writes `daily_metrics` with `merge: false` and no
   `createdAt`**, unlike every other document in this pipeline. Probably deliberate;
   nothing says which.
@@ -911,17 +945,23 @@ and a client-side check would be a guarantee the next device breaks), and **bulk
 catalog import** (`BULK_UPLOAD_GUIDE.md` describes a pre-migration flow that reaches
 no code in `lib/`).
 
-**Named once, as it has been inherited for many consecutive chunks: the subscription
-surfaces.** Still correctly excluded, and for a reason that has not moved:
-`grep -i subscription functions/src` finds nothing at all. A Flutter surface built now
-would invent the schema, the lifecycle, and the billing states that the server will
-later have to agree with, which is the wrong order — this one starts on the server or
-not at all. It has **not** become blocking: nothing in the sell-and-settle loop reads
-it. Receipt printing, named the same way in the previous handover, is unchanged and
-still correctly excluded. The two exclusions that have moved from cosmetic to
-load-bearing are tracked as open decisions instead: password reset, and how a price is
-corrected — and this session made the second one sharper, because a catalog typed in
-by hand is where a wrong price comes from.
+**Named once, as it has been inherited for many consecutive chunks: receipt printing
+and the printed receipt body.** Still correctly excluded from a `functions/test`
+chunk, and not blocking today — a sale completes, is recorded, is found by receipt
+lookup, and is returnable without anything being printed. But it should stop being
+inherited silently, because it is now **the only red row that is neither an open
+decision nor blocked on the server**: password reset waits on App Check, editing a
+product waits on a decision, and subscription has no server schema to build against.
+Printing waits on nothing but being scheduled. It is the next capability chunk this
+list will run out of excuses for.
+
+The subscription surfaces, named the same way in the previous handover, are unchanged
+and still correctly excluded: `grep -i subscription functions/src` still finds nothing
+at all, so a Flutter surface would invent the schema, lifecycle, and billing states
+the server later has to agree with. That one starts on the server or not at all, and
+nothing in the sell-and-settle loop reads it. The two exclusions that have moved from
+cosmetic to load-bearing are tracked as open decisions instead: password reset, and
+how a price is corrected.
 
 ---
 

@@ -12231,6 +12231,11 @@ files, and deployment.
 - **The reconciliation integration suite needs more than ten minutes of wall
   clock now.** Set any wrapper from a fresh measurement, not from an earlier
   chunk's, and prefer running it in the background.
+  **Retracted on 2026-08-07, second session: measured end to end at 2 minutes
+  9 seconds**, of which 66 seconds was inside the tests. The instruction to
+  measure rather than inherit is what survives here; the figure it was given
+  with did not, and three later entries repeated it as a reason to skip the
+  suite.
 - **Two records of the same class can have different identity contracts.** Four
   stock differences are addressed by product and run; the fifth is addressed by
   product alone. A surface that assumes one contract for a collection will be
@@ -14388,6 +14393,11 @@ minutes of wall clock, and this session changed no `functions/src`, no
 `firestore.rules`, and nothing the reconciliation workers read or write; its count
 is carried forward as 10.
 
+> **The ten-minute figure is retracted on 2026-08-07, second session.** The suite
+> was run there and took **2 minutes 9 seconds** end to end. The rest of the reason
+> for skipping it stands - nothing this chunk touched was read by it - but the cost
+> was overstated, and the count was carried forward three times on that basis.
+
 ### Failures that cost a cycle
 
 - **A test asserted a guard that cannot be reached.** The first draft of the writer
@@ -14623,6 +14633,10 @@ carried forward as 10. The full `flutter analyze --no-pub lib test` baseline of 
 was not re-measured either - only the touched paths were analysed, and they carry
 none of it.
 
+> **The ten-minute figure is retracted on 2026-08-07, second session**, where the
+> suite ran in **2 minutes 9 seconds**. The decision to skip it here was still
+> right for the other reason given; the cost was not what made it right.
+
 **The intermittent seam failure did not occur in this session's single full run.**
 That is not evidence: three of the four runs recorded earlier on 2026-08-07 were
 green too.
@@ -14660,6 +14674,235 @@ Adding one signal assertion above the seam group moved the intermittent failure 
 `test/checkout/checkout_sync_signals_test.dart:352` to **line 371**. The baseline in
 `PLAN.md` was updated with it. Nothing about the intermittency was investigated or
 changed.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```
+
+## The trigger every reconciliation job comes from - 2026-08-07
+
+### Completed in this session
+
+The chunk the previous handover queued, taken unchanged: **`registerSaleReceipt`'s
+own defences**. It was checked against the status board first and kept. No red row
+stops a business operating; the sharpest one left - editing a product - is an open
+decision rather than a chunk; and this one needs no decision at all.
+
+Fifteen tests in one new file, and **no production change of any kind**.
+`functions/src/reconciliation/jobs.ts` is byte-identical to its committed state at
+the end of this session, and `git diff` over it is empty.
+
+### Why this function and not another
+
+`mergeSaleReconciliationJob` is `onDocumentCreated` on
+`tenants/{tenantId}/sales/{saleId}`, declared `retry: true`. It is the entry point
+every reconciliation job in the system comes from: one Firestore trigger per sale,
+one transaction, four kinds of document written from a payload composed by a till
+that may have been offline for a day.
+
+It already ran against the in-memory Firestore double - `jobs.test.ts` drives it
+twice to build a `rerunRequested` fixture - but only down its simplest path: one
+sale, one valid line, one new bucket. Every branch below is one it takes on real
+data, and none of them was asserted anywhere.
+
+The new file is `saleReceipt.test.ts` rather than more of `jobs.test.ts`, because
+the two are about different things: `jobs.test.ts` is the job lifecycle - who may
+claim, advance, finalize, and fail a job - and this is the sale that creates one.
+
+### The five groups, and what each is actually protecting
+
+**1. The receipt is the idempotency key.** `reconciliation_sale_receipts/{saleId}`
+is written with `create`, and it is the only write in the transaction that can
+refuse. Three tests:
+
+- A redelivery writes **nothing** and answers exactly as the first delivery did.
+  Both halves of the answer come off the stored receipt - the task the caller
+  enqueues and the invalid-line count it reports - and the two counters that would
+  show a double count (`saleReceiptCount`, `invalidLineCount`) use
+  `FieldValue.increment`, which has no idea a delivery is a repeat.
+- A redelivery whose `businessDate` or bucket disagrees with the stored receipt is
+  refused with `already-exists`. Both are reachable: the same sale ID with a
+  corrected business date, and the same sale ID arriving in a different five-minute
+  bucket. Returning the first delivery's task there would enqueue a pass over the
+  wrong day.
+- Two deliveries that **both** read no receipt cannot both commit. Started together
+  and deliberately not awaited in turn, so both transactions read before either
+  writes.
+
+**The honest limit of the third one is written into the test.** A real Firestore
+aborts the losing transaction and retries it, and the retry then takes the free
+path. The double does not retry, so what is proved is the half that holds either
+way: the loser is refused outright and nothing it staged reaches the store - no
+half-written movement, and no receipt that would make a later redelivery believe
+the work was done.
+
+**2. `saleMovements` combines lines per product and rejects the rest.** Two lines of
+one product become one movement with `lineCount: 2` and the summed quantity, which
+matters because the movement ID is derived from the sale: two documents at one
+deterministic ID would mean the second silently replacing the first, and the sale
+recorded as having sold three of five.
+
+Fifteen rejected line shapes are tabulated in one test - `null`, a string, a number,
+an array, no `productId`, an empty one, a non-string one, one of 129 characters, one
+carrying a path separator, no `quantity`, a fractional one, a string one, zero,
+negative, and one past `Number.MAX_SAFE_INTEGER`. Each is counted and dropped; the
+sale is still marked dirty and its pass still enqueued, because the metrics and
+shift phases read the sale document itself rather than this validation's opinion of
+it. The trigger cannot refuse the sale - it is already committed - and throwing
+would leave the day permanently unreconciled behind a poison delivery.
+
+Two boundaries are pinned on the passing side as well: a `productId` of exactly 128
+characters is legal, because 128 is Firestore's own document-ID limit and the line
+becomes a ledger path; and the unsafe-sum check is on the **running total**, so two
+lines that are each safe and sum past the range reject only the second, leaving the
+first one's movement intact.
+
+`items` that is not an array is one invalid line, not zero - asserted for a missing
+field, `null`, an object, and a string. A sale with no readable lines is not a sale
+with no stock effect; it is a sale whose stock effect is unknown.
+
+Anything past the hundredth line is counted and dropped: 100 lines of one product
+plus five of another gives one movement of 100 and `invalidLineCount: 5`. The bound
+is on the transaction, not on the sale - a hundred products is a hundred movement
+documents against Firestore's 500-write limit.
+
+**3. Invalid lines write one anomaly document, and only when there is one.** It is
+the only place a malformed sale is ever visible to an operator. One sale writes at
+most one anomaly however many lines failed; its ID is a digest of the sale, matched
+against `/^sale_[0-9a-f]{40}$/`; and the dirty day's `invalidLineCount` carries the
+same figure, written in the same transaction, so the day can never report malformed
+lines that no anomaly document accounts for. A clean sale writes no anomaly at all -
+the collection is read by the differences surface, and an empty record per sale
+would bury the ones that mean something.
+
+**4. A bucket belonging to another source throws.** `dirty_<bucket>` is derived from
+the clock alone, so unlike every other job ID in this pipeline it is predictable.
+Two tests: a *manual* job created at that ID by the production creator, and a
+*sale-trigger* job whose `sourceKey` is a different bucket. Both are refused, and
+the assertion that matters is that the whole transaction is - the movement, the
+dirty day, and the receipt are staged with the job write, so a sale that cannot
+claim its bucket leaves no ledger entry and no receipt behind.
+
+**5. The movement ID stops being the sale ID at 120 characters.** Asserted on both
+sides of the boundary: at exactly 120 the movement is addressed by the sale itself,
+which is what makes a ledger entry traceable by reading its ID; past it, the ID is
+`sale_` plus a 40-character digest. Two sale IDs differing in one character get
+different digests - sharing one would mean the second sale replacing the first's
+ledger entry at a document nothing would look at again - and `sourceId` still holds
+the whole sale ID, because once the ID stops naming the sale the document has to.
+
+### One thing observed, and deliberately not changed
+
+**A redelivery always returns a task, including for a sale whose first delivery
+returned none.** A sale landing while its bucket's job is already running gets
+`enqueue: false` from `mergeDirtyJob`, but the receipt still records the job's
+`generation` and `revision`, and the redelivery path returns a task built from them
+unconditionally.
+
+It is safe, for two reasons that are both outside this function.
+`enqueueReconciliationTask` names the task `reconciliationTaskId(payload)` - a
+digest of tenant, job, generation, and revision - and swallows `already-exists`, so
+a duplicate enqueue is a no-op. And if the pass has since moved on, the dispatch
+names a superseded revision and `claimReconciliationJob` refuses it; if the pass
+died, this is exactly the lost-dispatch recovery the lease is for.
+
+So it is recorded rather than fixed. This chunk excluded production changes, and
+the behaviour is now pinned by the redelivery test, so a future session changing it
+will have to mean to.
+
+### The tests were proved able to fail
+
+A test written after the code it describes is worth nothing until it has been seen
+to fail. Three mutations were applied to `jobs.ts` together, and the failing set was
+checked against what each should catch:
+
+| Mutation | Expected to fail | Failed |
+| --- | --- | --- |
+| `businessDate` dropped from the receipt identity check | the disagreeing-redelivery test | 4 |
+| `saleId.length <= 120` becomes `<= 1200` | the movement-ID boundary test | 15 |
+| `if (invalidLineCount > 0)` becomes `>= 0` | the two no-anomaly assertions | 1, 5, 12 |
+
+**10 pass, 5 fail**, and the five were exactly those. All three mutations were then
+reverted with the editing tools and `git diff -- functions/src/reconciliation/jobs.ts`
+confirmed empty - not with `git checkout -- <path>`, per the standing trap about
+reverting a mutation in a session that also edits the file.
+
+### Files changed
+
+```text
+functions/src/reconciliation/saleReceipt.test.ts   (new, 15 tests)
+PLAN.md HISTORY.md
+```
+
+Nothing under `lib/`, nothing in `firestore.rules`, no new export, and no change to
+`functions/src/reconciliation/jobs.ts`.
+
+### Tests
+
+```text
+npm --prefix functions test
+  -> 287 pass, 0 fail (baseline 272 + 15)
+
+npm --prefix rules-tests run test:emulator:reconciliation
+  -> 10 pass, 0 fail
+```
+
+The Flutter suite was **not** run: this session changed no `lib/` and no `test/`
+file, and the whole of it is a `functions/` chunk. The Rules suite was not run for
+the same reason - `firestore.rules` and `rules-tests/test` are untouched - and
+neither was the invitation integration suite, which covers staff invitations and
+shares nothing with this code. Android build and Android emulator tests are
+excluded for now, as instructed.
+
+The reconciliation integration suite **was** run, and it is the one that exercises
+`mergeSaleReconciliationJob` against a real Firestore, a real trigger, and a real
+task queue. Its count had been carried forward un-measured through three sessions.
+
+### The ten-minute suite takes two minutes
+
+The reason it kept being carried forward was a figure recorded on 2026-08-05 and
+repeated since: *more than ten minutes of wall clock*. Measured here end to end,
+`npm --prefix rules-tests run test:emulator:reconciliation` took **2 minutes 9
+seconds**, 66 seconds of which was inside the tests. All three places in this file
+that state the ten-minute figure now carry a retraction inline, and the trap in
+`PLAN.md` has been corrected.
+
+The advice the original note came with was right and is kept: measure, do not
+inherit. This is what happens when it is inherited.
+
+### The held emulator run was found and left alone
+
+A `scripts/seed-dev-emulator.js --hold` run was already up on the dev ports, with
+its `emulators:exec` parent and a Firestore JVM - the seeded set a previous session
+left open for the "run the app against the emulators" item, which is still queued
+and still needs a human decision. It was not touched. The reconciliation suite runs
+its own project, its own ports, and its own copy of the Functions build precisely so
+the two can coexist, and it did: it started, passed, and shut down its own emulators
+while the held run stayed up.
+
+`functions/.env.local` and `functions/.secret.local` exist on disk for the same
+reason - the held run writes them and removes them on exit. They are not leftovers
+from a killed run and must not be deleted while that run is up.
+
+### One dead export, found while queuing the next chunk
+
+`reconciliationJobDocument` in `jobs.ts` returns `jobRef(db, tenantId, jobId)` and
+nothing else, and `grep -rn reconciliationJobDocument functions/src` finds only its
+own definition. It is not re-exported from `index.ts`, so nothing is deployed for it -
+it is dead inside its own module. Recorded rather than deleted: this chunk changed no
+production code, and the next one excludes `jobs.ts` itself. It is why the queued
+chunk names two functions rather than three.
+
+### Failures that cost a cycle
+
+None. The file compiled and passed on its first run; the only surprises were the two
+recorded above - the redelivery's unconditional task, and the ten-minute figure.
 
 ### Unrelated local changes, still unstaged and never touched
 
