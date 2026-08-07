@@ -28,6 +28,16 @@ is not readable back from the published page, and changing it makes the page loo
 like a different one in a tab strip. The 2026-08-07 session that first needed it had
 to guess.
 
+**Pass the title as an argument, not only as a `<title>` tag.** A redeploy on
+2026-08-07 that relied on the tag alone came back registered as plain "Status Board",
+losing the product name; the next redeploy passed `title` explicitly and restored it.
+The tag sits inside the page body rather than a `<head>` this file controls, so treat
+it as a hint and the argument as the record. Two other traps, both learned the same
+day: a redeploy from a session that did not itself publish the page **must** pass the
+URL above as `url`, or it mints a second artifact, and a redeploy can come back
+`conflict` even against your own earlier publish in the same session — re-read the
+page, confirm the live copy is yours, and publish again rather than forcing.
+
 ---
 
 ## Status board
