@@ -48,6 +48,24 @@ void main() {
       expect(requests.single, isNot(isA<CheckoutSaveSyncRequest>()));
     });
 
+    test('a published configuration asks for the same full pass', () async {
+      final requests = <Object?>[];
+      final changes = <Object?>[];
+      signals.syncRequests.listen(requests.add);
+      signals.evidenceChanges.listen(changes.add);
+
+      signals.requestSyncAfterConfigurationChange();
+      await pumpEventQueue();
+
+      // Deliberately the unnarrowed reason rather than a save-shaped one: the
+      // catalog refresh is the only thing that re-reads `configuration/checkout`,
+      // and a save-shaped request skips it. No local checkout state moved, so
+      // nothing asks a read-only surface to re-read.
+      expect(requests, [null]);
+      expect(requests.single, isNot(isA<CheckoutSaveSyncRequest>()));
+      expect(changes, isEmpty);
+    });
+
     test('a finished run reports evidence without asking for another run', () async {
       final requests = <Object?>[];
       final changes = <Object?>[];
@@ -66,6 +84,7 @@ void main() {
 
       expect(signals.requestSyncAfterSave, returnsNormally);
       expect(signals.requestSyncAfterReconnect, returnsNormally);
+      expect(signals.requestSyncAfterConfigurationChange, returnsNormally);
       expect(signals.reportEvidenceChanged, returnsNormally);
     });
   });

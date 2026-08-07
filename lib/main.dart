@@ -385,6 +385,28 @@ class SpiritPOSApp extends StatelessWidget {
             ),
           ),
         ),
+        // The one path in the app that publishes what a till prices in, and the
+        // one capability every other operational surface here already assumed:
+        // the catalog refresher refuses outright while no usable currency is
+        // published, so a business that never opens this route cannot sell at
+        // all. Owner and administrator only, which the Firestore rule for
+        // `configuration/{documentId}` enforces on its own.
+        //
+        // A commit asks for a full sync pass, because the catalog refresh is the
+        // only thing that re-reads the document: without it this device would
+        // keep pricing new sales with the code that was just replaced.
+        checkoutConfigurationRoute: (reader) =>
+            TenantCheckoutConfigurationScreen(
+              reader: reader,
+              writer: FirebaseTenantCheckoutConfigurationWriter(
+                firestore: FirebaseFirestore.instance,
+                isOnline: isOnline,
+              ),
+              onPublished:
+                  checkoutSyncSignals.requestSyncAfterConfigurationChange,
+            ),
+        checkoutConfigurationRoles:
+            TenantCheckoutConfigurationPublisher.allowedRoles,
         pendingCheckoutPanel: CheckoutPendingEvidencePanel(
           source: CheckoutOutboxEvidenceSource(checkoutOutbox),
           // Without this the counts are read once when the session opens, so a

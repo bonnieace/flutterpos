@@ -14232,3 +14232,223 @@ android/gradle.properties
 pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 ```
+
+---
+
+## A business can set what it sells in - 2026-08-07
+
+### Why this chunk and not the queued one
+
+The queued chunk was branch coverage for `registerSaleReceipt`. It was declined
+for this session in favour of the capability directly above it on the board,
+because the board said the app could not function without it: **"Set the currency
+/ checkout configuration - Read-only. Without it the till refuses to sell at
+all."** That is not a coverage gap, it is a business that cannot trade. The
+`registerSaleReceipt` chunk is carried forward unchanged and needs no decision.
+
+The other red row from the same finding - catalog management - was left alone
+deliberately, and not only for size. Its halves have different costs, which the
+Firestore rules settle rather than the plan:
+
+| Half | Rule today | Cost |
+| --- | --- | --- |
+| Create a product | `allow create: if hasTenantRole(['owner','admin','manager']) && quantity is int` | reachable now, client-only |
+| Delete a product | `allow delete: if hasTenantRole(['owner','admin'])` | reachable now, client-only |
+| **Edit** a product | `allow update` permits **only** a strictly decreasing `quantity` with `affectedKeys().hasOnly(['quantity','updatedAt'])` | needs a rules change or a new callable - a separate decision |
+
+So "a shop can stock itself" is a client-only chunk, and "a shop can correct a
+price" is not. That split is recorded in `PLAN.md` as the next chunk and its open
+half. Configuration writing had no such split: `configuration/{documentId}`
+already carries `allow write: if hasTenantRole(tenantId, ['owner','admin'])`, so
+this session added no rule, no callable, and no export.
+
+### Completed behaviour
+
+**One route publishes `configuration/checkout`, and only that document.** Reached
+from the safe landing screen as "Checkout settings", beside the read-only catalog
+rather than beside the till, because it decides what every price in that catalog
+means. Offered to owner and administrator only - the same pair the Firestore rule
+allows - and the route itself is guarded by that pair, so a manager or cashier is
+denied and issues no read at all.
+
+**The surface is built around whether a till can sell, not around whether a
+document exists.** `TenantPublishedCheckoutConfiguration` has three states:
+`published`, `absent`, and `malformed`. The third is the one that mattered: the
+strict read model refuses a document whose `currency` is not `^[A-Z]{3}$`, the
+catalog refresher then answers `configurationUnavailable`, and every device in the
+business stops selling. Showing the cashier's refusal to the one person who can
+correct it would have left them with nothing to do, so the publishing repository
+catches `FormatException` and reports the state, while `TenantScopeViolation` is
+deliberately **not** caught - a reader answering outside the tenant is a broken
+boundary, never "nothing is published".
+
+**The write merges.** `set(data, SetOptions(merge: true))`, not a whole-document
+`set`. `configuration` is one collection with a document per concern and the read
+model deliberately ignores fields it does not know, so a whole-document write from
+this build would silently delete a setting a later one added. The rules test proves
+both halves: an unknown `receiptFooter` on the same document survives, and
+`configuration/branding` beside it is untouched.
+
+**There is no request ID, and that is a property rather than an omission.** Every
+other write in this client derives a deterministic document ID from
+`actorUid + operation + tenantId + requestId` so a retry addresses one document.
+This write names one fixed path and one fixed value, so it is idempotent by
+construction: an ambiguous outcome is reported as "publishing the same code again
+is safe", and the page re-reads rather than warning the operator off a retry.
+
+### The safety decisions
+
+1. **A sale carries the currency it was priced with, so nothing is ever
+   re-priced.** `checkout_draft.dart:302` copies `snapshot.configuration.currency`
+   into the sale payload, and that payload is hashed. Changing the published code
+   therefore rewrites no history and converts no amount. The confirmation says so
+   in those words, and the route repeats it as a standing sentence: "It converts
+   nothing: this app runs no exchange rate, and no recorded sale is ever
+   re-priced."
+2. **An unsynced device keeps pricing in the old code, and the operator is told
+   so.** The till prices from the encrypted Hive snapshot, which is only re-read by
+   the catalog refresh inside a sync pass. Two devices can therefore record the
+   same day's sales in two currencies, and `daily_metrics` carries no code at all -
+   the reporting label comes from the *current* configuration. This is stated in
+   the confirmation rather than prevented, because preventing it would mean
+   blocking a correction: a business that published `KSE` for `KES` must be able to
+   fix it.
+3. **A commit asks for a full sync pass.** `CheckoutSyncSignals` gained
+   `requestSyncAfterConfigurationChange()`, which emits the same unnarrowed `null`
+   a reconnect does rather than a `CheckoutSaveSyncRequest`. A save-shaped request
+   sets `refreshDerivedData: false`, and the catalog refresh is the only thing that
+   re-reads the document - so a save-shaped signal would have left this device
+   pricing with the code it had just replaced. It emits nothing on
+   `evidenceChanges`: no local checkout state moved.
+4. **Only a warned change is confirmed; a refused one is never asked about.** The
+   intent is built *before* the dialog, so `invalid_currency` and
+   `currency_unchanged` are reported as sentences instead of being confirmed and
+   then refused, and the confirmation describes the intent that would be written
+   rather than the text that was typed. `intent.changesPublishedCurrency` is the
+   only thing that decides whether the strong warning is shown, and it is false for
+   both `absent` and `malformed` - neither replaces anything usable.
+5. **Republishing the identical code is refused.** It would rewrite the provenance
+   fields and ask every device to re-read a catalog that cannot have changed. A
+   malformed or absent document is never "unchanged": clearing it is exactly what
+   the surface exists for.
+6. **`kes` is a spelling of `KES`, not a different setting.** Normalization is in
+   the repository rather than the widget, so the one casing an ISO 4217 code has is
+   decided at the boundary that validates it. Reading is never a repair, though: a
+   stored lowercase code stays `malformed`, because the till would otherwise price
+   a sale with a code no rule and no report agrees about.
+7. **The committed/rejected/ambiguous/unavailable split is the return writer's,
+   unchanged.** Offline attempts nothing; a failing connectivity check counts as
+   offline; the seven proven-refusal codes are `rejected` and everything else is
+   `ambiguous`; only a rejection leaves the page unread, because only a rejection
+   proves nothing was written.
+
+### Files changed
+
+```text
+lib/checkout/checkout_configuration.dart          + publish intent, publisher,
+                                                    writer, published-state model
+lib/checkout/checkout_configuration_panel.dart    new - the route and its form
+lib/checkout/checkout_sync_signals.dart           + requestSyncAfterConfigurationChange
+lib/checkout/checkout.dart                        + one export
+lib/tenancy/tenant_routing_shell.dart             + checkoutConfigurationRoute
+                                                    and roles, on the shell and
+                                                    the landing screen, plus the
+                                                    "Checkout settings" button
+lib/main.dart                                     + the composition, wiring the
+                                                    writer and the sync signal
+test/checkout/checkout_configuration_test.dart    new - 20 tests
+test/checkout/checkout_configuration_panel_test.dart   new - 18 tests
+test/checkout/checkout_sync_signals_test.dart     + 1 test, + 1 assertion
+rules-tests/test/checkout-configuration.test.js   new - 9 tests
+rules-tests/package.json                          + the suite and a focused script
+```
+
+No server code, no rule, no index, and no callable changed. `functions/src` was
+not touched.
+
+### Tests
+
+| Command | Result |
+| --- | --- |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only test/checkout/checkout_configuration_test.dart` | **20/20** |
+| `flutter test ... test/checkout/checkout_configuration_panel_test.dart` | **18/18** |
+| `flutter test ... test/checkout/checkout_sync_signals_test.dart` | **14/14** |
+| `flutter test ... test/tenancy test/checkout/checkout_cart_panel_test.dart test/checkout/checkout_catalog_cache_test.dart test/reporting/reporting_currency_test.dart` | **397/397** |
+| `npm --prefix rules-tests run test:emulator:checkout-configuration` | **9/9** |
+| `flutter analyze --no-pub lib/checkout lib/tenancy test/checkout` | no issues |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1290/1290**, twice — the second after the role-loop teardown below |
+| `flutter analyze --no-pub lib test` | **476**, all pre-existing; see below |
+| `npm --prefix functions test` | **272/272** |
+| `npm --prefix rules-tests run test:emulator` | **150/150** (was 141) |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `git diff --check` | clean |
+
+The reconciliation integration suite was **not** re-run. It needs more than ten
+minutes of wall clock, and this session changed no `functions/src`, no
+`firestore.rules`, and nothing the reconciliation workers read or write; its count
+is carried forward as 10.
+
+### Failures that cost a cycle
+
+- **A test asserted a guard that cannot be reached.** The first draft of the writer
+  suite tried to prove `configuration_path_escaped_tenant` by building an intent
+  for another business - but the publisher derives both the path and the tenant ID
+  from one session, so they always agree and the write committed. The intent's
+  constructor is private, so the assertion is defence-in-depth with no reachable
+  input, exactly as the shift and return writers' equivalents are. The test was
+  rewritten to prove what is observable: the writer derives its path from the
+  intent it was handed, and a second business's intent lands in that business's own
+  subtree.
+- **A widget test asserted a button the same test had made absent.** The first case
+  pumped the panel with no writer, which is the deliberately read-only
+  configuration, and then looked for the submit button's label. Passing the writer
+  fixed it; the read-only case is now its own test.
+- **`const TenantPublishedCheckoutConfiguration.published(configuration)` does not
+  compile.** `TenantCheckoutConfiguration` validates its currency in an initializer
+  call, so it has no const constructor and cannot be a const argument. Not a cycle
+  - the analyzer said so immediately - but worth knowing before writing the next
+  fixture.
+
+### Two baselines corrected by measuring them
+
+- **The analyzer baseline is 476, not 477.** `flutter analyze --no-pub lib test` was
+  run twice and reported 476 both times, and none of the 476 is in a file this chunk
+  added or touched — `lib/checkout`, `lib/tenancy`, and `test/checkout` analyse with
+  no issues at all. The 477 in `PLAN.md` no longer reproduces; it is now 476.
+- **The Rules suite is 150, not 141.** The nine added
+  `checkout-configuration.test.js` cases are the difference, and the whole suite was
+  re-run to confirm rather than adding nine to the carried figure.
+
+### A role-by-role loop needed the tree torn down
+
+Three of the new widget tests loop over roles in one `testWidgets` body, and
+`TenantRouteGuard` reloads on a session change rather than on a rebuild - a standing
+trap in `PLAN.md`. Every one of those loops asserts the *same* outcome for both roles
+(offered, or denied), so a tree that kept the first role's answer would have passed
+the second case without ever rendering it. Each iteration now ends with a
+`pumpWidget(SizedBox.shrink())` so the next role builds from nothing. The assertions
+did not change and still pass, which is the point: they were passing for a reason
+that was only partly the one claimed.
+
+### The flaky seam test moved
+
+`PLAN.md` recorded the intermittent failure at
+`test/checkout/checkout_sync_signals_test.dart:333`. Adding a signal test above the
+seam group moved that assertion to **line 352**; the baseline in `PLAN.md` was
+updated with it. Nothing about the intermittency was investigated or changed.
+
+`dart format` was also reverted on five pre-existing blocks in that file, `main.dart`
+included: the repository is not formatted with this SDK's line-breaking, so
+formatting the whole file turned a 19-line addition into a 95-line diff. Only the
+added code is canonically formatted, and a formatter run on either file still reports
+those same pre-existing blocks. Do not format a whole file in this repository to
+land an addition to it.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+```

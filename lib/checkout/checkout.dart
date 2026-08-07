@@ -1,6 +1,7 @@
 export 'checkout_cart_panel.dart';
 export 'checkout_catalog_cache.dart';
 export 'checkout_configuration.dart';
+export 'checkout_configuration_panel.dart';
 export 'checkout_confirmation.dart';
 export 'checkout_draft.dart';
 export 'checkout_evidence.dart';

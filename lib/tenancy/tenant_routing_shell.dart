@@ -82,6 +82,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.tenantDataReader,
     this.tenantRouteBuilder,
     this.checkoutRoute,
+    this.checkoutConfigurationRoute,
+    this.checkoutConfigurationRoles = const <TenantRole>[],
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
@@ -161,6 +163,16 @@ final class TenantRoutingShell extends StatefulWidget {
   /// controller because saving a draft must be bound to the exact session it
   /// was started in.
   final Widget Function(TenantSessionController sessions)? checkoutRoute;
+
+  /// Optional guarded checkout settings route, injected for the same reason.
+  ///
+  /// It is the only surface that publishes what a till prices in, and until it
+  /// has been used once the till above it cannot sell at all.
+  final Widget Function(TenantDataReader reader)? checkoutConfigurationRoute;
+
+  /// The roles that route is offered to, decided by the checkout domain. It is
+  /// deliberately narrower than the roles that may sell.
+  final List<TenantRole> checkoutConfigurationRoles;
 
   /// Optional shift lifecycle surface rendered on the safe landing route. It is
   /// injected for the same reason: tenancy code owns routing, not operations.
@@ -715,6 +727,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       switchCandidates: _bootstrapResult?.selection.visible ?? const [],
       onSwitchTenant: _switchTenant,
       checkoutRoute: widget.checkoutRoute,
+      checkoutConfigurationRoute: widget.checkoutConfigurationRoute,
+      checkoutConfigurationRoles: widget.checkoutConfigurationRoles,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
       shiftPanel: widget.shiftPanel,
       dailySummaryRoute: widget.dailySummaryRoute,
@@ -1259,6 +1273,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.switchCandidates = const [],
     this.onSwitchTenant,
     this.checkoutRoute,
+    this.checkoutConfigurationRoute,
+    this.checkoutConfigurationRoles = const <TenantRole>[],
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
@@ -1287,6 +1303,18 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   onSwitchTenant;
   final Widget? pendingCheckoutPanel;
   final Widget Function(TenantSessionController sessions)? checkoutRoute;
+
+  /// Optional guarded checkout settings route, supplied by the composition root.
+  ///
+  /// It is the one surface that publishes what a till prices in. The till beside
+  /// it refuses to sell until this has been used once, which is why the two are
+  /// offered from the same screen.
+  final Widget Function(TenantDataReader reader)? checkoutConfigurationRoute;
+
+  /// The roles that route is offered to, decided by the checkout domain. It is
+  /// deliberately narrower than the roles that may sell.
+  final List<TenantRole> checkoutConfigurationRoles;
+
   final Widget? shiftPanel;
 
   /// Builds the read-only reporting route. Supplied by the composition root so
@@ -1458,6 +1486,27 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   icon: const Icon(Icons.inventory_2_outlined),
                   label: const Text('View read-only catalog'),
                 ),
+                // Beside the catalog rather than beside the till: this decides
+                // what every price in that catalog means, and the person who
+                // opens it is not the person standing at the till.
+                if (checkoutConfigurationRoute != null &&
+                    membership.role.canAccess(checkoutConfigurationRoles))
+                  OutlinedButton.icon(
+                    key: const ValueKey('checkout-configuration'),
+                    onPressed: () {
+                      final controller = TenantSessionScope.of(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TenantSessionScope(
+                            controller: controller,
+                            child: checkoutConfigurationRoute!(reader),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.tune_outlined),
+                    label: const Text('Checkout settings'),
+                  ),
                 if (dailySummaryRoute != null &&
                     membership.role.canAccess(dailySummaryRoles))
                   OutlinedButton.icon(

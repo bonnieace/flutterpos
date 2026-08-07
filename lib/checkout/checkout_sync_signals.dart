@@ -50,6 +50,15 @@ final class CheckoutSyncSignals {
   /// including refreshing derived data that could not be read while offline.
   void requestSyncAfterReconnect() => _add(_syncRequests, null);
 
+  /// The business published different checkout settings, so what this device
+  /// caches is stale.
+  ///
+  /// This asks for the same full pass a reconnect does rather than a save-shaped
+  /// one, because the catalog refresh is the only thing that re-reads
+  /// `configuration/checkout` - and until it runs the till keeps pricing new
+  /// sales with the currency it was published to replace.
+  void requestSyncAfterConfigurationChange() => _add(_syncRequests, null);
+
   /// A sync run finished, so what it settled is now worth re-reading.
   void reportEvidenceChanged() => _add(_evidenceChanges, null);
 
