@@ -135,6 +135,45 @@ test("daily aggregation retains transaction and shift expectations", () => {
   assert.deepEqual(result.shifts.map((shift) => shift.shiftId), ["shift-a", "shift-b"]);
 });
 
+test("daily aggregation refuses a date with more shifts than one transaction may write", () => {
+  // The third of the metrics phase's three bounds, and the only one that decides
+  // how many documents `regenerateDailyMetric`'s transaction *writes*: every shift
+  // this returns becomes one `shift_expectations` set in that transaction, beside
+  // up to 200 deletions of the ones it replaces. Two hundred is therefore not a
+  // preference - at 250 the widest regeneration would ask for 502 writes and
+  // Firestore would refuse the whole thing.
+  const sales = (count: number, from = 1) => Array.from({length: count}, (_, index) => ({
+    total: 1,
+    shiftId: `shift-${`${index + from}`.padStart(4, "0")}`,
+    items: [{quantity: 1, unitPrice: 1, unitCost: 0}],
+  }));
+
+  // The bound is on distinct shifts, not on sales: two thousand sales across two
+  // hundred shifts is inside it.
+  const wide = aggregateDailySales("2026-07-29", [...sales(200), ...sales(200)]);
+  assert.equal(wide.shifts.length, 200);
+  assert.equal(wide.metrics.transactionCount, 400);
+
+  assert.throws(() => aggregateDailySales("2026-07-29", sales(201)), (error: unknown) => {
+    assert.ok(error instanceof HttpsError);
+    assert.equal(error.code, "resource-exhausted");
+    assert.match(error.message, /bounded shift aggregation limit/);
+    return true;
+  });
+
+  // A sale that names no usable shift is skipped rather than counted against the
+  // bound, so a date full of them cannot be refused for a reason it does not have.
+  const unshifted = Array.from({length: 50}, () => ({
+    total: 1,
+    shiftId: "not/a/document/id",
+    items: [{quantity: 1, unitPrice: 1, unitCost: 0}],
+  }));
+  const mixed = aggregateDailySales("2026-07-29", [...sales(200), ...unshifted]);
+  assert.equal(mixed.shifts.length, 200);
+  // Skipped for the expectation, still counted for the day's takings.
+  assert.equal(mixed.metrics.transactionCount, 250);
+});
+
 test("checkpoint hashes chain expected and observed values separately", () => {
   const input = {
     tenantId: "tenant-a",

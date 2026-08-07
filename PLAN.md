@@ -14417,3 +14417,366 @@ files, and deployment.
 - Mutate the production code and revert with `git checkout -- <path>`. Five
   mutations in this session each named one test, which is the only evidence that a
   green suite is watching anything.
+
+---
+
+## A hook with no producer, and three bounds nothing had counted - 2026-08-07
+
+### Completed in this session
+
+Three chunks, in the order the previous handover queued them. The first was the
+one it named; the second it also named and this session could not finish, for a
+reason recorded in full below; the third it had declined once, on a premise that
+had stopped being true.
+
+### 1. `retryDelayMilliseconds` is gone
+
+**The decision: the deferral stays as it is, and the field loses its excuse to
+exist.** The previous handover left this as an open design question across three
+modules. It has one answer, and the code now says so in one place.
+
+The field could only ever be *forwarded* on a `completed: false` product result,
+because those are the only two returns in `processStockPage` that carried it.
+`reconcileProduct` has exactly one such return - `movement_backlog` - and a
+backlog means the next two hundred movements are **already committed and
+waiting**. Delaying that continuation is not conservative, it is just slower.
+
+The one branch with any claim to asking for a delay is `recent_write_deferred`,
+and asking would mean holding the page: returning `completed: false` with the
+product as `pendingProductId` so the phase stalls until `safeAfter`. The previous
+handover asked for that cost to be measured before choosing. Measured, it is worse
+than a delay:
+
+- **A held product blocks every product after it.** The page is ordered by
+  document ID, so one hot product early in the catalog stops the other 9,999 from
+  being verified at all in that job. Stepping past it verifies 9,999 and re-reads
+  the hot one on the next run.
+- **The five-minute window is not a five-minute wait.** Every sale stamps
+  `updatedAt` on every product it decrements -
+  `lib/checkout/checkout_sale.dart:419`, `stockServerTimestampFields: ['updatedAt']`
+  - so a product selling more often than once every five minutes never leaves its
+  own window. The hold is unbounded, and it is unbounded for exactly the products
+  a stock check exists to watch.
+- **Stepping past costs nothing.** The deferral writes the two
+  `stock_verifications` documents and never touches
+  `stock_reconciliation_state`, so no movement cursor advances, the
+  already-finished guard does not fire, and the next job reads the product from
+  the same ledger position. Nothing is lost by deferring; something is lost by
+  waiting.
+
+So the field is removed from `ProductResult`, `StockPageResult`, and `JobAdvance`,
+the pass-through in `handlers.ts` is gone, and `nextAttemptAt` is
+`Timestamp.now()`.
+
+**`advanceReconciliationJob` still writes the field rather than clearing it, and
+that is now under test for two reasons it turned out to have.** Both were
+discovered while working out what a test of it should say:
+
+1. **A backoff a failed attempt left behind must not outlive it.**
+   `recordReconciliationFailure` writes `nextAttemptAt` 15 seconds to an hour out
+   and `claimReconciliationJob` throws `unavailable` while it is live. Without
+   `advance` overwriting it, a job that failed once would have *every remaining
+   page* refused for being early - and past the sixth consecutive failure, refused
+   for a full hour per page.
+2. **`FieldValue.delete()` would strand the job.**
+   `listRetryableReconciliationTasks` finds a lost dispatch with
+   `where("nextAttemptAt", "<=", now)`, and Firestore returns nothing for a
+   document with no value at a filtered field. A queued job without the field is
+   invisible to the only sweep that can recover it.
+
+`jobs.test.ts` had no coverage of `advanceReconciliationJob` at all - the previous
+handover's step 4 said it did, and it did not; the file was five pure cases over
+`saleTriggerJobFields` and `mergeDirtyJob`. It now has three Firestore-backed
+cases, and the fixture is built by `createManualJobInTransaction` rather than
+hand-seeded, so it cannot drift from what production creates.
+
+**That needed one addition to the double: `create`.** `FakeTransaction` had no
+`create`, which is the write Firestore rejects a delete sentinel in and the exact
+shape of the defect `sentinelAudit.ts` exists to find - the one that threw on
+every sale for as long as it lived. The double could describe that refusal in a
+comment and not reproduce it. Now it reproduces it, and `ALREADY_EXISTS` besides,
+which is the whole of every idempotent creator's idempotency in this codebase.
+
+### 2. `test/widget_test.dart` - blocked, not skipped
+
+The previous handover offered two one-line resolutions. **Neither is available,
+and one of them was never one line.**
+
+- **Deleting it was refused by this session's permission classifier**, twice
+  (`git rm` and `Remove-Item`). No workaround was attempted. It is a one-command
+  change and it needs a human to authorise it.
+- **Pointing it at the real root widget is not one line.** `MyApp` has never
+  existed in this project; the file is the untouched `flutter create` template.
+  The root widget is `SpiritPOSApp`, whose constructor takes eight collaborators -
+  five of them encrypted Hive boxes opened at startup - and whose `build()` reaches
+  `FirebaseAuth.instance` and `FirebaseFirestore.instance` unconditionally
+  (`lib/main.dart:203`, `:235`). `pumpWidget` throws before the first frame. A
+  smoke test worth keeping needs startup seams that do not exist, which is a
+  production change for a test's benefit and belongs in its own chunk.
+
+The exact current failure, for whoever picks it up:
+
+```text
+test/widget_test.dart:16:35: Error: Couldn't find constructor 'MyApp'.
+```
+
+The file is untouched. `flutter test` still cannot be run without naming paths.
+
+### 3. The three metrics bounds, all asserted
+
+The previous handover recorded two bounded limits in `regenerateDailyMetric` as
+"unasserted anywhere", with the caveat that proving them "requires the page sizes
+to become injectable, which is a change to production code for a test's benefit".
+
+**That caveat was written against an emulator, and it stopped being true when the
+double landed.** Five thousand sales and two hundred expectations are seeded in
+memory in about three seconds, so the bounds are asserted at their real figures
+and the production constants stayed private. There are three, not two, and none of
+them had ever been counted:
+
+| Bound | Where | What it limits |
+| --- | --- | --- |
+| 5,000 sales per business date | `processors.ts` | documents **read** |
+| 200 stale shift expectations | `processors.ts` | documents **deleted** |
+| 200 distinct shifts | `model.ts`, `aggregateDailySales` | documents **written** |
+
+**They are one budget, and that is now written down where the constant is.** One
+regeneration is a single transaction: at most 200 deletions, plus 200 expectations
+written, plus the daily metric, plus the dirty-day row - **402 writes against
+Firestore's limit of 500**. Raising either 200 moves the widest regeneration past
+that limit, and on the day it does, a busy date stops being republishable rather
+than getting slower. The inline `201`/`200` literals are now
+`SHIFT_EXPECTATION_LIMIT`, carrying that reasoning.
+
+The half of each test that matters is not that it throws but **when**: both
+refusals are raised before the transaction opens, so a date over either bound
+keeps its previous daily metric and stays dirty. A bound checked one line later
+would publish an aggregate over the first 5,000 sales of the day and mark the day
+clean, and nothing downstream could tell that figure from a complete one. Each
+test asserts `db.writes` is empty and the day is still `dirty`.
+
+Both bounds are asserted on both sides of the comparison, because the query reads
+one more than the bound precisely so a date sitting exactly on it is still a
+complete read - `>` and not `>=`, and each direction is a separate test.
+
+### Every new assertion was proved to fail against the behaviour it names
+
+Fourteen mutations, each built and run:
+
+| Mutation | What failed |
+| --- | --- |
+| the `nextAttemptAt` line removed from `advance` | all three advance tests |
+| `nextAttemptAt: FieldValue.delete()` | all three advance tests |
+| `nextAttemptAt` pushed a minute out | all three advance tests |
+| `consecutiveFailureCount` carried instead of reset | the post-failure test, alone |
+| `lastErrorCode` left behind | the post-failure test, alone |
+| `pendingProductId` not carried forward | the pending-product test, alone |
+| `create` accepts a document that exists | the ALREADY_EXISTS test **and** the all-or-nothing test |
+| `create` treated as a merge | the sentinel-rules test, alone |
+| sales bound reads `limit(5000)` not `5001` | "one sale over is refused", alone |
+| sales bound compared `>=` | "exactly on the bound is regenerated", alone |
+| expectation bound reads `limit(200)` not `201` | "one expectation over is refused", alone |
+| expectation bound compared `>=` | "exactly on the stale bound", alone |
+| `maximumShifts` default raised to 2000 | the shift-aggregation bound test, alone |
+| `shifts.size >= maximumShifts` | the shift-aggregation bound test, alone |
+
+The first three killing all three advance tests is the honest result: three tests
+watch one line, and each names a different way it can be wrong. The next three
+show they are not one assertion in triplicate.
+
+Removing `retryDelayMilliseconds` itself broke **no test**, which is the evidence
+that it was dead. Re-adding it as a parameter would be behaviour-identical while
+nothing passes it; what stops it coming back is that the type no longer has it.
+
+### Files in this chunk
+
+```text
+PLAN.md
+firebase.reconciliation-test.json                         (auth port 9299 -> 9699)
+functions/src/reconciliation/handlers.ts
+functions/src/reconciliation/jobs.ts
+functions/src/reconciliation/jobs.test.ts
+functions/src/reconciliation/model.test.ts
+functions/src/reconciliation/processors.ts
+functions/src/reconciliation/processors.test.ts
+functions/src/testing/fakeFirestore.ts
+functions/src/testing/fakeFirestore.test.ts
+rules-tests/scripts/run-reconciliation-emulator-tests.js  (comment only)
+```
+
+Rules, the indexes, and every Dart path are untouched. `test/widget_test.dart` is
+untouched, for the reason above.
+
+### Validation evidence after implementation code was frozen
+
+| Command | Result |
+| --- | --- |
+| `npm --prefix functions run build` | clean |
+| `npm --prefix functions test` | **261/261**, up from 250, adding **11** |
+| fourteen mutations, each built and run | each failed exactly the test(s) named above |
+| `flutter test --no-pub --concurrency=1 --reporter=failures-only` over the 10 in-scope paths | **1251/1251**, unchanged - no Dart was touched |
+| `npm --prefix rules-tests run test:emulator` | **141/141** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:reconciliation` | **10/10** |
+| `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12/12** |
+| `git diff --check` | clean |
+
+Every emulator command was run with the pinned toolchain prelude and with
+inherited `DEBUG` removed:
+
+```powershell
+if (Test-Path Env:DEBUG) { Remove-Item Env:DEBUG }
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:JAVA_HOME\bin;$env:Path"
+```
+
+Of the 11 new unit tests: **3** for `advanceReconciliationJob`, **3** for the
+double's `create`, **4** for the two `regenerateDailyMetric` bounds, **1** for
+`aggregateDailySales`'s shift bound.
+
+The two big fixtures cost about 3.5 seconds - `processors.test.js` went from
+roughly 1.5s to 5.0s for 10,000 more in-memory documents. That is the trade this
+double exists to offer and it is still far cheaper than the emulator equivalent,
+but it is the first time a fixture in this suite has been worth timing.
+
+During development the loop was one `npm --prefix functions run build` followed by
+`node --test --test-reporter=tap functions/lib/<file>.test.js`, which is about a
+second per file against the full command's forty.
+
+### Meaningful failures and their resolutions
+
+- **`git checkout -- <path>` destroyed working changes when used to revert a
+  mutation.** The previous handover recommended it, and it was safe there because
+  that session changed no production code. This session does, so the first
+  mutation's revert took `jobs.ts` back to `HEAD` and silently undid both real
+  edits; the two mutations after it then patched line numbers that had moved and
+  failed to build, which is what exposed it. **Copy the file to the scratchpad
+  first and restore from the copy.** Every mutation after that did, and each
+  restore was verified with `diff -q` against its backup.
+- **The Rules emulator refused to start: "firebase-tools no longer supports Java
+  version before 21."** The machine's default JDK is 17. The prelude above is not
+  optional for any emulator command.
+- **The reconciliation integration suite refused to start: "Could not start
+  Authentication Emulator, port taken" on 9299 - a port no config claims.** The
+  cause is that **the Auth emulator reserves its port and that port plus 200 and
+  plus 400.** A held `emulators:dev` run configured on 9099 therefore also owns
+  9299 and 9499, and this suite's auth port was 9299. The runner's own header
+  claimed it could not interfere with a developer's `emulators:dev` run; the claim
+  was false and is now corrected there.
+  **The held emulator was not touched.** It was started before this session
+  (2026-08-06 23:39) by `seed-dev-emulator.js --hold`, so its Firestore holds
+  seeded data somebody deliberately kept alive - very likely for the "run the app
+  against the emulators" item this file has queued three times. Killing it to free
+  a port would have destroyed that. The suite's auth port moved to **9699**
+  instead, which is a one-line config change, needs no consent, and makes the
+  runner's isolation claim true. It was verified still running, on all six of its
+  ports, after both integration suites finished.
+  **The three suites are now spaced beyond each other's reservations: dev 9099,
+  invitations 9199, reconciliation 9699.** A fourth Auth emulator may not use
+  9299, 9399, 9499, 9599, 9899, or 10099.
+- **No assertion failed that was not made to.** Every red run in this session was
+  either a deliberate mutation or the two infrastructure failures above.
+
+### Session totals
+
+| Suite | Result |
+| --- | --- |
+| `flutter test` over the 10 in-scope paths | 1251 |
+| `npm --prefix functions test` | 261 |
+| `npm --prefix rules-tests run test:emulator` | 141 |
+| `npm --prefix rules-tests run test:emulator:reconciliation` | 10 |
+| `npm --prefix rules-tests run test:emulator:invitations` | 12 |
+
+**1675 tests across five suites**, up from 1664, adding **11**. Nothing was left
+failing and no suite was skipped except the Android build and the Android emulator
+runs.
+
+### The existing user-owned local edits remain separate and were never staged
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png        (untracked)
+.codex-live.png       (untracked)
+.codex-live2.png      (untracked)
+```
+
+Also still running and deliberately left alone: the `emulators:dev` set held open
+by `seed-dev-emulator.js --hold` on ports 4400, 4500, 5001, 9099, 9299, 9499, with
+Firestore on 8080.
+
+### Next bounded chunk
+
+**Delete `test/widget_test.dart`.** It is the same item, and it is now the oldest
+thing in this file at nine months. It could not be finished here only because file
+deletion was refused by the session's permission classifier - not because anything
+about it is unresolved. The analysis is done and recorded above: the file is the
+untouched `flutter create` template naming a `MyApp` that has never existed, and
+pointing it at `SpiritPOSApp` is not the one-line alternative earlier handovers
+assumed, because `build()` reaches `FirebaseAuth.instance` and
+`FirebaseFirestore.instance` before the first frame.
+
+1. Delete the file. One command.
+2. Then run bare `flutter test --no-pub --concurrency=1 --reporter=failures-only`
+   with no paths named and confirm it discovers and passes all 1251. If it does,
+   **replace the path list in this file's validation tables with the bare
+   command** - naming ten paths has been a workaround for this one file since
+   December, and every handover has carried it.
+3. Do not build a root-widget smoke test in the same chunk. If one is wanted, it
+   needs a seam for `FirebaseAuth.instance` and `FirebaseFirestore.instance` in
+   `SpiritPOSApp.build()`, which is production code changed for a test's benefit
+   and is its own decision.
+
+Then, in preference order:
+
+- **Run the app against the emulators and look at the reconciliation and stock
+  surfaces.** Queued for the fourth time and still the oldest behavioural item:
+  neither the deleted-product ledger nor the run route has ever been seen outside
+  a widget test. **There is now a seeded emulator set already held open for it**
+  (`seed-dev-emulator.js --hold`, since 2026-08-06) - check it is still alive
+  before starting a new one. Ask first whether the Android exclusion is lifted; a
+  Windows or web run exercises only the loopback path.
+- **`jobs.ts` has three more exported functions with no unit coverage.**
+  `advanceReconciliationJob` now has some, and getting there proved the double can
+  drive this module: `claimReconciliationJob`'s lease and backoff refusals,
+  `finalizeReconciliationJob`'s rerun-versus-complete branch, and
+  `recordReconciliationFailure`'s quarantine threshold and platform alert. The
+  fixture helper and the `create` support they need already exist in
+  `jobs.test.ts`. `listRetryableReconciliationTasks` is **not** in reach - it uses
+  `collectionGroup`, an `in` filter, and `<=`, none of which the double has, and
+  adding all three for one caller is a bigger decision than this item.
+- **`regenerateDailyMetric` writes `daily_metrics` with `merge: false` and no
+  `createdAt`.** Every other document in this pipeline carries one. Probably
+  deliberate - a regenerated metric has no meaningful creation instant - but it is
+  the only such document and nothing says which.
+
+Leave outside all of them: any resolution path for the four stock and sale
+differences, currency labels anywhere, the subscription surfaces (examined and
+declined earlier in this file - start on the server, not in Flutter), receipt
+printing, the printed receipt body, discounts, camera barcode scanning, password
+reset (still blocked on the App Check decision recorded near the top of this
+file), product cost/profit fields, a `platform_audit_logs` surface, branding
+surfaces, the Sentry DSN, the 477 pre-existing analyzer issues in the legacy
+files, and deployment.
+
+### Practical notes carried forward
+
+- Everything in the previous nine sessions' lists still applies, with one
+  correction: **do not revert a mutation with `git checkout -- <path>` in a session
+  that also changes that file.** Copy to the scratchpad and restore from the copy.
+- **The Auth emulator reserves three ports, not one:** `port`, `port + 200`, and
+  `port + 400`. Two suites 200 apart cannot run while the other is held, and the
+  failure names a port no config mentions.
+- **Never free a port by killing an emulator you did not start.** A held
+  `emulators:exec` may be holding seeded data. Read its command line first - the
+  `--hold` flag is the tell - and move your own port instead.
+- **A double's fidelity is what makes a bound testable at its real figure.** The
+  standing advice was to make three page sizes injectable to test them. Ten
+  thousand in-memory documents cost three seconds and left the constants private,
+  which is strictly better than a production seam that exists for a test.
+- **When three constants share one budget, say what the budget is at the
+  constant.** 200 + 200 + 2 = 402 against Firestore's 500. None of the three
+  numbers is safe to raise alone, and nothing said so until now.
+- `node --test` needs `--test-reporter=tap` before its output is filtered; the
+  Firebase emulator runners use the default reporter, whose totals are `pass N`
+  behind an information glyph.

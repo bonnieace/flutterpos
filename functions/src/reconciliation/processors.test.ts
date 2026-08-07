@@ -462,6 +462,155 @@ test("a day re-marked while it was being regenerated is left for the next pass",
   assert.deepEqual(db.ids(`tenants/${TENANT}/shift_expectations`), []);
 });
 
+/**
+ * The two bounds `regenerateDailyMetric` refuses a business date over.
+ *
+ * Neither had ever been asserted anywhere, and the reason was the emulator: five
+ * thousand sales or two hundred expectations per assertion is not a fixture a real
+ * Firestore run can afford, so the standing suggestion was to make the page sizes
+ * injectable and prove the bounds at a smaller number. That is not needed - these
+ * seed the real figures in memory, which is exactly the trade this double exists
+ * for, and the production constants stay private.
+ *
+ * What matters about both is not that they throw but *when*: the refusal is raised
+ * before the transaction opens, so a date over either bound keeps its old daily
+ * metric and stays dirty rather than being republished from a truncated read. A
+ * bound checked one line later would publish an aggregate over the first 5,000
+ * sales of the day and mark the day clean, and nothing downstream could tell that
+ * figure from a complete one.
+ */
+
+const DAILY_SALES_LIMIT = 5_000;
+const SHIFT_EXPECTATION_LIMIT = 200;
+
+/** Asserts `work` was refused for exceeding a bound rather than for anything else. */
+async function assertBoundExceeded(work: Promise<unknown>, expected: RegExp): Promise<void> {
+  await assert.rejects(work, (error: unknown) => {
+    assert.ok(error instanceof HttpsError);
+    assert.equal(error.code, "resource-exhausted");
+    assert.match(error.message, expected);
+    return true;
+  });
+}
+
+test("a business date one sale over the aggregation bound is refused, not truncated", async () => {
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  // One shift for all of them, so this test meets the sales bound and not
+  // `aggregateDailySales`'s separate 200-shift bound.
+  for (let index = 1; index <= DAILY_SALES_LIMIT + 1; index += 1) {
+    seedSale(db, `sale-${`${index}`.padStart(5, "0")}`, LOCAL_DATE, "shift-a", 1, 0);
+  }
+  db.clearWrites();
+
+  await assertBoundExceeded(
+    processMetricsPage(db.asFirestore(), claimedJob()),
+    /bounded daily aggregation limit/
+  );
+
+  // Nothing at all. The day is still owed a regeneration, which is the only
+  // honest state for a date whose sales cannot be read in one bounded pass.
+  assert.deepEqual(db.writes, []);
+  assert.equal(
+    stored(db, `tenants/${TENANT}/reconciliation_dirty_days/${LOCAL_DATE}`).status,
+    "dirty"
+  );
+  assert.deepEqual(db.ids(`tenants/${TENANT}/daily_metrics`), []);
+});
+
+test("a business date exactly on the aggregation bound is regenerated", async () => {
+  // The other side of the same comparison, and the reason it is `>` rather than
+  // `>=`: the query reads one more than the bound precisely so that a date sitting
+  // exactly on it is still a complete read.
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  for (let index = 1; index <= DAILY_SALES_LIMIT; index += 1) {
+    seedSale(db, `sale-${`${index}`.padStart(5, "0")}`, LOCAL_DATE, "shift-a", 1, 0);
+  }
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processMetricsPage(db.asFirestore(), claimedJob()),
+    {processed: 1, hasMore: false}
+  );
+
+  const metric = stored(db, `tenants/${TENANT}/daily_metrics/${LOCAL_DATE}`);
+  // Every one of them counted, so the pass that succeeded read the whole day.
+  assert.equal(metric.transactionCount, DAILY_SALES_LIMIT);
+  assert.equal(metric.sales, DAILY_SALES_LIMIT);
+  assert.equal(metric.shiftCount, 1);
+  assert.equal(
+    stored(db, `tenants/${TENANT}/reconciliation_dirty_days/${LOCAL_DATE}`).status,
+    "clean"
+  );
+});
+
+test("a business date one expectation over the stale bound is refused, not truncated", async () => {
+  // The bound on what is *already* stored for the date, which is the half of the
+  // transaction that deletes. A date holding more stale expectations than one
+  // transaction may delete cannot be republished at all, and saying so is better
+  // than leaving some of them behind pointing at a metric generation that is gone.
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  seedSale(db, "sale-1", LOCAL_DATE, "shift-a", 20, 6);
+  for (let index = 1; index <= SHIFT_EXPECTATION_LIMIT + 1; index += 1) {
+    seedExpectation(db, `stale-${`${index}`.padStart(4, "0")}`, {
+      shiftId: `shift-old-${index}`,
+      sales: 1,
+      transactions: 1,
+    });
+  }
+  db.clearWrites();
+
+  await assertBoundExceeded(
+    processMetricsPage(db.asFirestore(), claimedJob()),
+    /bounded shift expectation limit/
+  );
+
+  assert.deepEqual(db.writes, []);
+  assert.equal(
+    stored(db, `tenants/${TENANT}/reconciliation_dirty_days/${LOCAL_DATE}`).status,
+    "dirty"
+  );
+  assert.deepEqual(db.ids(`tenants/${TENANT}/daily_metrics`), []);
+  // And the stale ones are all still there, rather than partly deleted.
+  assert.equal(
+    db.ids(`tenants/${TENANT}/shift_expectations`).length,
+    SHIFT_EXPECTATION_LIMIT + 1
+  );
+});
+
+test("a business date exactly on the stale bound is regenerated and swept clean", async () => {
+  const db = firestoreWithClaimedJob();
+  seedDirtyDay(db, LOCAL_DATE);
+  seedSale(db, "sale-1", LOCAL_DATE, "shift-a", 20, 6);
+  for (let index = 1; index <= SHIFT_EXPECTATION_LIMIT; index += 1) {
+    seedExpectation(db, `stale-${`${index}`.padStart(4, "0")}`, {
+      shiftId: `shift-old-${index}`,
+      sales: 1,
+      transactions: 1,
+    });
+  }
+  db.clearWrites();
+
+  assert.deepEqual(
+    await processMetricsPage(db.asFirestore(), claimedJob()),
+    {processed: 1, hasMore: false}
+  );
+
+  // Two hundred deletions and one write, in the transaction that also marks the
+  // day clean: this is the widest this phase's write set is allowed to get, and it
+  // is why the bound is where it is rather than higher.
+  assert.deepEqual(
+    db.ids(`tenants/${TENANT}/shift_expectations`),
+    [shiftExpectationId(LOCAL_DATE, "shift-a")]
+  );
+  assert.equal(
+    stored(db, `tenants/${TENANT}/reconciliation_dirty_days/${LOCAL_DATE}`).status,
+    "clean"
+  );
+});
+
 // ---------------------------------------------------------------------------
 // processStockPage
 // ---------------------------------------------------------------------------
@@ -584,14 +733,11 @@ test("a movement backlog resumes from its cursor rather than re-reading the ledg
     // pending one and no completed product is verified twice.
     productCursor: "product-01",
     pendingProductId: "product-02",
-    // Always undefined, and asserted so on purpose. `ProductResult` declares this
-    // field, `processStockPage` forwards it, `handlers.ts` passes it into
-    // `JobAdvance`, and `advanceReconciliationJob` turns it into `nextAttemptAt` -
-    // but nothing in the pipeline ever assigns it a value, so every continuation
-    // is scheduled for now. The default is the right one for a backlog, which has
-    // more work waiting; whether anything should ever ask for a delay is a
-    // question this test pins rather than answers.
-    retryDelayMilliseconds: undefined,
+    // Nothing else. This result once carried a `retryDelayMilliseconds` that no
+    // branch ever set, and this is the only page shape that could have carried
+    // one: a backlog has its next two hundred movements already written, so the
+    // continuation belongs now. `jobs.test.ts` pins what "now" means on the job
+    // document.
   });
   const backlog = stored(db, `tenants/${TENANT}/stock_reconciliation_state/product-02`);
   assert.equal(backlog.status, "movement_backlog");

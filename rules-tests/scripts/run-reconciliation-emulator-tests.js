@@ -15,6 +15,14 @@
  * Auth/Firestore/Functions harness in the repository until this one. It runs its
  * own project, its own ports, and its own Functions codebase so the two suites
  * cannot interfere with each other or with a developer's `emulators:dev` run.
+ *
+ * That last claim was false for as long as this suite's Auth emulator sat on 9299.
+ * The Auth emulator does not listen on one port: it reserves its configured port
+ * and that port plus 200 and plus 400. So a held `emulators:dev` run on 9099 also
+ * owns 9299 and 9499, and this suite would refuse to start with "port taken"
+ * against a port nothing in any config had claimed. The three suites are now
+ * spaced beyond each other's reservations - dev 9099, invitations 9199,
+ * reconciliation 9699 - and none of the ports in between may be used for a fourth.
  */
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, rmSync } from "node:fs";

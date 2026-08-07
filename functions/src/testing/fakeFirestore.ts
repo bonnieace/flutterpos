@@ -23,10 +23,11 @@ import {
  * - **Where Firestore's semantics decide an outcome, they are implemented, not
  *   approximated.** A document missing a field the query orders by is invisible
  *   to that query; a transaction may not read after its first write; a
- *   `FieldValue.delete()` in an unmerged `set` is rejected; `update` refuses a
- *   document that does not exist. Each of those is a real refusal this module
- *   reproduces, because a double that is more permissive than Firestore turns a
- *   production defect into a green test.
+ *   `FieldValue.delete()` in an unmerged `set` or a `create` is rejected;
+ *   `update` refuses a document that does not exist and `create` refuses one that
+ *   does. Each of those is a real refusal this module reproduces, because a
+ *   double that is more permissive than Firestore turns a production defect into
+ *   a green test.
  * - **Everything else throws.** Any operator but `==`, any `FieldPath` but
  *   `documentId()`, any sentinel but the three used, any value type the sort
  *   order does not cover. A silently-ignored `where` clause is the single worst
@@ -64,7 +65,7 @@ interface QueryPlan {
 
 /** One committed write, in the order it was committed. */
 export interface FakeWrite {
-  kind: "set" | "merge" | "update" | "delete";
+  kind: "create" | "set" | "merge" | "update" | "delete";
   path: string;
 }
 
@@ -76,7 +77,7 @@ export interface FakeWrite {
  * behind every "a lease that is not current wrote nothing" assertion.
  */
 type PendingWrite =
-  | {kind: "set" | "merge" | "update"; path: string; data: DocumentData}
+  | {kind: "create" | "set" | "merge" | "update"; path: string; data: DocumentData}
   | {kind: "delete"; path: string};
 
 /** Staged documents by path. `null` is a staged deletion. */
@@ -383,6 +384,11 @@ export class FakeDocumentReference {
   // a server. Every caller in `functions/src` awaits, and an awaited synchronous
   // throw and an awaited rejection are the same failure.
 
+  create(data: DocumentData): Promise<void> {
+    this.db.applyCreate(this.path, data);
+    return Promise.resolve();
+  }
+
   set(data: DocumentData, options?: {merge?: boolean}): Promise<void> {
     this.db.applySet(this.path, data, options?.merge === true);
     return Promise.resolve();
@@ -426,6 +432,10 @@ export class FakeTransaction {
   ): Promise<FakeDocumentSnapshot[]> {
     this.requireReadPhase();
     return Promise.resolve(refs.map((ref) => this.db.readSnapshot(ref)));
+  }
+
+  create(ref: FakeDocumentReference, data: DocumentData): FakeTransaction {
+    return this.buffer({kind: "create", path: ref.path, data});
   }
 
   set(
@@ -549,6 +559,11 @@ export class FakeFirestore {
   }
 
   /** @internal */
+  applyCreate(path: string, data: DocumentData): void {
+    this.commitWrites([{kind: "create", path: requireDocumentPath(path), data}]);
+  }
+
+  /** @internal */
   applySet(path: string, data: DocumentData, merge: boolean): void {
     this.commitWrites([{kind: merge ? "merge" : "set", path, data}]);
   }
@@ -594,7 +609,16 @@ export class FakeFirestore {
       // assumes exists must fail here rather than create a partial one.
       throw new Error(`NOT_FOUND: no document to update at ${write.path}.`);
     }
-    const merge = write.kind !== "set";
+    if (write.kind === "create" && existing !== undefined) {
+      // The other half of that refusal, and the one every idempotent creator in
+      // this codebase leans on: a second create of the same job, invitation, or
+      // sale is rejected rather than silently replacing the first.
+      throw new Error(`ALREADY_EXISTS: a document already exists at ${write.path}.`);
+    }
+    // `create` writes a whole document, so it carries a replace's sentinel rules:
+    // a delete sentinel in one is rejected, which is the defect the sentinel audit
+    // beside this file exists to find.
+    const merge = write.kind === "merge" || write.kind === "update";
     const target = merge && existing !== undefined ? existing : {};
     applyPatch(target, write.data, this.clock(), merge, write.path);
     staged.set(write.path, target);

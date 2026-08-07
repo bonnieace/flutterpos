@@ -92,6 +92,61 @@ test("a replace drops fields a merge would have kept", () => {
   assert.deepEqual(db.read(DOC), {sales: 3});
 });
 
+test("create refuses a document that already exists", () => {
+  // `createManualJobInTransaction` creates the reconciliation job document, and
+  // that is the whole of its idempotency: two operators asking for the same run,
+  // or one request retried, must be refused rather than have the second silently
+  // replace a job already part-way through its phases. A double that accepted the
+  // second create would reset a running job's cursors and counters in a test that
+  // then reported success.
+  const db = new FakeFirestore();
+
+  db.doc(DOC).create({status: "queued", revision: 0});
+  assert.deepEqual(db.read(DOC), {status: "queued", revision: 0});
+
+  assert.throws(() => db.doc(DOC).create({status: "queued", revision: 0}), /ALREADY_EXISTS/);
+  db.doc(DOC).update({revision: 4});
+  assert.throws(() => db.doc(DOC).create({status: "queued", revision: 0}), /ALREADY_EXISTS/);
+  assert.equal(db.read(DOC)?.revision, 4);
+});
+
+test("create carries a replace's sentinel rules, not a merge's", () => {
+  // The exact shape of the defect the sentinel audit beside this file exists to
+  // find: one payload shared between a create and an update, carrying a delete
+  // sentinel that only the create rejects. It threw on every sale for as long as
+  // it lived, and no compiler, linter, or pure test saw it.
+  const db = new FakeFirestore();
+
+  assert.throws(
+    () => db.doc(DOC).create({status: "queued", leaseToken: FieldValue.delete()}),
+    /Firestore rejects FieldValue.delete\(\)/
+  );
+  assert.equal(db.read(DOC), undefined);
+
+  // Everything else a create payload holds resolves as a replace's would.
+  db.doc(DOC).create({attemptCount: FieldValue.increment(1), at: FieldValue.serverTimestamp()});
+  assert.equal(db.read(DOC)?.attemptCount, 1);
+  assert.ok(db.read(DOC)?.at instanceof Timestamp);
+});
+
+test("a create Firestore would refuse leaves the writes staged beside it unwritten", async () => {
+  // A refused create is discovered while the transaction's writes are being
+  // staged, after earlier writes in the same transaction have already been
+  // computed. Publishing those would leave a job's side effects behind without
+  // the job, which is the one outcome an all-or-nothing commit exists to prevent.
+  const db = new FakeFirestore();
+  db.seed(DOC, {status: "running"});
+
+  await assert.rejects(db.runTransaction(async (transaction) => {
+    transaction.set(db.doc("tenants/tenant-a/things/thing-2"), {enqueued: true});
+    transaction.create(db.doc(DOC), {status: "queued"});
+  }), /ALREADY_EXISTS/);
+
+  assert.equal(db.read("tenants/tenant-a/things/thing-2"), undefined);
+  assert.equal(db.read(DOC)?.status, "running");
+  assert.deepEqual(db.writes, []);
+});
+
 test("update refuses a document that does not exist", () => {
   // `regenerateDailyMetric` and `verifyShiftExpectation` both `update` a document
   // they read earlier in the same transaction. A double that created one instead

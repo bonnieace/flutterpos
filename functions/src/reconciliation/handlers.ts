@@ -218,7 +218,6 @@ async function executeReconciliationTask(payload: ReconciliationTaskPayload): Pr
         pendingProductId: result.pendingProductId ?? null,
         productsProcessedDelta: result.processed,
         stockVarianceDelta: result.varianceCount,
-        retryDelayMilliseconds: result.retryDelayMilliseconds,
       });
     } else if (job.phase === "shifts") {
       const result = await processShiftPage(db, job);

@@ -78,7 +78,6 @@ export interface JobAdvance {
   stockVarianceDelta?: number;
   shiftsProcessedDelta?: number;
   shiftVarianceDelta?: number;
-  retryDelayMilliseconds?: number;
 }
 
 interface SaleMovement {
@@ -564,9 +563,15 @@ export async function advanceReconciliationJob(
       status: "queued",
       phase: advance.phase ?? current.phase,
       revision,
-      nextAttemptAt: Timestamp.fromMillis(
-        Date.now() + Math.max(0, advance.retryDelayMilliseconds ?? 0)
-      ),
+      // Every page that finishes is continued now. No phase asks to be picked up
+      // later: a stock page that stopped short has a movement backlog waiting, and
+      // a product too recently written to compare is deferred and stepped past
+      // rather than held. The field is still written rather than cleared for two
+      // reasons - a backoff a previous failure left behind must not outlive the
+      // attempt that succeeded, and `listRetryableReconciliationTasks` finds a
+      // stranded job by filtering on this field, so a queued job without one is
+      // invisible to the only sweep that can recover a lost dispatch.
+      nextAttemptAt: Timestamp.now(),
       leaseToken: FieldValue.delete(),
       leaseExpiresAt: FieldValue.delete(),
       lastErrorCode: FieldValue.delete(),

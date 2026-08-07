@@ -23,6 +23,17 @@ import {SaleLike, moneyToMinorUnits, minorUnitsToMoney} from "../operations/doma
 
 const DAILY_METRICS_PAGE_SIZE = 5;
 const DAILY_SALES_LIMIT = 5_000;
+/**
+ * How many shift expectations one business date may already hold.
+ *
+ * Not an arbitrary figure: `regenerateDailyMetric` republishes a day in one
+ * transaction, and the widest that transaction can get is this many stale
+ * expectations deleted plus `aggregateDailySales`'s own 200-shift bound written,
+ * plus the daily metric and the dirty-day row - 402 writes against Firestore's
+ * limit of 500. Raising either 200 moves that past the limit, and the day it does
+ * every regeneration of a busy date starts failing rather than getting slower.
+ */
+const SHIFT_EXPECTATION_LIMIT = 200;
 const PRODUCT_PAGE_SIZE = 25;
 const MOVEMENT_PAGE_SIZE = 200;
 const SHIFT_PAGE_SIZE = 50;
@@ -38,7 +49,6 @@ export interface StockPageResult {
   hasMore: boolean;
   productCursor?: string;
   pendingProductId?: string;
-  retryDelayMilliseconds?: number;
 }
 
 export interface ShiftPageResult {
@@ -50,7 +60,6 @@ export interface ShiftPageResult {
 interface ProductResult {
   completed: boolean;
   variance: boolean;
-  retryDelayMilliseconds?: number;
 }
 
 function nonNegativeInteger(value: unknown): number {
@@ -161,9 +170,9 @@ async function regenerateDailyMetric(
   );
   const previousExpectationSnapshot = await tenantRef.collection("shift_expectations")
     .where("businessDate", "==", businessDate)
-    .limit(201)
+    .limit(SHIFT_EXPECTATION_LIMIT + 1)
     .get();
-  if (previousExpectationSnapshot.size > 200) {
+  if (previousExpectationSnapshot.size > SHIFT_EXPECTATION_LIMIT) {
     throw new HttpsError(
       "resource-exhausted",
       `Business date ${businessDate} exceeds the bounded shift expectation limit.`
@@ -635,6 +644,13 @@ async function reconcileProduct(
   });
 }
 
+// A page that stops short is continued immediately, never after a delay. The
+// only product this phase leaves unfinished has a movement backlog, which means
+// the work for the next dispatch is already written and waiting; the only product
+// it would ever be worth waiting for is one written in the last five minutes, and
+// that one is deferred and stepped past rather than held, because holding it
+// would block every product after it in the catalog while a product that sells
+// more often than once every five minutes never leaves its own window.
 export async function processStockPage(
   db: Firestore,
   job: ClaimedReconciliationJob
@@ -650,7 +666,6 @@ export async function processStockPage(
       } : {
         productCursor: job.productCursor,
         pendingProductId: job.pendingProductId,
-        retryDelayMilliseconds: result.retryDelayMilliseconds,
       }),
     };
   }
@@ -672,7 +687,6 @@ export async function processStockPage(
         hasMore: true,
         productCursor: lastCompleted,
         pendingProductId: product.id,
-        retryDelayMilliseconds: result.retryDelayMilliseconds,
       };
     }
     processed += 1;
