@@ -15107,6 +15107,41 @@ test built its expected `checkpointKey` from `LOCAL_DATE` while the loop beneath
 ran on a shard-derived date, so the weekly ISO week key would have been the wrong
 week's. Fixed by deriving both from the same date.
 
+### Addendum, same day: the printing decision was answered before it was a day old
+
+This session promoted receipt printing out of the standing exclusions and into an open
+decision, "What a receipt is printed on", offering three ways out: the `printing`
+package's system dialog, networked ESC/POS through `flutter_esc_pos_network`, or the
+printed body alone with no transport. **That framing is retracted at the decision
+itself in `PLAN.md`, and none of the three is the shape of the work.**
+
+The product owner answered it in the same session: **an external print service, to be
+shared, handles thermal printer onboarding across a local print server, TCP/IP, and
+Bluetooth.**
+
+Two consequences, recorded because they point in opposite directions and a later
+session will want both:
+
+- **The transport surfaces are cancelled before they were ever scheduled.** No printer
+  address route, no discovery UI, no connection state machine, nothing new in the
+  encrypted Hive `printer` slot. The second option's real cost was that settings
+  surface, and it is not this app's to build.
+- **The printed body stops being an unreachable artifact.** The third option was
+  discounted only because it would land in "built, tested, and unreachable"; with a
+  service on the other side of it, the body is simply the half this app owes, and the
+  half that is transport-independent by construction.
+
+What replaces the decision is a dependency: the service's interface. `PLAN.md` lists
+the five unknowns that change what a "body" is — the payload it takes, how it is
+reached, whether it holds the printer selection, what it does offline on a till that
+is offline-first by design, and the column width. The instruction attached to it is
+the important part: **do not start the body on a guessed contract.** A receipt
+formatter written against the wrong one is worse than none, because it looks finished.
+
+Nothing was implemented for this. It is a `PLAN.md` correction and this note, made in
+the same session that opened the question, so that no later session re-argues a
+decision that has already been made.
+
 ### Unrelated local changes, still unstaged and never touched
 
 ```text

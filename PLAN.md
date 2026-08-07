@@ -67,7 +67,7 @@ callable exists, and not green if it is merely tested.
 | Read daily and period totals | 🟢 | Daily summary, plus period totals by member and category |
 | Ask for reconciliation | 🟢 | Owner/admin, from the reconciliation status route |
 | See why a day disagrees, and correct a shift | 🟢 | Differences list → `amendShiftSummary` |
-| Print a receipt | 🔴 | No printed body exists |
+| Print a receipt | 🔴 | No printed body exists. The transport is settled — an external print service, to be shared, onboards thermal printers over a local print server, TCP/IP, and Bluetooth — so this waits on that interface, not on a decision |
 | See a subscription | 🔴 | Path and rules exist; nothing reads or writes it |
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
@@ -358,38 +358,53 @@ callable does either. Three ways out:
 Until this is decided, a mistyped price is corrected by an operator with the Admin
 SDK, and a catalog surface can create and retire products but not edit one.
 
-### What a receipt is printed on
+### ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
 
-Opened 2026-08-07 by the sweep session, and the reason is procedural: receipt
-printing had been a standing exclusion for many consecutive chunks, was named once in
-the previous handover as "the next capability chunk this list will run out of excuses
-for", and re-excluding it a second time without saying why would be exactly the silent
-inheritance this file forbids. It is no longer correctly excluded **as a capability**.
-It is still correctly excluded from a chunk, because it needs one thing decided first.
+Opened by the sweep session for a procedural reason: receipt printing had been a
+standing exclusion for many consecutive chunks, was named once in the previous
+handover as "the next capability chunk this list will run out of excuses for", and
+re-excluding it silently a second time is what this file forbids. It is no longer
+correctly excluded **as a capability**.
 
-Nothing in the live shell prints. `grep -rn printer lib/tenancy lib/checkout
-lib/operations` finds nothing at all; `thermal_printer_service.dart` and
-`Receipt_service.dart` are in the disabled legacy island, reached by nothing in
-`lib/main.dart`. Three dependencies are already in `pubspec.yaml` and none is used by
-live code: `printing`, `flutter_esc_pos_network`, `flutter_esc_pos_utils`. Three ways
-out, and they are not the same size:
+~~It needs one thing decided first: the `printing` package's system dialog, networked
+ESC/POS through `flutter_esc_pos_network`, or the printed body alone with no
+transport.~~ **Retracted the same day.** The product owner answered it before the
+question was a day old: **a print service, to be shared, handles thermal printer
+onboarding across a local print server, TCP/IP, and Bluetooth.** So the transport is
+external, the range of connections is settled, and none of the three options above is
+the shape of the work. Two consequences, and they run in opposite directions:
 
-1. **The `printing` package's system dialog.** Renders a receipt as a PDF and hands it
-   to whatever printer the operating system knows about. Works on Windows with no
-   hardware decision and no printer-configuration surface, and is the only one of the
-   three that could move the board this month. It is also not what a thermal till
-   roll wants.
-2. **Networked ESC/POS**, through `flutter_esc_pos_network`. What the legacy island
-   aimed at, and what the hardware in a shop actually is. Needs a printer address to
-   be configured, stored, and reachable offline — so it needs a settings surface and a
-   place in the encrypted Hive state, which already reserves a `printer` slot.
-3. **Neither, yet — build the body alone.** A pure function from a recorded sale to
-   the printed lines, unit-tested, with no transport. Decision-free and useful under
-   either of the two above, but it lands straight in "built, tested, and unreachable",
-   which is a table this file tries to shrink.
+1. **The transport is not this app's problem, so the surfaces the second option
+   implied are not either** — no printer-address settings route, no discovery UI, no
+   connection state machine, and nothing new in the encrypted Hive `printer` slot
+   until the service says otherwise. `flutter_esc_pos_network` and
+   `flutter_esc_pos_utils` are in `pubspec.yaml`, unused by live code, and stay unused
+   unless the service's own interface asks for them.
+2. **The printed body is squarely ours, and it stops being an unreachable artifact.**
+   Option 3 was discounted for landing in "built, tested, and unreachable"; with a
+   service on the other side of it that objection is gone. The body is the half this
+   app owes, and it is the half that is transport-independent by construction.
 
-Until this is decided, a sale is recorded, found by receipt lookup, and returned
-without anything ever being printed, and "Print a receipt" stays red.
+**What is still unknown is the interface, and it is unknown enough to block.** The
+body cannot be written faithfully without it, because the answer changes what a
+"body" even is:
+
+- **What the service takes.** ESC/POS byte sequences, plain text with a column width,
+  a structured payload it renders itself, or a PDF. Each makes a different function.
+- **How it is reached.** A Dart package in `pubspec.yaml`, a local HTTP endpoint, or a
+  platform channel. This decides whether printing is testable as a unit at all.
+- **Whether it holds the printer selection**, or hands this app a list to choose from
+  and store — the one thing that could still pull a settings surface back in.
+- **What it does offline.** The till is offline-first on Windows by design, and a
+  receipt is printed at the moment of sale. A service that needs the network to print
+  makes printing conditional in a way the sell-and-settle loop currently is not.
+- **Column width and character set**, which are formatting inputs, not details: a
+  32-column roll and a 48-column roll are different layouts.
+
+Until the service is shared, a sale is recorded, found by receipt lookup, and returned
+without anything ever being printed, and "Print a receipt" stays red. **Do not start
+the body on a guessed interface** — a receipt formatter written against the wrong
+contract is worse than none, because it looks finished.
 
 ---
 
@@ -962,16 +977,19 @@ group's neighbours, rather than repeating the whole suite and hoping.
 **Explicitly excluded from it:** anything in `functions/`, any change to
 `firestore.rules`, any new export, any change to checkout submission *semantics*
 unless the diagnosis demands it (a flake is a reason to understand the lock, not a
-licence to redesign the outbox), receipt printing and the open decision above it, and
-the `regenerateDailyMetric` question below. It is one test seam and whatever
-production code the diagnosis points at.
+licence to redesign the outbox), the printed receipt body and anything to do with the
+print service, and the `regenerateDailyMetric` question below. It is one test seam and
+whatever production code the diagnosis points at.
 
 ### Then, in preference order
 
-- **Receipt printing** — but decide *what a receipt is printed on* first. It is now an
-  open decision above, promoted out of the standing exclusions on 2026-08-07 rather
-  than inherited a second time. It is the only red row that is neither blocked on the
-  server nor waiting on a rule, so it is the next capability chunk.
+- **The printed receipt body** — **waiting on an interface, not on a decision.** The
+  transport question was answered on 2026-08-07: an external print service, to be
+  shared, handles thermal printer onboarding over a local print server, TCP/IP, and
+  Bluetooth. See the closed decision above for what is still unknown, all of it about
+  what that service takes and how it is reached. The moment it is shared this becomes
+  the next capability chunk and it is a well-shaped one; until then it is blocked on
+  something no session can resolve by thinking about it.
 - **Run the app against the emulators**, looking at the catalog, reconciliation, and
   stock surfaces. Queued eight times and the oldest behavioural item: neither the
   deleted-product ledger nor the run route has been seen outside a widget test.
@@ -1008,10 +1026,13 @@ in `lib/`).
 
 **Receipt printing has left this list.** It was named once in the previous handover as
 the item this list would run out of excuses for, and re-excluding it silently a second
-time is what this section exists to prevent — so it is now the open decision "What a
-receipt is printed on" above, and the head of the preference order below the current
-chunk. Nothing about it is blocking today: a sale completes, is recorded, is found by
-receipt lookup, and is returnable without anything being printed.
+time is what this section exists to prevent — so it became an open decision on
+2026-08-07, was answered the same day, and is now the head of the preference order
+below the current chunk, **blocked on an interface rather than on a decision**: an
+external print service handles the transport, and this app owes the printed body. Do
+not re-exclude it and do not start it on a guessed contract. Nothing about it is
+blocking today: a sale completes, is recorded, is found by receipt lookup, and is
+returnable without anything being printed.
 
 **Named once, as it has been inherited for many consecutive chunks: the 476
 pre-existing analyzer issues.** Still correctly excluded, and the reason is stronger
@@ -1028,9 +1049,10 @@ The subscription surfaces, named the same way two handovers ago, are unchanged a
 still correctly excluded: `grep -i subscription functions/src` still finds nothing at
 all, so a Flutter surface would invent the schema, lifecycle, and billing states the
 server later has to agree with. That one starts on the server or not at all, and
-nothing in the sell-and-settle loop reads it. The three exclusions that have moved
-from cosmetic to load-bearing are tracked as open decisions instead: password reset,
-how a price is corrected, and what a receipt is printed on.
+nothing in the sell-and-settle loop reads it. The exclusions that moved from cosmetic
+to load-bearing are tracked above instead of here: password reset and how a price is
+corrected are open decisions, and what a receipt is printed on is a closed one waiting
+on an interface.
 
 ---
 
