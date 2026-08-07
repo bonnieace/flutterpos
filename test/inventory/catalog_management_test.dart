@@ -355,6 +355,95 @@ void main() {
     });
   });
 
+  group('what the business paid', () {
+    test('is optional, and blank means never recorded', () {
+      // A business that does not track cost still has to be able to add a
+      // product, and an invented cost - zero, or the price - would be a
+      // fabricated margin reported as fact.
+      final blank = _productIntent(price: '65');
+
+      expect(blank.costMinor, isNull);
+      expect(blank.cost, isNull);
+      expect(blank.documentData().containsKey('cost'), isFalse);
+    });
+
+    test('is stored as the till converts it back, exactly like a price', () {
+      final intent = _productIntent(price: '65', cost: '40.50');
+
+      expect(intent.costMinor, 4050);
+      expect(intent.cost, 40.5);
+      expect(intent.documentData()['cost'], 40.5);
+      // The stored figure is derived from the minor units rather than from what
+      // was typed, so what the till converts back is exactly what was meant.
+      expect(checkoutMinorUnitsFromMajor(intent.cost!), intent.costMinor);
+    });
+
+    test('is refused where it is typed if the till could not record it', () {
+      for (final entry in <String, String>{
+        'nonsense': 'invalid_cost',
+        '40.505': 'invalid_cost',
+        '-1': 'invalid_cost',
+        // Twelve digits passes the format check and then fails the till's own
+        // conversion, which is the only way to reach the second refusal.
+        '999999999999': 'cost_not_representable',
+      }.entries) {
+        expect(
+          () => _productIntent(price: '65', cost: entry.key),
+          throwsA(
+            isA<TenantCatalogManagementException>().having(
+              (error) => error.code,
+              'code for "${entry.key}"',
+              entry.value,
+            ),
+          ),
+        );
+      }
+    });
+
+    test('needs an owner or an administrator, unlike the product itself', () {
+      // Adding a product is owner/admin/manager. Stating the margin is not.
+      for (final role in <TenantRole>[TenantRole.owner, TenantRole.admin]) {
+        expect(
+          _productIntent(price: '65', cost: '40', role: role).costMinor,
+          4000,
+          reason: role.name,
+        );
+        expect(
+          TenantCatalogManagementRepository.canRecordCostInSession(
+            _session(role: role),
+          ),
+          isTrue,
+          reason: role.name,
+        );
+      }
+
+      // Refused rather than dropped: a manager must never be told a cost was
+      // recorded when it was silently discarded.
+      expect(
+        () => _productIntent(price: '65', cost: '40', role: TenantRole.manager),
+        throwsA(
+          isA<TenantCatalogManagementException>().having(
+            (error) => error.code,
+            'code',
+            'cost_forbidden',
+          ),
+        ),
+      );
+      expect(
+        TenantCatalogManagementRepository.canRecordCostInSession(
+          _session(role: TenantRole.manager),
+        ),
+        isFalse,
+      );
+
+      // A manager may still add the product, just without the margin.
+      expect(
+        _productIntent(price: '65', role: TenantRole.manager).costMinor,
+        isNull,
+      );
+    });
+  });
+
   group('retire intent', () {
     test('names the product and what it was still holding', () {
       final intent = _retireIntent();
@@ -574,6 +663,7 @@ TenantProductCreateIntent _productIntent({
   String name = 'White bread loaf',
   String sku = '6161100000019',
   String categoryId = 'cat-bakery',
+  String cost = '',
   TenantRole role = TenantRole.owner,
   String tenantId = 'tenant-a',
   String uid = 'user-a',
@@ -582,6 +672,7 @@ TenantProductCreateIntent _productIntent({
   name: name,
   sku: sku,
   price: price,
+  cost: cost,
   categoryId: categoryId,
   categories: _categories(tenantId),
   requestId: requestId,

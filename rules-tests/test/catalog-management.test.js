@@ -7,6 +7,7 @@ import {
   getDoc,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
 
 import {
@@ -132,6 +133,35 @@ test("a create must carry an integer quantity", async () => {
   }
   await assertSucceeds(
     setDoc(doc(firestore, `${PRODUCTS}/pd_good`), product("owner-a")),
+  );
+});
+
+test("a create may carry the buying price, and the checkout rule still cannot", async () => {
+  // `allow create` names one condition and no key list, which is what lets the
+  // catalog surface add `cost` without a rules change. Pinned here because the
+  // day someone tightens that create rule with a `hasOnly`, a business that
+  // records what it pays stops being able to add products at all.
+  await seedBusiness();
+  const firestore = authenticatedFirestore(testEnvironment, "owner-a");
+
+  await assertSucceeds(
+    setDoc(doc(firestore, `${PRODUCTS}/pd_costed`), product("owner-a", { cost: 40 })),
+  );
+
+  // And the half that must not move: the checkout decrement is still the only
+  // client update, so no cashier can reprice what the business pays.
+  await assertFails(
+    updateDoc(doc(firestore, `${PRODUCTS}/pd_seeded`), {
+      cost: 1,
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(firestore, `${PRODUCTS}/pd_seeded`), {
+      quantity: 39,
+      cost: 1,
+      updatedAt: serverTimestamp(),
+    }),
   );
 });
 

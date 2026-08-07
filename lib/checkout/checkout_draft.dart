@@ -251,12 +251,32 @@ final class CheckoutDraftService implements CheckoutDraftSink {
         throw const CheckoutDraftException('price_not_representable');
       }
       subtotalMinor += unitPriceMinor * line.quantity;
+      // What the business paid for this unit, frozen onto the line at the moment
+      // of sale. This is the whole of the guarantee that correcting a buying
+      // price never moves a profit figure that has already been reported: the
+      // number is copied here, the payload is hashed, the sale document refuses
+      // every update, and every profit figure is computed from this line rather
+      // than from the product. Changing `cost` therefore prices the next sale
+      // and cannot reach this one.
+      //
+      // An unrecorded cost stays unrecorded rather than defaulting to zero,
+      // which would claim the business paid nothing and report a 100% margin.
+      // The server counts those lines as `incompleteCostLineCount`, and a
+      // missing cost never refuses a sale — that would stop a till trading over
+      // a reporting field.
+      final unitCostMinor = product.cost == null
+          ? null
+          : checkoutMinorUnitsFromMajor(product.cost!);
+      if (product.cost != null && unitCostMinor == null) {
+        throw const CheckoutDraftException('cost_not_representable');
+      }
       items.add(<String, Object?>{
         'productId': product.id,
         'name': product.name,
         'categoryId': product.categoryId,
         'quantity': line.quantity,
         'unitPriceMinor': unitPriceMinor,
+        if (unitCostMinor != null) 'unitCostMinor': unitCostMinor,
       });
     }
     if (request.discountMinor < 0 || request.discountMinor > subtotalMinor) {

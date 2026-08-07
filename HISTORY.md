@@ -15593,3 +15593,163 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## A product records what it cost, and a sale freezes it - 2026-08-07
+
+Not the queued chunk. The product owner asked whether buying price was captured, was
+told it was not, and asked for it - **with one requirement attached: a change to a
+buying price must never move a profit figure already reported.** That requirement is
+what shaped the whole design, so it is recorded first.
+
+### The requirement was already structurally satisfiable, and that decided the design
+
+Four facts were checked in source before anything was promised, because the answer
+"yes, and here is why it cannot be otherwise" is worth more than a new mechanism:
+
+1. **Profit reads the sale line, never the product.** `lineCost()` in
+   `functions/src/operations/domain.ts` looks at `line.cost`, then `line.unitCost`,
+   then `line.buyingPrice`. There is no product join anywhere in the metrics pipeline.
+2. **Sales are immutable.** `allow update, delete: if false` on
+   `tenants/{tenantId}/sales/{saleId}`.
+3. **Regeneration re-reads sales, not products.** `processors.ts` reads
+   `tenantRef.collection("sales")`, so a nightly reconciliation recomputes the same
+   figure from the same frozen lines.
+4. **The offline record is hash-sealed.** `checkoutPayloadHash` covers the whole
+   payload and `_parseRecord` re-derives it on every read.
+
+So the answer was: capture the cost **onto the sale line at the moment of the sale**,
+and the guarantee follows from machinery that already exists rather than from a new
+rule anyone could later relax.
+
+### Two decisions, both taken by the product owner
+
+- **One cost per product, snapshotted at sale**, rather than stock-lot FIFO or weighted
+  average. Lot costing would have meant a unit cost on every stock receipt, a change to
+  the `adjustStock` contract, a consumption algorithm inside the checkout batch, and a
+  backfill - a large change to a frozen area, for accuracy this business does not need.
+  Restocking at a new price now forward-dates itself: old lines keep the old figure.
+- **Cost lives on the product document**, where every active member can read it. This
+  was raised as a *privacy* decision rather than buried, because it is one: `products`
+  is readable by any active member - the till cannot price a sale otherwise - and
+  Firestore cannot hide one field of a document. The alternative was a trigger stamping
+  cost onto the sale server-side, which keeps buying prices off cashier devices but
+  costs a write per sale, leaves a window where the sale has no cost, and cannot work
+  offline, which is the platform the whole Hive design exists for. **What was bought
+  instead is a surface boundary: no manager is shown a cost, and a client that sends
+  one without the role is refused rather than ignored.** That limit is documented at
+  `MONETARY_PRODUCT_FIELDS` and at `TenantCatalogManagementRepository.costRoles` so
+  nobody later mistakes it for secrecy.
+
+### The half that was already built
+
+Worth recording, because it changed the size of the chunk: the *consuming* half was
+finished and idle. `_allowedLineKeys` in `lib/checkout/checkout_sale.dart` already
+contained `unitCostMinor`; `CheckoutSaleLine` already carried `unitCostMinor` and
+`lineCostMinor` and already emitted `unitCost`, `cost`, and their minor-unit twins;
+the parser already read them optionally; the server already computed
+`profit = revenue - cost` with an `incompleteCostLineCount` beside it; and the daily
+summary already rendered "N sale lines have no cost recorded". The legacy mono-tenant
+island still has a working "Buying Price" field in `lib/pos/goods.dart`, which is
+where the server's `buyingPrice` alias comes from.
+
+**Two consequences.** No payload schema version bump was needed - `unitCostMinor` is an
+optional key within v2, so `validSaleTender`'s `payloadSchemaVersion == 2` branch is
+untouched. And **no `firestore.rules` change was needed**: `validSaleLine` constrains
+only `productId` and `quantity` and names no key list, and `allow create` on `products`
+checks only `quantity is int`. `firestore.rules` is byte-identical, and the rules suite
+was run to say so with a measurement.
+
+### What was built
+
+- **`TenantProduct.cost`**, nullable. Null is the normal case and the test says why: no
+  product created before this existed carries one, and this read model is strict enough
+  that a single refusal makes the *whole* cached catalog a miss, so requiring it would
+  have stopped every existing business selling. A *present but unusable* cost is still
+  refused, because dropping it would report that product's entire revenue as profit.
+- **The encrypted catalog cache carries it**, because the till stamps the cost with no
+  network and the cache is the only place it can come from.
+- **The till freezes it.** `checkout_draft.dart` converts `product.cost` through
+  `checkoutMinorUnitsFromMajor` - the same function the price goes through - and writes
+  `unitCostMinor` onto the line. An absent cost stays absent rather than defaulting to
+  zero, which would claim the business paid nothing. A cost the till cannot represent is
+  refused as `cost_not_representable` rather than dropped. **A missing cost never
+  refuses a sale**: that would stop a till trading over a reporting field.
+- **Creating a product accepts an optional cost**, owner/admin only, validated through
+  the till's own arithmetic so a refusal happens where the number is typed.
+- **`updateProduct` gained `cost`** as its fifth editable field and second monetary one.
+  It is the only field where an explicit `null` is meaningful: it *clears* a cost, which
+  is also the escape hatch for a stored cost too malformed for the callable to correct.
+  The audit keeps the unreadable previous value verbatim rather than flattening it to
+  null - "who set this to `nine`" is exactly the question a cleared cost leaves behind.
+
+### Files changed
+
+```text
+lib/tenancy/tenant_catalog.dart                     TenantProduct.cost, optional parser
+lib/checkout/checkout_catalog_cache.dart            cost written to and read from cache
+lib/checkout/checkout_draft.dart                    unitCostMinor frozen onto each line
+lib/inventory/catalog_management.dart               costMinor on the create intent,
+                                                    costRoles, canRecordCostInSession
+lib/inventory/catalog_management_panel.dart         the optional cost field, its
+                                                    confirmation text and refusals
+functions/src/operations/productUpdate.ts           cost in EDITABLE_PRODUCT_FIELDS,
+                                                    MONETARY_PRODUCT_FIELDS, the clear
+                                                    path, readSellableProduct
+rules-tests/test/catalog-management.test.js         the create rule still permits cost;
+                                                    the checkout update rule still does
+                                                    not
+test/tenancy/tenant_catalog_test.dart               absent is normal, broken is not
+test/inventory/catalog_management_test.dart         optional, converted, role-gated
+test/inventory/catalog_management_panel_test.dart   shown to an owner, not to a manager
+test/checkout/checkout_draft_test.dart              the frozen-cost group
+functions/src/operations/productUpdate.test.ts      13 cost cases
+```
+
+### The test that is the requirement
+
+`correcting the buying price cannot reach a sale already recorded`, in
+`test/checkout/checkout_draft_test.dart`. A sale is rung up against a product costing
+60, the catalog is then rewritten with the same product costing 90 - exactly what
+`updateProduct` plus a refresh leaves on a device - and a second sale is rung up. The
+first sale is **re-read from storage** rather than trusted from the value returned at
+save time, because the claim is about what is durable. It still says 60, the second says
+90, and the first record's payload hash still verifies, which is what would have refused
+it as `malformed_record` had anything rewritten it in place.
+
+### Tests
+
+```text
+flutter analyze --no-pub lib test                             476 issues (baseline, +0)
+flutter test --no-pub --concurrency=1 --reporter=failures-only
+                                                              1358 pass
+npm --prefix functions test                                   346 pass, 0 fail
+npm --prefix rules-tests run test:emulator                     161 pass, 0 fail
+npm --prefix rules-tests run test:emulator:reconciliation      10 pass, 0 fail
+FUNCTIONS_DISCOVERY_TIMEOUT=60000
+  npm --prefix rules-tests run test:emulator:invitations        12 pass, 0 fail
+```
+
+All five suites measured in this session, none carried forward. Flutter 1347 to 1358
+(eleven new tests), Functions 333 to 346, Rules 160 to 161. Reconciliation and
+invitation integration are unchanged at 10 and 12.
+
+### One failure worth keeping
+
+`clearing is the escape hatch for a cost too broken to correct` was written asserting
+that clearing a stored `"nine"` records `previous: null`. It records `previous: "nine"`,
+because `describePrevious` returns a string unchanged. **The code was right and the
+test was wrong**, and the assertion was corrected rather than the behaviour: an audit
+entry that flattens an unreadable previous value to null destroys the only record of
+what was there.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

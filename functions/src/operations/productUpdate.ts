@@ -75,6 +75,7 @@ export const EDITABLE_PRODUCT_FIELDS = [
   "name",
   "sku",
   "price",
+  "cost",
   "categoryId",
 ] as const;
 
@@ -112,11 +113,36 @@ export const PRODUCT_UPDATE_ROLES = ["owner", "admin", "manager"] as const;
  */
 export const PRODUCT_PRICE_ROLES = ["owner", "admin"] as const;
 
+/**
+ * The fields that are money, and therefore sit behind {@link PRODUCT_PRICE_ROLES}.
+ *
+ * `cost` is here for a second reason on top of the one above: it is the
+ * business's margin written down. Every active member can already *read* a
+ * product document - the till cannot price a sale otherwise - so this is a
+ * boundary on who may state a cost, not a guarantee that nobody else can see
+ * one. That limit is deliberate and recorded rather than implied.
+ */
+export const MONETARY_PRODUCT_FIELDS: readonly EditableProductField[] = [
+  "price",
+  "cost",
+];
+
 /** The fields this module reads from `tenants/{tenantId}/products/{productId}`. */
 export interface StoredProductFields {
   name?: unknown;
   SKU?: unknown;
   price?: unknown;
+
+  /**
+   * What one unit cost the business, when it has recorded one.
+   *
+   * Optional at every layer. No product created before this field existed
+   * carries one, and the client's read model refuses a *present* but unusable
+   * cost while accepting an absent one - so requiring it here would make this
+   * callable unable to correct the very products most likely to need it.
+   */
+  cost?: unknown;
+
   quantity?: unknown;
   categoryId?: unknown;
 
@@ -136,6 +162,11 @@ export interface SellableProduct {
   sku: string;
   price: number;
   priceMinor: number;
+
+  /** Null when this business has not recorded what the product cost. */
+  cost: number | null;
+  costMinor: number | null;
+
   quantity: number;
   categoryId: string;
 }
@@ -155,7 +186,8 @@ export interface ProductFieldChange {
    */
   previous: string | number | null;
 
-  next: string | number;
+  /** Null only for a cleared cost - the one field whose absence is meaningful. */
+  next: string | number | null;
 }
 
 /** Exactly what one accepted correction writes, and what it replaces. */
@@ -171,7 +203,7 @@ export interface ProductUpdatePlan {
    * requested value writes nothing for it, so an audit entry never claims a
    * change that did not happen.
    */
-  documentUpdate: Record<string, string | number>;
+  documentUpdate: Record<string, string | number | null>;
 
   /** What the product holds once the plan is applied. */
   product: SellableProduct;
@@ -184,6 +216,16 @@ export interface ProductUpdateInput {
 
   /** The requested price in exact minor units, as a sale line records it. */
   priceMinor?: number;
+
+  /**
+   * The requested cost in exact minor units, as a sale line records it.
+   *
+   * `null` is a request to *clear* a recorded cost, which is distinct from
+   * omitting the key. Clearing is offered because a cost entered by mistake
+   * would otherwise be uncorrectable, and reporting a wrong margin as fact is
+   * worse than reporting none.
+   */
+  costMinor?: number | null;
 
   categoryId?: string;
 
@@ -268,6 +310,20 @@ export function productPriceMinorUnits(value: unknown): number | undefined {
     undefined : rounded;
 }
 
+function requireProductCostMinorUnits(value: unknown): number {
+  if (typeof value !== "number") {
+    throw new HttpsError("invalid-argument", "cost must be a number or null.");
+  }
+  const minorUnits = productPriceMinorUnits(value);
+  if (minorUnits === undefined) {
+    throw new HttpsError(
+      "invalid-argument",
+      "cost must be a non-negative amount with at most two decimal places."
+    );
+  }
+  return minorUnits;
+}
+
 function requireProductPriceMinorUnits(value: unknown): number {
   if (typeof value !== "number") {
     throw new HttpsError("invalid-argument", "price must be a number.");
@@ -327,6 +383,14 @@ export function readProductUpdateInput(
     input.priceMinor = requireProductPriceMinorUnits(data.price);
     requestedFields.push("price");
   }
+  if ("cost" in data && data.cost !== undefined) {
+    // Unlike every other field here, an explicit null is meaningful rather than
+    // "leave it alone": it clears a cost that was recorded by mistake.
+    input.costMinor = data.cost === null ?
+      null :
+      requireProductCostMinorUnits(data.cost);
+    requestedFields.push("cost");
+  }
   if (data.categoryId !== undefined && data.categoryId !== null) {
     input.categoryId = requireDocumentId(data.categoryId, "categoryId");
     requestedFields.push("categoryId");
@@ -334,7 +398,7 @@ export function readProductUpdateInput(
   if (requestedFields.length === 0) {
     throw new HttpsError(
       "invalid-argument",
-      "Name at least one of name, sku, price, or categoryId to change."
+      "Name at least one of name, sku, price, cost, or categoryId to change."
     );
   }
   return input;
@@ -350,11 +414,16 @@ export function assertProductUpdateAuthorized(
   role: TenantRole,
   requested: ProductUpdateInput
 ): void {
-  if (!requested.requestedFields.includes("price")) return;
+  const monetary = requested.requestedFields.filter(
+    (field) => MONETARY_PRODUCT_FIELDS.includes(field)
+  );
+  if (monetary.length === 0) return;
   if (!(PRODUCT_PRICE_ROLES as readonly string[]).includes(role)) {
     throw new HttpsError(
       "permission-denied",
-      "Only an owner or an administrator may change a product's price."
+      monetary.includes("price") ?
+        "Only an owner or an administrator may change a product's price." :
+        "Only an owner or an administrator may change what a product costs."
     );
   }
 }
@@ -417,6 +486,33 @@ export function readSellableProduct(fields: StoredProductFields): SellableProduc
       "refuses to sell it. Correct it in the same request."
     );
   }
+  // A cost is optional, so absent is not a fault. A *present* cost that cannot
+  // be read is refused for the same reason a price is: a sale line copies this
+  // figure, and a cost the till cannot convert would silently record no cost at
+  // all and report the product's whole revenue as profit.
+  let cost: number | null = null;
+  let costMinor: number | null = null;
+  if (fields.cost !== undefined && fields.cost !== null) {
+    if (
+      typeof fields.cost !== "number" || !Number.isFinite(fields.cost) ||
+      fields.cost < 0
+    ) {
+      throw unusableProduct(
+        "This product's cost is unreadable. Correct it in the same request, or " +
+        "clear it by sending cost: null."
+      );
+    }
+    const converted = productPriceMinorUnits(fields.cost);
+    if (converted === undefined) {
+      throw unusableProduct(
+        "This product's cost cannot be represented in minor units, so a sale " +
+        "could not record it. Correct it in the same request, or clear it by " +
+        "sending cost: null."
+      );
+    }
+    cost = fields.cost;
+    costMinor = converted;
+  }
   if (!Number.isSafeInteger(fields.quantity)) {
     throw unusableProduct(
       "This product's stock quantity is not an integer, which no callable can " +
@@ -462,6 +558,8 @@ export function readSellableProduct(fields: StoredProductFields): SellableProduc
     sku,
     price: fields.price,
     priceMinor,
+    cost,
+    costMinor,
     quantity: fields.quantity as number,
     categoryId,
   };
@@ -495,6 +593,17 @@ export function planProductUpdate(input: {
     // figure is exactly the one the till will convert back.
     resulting.price = requested.priceMinor / 100;
   }
+  if (requested.costMinor !== undefined) {
+    // Null clears. Assigning null rather than deleting the key is deliberate:
+    // the client's read model treats a stored null and an absent key the same
+    // way, and null is the one value that reliably overwrites a stored figure
+    // through a merge. It is also what makes clearing the escape hatch for a
+    // cost too malformed to correct - `readSellableProduct` below sees the
+    // cleared value, not the stored garbage.
+    resulting.cost = requested.costMinor === null ?
+      null :
+      requested.costMinor / 100;
+  }
   if (requested.categoryId !== undefined) {
     resulting.categoryId = requested.categoryId;
     // A stored legacy alias moves with it. Leaving it behind would make the two
@@ -508,7 +617,7 @@ export function planProductUpdate(input: {
   const product = readSellableProduct(resulting);
 
   const changes: ProductFieldChange[] = [];
-  const documentUpdate: Record<string, string | number> = {};
+  const documentUpdate: Record<string, string | number | null> = {};
   if (requested.name !== undefined && stored.name !== product.name) {
     changes.push({
       field: "name",
@@ -532,6 +641,25 @@ export function planProductUpdate(input: {
       next: product.price,
     });
     documentUpdate.price = product.price;
+  }
+  if (requested.costMinor !== undefined) {
+    // "Was a cost recorded at all" is asked separately from "what was it",
+    // because both transitions are real changes and one of them - clearing a
+    // stored value this module cannot even read - would otherwise compare equal
+    // to null and be refused as a no-op.
+    const storedHasCost = stored.cost !== undefined && stored.cost !== null;
+    const storedCost = typeof stored.cost === "number" ? stored.cost : null;
+    const changed = product.cost === null ?
+      storedHasCost :
+      !storedHasCost || storedCost !== product.cost;
+    if (changed) {
+      changes.push({
+        field: "cost",
+        previous: describePrevious(stored.cost),
+        next: product.cost,
+      });
+      documentUpdate.cost = product.cost;
+    }
   }
   // Compared against the effective category rather than against `categoryId`
   // alone, so a legacy-only document asked for the category it already holds

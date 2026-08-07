@@ -91,6 +91,7 @@ final class TenantProductCreateIntent {
     required this.name,
     required this.sku,
     required this.priceMinor,
+    required this.costMinor,
     required this.categoryId,
     required this.categoryName,
     required this.createdBy,
@@ -105,6 +106,15 @@ final class TenantProductCreateIntent {
   /// The price in exact integer minor units, as a sale line records it.
   final int priceMinor;
 
+  /// What one unit cost the business, in exact integer minor units, or null
+  /// when it was left blank.
+  ///
+  /// Optional deliberately. A business that does not track cost must still be
+  /// able to add a product, and a cost invented here — zero, or the price —
+  /// would be a fabricated margin reported as fact. Blank means "not recorded",
+  /// which is what the daily summary already counts and says.
+  final int? costMinor;
+
   /// The name of the category this product is filed under, carried for the
   /// confirmation only. It is never written: a product refers to its category
   /// by ID, so a renamed category does not have to be chased through products.
@@ -118,10 +128,17 @@ final class TenantProductCreateIntent {
   /// convert back.
   double get price => priceMinor / 100;
 
+  /// The stored major-unit cost, derived from [costMinor] for the same reason
+  /// [price] is derived from [priceMinor].
+  double? get cost => costMinor == null ? null : costMinor! / 100;
+
   Map<String, Object?> documentData() => <String, Object?>{
     'name': name,
     'SKU': sku,
     'price': price,
+    // Omitted rather than written as null when it was left blank, so "never
+    // recorded" and "recorded as nothing" stay distinguishable in the document.
+    if (cost != null) 'cost': cost,
     'quantity': catalogOpeningQuantity,
     'categoryId': categoryId,
     'createdBy': createdBy,
@@ -189,6 +206,24 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
   static bool canRetireInSession(TenantSession session) =>
       session.canAccess(allowedRoles: retireRoles);
 
+  /// Recording what the business *paid* is narrower than recording what it
+  /// charges, and deliberately matches the tier `updateProduct` puts a price
+  /// behind.
+  ///
+  /// A buying price is the business's margin written down. Every active member
+  /// can already read a product document — the till cannot price a sale
+  /// otherwise — so this is a surface boundary, not a secrecy guarantee, and it
+  /// is documented as one. What it does buy is that no manager is *shown* the
+  /// margin, and that a client which sends a cost without the role is refused
+  /// rather than quietly ignored.
+  static const List<TenantRole> costRoles = <TenantRole>[
+    TenantRole.owner,
+    TenantRole.admin,
+  ];
+
+  static bool canRecordCostInSession(TenantSession session) =>
+      session.canAccess(allowedRoles: costRoles);
+
   /// Builds the one create instruction [name] describes.
   ///
   /// [requestId] scopes the deterministic document ID. One confirmation keeps
@@ -224,6 +259,9 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
   /// product can only be filed under a grouping that was read from this same
   /// business in this same session. [price] is taken as typed, because the
   /// exact spelling is what decides whether the amount is recordable.
+  /// [cost] is what the business paid for one unit, and it is the one field
+  /// here that may be left blank: a business that does not track cost still has
+  /// to be able to add a product.
   TenantProductCreateIntent buildProductIntent({
     required String name,
     required String sku,
@@ -231,12 +269,29 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     required String categoryId,
     required Iterable<TenantCategory> categories,
     required String requestId,
+    String cost = '',
   }) {
     _requireCreateRole();
     _requireRequestId(requestId);
     final safeName = _normalizedName(name, 'invalid_product_name');
     final safeSku = _normalizedSku(sku);
     final priceMinor = _priceMinorUnits(price);
+    final int? costMinor;
+    if (cost.trim().isEmpty) {
+      costMinor = null;
+    } else {
+      // Refused rather than dropped, for the same reason `updateProduct`
+      // refuses an unknown key: a caller must not be able to believe it
+      // recorded a cost that was silently discarded.
+      if (!canRecordCostInSession(session)) {
+        throw const TenantCatalogManagementException('cost_forbidden');
+      }
+      costMinor = _priceMinorUnits(
+        cost,
+        invalidCode: 'invalid_cost',
+        unrepresentableCode: 'cost_not_representable',
+      );
+    }
     TenantCategory? category;
     for (final candidate in categories) {
       if (candidate.id == categoryId) {
@@ -261,6 +316,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       name: safeName,
       sku: safeSku,
       priceMinor: priceMinor,
+      costMinor: costMinor,
       categoryId: category.id,
       categoryName: category.name,
       createdBy: session.uid,
@@ -595,17 +651,21 @@ String _normalizedSku(String value) {
 /// [checkoutMinorUnitsFromMajor] - the same function the till and the cart use.
 /// That is what makes it impossible for this surface to accept a price the till
 /// would later refuse as `price_not_representable` with the customer waiting.
-int _priceMinorUnits(String value) {
+int _priceMinorUnits(
+  String value, {
+  String invalidCode = 'invalid_price',
+  String unrepresentableCode = 'price_not_representable',
+}) {
   final text = value.trim();
   if (!_pricePattern.hasMatch(text)) {
-    throw const TenantCatalogManagementException('invalid_price');
+    throw TenantCatalogManagementException(invalidCode);
   }
   final parts = text.split('.');
   final minorUnits =
       int.parse(parts[0]) * 100 +
       (parts.length == 2 ? int.parse(parts[1].padRight(2, '0')) : 0);
   if (checkoutMinorUnitsFromMajor(minorUnits / 100) != minorUnits) {
-    throw const TenantCatalogManagementException('price_not_representable');
+    throw TenantCatalogManagementException(unrepresentableCode);
   }
   return minorUnits;
 }

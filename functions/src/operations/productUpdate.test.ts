@@ -340,3 +340,173 @@ test("naming a price decides the role, not whether the price turns out to differ
     "permission-denied"
   );
 });
+
+/**
+ * What a business paid, and the one guarantee the whole feature rests on.
+ *
+ * A cost is optional at every layer, it sits behind the same role as a price
+ * because it is money and because it is the business's margin written down, and
+ * it is the only field here whose *absence* a caller can ask for. A sale copies
+ * whatever it holds at the moment of the sale onto its own line, so nothing
+ * below can reach a profit figure that has already been reported - that half is
+ * proved in `test/checkout/checkout_draft_test.dart`.
+ */
+
+test("a recorded cost is stored as the till converts it back", () => {
+  const result = plan(storedProduct(), {cost: 12.5});
+
+  assert.deepEqual(result.changedFields, ["cost"]);
+  assert.equal(result.product.cost, 12.5);
+  assert.equal(result.product.costMinor, 1250);
+  assert.deepEqual(result.documentUpdate, {cost: 12.5});
+  assert.deepEqual(result.changes, [
+    {field: "cost", previous: null, next: 12.5},
+  ]);
+});
+
+test("a corrected cost records what it replaced", () => {
+  const result = plan(storedProduct({cost: 9}), {cost: 11.25});
+
+  assert.deepEqual(result.changes, [
+    {field: "cost", previous: 9, next: 11.25},
+  ]);
+});
+
+test("a cost the till could not record on a sale line is refused", () => {
+  // The same arithmetic the price goes through, for the same reason: a sale line
+  // records the cost beside the price, so a cost the till cannot convert would
+  // silently record no cost at all and report the whole revenue as profit.
+  assert.equal(refusalCode(() => input({cost: 12.505})), "invalid-argument");
+  assert.equal(refusalCode(() => input({cost: -1})), "invalid-argument");
+  assert.equal(refusalCode(() => input({cost: "12.50"})), "invalid-argument");
+  assert.equal(refusalCode(() => input({cost: Number.NaN})), "invalid-argument");
+});
+
+test("an explicit null clears a cost, unlike every other field", () => {
+  // Absent means "leave it alone" everywhere in this payload. `cost` is the one
+  // field where null means something else, because a cost entered by mistake
+  // would otherwise be permanent - and a wrong margin reported as fact is worse
+  // than no margin at all.
+  const result = plan(storedProduct({cost: 9}), {cost: null});
+
+  assert.deepEqual(result.changedFields, ["cost"]);
+  assert.equal(result.product.cost, null);
+  assert.equal(result.product.costMinor, null);
+  assert.deepEqual(result.documentUpdate, {cost: null});
+  assert.deepEqual(result.changes, [{field: "cost", previous: 9, next: null}]);
+});
+
+test("clearing a cost that was never recorded changes nothing and is refused", () => {
+  assert.equal(
+    refusal(() => plan(storedProduct(), {cost: null})).message,
+    "This product already holds every value in the request."
+  );
+});
+
+test("re-recording the cost a product already holds is refused", () => {
+  assert.equal(
+    refusal(() => plan(storedProduct({cost: 9}), {cost: 9})).message,
+    "This product already holds every value in the request."
+  );
+});
+
+test("a stored cost nothing can read blocks an unrelated correction", () => {
+  // The same contract every other field has: name every broken field in one
+  // request, or none. A cost is money on a sale line, so a product carrying an
+  // unreadable one must not quietly keep selling with it.
+  assert.equal(
+    refusalCode(() => plan(storedProduct({cost: "nine"}), {name: "Cola 1L"})),
+    "failed-precondition"
+  );
+  assert.equal(
+    refusalCode(() => plan(storedProduct({cost: 12.505}), {name: "Cola 1L"})),
+    "failed-precondition"
+  );
+});
+
+test("clearing is the escape hatch for a cost too broken to correct", () => {
+  // The refusal above names `cost: null` as the way out, so it has to work: the
+  // cleared value is what is validated, not the stored garbage.
+  const result = plan(storedProduct({cost: "nine"}), {cost: null});
+
+  assert.deepEqual(result.documentUpdate, {cost: null});
+  // The audit keeps the unreadable value verbatim rather than flattening it to
+  // null. "Who set this to `nine`, and when" is exactly the question a cleared
+  // cost leaves behind, and it is answerable only if the string survives here.
+  assert.deepEqual(result.changes, [
+    {field: "cost", previous: "nine", next: null},
+  ]);
+});
+
+test("an absent cost is not a fault, because no old product has one", () => {
+  // The client's read model is strict and one product it refuses makes the whole
+  // cached catalog a miss. Requiring a cost would have stopped every existing
+  // business selling the moment this shipped.
+  const product = readSellableProduct(storedProduct());
+
+  assert.equal(product.cost, null);
+  assert.equal(product.costMinor, null);
+  assert.equal(product.priceMinor, 1999);
+});
+
+test("only an owner or an administrator may say what a product cost", () => {
+  const cost = input({cost: 12.5});
+  for (const role of ["owner", "admin"] as TenantRole[]) {
+    assert.doesNotThrow(() => assertProductUpdateAuthorized(role, cost));
+  }
+  const denied = refusal(
+    () => assertProductUpdateAuthorized("manager" as TenantRole, cost)
+  );
+  assert.equal(denied.code, "permission-denied");
+  assert.match(denied.message, /what a product costs/);
+
+  // A manager keeps everything that is not money.
+  assert.doesNotThrow(
+    () => assertProductUpdateAuthorized(
+      "manager" as TenantRole,
+      input({name: "Cola 1L"})
+    )
+  );
+});
+
+test("naming a cost is enough to need the money role, whatever it holds", () => {
+  // Read from the requested fields rather than the resulting diff, so a manager
+  // cannot discover a cost by binary search over refusals.
+  const unchanged = input({cost: 9});
+  assert.equal(
+    refusalCode(
+      () => assertProductUpdateAuthorized("manager" as TenantRole, unchanged)
+    ),
+    "permission-denied"
+  );
+  assert.equal(
+    refusalCode(
+      () => assertProductUpdateAuthorized("cashier" as TenantRole, input({cost: null}))
+    ),
+    "permission-denied"
+  );
+});
+
+test("cost travels with the other editable fields in one request", () => {
+  const result = plan(storedProduct({cost: 9}), {
+    name: "Cola 1L",
+    price: 24.5,
+    cost: 11,
+  });
+
+  assert.deepEqual(result.changedFields, ["name", "price", "cost"]);
+  assert.deepEqual(result.documentUpdate, {
+    name: "Cola 1L",
+    price: 24.5,
+    cost: 11,
+  });
+});
+
+test("quantity is still the refusal that outranks everything", () => {
+  // Adding a second monetary field must not have opened a second way to move
+  // stock without a ledger entry.
+  assert.equal(
+    refusalCode(() => input({cost: 12.5, quantity: 40})),
+    "invalid-argument"
+  );
+});

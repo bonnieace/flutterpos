@@ -40,6 +40,7 @@ final class TenantProduct {
        name = _requiredTrimmedString(data, 'name'),
        sku = _requiredTrimmedString(data, 'SKU'),
        price = _nonNegativeFiniteNumber(data, 'price'),
+       cost = _optionalNonNegativeFiniteNumber(data, 'cost'),
        quantity = _signedSafeInteger(data, 'quantity'),
        categoryId = _categoryId(data),
        imageUrl = _optionalHttpsUrl(data, 'image');
@@ -54,6 +55,17 @@ final class TenantProduct {
   final String name;
   final String sku;
   final double price;
+
+  /// What the business paid for one unit, when it has recorded it.
+  ///
+  /// **Null is the normal case, not a fault.** No product created before cost
+  /// existed carries one, and this read model is strict: one product it refuses
+  /// makes the *whole* cached catalog a miss, so requiring `cost` would stop
+  /// every existing business selling. A sale line records whatever this holds at
+  /// the moment of the sale and never consults it again — see
+  /// `CheckoutDraftCoordinator`.
+  final double? cost;
+
   final int quantity;
   final String categoryId;
   final Uri? imageUrl;
@@ -433,6 +445,24 @@ String _requiredTrimmedString(Map<String, Object?> map, String field) {
 
 double _nonNegativeFiniteNumber(Map<String, Object?> map, String field) {
   final value = map[field];
+  if (value is! num || !value.isFinite || value < 0) {
+    throw FormatException('$field must be a finite non-negative number.');
+  }
+  return value.toDouble();
+}
+
+/// Like [_nonNegativeFiniteNumber], but absent is a valid answer.
+///
+/// A stored `null` and a missing key mean the same thing: this business has not
+/// recorded what the product cost. A *present* but unusable value is still a
+/// refusal, because silently dropping it would report a 100% margin on the
+/// product whose cost someone had tried to record.
+double? _optionalNonNegativeFiniteNumber(
+  Map<String, Object?> map,
+  String field,
+) {
+  final value = map[field];
+  if (value == null) return null;
   if (value is! num || !value.isFinite || value < 0) {
     throw FormatException('$field must be a finite non-negative number.');
   }

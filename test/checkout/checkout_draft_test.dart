@@ -625,6 +625,131 @@ void main() {
     expect(checkoutBusinessDate(DateTime.utc(2026, 1, 1, 21)), '2026-01-02');
     expect(checkoutBusinessDate(DateTime.utc(2026, 12, 31, 21)), '2027-01-01');
   });
+
+  group('what the business paid is frozen onto the sale', () {
+    Future<void> stock(List<TenantProduct> products) => cache.write(
+      uid: 'user-a',
+      tenantId: 'tenant-a',
+      configuration: TenantCheckoutConfiguration(currency: 'KES'),
+      categories: [_category('tenant-a', 'drinks')],
+      products: products,
+      complete: true,
+    );
+
+    Future<CheckoutOutboxRecord> sell(String productId, {int quantity = 1}) =>
+        _service(sessions, cache, outbox, receipts, clock).createDraft(
+          CheckoutDraftRequest(
+            tender: CheckoutTender.cash,
+            lines: [
+              CheckoutDraftLineRequest(productId: productId, quantity: quantity),
+            ],
+          ),
+        );
+
+    test('a sale records the cost the product held at that moment', () async {
+      await stock([_product('tenant-a', 'p1', price: 100, cost: 60)]);
+
+      final record = await sell('p1', quantity: 2);
+      final line = CheckoutSalePayload.fromOutboxRecord(
+        record,
+        session: sessions.requireSession(),
+      ).lines.single;
+
+      expect(line.unitPriceMinor, 10000);
+      expect(line.unitCostMinor, 6000);
+      // Derived, not sent: the line total cost is what the server's profit
+      // arithmetic subtracts from the line revenue.
+      expect(line.lineCostMinor, 12000);
+      expect(line.toSaleLineFields()['unitCost'], 60);
+      expect(line.toSaleLineFields()['cost'], 120);
+    });
+
+    test(
+      'correcting the buying price cannot reach a sale already recorded',
+      () async {
+        // The requirement in one test. A sale is rung up at a cost of 60, the
+        // business then corrects the buying price to 90, and the recorded sale
+        // must still say 60 - otherwise every profit figure ever reported would
+        // move retrospectively whenever a price was corrected.
+        await stock([_product('tenant-a', 'p1', price: 100, cost: 60)]);
+        final before = await sell('p1');
+
+        // Exactly what `updateProduct` followed by a catalog refresh leaves on
+        // this device: the same product, a different cost.
+        await stock([_product('tenant-a', 'p1', price: 100, cost: 90)]);
+        final after = await sell('p1');
+
+        CheckoutSaleLine lineOf(CheckoutOutboxRecord record) =>
+            CheckoutSalePayload.fromOutboxRecord(
+              record,
+              session: sessions.requireSession(),
+            ).lines.single;
+
+        // Re-read from storage rather than from the value returned at save
+        // time, because the claim is about what is durable, not about what one
+        // call happened to return.
+        final stored = await outbox.read(
+          uid: 'user-a',
+          tenantId: 'tenant-a',
+          checkoutId: before.checkoutId,
+        );
+        expect(lineOf(stored!).unitCostMinor, 6000);
+        expect(lineOf(after).unitCostMinor, 9000);
+        // And the payload hash still verifies, which is what would refuse the
+        // record as `malformed_record` had anything rewritten it in place.
+        expect(stored.payloadHash, before.payloadHash);
+      },
+    );
+
+    test('a product with no recorded cost sells and records none', () async {
+      // A missing cost must never refuse a sale: that would stop a till trading
+      // over a reporting field. The server counts the line instead.
+      await stock([_product('tenant-a', 'p1', price: 100)]);
+
+      final line = CheckoutSalePayload.fromOutboxRecord(
+        await sell('p1'),
+        session: sessions.requireSession(),
+      ).lines.single;
+
+      expect(line.unitCostMinor, isNull);
+      expect(line.lineCostMinor, isNull);
+      // Absent, not zero. Zero would claim the business paid nothing and report
+      // the whole line as profit.
+      expect(line.toSaleLineFields().containsKey('unitCost'), isFalse);
+      expect(line.toSaleLineFields().containsKey('cost'), isFalse);
+    });
+
+    test('a cost the till cannot represent is refused, not dropped', () async {
+      // Silently dropping it would report a 100% margin on the one product
+      // somebody had actually recorded a cost for.
+      await stock([_product('tenant-a', 'p1', price: 100, cost: 60.555)]);
+
+      await expectLater(
+        sell('p1'),
+        throwsA(
+          isA<CheckoutDraftException>().having(
+            (error) => error.code,
+            'code',
+            'cost_not_representable',
+          ),
+        ),
+      );
+    });
+
+    test('the encrypted catalog cache carries the cost offline', () async {
+      // The till stamps the cost with no network, so the cache is the only
+      // place it can come from.
+      await stock([
+        _product('tenant-a', 'p1', price: 100, cost: 60),
+        _product('tenant-a', 'p2', price: 20),
+      ]);
+
+      final snapshot = await cache.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(snapshot!.productById('p1')!.cost, 60);
+      expect(snapshot.productById('p2')!.cost, isNull);
+    });
+  });
 }
 
 CheckoutDraftRequest _request({int quantity = 1}) => CheckoutDraftRequest(
@@ -687,19 +812,24 @@ final List<int> _encryptionKey = List<int>.generate(
   (index) => (index * 5) % 256,
 );
 
-TenantProduct _product(String tenantId, String productId, {double price = 10}) =>
-    TenantProduct.fromSnapshot(
-      TenantQueryDocumentSnapshot(
-        path: 'tenants/$tenantId/products/$productId',
-        data: <String, Object?>{
-          'name': '$productId name',
-          'SKU': 'sku-$productId',
-          'price': price,
-          'quantity': 12,
-          'categoryId': 'drinks',
-        },
-      ),
-    );
+TenantProduct _product(
+  String tenantId,
+  String productId, {
+  double price = 10,
+  double? cost,
+}) => TenantProduct.fromSnapshot(
+  TenantQueryDocumentSnapshot(
+    path: 'tenants/$tenantId/products/$productId',
+    data: <String, Object?>{
+      'name': '$productId name',
+      'SKU': 'sku-$productId',
+      'price': price,
+      if (cost != null) 'cost': cost,
+      'quantity': 12,
+      'categoryId': 'drinks',
+    },
+  ),
+);
 
 TenantCategory _category(String tenantId, String categoryId) =>
     TenantCategory.fromSnapshot(

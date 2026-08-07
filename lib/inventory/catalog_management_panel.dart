@@ -86,6 +86,7 @@ final class _TenantCatalogManagementPanelState
   final TextEditingController _productName = TextEditingController();
   final TextEditingController _productSku = TextEditingController();
   final TextEditingController _productPrice = TextEditingController();
+  final TextEditingController _productCost = TextEditingController();
 
   String? _selectedCategoryId;
   List<String?> _cursors = <String?>[null];
@@ -105,6 +106,7 @@ final class _TenantCatalogManagementPanelState
     _productName.dispose();
     _productSku.dispose();
     _productPrice.dispose();
+    _productCost.dispose();
     super.dispose();
   }
 
@@ -218,6 +220,7 @@ final class _TenantCatalogManagementPanelState
         name: _productName.text,
         sku: _productSku.text,
         price: _productPrice.text,
+        cost: _productCost.text,
         categoryId: _selectedCategoryId ?? '',
         categories: view.categories.items,
         requestId: _productRequestId ??= _newRequestId(),
@@ -232,7 +235,13 @@ final class _TenantCatalogManagementPanelState
           body:
               '${intent.name} is filed under ${intent.categoryName}, scanned as '
               '${intent.sku}, and priced at ${_money(intent.priceMinor)} in the '
-              'currency this business publishes. It is added holding no stock: '
+              'currency this business publishes. '
+              '${intent.costMinor == null ? 'No unit cost is recorded, so its '
+                    'sales report no profit and are counted as missing cost data.' : 'It costs ${_money(intent.costMinor!)} a unit; every sale '
+                    'records that figure as it stands at the moment of the sale, '
+                    'so correcting it later never changes a profit already '
+                    'reported.'} '
+              'It is added holding no stock: '
               'record the opening quantity from the product itself, so the '
               'ledger says where those units came from.\n\n'
               'Nothing in this app can change a name, a code, or a price '
@@ -324,6 +333,7 @@ final class _TenantCatalogManagementPanelState
     _productName.clear();
     _productSku.clear();
     _productPrice.clear();
+    _productCost.clear();
     _selectedCategoryId = null;
   }
 
@@ -416,6 +426,9 @@ final class _TenantCatalogManagementPanelState
         productName: _productName,
         productSku: _productSku,
         productPrice: _productPrice,
+        productCost: _productCost,
+        canRecordCost:
+            TenantCatalogManagementRepository.canRecordCostInSession(session),
         selectedCategoryId: _selectedCategoryId,
         pageIndex: _pageIndex,
         onCategorySelected: (categoryId) =>
@@ -450,6 +463,8 @@ final class _CatalogManagementContents extends StatelessWidget {
     required this.productName,
     required this.productSku,
     required this.productPrice,
+    required this.productCost,
+    required this.canRecordCost,
     required this.selectedCategoryId,
     required this.pageIndex,
     required this.onCategorySelected,
@@ -470,6 +485,11 @@ final class _CatalogManagementContents extends StatelessWidget {
   final TextEditingController productName;
   final TextEditingController productSku;
   final TextEditingController productPrice;
+  final TextEditingController productCost;
+
+  /// Whether this member may record what the business paid. A manager may add
+  /// a product and may not state its margin.
+  final bool canRecordCost;
   final String? selectedCategoryId;
   final int pageIndex;
   final ValueChanged<String> onCategorySelected;
@@ -629,6 +649,26 @@ final class _CatalogManagementContents extends StatelessWidget {
                   'refused here rather than at the till.',
             ),
           ),
+          if (canRecordCost) ...[
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('catalog-management-product-cost'),
+              controller: productCost,
+              enabled: !busy,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (_) => onFormChanged(),
+              decoration: const InputDecoration(
+                labelText: 'Unit cost (optional)',
+                helperText:
+                    'What one unit costs this business. Every sale records the '
+                    'cost as it stands at that moment, so correcting this later '
+                    'prices the next sale and never changes a profit figure '
+                    'already reported. Leave blank if you do not track it.',
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
             key: const ValueKey('catalog-management-selected-category'),
@@ -775,6 +815,15 @@ String _refusalNotice(String code) => switch (code) {
   'price_not_representable' =>
     'That price is larger than a sale in this app can record. It is refused '
         'here rather than at the till, where it would stop a customer.',
+  'invalid_cost' =>
+    'Enter the unit cost as a plain amount with at most two decimal places, '
+        'such as 40 or 12.50 - or leave it blank if you do not track it.',
+  'cost_not_representable' =>
+    'That unit cost is larger than a sale in this app can record. A sale '
+        'records the cost alongside the price, so it is refused here.',
+  'cost_forbidden' =>
+    'Only an owner or administrator may record what a product costs. Leave the '
+        'unit cost blank, or ask one of them to set it.',
   'unknown_category' =>
     'Choose one of the categories shown above before adding the product.',
   'catalog_forbidden' =>

@@ -200,6 +200,10 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
         'name': product.name,
         'SKU': product.sku,
         'price': product.price,
+        // Cached because the till stamps it onto a sale line while offline, and
+        // an absent cost is a permanent "not recorded" on that line rather than
+        // something a later sync fills in.
+        if (product.cost != null) 'cost': product.cost,
         'quantity': product.quantity,
         'categoryId': product.categoryId,
         if (product.imageUrl != null) 'image': product.imageUrl.toString(),
@@ -286,6 +290,7 @@ final class HiveCheckoutCatalogCache implements CheckoutCatalogSource {
             'name': entry['name'],
             'SKU': entry['SKU'],
             'price': entry['price'],
+            if (entry['cost'] != null) 'cost': entry['cost'],
             'quantity': entry['quantity'],
             'categoryId': entry['categoryId'],
             if (entry['image'] != null) 'image': entry['image'],

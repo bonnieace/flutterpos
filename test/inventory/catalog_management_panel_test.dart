@@ -265,6 +265,25 @@ void main() {
       find.byKey(const ValueKey('catalog-management-retire-unavailable')),
       findsOne,
     );
+    // A manager stocks the catalog without being shown the margin. Every active
+    // member can read a product document, so this is a surface boundary rather
+    // than a secrecy guarantee - but it is the boundary that decides whether a
+    // manager is *shown* what the business pays.
+    expect(
+      find.byKey(const ValueKey('catalog-management-product-cost')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an owner is offered the unit cost the manager is not', (
+    tester,
+  ) async {
+    await _pump(tester, _controller(), _Reader.seeded(), writer: _Writer());
+
+    expect(
+      find.byKey(const ValueKey('catalog-management-product-cost')),
+      findsOne,
+    );
   });
 
   testWidgets('retiring says what survives it and then deletes', (

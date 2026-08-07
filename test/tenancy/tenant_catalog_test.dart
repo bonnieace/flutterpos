@@ -27,6 +27,54 @@ void main() {
       expect(legacy.categoryId, 'drinks');
     });
 
+    test('an absent buying price is normal, and a broken one is not', () {
+      // Optional on purpose, and this is the test that says why: no product
+      // created before `cost` existed carries one, and this read model is
+      // strict enough that a single refusal makes the *whole* cached catalog a
+      // miss - so requiring it would have stopped every existing business
+      // selling. A present-but-unusable value is still refused, because
+      // dropping it would report the product's entire revenue as profit.
+      expect(
+        TenantProduct.fromSnapshot(_productSnapshot('tenant-a', 'p')).cost,
+        isNull,
+      );
+      expect(
+        TenantProduct.fromSnapshot(
+          _productSnapshot('tenant-a', 'p', data: _productData()..['cost'] = null),
+        ).cost,
+        isNull,
+      );
+      expect(
+        TenantProduct.fromSnapshot(
+          _productSnapshot('tenant-a', 'p', data: _productData()..['cost'] = 60),
+        ).cost,
+        60,
+      );
+      expect(
+        TenantProduct.fromSnapshot(
+          _productSnapshot(
+            'tenant-a',
+            'p',
+            data: _productData()..['cost'] = 0,
+          ),
+        ).cost,
+        0,
+      );
+      for (final broken in <Object?>['60', -1, double.nan, double.infinity]) {
+        expect(
+          () => TenantProduct.fromSnapshot(
+            _productSnapshot(
+              'tenant-a',
+              'p',
+              data: _productData()..['cost'] = broken,
+            ),
+          ),
+          throwsA(isA<FormatException>()),
+          reason: 'cost $broken must be refused rather than dropped',
+        );
+      }
+    });
+
     test('a product carries the business its own path names', () {
       final product = TenantProduct.fromDocument(
         path: 'tenants/tenant-a/products/product-a',

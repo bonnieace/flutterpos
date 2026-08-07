@@ -49,9 +49,9 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 
 | Track | State | What is left |
 | --- | --- | --- |
-| **Cloud Functions** | ~95% | 47 handlers, 333 unit tests. No live Brevo, no deployment. |
-| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. `subscription` has rules and no writer. |
-| **Flutter client** | ~85% | The sell-and-settle loop works, a business can publish the currency it sells in, and it can stock itself. No way to correct a product **from the app** — the callable exists, no route calls it — no printing, no subscription. |
+| **Cloud Functions** | ~95% | 47 handlers, 346 unit tests. No live Brevo, no deployment. |
+| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered, and the cost chunk changed the file not at all. `subscription` has rules and no writer. |
+| **Flutter client** | ~85% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, and record what a product cost. No way to correct a product **from the app** — the callable exists, no route calls it — no profit display, no printing, no subscription. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -74,6 +74,8 @@ callable exists, and not green if it is merely tested.
 | **Edit a product's price or name** | 🔴 | **`updateProduct` is built and tested; nothing in the app calls it.** Still red, because red is what "only the callable exists" means on this board. The Flutter edit surface is the next chunk, and nothing is in front of it any more |
 | Set the currency / checkout configuration | 🟢 | "Checkout settings" on the landing route → merges `configuration/checkout`, owner/admin only |
 | Adjust stock | 🟢 | Product stock route → `adjustStock` |
+| Record what a product cost | 🟢 | "Manage catalog" → the optional unit cost on the add-product form, owner/admin only. Every sale freezes the figure onto its own line |
+| See profit or margin | 🔴 | The server computes it and nothing displays it. Needs a surface that states how many lines have no cost — see the unreachable table |
 | Record a return | 🟢 | From a sale, via receipt lookup or shift history |
 | Verify a return, restoring stock | 🟢 | Owner/admin/manager, on a pending return |
 | Look up a receipt | 🟢 | "Find a receipt" |
@@ -86,8 +88,10 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
-**No row on this board has changed colour since the catalog chunk, and the flake
-session did not change one either — it changed no board row at all, deliberately, and
+**Two rows moved on 2026-08-07 when a product gained a cost** — "Record what a product
+cost" is green and "See profit or margin" was added red, because the server computes a
+figure nothing displays. Before that: **no row had changed colour since the catalog
+chunk, and the flake session did not change one either — it changed no board row at all, deliberately, and
 this sentence is here so that is stated rather than left silent.** Five 2026-08-07
 sessions have followed the catalog chunk: two added unit tests only, one resolved
 decisions without touching code, the fourth built `updateProduct`, and the fifth fixed
@@ -129,7 +133,7 @@ The fifteen frozen steps, with what is actually true:
 | 8 | Brevo delivery, webhook normalization, action pages | ⚠️ implemented, never exercised against live Brevo |
 | 9 | `TenantSession`, switching, shift restoration, epochs | ✅ |
 | 10 | Encrypted Hive cache, single-flight checkout, receipt counters | ✅ |
-| 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription; editing a product is a server callable with no client route. Checkout configuration writing, catalog management, and `updateProduct` all landed 2026-08-07 |
+| 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription; editing a product is a server callable with no client route, and profit is computed but not displayed. Checkout configuration writing, catalog management, `updateProduct`, and product cost all landed 2026-08-07 |
 | 12 | Emulator, multi-device, Windows-offline, email, adversarial tests | ⚠️ emulator suites green; no multi-device, no Windows-offline, no live email |
 | 13 | Deploy development, then staging | ❌ not started |
 | 14 | Enable App Check on validated platforms | ❌ not started; no `firebase_app_check` dependency |
@@ -139,29 +143,25 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1347** |
-| Functions | `npm --prefix functions test` | **333** |
-| Rules | `npm --prefix rules-tests run test:emulator` | **160** (carried) |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** (carried) |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12** (carried) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1358** |
+| Functions | `npm --prefix functions test` | **346** |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12** |
 
-**1862 tests across five suites.** `flutter test` takes no path list — the one
-uncompilable file that forced that workaround was deleted on 2026-08-07. Flutter and
-Functions were measured in the flake session on 2026-08-07; Flutter gained one test
-there and Functions did not move.
-
-**(carried)** — not re-measured; the figures are the `updateProduct` session's, from the
-same day. The flake session that carried them changed two files, both under
-`test/checkout/`, and touched nothing in `functions/`, `firestore.rules`,
-`rules-tests/`, or `lib/`, so all three emulator suites would have been measuring an
-unchanged tree. Named as carried rather than presented as fresh.
+**1887 tests across five suites.** `flutter test` takes no path list — the one
+uncompilable file that forced that workaround was deleted on 2026-08-07. **All five were
+measured in the product-cost session on 2026-08-07**, so nothing here is carried. Flutter
+1347 → 1358 (eleven new), Functions 333 → 346, Rules 160 → 161; the two integration
+suites did not move.
 
 ✅ **The intermittent Flutter failure is diagnosed and fixed.** Measured eleven times on
 2026-08-07: **1250 passed with 1 failed**, then **1251**, then **1290 twice** once the
 configuration chunk added 39, then **1346** three times — the catalog chunk, the sweep
 session, and the `updateProduct` session — then **1347 four times** in the flake session,
-all four with the fix already in and the last of them against the frozen tree. One
-failure in eleven runs, and the last ten green.
+all four with the fix already in and the last of them against the frozen tree, then
+**1358** once the product-cost chunk added eleven. One failure in twelve runs, and the
+last eleven green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -351,6 +351,54 @@ The guarantees are settled, not open:
 8. **A request that changes nothing is refused, not audited as a no-op.** Reachable only
    with a fresh request ID: a genuine retry answers off the idempotency record.
 
+### A product records what it cost, and a sale freezes it
+
+Asked for and built 2026-08-07, with one requirement attached by the product owner:
+**a change to a buying price must never move a profit figure already reported.** That
+requirement decided the design, and it is met by machinery that already existed rather
+than by a new rule someone could later relax.
+
+The guarantees are settled, not open:
+
+1. **The cost is copied onto the sale line at the moment of the sale**, in
+   `checkout_draft.dart`, beside the price and through the same
+   `checkoutMinorUnitsFromMajor`. Nothing downstream ever consults the product again.
+2. **Four independent locks hold it there**, and no new one was invented: profit is
+   computed from the line (`lineCost()` in `operations/domain.ts` reads `cost`, then
+   `unitCost`, then the legacy `buyingPrice`, and there is no product join anywhere in
+   the pipeline); a sale document refuses every client update (`allow update, delete:
+   if false`); nightly regeneration re-reads `sales` rather than `products`; and the
+   offline payload is hash-sealed, so the device copy cannot be edited either.
+3. **An absent cost stays absent, never zero.** Zero would claim the business paid
+   nothing and report a 100% margin. The server already counts those lines as
+   `incompleteCostLineCount` and the daily summary already says so.
+4. **A missing cost never refuses a sale.** Stopping a till trading over a reporting
+   field would be the wrong trade. A cost the till *cannot represent* is refused where
+   it is typed, as `cost_not_representable`.
+5. **`firestore.rules` is byte-identical, and the rules suite was run to say so.**
+   `validSaleLine` constrains only `productId` and `quantity` and names no key list, and
+   `allow create` on `products` checks only `quantity is int`. A rules test now pins
+   both, because the day someone tightens the create rule with a `hasOnly`, a business
+   that records what it pays stops being able to add products.
+6. **No payload schema version bump.** `unitCostMinor` was already an allowed optional
+   line key at v2 and the parser already read it, so `validSaleTender`'s
+   `payloadSchemaVersion == 2` branch is untouched. The consuming half of this feature
+   was built long ago and idle; only the source was missing.
+7. **Cost is money, so it sits behind owner/admin** — `MONETARY_PRODUCT_FIELDS` on the
+   server, `costRoles` on the client — while creating a product stays
+   owner/admin/manager. A client that sends a cost without the role is **refused, not
+   ignored**.
+8. **This is a surface boundary, not secrecy, and is documented as one.** `products` is
+   readable by any active member because the till cannot price a sale otherwise, and
+   Firestore cannot hide one field of a document. Every staff device therefore caches
+   buying prices. What the boundary buys is that no manager is *shown* a margin. The
+   alternative — a trigger stamping cost onto the sale server-side — was considered and
+   declined: it costs a write per sale, leaves a window where the sale has no cost, and
+   cannot work offline, which is the platform the whole Hive design exists for.
+9. **Clearing is `cost: null`, and it is the only field where null means something.**
+   It is also the escape hatch for a stored cost too malformed for the callable to
+   correct. The audit keeps the unreadable previous value verbatim.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -358,7 +406,7 @@ The guarantees are settled, not open:
 | `updateProduct` | **Built and tested 2026-08-07; no client calls it.** The twenty-fourth callable. Blocked on nothing but a Flutter route, which is now the current chunk rather than a queued one. Until it lands a mistyped price is still corrected by an operator. |
 | `requestPasswordReset` | **Blocked on App Check.** Still no caller — see below. |
 | Subscription | `TenantPaths.currentSubscription` and rules exist; **nothing reads it and nothing writes it**. `grep -i subscription functions/src` finds nothing at all, so there is no schema to model. Start on the server, not in Flutter. |
-| Product cost / profit | `profit` is parsed at `lib/reporting/daily_metrics.dart:64` and deliberately never displayed. No product carries a cost, so the server's profit equals its revenue; showing it would report a 100% margin. |
+| Product cost / profit **(half closed 2026-08-07)** | A product now **carries a cost** and a sale **freezes it onto its line**, so profit is real for anything sold since. `profit` is still parsed and never *displayed* — that surface is the remaining half, and it must state `incompleteCostLineCount`, because every sale recorded before this date has no cost and never will. |
 | Category rename and delete | Permitted by `allow create, update, delete` on `categories` to owner/admin/manager, and offered to nobody. Deliberate, for the orphaning reason above; recorded here so the gap between rule and surface stays a decision. |
 
 Checkout configuration writing left this table on 2026-08-07. The route is
@@ -702,7 +750,7 @@ acceptTenantInvitation({tenantId, invitationVersion, invitationToken, requestId}
 acceptVisibleTenantInvitation({tenantId, requestId})
 reviewEmailSuppression({email, action, reason, confirmation?, evidenceReference?, requestId})
 adjustStock({tenantId, productId, quantityDelta, type, reason, requestId})
-updateProduct({tenantId, productId, name?, sku?, price?, categoryId?, requestId})  // added later
+updateProduct({tenantId, productId, name?, sku?, price?, cost?, categoryId?, requestId})  // added later
 verifyReturnAndRestoreStock({tenantId, returnId, requestId})
 getSalesComparison({tenantId, previousStartDate, previousEndDate, soldById?, categoryId?})
 requestTenantReconciliation({tenantId, mode, requestId})
@@ -711,7 +759,8 @@ amendShiftSummary({tenantId, shiftId, reason, requestId})  // added later
 
 ### Full export surface
 
-`functions/src/index.ts` exports **47** handlers — callables above, plus task
+`functions/src/index.ts` exports **47** handlers — unchanged by the 2026-08-07 cost
+chunk, which widened `updateProduct`'s payload and added no export — callables above, plus task
 workers, triggers, retry workers, and schedulers:
 
 ```text
@@ -991,7 +1040,7 @@ Role boundaries, each decided deliberately rather than by default:
 | `daily_metrics`, `stock_adjustments`, `stock_movements`, `reconciliation_*`, `shift_amendments` | owner/admin/manager |
 | `audit_logs` | owner/admin, plus platform |
 | `configuration` | any active member — a till cannot price a sale without it. Writing is owner/admin, the one client-writable settings collection |
-| `products`, `categories` | any active member — a till cannot sell what it cannot read. Writing is client-reachable and split three ways: create is owner/admin/manager on both, delete is owner/admin on `products` and owner/admin/manager on `categories`, and **update on `products` is the checkout decrement and nothing else** — a descriptive field changes only through `updateProduct`, which writes past rules entirely |
+| `products`, `categories` | any active member — a till cannot sell what it cannot read. Writing is client-reachable and split three ways: create is owner/admin/manager on both, delete is owner/admin on `products` and owner/admin/manager on `categories`, and **update on `products` is the checkout decrement and nothing else** — a descriptive field, including `cost`, changes only through `updateProduct`, which writes past rules entirely. `allow create` names no key list, which is what lets a product carry a `cost` with no rule change |
 
 App Check built-in providers cover Apple, Android, and web. Windows relies on
 authentication, canonical authorization, rate limiting, and idempotency until a
@@ -1159,11 +1208,16 @@ Firestore directly, because **no rule permits a client to write these fields and
 will be added** — `allow update` on `products` is the checkout decrement, byte for byte,
 and the resolved decision above says why it stays that way.
 
-Four things the callable's contract forces on the route, all worth reading before
+**It now has five editable fields, not four.** `cost` was added on 2026-08-07 and is the
+second monetary one, so the price tier below covers both — and `cost` is the only field
+where sending `null` is meaningful rather than "leave it alone": it clears a recorded
+cost, and it is the escape hatch for one too malformed to correct.
+
+Five things the callable's contract forces on the route, all worth reading before
 designing it:
 
-- **The form has two permission tiers.** A payload naming `price` requires an owner or an
-  administrator; a name, SKU, or category needs the operational three. The callable reads
+- **The form has two permission tiers.** A payload naming `price` **or `cost`** requires
+  an owner or an administrator; a name, SKU, or category needs the operational three. The callable reads
   this from the *requested* fields, not the resulting diff, so a manager cannot discover a
   price by binary search over refusals — and the form must not offer a price field it
   knows will be refused.
@@ -1176,6 +1230,9 @@ designing it:
 - **Hold one request ID across a retry**, from `secureTenantCatalogRequestId()`. A genuine
   retry answers off the idempotency record; a fresh ID on the same edit reaches the
   no-op refusal instead.
+- **A blank cost field is not the same as clearing one.** The create form already makes
+  this distinction; the edit form has to make it visibly, because omitting `cost` leaves
+  the stored value alone while sending `null` deletes it. Offer clearing as its own act.
 
 See "A price is corrected on the server, and never a quantity" for the full contract, and
 "How a price is corrected" for why it is a callable at all.
@@ -1221,7 +1278,7 @@ It is one route, its gateway, and its tests.
 Outside every chunk until deliberately scheduled: a resolution path for the four
 stock and sale differences, currency labels on the differences list, the subscription
 surfaces, discounts, camera barcode scanning, password reset (blocked on the App Check
-decision above, which is now in motion), product cost/profit fields, renaming or
+decision above, which is now in motion), renaming or
 deleting a category, SKU uniqueness, bulk catalog import, a `platform_audit_logs`
 surface, branding surfaces, the Sentry DSN, the 476 pre-existing analyzer issues, a
 root-widget smoke test and the startup seams it would need, and deployment.
@@ -1248,6 +1305,13 @@ external print service handles the transport, and this app owes the printed body
 not re-exclude it and do not start it on a guessed contract. Nothing about it is
 blocking today: a sale completes, is recorded, is found by receipt lookup, and is
 returnable without anything being printed.
+
+**Product cost left this list on 2026-08-07, and profit display replaced it.** The
+product owner asked for buying price and attached one requirement: a change to it must
+never move a profit already reported. That is now guaranteed by the sale line rather
+than by care — see the standing decision above. What stays excluded is the **display**
+of profit or margin, which is a reporting surface and needs its own chunk, because it
+cannot show a number without also showing how many lines have no cost behind it.
 
 **Named once, as it has been inherited for many consecutive chunks: the 476
 pre-existing analyzer issues.** Still correctly excluded, and the reason is stronger
