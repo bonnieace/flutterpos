@@ -15434,3 +15434,162 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## The flake was the test's own clock - 2026-08-07
+
+Chose the queued chunk: chase the one intermittent Flutter failure at
+`test/checkout/checkout_sync_signals_test.dart`. The status board has no red row that
+stops a business operating and no unqueued capability the app needs in order to
+function, and the next capability - the Flutter surface that calls `updateProduct` - is
+Dart, so a suite that is green six times in seven cannot certify it. This chunk comes
+first for exactly the reason the handover gave.
+
+### It reproduced, and it is not what the plan said to look for
+
+The queued lead was the outbox's **static** per-box lock, on the grounds that the same
+mechanism had deadlocked this file once before. **That lead is wrong and is retracted.**
+`HiveCheckoutOutbox._serialized` completes its `release` in a `finally` and removes its
+own tail; nothing in this file contends on one key from two instances; and, decisively,
+a deadlock means a transition that never happens, while what was measured is a
+transition that happens **late**.
+
+The fault is in the test, not in anything it tests. `_settle()` waited a fixed **20
+event-loop turns** of `Future<void>.delayed(Duration.zero)`. What it was waiting for is
+three sequential writes to a real encrypted Hive box on a real filesystem -
+`beginSubmission`, `markAwaitingConfirmation`, `recordConfirmation` - each of which
+Hive's VM backend dispatches to the IO thread pool as a real `writeFrom`. **A turn count
+is not a wait; it is a race against the disk.**
+
+A temporary probe (`test/checkout/zz_seam_probe_test.dart`, deleted before the commit)
+ran the seam pipeline one save at a time and read the record after every turn:
+
+```text
+172 runs.  Turn at which the record reached `confirmed`:
+  median 3    p90 6    p99 9
+  tail: one run at 19, one run at 26
+  the run that needed 26 turns read `awaiting_confirmation` at turn 20
+```
+
+Turn 26 is the failure, exactly as reported: past the 20 turns the helper allowed, with
+the record still `awaiting_confirmation` at the assertion. Two runs in 172 at or past
+the limit matches roughly one full-suite failure in seven, because a full suite is where
+the disk is busiest - and it is why the file passed 15/15 run alone.
+
+### What was changed, and why it is not simply a bigger margin
+
+Raising the turn count would have been the wrong fix: the tail has no bound in turns,
+because it is not measured in turns. So **nothing in the seam group counts turns any
+more.**
+
+- Three of the four seam tests now hold the future the signal listener starts, and await
+  it. The listener still fires and forgets, exactly as the composition root does; the
+  future is the test's own. `CheckoutSyncPass.run` settles the record before its own
+  future completes, so for the test that used to fail this is the whole of the wait, and
+  it is deterministic.
+- The fourth - a save arriving during an in-flight run - cannot await the first run
+  before releasing it, and the rerun the worker schedules for itself in its `finally` is
+  `unawaited`, so it has no future to hold at all. Those two points poll a **condition**
+  under a ten-second wall-clock deadline. A genuinely broken seam still fails, just
+  later, and it fails naming what it was waiting for.
+- The negative assertion - a save is not submitted for a session the device has left -
+  now waits for the run to be *over* rather than merely for it to be unlikely, which is
+  the other thing a turn count could not give it.
+
+### The flake, made permanent
+
+`a slow disk decides nothing about whether the seam worked` is a new group holding one
+test. It wraps the real Hive box in `_SlowBox`, which delays every `put` by 60 ms -
+longer than any plausible run of zero-duration turns - and asserts the same `confirmed`
+outcome the seam group asserts. It adds no new claim about the pipeline; its whole job
+is to fail if this file ever goes back to guessing.
+
+**It was verified to fail without the fix.** The probe file was rewritten to run the
+same slow box against the old 20-turn helper, and did fail, deterministically:
+
+```text
+Expected: CheckoutOutboxState:<CheckoutOutboxState.confirmed>
+  Actual: CheckoutOutboxState:<CheckoutOutboxState.savedOffline>
+```
+
+`savedOffline` rather than `awaiting_confirmation` because 60 ms a write is far past the
+real stall. Same mechanism, larger dose.
+
+### The same fault in a sibling file, and one that is not
+
+`_waitForState` in `test/checkout/checkout_recovery_test.dart` had the identical shape -
+20 `Duration.zero` turns, then `fail(...)` - and was waiting for a `recordConfirmation`
+write to the same kind of real box, in a rerun path with no future to hold. It had never
+been seen to fail; it was one bad disk stall away from it. It now polls in real
+milliseconds against a ten-second deadline.
+
+**`_settle()` in `test/checkout/checkout_sync_test.dart` was examined and deliberately
+left alone.** It has the same 20-turn shape, but what it waits for is a coalesced rerun
+that finds the record already `awaiting_confirmation` and skips it: no `put`, no disk,
+no race. Changing it would be churn. Recorded here so the next session does not
+re-derive it.
+
+**No file under `lib/` was changed, and none needed to be.** Production awaits its own
+futures throughout, and `CheckoutSyncPass` is sequential and fully awaited. The bug was
+never in the pipeline.
+
+### Files changed
+
+```text
+test/checkout/checkout_sync_signals_test.dart   `_settle` replaced by `_settleUntil`
+                                                and `_runsFinished`; four seam tests
+                                                rewired; `_slowDiskGroup` and
+                                                `_SlowBox` added
+test/checkout/checkout_recovery_test.dart       `_waitForState` given a wall-clock
+                                                deadline and real millisecond turns
+```
+
+A temporary `test/checkout/zz_seam_probe_test.dart` carried the measurements above and
+was deleted before the commit. It is not in the diff.
+
+### Tests
+
+```text
+flutter analyze --no-pub test/checkout                        No issues found
+flutter test --no-pub --concurrency=1 --reporter=failures-only test/checkout/
+                                                              247 pass  (246 + 1 new)
+flutter test --no-pub --concurrency=1 --reporter=failures-only
+                                                              1347 pass, four times
+npm --prefix functions test                                   333 pass, 0 fail
+```
+
+The Flutter suite is **1347**, one more than the 1346 baseline: the new slow-disk test.
+Four consecutive green full runs, about 550 s each; the last of them ran against the
+frozen tree, after the final edit. **Four green runs are not the evidence here and are
+not offered as it** - the plan says as much itself, and six green runs preceded this
+session without the fault being gone. The evidence is the measurement, the mechanism,
+and a test that fails deterministically without the change.
+
+### The emulator suites were deliberately not run
+
+`git diff --stat` for this chunk is two files, both under `test/checkout/`. Nothing in
+`functions/`, `firestore.rules`, `rules-tests/`, or `lib/` was touched, so the rules
+suite (160), the reconciliation integration suite (10), and the invitation integration
+suite (12) could validate nothing about this change. Their counts in `PLAN.md` are
+carried forward from the `updateProduct` session **on the same day** and are marked
+there as carried rather than re-measured. Named here rather than skipped in silence.
+
+### One exclusion named, as required
+
+**Receipt printing**, excluded for many consecutive chunks. Still correctly excluded,
+and for an unchanged reason: the transport was answered on 2026-08-07 - an external
+print service, to be shared - but the interface is still unknown, and what the service
+takes decides what a "body" even is. No session can resolve that by thinking about it,
+and nothing about it is blocking: a sale completes, is recorded, is found by receipt
+lookup, and is returnable without anything being printed.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

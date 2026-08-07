@@ -426,16 +426,28 @@ Future<CheckoutOutboxRecord> _read(
   checkoutId: record.checkoutId,
 ))!;
 
+/// Waits for a rerun the coordinator schedules for itself, which is the one
+/// thing in this file with no future to hold.
+///
+/// The turns are real milliseconds against a wall-clock deadline rather than
+/// twenty `Duration.zero` turns, because what is being waited for is a
+/// `recordConfirmation` write to a real encrypted Hive box, and a zero-duration
+/// turn does not wait for a disk. Twenty of them proved too few about one run in
+/// seven in `test/checkout/checkout_sync_signals_test.dart` - the same mechanism
+/// over the same kind of box - and this helper had simply not been unlucky yet.
+/// See `_settleUntil` there for the measurements.
 Future<void> _waitForState(
   HiveCheckoutOutbox outbox,
   CheckoutOutboxRecord record,
   CheckoutOutboxState state,
 ) async {
-  for (var attempt = 0; attempt < 20; attempt++) {
-    if ((await _read(outbox, record)).state == state) return;
-    await Future<void>.delayed(Duration.zero);
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while ((await _read(outbox, record)).state != state) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('Checkout ${record.checkoutId} did not reach $state.');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 1));
   }
-  fail('Checkout ${record.checkoutId} did not reach $state.');
 }
 
 TenantMembership _membership(String tenantId) => TenantMembership(

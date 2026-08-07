@@ -237,15 +237,19 @@ void _seamGroup() {
         submissionGateway: gateway,
         isOnline: () async => true,
       );
-      // Exactly what the composition root does with the two ends.
-      signals.syncRequests.listen((_) => worker.submitDueCheckouts());
+      // Exactly what the composition root does with the two ends. Holding the
+      // run it starts is the test's own business: the listener still fires and
+      // forgets, and the future is how this test knows the run is over instead
+      // of guessing at event-loop turns.
+      final runs = <Future<Object?>>[];
+      signals.syncRequests.listen((_) => runs.add(worker.submitDueCheckouts()));
       final sink = CheckoutSyncOnSaveDraftSink(
         delegate: _OutboxSink(outbox),
         signals: signals,
       );
 
       await sink.saveDraft(_request());
-      await _settle();
+      await _runsFinished(runs, count: 1);
 
       // Before this seam existed the worker ran only on session open and on a
       // reconnect, so this record stayed saved_offline until the next restart.
@@ -275,18 +279,43 @@ void _seamGroup() {
         submissionGateway: gateway,
         isOnline: () async => true,
       );
-      signals.syncRequests.listen((_) => worker.submitDueCheckouts());
+      final runs = <Future<Object?>>[];
+      signals.syncRequests.listen((_) => runs.add(worker.submitDueCheckouts()));
       final sink = CheckoutSyncOnSaveDraftSink(
         delegate: _OutboxSink(outbox),
         signals: signals,
       );
 
       await sink.saveDraft(_request());
-      await _settle();
+      await _settleUntil(
+        'the first sale was in flight at the gateway',
+        () => gateway.submissions.length == 1,
+      );
       await sink.saveDraft(_request(checkoutId: 'checkout-b'));
-      await _settle();
+      // The second save must reach the worker while the first run still holds
+      // it: that refusal is what sets the rerun this test is really about. Run
+      // 1 is still blocked in the gateway, so only run 2 can be awaited here.
+      await _settleUntil(
+        'the second save had asked for its own run',
+        () => runs.length == 2,
+      );
+      await runs[1];
       release.complete();
-      await _settle();
+      await runs[0];
+      // The rerun the worker schedules for itself is the one wait in this group
+      // with no future to hold, so it is the one wait that polls. It waits on the
+      // rerun's *last* write rather than on its submission, so the run is over
+      // before `tearDown` closes the box under it.
+      await _settleUntil(
+        'the coalesced rerun had submitted and recorded the second sale',
+        () async =>
+            (await outbox.read(
+              uid: 'user-a',
+              tenantId: 'tenant-a',
+              checkoutId: 'checkout-b',
+            ))?.state ==
+            CheckoutOutboxState.awaitingConfirmation,
+      );
 
       // The lease and the worker's own coalescing both hold: two sales, two
       // commits, and neither sale committed twice.
@@ -307,7 +336,8 @@ void _seamGroup() {
         submissionGateway: gateway,
         isOnline: () async => true,
       );
-      signals.syncRequests.listen((_) => worker.submitDueCheckouts());
+      final runs = <Future<Object?>>[];
+      signals.syncRequests.listen((_) => runs.add(worker.submitDueCheckouts()));
       final sink = CheckoutSyncOnSaveDraftSink(
         delegate: _OutboxSink(outbox),
         signals: signals,
@@ -315,7 +345,9 @@ void _seamGroup() {
 
       await sink.saveDraft(_request());
       sessions.open(uid: 'user-a', membership: _membership(tenantId: 'tenant-b'));
-      await _settle();
+      // A negative assertion needs the run to be over rather than merely
+      // unlikely, which is the other thing counting turns could not give it.
+      await _runsFinished(runs, count: 1);
 
       expect(gateway.submissions, isEmpty);
       final stored = await outbox.read(
@@ -348,16 +380,20 @@ void _seamGroup() {
       );
       // Exactly what the composition root wires, including the trigger's effect
       // on derived data.
-      signals.syncRequests.listen((trigger) => pass.run(
+      final passes = <Future<Object?>>[];
+      signals.syncRequests.listen((trigger) => passes.add(pass.run(
         refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
-      ));
+      )));
       final sink = CheckoutSyncOnSaveDraftSink(
         delegate: _OutboxSink(outbox),
         signals: signals,
       );
 
       await sink.saveDraft(_request());
-      await _settle();
+      // The pass settles the record before its own future completes, so this is
+      // the whole of the wait. This assertion is the one that used to fail
+      // roughly one full-suite run in seven; see `_settleUntil` for why.
+      await _runsFinished(passes, count: 1);
 
       // Observed on a real device before the second recovery existed: the sale
       // reached Firestore immediately and stopped at `awaiting_confirmation`, so
@@ -374,12 +410,186 @@ void _seamGroup() {
       expect(confirmations.checked, ['checkout-a']);
     });
   });
+
+  _slowDiskGroup();
 }
 
-Future<void> _settle() async {
-  for (var turn = 0; turn < 20; turn++) {
-    await Future<void>.delayed(Duration.zero);
+/// The flake above, made permanent.
+///
+/// The failure this group exists for was never reproducible on demand: it needed
+/// a Hive write to take longer than twenty `Duration.zero` turns, which happened
+/// roughly one full-suite run in seven and never once in fifteen runs of the file
+/// alone. Delaying every write past any number of zero-duration turns makes that
+/// rare condition the only condition, so a wait that counts turns instead of
+/// waiting for the work fails here every single time.
+///
+/// It asserts nothing the seam group does not already assert. Its whole job is to
+/// fail if this file ever goes back to guessing.
+void _slowDiskGroup() {
+  group('a slow disk decides nothing about whether the seam worked', () {
+    late Directory directory;
+    late Box<dynamic> box;
+    late HiveCheckoutOutbox outbox;
+    late TenantSessionController sessions;
+    late CheckoutSyncSignals signals;
+
+    setUp(() async {
+      directory = await Directory.systemTemp.createTemp('checkout-slow-test-');
+      Hive.init(directory.path);
+      box = await Hive.openBox<dynamic>(
+        'checkout-slow-disk-test',
+        encryptionCipher: HiveAesCipher(_encryptionKey),
+        crashRecovery: false,
+      );
+      outbox = HiveCheckoutOutbox.fromBox(_SlowBox(box, _slowWrite));
+      sessions = TenantSessionController()
+        ..open(uid: 'user-a', membership: _membership());
+      signals = CheckoutSyncSignals();
+    });
+
+    tearDown(() async {
+      await signals.dispose();
+      sessions.dispose();
+      await Hive.close();
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+
+    test('a save still ends confirmed when every write is slow', () async {
+      final confirmations = _FakeConfirmationGateway();
+      final pass = CheckoutSyncPass(
+        recover: CheckoutRecoveryCoordinator(
+          sessionController: sessions,
+          outbox: outbox,
+          confirmationGateway: confirmations,
+        ).recoverSelectedSession,
+        submit: CheckoutSubmissionWorker(
+          sessionController: sessions,
+          outbox: outbox,
+          submissionGateway: _FakeGateway(
+            (_) async => const CheckoutSubmissionResult.committed(),
+          ),
+          isOnline: () async => true,
+        ).submitDueCheckouts,
+        refreshCatalog: () async {},
+        reportEvidenceChanged: () {},
+      );
+      final passes = <Future<Object?>>[];
+      signals.syncRequests.listen((trigger) => passes.add(pass.run(
+        refreshDerivedData: trigger is! CheckoutSaveSyncRequest,
+      )));
+      final sink = CheckoutSyncOnSaveDraftSink(
+        delegate: _OutboxSink(outbox),
+        signals: signals,
+      );
+
+      await sink.saveDraft(_request());
+      await _runsFinished(passes, count: 1);
+
+      final stored = await outbox.read(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        checkoutId: 'checkout-a',
+      );
+      expect(stored!.state, CheckoutOutboxState.confirmed);
+    });
+  });
+}
+
+/// Longer than any plausible run of zero-duration turns, and short enough that
+/// the four writes one save performs still cost well under a second.
+const Duration _slowWrite = Duration(milliseconds: 60);
+
+/// A real Hive box whose writes take a visible amount of time.
+///
+/// Only the five members [HiveCheckoutOutbox] uses are delegated; anything else
+/// this test reaches for should be a loud failure rather than a silent default,
+/// which is what the inherited `noSuchMethod` gives.
+final class _SlowBox implements Box<dynamic> {
+  _SlowBox(this._delegate, this._writeDelay);
+
+  final Box<dynamic> _delegate;
+  final Duration _writeDelay;
+
+  @override
+  String get name => _delegate.name;
+
+  @override
+  Iterable<dynamic> get keys => _delegate.keys;
+
+  @override
+  dynamic get(dynamic key, {dynamic defaultValue}) =>
+      _delegate.get(key, defaultValue: defaultValue);
+
+  @override
+  Future<void> put(dynamic key, dynamic value) async {
+    await Future<void>.delayed(_writeDelay);
+    await _delegate.put(key, value);
   }
+
+  @override
+  Future<void> close() => _delegate.close();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// How long a wait in this file is allowed to take before it is a failure.
+///
+/// Generous on purpose: it is not a performance budget, it is the point past
+/// which the seam is broken rather than slow.
+const Duration _settleTimeout = Duration(seconds: 10);
+
+/// Waits until [expectation] holds, or fails saying what it was waiting for.
+///
+/// **Nothing in this group counts event-loop turns, and this is why.** The seam
+/// runs over a real encrypted Hive box on a real filesystem, so every state
+/// change costs a file write dispatched to the IO thread pool. A fixed number of
+/// `Duration.zero` turns is therefore not a wait at all - it is a race against
+/// the disk, and it is one the disk sometimes wins.
+///
+/// Measured on 2026-08-07, one save at a time, reading the record after every
+/// turn: the three writes a save sets off - `beginSubmission`,
+/// `markAwaitingConfirmation`, `recordConfirmation` - settle by turn 3 in the
+/// median case, but the tail of 172 runs reached turn 19 once and turn 26 once.
+/// This file used to allow exactly 20, which is precisely how one full-suite run
+/// in seven ended with the sale still `awaiting_confirmation` and no fault in
+/// any of the code it was testing. Neither the outbox's static per-box lock nor
+/// the submission pipeline was involved: the transitions all happened, late.
+///
+/// So a positive assertion waits for the run it is about to assert on to
+/// *finish*, and the one wait with no future to hold - a rerun the worker
+/// schedules for itself - polls for a condition under a wall-clock deadline.
+/// A genuinely broken seam still fails, just after [_settleTimeout].
+Future<void> _settleUntil(
+  String expectation,
+  FutureOr<bool> Function() satisfied,
+) async {
+  final deadline = DateTime.now().add(_settleTimeout);
+  while (!await satisfied()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail(
+        'Timed out after ${_settleTimeout.inSeconds}s waiting until '
+        '$expectation.',
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+}
+
+/// Waits until [count] runs have been asked for and every one of them is over.
+///
+/// The listener fires and forgets exactly as the composition root does; the
+/// futures are the test's own, and holding them is what makes this a wait
+/// rather than a guess.
+Future<void> _runsFinished(
+  List<Future<Object?>> runs, {
+  required int count,
+}) async {
+  await _settleUntil(
+    'the save had asked for $count sync run(s)',
+    () => runs.length >= count,
+  );
+  await Future.wait<Object?>(runs.take(count));
 }
 
 const String _deviceId = 'dev-0123456789abcdef0123456789abcdef';
