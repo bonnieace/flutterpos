@@ -8,6 +8,20 @@ Last verified against the code on **2026-08-07**. Claims in this file are checke
 against source, not inherited from the log; corrections are noted where they were
 made.
 
+### Published status board
+
+The status board, the capability list, and the rollout position below are also
+rendered as a private page:
+
+```text
+https://claude.ai/code/artifact/8d59a3e2-820f-4d05-aae3-5d49ec3420f5
+```
+
+**Update that URL in place at the end of a session — do not publish a second one.**
+It is the same content as this file's first three sections and is derived from them,
+so it is stale the moment they change. A session that cannot reach it should say so
+rather than mint a replacement, because a second URL makes both untrustworthy.
+
 ---
 
 ## Status board
