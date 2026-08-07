@@ -324,7 +324,14 @@ the whole Hive offline design exists for. Three ways out, none obviously right:
 2. Implement the custom Windows provider the spec anticipates. Most faithful, by far
    the most work.
 3. Relax the endpoint to accept an unattested request under different rate limiting.
-   Weakens a deliberate enumeration boundary; not to be done casually.
+   ~~Weakens a deliberate enumeration boundary~~ — **corrected 2026-08-07: that is not
+   the exposure.** Enumeration is already closed by design, because the response is a
+   constant `{accepted: true}` whatever happens and plaintext never reaches Firestore.
+   What an unattested public endpoint actually risks is **abuse volume**: anyone can
+   drive the Brevo sender domain to mail arbitrary addresses, and that domain is shared
+   with staff invitations, its SPF/DKIM/DMARC records, and the suppression list. So the
+   damage is sender reputation and cost, not disclosure. A smaller risk than this file
+   claimed, landing on the one system never exercised live. Still not casual.
 
 Until this is decided, a user who forgets their password has no in-app recovery on
 any platform.
@@ -354,6 +361,29 @@ The one exception is already live and is code, not console:
 `requestPasswordReset` carries `enforceAppCheck: true` in its own declaration, which is
 why that single callable rejects everything today while every other callable is
 unaffected.
+
+**Do not remove the enforcement in order to test the pipeline — it gates almost
+nothing.** Asked and answered 2026-08-07, and deferred by the product owner rather than
+acted on. Three facts, so nobody re-derives them:
+
+- **The gated part is seventeen lines.** `requestPasswordReset` validates input,
+  enqueues a task, and returns `{accepted: true}`. Everything worth testing is past the
+  queue in `processPasswordResetTask`, reached by the private worker
+  `deliverPasswordReset`, which has no attestation of any kind.
+- **That logic is already covered.** `functions/src/email/passwordReset.test.ts` holds
+  **7 tests** — unknown identity, the current-Auth-email HMAC recheck, active
+  suppression, an eligible send, a retryable provider error, a globally disabled
+  canonical root, and malformed email. Removing enforcement would reveal nothing they
+  do not already assert.
+- **Both gates are ours, not the platform's.** Line 421 calls
+  `requireAppCheckedPublic`, which throws on an absent `request.app` in the emulator
+  too. "Turn it off locally" means deleting production code, not changing a setting.
+
+**The one layer with no coverage** is the worker against real infrastructure: an
+emulator integration test that builds the task with `preparePasswordResetRequest` and
+dispatches `deliverPasswordReset` directly, against the real Auth emulator, real
+Firestore, and the Brevo seam. It skips only the six guarded lines, needs no decision,
+and changes no production code. Unqueued and available whenever this is picked up.
 
 ### ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
 
