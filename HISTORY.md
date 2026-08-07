@@ -15142,6 +15142,59 @@ Nothing was implemented for this. It is a `PLAN.md` correction and this note, ma
 the same session that opened the question, so that no later session re-argues a
 decision that has already been made.
 
+### Addendum, same day: how a price is corrected, resolved — and App Check started
+
+Two of the three open decisions moved after the chunk above was committed. Neither
+involved any code; both are recorded so a later session inherits the answer rather than
+the argument.
+
+**How a price is corrected: an `updateProduct` callable, not a wider rule.** The
+product owner asked for a recommendation between the two survivors — delete-and-
+re-create having never been viable, since the product ID is what `stock_movements`,
+`daily_metrics`, and every past sale line refer to — and accepted the callable. The
+three grounds are written up at the decision in `PLAN.md`. The first was **not** in the
+original framing and is the one that flipped it:
+
+- **A wider rule means editing the tightest clause in `firestore.rules`.** The current
+  `allow update` on `products/{productId}` is the whole guarantee that no client can
+  inflate stock. Widening it means OR-ing a second clause onto it, where a mistake is a
+  stock-integrity hole rather than an audit gap. A callable writes through the Admin
+  SDK, which bypasses rules entirely, so it changes `firestore.rules` **not at all**.
+  The rule route was chosen-looking on cost; this is the cost it hid.
+- **A price is money and the rule route records nothing** — no actor, no previous
+  value, no reason. `adjustStock` changes a mere quantity and writes three documents.
+- **Only a server can validate the price.** A rule can check `price is number`; it
+  cannot check two-decimal representability, so `19.999` passes and then fails
+  `checkoutMinorUnitsFromMajor` at the till with a customer standing there.
+
+The cost estimate in the original framing — "the most work" — was checked and is wrong.
+`functions/src/operations/stock.ts` is **128 lines** end to end including imports,
+types, and audit writes, and `updateProduct` is that skeleton minus the ledger entry.
+
+Two constraints were settled with the decision so the chunk cannot reopen them: it must
+not touch `quantity`, and its role split is its own choice rather than one inherited
+from create or delete.
+
+**App Check was started in the Firebase console**, which puts the third open decision
+in motion. Nothing was implemented; two facts were checked and recorded against it,
+because both bear on the option this file called "by far the most work":
+
+- **`firebase_app_check` lists Windows as a supported platform** as of 0.4.6 on
+  pub.dev. That is plugin support and not proof that a built-in attestation provider
+  exists for Windows, so the "structurally unreachable on Windows" claim in this file
+  is flagged for re-checking rather than retracted. Retracting it on a pub.dev badge
+  would be exactly the inheritance-without-measurement this log keeps punishing.
+- **The Windows app is registered as a *web* app.** `DefaultFirebaseOptions.windows`
+  carries a `1:...:web:...` app ID, because Firebase has no native Windows app type.
+
+The operational warning attached to it: nothing in the client sends a token today, so
+console enforcement must stay off until a build that initializes the SDK is in users'
+hands. The one enforcement already live is code rather than console —
+`requestPasswordReset` declares `enforceAppCheck: true` itself, which is why that single
+callable rejects everything while no other callable is affected.
+
+No production code, no tests, and no test counts changed in either addendum.
+
 ### Unrelated local changes, still unstaged and never touched
 
 ```text

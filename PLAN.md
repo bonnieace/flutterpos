@@ -68,7 +68,7 @@ callable exists, and not green if it is merely tested.
 | Open and close a shift | 🟢 | Shift panel on the landing route |
 | Ring up a sale | 🟢 | "New sale" → cart, tender, saved offline, submitted automatically |
 | Add or retire a product | 🟢 | "Manage catalog" on the landing route → add a category, add a product, retire one. Adding is owner/admin/manager; retiring is owner/admin |
-| **Edit a product's price or name** | 🔴 | **No client rule and no callable permits it at all.** See "How a price is corrected" — now the sharpest open decision, because a catalog typed in by hand is where a wrong price comes from |
+| **Edit a product's price or name** | 🔴 | **No client rule and no callable permits it at all**, and still red. Decided 2026-08-07: an `updateProduct` callable, not a wider rule — see "How a price is corrected", resolved. Queued, not built |
 | Set the currency / checkout configuration | 🟢 | "Checkout settings" on the landing route → merges `configuration/checkout`, owner/admin only |
 | Adjust stock | 🟢 | Product stock route → `adjustStock` |
 | Record a return | 🟢 | From a sale, via receipt lookup or shift history |
@@ -95,13 +95,12 @@ sell without, and it stocks its own catalog, which every surface downstream of a
 product already assumed. Neither needed a rule, a callable, or an export — the rules
 had permitted both writes all along, and nothing had ever called them.
 
-**The bolded row is what is left, and it is a decision rather than a chunk.** A
-product's name, code, and price are permanent once written: `allow update` on
+**The bolded row stopped being a decision on 2026-08-07 and is now a chunk.** A
+product's name, code, and price are still permanent once written — `allow update` on
 `products` permits only the checkout decrement, and no callable changes a descriptive
-field. That was tolerable while an operator seeded the catalog with a script and could
-fix a typo with the Admin SDK. It is less tolerable now that a manager types the
-catalog in by hand, which is the only thing this chunk changed about it. The three
-ways out are unchanged and still undecided — see "How a price is corrected".
+field — but the way out is settled: **an `updateProduct` callable**, not a wider rule.
+See "How a price is corrected", resolved. It is queued behind the Flutter flake and
+will be the twenty-fourth callable and the forty-seventh export.
 
 ### Rollout position
 
@@ -330,6 +329,32 @@ the whole Hive offline design exists for. Three ways out, none obviously right:
 Until this is decided, a user who forgets their password has no in-app recovery on
 any platform.
 
+**Started in the console on 2026-08-07, and the "structurally unreachable" claim above
+now needs re-checking before it is relied on.** The product owner opened App Check in
+the Firebase console. Two repository facts bear on it and neither was recorded before:
+
+- **`firebase_app_check` lists Windows among its supported platforms** as of 0.4.6 on
+  pub.dev. That is *plugin* support and is **not** the same as a built-in attestation
+  provider existing for Windows — the three built-ins are still Play Integrity, App
+  Attest/DeviceCheck, and reCAPTCHA Enterprise. Check what a Windows build can
+  actually attest with before treating option 2 as "by far the most work"; it may have
+  become much cheaper, or it may resolve to the debug provider only, which is not a
+  production answer. **Do not restate the structural claim either way without
+  checking.**
+- **The Windows app is registered as a web app.** `DefaultFirebaseOptions.windows` in
+  `lib/firebase_options.dart` carries a `1:...:web:...` app ID, because Firebase has no
+  native Windows app type. Whatever provider Windows ends up using, it is attesting
+  against a web app registration, which is the thing to reconcile with the console's
+  per-app provider settings.
+
+**Nothing in the client sends an App Check token today**, so console enforcement must
+stay off for Firestore, Auth, Functions, and Storage until a build that initializes
+the SDK is actually in users' hands — the metrics page is the gate, not the calendar.
+The one exception is already live and is code, not console:
+`requestPasswordReset` carries `enforceAppCheck: true` in its own declaration, which is
+why that single callable rejects everything today while every other callable is
+unaffected.
+
 ### ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
 
 **Resolved in the client's favour, in full.** The question was never stated as a
@@ -341,32 +366,67 @@ until an operator runs a script. Then for the catalog itself, on identical reaso
 Both are now standing decisions above; the seed script is a development convenience
 and not the supported route.
 
-### How a price is corrected
+### ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
 
-Opened 2026-08-07 by the configuration chunk, and genuinely undecided. Firestore
-rules let a client **create** a product (owner/admin/manager) and **delete** one
-(owner/admin) — both of which the app now does — but `allow update` on
-`products/{productId}` permits only a strictly decreasing `quantity` with
-`affectedKeys().hasOnly(['quantity', 'updatedAt'])` — the checkout decrement, and
+Opened by the configuration chunk and resolved the same week. Firestore rules let a
+client **create** a product (owner/admin/manager) and **delete** one (owner/admin) —
+both of which the app now does — but `allow update` on `products/{productId}` permits
+only a strictly decreasing `quantity` with
+`affectedKeys().hasOnly(['quantity', 'updatedAt'])`: the checkout decrement, and
 nothing else. So no client can change a name, a price, a SKU, or a category, and no
-callable does either. Three ways out:
+callable does either.
 
-1. **A callable.** `updateProduct({tenantId, productId, ...})` behind
-   `requireTenantMember`, with an audit record and idempotency, exactly as
-   `adjustStock` already is. Most consistent with the frozen architecture; the most
-   work.
-2. **Widen the update rule** to allow owner/admin/manager to change the descriptive
-   fields while keeping `quantity` server-only. Cheapest, and it puts a price change
-   outside every audit trail this app has.
-3. **Delete and re-create.** Reachable today with no change at all, and wrong: the
-   product ID is what `stock_movements`, `daily_metrics`, and every past sale line
-   refer to, so re-creating a product under a new ID severs its whole ledger. It is
-   now reachable *in the app* rather than only through the Admin SDK, which is why
-   the retire confirmation says in as many words that this is not how a mistake is
-   corrected.
+~~Three ways out, undecided.~~ **Delete-and-re-create was never viable** — the product
+ID is what `stock_movements`, `daily_metrics`, and every past sale line refer to, so
+re-creating under a new ID severs the whole ledger, which is why the retire
+confirmation says in as many words that this is not how a mistake is corrected. Of the
+two that remained, **the callable wins on three counts, and the first is the one the
+original framing missed:**
 
-Until this is decided, a mistyped price is corrected by an operator with the Admin
-SDK, and a catalog surface can create and retire products but not edit one.
+1. **A wider rule means editing the most dangerous clause in `firestore.rules`.** The
+   current `allow update` is a single tight clause and it is the whole guarantee that
+   no client can ever inflate stock. Widening it means OR-ing a second clause onto it,
+   where a mistake is a stock-integrity hole rather than an audit gap. **A callable
+   writes through the Admin SDK, which bypasses rules entirely, so this route changes
+   `firestore.rules` not at all** and that clause stays byte-identical. Cost was the
+   original argument for the rule; this is the cost it hid.
+2. **A price is money, and the rule route is the only path here that would change
+   money with no record.** `adjustStock` changes a *quantity* and still writes three
+   documents — a `stock_adjustments` record, a `stock_movements` ledger entry, and an
+   `audit_logs` entry — each carrying actor, reason, request ID, and the before and
+   after. A rule-based price edit writes none of that: no actor, no previous value, no
+   reason, nothing but `updatedAt`. "This was 450 last week, who made it 45?" would be
+   unanswerable. It lands hardest against reconciliation, which exists to explain
+   differences and could never account for that one.
+3. **The server is the only place price validation becomes a guarantee.** A rule can
+   check `price is number && price >= 0`. It cannot check two-decimal
+   representability, so `19.999` passes the rule and then fails
+   `checkoutMinorUnitsFromMajor` at the till with a customer standing there. `name` and
+   `SKU` are strict in `TenantProduct`, and one unparseable product makes the *whole*
+   cached catalog a miss. Today only client-side `TenantProductCreateIntent` guards
+   that; a callable is the first chance to make it real on the server.
+
+**The cost was overstated.** `functions/src/operations/stock.ts` is 128 lines end to
+end including imports, request and response types, and the audit writes.
+`updateProduct` is that skeleton with a different payload and *no* ledger entry,
+reusing `requireTenantMember`, `runIdempotentFirestoreTransaction`, `requireDocumentId`
+and `requireRequestId`. The rule route was not free either: a second clause, a
+`hasOnly` key list, an explicit `quantity` exclusion, and rules-emulator coverage for
+every combination.
+
+Two things settled with it, so the chunk does not reopen them:
+
+- **It must not touch `quantity`.** That belongs to `adjustStock` and the checkout
+  decrement, and a callable that could write both would be a second way to move stock
+  without a ledger entry.
+- **The role split is its own choice, not an inherited one.** Creating is
+  owner/admin/manager and deleting is owner/admin; a price edit is closer in
+  consequence to deleting than to creating. The callable can say a manager may fix a
+  name or SKU while only an owner or administrator may change a price — which a rule
+  realistically cannot.
+
+Until it is built, a mistyped price is still corrected by an operator with the Admin
+SDK, and the catalog surface can create and retire products but not edit one.
 
 ### ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
 
@@ -960,10 +1020,12 @@ anywhere in `functions/src`** and is a deletion for some other chunk to make. Ad
 those three operators to the double to reach one function is a larger and worse chunk
 than the one it would enable.
 
-It is also queued ahead of the capability work on purpose. The head of the capability
-queue is receipt printing, and printing is a **Flutter** chunk — validated by the one
-suite in this repository that is not reliably green. Fixing the suite first is what
-makes that chunk's result mean something.
+It is also queued ahead of the capability work on purpose, though that margin narrowed
+on 2026-08-07 when `updateProduct` was decided. That one is a `functions/` chunk and
+does not need the Flutter suite to be trustworthy — so if a session would rather move a
+capability than chase a flake, **take `updateProduct` first and come back to this**.
+The flake still has to be caught before any *Flutter* capability chunk, because a
+suite that is green five times in six cannot certify a new route.
 
 What is known, and it is not much: the assertion is the one that wires a real
 encrypted outbox, a real submission worker, and a real recovery coordinator and
@@ -993,6 +1055,18 @@ whatever production code the diagnosis points at.
 
 ### Then, in preference order
 
+- **`updateProduct`, the callable that corrects a price** — decided 2026-08-07 and the
+  first capability chunk in the queue that is blocked on nothing at all. Shape:
+  `updateProduct({tenantId, productId, name?, sku?, price?, categoryId?, requestId})`
+  behind `requireTenantMember` and `runIdempotentFirestoreTransaction`, modelled on
+  `functions/src/operations/stock.ts`, writing an `audit_logs` entry carrying actor,
+  request ID, and the before and after of every field it changed. **It must not touch
+  `quantity`, and it changes `firestore.rules` not at all** — both are load-bearing;
+  see the resolved decision above. Validate the price on the server against the same
+  two-decimal representability the till enforces, and re-check `TenantProduct`'s strict
+  fields, because one unparseable product misses the whole cached catalog. It is the
+  twenty-fourth callable and the forty-seventh export, and both counts in this file
+  move with it. A Flutter edit surface is a *separate* chunk after it.
 - **The printed receipt body** — **waiting on an interface, not on a decision.** The
   transport question was answered on 2026-08-07: an external print service, to be
   shared, handles thermal printer onboarding over a local print server, TCP/IP, and
@@ -1021,11 +1095,17 @@ whatever production code the diagnosis points at.
 Outside every chunk until deliberately scheduled: a resolution path for the four
 stock and sale differences, currency labels on the differences list, the subscription
 surfaces, discounts, camera barcode scanning, password reset (blocked on the App Check
-decision above), product cost/profit fields, editing a product's descriptive fields
-(the open decision above), renaming or deleting a category, SKU uniqueness, bulk
-catalog import, a `platform_audit_logs` surface, branding surfaces, the Sentry DSN,
-the 476 pre-existing analyzer issues, a root-widget smoke test and the startup seams
-it would need, and deployment.
+decision above, which is now in motion), product cost/profit fields, renaming or
+deleting a category, SKU uniqueness, bulk catalog import, a `platform_audit_logs`
+surface, branding surfaces, the Sentry DSN, the 476 pre-existing analyzer issues, a
+root-widget smoke test and the startup seams it would need, and deployment.
+
+**Editing a product's descriptive fields has left this list too**, for the opposite
+reason printing did: its decision is *resolved* rather than answered elsewhere. It is
+the `updateProduct` callable, it is queued above, and it is blocked on nothing. What
+stays excluded is the **Flutter edit surface** that would call it — a separate chunk,
+after the callable exists, so a route is never written against an interface that is
+still being designed.
 
 Three of those are consequences of the catalog chunk on 2026-08-07 rather than
 inherited: **renaming or deleting a category** (it orphans the `categoryId` on every
@@ -1060,9 +1140,10 @@ still correctly excluded: `grep -i subscription functions/src` still finds nothi
 all, so a Flutter surface would invent the schema, lifecycle, and billing states the
 server later has to agree with. That one starts on the server or not at all, and
 nothing in the sell-and-settle loop reads it. The exclusions that moved from cosmetic
-to load-bearing are tracked above instead of here: password reset and how a price is
-corrected are open decisions, and what a receipt is printed on is a closed one waiting
-on an interface.
+to load-bearing are tracked above instead of here, and only one of the three is still
+an open question: **password reset**, now in motion in the console. **How a price is
+corrected** is resolved and queued as a chunk, and **what a receipt is printed on** is
+answered and waiting on an interface.
 
 ---
 
