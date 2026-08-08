@@ -4,9 +4,11 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-08**, the seventh session that day. Claims in
+Last verified against the code on **2026-08-08**, the eighth session that day. Claims in
 this file are checked against source, not inherited from the log; corrections are noted
-where they were made.
+where they were made. **The eighth session verified them against the running app on Android
+rather than only against source**, which is a different kind of check and the first of its
+kind since 2026-08-04.
 
 ### Published status board
 
@@ -69,7 +71,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, nor the password-reset integration test touched the file at all, and the suite was run over all seven to say so. `subscription` has rules and no writer. |
-| **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
+| **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app". No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -83,7 +85,7 @@ callable exists, and not green if it is merely tested.
 | Verify an email address | 🟢 | Offered on the business selector to an unverified identity |
 | Recover a forgotten password | 🔴 | `requestPasswordReset` has no caller — blocked on App Check, see open decisions |
 | Request a new business | 🟢 | "Request business" on the selector |
-| Accept a staff invitation | 🟢 | In-app for a verified identity; email-link proof otherwise |
+| Accept a staff invitation | 🟢 | In-app **only for an identity that already existed and was already verified when the invitation was issued**; email-link token proof otherwise. `visibleAcceptanceAllowed` is decided once, at invite time, by `!newlyCreated && emailVerified` in `functions/src/staff/issuance.ts:310` — verifying the address *afterwards* does not change it. Corrected 2026-08-08 after a device run hit the refusal; the row's text was wrong, its colour was not |
 | Switch business / set default | 🟢 | "Change business", "Make default" |
 | Invite, edit, deactivate staff | 🟢 | "View staff directory" → typed gateways |
 | Open and close a shift | 🟢 | Shift panel on the landing route |
@@ -109,7 +111,56 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
-**The last session of 2026-08-08 changed no board row at all, deliberately, and this sentence
+**The eighth session of 2026-08-08 changed no board row's colour, and this sentence is here so
+that is stated rather than left silent.** It drove the app on an Android emulator against real
+Auth, Firestore, and Functions, and **every green row it touched stayed green on the evidence of
+a person using it** rather than on the evidence of a widget test — add, correct and retire a
+product, bulk correction, spreadsheet import, ring up a sale, daily summary as two different
+roles, the stock route, and reconciliation. It changed **one row's text**, "Accept a staff
+invitation", because the row was wrong about *which* identities may accept in-app; see that row
+and the finding behind it below. It changed no code at all, so the four suite baselines are
+carried rather than re-measured.
+
+### Found by using the app
+
+Six defects, all at the edges, none blocking, **all recorded rather than fixed** — a behavioural
+session that starts repairing becomes an unbounded one. They are queued as chunks below.
+
+1. **The login screen prints a raw platform-channel name when the password is empty.** Verbatim:
+   `"dev.flutter.pigeon.firebase_auth_platform_interface.FirebaseAuthHostApi.signInWithEmailAndPassword".`
+   A *wrong* password produces a proper sentence, so this is the empty-password path only: the
+   form calls Firebase without requiring a non-empty password, and the platform exception's
+   message is the channel name. **Deterministic**, reproduced twice. This supersedes the
+   2026-08-04 note that recorded the same string as unreproducible. It is the first thing a new
+   user can see.
+2. **That error survives editing the fields**, which is the other half of the same 2026-08-04
+   note and also reproduces.
+3. **The invitation refusal tells a user to retry something that can never succeed.**
+   "Invitation could not be accepted. Please try again." is shown where
+   `visibleAcceptanceAllowed` is false. **The server is right to refuse**; the sentence is what
+   is wrong, because no number of retries can change a flag decided at invite time.
+4. **The add-product form asks for a category with no picker beside it.** "Choose the category
+   this product is filed under." sits about a thousand pixels below the chip row that is
+   actually the picker, under a heading that also serves as the category list. It works once
+   found. The **"Correct" dialog has an inline picker**, so one screen does it both ways.
+5. **A category ID reaches the eye in two surfaces.** The import preview says "filed under
+   `cat-bakery`" to someone who typed `Bakery`, and "Manage catalog" shows `cat-not-cached` for
+   a product whose category document is missing. The read-only catalog resolves names correctly
+   in the same situation, so the resolution exists and these two do not use it.
+6. **Staff invitation email cannot be delivered against the local emulators**
+   (`EmailProviderError`, `safeCode: 'credential_link_unavailable'`, placeholder Brevo key).
+   With finding 3 this means **a newly invited identity cannot finish onboarding on the
+   emulators by any route** — the token only ever existed in the email. This is a local
+   limitation, not a product defect, and it is why the manager session below was activated out
+   of band.
+
+**One thing the run could not prove, stated because it would otherwise look proved.** The
+manager membership used for the profit role-boundary check was activated by a scratchpad Admin
+SDK script writing what `acceptVisibleTenantInvitation` would have written, for the reason in
+finding 6. `inviteStaff` was genuinely exercised and wrote the staff record, the mirror, the
+root identity, and the invitation proof correctly; **acceptance was not**.
+
+**The seventh session of 2026-08-08 changed no board row at all, deliberately, and this sentence
 is here so that is stated rather than left silent.** It wrote the emulator integration test for
 `deliverPasswordReset` — 11 tests against real Auth and real Firestore, joined to the invitation
 suite. Password reset stays **red** because red means a person cannot do it in a running app, and
@@ -228,7 +279,7 @@ The fifteen frozen steps, with what is actually true:
 | 9 | `TenantSession`, switching, shift restoration, epochs | ✅ |
 | 10 | Encrypted Hive cache, single-flight checkout, receipt counters | ✅ |
 | 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription. Checkout configuration writing, catalog management, `updateProduct`, and product cost landed 2026-08-07; the client route that corrects a product, the `updateProducts` bulk callable, the `importProducts` spreadsheet callable, the one screen that reaches both, and **the profit and margin display** all landed 2026-08-08. **Nothing in the catalog or reporting area is now built and unreachable** |
-| 12 | Emulator, multi-device, Windows-offline, email, adversarial tests | ⚠️ emulator suites green, and the **email** half is no longer empty: the password-reset worker runs against real Auth, real Firestore, and a stubbed Brevo seam as of 2026-08-08. No multi-device, no Windows-offline, no live email |
+| 12 | Emulator, multi-device, Windows-offline, email, adversarial tests | ⚠️ emulator suites green, and the **email** half is no longer empty: the password-reset worker runs against real Auth, real Firestore, and a stubbed Brevo seam as of 2026-08-08. **A manual Android device pass over the whole 2026-08-08 capability set ran the same day** and is evidence for this step, though it is a person driving rather than an automated suite. No multi-device, no Windows-offline, no live email — and **staff invitation email cannot be delivered locally at all**, so a newly invited identity cannot finish onboarding against the emulators |
 | 13 | Deploy development, then staging | ❌ not started |
 | 14 | Enable App Check on validated platforms | ❌ not started; no `firebase_app_check` dependency |
 | 15 | Promote the identical release to production | ❌ not started |
@@ -245,7 +296,10 @@ The fifteen frozen steps, with what is actually true:
 
 **2076 tests across five suites.** `flutter test` takes no path list — the one
 uncompilable file that forced that workaround was deleted on 2026-08-07. **All five were
-measured again in the password-reset session on 2026-08-08**, so nothing here is carried.
+measured in the password-reset session on 2026-08-08**, and every figure above is **carried
+unchanged** through the Android device session that followed it, which edited no Dart, no
+`functions/`, no rule, and no test — so there was nothing for a suite to observe. That is the
+only chunk so far to carry all five rather than measure any.
 The invitation suite is now **two files under one emulator start** —
 `invitation-acceptance.integration.test.js` (12) and
 `password-reset-delivery.integration.test.js` (11) — and it went 12 → 23 while the other four
@@ -571,8 +625,8 @@ The guarantees are settled, not open:
 
 ### A profit figure is complete or it is not shown
 
-Built 2026-08-08, the last chunk of that day, and it is what made "See profit or margin"
-green. It changed `firestore.rules` not at all and nothing in `functions/` either — 409
+Built 2026-08-08, the **last capability chunk** of that day, and it is what made "See profit or
+margin" green. It changed `firestore.rules` not at all and nothing in `functions/` either — 409
 functions tests and 161 rules tests, both unchanged, are the measurement. Everything it needed
 already existed: `aggregateSales` returns `profit` and `incompleteCostLineCount`,
 `getSalesComparison` sends both for a business, a member, or a category, `daily_metrics`
@@ -848,8 +902,9 @@ moved no board row. **The surface landed the same day** — see the decision bel
 
 ### One screen reaches both bulk callables, and it previews before it writes
 
-Built 2026-08-08, the last chunk of that day, and it is what made spreadsheet import and
-bulk change green. `TenantBulkCatalogScreen` is offered as **"Bulk changes and import"** from
+Built 2026-08-08, the chunk immediately before the profit display, and it is what made
+spreadsheet import and bulk change green. `TenantBulkCatalogScreen` is offered as **"Bulk
+changes and import"** from
 inside "Manage catalog" rather than from the landing route, because correcting many products
 starts by looking at them and the product list it needs is the list that route already shows.
 It changed `firestore.rules` not at all and nothing in `functions/` either.
@@ -993,8 +1048,8 @@ unreachable for one bounded reason, with the reason queued, and it stayed for on
 day**, and they left together because they wanted one screen. That screen is
 `TenantBulkCatalogScreen`.
 
-**Product cost and profit left this table in the last session of 2026-08-08**, and it is the
-row that had been here longest with nothing but effort in front of it. Its first half closed
+**Product cost and profit left this table in the profit-display session of 2026-08-08**, and it
+is the row that had been here longest with nothing but effort in front of it. Its first half closed
 on 2026-08-07, when a product gained a cost and a sale began freezing it onto its line; the
 second closed when the daily summary and the sales totals started reporting it. What that
 chunk had to decide was not how to display a number but **when a number may be displayed at
@@ -1712,6 +1767,32 @@ enormous expected-denial traces.
 - **Use Flutter's own `adb`** at
   `C:\Users\BonifaceMasota\develop\android-sdk\platform-tools\adb.exe`; the one first
   on `PATH` is a different binary and the two servers fight.
+- **The Android emulator needs `ANDROID_SDK_ROOT=D:\android-emulator-sdk`, or it will not
+  boot.** Found 2026-08-08. This machine sets `ANDROID_SDK_ROOT` and `ANDROID_HOME` to
+  `C:\Users\BonifaceMasota\develop\android-sdk`, whose
+  `system-images\android-35\google_apis\x86_64\` directory **is an empty stub**; the real image
+  holding `kernel-ranchu` is on `D:`. Without the override the emulator dies immediately with
+  `This AVD's configuration is missing a kernel file!`, which reads like a broken AVD and is
+  not. Override it **for the emulator process only** — Flutter's `adb` lives under the `develop`
+  tree and is invoked by absolute path, so nothing else needs to move. Full line:
+  `ANDROID_AVD_HOME=D:\android-avds ANDROID_SDK_ROOT=D:\android-emulator-sdk`, then
+  `D:\android-emulator-sdk\emulator\emulator.exe -avd chilltent_api35 -no-snapshot-save
+  -no-boot-anim -gpu swiftshader_indirect -memory 1536`. Boots in about 90 seconds.
+- **`./gradlew --stop` after `flutter build apk`, before starting either emulator.** The daemon
+  survives the build and holds enough that only ~1.5 GB is free; stopping it returns ~3.1 GB,
+  which is what makes the Android and Firebase emulators fit together on this host.
+- **Opening the soft keyboard scrolls the login form**, so a tap aimed at the password field can
+  land on the sign-in button. That is not cosmetic: it submits with an **empty** password, which
+  is its own defect (see "Found by using the app"). Screenshot between every field rather than
+  between every chain, and re-read coordinates from the shot with the keyboard already open.
+- **Staff invitation and password-reset email go nowhere locally.** The Brevo key
+  `run-dev-emulators.js` writes is a placeholder, so `deliverStaffInvitation` fails with
+  `EmailProviderError` / `safeCode: 'credential_link_unavailable'`. An identity **created by**
+  its own invitation therefore cannot be onboarded on the emulators at all: tokenless in-app
+  acceptance is correctly barred for it, and the token existed only in the mail that failed. To
+  get a non-owner session locally, either invite an identity that **already exists and is
+  already verified** (which makes `visibleAcceptanceAllowed` true), or write the membership
+  directly with the Admin SDK and say so in the handover.
 - **A cold emulator's first trigger delivery costs ~25 s**, every later one ~310 ms.
   Set timeouts from the first. **The reconciliation integration suite takes two to
   three minutes**, measured end to end on 2026-08-07 twice: 2 min 09 s with 66 s inside
@@ -1854,55 +1935,48 @@ prompt.md                                          (untracked)
 
 ## Next bounded chunk
 
-**Run the app against the emulators, and look at the catalog, bulk, reconciliation, and stock
-surfaces.** It is promoted out of the preference list below, where it has been queued **ten**
-times and is by a wide margin the oldest item. It is taken now because the argument for it got
-stronger every session of 2026-08-08 and nothing else implementable is unblocked: five capability
-chunks landed that day and **not one of their routes has been seen outside a widget test** — the
-correction dialog, the bulk selection, the pasted spreadsheet, and the profit statement included.
+**Say something true when a sign-in fails.** Findings 1 and 2 from the Android run, and nothing
+else. It is taken next because it is the **only defect this repository knows about that a
+stranger meets before anything else works** — the sign-in screen is the first surface in the app,
+and today one of its two failure paths prints an internal Flutter channel name at the user.
 
-**Why it is the right next chunk rather than a nicer one.** Everything else is blocked on
-somebody else or sequenced on purpose. The printed receipt body waits on an interface nobody has
-shared; suspicious-return scoring is sequenced after the first deployment at the product owner's
-direction; the subscription surfaces would invent a schema the server has none of; deployment is
-step 13 and is not a coding chunk. This one needs no decision, no dependency, and no answer from
-anyone — only time.
+**Why this rather than a nicer one.** It is the highest-consequence thing the device run found,
+it is small, it is entirely inside a file this project owns, and it needs no decision from
+anybody. Everything larger is still blocked exactly as it was: the printed receipt body waits on
+an interface nobody has shared, suspicious-return scoring is sequenced after the first
+deployment, the subscription surfaces would invent a schema the server has none of, and
+deployment is step 13.
 
-**The strongest single argument is the pasted spreadsheet.** A widget test pastes only what its
-author imagined, and import is the one input in this app whose failure modes are about what real
-text actually looks like: a sheet copied out of Excel, a trailing blank line, a quoted cell
-holding the delimiter, a column nobody reads. That surface refuses a whole sheet for eight
-distinct reasons and every one of them was written against an imagined paste.
+**The two defects, with their reproductions, so the chunk starts from evidence:**
+
+1. **Empty password.** Type a valid address, leave the password blank, submit. The error text is
+   `"dev.flutter.pigeon.firebase_auth_platform_interface.FirebaseAuthHostApi.signInWithEmailAndPassword".`
+   A *wrong* password renders a proper sentence, so the sign-in call itself maps
+   `FirebaseAuthException` correctly and this path does not: an empty password makes the platform
+   channel throw something that is not a `FirebaseAuthException`, and whatever renders it is
+   printing the exception rather than a message.
+2. **Stale error.** After any failure, edit either field. The red text stays. It should not
+   outlive the input it describes.
 
 **The shape of it, so nothing widens:**
 
-- Start a fresh held emulator set with `npm --prefix rules-tests run emulators:dev`, seeded
-  through `scripts/seed-dev-emulator.js --hold`. **Delete `functions/.env.local` and
-  `functions/.secret.local` first** — they are dated 2026-08-06, they outlived the run that
-  wrote them, and `run-dev-emulators.js` refuses to overwrite them, so a run started without
-  deleting them wedges.
-- Drive the **Windows** build. A run scheduled today is Windows or web, because the standing
-  session instructions still skip the Android build and the Android emulator, so this exercises
-  the loopback path only.
-- Look at, in this order: "Manage catalog" (add, correct, retire), "Bulk changes and import"
-  (tick and correct, then paste a sheet copied out of a real spreadsheet), the daily summary and
-  period totals as an **owner** and again as a **manager** — the profit rule is a role boundary
-  and the two sessions are supposed to see different sentences — and the stock and reconciliation
-  routes.
-- **Record what is found rather than fixing it.** A behavioural session that starts repairing
-  turns into an unbounded one. Anything found becomes a queued chunk with a written reproduction;
-  only a defect that stops the run itself gets fixed inside it.
-- The catalog route is the one that would make the seed script optional. Worth confirming once,
-  because "a business can stock itself" is currently a claim proved by widget tests.
+- **Refuse an empty password in the form**, before Firebase is called. That is the actual fix for
+  1 and it is also the honest one: an empty password is not a credential.
+- **Render a sentence for every failure, never an exception.** Whatever the form catches, a user
+  sees language. Treat "the error is a string nobody wrote" as the bug class rather than patching
+  the one code that produced it, because the same shape will return from any non-`FirebaseAuthException`
+  the channel can raise.
+- **Clear the error when the input changes**, which is finding 2.
+- Cover all three with widget tests, including one that asserts **no rendered error string
+  contains `dev.flutter.pigeon`** — that assertion is the one that would have caught this in
+  2026-08-04, when the string was seen and could not be reproduced.
+- Look at the sign-in screen once on a device afterwards. The whole reason this defect survived
+  two years of widget tests is that nobody looked at it.
 
-**One thing to ask before starting, and it has been open for nine sessions:** whether a
-loopback-only Windows or web run is worth doing in that form, or whether Android should be
-brought back into scope for it. The standing instructions exclude the Android build and the
-Android emulator; that says what the run *would* be, not whether it is the run wanted.
-
-**Explicitly excluded from it:** fixing anything found, beyond what blocks the run; deployment of
-any kind; the Android build and Android emulator tests, unless the answer above reopens them;
-touching `firestore.rules` or `functions/`; and every standing exclusion listed below.
+**Explicitly excluded from it:** the "UNLOCK REGISTER" button label and the rest of that screen's
+visual design, which is legacy styling and not a defect; any other finding from the run (they are
+queued below, separately, on purpose); `firestore.rules`; `functions/`; deployment; and every
+standing exclusion listed below.
 
 **The alternative, named because it is the only queued item that would move a red row:**
 resolving what a **Windows** build can actually attest with under App Check. `PLAN.md` already
@@ -1965,12 +2039,29 @@ finished.
   code" claim did not survive contact — it added `export` to
   `firestorePasswordResetDependencies`, because rebuilding those adapters in the test would
   have been a test of the rebuild. See the closed half of the App Check decision above.
-- **~~Run the app against the emulators~~** — **promoted out of this list into the current
-  chunk**, after being queued ten times. What it inherits from here: a fresh hold has to be
-  started because the 2026-08-07 one has exited, and `functions/.env.local` and
-  `functions/.secret.local` must be deleted first — they are dated 2026-08-06 and are exactly
-  the leftovers `run-dev-emulators.js` refuses to overwrite. The Android question is narrowed
-  and still unanswered, and is the one thing to ask before starting.
+- **~~Run the app against the emulators~~** — **done 2026-08-08**, on **Android**, after being
+  queued eleven times. The product owner answered the one open question by putting Android back
+  in scope and asking for it first. It moved no board row's colour, corrected one row's text, and
+  changed no repository file. Every green route it touched worked; it found six defects at the
+  edges, all listed under "Found by using the app" and queued individually below. The traps it
+  cost are now in "Standing traps": the emulator needs `ANDROID_SDK_ROOT` overridden to `D:`, the
+  Gradle daemon must be stopped before either emulator starts, and staff invitation email cannot
+  be delivered locally at all.
+- **~~The login screen's failure messages~~** — **promoted out of this list into the current
+  chunk.** Findings 1 and 2.
+- **The invitation refusal that says "Please try again" when retrying cannot work.** Finding 3,
+  and the smallest of them. Shown where `visibleAcceptanceAllowed` is false — an identity created
+  by its own invitation, which must use the emailed token. The server is right; the sentence
+  should say that the invitation must be accepted from the emailed link, not that the user should
+  try again. Worth pairing with the login chunk's rule that a refusal names what to do next, but
+  kept separate because it is a different screen and a different callable.
+- **The add-product form's category picker, and the two surfaces that show a category ID.**
+  Findings 4 and 5, together because both are about a category being named by its ID where a
+  person expects its name. The form asks "Choose the category this product is filed under." with
+  the picker a screen away, while the "Correct" dialog beside it has an inline one; the import
+  preview echoes `cat-bakery` to somebody who typed `Bakery`; and "Manage catalog" shows
+  `cat-not-cached` where the read-only catalog resolves the same case correctly. None of them is
+  wrong, all of them are avoidable, and the resolution already exists in the codebase.
 - **A fixture chunk that reaches the last three lines of `deliverPasswordReset`** — the
   keyring parsed out of its secret, the Brevo provider constructed out of its secrets, and the
   `getFirestore()`/`getAuth()` defaults. Small, and deliberately not folded into the test

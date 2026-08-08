@@ -17503,3 +17503,208 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## The app is driven on Android against the emulators - 2026-08-08
+
+### Completed in this session
+
+**The queued "run the app against the emulators" chunk, taken on Android after the product
+owner answered the one question standing in front of it.** `PLAN.md` had queued this eleven
+times and named exactly one thing to ask before starting: whether a loopback-only Windows or
+web run was worth doing in that form, or whether Android should be brought back into scope. The
+answer was Android, and first. That reverses the standing "skip the Android build and Android
+emulator tests" instruction for this session only, on an explicit instruction, and it is
+recorded here so a later session does not read the reversal as drift.
+
+**It changed no repository file.** No Dart, no `functions/`, no `firestore.rules`, no test. The
+working tree at the end of the run held exactly the five user-owned edits it held at the start.
+That is what a behavioural session is supposed to look like, and everything below is either an
+observation or a finding.
+
+**Five capability chunks landed on 2026-08-08 and not one of their routes had been seen outside
+a widget test.** All five were driven on a real device against real Auth, real Firestore, and
+real Functions. Every one of them worked. The findings are all at the edges.
+
+### What was verified, end to end, against real infrastructure
+
+Each of these was checked in the app *and* against Firestore through the Admin SDK, because a
+screen saying a thing happened is not the same as it having happened.
+
+- **A product is created holding nothing.** "Manage catalog" wrote
+  `pd_231dfbe58ed1d6bac0729933c2f89e30ff2cff88` with `quantity: 0`, `cost: 15`, and **no
+  `updatedAt`** - which is the documented asymmetry with import, confirmed from the other side
+  for the first time.
+- **A correction audits its before and after.** Price 65 to 70 and cost null to 45 on
+  `prod-bread` produced `audit_logs/pu_1e4ff8b47756fc7d7bc25a0031b1fb5a9a76cd75` carrying
+  `changes: [{price, 65, 70}, {cost, null, 45}]`, `mutatesQuantity: false`, the actor UID, and
+  the request ID. The route sent only the two fields that moved.
+- **A preview really writes nothing.** The bulk correction's preview reported "2 would be
+  corrected" and neither `prod-mandazi` nor `prod-milk-500` had a `cost` field at that moment.
+  Committing added `cost: 12` to both. The preview/commit split is real, not cosmetic.
+- **The pasted spreadsheet was the strongest argument for this chunk and it held.** Three rows
+  of comma-delimited text, header included, with a **quoted cell holding the delimiter** -
+  `"Bread, sliced"` - parsed as one product named `Bread, sliced`. All three were created with
+  their price, cost, category resolved by name, and opening quantity, plus three
+  `stock_adjustments` carrying `sourceType: "product_import"`,
+  `adjustmentType: "opening_balance"`, `previousQuantity: 0`, one shared
+  `importId: im_72f70bae46efc371b972caf4ea274d94d18ad055`, and `rowIndex` 0/1/2. Rows were
+  labelled **Line 2, Line 3, Line 4** - the line of the pasted sheet, header included, exactly
+  as the standing decision requires.
+- **A sale freezes the cost onto its line.** This is the central guarantee of the product-cost
+  decision and it had never been observed outside a test. The stored sale carries
+  `unitCostMinor: 4500` and `costMinor: 4500` beside `unitPriceMinor: 7000`, with receipt
+  `CT-33C-20260808-0001` and `payloadSchemaVersion: 2`. It submitted automatically on save, and
+  the landing panel read `Confirmed: 1` on return - so the 2026-08-04 defects (a sale that never
+  submitted, and a stale pending-checkout panel) both stay fixed.
+- **The profit rule is a role boundary and the two sessions see different sentences.** Same day,
+  same data, verified by signing in twice:
+
+  | Session | What the daily summary says for 2026-08-08 |
+  | --- | --- |
+  | Owner | `Sales: KES 70.00 over 1 transaction in 1 shift` / `Profit: KES 25.00, a margin of 35.7%.` / `Every sale line behind it carries a cost.` |
+  | Manager | `Sales: KES 70.00 over 1 transaction in 1 shift` - and nothing else |
+
+  70 minus 45 is 25, and 25/70 is 35.7%. The manager is shown no figure, no margin, and no cost
+  sentence at all. The manager's landing route also omits "Checkout settings", which is the
+  owner/admin gate showing up where it should.
+- **Reconciliation works from both directions.** The sale trigger created
+  `dirty_1786210200000` and it completed on its own within seconds. "Ask for a check" then
+  created `rj_6c2768eafe98218477ad713e9cf9d6f6f538f15c` with `source: "manual"`, the owner's
+  UID, and its own request ID; it completed, walking **11 products** - the whole catalog
+  including the imports.
+- **The stock route reads the ledger.** After the sale, White bread loaf shows
+  `Recorded stock: 39` (down from 40) and one ledger entry, `-1 - Sale`, sourced to the
+  checkout ID and timestamped.
+
+### Findings, recorded rather than fixed
+
+The chunk said to record what is found and fix only what blocks the run. Nothing blocked the
+run, so nothing was fixed.
+
+1. **The login screen shows a raw platform-channel name when the password is empty.** With a
+   valid address and an empty password, the error rendered to the user is, verbatim:
+
+   ```text
+   "dev.flutter.pigeon.firebase_auth_platform_interface.FirebaseAuthHostApi.signInWithEmailAndPassword".
+   ```
+
+   A **wrong** password gives a proper sentence ("The password is invalid or the user does not
+   have a password."), so this is specific to the empty-password path: the form does not require
+   a non-empty password before calling Firebase, and the resulting platform exception's message
+   is the channel name. **This supersedes the 2026-08-04 note**, which recorded the same string,
+   said it "appeared only after a mistyped sign-in and did not recur on a clean run, so it was
+   not chased". It is deterministic and it was reproduced twice, once by accident and once
+   deliberately. It is the first thing a new user can see.
+2. **That error survives editing the fields.** Clearing the address and retyping it left the red
+   text in place. This is the other half of the same 2026-08-04 note and it also reproduces.
+3. **The invitation refusal tells the user to do something that can never work.** A newly
+   invited manager was offered in-app acceptance on the business selector, and it failed with
+   "Invitation could not be accepted. Please try again." **The server was right to refuse.** The
+   invitation carries `visibleAcceptanceAllowed: false`, set at
+   `functions/src/staff/issuance.ts:310` as
+   `!targetIdentity.newlyCreated && targetIdentity.emailVerified` - this identity was created by
+   its own invitation, so tokenless acceptance is correctly barred and the token is mandatory.
+   The defect is the sentence: retrying cannot ever succeed, and the message says to retry.
+4. **Board row text corrected, not its colour.** "Accept a staff invitation" read "In-app for a
+   verified identity". That is incomplete: the flag is decided **at invite time** and requires
+   the identity to have *already existed and already been verified* when the invitation was
+   issued. Verifying the address afterwards - which is exactly what this session did - does not
+   change the stored flag. The row's text is updated in `PLAN.md`; it is still green, because an
+   identity that already exists can still accept in-app.
+5. **The add-product form asks for a category next to nothing.** The form ends with "Choose the
+   category this product is filed under." and **no picker beside it**; the picker is the chip row
+   about a thousand pixels above, under a heading called "Categories" that also serves as the
+   list of existing categories. Tapping "Bakery" up there does work and the sentence becomes
+   "Filed under Bakery.", after which "Add product" enables. The inconsistency is that the
+   **"Correct" dialog has an inline category picker** right where it is needed, so one screen
+   does it both ways.
+6. **A category ID reaches the eye in two places.** The import preview says "filed under
+   **cat-bakery**" for a row whose author typed `Bakery`, and "Manage catalog" lists Charcoal 2kg
+   under **cat-not-cached** because the seed files it under a category that does not exist. The
+   read-only catalog resolves names correctly in the same situation, so the resolution exists and
+   these two surfaces do not use it.
+
+### Meaningful failures and their resolutions
+
+- **The Android emulator would not boot, and it was the environment rather than the AVD.** It
+  died with `This AVD's configuration is missing a kernel file!`, resolving the system image
+  against `ANDROID_SDK_ROOT`, which this machine sets to
+  `C:\Users\BonifaceMasota\develop\android-sdk`. That tree's
+  `system-images\android-35\google_apis\x86_64\` directory **is an empty stub**; the real image
+  with `kernel-ranchu` is under `D:\android-emulator-sdk`. Exporting
+  `ANDROID_SDK_ROOT=D:\android-emulator-sdk` for the emulator process alone booted it in 92
+  seconds. Flutter's own `adb` stays at the `develop` path and is called by absolute path, so
+  the two do not conflict. **This is new and is now a standing note** - the previous Android
+  sessions did not hit it.
+- **Staff invitation email cannot be delivered against the local emulators at all.**
+  `deliverStaffInvitation` fails with `EmailProviderError ... safeCode:
+  'credential_link_unavailable'`, because the local Brevo key is a placeholder. Combined with
+  finding 3, this means **a newly invited identity cannot complete onboarding on the emulators
+  by any route**: in-app acceptance is correctly barred and the token only ever existed in the
+  email. To read the profit surfaces as a manager, the membership was activated out of band with
+  a scratchpad Admin SDK script writing what `acceptVisibleTenantInvitation` would have written.
+  That is a local fixture and is **not** evidence the acceptance path works; what this session
+  actually exercised was `inviteStaff`, which wrote the staff record, the mirror, the root
+  identity, and the invitation proof correctly.
+- **`adb shell input text` truncates at the first space**, the trap the 2026-08-04 handover
+  already recorded. Every text entry went through a helper substituting `%s`. It bit once anyway
+  in a different form: opening the keyboard **scrolls the login form**, so a tap aimed at the
+  password field landed on the sign-in button and submitted with an empty password - which is how
+  finding 1 was discovered. Screenshot between every field, not between every chain.
+- **The host ran out of memory before the run started.** After `flutter build apk` the Gradle
+  daemon still held enough that only 1.5 GB was free. `./gradlew --stop` returned it to 3.1 GB,
+  which is what let the Android emulator and the Firebase emulators coexist. Android's System UI
+  still reported "isn't responding" once during launch and recovered on "Wait". The documented
+  order - Gradle alone, then Android, then Firebase under `JAVA_TOOL_OPTIONS=-Xmx512m` - is not
+  optional on this machine.
+- **The two 2026-08-06 leftovers were deleted first, as the chunk instructed.**
+  `functions/.env.local` and `functions/.secret.local` were read before deletion and were
+  byte-identical to what `run-dev-emulators.js` generates. **They were recreated by this run and
+  then had to be deleted again**, because stopping the run killed the wrapper before its
+  `finally` could unlink them. Both are absent now and every emulator port is free.
+
+### Files in this session
+
+```text
+HISTORY.md
+PLAN.md
+```
+
+No other file was created, edited, or deleted in the repository. The helper scripts, the pasted
+sheet, and 78 screenshots were written to the session scratchpad, deliberately not to the repo.
+
+### Validation evidence
+
+No implementation code changed, so there was nothing to re-validate and the four suites were not
+re-run; their baselines in `PLAN.md` are carried unchanged from the password-reset session
+earlier the same day, which measured all five. What this session ran instead is the app:
+
+| Command | Result |
+| --- | --- |
+| `flutter build apk --debug --no-pub --target-platform android-x64 --dart-define=USE_FIREBASE_EMULATORS=true` | built in 314.8 s, 187.3 MB, installed on the API 35 emulator |
+| `D:\android-emulator-sdk\emulator\emulator.exe -avd chilltent_api35 ... -memory 1536` with `ANDROID_SDK_ROOT=D:\android-emulator-sdk` | booted in 92 s |
+| `npm --prefix rules-tests run emulators:dev` under `JAVA_TOOL_OPTIONS=-Xmx512m` | all 49 handlers loaded, seeded, held for the whole session |
+| `git status --short` | the five user-owned entries and nothing else |
+
+The deprecation warnings Gradle emitted - Gradle 8.12.0, AGP 8.9.1, Kotlin 2.1.0, each below
+what Flutter 3.44.8 will soon require - are recorded and were not acted on.
+`android/gradle.properties` is user-owned and upgrading a toolchain is not this chunk.
+
+### The published board is unchanged and still four greens behind
+
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29 capabilities at
+**20 green, 8 red, 1 amber**; `PLAN.md` is at **24 green, 4 red, 1 amber**. Publishing was not
+requested this session and the page was left alone. This chunk moved no row, so the gap is
+exactly what it was.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```
