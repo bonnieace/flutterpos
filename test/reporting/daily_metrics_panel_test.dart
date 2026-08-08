@@ -45,7 +45,7 @@ void main() {
     );
   });
 
-  testWidgets('incomplete cost data is named, and profit is not shown', (
+  testWidgets('a manager is told cost data is incomplete, and no more', (
     tester,
   ) async {
     final reader = _Reader(<String, Map<String, Object?>>{
@@ -54,7 +54,7 @@ void main() {
       ),
     });
 
-    await _pump(tester, _controller(TenantRole.owner), reader);
+    await _pump(tester, _controller(TenantRole.manager), reader);
 
     expect(
       tester
@@ -66,6 +66,71 @@ void main() {
     );
     expect(find.textContaining('430.25'), findsNothing);
     expect(find.textContaining('Profit'), findsNothing);
+  });
+
+  testWidgets('an owner reads the day\'s profit and its margin', (
+    tester,
+  ) async {
+    final reader = _Reader(<String, Map<String, Object?>>{
+      'tenants/tenant-a/daily_metrics/2026-07-30': _metrics(
+        businessDate: '2026-07-30',
+      ),
+      'tenants/tenant-a/configuration/checkout': <String, Object?>{
+        'currency': 'KES',
+      },
+    });
+
+    await _pump(tester, _controller(TenantRole.owner), reader);
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('daily-summary-2026-07-30-profit')),
+          )
+          .data,
+      'Profit: KES 430.25, a margin of 34.4%.',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('daily-summary-2026-07-30-profit-note')),
+          )
+          .data,
+      'Every sale line behind it carries a cost.',
+    );
+  });
+
+  testWidgets('an owner is told why an incomplete day has no figure', (
+    tester,
+  ) async {
+    final reader = _Reader(<String, Map<String, Object?>>{
+      'tenants/tenant-a/daily_metrics/2026-07-31': _metrics(
+        overrides: <String, Object?>{'incompleteCostLineCount': 4},
+      ),
+    });
+
+    await _pump(tester, _controller(TenantRole.owner), reader);
+
+    // One statement, not two: the count lives inside the reason rather than
+    // beside it, so nothing reads as a second finding.
+    expect(
+      find.byKey(const ValueKey('daily-summary-cost-2026-07-31')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('daily-summary-2026-07-31-profit')),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('daily-summary-2026-07-31-profit-note')),
+          )
+          .data,
+      'Profit and margin are not shown: 4 sale lines have no cost recorded, '
+      'and counting them as free would overstate both.',
+    );
+    expect(find.textContaining('430.25'), findsNothing);
   });
 
   testWidgets('a day with one of everything reads in the singular', (
@@ -85,7 +150,7 @@ void main() {
       ),
     });
 
-    await _pump(tester, _controller(TenantRole.owner), reader);
+    await _pump(tester, _controller(TenantRole.manager), reader);
 
     expect(
       tester

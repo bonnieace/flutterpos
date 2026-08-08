@@ -22,6 +22,27 @@ void main() {
       expect(metrics.regeneratedAt, DateTime.utc(2026, 8, 1, 2, 30));
     });
 
+    test('the day judges its own profit, and the decoder does not', () {
+      final complete = TenantDailyMetrics.fromDocument(
+        path: 'tenants/tenant-a/daily_metrics/2026-07-31',
+        data: _metrics(),
+      );
+      expect(complete.profitReport.basis, TenantProfitBasis.complete);
+      expect(complete.profitReport.marginPercent, closeTo(34.4062, 0.0001));
+
+      // An uncosted line is a document this decoder still accepts: it is a
+      // fact about the day, not a defect in the record.
+      final incomplete = TenantDailyMetrics.fromDocument(
+        path: 'tenants/tenant-a/daily_metrics/2026-07-31',
+        data: _metrics(overrides: <String, Object?>{
+          'incompleteCostLineCount': 4,
+        }),
+      );
+      expect(incomplete.profit, 430.25);
+      expect(incomplete.profitReport.basis, TenantProfitBasis.incomplete);
+      expect(incomplete.profitReport.isShowable, isFalse);
+    });
+
     test('a negative profit is legitimate, a negative revenue is not', () {
       final loss = TenantDailyMetrics.fromDocument(
         path: 'tenants/tenant-a/daily_metrics/2026-07-31',

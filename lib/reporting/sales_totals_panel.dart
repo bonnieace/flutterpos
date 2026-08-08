@@ -5,6 +5,8 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import 'profit_report.dart';
+import 'profit_statement.dart';
 import 'reporting_currency.dart';
 import 'sales_totals.dart';
 import 'sales_totals_choosers.dart';
@@ -195,6 +197,9 @@ final class _TenantSalesTotalsPanelState
         onChooseMember: _chooseMember,
         onChooseCategory: _chooseCategory,
         onRetry: _retry,
+        // There is no answer to describe, so there is nothing to withhold. The
+        // guarded session decides it wherever a figure actually exists.
+        showProfit: false,
         failureMessage: _failureMessage(error),
       ),
       builder: (context, session, view) => _SalesTotalsContents(
@@ -210,6 +215,10 @@ final class _TenantSalesTotalsPanelState
         onChooseMember: _chooseMember,
         onChooseCategory: _chooseCategory,
         onRetry: _retry,
+        // Profit is cost, and cost is owner/admin everywhere else. Read from
+        // the guarded session rather than from the caller, exactly as the
+        // filters above are read from the answer rather than the selection.
+        showProfit: TenantProfitReport.canSeeInSession(session),
         totals: view.totals,
       ),
     );
@@ -256,6 +265,7 @@ final class _SalesTotalsContents extends StatelessWidget {
     required this.onChooseMember,
     required this.onChooseCategory,
     required this.onRetry,
+    required this.showProfit,
     this.totals,
     this.failureMessage,
   });
@@ -272,6 +282,11 @@ final class _SalesTotalsContents extends StatelessWidget {
   final ValueChanged<String?> onChooseMember;
   final ValueChanged<String?> onChooseCategory;
   final VoidCallback onRetry;
+
+  /// Whether this session may be shown what the business made, rather than
+  /// only what it took.
+  final bool showProfit;
+
   final TenantSalesTotals? totals;
   final String? failureMessage;
 
@@ -346,13 +361,26 @@ final class _SalesTotalsContents extends StatelessWidget {
                     'read held nothing in it.',
                   ),
                 ],
-                if (!answer.hasCompleteCostData) ...[
+                // The whole statement about profit, or - for a session that may
+                // not be shown one - the cost-data fact on its own. Never both:
+                // the statement carries the same count inside it, and saying it
+                // twice reads as two different findings. The sentence is now
+                // word for word the daily summary's, because it is the same
+                // fact about the same sale lines over a different stretch.
+                if (showProfit) ...[
+                  const SizedBox(height: 8),
+                  TenantProfitStatement(
+                    report: answer.profitReport,
+                    currency: _currency,
+                    keyPrefix: 'sales-totals',
+                  ),
+                ] else if (!answer.hasCompleteCostData) ...[
                   const SizedBox(height: 8),
                   Text(
                     key: const ValueKey('sales-totals-cost'),
                     '${answer.incompleteCostLineCount} sale '
                     '${answer.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
-                    'no cost recorded, so no profit figure is shown.',
+                    'no cost recorded.',
                   ),
                 ],
                 if (answer.tenderBreakdown case final breakdown?) ...[

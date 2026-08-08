@@ -303,6 +303,28 @@ void main() {
       expect(totals.profit, -12.5);
     });
 
+    test('the period judges its own profit, and the decoder does not', () async {
+      final complete = await load(
+        _response(
+          overrides: {
+            'sales': 4820.0,
+            'profit': 1205.0,
+            'incompleteCostLineCount': 0,
+          },
+        ),
+      );
+      expect(complete.profitReport.basis, TenantProfitBasis.complete);
+      expect(complete.profitReport.marginPercent, closeTo(25, 0.0001));
+
+      // The default answer is the shape every period before products carried
+      // costs produces: nothing was subtracted, so profit equals the takings.
+      // It is decoded, then refused as a figure - never as a response.
+      final incomplete = await load(_response());
+      expect(incomplete.profit, incomplete.sales);
+      expect(incomplete.profitReport.basis, TenantProfitBasis.incomplete);
+      expect(incomplete.profitReport.marginPercent, isNull);
+    });
+
     test('an empty period is a real answer, not a failure', () async {
       final totals = await load(
         _response(

@@ -347,18 +347,20 @@ void main() {
     expect(callable.payloads, hasLength(2));
   });
 
-  testWidgets('incomplete cost lines are named and no profit is shown', (
+  testWidgets('a manager is told cost lines are missing, and no more', (
     tester,
   ) async {
     final callable = _Callable(<Object?>[_response()]);
 
-    await _pump(tester, _controller(TenantRole.owner), callable);
+    await _pump(tester, _controller(TenantRole.manager), callable);
 
+    // Word for word the daily summary's sentence: the same fact about the same
+    // sale lines over a different stretch of days.
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('sales-totals-cost')))
           .data,
-      '96 sale lines have no cost recorded, so no profit figure is shown.',
+      '96 sale lines have no cost recorded.',
     );
     expect(find.textContaining('Profit'), findsNothing);
   });
@@ -371,24 +373,132 @@ void main() {
       _response(overrides: <String, Object?>{'incompleteCostLineCount': 1}),
     ]);
 
-    await _pump(tester, _controller(TenantRole.owner), callable);
+    await _pump(tester, _controller(TenantRole.manager), callable);
 
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('sales-totals-cost')))
           .data,
-      '1 sale line has no cost recorded, so no profit figure is shown.',
+      '1 sale line has no cost recorded.',
     );
   });
 
-  testWidgets('a complete day says nothing about cost', (tester) async {
+  testWidgets('a complete period says nothing about cost to a manager', (
+    tester,
+  ) async {
     final callable = _Callable(<Object?>[
       _response(overrides: <String, Object?>{'incompleteCostLineCount': 0}),
     ]);
 
-    await _pump(tester, _controller(TenantRole.owner), callable);
+    await _pump(tester, _controller(TenantRole.manager), callable);
 
     expect(find.byKey(const ValueKey('sales-totals-cost')), findsNothing);
+    expect(find.byKey(const ValueKey('sales-totals-profit')), findsNothing);
+  });
+
+  testWidgets('an owner reads the period\'s profit and its margin', (
+    tester,
+  ) async {
+    final callable = _Callable(<Object?>[
+      _response(
+        overrides: <String, Object?>{
+          'profit': 1205.25,
+          'incompleteCostLineCount': 0,
+        },
+      ),
+    ]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _Reader(currency: 'KES'),
+    );
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-profit')))
+          .data,
+      'Profit: KES 1205.25, a margin of 25.0%.',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-profit-note')))
+          .data,
+      'Every sale line behind it carries a cost.',
+    );
+    // The withheld sentence is gone rather than doubled: the statement above
+    // carries the whole of what is known about cost.
+    expect(find.byKey(const ValueKey('sales-totals-cost')), findsNothing);
+  });
+
+  testWidgets('an owner is told why an incomplete period has no figure', (
+    tester,
+  ) async {
+    // The default response is the shape every period before products carried
+    // costs produces: profit equals takings because nothing was subtracted.
+    final callable = _Callable(<Object?>[_response()]);
+
+    await _pump(tester, _controller(TenantRole.owner), callable);
+
+    expect(find.byKey(const ValueKey('sales-totals-profit')), findsNothing);
+    expect(find.byKey(const ValueKey('sales-totals-cost')), findsNothing);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-profit-note')))
+          .data,
+      'Profit and margin are not shown: 96 sale lines have no cost recorded, '
+      'and counting them as free would overstate both.',
+    );
+    // The takings are unaffected: what is refused is the profit, not the total
+    // the manager and the owner both came for.
+    expect(find.byKey(const ValueKey('sales-totals-amount')), findsOne);
+  });
+
+  testWidgets('a category filter profits from its own lines', (tester) async {
+    final callable = _Callable(<Object?>[
+      _response(),
+      _response(
+        overrides: <String, Object?>{
+          'sales': 400.0,
+          'profit': 100.0,
+          'transactions': 12,
+          'incompleteCostLineCount': 0,
+        },
+      ),
+    ]);
+
+    await _pump(
+      tester,
+      _controller(TenantRole.owner),
+      callable,
+      reader: _Reader(
+        currency: 'KES',
+        categories: <String, List<String>>{
+          'tenant-a': <String>['drinks'],
+        },
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('sales-totals-category-drinks')),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    // The server sums the matching lines and counts only their costs, so the
+    // figure is that category's margin and the basis sentence beside it says
+    // what the takings themselves are.
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sales-totals-profit')))
+          .data,
+      'Profit: KES 100.00, a margin of 25.0%.',
+    );
+    expect(
+      find.byKey(const ValueKey('sales-totals-category-basis')),
+      findsOne,
+    );
   });
 
   testWidgets('the takings are split by how they were paid for', (

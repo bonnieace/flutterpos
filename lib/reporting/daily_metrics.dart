@@ -6,6 +6,7 @@ import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_types.dart';
+import 'profit_report.dart';
 
 /// Raised when a canonical daily metric document cannot be trusted.
 final class TenantDailyMetricsException implements Exception {
@@ -59,8 +60,8 @@ final class TenantDailyMetrics {
       businessDate: businessDate,
       sales: _requiredNonNegativeNumber(data, 'sales'),
       // Profit may legitimately be negative, and it depends on product cost
-      // data whose completeness `incompleteCostLineCount` reports. It is parsed
-      // so a later surface can use it; no screen displays it yet.
+      // data whose completeness `incompleteCostLineCount` reports. Whether it
+      // may be shown is [profitReport]'s decision, never this decoder's.
       profit: _requiredFiniteNumber(data, 'profit'),
       transactions: transactions,
       shiftCount: _requiredInt(data, 'shiftCount'),
@@ -107,6 +108,16 @@ final class TenantDailyMetrics {
 
   /// Whether the day's cost data was complete enough to trust a profit figure.
   bool get hasCompleteCostData => incompleteCostLineCount == 0;
+
+  /// This day's profit, and whether it may be shown at all.
+  ///
+  /// The same type the period totals produce, so one day and a stretch of days
+  /// cannot answer that question differently.
+  TenantProfitReport get profitReport => TenantProfitReport.from(
+    sales: sales,
+    profit: profit,
+    incompleteCostLineCount: incompleteCostLineCount,
+  );
 }
 
 /// One business day, reconciled or not.

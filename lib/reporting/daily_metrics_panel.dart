@@ -5,6 +5,8 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_types.dart';
 import 'daily_metrics.dart';
+import 'profit_report.dart';
+import 'profit_statement.dart';
 import 'reporting_currency.dart';
 
 /// Builds the guarded reconciliation status route for one exact business date.
@@ -153,8 +155,12 @@ final class _TenantDailySummaryPanelState
         builder: (context, session, view) => _DailySummaryContents(
           days: view.days,
           currency: view.currency,
+          // Profit is cost, and cost is owner/admin everywhere else - a
+          // narrower tier than the one that may read this whole summary.
+          showProfit: TenantProfitReport.canSeeInSession(session),
           // The role is taken from the guarded session, never from the caller,
-          // so the action disappears the moment the session stops allowing it.
+          // so the action - and the figure above - disappears the moment the
+          // session stops allowing it.
           reconciliationRoute:
               session.canAccess(allowedRoles: widget.reconciliationRoles)
               ? widget.reconciliationRoute
@@ -171,12 +177,17 @@ final class _DailySummaryContents extends StatelessWidget {
   const _DailySummaryContents({
     required this.days,
     required this.currency,
+    required this.showProfit,
     this.reconciliationRoute,
     this.salesTotalsRoute,
   });
 
   final List<TenantDailyMetricsDay> days;
   final TenantReportingCurrency currency;
+
+  /// Whether this session may be shown what the business made, rather than
+  /// only what it took.
+  final bool showProfit;
   final TenantReconciliationRouteBuilder? reconciliationRoute;
   final TenantSalesTotalsRouteBuilder? salesTotalsRoute;
 
@@ -236,7 +247,17 @@ final class _DailySummaryContents extends StatelessWidget {
                     'in ${metrics.shiftCount} '
                     '${metrics.shiftCount == 1 ? 'shift' : 'shifts'}',
                   ),
-                  if (!metrics.hasCompleteCostData)
+                  // The whole statement about profit, or - for a session that
+                  // may not be shown one - the cost-data fact on its own. Never
+                  // both: the statement carries the same count inside it, and
+                  // saying it twice reads as two different findings.
+                  if (showProfit)
+                    TenantProfitStatement(
+                      report: metrics.profitReport,
+                      currency: currency,
+                      keyPrefix: 'daily-summary-${day.businessDate}',
+                    )
+                  else if (!metrics.hasCompleteCostData)
                     Text(
                       key: ValueKey('daily-summary-cost-${day.businessDate}'),
                       '${metrics.incompleteCostLineCount} sale '

@@ -7,6 +7,7 @@ import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_types.dart';
+import 'profit_report.dart';
 
 /// Narrow callable boundary for the server's `getSalesComparison`.
 ///
@@ -217,10 +218,12 @@ final class TenantSalesTenderBreakdown {
     var countedMinor = 0;
     for (final bucket in buckets.values) {
       countedTransactions += bucket.transactions;
-      countedMinor += _minorUnits(bucket.sales);
+      // Compared in whole minor units, the way the server adds them: comparing
+      // doubles would need a tolerance that could hide a real disagreement.
+      countedMinor += reportingMinorUnits(bucket.sales);
     }
     if (countedTransactions != transactions ||
-        countedMinor != _minorUnits(sales)) {
+        countedMinor != reportingMinorUnits(sales)) {
       throw const FormatException(
         'getSalesComparison returned a tender split that does not add up to '
         'the totals it accompanies.',
@@ -317,10 +320,11 @@ final class TenantSalesTotals {
       query: query,
       scannedTransactions: scanned,
       sales: sales,
-      // Parsed so the figure is validated rather than ignored, and deliberately
-      // never displayed: no product in this app carries a cost, so every sale
-      // line reaches the server without one and the server's profit equals its
-      // revenue. Showing it would be reporting a margin of 100%.
+      // Validated here and judged by [profitReport], never by this decoder.
+      // ~~Deliberately never displayed~~ - retracted: that reason was that no
+      // product carried a cost, so profit always equalled revenue and showing
+      // it would have reported a margin of 100%. Products carry costs now, and
+      // that exact case is the one `TenantProfitBasis.incomplete` refuses.
       profit: _requiredFiniteNumber(previous, 'profit'),
       transactions: transactions,
       incompleteCostLineCount: _requiredCount(
@@ -358,7 +362,8 @@ final class TenantSalesTotals {
   /// the rest of each sale is not in it.
   final double sales;
 
-  /// Never displayed; see [TenantSalesTotals.fromCallable].
+  /// Major-unit profit, exactly as the server subtracted it. Whether it may be
+  /// shown at all is [profitReport]'s answer, not this field's.
   final double profit;
 
   /// How many sales contributed to [sales].
@@ -372,6 +377,18 @@ final class TenantSalesTotals {
   final TenantSalesTenderBreakdown? tenderBreakdown;
 
   bool get hasCompleteCostData => incompleteCostLineCount == 0;
+
+  /// This period's profit, and whether it may be shown at all.
+  ///
+  /// The same type one reconciled day produces. A category filter changes what
+  /// the figures mean - the server sums the matching lines and counts only
+  /// their costs - but not what makes one of them believable, so the rule is
+  /// the same one.
+  TenantProfitReport get profitReport => TenantProfitReport.from(
+    sales: sales,
+    profit: profit,
+    incompleteCostLineCount: incompleteCostLineCount,
+  );
 }
 
 /// Session-bound gateway with no business input surface.
@@ -565,13 +582,6 @@ double _requiredFiniteNumber(Map<String, Object?> data, String field) {
   }
   return value.toDouble();
 }
-
-/// Whole minor units, rounded exactly as the server rounds.
-///
-/// Comparing sums here rather than as doubles: the server adds money as
-/// integers, so a split that really adds up matches to the cent, and comparing
-/// doubles would need a tolerance that could hide a genuine disagreement.
-int _minorUnits(double amount) => (amount * 100).round();
 
 const int _maximumCount = 1000000000;
 

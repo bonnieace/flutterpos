@@ -4,7 +4,7 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-08**, the fifth session that day. Claims in
+Last verified against the code on **2026-08-08**, the sixth session that day. Claims in
 this file are checked against source, not inherited from the log; corrections are noted
 where they were made.
 
@@ -68,8 +68,8 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | Track | State | What is left |
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. No live Brevo, no deployment. |
-| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, nor the bulk *surface* touched the file at all, and the suite was run over all five to say so. `subscription` has rules and no writer. |
-| **Flutter client** | ~90% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, and **create a catalog from a pasted spreadsheet**. No profit display, no printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
+| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, nor the profit display touched the file at all, and the suite was run over all six to say so. `subscription` has rules and no writer. |
+| **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -93,7 +93,7 @@ callable exists, and not green if it is merely tested.
 | Set the currency / checkout configuration | 🟢 | "Checkout settings" on the landing route → merges `configuration/checkout`, owner/admin only |
 | Adjust stock | 🟢 | Product stock route → `adjustStock` |
 | Record what a product cost | 🟢 | "Manage catalog" → the optional unit cost on the add-product form, and on "Correct" afterwards, owner/admin only. Every sale freezes the figure onto its own line |
-| See profit or margin | 🔴 | The server computes it and nothing displays it. Needs a surface that states how many lines have no cost — see the unreachable table. **The next chunk** |
+| See profit or margin | 🟢 | Daily summary, and sales totals over any period, member, or category. **Owner and administrator only** — profit is cost, and a manager reads the takings and is shown no margin. A figure appears **only when every sale line behind it carries a cost**; otherwise the count of lines without one is shown in its place, and no number is |
 | Record a return | 🟢 | From a sale, via receipt lookup or shift history |
 | Verify a return, restoring stock | 🟢 | Owner/admin/manager, on a pending return |
 | Look up a receipt | 🟢 | "Find a receipt" |
@@ -109,12 +109,27 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
-**Two rows went green in the last session of 2026-08-08, and they are the two that had been
-waiting on nothing but effort**: spreadsheet import and bulk change. The board is 29 rows at
-**23 green, 5 red, 1 amber**. The route is `TenantBulkCatalogScreen`, offered as "Bulk
-changes and import" from inside "Manage catalog", and it is the first client caller either
-callable has ever had. It changed `firestore.rules` not at all and nothing in `functions/`
-either — both callables were already built, and neither needed a change to be reached.
+**One row went green in the last session of 2026-08-08: profit and margin.** The board is 29
+rows at **24 green, 4 red, 1 amber**. It moved with **no server file and no rule touched** —
+409 functions tests and 161 rules tests, both unchanged, were the measurement — because
+`aggregateSales` already returned `profit` and `incompleteCostLineCount`, `daily_metrics`
+already stored both, and both client read models already parsed both. Only the display was
+missing, and only for a session allowed to see it.
+
+**What the row does not mean is worth pinning, because green usually means more than this.**
+A shop sees a profit figure on a day, or over a period, **only when every sale line behind it
+carries a cost** — and every sale recorded before 2026-08-07 has none and never will. So a
+90-day total will state that it cannot show one until the window rolls past that date, and a
+day is complete as soon as the products sold on it carry costs. That is the capability
+working, not failing: see the standing decision for why a partial figure is refused rather
+than qualified.
+
+**Two rows went green in the session before it, and they are the two that had been
+waiting on nothing but effort**: spreadsheet import and bulk change, which took the board to
+23 green. The route is `TenantBulkCatalogScreen`, offered as "Bulk changes and import" from
+inside "Manage catalog", and it is the first client caller either callable has ever had. It
+changed `firestore.rules` not at all and nothing in `functions/` either — both callables were
+already built, and neither needed a change to be reached.
 
 **That session is also the one where the unreachable table stopped growing.** Two
 consecutive server chunks had ended in it, which this file named as the limit; the third
@@ -148,8 +163,11 @@ three were built and reachable by the end of the same day**; suspicious-return s
 the one still red, and it is sequenced after the first deployment on purpose.
 
 **Two rows moved on 2026-08-07 when a product gained a cost** — "Record what a product
-cost" is green and "See profit or margin" was added red, because the server computes a
-figure nothing displays. Before that: **no row had changed colour since the catalog
+cost" went green and "See profit or margin" was added red, because the server computed a
+figure nothing displayed. **That second row closed on 2026-08-08**, which is the whole life
+of it: added as a red row by the chunk that created the gap, named as an exclusion for four
+consecutive chunks with the same true reason, then taken as a chunk once that reason turned
+out to be the design rather than a blocker. Before that: **no row had changed colour since the catalog
 chunk, and the flake session did not change one either — it changed no board row at all, deliberately, and
 this sentence is here so that is stated rather than left silent.** Five 2026-08-07
 sessions followed the catalog chunk: two added unit tests only, one resolved
@@ -199,7 +217,7 @@ The fifteen frozen steps, with what is actually true:
 | 8 | Brevo delivery, webhook normalization, action pages | ⚠️ implemented, never exercised against live Brevo |
 | 9 | `TenantSession`, switching, shift restoration, epochs | ✅ |
 | 10 | Encrypted Hive cache, single-flight checkout, receipt counters | ✅ |
-| 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription; profit is computed and not displayed. Checkout configuration writing, catalog management, `updateProduct`, and product cost landed 2026-08-07; the client route that corrects a product, the `updateProducts` bulk callable, the `importProducts` spreadsheet callable, and the one screen that reaches both all landed 2026-08-08. **Nothing in the catalog area is now built and unreachable** |
+| 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription. Checkout configuration writing, catalog management, `updateProduct`, and product cost landed 2026-08-07; the client route that corrects a product, the `updateProducts` bulk callable, the `importProducts` spreadsheet callable, the one screen that reaches both, and **the profit and margin display** all landed 2026-08-08. **Nothing in the catalog or reporting area is now built and unreachable** |
 | 12 | Emulator, multi-device, Windows-offline, email, adversarial tests | ⚠️ emulator suites green; no multi-device, no Windows-offline, no live email |
 | 13 | Deploy development, then staging | ❌ not started |
 | 14 | Enable App Check on validated platforms | ❌ not started; no `firebase_app_check` dependency |
@@ -209,21 +227,26 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1447** |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1473** |
 | Functions | `npm --prefix functions test` | **409** |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12** |
 
-**2039 tests across five suites.** `flutter test` takes no path list — the one
+**2065 tests across five suites.** `flutter test` takes no path list — the one
 uncompilable file that forced that workaround was deleted on 2026-08-07. **All five were
-measured again in the bulk-surface session on 2026-08-08**, so nothing here is carried.
+measured again in the profit-display session on 2026-08-08**, so nothing here is carried.
+Flutter 1447 → 1473 (26 new: 11 in `profit_report_test.dart`, 8 in
+`profit_statement_test.dart`, 3 in `sales_totals_panel_test.dart`, 2 in
+`daily_metrics_panel_test.dart`, 1 each in `daily_metrics_test.dart` and
+`sales_totals_test.dart`); the other four did not move, which for the rules suite is the
+measurement proving `firestore.rules` is byte-identical and for the functions suite is the
+measurement proving no server file was touched. **This is the second chunk in a row where
+holding both counts still was the entire claim about the server**, and the sixth in a row
+where the rules count did not move. Earlier the same day: the bulk-surface session took
 Flutter 1392 → 1447 (55 new: 38 in `bulk_catalog_test.dart`, 13 in
 `bulk_catalog_panel_test.dart`, 3 in `catalog_management_test.dart` for the `cost` echo, 1 in
-`catalog_management_panel_test.dart` for the route's entry point); the other four did not
-move, which for the rules suite is the measurement proving `firestore.rules` is
-byte-identical and for the functions suite is the measurement proving no server file was
-touched. Earlier the same day: the import session took Functions 378 → 409 (31 new: 22 in
+`catalog_management_panel_test.dart` for the route's entry point), the import session took Functions 378 → 409 (31 new: 22 in
 `productImport.test.ts`, 9 in `products.test.ts`), the bulk-change session took Functions
 346 → 378 (32 new: 23 in `productBatch.test.ts`, 9 in `products.test.ts`), and the
 product-edit session took Flutter 1358 → 1392 (34 new: 22 unit, 12 widget).
@@ -234,8 +257,9 @@ across 2026-08-07 and 2026-08-08: **1250 passed with 1 failed**, then **1251**, 
 catalog chunk, the sweep session, and the `updateProduct` session — then **1347 four
 times** in the flake session, all four with the fix already in and the last of them
 against the frozen tree, then **1358** once the product-cost chunk added eleven, then
-**1392** once the product-edit chunk added 34, then **1447** once the bulk surface added 55.
-One failure in fourteen runs, and the last thirteen green.
+**1392** once the product-edit chunk added 34, then **1447** once the bulk surface added 55,
+then **1473** once the profit display added 26. One failure in fifteen runs, and the last
+fourteen green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -275,10 +299,12 @@ and `lib/main copy.dart` is still a 48-line stray that should be deleted.
 The two counts in that list have since moved three times more, by being added to rather
 than corrected: `updateProduct` made them **24** callables and **47** exports on
 2026-08-07, `updateProducts` made them **25** and **48** on 2026-08-08, and
-`importProducts` made them **26** and **49** the same day. **The bulk-surface chunk later
-that day moved neither**, which is what a client chunk should do: it reached two callables
-that already existed. The figures above are what that split fixed, not what is true now; the
-current numbers are in "Public callable interfaces" and "Full export surface" below.
+`importProducts` made them **26** and **49** the same day. **Neither the bulk-surface chunk
+nor the profit display later that day moved either count**, which is what a client chunk
+should do: the first reached two callables that already existed, and the second displayed a
+figure two of them already returned. The figures above are what that split fixed, not what is
+true now; the current numbers are in "Public callable interfaces" and "Full export surface"
+below.
 
 ---
 
@@ -525,6 +551,70 @@ The guarantees are settled, not open:
 9. **Clearing is `cost: null`, and it is the only field where null means something.**
    It is also the escape hatch for a stored cost too malformed for the callable to
    correct. The audit keeps the unreadable previous value verbatim.
+
+### A profit figure is complete or it is not shown
+
+Built 2026-08-08, the last chunk of that day, and it is what made "See profit or margin"
+green. It changed `firestore.rules` not at all and nothing in `functions/` either — 409
+functions tests and 161 rules tests, both unchanged, are the measurement. Everything it needed
+already existed: `aggregateSales` returns `profit` and `incompleteCostLineCount`,
+`getSalesComparison` sends both for a business, a member, or a category, `daily_metrics`
+stores both, and both client read models already parsed both. **Only the display was missing.**
+
+**The rule is one sentence, and everything else follows from it:**
+
+> **No profit figure is shown unless every sale line behind it carries a cost.**
+
+The guarantees are settled, not open:
+
+1. **A proportion is not available, and that is what decided the rule.** Nothing reported
+   anywhere says how many sale lines there were altogether — only how many lacked a cost. So
+   "96 lines have no cost" cannot become "96 of 4,000" without a server change. A line with no
+   cost is counted by the server as costing nothing, so an incomplete figure is an **upper
+   bound**, and with no denominator **how far above the truth it sits is unmeasurable**. An
+   unmeasurable overstatement is not a smaller version of the truth.
+2. **An "at most" ceiling was considered and declined.** It is honest wording, but the number
+   it decorates is still the number a reader remembers, and the qualifier's weight is exactly
+   what nothing here can quantify: two costed lines in five hundred produce a ceiling equal to
+   the takings — the 100% margin this app already refused once. Suppression heals as costs are
+   recorded; a ceiling only stops being *very* misleading.
+3. **Three bases, decided from the figures themselves rather than from where they came**, so
+   the reconciled daily summary and the server-added period totals cannot disagree about when a
+   number may be believed. `complete` shows the figure and its margin and **says that it is
+   complete**, because a reader cannot tell a complete figure from an overstated one by looking
+   at it. `incomplete` shows no figure and carries the count inside the reason. `inconsistent`
+   is a profit exceeding the takings it came from — a negative total cost, which nothing that
+   writes either figure can produce — and it **outranks** `incomplete` the way
+   `stockComparisonOutcome` orders its causes, because naming missing cost data for it would
+   name a cause that does not explain it.
+4. **The subtracted cost is recovered in whole minor units**, as `sales - profit`, which is
+   exact rather than approximate because the server adds money as integers. The rounding is
+   `reportingMinorUnits`, promoted out of `sales_totals.dart`, where the tender split is
+   checked against its own total the same way. Deliberately **not**
+   `checkoutMinorUnitsFromMajor`: that one refuses an amount the till could not price, and
+   these figures are already recorded.
+5. **A margin never outlives the figure it was divided from**, and is also absent for a period
+   that took nothing — a margin on no takings is a division by zero, not a figure of zero. A
+   percentage is the most believed number on any report and carries no units to warn a reader.
+6. **Owner and administrator only, and no rule changed.** This is the tier the product-cost
+   decision above already named, in the sentence saying what it buys is that no manager is
+   *shown* a margin. `daily_metrics` is readable by owner/admin/manager and
+   `getSalesComparison` answers all three, so **a manager's device already holds every figure
+   involved**: this is a surface boundary, not a secrecy guarantee, exactly as recording a cost
+   is. `TenantProfitReport.allowedRoles` restates `costRoles` rather than importing it, because
+   it is this domain's own decision about a different document.
+7. **A session sees the profit statement or the bare count sentence, never both.** Both panels
+   already named the count to every reporting role; a profit block that also named it gave an
+   owner two sentences holding one number, which reads as two findings. The sales-totals
+   sentence lost its trailing "so no profit figure is shown" and is now word for word the daily
+   summary's, because it is the same fact about the same sale lines over a different stretch.
+8. **`TenantProfitStatement` is shared by both surfaces**, so one fact cannot be worded two
+   ways, and it takes a `keyPrefix` because the daily summary renders one per day.
+
+**What this costs a real shop, stated because green usually means more.** Every sale recorded
+before 2026-08-07 has no cost and never will, so a 90-day total says it cannot show a figure
+until the window rolls past that date. A **day** is complete as soon as everything sold on it
+carries a cost, which is why the daily summary is the surface where this becomes useful first.
 
 ### Bulk catalog work is a rewrite, and the old code is not the starting point
 
@@ -867,7 +957,6 @@ Field drift to expect on the way: the old scorer reads `soldBy` (a display name)
 | --- | --- |
 | `requestPasswordReset` | **Blocked on App Check.** Still no caller — see below. |
 | Subscription | `TenantPaths.currentSubscription` and rules exist; **nothing reads it and nothing writes it**. `grep -i subscription functions/src` finds nothing at all, so there is no schema to model. Start on the server, not in Flutter. |
-| Product cost / profit **(half closed 2026-08-07)** | A product now **carries a cost** and a sale **freezes it onto its line**, so profit is real for anything sold since. `profit` is still parsed and never *displayed* — that surface is the remaining half, and it must state `incompleteCostLineCount`, because every sale recorded before that date has no cost and never will. **It is the next chunk as of 2026-08-08**, which makes this the one row here waiting on effort rather than on a decision, a schema, or a refusal. |
 | Category rename and delete | Permitted by `allow create, update, delete` on `categories` to owner/admin/manager, and offered to nobody. Deliberate, for the orphaning reason above; recorded here so the gap between rule and surface stays a decision. |
 
 Checkout configuration writing left this table on 2026-08-07. The route is
@@ -884,10 +973,18 @@ is exactly the life a row here is supposed to have. It was the *good* kind of en
 unreachable for one bounded reason, with the reason queued, and it stayed for one day.
 
 **`updateProducts` and `importProducts` both entered on 2026-08-08 and both left the same
-day**, in the last session of it, and they left together because they wanted one screen. That
-screen is `TenantBulkCatalogScreen`. While they sat here they were the only rows in this
-table waiting on nothing but effort; **every row left is once again blocked on a decision, a
-schema, or a deliberate refusal**, which is the state this table is supposed to be in.
+day**, and they left together because they wanted one screen. That screen is
+`TenantBulkCatalogScreen`.
+
+**Product cost and profit left this table in the last session of 2026-08-08**, and it is the
+row that had been here longest with nothing but effort in front of it. Its first half closed
+on 2026-08-07, when a product gained a cost and a sale began freezing it onto its line; the
+second closed when the daily summary and the sales totals started reporting it. What that
+chunk had to decide was not how to display a number but **when a number may be displayed at
+all** — see the standing decision above. **Every row left here is once again blocked on a
+decision, a schema, or a deliberate refusal**, which is the state this table is supposed to
+be in, and the three rows that were waiting on effort alone all left within one day of each
+other.
 
 **Two consecutive server chunks ending here was the limit, it was named, and the next chunk
 was the surface rather than a third callable.** That is the mechanism working: a third would
@@ -979,7 +1076,11 @@ acted on. Three facts, so nobody re-derives them:
 emulator integration test that builds the task with `preparePasswordResetRequest` and
 dispatches `deliverPasswordReset` directly, against the real Auth emulator, real
 Firestore, and the Brevo seam. It skips only the six guarded lines, needs no decision,
-and changes no production code. Unqueued and available whenever this is picked up.
+and changes no production code. ~~Unqueued and available whenever this is picked up.~~
+**Queued 2026-08-08 as the next bounded chunk**, because the exclusion rule attached to
+password reset said a third consecutive exclusion is when this gets taken, and it was
+excluded a third time by the profit-display chunk. It resolves none of the App Check
+question above and is not meant to: what it covers is the half that was never blocked.
 
 ### ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
 
@@ -1512,7 +1613,7 @@ Role boundaries, each decided deliberately rather than by default:
 | `sales`, `returns` | any active member — a receipt lookup and a return against a colleague's sale both need it |
 | `shifts` | owner/admin/manager, or the shift's own cashier |
 | `staff` | owner/admin/manager, or the member's own record |
-| `daily_metrics`, `stock_adjustments`, `stock_movements`, `reconciliation_*`, `shift_amendments` | owner/admin/manager |
+| `daily_metrics`, `stock_adjustments`, `stock_movements`, `reconciliation_*`, `shift_amendments` | owner/admin/manager — and `daily_metrics` holds `profit`, which **only owner and admin are shown**. That is a surface boundary in `TenantProfitReport.allowedRoles`, not a rule: a manager's device already receives the field, exactly as every staff device already caches buying prices, and Firestore cannot hide one field of a document |
 | `audit_logs` | owner/admin, plus platform |
 | `configuration` | any active member — a till cannot price a sale without it. Writing is owner/admin, the one client-writable settings collection |
 | `products`, `categories` | any active member — a till cannot sell what it cannot read. Writing is client-reachable and split three ways: create is owner/admin/manager on both, delete is owner/admin on `products` and owner/admin/manager on `categories`, and **update on `products` is the checkout decrement and nothing else** — a descriptive field, including `cost`, changes only through `updateProduct` or `updateProducts`, both of which write past rules entirely. `allow create` names no key list, which is what lets a product carry a `cost` with no rule change. `importProducts` also creates past rules, and **not** because it has to: `allow create` is client-reachable, but no device can write the `stock_adjustments` record and `stock_movements` entry that give imported units a recorded origin, since both collections are server-write-only |
@@ -1699,66 +1800,72 @@ prompt.md                                          (untracked)
 
 ## Next bounded chunk
 
-**A surface that shows profit and margin, and states how much of it is unknown.** It is
-promoted from nowhere in particular: it has never been in the preference order, because it
-was created as a *red board row* by the product-cost chunk on 2026-08-07 and named an
-exclusion needing its own chunk. It is now the only red row that is neither blocked on a
-decision, blocked on somebody else's interface, nor deliberately sequenced after a
-deployment — which makes it the next thing a shop cannot do that this app could let it do
-today.
+**An emulator integration test for `deliverPasswordReset`, against real Auth, real Firestore,
+and the Brevo seam.** It is taken because the rule above said to take it: password reset was
+excluded for a third consecutive chunk in the profit-display session, and the standing
+instruction attached to that exclusion is that a third exclusion is when this test gets
+written. Nothing about it is a decision — it changes no production code, needs no App Check
+answer, and is the one piece of that whole area available today.
 
-**What already exists, so this is a display chunk and not a pipeline one.** `lineCost()` in
-`functions/src/operations/domain.ts` computes profit from the sale line, `daily_metrics`
-stores it, the daily summary already reads the document, and every sale since 2026-08-07
-freezes the cost it was sold at. **Nothing displays the figure.** Read the existing
-reporting surfaces before adding one: `lib/reporting/` already holds a daily summary, period
-totals by member and category, and a reconciliation anomalies panel, and this is more likely
-a section of one of those than a new route.
+**It is also the only queued item that is not blocked on somebody else.** The printed receipt
+body waits on an interface nobody has shared; suspicious-return scoring is sequenced after the
+first deployment on purpose; deployment itself is not a coding chunk. Running the app against
+the emulators is available and is queued below, and it is a behavioural session rather than a
+bounded implementation one — it is the natural companion to this chunk, not a replacement for
+it, because both bring up emulators.
 
-**The hard requirement, and it is the reason this cannot be a number on a card.** The server
-already counts `incompleteCostLineCount`, and **every sale recorded before 2026-08-07 has no
-cost and never will**. A margin computed over a day that is half uncostable is not a margin;
-it is a number that will be believed. So the contract is: **no profit figure may be shown
-without the count of lines behind it that have no cost**, in the same view, at the same
-prominence. If that cannot be done for a given surface, that surface does not get profit.
+**What is already covered, so this test does not duplicate it.**
+`functions/src/email/passwordReset.test.ts` holds **7** unit tests: unknown identity, the
+current-Auth-email HMAC recheck, active suppression, an eligible send, a retryable provider
+error, a globally disabled canonical root, and a malformed email. Those assert the worker's
+*logic* against fakes. **What has never run is the worker against real infrastructure**, and
+that is exactly the gap.
 
-**Four things to decide, and the first two are the chunk:**
+**The shape of it, so nothing widens:**
 
-- **What "unknown" looks like next to a figure.** A count, a proportion, a suppressed figure
-  below some coverage, or all three. This is the whole design problem and it is a wording
-  problem as much as a layout one.
-- **Which surfaces get it.** The daily summary is the obvious one. Period totals by category
-  and by member are the useful ones and also the ones where a per-group coverage count has
-  to be computed or read rather than summed from the day. Check what `getSalesComparison`
-  already returns before assuming anything needs a server change.
-- **Who may see it.** Cost sits behind owner/admin everywhere else — `MONETARY_PRODUCT_FIELDS`
-  on the server, `costRoles` on the client — and profit is cost. The `audit_logs` read rule
-  is already owner/admin while `daily_metrics` is owner/admin/manager, so this is a real
-  decision and not an inherited one: a manager may currently read the document that holds
-  the figure.
-- **Whether anything on the server is missing.** Quite possibly nothing is. Say so with a
-  measurement if so, the way the last three chunks did with `firestore.rules`.
+- Build the task payload with `preparePasswordResetRequest` and dispatch `deliverPasswordReset`
+  **directly**, the way the reconciliation and invitation suites dispatch their own workers.
+  The public callable is not called and its App Check gate is not touched — that gate is
+  seventeen lines of validate-and-enqueue, and everything worth testing is past the queue.
+- Use the **real Auth emulator** for the identity lookup and the current-email HMAC recheck,
+  which is the one step no fake has ever exercised: it is the difference between "the code
+  compares two hashes" and "the hash it computes from a real Auth record matches".
+- Use **real Firestore** for `email_deliveries` and `email_suppressions`, so the suppression
+  check and the delivery record are written and read by the real client rather than a fake.
+- Keep the **Brevo seam** a seam. Nothing in this chunk sends mail, and no live provider
+  credential belongs in a test. What is proved is what reaches the seam and what is recorded
+  around it.
+- **Plaintext must not appear in Firestore**, which is a frozen guarantee of this endpoint and
+  is worth asserting against a real store rather than a map: read the delivery and suppression
+  documents back and prove they hold hashes.
 
-**Explicitly excluded from it:** any change to `firestore.rules` unless the role decision
-above genuinely requires one — and if it does, say so before writing it, because a read rule
-is the one thing here that could widen who sees a margin; recomputing or backfilling profit
-for sales recorded before cost existed, which is impossible and must not be faked with
-zero; discounts; currency conversion of any kind; `.xlsx` and any binary spreadsheet format;
-camera or barcode input; category rename and delete; SKU uniqueness in any form; a quantity
-written anywhere but through `adjustStock` or `importProducts`; the printed receipt body and
-anything to do with the print service; suspicious-return scoring; deployment; and the
-`regenerateDailyMetric` question below.
+**Two operational facts to plan the ports with**, both already recorded above and both easy to
+get wrong: the Auth emulator reserves `port`, `port + 200`, and `port + 400` — dev 9099,
+invitations 9199, reconciliation 9699, so a fourth suite may not use 9299, 9399, 9499, 9599,
+9899, or 10099 — and a cold emulator's first trigger delivery costs about 25 seconds while
+every later one costs about 310 ms, so timeouts come from the first. Decide whether this
+belongs in the existing invitation suite, which already runs Auth plus Functions plus Firestore
+for the same email machinery, or in a fourth project of its own. **Reusing the invitation
+suite is the recommendation** — it needs no new ports, no new project, and no fourth copy of
+the Functions build, and password reset and staff invitation share the delivery, suppression,
+and HMAC code they would both be exercising.
 
-**One exclusion named because it has been inherited for many consecutive chunks:
-password reset.** Still correctly excluded, and the reason has not changed — it is blocked
-on the App Check decision, which is in motion in the console and is not a decision a coding
-session can make. It is not blocking: nothing else in the app needs it, and a user who
-forgets a password today is recovered by an operator. **What has changed is that it is now
-the longest-standing red row with a *named* way forward**, and the open decision above lists
-the one piece of work available under it that needs no decision at all — an emulator
-integration test for `deliverPasswordReset` against real Auth and the Brevo seam. If this is
-excluded a third time, take that test.
+**Explicitly excluded from it:** removing or relaxing `enforceAppCheck` or
+`requireAppCheckedPublic` in order to reach the callable — asked and answered on 2026-08-07,
+and the answer was that it gates almost nothing and deleting it would be deleting production
+code; adding `firebase_app_check` to `pubspec.yaml`; any client surface for reset, which is
+what the App Check decision actually blocks; live Brevo of any kind; the Windows custom
+attestation provider; deployment; and every standing exclusion listed below.
 
+**One exclusion named because it has been inherited for many consecutive chunks: the printed
+receipt body.** Still correctly excluded and it has not become blocking — a sale is recorded,
+found by receipt lookup, and returned without anything being printed. It is **not** blocked on
+a decision, which is the part worth restating: the transport was answered on 2026-08-07 and an
+external print service owns it. It is blocked on that service's interface, which decides what
+a "body" even is — ESC/POS bytes, text at a column width, a structured payload, or a PDF. The
+moment it is shared this becomes the next capability chunk. **Do not start it on a guessed
+contract**; a formatter written against the wrong one is worse than none, because it looks
+finished.
 
 ### Then, in preference order
 
@@ -1782,10 +1889,12 @@ excluded a third time, take that test.
   nothing but effort. What it decided — one field across many products, an immutable page per
   request, a commit only after a whole-chain preview, and two different money rules on one
   screen — is recorded in its own standing decision above.
-- **~~A surface that shows profit and margin~~** — promoted into the current chunk above on
-  2026-08-08. It was never in this list, which is the point: it was created as a red board
-  row by the product-cost chunk and left as an exclusion, and it is now the only red row
-  that nothing is blocking.
+- **~~A surface that shows profit and margin~~** — **done 2026-08-08**, and it is the board's
+  twenty-fourth green row. It was never in this list, which is the point: it was created as a
+  red board row by the product-cost chunk and left as an exclusion four times over. It touched
+  no server file and no rule, and what it decided — that an incomplete figure is refused rather
+  than qualified, because nothing reports the denominator that would let it be qualified — is
+  recorded in its own standing decision above.
 - **The printed receipt body** — **waiting on an interface, not on a decision.** The
   transport question was answered on 2026-08-07: an external print service, to be
   shared, handles thermal printer onboarding over a local print server, TCP/IP, and
@@ -1829,11 +1938,19 @@ excluded a third time, take that test.
 
 Outside every chunk until deliberately scheduled: a resolution path for the four
 stock and sale differences, currency labels on the differences list, the subscription
-surfaces, discounts, camera barcode scanning, password reset (blocked on the App Check
-decision above, which is now in motion), renaming or
+surfaces, discounts, camera barcode scanning, **the in-app password reset surface**
+(blocked on the App Check decision above, which is now in motion), renaming or
 deleting a category, SKU uniqueness, a `platform_audit_logs`
 surface, branding surfaces, the Sentry DSN, the 476 pre-existing analyzer issues, a
 root-widget smoke test and the startup seams it would need, and deployment.
+
+**That entry was narrowed on 2026-08-08 and the narrowing is the point.** It used to read
+"password reset" flat, which made a whole area look closed when only one half of it was. The
+**client surface** is what App Check blocks, and it stays excluded. The **server worker** is
+not blocked by anything and never was: `deliverPasswordReset` has no attestation of any kind,
+and an emulator integration test for it against real Auth, real Firestore, and the Brevo seam
+changes no production code. That test is the **current chunk** above, taken because the rule
+attached to this exclusion said a third consecutive exclusion is when it gets taken.
 
 **Editing a product's descriptive fields left this list on 2026-08-07 and was finished
 on 2026-08-08.** The `updateProduct` callable exists, is tested, and is now called by
@@ -1866,14 +1983,20 @@ blocking today: a sale completes, is recorded, is found by receipt lookup, and i
 returnable without anything being printed.
 
 **Product cost left this list on 2026-08-07, profit display replaced it, and profit display
-left it on 2026-08-08 by becoming the current chunk.** The product owner asked for buying
-price and attached one requirement: a change to it must never move a profit already
-reported. That is now guaranteed by the sale line rather than by care — see the standing
-decision above. The **display** of profit or margin was excluded from four consecutive chunks
-with the same true reason — it cannot show a number without also showing how many lines have
-no cost behind it — and that reason is a design requirement rather than a blocker, so it is
-now the chunk rather than the excuse. What stays excluded from *around* it is listed with the
-chunk: no backfill of sales recorded before cost existed, and no discounts.
+left it on 2026-08-08 by being built.** The product owner asked for buying price and attached
+one requirement: a change to it must never move a profit already reported. That is now
+guaranteed by the sale line rather than by care — see the standing decision above. The
+**display** of profit or margin was excluded from four consecutive chunks with the same true
+reason — it cannot show a number without also showing how many lines have no cost behind it —
+and that reason turned out to be the design rather than a blocker: the chunk resolved it by
+**refusing the number** whenever any line lacks a cost, because nothing reports the total line
+count that would let a partial figure be honestly qualified. Nothing of it is excluded and
+nothing of it is queued.
+
+**What stays excluded from around it**, and the first of these is new rather than inherited:
+**a server change adding a total line count**, which is the one thing that could justify
+showing an incomplete figure and which nobody has asked for; **no backfill** of sales recorded
+before cost existed, which is impossible and must not be faked with zero; and **discounts**.
 
 **Named once, as it has been inherited for many consecutive chunks: the 476
 pre-existing analyzer issues.** Still correctly excluded, and the reason is stronger
@@ -1899,9 +2022,11 @@ all, so a Flutter surface would invent the schema, lifecycle, and billing states
 server later has to agree with. That one starts on the server or not at all, and
 nothing in the sell-and-settle loop reads it. The exclusions that moved from cosmetic
 to load-bearing are tracked above instead of here, and only one of the three is still
-an open question: **password reset**, now in motion in the console. **How a price is
-corrected** is resolved, built, and reachable — nothing of it is left — and **what a
-receipt is printed on** is answered and waiting on an interface.
+an open question: **the in-app password reset surface**, now in motion in the console —
+though the server-side half of that area stopped being an exclusion on 2026-08-08 and is
+the current chunk. **How a price is corrected** is resolved, built, and reachable —
+nothing of it is left — and **what a receipt is printed on** is answered and waiting on
+an interface.
 
 **Bulk catalog work was dropped from the list above on 2026-08-08 and is finished.** It
 stopped being an exclusion when it was scoped as a rewrite; `updateProducts` landed that

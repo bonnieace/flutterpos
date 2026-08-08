@@ -17061,3 +17061,248 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## Profit is shown, or refused, and never overstated - 2026-08-08
+
+### What was chosen, and why
+
+The queued chunk, taken unchanged: **a surface that shows profit and margin, and states how
+much of it is unknown.** It was the only red board row not blocked on a decision, on somebody
+else's interface, or on a sequencing call — the last one waiting on nothing but effort, in a
+table this file has twice recorded emptying of exactly that kind of row.
+
+Checked against the board before accepting it, as required. No capability the app needs in
+order to function is missing and unqueued: no red row stops a business operating, the four
+remaining reds are each blocked on something a coding session cannot resolve, and the amber
+one is deliberate. So the queued chunk stood.
+
+### What it turned out to be
+
+**A display chunk, and the measurement says so.** `functions/` and `firestore.rules` were not
+touched at all, and both suites were run over the finished tree to prove it rather than to
+assert it: **409 functions tests and 161 rules tests, both unchanged.** Everything the surface
+needs was already computed and already parsed:
+
+- `aggregateSales` in `functions/src/operations/domain.ts` returns `profit` and
+  `incompleteCostLineCount`, and `getSalesComparison` already sends both — for a whole
+  business, for one member, and for one category, because the filter is applied before the
+  aggregation rather than after it.
+- `daily_metrics` already stores both, and `TenantDailyMetrics` already parsed both.
+- `TenantSalesTotals` already parsed both.
+
+So the answer to "whether anything on the server is missing" is **no**, with one qualification
+that decided the whole design and is recorded below: **nothing reports how many sale lines
+there were altogether**, only how many lacked a cost.
+
+### The decision the chunk actually turned on
+
+The `PLAN.md` question was what "unknown" looks like next to a figure — a count, a proportion,
+a suppressed figure below some coverage, or all three. **A proportion is not available.**
+Neither surface is told the total line count, so "96 lines have no cost" cannot be turned into
+"96 of 4,000" without a server change, and a server change was out of scope for a display
+chunk that had just measured the server complete.
+
+That is not a limitation to work around; it is the argument. A line with no cost is counted by
+the server as costing nothing, so a profit figure over incomplete data is an **upper bound**,
+and with no total line count **how far above the truth it sits is unmeasurable**. An
+unmeasurable overstatement is not a smaller version of the truth. So the rule is:
+
+> **No profit figure is shown unless every sale line behind it carries a cost.**
+
+An "at most" ceiling was considered and declined, and it is worth recording why, because it is
+the plausible alternative. It is honest wording, but the number it decorates is still the
+number a reader remembers, and the qualifier's weight is exactly the thing nothing here can
+quantify: a period with two costed lines in five hundred produces a ceiling equal to the
+takings, which is the 100%-margin failure this app already refused once. Suppression heals by
+itself as costs are recorded; a ceiling does not stop being misleading as the data improves,
+it just stops being *very* misleading.
+
+### The three states, and why the third exists
+
+`TenantProfitBasis` in the new `lib/reporting/profit_report.dart`:
+
+1. **`complete`** — every line carried a cost. The figure is shown with its margin, and the
+   note says so: *"Every sale line behind it carries a cost."* That positive sentence is not
+   decoration. A reader cannot tell a complete figure from an overstated one by looking at it,
+   so the completeness is stated wherever the figure is.
+2. **`incomplete`** — at least one line carried none. No figure, no margin, and the count is
+   inside the reason rather than beside it.
+3. **`inconsistent`** — the profit exceeds the takings it was computed from. That means a
+   negative total cost, and nothing that writes either figure can produce one: profit is
+   revenue minus a sum of non-negative line costs. It is **ordered above `incomplete`**, the
+   way `stockComparisonOutcome` orders its own causes most-specific-first, because an
+   incomplete figure is at least the arithmetic it claims to be and this one is not — naming
+   missing cost data for it would name a cause that does not explain it.
+
+The basis is decided **from the figures themselves**, never from where they came, which is
+what stops the reconciled daily summary and the server-added period totals disagreeing about
+when a number may be believed. The cost the server must have subtracted is recovered as
+`sales - profit` **in whole minor units**, which is exact rather than approximate because the
+server adds money as integers.
+
+A fourth candidate state was dropped: "no cost recorded at all", distinguishable because the
+recovered cost would be zero. Under suppression it produces the same output as `incomplete`,
+so it would have been a distinction with no consequence.
+
+**A margin is withheld unless the figure it describes is shown**, and also when the period
+took nothing — a margin on no takings is a division by zero, not a figure of zero. A
+percentage is the most believed number on any report and it carries no units to warn a reader,
+so it must never outlive the figure it was divided from.
+
+### Who may see it
+
+**Owner and administrator, and no rule changed.** This was not a fresh decision: the standing
+product-cost decision of 2026-08-07 already said in as many words that what putting a buying
+price behind owner/admin buys is that **no manager is *shown* a margin**. `daily_metrics` is
+readable by owner, administrator, and manager, and `getSalesComparison` answers all three, so
+a manager's device already holds every figure involved. This is a **surface boundary, not a
+secrecy guarantee**, exactly as recording a cost is, and it is documented as one in the code.
+
+`TenantProfitReport.allowedRoles` is restated rather than imported from
+`TenantCatalogManagementRepository.costRoles`. It is deliberately identical, and it is this
+domain's own decision about a different document — importing the inventory module into
+reporting to borrow a two-element list would couple two areas over a coincidence of value.
+
+**`firestore.rules` is untouched and was measured so.** The role decision needed no rule
+because it removes nothing a manager could already read; it removes what a manager is shown.
+
+### The redundancy that shaped the widgets
+
+Both panels already carried a sentence naming the incomplete count, visible to every reporting
+role. Adding a profit block that also names it gave an owner two sentences containing the same
+number, which reads as two findings rather than one. So:
+
+- **A session that may see profit gets `TenantProfitStatement` and nothing else** — the count
+  lives inside the reason there is no figure.
+- **A session that may not gets the standalone count sentence, exactly as before.**
+
+Never both. The sales-totals sentence lost its trailing clause and is now word for word the
+daily summary's — *"96 sale lines have no cost recorded."* — because it is the same fact about
+the same sale lines over a different stretch of days, and the clause it dropped ("so no profit
+figure is shown") explained something the reader who sees that sentence is not being shown
+anyway.
+
+`TenantProfitStatement` is shared by both surfaces so the two cannot word one fact
+differently, and it takes a `keyPrefix` because the daily summary renders one per day.
+
+### Files changed
+
+```text
+lib/reporting/profit_report.dart          new — basis, margin, roles, minor-unit rounding
+lib/reporting/profit_statement.dart       new — the shared figure-or-reason block
+lib/reporting/daily_metrics.dart          profitReport getter; the "no screen displays it" comment retired
+lib/reporting/daily_metrics_panel.dart    showProfit from the guarded session; statement or count, never both
+lib/reporting/sales_totals.dart           profitReport getter; _minorUnits promoted to reportingMinorUnits
+lib/reporting/sales_totals_panel.dart     showProfit from the guarded session; the cost sentence unified
+lib/reporting/reporting.dart              both new files exported
+test/reporting/profit_report_test.dart          new — 11
+test/reporting/profit_statement_test.dart       new — 8
+test/reporting/daily_metrics_test.dart          +1
+test/reporting/daily_metrics_panel_test.dart    +2
+test/reporting/sales_totals_test.dart           +1
+test/reporting/sales_totals_panel_test.dart     +3
+```
+
+**One duplication was removed rather than added to.** `sales_totals.dart` held a private
+`_minorUnits` used to check that the tender split adds up to the total it describes. The
+profit basis needs the same rounding for the same reason, so it is now `reportingMinorUnits`
+in `profit_report.dart` and the tender check calls it. Its doc comment records why it is
+deliberately **not** `checkoutMinorUnitsFromMajor`: that one refuses an amount the till could
+not price and exists to stop a bad price being recorded, while these figures are already
+recorded, arrive from the server, and are only ever compared with each other.
+
+### Test commands and results
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only        1473 passed  (was 1447)
+npm --prefix functions test                                            409 passed  (unchanged)
+npm --prefix rules-tests run test:emulator                             161 passed  (unchanged)
+npm --prefix rules-tests run test:emulator:reconciliation               10 passed
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                        12 passed
+```
+
+**2065 across five suites.** The 26 new Flutter tests split 11 model, 8 widget-fragment, and 7
+across the two panels and the two read models. The two unchanged counts are the measurements,
+not decoration: 409 says no file under `functions/` was touched, and 161 says
+`firestore.rules` is byte-identical.
+
+The habitual NUL check was run over all thirteen touched files before committing. None carries
+one; the two new Dart files were written with spelled-out escapes nowhere near a shell
+heredoc.
+
+### Meaningful failures and their resolutions
+
+**One, and it was arithmetic in the test rather than in the code.** A new decoder test
+asserted a 25% margin over the existing response fixture, whose takings are `4820.75`;
+`1205.25` of that is 25.0013%, and `closeTo(25, 0.0001)` refused it. The figure was wrong, not
+the tolerance — a looser tolerance would have hidden exactly the kind of disagreement the
+whole minor-unit comparison exists to expose. The fixture now overrides both figures to
+`4820.00` and `1205.00`.
+
+Three existing tests changed role rather than expectation, and that is the part worth
+recording. `incomplete cost data is named, and profit is not shown`, `a day with one of
+everything reads in the singular`, and the two sales-totals cost-count tests all ran as an
+**owner** and asserted the standalone count sentence. Under the new rule an owner is shown the
+profit statement instead, so they now run as a **manager** — which is what they were always
+really testing, since the sentence they assert is the one a session that may not see profit
+gets. The owner's side of each is a new test beside it.
+
+One process note, because it cost a cycle and the file already warns about the general shape:
+**appending this entry through a quoted shell heredoc failed to parse** and wrote nothing. The
+entry was written to a scratch file with the editing tools and appended with a three-line Node
+script instead. And then writing the paragraph you are reading produced an eighth occurrence of the
+control-character trap: the sentence naming it came back holding a real NUL where its
+six-character escape should have been, this time written straight through the editing tools
+rather than through a shell heredoc. The habitual check found it in seconds, as it always
+has. **So the mechanism is wider than the last entry concluded** — it is not the heredoc, it
+is writing that escape anywhere at all, and the only reliable way to put one into a file is
+to build it as chr(92) followed by the four characters and concatenate.
+
+### Superseded claims, retracted at their original text
+
+- `lib/reporting/sales_totals.dart` said `profit` was **"deliberately never displayed"**
+  because no product carried a cost, so the server's profit always equalled its revenue and
+  showing it would report a margin of 100%. Retracted inline: products carry costs now, and
+  that exact case is the one `TenantProfitBasis.incomplete` refuses by name.
+- `lib/reporting/daily_metrics.dart` said profit was parsed so that **"a later surface can use
+  it; no screen displays it yet."** Rewritten: whether it may be shown is `profitReport`'s
+  decision.
+
+### Exclusions named, as required
+
+**Password reset** was excluded again, which by the standing rule makes this the third time —
+and the rule says that if it is excluded a third time, the emulator integration test for
+`deliverPasswordReset` is taken. It was not taken here, deliberately and only because this
+chunk was a Flutter display chunk with no emulator work of its own, and folding an unrelated
+Functions integration suite into it would have been two chunks in one coat. It is now named in
+`PLAN.md` as the **next bounded chunk**, which is the honest form of not taking it.
+
+**A server change adding a total line count** is excluded and is recorded as a real option
+rather than an oversight: it would make a coverage proportion possible, and a proportion is
+the one thing that could justify showing an incomplete figure. It is not free — `daily_metrics`
+documents already written hold no such field, and `TenantDailyMetrics` is a strict read model,
+so it would have to be optional and the absent case is exactly today's behaviour. Worth doing
+only if somebody wants an incomplete figure shown, which nobody has asked for.
+
+**The 476 pre-existing analyzer issues** remain excluded, unchanged and still correct: all of
+them are in the closed unreachable island, and fixing them is work on code that does not run.
+`flutter analyze --no-pub lib/reporting test/reporting` reports **no issues**.
+
+### The published board is now four greens behind
+
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29 capabilities
+at **20 green, 8 red, 1 amber**. `PLAN.md` is now at **24 green, 4 red, 1 amber**. Publishing
+was not requested this session and the page was left alone.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```
