@@ -15953,3 +15953,218 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## A price is corrected from the app - 2026-08-08
+
+### Chunk chosen, and why the queued one was right
+
+Took the queued chunk: **the Flutter surface that edits a product**. Checked against
+the board first, as required. Every other red row is blocked on something no session
+resolves by working harder — password reset on the App Check decision, the printed
+body on an interface nobody has shared, subscription on a schema that does not exist,
+profit display on its own reporting chunk, and the three rewrite rows on this one
+landing first. No unqueued capability the app needs in order to function is missing.
+The bolded row was the only half-built thing on the board: `updateProduct` had been
+built, tested, and called by nothing since 2026-08-07.
+
+### Completed in this session
+
+**"Correct" on every product in "Manage catalog", and the row goes green.** A
+mistyped price no longer needs an operator with the Admin SDK. The route offers all
+five editable fields at once, states every before and after in a confirmation, and
+sends only the fields that moved.
+
+Nothing in `functions/` changed, `firestore.rules` is untouched, no export was added,
+and no callable's contract moved. `git status` shows it, and the 161-test rules suite
+was run to say so with a measurement.
+
+### The five things the callable's contract forced on the route
+
+Each of these is a design constraint the server already fixed, not a preference.
+
+1. **Only changed fields are sent.** `assertProductUpdateAuthorized` reads its
+   permission tier from the fields a payload *names*, not from the resulting diff. A
+   form that resent every field would refuse a manager's name correction over a price
+   nobody touched. So `buildUpdateIntent` compares each typed value against the stored
+   product and carries only what differs — and a correction where nothing differs is
+   refused locally as `product_unchanged`, which is the client half of the server's own
+   refusal of a request that changes nothing.
+2. **Every field is offered at once, in one dialog.** `readSellableProduct` validates
+   the *resulting* document, so a refusal can name a field this correction never
+   touched. A single-field edit could not honour "name every broken field in one
+   request, or none".
+3. **A manager is not offered price or cost at all.** The form says why, in place of
+   the fields. Offering a field it knows will be refused teaches an operator only that
+   the app guesses. The boundary is still enforced behind the surface —
+   `_requireMonetaryRole` refuses rather than drops, the same way the create form
+   already refuses a cost a manager types.
+4. **Clearing a cost is its own act.** A checkbox, offered only when a cost is
+   recorded, and the cost field's helper text says in as many words that leaving it
+   blank keeps the stored figure. On the wire that is `cost: null`, the one place in
+   this app where null means "remove this" rather than "leave it alone".
+5. **One request ID per correction, held across a retry of that same correction.** See
+   below — this turned out to need more than the plan asked for.
+
+### The request ID is held against the correction, not just the attempt
+
+The queued text said to hold one request ID across a retry. That is necessary and it
+is not sufficient, and the reason is a **server gap this chunk found and did not
+fix**, in line with the standing instruction that a gap found while wiring the route
+is a finding to record.
+
+`products.ts` builds the idempotency fingerprint from `productId`, `name`, `sku`,
+`priceMinor`, and `categoryId`. **`costMinor` is not in it.** So one request ID
+carrying two payloads that differ *only* in cost hashes identically, and the second
+call is answered off the stored record with the new cost silently not applied. Every
+other field would have been refused as `already-exists`. It is narrow — it needs an
+unknown outcome followed by a changed mind about the cost alone — but it is a silent
+wrong answer rather than a refusal, which is the worse kind.
+
+The route closes it from this side: the retained request ID is stored beside a
+fingerprint of the exact correction it was issued for, so changing any field, cost
+included, mints a fresh one. `test/inventory/catalog_management_panel_test.dart` pins
+it with a cost-only retry, and the test says why in a comment rather than leaving the
+next reader to work out which field it is really about.
+
+**Two smaller server observations, both harmless today and both worth knowing before
+bulk change reuses this callable:**
+
+- `UpdateProductRequest` in `products.ts` does not declare `cost`. It is typing only —
+  the handler reads from `requireObject(request.data)`, a `Record<string, unknown>` —
+  so behaviour is correct and the interface is merely incomplete documentation.
+- `UpdateProductResponse` echoes `name`, `sku`, `price`, `priceMinor`, and
+  `categoryId`, but **not `cost`**. A cost that moved appears in `changedFields` with
+  no value beside it, so the client can reconcile four of the five fields against the
+  request and not the fifth. The route therefore confirms a cost by re-reading the
+  catalog, and `TenantProductUpdateResult` documents the hole rather than pretending
+  the check is complete.
+
+### The escape hatch for a malformed cost is not reachable from here, deliberately
+
+"A stored cost too malformed for the callable to correct is cleared with `cost: null`"
+is a real server guarantee and **this route cannot reach it**. `TenantProduct` is a
+strict read model, and one product it refuses makes the whole page a read failure — so
+a product with an unreadable cost never renders a row, and no row means no "Correct"
+button. The same is true of every other `readSellableProduct` refusal:
+`productUnreadable` and `needsOperator` are modelled and worded, and are reachable only
+if the document changes between the page load and the call.
+
+That is not a defect in either half. The server contract is right, the client's
+strictness is right, and the intersection is an operator's job. It is recorded because
+"the callable can do it" and "a person can do it" are different sentences, and this
+board is built on the difference.
+
+### Two smaller decisions worth not re-litigating
+
+**A product filed under a category this page did not read is left where it is.**
+Categories are one bounded page and a business may hold more, so requiring the current
+category to be among the offered ones would make a name correction impossible for
+every product filed past the first page. Moving a product still requires a category
+this surface actually read, exactly as the create form does.
+
+**Three sentences elsewhere on the route stopped being true and were changed.** The
+catalog scope line, the add-product confirmation, and the retire confirmation all told
+an operator that a name, code, and price are permanent. Each now branches on whether
+this build carries the callable, so a build without it still reads correctly. The
+retire confirmation additionally points at the correction, which is the thing it used
+to say did not exist.
+
+### Files changed
+
+```text
+lib/inventory/catalog_management.dart         +658  the callable boundary, the intent,
+                                                    the strict result, the gateway, the
+                                                    failure classification
+lib/inventory/catalog_management_panel.dart   +589  the Correct action, the edit dialog,
+                                                    the confirmation, the notices
+lib/main.dart                                  +20  FirebaseUpdateProductCallable wired in
+test/inventory/catalog_management_test.dart   +449  22 new unit tests
+test/inventory/catalog_management_panel_test.dart +470  12 new widget tests
+PLAN.md HISTORY.md
+```
+
+The gateway went into `catalog_management.dart` rather than a new file, which is what
+`PLAN.md` asked for and is right for one reason worth stating: `_normalizedName`,
+`_normalizedSku`, and `_priceMinorUnits` are library-private, and they are the exact
+validation the create form already proves. A second file would have duplicated them,
+and two copies of a price validator that must agree with the till is precisely the
+thing this repository has spent chunks avoiding.
+
+### Tests
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only
+  -> 1392 pass, 0 fail   (baseline 1358 + 34)
+
+npm --prefix functions test
+  -> 346 pass, 0 fail    (unchanged; nothing in functions/ was touched)
+
+npm --prefix rules-tests run test:emulator
+  -> 161 pass, 0 fail    (unchanged; proves firestore.rules is byte-identical)
+
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+  -> 12 pass, 0 fail
+
+npm --prefix rules-tests run test:emulator:reconciliation
+  -> 10 pass, 0 fail
+```
+
+**1921 across five suites.** Android build and Android emulator tests excluded as
+instructed. `flutter analyze --no-pub lib/inventory test/inventory` is clean; the one
+warning over `lib/main.dart` is the pre-existing experimental Sentry
+`profilesSampleRate`.
+
+The two integration suites and the functions suite are the ones that need a word: none
+of them could have been broken by a Dart-only chunk, and all three were run anyway
+because the final validation sequence asks for them and because "nothing in
+`functions/` changed" is a claim worth measuring rather than asserting. The rules suite
+earns its place for the same reason it did in the `updateProduct` chunk.
+
+### No failure cost a debugging cycle
+
+Unusual, and worth recording as the exception rather than pretending it is normal.
+Both new test files passed on their first run. The one thing that came close was the
+category lookup: the first draft required the product's current category to be among
+the offered ones, which would have made a name correction impossible for any product
+filed past the first page of categories — caught while writing the code that would
+have needed the test, not by the test.
+
+### The held emulator run is gone, and its files are not
+
+`PLAN.md` recorded `scripts/seed-dev-emulator.js --hold` as running on the dev ports,
+with `functions/.env.local` and `functions/.secret.local` existing *because* of it and
+therefore not leftovers to delete. **No node or java process was running at the start
+of this session**, so that run has exited. Both files are still there, dated
+2026-08-06, and they are now exactly the state `run-dev-emulators.js` refuses to
+overwrite. They were not deleted — they are ignored, they are not this session's, and
+the next session to want a held dev emulator is the one that should decide. The three
+emulator suites above do not need them and started, passed, and shut down cleanly.
+
+### One exclusion named, as required
+
+**The 476 pre-existing analyzer issues** have been inherited for many consecutive
+chunks and are still correctly excluded. Every one is in the closed unreachable island
+(`lib/pos/**`, `lib/screens/**`, `thermal_printer_service`, `glass_card`, `pill_input`,
+`theme.dart`) plus one experimental Sentry warning, and nothing in `lib/main.dart` or
+the tenancy shell reaches any of it. Fixing them is work on code that does not run.
+The one thing to keep watching is that the printing decision points at
+`thermal_printer_service.dart`, which is *in* that island — whichever chunk takes
+printing has to say whether it revives that file or writes past it.
+
+### The published board is now further behind PLAN.md
+
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29
+capabilities at **20 green, 8 red, 1 amber**. This session makes it **21 green, 7 red,
+1 amber**. Publishing was not requested, so the page was left alone.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

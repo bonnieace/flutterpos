@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:crypto/crypto.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../tenancy/tenant_catalog.dart';
+import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
@@ -170,6 +172,141 @@ final class TenantProductRetireIntent {
   /// The stock the product was holding when it was read. Retiring does not
   /// change it, and no movement records its disappearance from the catalog.
   final int quantity;
+}
+
+/// A descriptive field `updateProduct` may correct, with the exact key it reads.
+///
+/// `quantity` is deliberately absent and can never be added here: it belongs to
+/// `adjustStock`, which writes a `stock_movements` entry, and the callable
+/// refuses a payload that so much as mentions it.
+enum TenantProductField {
+  name('name', 'Name'),
+  sku('sku', 'Code'),
+  price('price', 'Unit price'),
+  cost('cost', 'Unit cost'),
+  categoryId('categoryId', 'Category');
+
+  const TenantProductField(this.wireKey, this.label);
+
+  /// The payload key, which is also what the response names in `changedFields`.
+  final String wireKey;
+
+  /// What the confirmation calls this field.
+  final String label;
+
+  /// Whether this field is money, and therefore behind [
+  /// TenantCatalogManagementRepository.costRoles] rather than the operational
+  /// three. The server's `MONETARY_PRODUCT_FIELDS`, field for field.
+  bool get isMonetary => this == price || this == cost;
+
+  static TenantProductField? fromWireKey(String value) {
+    for (final field in values) {
+      if (field.wireKey == value) return field;
+    }
+    return null;
+  }
+}
+
+/// One field's correction, exactly as the confirmation states it.
+///
+/// Both sides are display strings rather than typed values on purpose: this
+/// exists to be read by the person about to change a price, and a stored figure
+/// the till cannot convert has no typed form to carry.
+final class TenantProductFieldChange {
+  const TenantProductFieldChange._({
+    required this.field,
+    required this.previous,
+    required this.next,
+  });
+
+  final TenantProductField field;
+  final String previous;
+  final String next;
+
+  @override
+  String toString() => '${field.label}: was $previous, now $next';
+}
+
+/// A validated instruction to correct exactly one product, and nothing else.
+///
+/// Only [TenantCatalogManagementRepository] can build one, so no caller can name
+/// an arbitrary product, business, or field. It carries **only the fields that
+/// actually move**: the callable reads its permission tier from the fields a
+/// payload names rather than from the resulting diff, so naming an unchanged
+/// price would refuse a manager's name correction for a value nobody touched.
+final class TenantProductUpdateIntent {
+  const TenantProductUpdateIntent._({
+    required this.tenantId,
+    required this.productId,
+    required this.requestId,
+    required this.changes,
+    required this.name,
+    required this.sku,
+    required this.priceMinor,
+    required this.costMinor,
+    required this.clearsCost,
+    required this.categoryId,
+    required this.categoryName,
+  });
+
+  final String tenantId;
+  final String productId;
+
+  /// The idempotency key. One correction keeps one request ID across a retry,
+  /// so a genuine retry answers off the server's own record instead of reaching
+  /// the refusal it keeps for a request that changes nothing.
+  final String requestId;
+
+  /// Every field that moves, with what it held and what it will hold.
+  final List<TenantProductFieldChange> changes;
+
+  final String? name;
+  final String? sku;
+
+  /// The corrected price in exact integer minor units, or null when the price
+  /// is not being corrected.
+  final int? priceMinor;
+
+  /// The corrected cost in exact integer minor units, or null when the cost is
+  /// either not being corrected or being cleared - [clearsCost] tells the two
+  /// apart, because it is the one field where sending nothing and sending null
+  /// mean different things.
+  final int? costMinor;
+
+  /// Whether this correction removes a recorded cost outright.
+  final bool clearsCost;
+
+  final String? categoryId;
+
+  /// The name of the category being moved to, carried for the confirmation
+  /// only. Null when the category is not being changed.
+  final String? categoryName;
+
+  /// The fields this payload names, which is what the server authorizes on.
+  List<TenantProductField> get fields =>
+      changes.map((change) => change.field).toList();
+
+  /// Whether this correction changes money, and therefore needs an owner or an
+  /// administrator rather than the operational three.
+  bool get changesMoney => fields.any((field) => field.isMonetary);
+
+  /// Exactly the keys this correction sends, and nothing else.
+  ///
+  /// A cleared cost is an explicit `null`, which is the only place in this app
+  /// where null on the wire means "remove this" rather than "leave it alone".
+  Map<String, Object?> payload() => <String, Object?>{
+    'tenantId': tenantId,
+    'productId': productId,
+    'requestId': requestId,
+    if (name != null) 'name': name,
+    if (sku != null) 'sku': sku,
+    // Sent as a major-unit amount derived from the minor units, never as what
+    // was typed, so the figure the server converts back is the one confirmed.
+    if (priceMinor != null) 'price': priceMinor! / 100,
+    if (clearsCost) 'cost': null,
+    if (costMinor != null) 'cost': costMinor! / 100,
+    if (categoryId != null) 'categoryId': categoryId,
+  };
 }
 
 typedef TenantCatalogRequestIdFactory = String Function();
@@ -347,10 +484,202 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     );
   }
 
+  /// Builds the one correction the typed edit form describes.
+  ///
+  /// [product] is a record this surface already read and decoded from this same
+  /// business, so the correction can only ever address a product the operator
+  /// was actually shown. [price] and [cost] are nullable because the form does
+  /// not offer them to a manager: null means "this form never asked", which is
+  /// different from an empty string, and different again from [clearCost].
+  ///
+  /// **Only fields that actually move are carried.** The callable reads its
+  /// permission tier from the fields a payload names, so resending an unchanged
+  /// price would refuse a manager's name correction over a value nobody touched
+  /// - and a request that changes nothing at all is refused by the server as a
+  /// caller defect, so it is refused here instead of costing a round trip and an
+  /// idempotency record.
+  TenantProductUpdateIntent buildUpdateIntent({
+    required TenantProduct product,
+    required String name,
+    required String sku,
+    required String categoryId,
+    required Iterable<TenantCategory> categories,
+    required String requestId,
+    String? price,
+    String? cost,
+    bool clearCost = false,
+  }) {
+    // The server's PRODUCT_UPDATE_ROLES are the same operational three that may
+    // create, which is why the route guard's own list is reused here.
+    _requireCreateRole();
+    _requireRequestId(requestId);
+    // A product decoded while another business was open can never be corrected
+    // from this one, even though both paths would be well-formed.
+    if (product.tenantId != session.tenantId) {
+      throw const TenantCatalogManagementException('edit_forbidden');
+    }
+    final safeName = _normalizedName(name, 'invalid_product_name');
+    final safeSku = _normalizedSku(sku);
+    TenantCategory? category;
+    for (final candidate in categories) {
+      if (candidate.id == categoryId) {
+        category = candidate;
+        break;
+      }
+    }
+    // A product may legitimately sit in a category this page did not read - the
+    // categories are one bounded page and a business may hold more. Leaving it
+    // where it is therefore needs no proof, while moving it to a grouping this
+    // surface never offered is refused exactly as it is on the create form.
+    if (category == null && categoryId != product.categoryId) {
+      throw const TenantCatalogManagementException('unknown_category');
+    }
+
+    final changes = <TenantProductFieldChange>[];
+    final String? nextName = safeName == product.name ? null : safeName;
+    if (nextName != null) {
+      changes.add(
+        TenantProductFieldChange._(
+          field: TenantProductField.name,
+          previous: product.name,
+          next: nextName,
+        ),
+      );
+    }
+    final String? nextSku = safeSku == product.sku ? null : safeSku;
+    if (nextSku != null) {
+      changes.add(
+        TenantProductFieldChange._(
+          field: TenantProductField.sku,
+          previous: product.sku,
+          next: nextSku,
+        ),
+      );
+    }
+
+    int? nextPriceMinor;
+    if (price != null) {
+      final priceMinor = _priceMinorUnits(price);
+      // A stored price the till cannot convert is a price that differs from
+      // every representable figure, so retyping it is a real correction rather
+      // than a no-op the server would refuse.
+      final storedPriceMinor = checkoutMinorUnitsFromMajor(product.price);
+      if (storedPriceMinor != priceMinor) {
+        _requireMonetaryRole(TenantProductField.price);
+        nextPriceMinor = priceMinor;
+        changes.add(
+          TenantProductFieldChange._(
+            field: TenantProductField.price,
+            previous: storedPriceMinor == null
+                ? '${product.price} (unusable)'
+                : _majorUnits(storedPriceMinor),
+            next: _majorUnits(priceMinor),
+          ),
+        );
+      }
+    }
+
+    int? nextCostMinor;
+    var clearsCost = false;
+    final storedCost = product.cost;
+    final storedCostMinor = storedCost == null
+        ? null
+        : checkoutMinorUnitsFromMajor(storedCost);
+    final String previousCost = storedCost == null
+        ? 'not recorded'
+        : storedCostMinor == null
+        ? '$storedCost (unusable)'
+        : _majorUnits(storedCostMinor);
+    if (clearCost) {
+      _requireMonetaryRole(TenantProductField.cost);
+      if (storedCost != null) {
+        clearsCost = true;
+        changes.add(
+          TenantProductFieldChange._(
+            field: TenantProductField.cost,
+            previous: previousCost,
+            next: 'not recorded',
+          ),
+        );
+      }
+    } else if (cost != null && cost.trim().isNotEmpty) {
+      final costMinor = _priceMinorUnits(
+        cost,
+        invalidCode: 'invalid_cost',
+        unrepresentableCode: 'cost_not_representable',
+      );
+      if (storedCostMinor != costMinor) {
+        _requireMonetaryRole(TenantProductField.cost);
+        nextCostMinor = costMinor;
+        changes.add(
+          TenantProductFieldChange._(
+            field: TenantProductField.cost,
+            previous: previousCost,
+            next: _majorUnits(costMinor),
+          ),
+        );
+      }
+    }
+
+    String? nextCategoryId;
+    String? nextCategoryName;
+    if (category != null && category.id != product.categoryId) {
+      nextCategoryId = category.id;
+      nextCategoryName = category.name;
+      // The grouping being left may be off this page, in which case its ID is
+      // the only name there is for it. Stating the ID beats stating nothing.
+      var previousCategory = product.categoryId;
+      for (final candidate in categories) {
+        if (candidate.id == product.categoryId) {
+          previousCategory = candidate.name;
+          break;
+        }
+      }
+      changes.add(
+        TenantProductFieldChange._(
+          field: TenantProductField.categoryId,
+          previous: previousCategory,
+          next: nextCategoryName,
+        ),
+      );
+    }
+
+    if (changes.isEmpty) {
+      throw const TenantCatalogManagementException('product_unchanged');
+    }
+    return TenantProductUpdateIntent._(
+      tenantId: session.tenantId,
+      productId: product.id,
+      requestId: requestId,
+      changes: List<TenantProductFieldChange>.unmodifiable(changes),
+      name: nextName,
+      sku: nextSku,
+      priceMinor: nextPriceMinor,
+      costMinor: nextCostMinor,
+      clearsCost: clearsCost,
+      categoryId: nextCategoryId,
+      categoryName: nextCategoryName,
+    );
+  }
+
   void _requireCreateRole() {
     if (!session.canAccess(allowedRoles: allowedRoles)) {
       throw const TenantCatalogManagementException('catalog_forbidden');
     }
+  }
+
+  /// Refuses a money change by a principal who may correct everything else.
+  ///
+  /// Refused rather than dropped, for the same reason the create form refuses a
+  /// cost it may not record: a caller must never be able to believe it corrected
+  /// a price that was silently discarded. The form does not offer either field
+  /// to a manager, so this is the boundary behind the surface rather than the
+  /// message anybody is expected to see.
+  void _requireMonetaryRole(TenantProductField field) {
+    if (canRecordCostInSession(session)) return;
+    throw TenantCatalogManagementException(
+      field == TenantProductField.price ? 'price_forbidden' : 'cost_forbidden',
+    );
   }
 
   static void _requireRequestId(String requestId) {
@@ -566,6 +895,332 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
       (path) => firestore.doc(path).delete();
 }
 
+/// Narrow callable boundary for `updateProduct`.
+///
+/// Correcting a product is the one catalog change that is **not** a Firestore
+/// write, and it cannot become one: `allow update` on `products` permits a
+/// strictly decreasing `quantity` with `hasOnly(['quantity', 'updatedAt'])` -
+/// the checkout decrement - and widening it was considered and rejected, because
+/// a rule-based edit records no actor, no previous value, and no reason. The
+/// callable writes through the Admin SDK, so `firestore.rules` is untouched.
+abstract interface class UpdateProductCallable {
+  Future<Object?> call(Map<String, Object?> payload);
+}
+
+/// Firebase adapter for `updateProduct`.
+final class FirebaseUpdateProductCallable implements UpdateProductCallable {
+  FirebaseUpdateProductCallable({FirebaseFunctions? functions})
+    : _functions = functions ?? FirebaseFunctions.instance;
+
+  final FirebaseFunctions _functions;
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    final result = await _functions
+        .httpsCallable('updateProduct')
+        .call<Object?>(payload);
+    return result.data;
+  }
+}
+
+/// Why a correction did not change the product.
+///
+/// Each case is a distinct, actionable outcome. The codes and message fragments
+/// are the ones `functions/src/operations/productUpdate.ts` and `products.ts`
+/// raise; an unrecognised refusal degrades to [refused], which reports honestly
+/// that nothing changed.
+enum TenantProductUpdateFailure {
+  /// The session may not correct products, or its membership ended.
+  forbidden,
+
+  /// A price needs an owner or an administrator. The form does not offer the
+  /// field to anybody else, so this is reachable only if the role changed
+  /// between the form opening and the correction being sent.
+  priceForbidden,
+
+  /// What a product costs needs an owner or an administrator, for the same
+  /// reason and reachable the same way.
+  costForbidden,
+
+  /// The product no longer exists in this business.
+  productMissing,
+
+  /// The category named does not exist in this business.
+  categoryMissing,
+
+  /// The product already holds every value in the request. Refused locally
+  /// first, so this means the product changed underneath the form.
+  unchanged,
+
+  /// The stored document holds a value no device can read, and the correction
+  /// has to name every broken field in one request.
+  productUnreadable,
+
+  /// The stored document is broken in a way no callable can repair - a
+  /// non-integer quantity, or an image that is not an HTTPS URL.
+  needsOperator,
+
+  /// This request ID already settled a different correction.
+  duplicateRequest,
+
+  /// The payload was refused as malformed, which means this client and the
+  /// server disagree about what is acceptable.
+  invalidRequest,
+
+  /// The call was refused for a reason this client does not model.
+  refused,
+
+  /// The outcome is unknown; only a canonical re-read may settle it.
+  ambiguous,
+}
+
+/// Raised when a correction did not complete.
+final class TenantProductUpdateException implements Exception {
+  const TenantProductUpdateException(this.failure);
+
+  final TenantProductUpdateFailure failure;
+
+  /// Whether the attempt may have corrected the product despite the failure.
+  ///
+  /// Only an unknown outcome may have landed. Every other case is proof that
+  /// nothing changed, so only this one requires a canonical re-read before
+  /// anything is retried.
+  bool get mayHaveCommitted => failure == TenantProductUpdateFailure.ambiguous;
+
+  @override
+  String toString() => 'TenantProductUpdateException(${failure.name})';
+}
+
+/// Strictly decoded result from `updateProduct`.
+///
+/// The response is reconciled against the intent it was requested for: it must
+/// name the same business and product, it must report the product holding
+/// exactly the values that were asked for, and it must not claim to have moved a
+/// field the request never named. Anything else is refused rather than
+/// displayed, because this is the surface that states what a business now sells
+/// and at what price.
+final class TenantProductUpdateResult {
+  const TenantProductUpdateResult._({
+    required this.updateId,
+    required this.productId,
+    required this.changedFields,
+    required this.name,
+    required this.sku,
+    required this.price,
+    required this.priceMinor,
+    required this.categoryId,
+  });
+
+  factory TenantProductUpdateResult.fromCallable(
+    Object? value, {
+    required TenantProductUpdateIntent intent,
+  }) {
+    final data = _strictMap(value);
+    if (data['tenantId'] != intent.tenantId) {
+      throw const FormatException('updateProduct answered for another business.');
+    }
+    if (data['productId'] != intent.productId) {
+      throw const FormatException('updateProduct answered for another product.');
+    }
+    final requested = intent.fields;
+    final rawChanged = data['changedFields'];
+    if (rawChanged is! List || rawChanged.isEmpty) {
+      throw const FormatException('updateProduct returned no changed fields.');
+    }
+    final changedFields = <TenantProductField>[];
+    for (final entry in rawChanged) {
+      final field = entry is String
+          ? TenantProductField.fromWireKey(entry)
+          : null;
+      // A response naming a field the request did not is describing a write
+      // this correction never asked for, which is the one thing this boundary
+      // exists to notice.
+      if (field == null || !requested.contains(field)) {
+        throw const FormatException(
+          'updateProduct reported a field this correction did not name.',
+        );
+      }
+      changedFields.add(field);
+    }
+    final name = _requiredString(data, 'name');
+    final sku = _requiredString(data, 'sku');
+    final categoryId = _requiredCategoryId(data);
+    final price = data['price'];
+    final priceMinor = data['priceMinor'];
+    if (price is! num || priceMinor is! int) {
+      throw const FormatException('updateProduct returned an invalid price.');
+    }
+    // Re-derived rather than trusted: a response whose own two figures for one
+    // price disagree cannot describe the product the till will read.
+    if (checkoutMinorUnitsFromMajor(price) != priceMinor) {
+      throw const FormatException(
+        'updateProduct returned inconsistent price figures.',
+      );
+    }
+    // Every field that was asked for must be what the product now holds, not
+    // merely a value the server was willing to report.
+    if (intent.name != null && name != intent.name) {
+      throw const FormatException('updateProduct did not apply the name.');
+    }
+    if (intent.sku != null && sku != intent.sku) {
+      throw const FormatException('updateProduct did not apply the code.');
+    }
+    if (intent.priceMinor != null && priceMinor != intent.priceMinor) {
+      throw const FormatException('updateProduct did not apply the price.');
+    }
+    if (intent.categoryId != null && categoryId != intent.categoryId) {
+      throw const FormatException('updateProduct did not apply the category.');
+    }
+    return TenantProductUpdateResult._(
+      updateId: _requiredString(data, 'updateId'),
+      productId: intent.productId,
+      changedFields: List<TenantProductField>.unmodifiable(changedFields),
+      name: name,
+      sku: sku,
+      price: price.toDouble(),
+      priceMinor: priceMinor,
+      categoryId: categoryId,
+    );
+  }
+
+  /// The `audit_logs` entry recording the before and after of every field that
+  /// moved. A price is money, and this is the record that answers "this was 450
+  /// last week, who made it 45?".
+  final String updateId;
+
+  final String productId;
+
+  /// Which fields actually moved, which can be fewer than the intent named:
+  /// nothing is written for a field that already held the requested value.
+  ///
+  /// **`cost` appears here when it moved and its new value does not.** The
+  /// response carries no cost, so a cleared or corrected cost is confirmed by
+  /// re-reading the catalog rather than from this answer.
+  final List<TenantProductField> changedFields;
+
+  final String name;
+  final String sku;
+  final double price;
+  final int priceMinor;
+  final String categoryId;
+}
+
+/// Session-bound gateway with no tenant input surface.
+///
+/// The business comes from one captured live session and the product from one
+/// already-decoded catalog record, so no caller can name either.
+final class TenantProductUpdateGateway {
+  const TenantProductUpdateGateway({
+    required TenantSession session,
+    required UpdateProductCallable callable,
+  }) : _session = session,
+       _callable = callable;
+
+  final TenantSession _session;
+  final UpdateProductCallable _callable;
+
+  /// Correcting a description is an operational act, matching the server's
+  /// `PRODUCT_UPDATE_ROLES`. Money is narrower and is enforced when the intent
+  /// is built.
+  static bool canUpdateInSession(TenantSession session) => session.canAccess(
+    allowedRoles: TenantCatalogManagementRepository.allowedRoles,
+  );
+
+  /// Submits [intent]; one intent keeps one request ID across a retry, so the
+  /// server's own idempotency record settles a repeated attempt rather than
+  /// auditing the same correction twice.
+  Future<TenantProductUpdateResult> submit(
+    TenantProductUpdateIntent intent,
+  ) async {
+    if (!canUpdateInSession(_session) ||
+        intent.tenantId != _session.tenantId) {
+      throw const TenantProductUpdateException(
+        TenantProductUpdateFailure.forbidden,
+      );
+    }
+    final Object? response;
+    try {
+      response = await _callable.call(intent.payload());
+    } on FirebaseFunctionsException catch (error) {
+      throw TenantProductUpdateException(_classifyUpdate(error));
+    } on TimeoutException {
+      throw const TenantProductUpdateException(
+        TenantProductUpdateFailure.ambiguous,
+      );
+    } catch (_) {
+      throw const TenantProductUpdateException(
+        TenantProductUpdateFailure.ambiguous,
+      );
+    }
+    return TenantProductUpdateResult.fromCallable(response, intent: intent);
+  }
+}
+
+/// Classifies a refusal from `updateProduct`.
+///
+/// The code decides the outcome. `permission-denied` and `failed-precondition`
+/// each cover several distinct server conditions, so those are separated by the
+/// exact wording `productUpdate.ts` and `products.ts` raise. If that wording ever
+/// changes the case degrades to a broader failure in the same family, which
+/// still reports truthfully that nothing changed - the classification only ever
+/// words a message and never decides whether to retry.
+TenantProductUpdateFailure _classifyUpdate(FirebaseFunctionsException error) {
+  final message = error.message ?? '';
+  return switch (error.code) {
+    'permission-denied' when message.contains("product's price") =>
+      TenantProductUpdateFailure.priceForbidden,
+    'permission-denied' when message.contains('what a product costs') =>
+      TenantProductUpdateFailure.costForbidden,
+    'permission-denied' ||
+    'unauthenticated' => TenantProductUpdateFailure.forbidden,
+    'not-found' => TenantProductUpdateFailure.productMissing,
+    'already-exists' => TenantProductUpdateFailure.duplicateRequest,
+    'failed-precondition' when message.contains('category does not exist') =>
+      TenantProductUpdateFailure.categoryMissing,
+    'failed-precondition' when message.contains('already holds every value') =>
+      TenantProductUpdateFailure.unchanged,
+    'failed-precondition' when message.contains('operator') =>
+      TenantProductUpdateFailure.needsOperator,
+    'failed-precondition' => TenantProductUpdateFailure.productUnreadable,
+    'invalid-argument' => TenantProductUpdateFailure.invalidRequest,
+    'unavailable' ||
+    'deadline-exceeded' ||
+    'internal' ||
+    'aborted' ||
+    'unknown' => TenantProductUpdateFailure.ambiguous,
+    _ => TenantProductUpdateFailure.refused,
+  };
+}
+
+Map<String, Object?> _strictMap(Object? value) {
+  if (value is! Map) {
+    throw const FormatException('updateProduct returned an invalid response.');
+  }
+  return <String, Object?>{
+    for (final key in value.keys)
+      if (key is String) key: value[key],
+  };
+}
+
+String _requiredString(Map<String, Object?> data, String field) {
+  final value = data[field];
+  if (value is! String || value.isEmpty || value != value.trim()) {
+    throw FormatException('updateProduct returned an invalid $field.');
+  }
+  return value;
+}
+
+String _requiredCategoryId(Map<String, Object?> data) {
+  final value = _requiredString(data, 'categoryId');
+  try {
+    return validateTenantDocumentId(value, fieldName: 'categoryId');
+  } on ArgumentError {
+    throw const FormatException(
+      'updateProduct returned an invalid categoryId.',
+    );
+  }
+}
+
 /// A fresh request ID for one confirmed catalog create.
 ///
 /// The same value must be reused across a retry of that create, and a new one
@@ -669,6 +1324,9 @@ int _priceMinorUnits(
   }
   return minorUnits;
 }
+
+/// Formats exact minor units the way every amount in this app is written.
+String _majorUnits(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
 
 final RegExp _whitespaceRun = RegExp(r'\s+');
 final RegExp _pricePattern = RegExp(r'^\d{1,12}(\.\d{1,2})?$');

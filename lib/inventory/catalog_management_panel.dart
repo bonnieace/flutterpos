@@ -7,17 +7,27 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'catalog_management.dart';
 
-/// The catalog route that can add to and retire from one business's catalog.
+/// The catalog route that adds to, corrects, and retires from one business's
+/// catalog.
 ///
 /// It is the first surface in the migrated client that puts a product in. Every
 /// operational surface below it - the till, stock, returns, reporting,
 /// reconciliation - already assumed a product existed, and until this route
 /// nothing but `seed-dev-emulator.js` could create one.
+///
+/// Its three write paths do not share a transport, and that is a decision rather
+/// than an accident. Creating and retiring are direct Firestore writes, because
+/// the rules on `products` and `categories` already name the roles this route is
+/// offered to. **Correcting is a callable**, because `allow update` on `products`
+/// is the checkout decrement and nothing else, and widening it would trade a
+/// stock-integrity guarantee for a price edit that records no actor, no previous
+/// value, and no reason.
 final class TenantCatalogManagementScreen extends StatelessWidget {
   const TenantCatalogManagementScreen({
     super.key,
     required this.reader,
     this.writer,
+    this.updateCallable,
     this.onChanged,
     this.requestIdFactory,
   });
@@ -29,11 +39,16 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
   /// in this app behaves.
   final TenantCatalogWriter? writer;
 
+  /// Corrects one product's name, code, price, cost, or category. Injected for
+  /// the same reason and with the same consequence: while it is absent, nothing
+  /// on this route offers to correct anything.
+  final UpdateProductCallable? updateCallable;
+
   /// Called after the server acknowledged a change, so the composition root can
   /// ask the sync pass to re-read what this device caches.
   final VoidCallback? onChanged;
 
-  /// One fresh request ID per confirmed create.
+  /// One fresh request ID per confirmed create or correction.
   final TenantCatalogRequestIdFactory? requestIdFactory;
 
   @override
@@ -42,6 +57,7 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
     body: TenantCatalogManagementPanel(
       reader: reader,
       writer: writer,
+      updateCallable: updateCallable,
       onChanged: onChanged,
       requestIdFactory: requestIdFactory,
     ),
@@ -59,6 +75,7 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
     super.key,
     required this.reader,
     this.writer,
+    this.updateCallable,
     this.onChanged,
     this.requestIdFactory,
     this.pageSize = 20,
@@ -67,6 +84,7 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
 
   final TenantDataReader reader;
   final TenantCatalogWriter? writer;
+  final UpdateProductCallable? updateCallable;
   final VoidCallback? onChanged;
   final TenantCatalogRequestIdFactory? requestIdFactory;
   final int pageSize;
@@ -99,6 +117,17 @@ final class _TenantCatalogManagementPanelState
   /// deterministic document instead of stocking the shelf twice.
   String? _categoryRequestId;
   String? _productRequestId;
+
+  /// The same rule for corrections, with one addition the creates do not need.
+  ///
+  /// A create's request ID decides a document identity, so reusing it is always
+  /// the safe thing. A correction's decides an *idempotency* record, and the
+  /// server refuses a reused ID carrying different input - so the retained ID is
+  /// held against the exact correction it was issued for, and an operator who
+  /// changes their mind after an unknown outcome gets a fresh one rather than a
+  /// duplicate-request refusal.
+  String? _editRequestId;
+  String? _editFingerprint;
 
   @override
   void dispose() {
@@ -244,8 +273,10 @@ final class _TenantCatalogManagementPanelState
               'It is added holding no stock: '
               'record the opening quantity from the product itself, so the '
               'ledger says where those units came from.\n\n'
-              'Nothing in this app can change a name, a code, or a price '
-              'afterwards. Nothing makes a code unique either - if another '
+              '${widget.updateCallable == null ? 'Nothing in this app can change a name, a code, or a price '
+                    'afterwards.' : 'A name, code, price, or unit cost can be corrected afterwards '
+                    'from this same list, and every correction is recorded.'} '
+              'Nothing makes a code unique either - if another '
               'product already scans as ${intent.sku}, the till will refuse '
               'that scan rather than pick one.',
           action: 'Add product',
@@ -301,7 +332,8 @@ final class _TenantCatalogManagementPanelState
               'nowhere and records no movement for it.\n\n'
               'This is not how a mistake is corrected. A replacement product '
               'gets its own identity, and this one keeps its whole history, so '
-              'adding one back does not repair a wrong name, code, or price.',
+              'adding one back does not repair a wrong name, code, or price.'
+              '${widget.updateCallable == null ? '' : ' Correct it instead, from the same list.'}',
           action: 'Retire product',
           destructive: true,
         ) ||
@@ -327,6 +359,120 @@ final class _TenantCatalogManagementPanelState
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Corrects one product through `updateProduct`, then re-reads.
+  ///
+  /// Every field is offered at once, deliberately. The callable validates the
+  /// *resulting* document rather than only the fields being written, so a
+  /// refusal can name a field this correction never touched - the contract is
+  /// "name every broken field in one request, or none", and a single-field edit
+  /// could not honour it.
+  Future<void> _edit(
+    TenantSession session,
+    _CatalogView view,
+    TenantProduct product,
+  ) async {
+    final callable = widget.updateCallable;
+    if (callable == null || _busy) return;
+    final capturedKey = _sessionKey(session);
+
+    final draft = await showDialog<_ProductEditDraft>(
+      context: context,
+      builder: (context) => _EditProductDialog(
+        product: product,
+        categories: view.categories.items,
+        moreCategories: view.categories.hasMore,
+        // A price and a cost are money and sit behind owner or administrator.
+        // The field is not offered at all to anyone else, because the callable
+        // reads its tier from the fields a payload names: a form that offered a
+        // price it knew would be refused would teach a manager only that the
+        // app guesses.
+        canChangeMoney: TenantCatalogManagementRepository.canRecordCostInSession(
+          session,
+        ),
+      ),
+    );
+    if (draft == null || !_stillCurrent(capturedKey)) return;
+
+    final TenantProductUpdateIntent intent;
+    try {
+      intent = _repository(session).buildUpdateIntent(
+        product: product,
+        name: draft.name,
+        sku: draft.sku,
+        price: draft.price,
+        cost: draft.cost,
+        clearCost: draft.clearCost,
+        categoryId: draft.categoryId,
+        categories: view.categories.items,
+        requestId: _editRequestIdFor(draft.fingerprint(product.id)),
+      );
+    } on TenantCatalogManagementException catch (error) {
+      _forgetEditRequestId();
+      setState(() => _notice = _refusalNotice(error.code));
+      return;
+    }
+    if (!await _confirmed(
+          title: 'Correct "${product.name}"?',
+          body: _editConfirmation(intent),
+          action: 'Save correction',
+        ) ||
+        !_stillCurrent(capturedKey)) {
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _notice = null;
+    });
+    try {
+      final result = await TenantProductUpdateGateway(
+        session: session,
+        callable: callable,
+      ).submit(intent);
+      if (!_stillCurrent(capturedKey)) return;
+      _forgetEditRequestId();
+      setState(() => _notice = _updateNotice(result));
+      _reload();
+      widget.onChanged?.call();
+    } on TenantProductUpdateException catch (error) {
+      if (!_stillCurrent(capturedKey)) return;
+      // Only an unknown outcome may have landed, so only it keeps the request
+      // ID. Every other refusal is proof nothing changed, and reusing its ID
+      // would deny an edited retry as a duplicate.
+      if (!error.mayHaveCommitted) _forgetEditRequestId();
+      setState(() => _notice = _updateFailureNotice(error.failure));
+      if (error.mayHaveCommitted) _reload();
+    } on FormatException {
+      if (!_stillCurrent(capturedKey)) return;
+      // The correction may well have been applied; only its answer was
+      // unusable. The request ID is kept for exactly that reason: repeating
+      // this same correction answers off the server's record rather than
+      // auditing it twice.
+      setState(
+        () => _notice =
+            'The correction was sent and its answer could not be trusted. The '
+            'catalog below has been re-read; it states what the server holds.',
+      );
+      _reload();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// One request ID per correction, held across a retry of that same
+  /// correction and never across a different one.
+  String _editRequestIdFor(String fingerprint) {
+    final retained = _editRequestId;
+    if (retained != null && _editFingerprint == fingerprint) return retained;
+    _editFingerprint = fingerprint;
+    return _editRequestId = _newRequestId();
+  }
+
+  void _forgetEditRequestId() {
+    _editRequestId = null;
+    _editFingerprint = null;
   }
 
   void _clearProductForm() {
@@ -422,6 +568,11 @@ final class _TenantCatalogManagementPanelState
         canRetire: TenantCatalogManagementRepository.canRetireInSession(
           session,
         ),
+        // Correcting needs only the operational three the guard already
+        // admitted, so what decides this is whether the build has the callable
+        // at all. Which of the five fields the form then offers is decided
+        // per session inside it.
+        canEdit: widget.updateCallable != null,
         categoryName: _categoryName,
         productName: _productName,
         productSku: _productSku,
@@ -436,6 +587,7 @@ final class _TenantCatalogManagementPanelState
         onFormChanged: () => setState(() {}),
         onAddCategory: () => _addCategory(session),
         onAddProduct: () => _addProduct(session, view),
+        onEdit: (product) => _edit(session, view, product),
         onRetire: (product) => _retire(session, product),
         onNextPage: () => _nextPage(view.products.nextCursor),
         onPreviousPage: _previousPage,
@@ -459,6 +611,7 @@ final class _CatalogManagementContents extends StatelessWidget {
     required this.notice,
     required this.canWrite,
     required this.canRetire,
+    required this.canEdit,
     required this.categoryName,
     required this.productName,
     required this.productSku,
@@ -471,6 +624,7 @@ final class _CatalogManagementContents extends StatelessWidget {
     required this.onFormChanged,
     required this.onAddCategory,
     required this.onAddProduct,
+    required this.onEdit,
     required this.onRetire,
     required this.onNextPage,
     required this.onPreviousPage,
@@ -481,6 +635,12 @@ final class _CatalogManagementContents extends StatelessWidget {
   final String? notice;
   final bool canWrite;
   final bool canRetire;
+
+  /// Whether this build can correct a product at all, which is whether the
+  /// composition root supplied the callable. The role tier inside a correction
+  /// is decided by the form, not here.
+  final bool canEdit;
+
   final TextEditingController categoryName;
   final TextEditingController productName;
   final TextEditingController productSku;
@@ -496,6 +656,7 @@ final class _CatalogManagementContents extends StatelessWidget {
   final VoidCallback onFormChanged;
   final VoidCallback onAddCategory;
   final VoidCallback onAddProduct;
+  final ValueChanged<TenantProduct> onEdit;
   final ValueChanged<TenantProduct> onRetire;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
@@ -508,6 +669,30 @@ final class _CatalogManagementContents extends StatelessWidget {
       if (category.id == selectedCategoryId) return category.id;
     }
     return null;
+  }
+
+  /// The actions offered against one product, or nothing at all.
+  ///
+  /// Correcting and retiring are separate capabilities with separate role sets
+  /// and separate transports, so a build or a session may offer either, both, or
+  /// neither.
+  Widget? _actions(TenantProduct product) {
+    final actions = <Widget>[
+      if (canEdit)
+        TextButton(
+          key: ValueKey('catalog-management-edit-${product.id}'),
+          onPressed: busy ? null : () => onEdit(product),
+          child: const Text('Correct'),
+        ),
+      if (canRetire && canWrite)
+        TextButton(
+          key: ValueKey('catalog-management-retire-${product.id}'),
+          onPressed: busy ? null : () => onRetire(product),
+          child: const Text('Retire'),
+        ),
+    ];
+    if (actions.isEmpty) return null;
+    return Row(mainAxisSize: MainAxisSize.min, children: actions);
   }
 
   bool get _canSubmitProduct =>
@@ -532,12 +717,21 @@ final class _CatalogManagementContents extends StatelessWidget {
       children: [
         Text('Catalog', style: text.titleMedium),
         const SizedBox(height: 4),
-        const Text(
-          key: ValueKey('catalog-management-scope'),
-          'A product added here can be sold, counted, returned, and reported '
-          'on immediately. Its name, code, and price are permanent: nothing in '
-          'this app can correct them afterwards, and retiring it does not undo '
-          'anything already recorded.',
+        Text(
+          key: const ValueKey('catalog-management-scope'),
+          canEdit
+              ? 'A product added here can be sold, counted, returned, and '
+                    'reported on immediately. Its name, code, price, and unit '
+                    'cost can be corrected afterwards, and every correction is '
+                    'recorded with what each field held before. What cannot be '
+                    'changed here is its stock, which belongs to the product '
+                    'itself, and retiring it does not undo anything already '
+                    'recorded.'
+              : 'A product added here can be sold, counted, returned, and '
+                    'reported on immediately. Its name, code, and price are '
+                    'permanent: nothing in this build can correct them '
+                    'afterwards, and retiring it does not undo anything '
+                    'already recorded.',
         ),
         if (!canWrite) ...[
           const SizedBox(height: 12),
@@ -702,17 +896,10 @@ final class _CatalogManagementContents extends StatelessWidget {
                 title: Text(product.name),
                 subtitle: Text(
                   '${categoryNames[product.categoryId] ?? product.categoryId} '
-                  '• ${product.sku} • ${product.quantity} in stock',
+                  '• ${product.sku} • ${product.quantity} in stock '
+                  '• ${product.price.toStringAsFixed(2)}',
                 ),
-                trailing: canRetire && canWrite
-                    ? TextButton(
-                        key: ValueKey(
-                          'catalog-management-retire-${product.id}',
-                        ),
-                        onPressed: busy ? null : () => onRetire(product),
-                        child: const Text('Retire'),
-                      )
-                    : Text(product.price.toStringAsFixed(2)),
+                trailing: _actions(product),
               ),
             ),
         if (!canRetire) ...[
@@ -801,6 +988,103 @@ String _retireNotice(
         'changed while online.',
 };
 
+/// States every field that moves, and the consequence of each kind of move.
+///
+/// The changes are listed before the consequences on purpose: an operator who
+/// mistyped a price and is about to correct it needs to see the before and the
+/// after side by side, which is the one thing a form full of prefilled fields
+/// cannot show them.
+String _editConfirmation(TenantProductUpdateIntent intent) {
+  bool moves(TenantProductField field) =>
+      intent.changes.any((change) => change.field == field);
+  final buffer = StringBuffer(
+    intent.changes.map((change) => '- $change').join('\n'),
+  );
+  buffer.write(
+    '\n\nThis is recorded permanently against the product, with who made it '
+    'and what each field held before. Nothing else about the product changes: '
+    'its stock is untouched, its identity stays the same, and every sale, '
+    'return, and reported figure already recorded still names it.',
+  );
+  if (moves(TenantProductField.price)) {
+    buffer.write(
+      '\n\nA new price applies to the next sale. Sales already recorded keep '
+      'the price they were sold at, so no figure already reported moves.',
+    );
+  }
+  if (moves(TenantProductField.cost)) {
+    buffer.write(
+      '\n\nEvery sale records what a unit cost at the moment of that sale, so '
+      'this prices the next sale and never changes a profit already reported.',
+    );
+  }
+  if (moves(TenantProductField.sku)) {
+    buffer.write(
+      '\n\nThe till matches a scan against the code, so the old one stops '
+      'finding this product. Nothing makes a code unique either - if another '
+      'product already scans as the new one, the till refuses that scan rather '
+      'than picking one.',
+    );
+  }
+  buffer.write(
+    '\n\nThis device re-reads the catalog on its next sync, and every other '
+    'device picks the correction up when it syncs.',
+  );
+  return buffer.toString();
+}
+
+String _updateNotice(TenantProductUpdateResult result) {
+  final fields = result.changedFields
+      .map((field) => field.label.toLowerCase())
+      .join(', ');
+  return 'Corrected: $fields. What each field held before is recorded against '
+      'the product. The catalog below has been re-read; this device re-reads '
+      'its own copy on the next sync.';
+}
+
+String _updateFailureNotice(TenantProductUpdateFailure failure) =>
+    switch (failure) {
+      TenantProductUpdateFailure.forbidden =>
+        'Only an owner, administrator, or manager may correct a product, and '
+            'nothing was changed.',
+      TenantProductUpdateFailure.priceForbidden =>
+        'Only an owner or administrator may change a price. Nothing was '
+            'changed, including the fields that are not money.',
+      TenantProductUpdateFailure.costForbidden =>
+        'Only an owner or administrator may change what a product costs. '
+            'Nothing was changed, including the fields that are not money.',
+      TenantProductUpdateFailure.productMissing =>
+        'This product no longer exists in this business, so nothing was '
+            'changed.',
+      TenantProductUpdateFailure.categoryMissing =>
+        'That category no longer exists in this business. Nothing was changed; '
+            'the categories above have been re-read.',
+      TenantProductUpdateFailure.unchanged =>
+        'The product already holds every value in this correction, so nothing '
+            'was changed. Somebody else may have made the same correction.',
+      TenantProductUpdateFailure.productUnreadable =>
+        'This product holds a value no device can read, and a correction has '
+            'to repair every one of them at once. Nothing was changed. Correct '
+            'each field on this form together and save again.',
+      TenantProductUpdateFailure.needsOperator =>
+        'This product is stored in a state no correction can repair - its '
+            'stock quantity or its image. Nothing was changed, and it needs an '
+            'operator.',
+      TenantProductUpdateFailure.duplicateRequest =>
+        'An earlier attempt already used this correction. Nothing was changed '
+            'a second time; re-read the catalog below and start again.',
+      TenantProductUpdateFailure.invalidRequest =>
+        'The server refused this correction as malformed and nothing was '
+            'changed. This build and the server disagree about what a product '
+            'may hold.',
+      TenantProductUpdateFailure.refused =>
+        'The correction was refused and nothing was changed.',
+      TenantProductUpdateFailure.ambiguous =>
+        'The result is unknown. The catalog below has been re-read; if the '
+            'correction is not there, save it again - repeating the same '
+            'correction cannot apply it twice.',
+    };
+
 String _refusalNotice(String code) => switch (code) {
   'invalid_category_name' =>
     'Enter a category name of at most $maximumCatalogNameLength characters.',
@@ -824,12 +1108,275 @@ String _refusalNotice(String code) => switch (code) {
   'cost_forbidden' =>
     'Only an owner or administrator may record what a product costs. Leave the '
         'unit cost blank, or ask one of them to set it.',
+  'price_forbidden' =>
+    'Only an owner or administrator may change a price. Nothing was sent, so '
+        'the other fields were not changed either.',
+  'product_unchanged' =>
+    'Nothing on the form differs from what the product already holds, so there '
+        'was nothing to correct and nothing was sent.',
   'unknown_category' =>
     'Choose one of the categories shown above before adding the product.',
   'catalog_forbidden' =>
     'Only an owner, administrator, or manager may change the catalog.',
   'retire_forbidden' => 'Only an owner or administrator may retire a product.',
+  'edit_forbidden' =>
+    'That product belongs to another business, so nothing was changed.',
   _ => 'The catalog could not be changed.',
 };
 
 String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+
+/// What one correction asks for, before anything has been validated.
+///
+/// [price] and [cost] are nullable because the form does not offer either to a
+/// manager, and null means "this form never asked" rather than "make it empty".
+final class _ProductEditDraft {
+  const _ProductEditDraft({
+    required this.name,
+    required this.sku,
+    required this.categoryId,
+    required this.price,
+    required this.cost,
+    required this.clearCost,
+  });
+
+  final String name;
+  final String sku;
+  final String categoryId;
+  final String? price;
+  final String? cost;
+
+  /// Clearing a recorded cost is its own act, never an empty cost field. An
+  /// omitted cost leaves the stored figure alone; this removes it.
+  final bool clearCost;
+
+  /// Identifies this exact correction, so a retained request ID can be held
+  /// against the correction it was issued for and no other.
+  String fingerprint(String productId) =>
+      <String>[
+        productId,
+        name,
+        sku,
+        categoryId,
+        price ?? '',
+        cost ?? '',
+        '$clearCost',
+      ].join(' ');
+}
+
+/// The one form that corrects a product, offering every editable field at once.
+///
+/// Every field is prefilled with what the product holds, so the form states the
+/// current value as well as collecting the new one, and an untouched field is
+/// compared equal and never sent.
+final class _EditProductDialog extends StatefulWidget {
+  const _EditProductDialog({
+    required this.product,
+    required this.categories,
+    required this.moreCategories,
+    required this.canChangeMoney,
+  });
+
+  final TenantProduct product;
+  final List<TenantCategory> categories;
+
+  /// Whether more categories exist than were read, in which case a product can
+  /// only be moved into one of those offered.
+  final bool moreCategories;
+
+  final bool canChangeMoney;
+
+  @override
+  State<_EditProductDialog> createState() => _EditProductDialogState();
+}
+
+final class _EditProductDialogState extends State<_EditProductDialog> {
+  late final TextEditingController _name = TextEditingController(
+    text: widget.product.name,
+  );
+  late final TextEditingController _sku = TextEditingController(
+    text: widget.product.sku,
+  );
+  late final TextEditingController _price = TextEditingController(
+    text: widget.product.price.toStringAsFixed(2),
+  );
+  late final TextEditingController _cost = TextEditingController(
+    text: widget.product.cost?.toStringAsFixed(2) ?? '',
+  );
+  late String _categoryId = widget.product.categoryId;
+  bool _clearCost = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _sku.dispose();
+    _price.dispose();
+    _cost.dispose();
+    super.dispose();
+  }
+
+  /// Whether the product's own category is one this page read. A business may
+  /// hold more categories than one page shows, and leaving a product where it
+  /// already is needs no proof.
+  bool get _categoryOffered =>
+      widget.categories.any((category) => category.id == _categoryId);
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return AlertDialog(
+      title: Text('Correct "${widget.product.name}"'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              key: ValueKey('catalog-management-edit-scope'),
+              'Every field is filled in with what the product holds now. '
+              'Change the ones that are wrong and save them together: a '
+              'correction is checked against the whole product, so one that '
+              'leaves a different field unreadable is refused outright.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('catalog-management-edit-name'),
+              controller: _name,
+              maxLength: maximumCatalogNameLength,
+              decoration: const InputDecoration(labelText: 'Product name'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('catalog-management-edit-sku'),
+              controller: _sku,
+              maxLength: maximumCatalogSkuLength,
+              decoration: const InputDecoration(
+                labelText: 'Code (SKU or barcode)',
+                helperText:
+                    'What the till matches a scan against. No spaces. The old '
+                    'code stops finding this product.',
+              ),
+            ),
+            if (widget.canChangeMoney) ...[
+              const SizedBox(height: 8),
+              TextField(
+                key: const ValueKey('catalog-management-edit-price'),
+                controller: _price,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Unit price',
+                  helperText:
+                      'Applies to the next sale. Sales already recorded keep '
+                      'the price they were sold at.',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const ValueKey('catalog-management-edit-cost'),
+                controller: _cost,
+                enabled: !_clearCost,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Unit cost',
+                  helperText: widget.product.cost == null
+                      ? 'No unit cost is recorded. Enter one to start recording '
+                            'it; leave it blank to keep reporting no profit for '
+                            'this product.'
+                      : 'Leaving this blank keeps the recorded cost as it is. '
+                            'Removing it is a separate act, below.',
+                ),
+              ),
+              if (widget.product.cost != null)
+                CheckboxListTile(
+                  key: const ValueKey('catalog-management-edit-clear-cost'),
+                  value: _clearCost,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Remove the recorded unit cost'),
+                  subtitle: const Text(
+                    'Its sales then report no profit and are counted as '
+                    'missing cost data, rather than reporting the whole price '
+                    'as profit.',
+                  ),
+                  onChanged: (value) =>
+                      setState(() => _clearCost = value ?? false),
+                ),
+            ] else ...[
+              const SizedBox(height: 12),
+              Text(
+                key: const ValueKey('catalog-management-edit-money-hidden'),
+                'Only an owner or administrator may change what this product '
+                'is priced at or what it costs, so neither is offered here.',
+                style: text.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 12),
+            Text('Category', style: text.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final category in widget.categories)
+                  ChoiceChip(
+                    key: ValueKey(
+                      'catalog-management-edit-category-${category.id}',
+                    ),
+                    label: Text(category.name),
+                    selected: category.id == _categoryId,
+                    onSelected: (_) =>
+                        setState(() => _categoryId = category.id),
+                  ),
+              ],
+            ),
+            if (!_categoryOffered)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  key: const ValueKey('catalog-management-edit-category-off'),
+                  'This product is filed under ${widget.product.categoryId}, '
+                  'which is not among the categories read here. Leaving it '
+                  'there is fine; choosing one above moves it.',
+                  style: text.bodySmall,
+                ),
+              )
+            else if (widget.moreCategories)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  key: const ValueKey('catalog-management-edit-more-categories'),
+                  'More categories exist than are shown here. A product can '
+                  'only be moved into one of those above.',
+                  style: text.bodySmall,
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('catalog-management-edit-cancel'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('catalog-management-edit-review'),
+          onPressed: () => Navigator.of(context).pop(
+            _ProductEditDraft(
+              name: _name.text,
+              sku: _sku.text,
+              categoryId: _categoryId,
+              price: widget.canChangeMoney ? _price.text : null,
+              cost: widget.canChangeMoney && !_clearCost ? _cost.text : null,
+              clearCost: widget.canChangeMoney && _clearCost,
+            ),
+          ),
+          child: const Text('Review correction'),
+        ),
+      ],
+    );
+  }
+}

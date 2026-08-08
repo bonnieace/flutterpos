@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
@@ -426,6 +427,374 @@ void main() {
 
     expect(find.byKey(const ValueKey('catalog-management-failure')), findsOne);
   });
+
+  testWidgets('a build with no callable offers no correction at all', (
+    tester,
+  ) async {
+    await _pump(tester, _controller(), _Reader.seeded(), writer: _Writer());
+
+    expect(find.byKey(const ValueKey('catalog-management-edit-pd-1')), findsNothing);
+    expect(
+      _text(tester, 'catalog-management-scope'),
+      contains('are permanent'),
+    );
+  });
+
+  testWidgets('a correction states the before and after, then sends it', (
+    tester,
+  ) async {
+    final reader = _Reader.seeded();
+    final callable = _Callable();
+    var syncs = 0;
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: _Writer(),
+      callable: callable,
+      onChanged: () => syncs++,
+    );
+
+    // The route stops claiming a product is permanent the moment it can correct
+    // one, because that sentence is what a mistyped price is read against.
+    expect(
+      _text(tester, 'catalog-management-scope'),
+      contains('can be corrected afterwards'),
+    );
+    await _openCorrection(tester, 'pd-1');
+
+    // Every field is offered at once and prefilled with what the product holds:
+    // the callable validates the resulting document, so a refusal can name a
+    // field this correction never touched.
+    expect(_field(tester, 'catalog-management-edit-name'), 'White bread loaf');
+    expect(_field(tester, 'catalog-management-edit-price'), '65.00');
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-edit-price')),
+      '70',
+    );
+    await _review(tester);
+
+    expect(find.textContaining('Unit price: was 65.00, now 70.00'), findsOne);
+    expect(
+      find.textContaining('Sales already recorded keep the price'),
+      findsOne,
+    );
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(callable.payloads.single, <String, Object?>{
+      'tenantId': 'tenant-a',
+      'productId': 'pd-1',
+      'requestId': 'catalog-test-request-0000',
+      'price': 70.0,
+    });
+    expect(
+      _text(tester, 'catalog-management-notice'),
+      startsWith('Corrected: unit price.'),
+    );
+    // The catalog is re-read and the till is asked to re-read its own copy,
+    // without which this device would keep selling at the old price.
+    expect(reader.pages.where((path) => path == _productsPath).length, 2);
+    expect(syncs, 1);
+  });
+
+  testWidgets('a manager corrects a name and is not offered money', (
+    tester,
+  ) async {
+    final callable = _Callable();
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _openCorrection(tester, 'pd-1');
+
+    // The callable reads its tier from the fields a payload names, so a form
+    // that offered a price it knew would be refused would teach a manager only
+    // that the app guesses.
+    expect(find.byKey(const ValueKey('catalog-management-edit-price')), findsNothing);
+    expect(find.byKey(const ValueKey('catalog-management-edit-cost')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('catalog-management-edit-money-hidden')),
+      findsOne,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-edit-name')),
+      'Brown bread loaf',
+    );
+    await _review(tester);
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(callable.payloads.single.containsKey('price'), isFalse);
+    expect(callable.payloads.single['name'], 'Brown bread loaf');
+  });
+
+  testWidgets('clearing a recorded cost is its own act, and sends null', (
+    tester,
+  ) async {
+    final callable = _Callable(
+      answer: <String, Object?>{'changedFields': <String>['cost']},
+    );
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(cost: 40),
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _openCorrection(tester, 'pd-1');
+
+    expect(_field(tester, 'catalog-management-edit-cost'), '40.00');
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-edit-clear-cost')),
+    );
+    await tester.pump();
+    await _review(tester);
+
+    expect(
+      find.textContaining('Unit cost: was 40.00, now not recorded'),
+      findsOne,
+    );
+    expect(find.textContaining('never changes a profit already reported'), findsOne);
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
+    // The one field in this app where null on the wire means "remove this"
+    // rather than "leave it alone".
+    expect(callable.payloads.single.containsKey('cost'), isTrue);
+    expect(callable.payloads.single['cost'], isNull);
+  });
+
+  testWidgets('a product with no cost is not offered a clear', (tester) async {
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+    );
+    await _openCorrection(tester, 'pd-1');
+
+    expect(_field(tester, 'catalog-management-edit-cost'), '');
+    expect(
+      find.byKey(const ValueKey('catalog-management-edit-clear-cost')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an untouched product is never sent', (tester) async {
+    final callable = _Callable();
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _openCorrection(tester, 'pd-1');
+    await _review(tester);
+
+    // Refused before anything is confirmed: the server treats a request that
+    // changes nothing as a caller defect, and reaching it would put an
+    // idempotency record behind a request that does nothing.
+    expect(find.byKey(const ValueKey('catalog-management-confirm')), findsNothing);
+    expect(callable.payloads, isEmpty);
+    expect(
+      _text(tester, 'catalog-management-notice'),
+      startsWith('Nothing on the form differs'),
+    );
+  });
+
+  testWidgets('a refused correction changes nothing and says why', (
+    tester,
+  ) async {
+    final reader = _Reader.seeded();
+    final callable = _Callable(
+      error: FirebaseFunctionsException(
+        code: 'failed-precondition',
+        message: 'The category does not exist in this business.',
+      ),
+    );
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _correct(tester, 'pd-1', name: 'Brown bread loaf');
+
+    expect(
+      _text(tester, 'catalog-management-notice'),
+      startsWith('That category no longer exists'),
+    );
+    // A proven refusal changed nothing, so there is nothing to re-read.
+    expect(reader.pages.where((path) => path == _productsPath).length, 1);
+  });
+
+  testWidgets('an unknown outcome retries the same correction, not a new one', (
+    tester,
+  ) async {
+    final callable = _Callable(
+      error: FirebaseFunctionsException(code: 'unavailable', message: 'down'),
+    );
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _correct(tester, 'pd-1', name: 'Brown bread loaf');
+
+    expect(
+      _text(tester, 'catalog-management-notice'),
+      startsWith('The result is unknown.'),
+    );
+    await _correct(tester, 'pd-1', name: 'Brown bread loaf');
+
+    // A genuine retry answers off the server's own idempotency record. A fresh
+    // ID would reach the refusal it keeps for a request that changes nothing,
+    // if the first attempt had in fact landed.
+    expect(callable.payloads.length, 2);
+    expect(
+      callable.payloads.first['requestId'],
+      callable.payloads.last['requestId'],
+    );
+
+    // A different correction is a different request, because the server refuses
+    // one request ID carrying two different payloads.
+    await _correct(tester, 'pd-1', name: 'Rye bread loaf');
+    expect(
+      callable.payloads.last['requestId'],
+      isNot(callable.payloads.first['requestId']),
+    );
+  });
+
+  testWidgets('a changed cost after an unknown outcome is a new request', (
+    tester,
+  ) async {
+    // This one is load-bearing rather than symmetrical. `updateProduct`
+    // fingerprints its idempotency record from productId, name, sku, price, and
+    // categoryId - **not** cost - so a reused request ID carrying only a
+    // different cost would be answered off the stored record and the new cost
+    // silently not applied. Every other field would be refused as
+    // `already-exists`. Holding the retained ID against the exact correction it
+    // was issued for is what closes that from this side.
+    final callable = _Callable(
+      error: FirebaseFunctionsException(code: 'unavailable', message: 'down'),
+    );
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(cost: 40),
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _correctCost(tester, 'pd-1', cost: '41');
+    await _correctCost(tester, 'pd-1', cost: '41');
+
+    expect(
+      callable.payloads.first['requestId'],
+      callable.payloads[1]['requestId'],
+    );
+    await _correctCost(tester, 'pd-1', cost: '42');
+
+    expect(callable.payloads.last['cost'], 42.0);
+    expect(
+      callable.payloads.last['requestId'],
+      isNot(callable.payloads.first['requestId']),
+    );
+  });
+
+  testWidgets('a settled correction starts the next one afresh', (
+    tester,
+  ) async {
+    final callable = _Callable();
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _correct(tester, 'pd-1', name: 'Brown bread loaf');
+    await _correct(tester, 'pd-1', name: 'Rye bread loaf');
+
+    expect(
+      callable.payloads.first['requestId'],
+      isNot(callable.payloads.last['requestId']),
+    );
+  });
+
+  testWidgets('an untrustworthy answer re-reads instead of claiming success', (
+    tester,
+  ) async {
+    final reader = _Reader.seeded();
+    // A response describing a product this correction never named.
+    final callable = _Callable(
+      answer: <String, Object?>{'productId': 'pd-2'},
+    );
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _correct(tester, 'pd-1', name: 'Brown bread loaf');
+
+    expect(
+      _text(tester, 'catalog-management-notice'),
+      startsWith('The correction was sent and its answer could not be trusted'),
+    );
+    expect(reader.pages.where((path) => path == _productsPath).length, 2);
+  });
+
+  testWidgets('a tenant switch mid-correction discards the outcome', (
+    tester,
+  ) async {
+    final controller = _controller();
+    final callable = _Callable.deferred();
+
+    await _pump(
+      tester,
+      controller,
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: callable,
+    );
+    await _openCorrection(tester, 'pd-1');
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-edit-name')),
+      'Brown bread loaf',
+    );
+    await _review(tester);
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pump();
+
+    controller.open(uid: 'owner-a', membership: _membership('tenant-b'));
+    await tester.pump();
+    callable.complete();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('catalog-management-notice')),
+      findsNothing,
+    );
+  });
 }
 
 Future<void> _pump(
@@ -433,6 +802,7 @@ Future<void> _pump(
   TenantSessionController controller,
   _Reader reader, {
   TenantCatalogWriter? writer,
+  UpdateProductCallable? callable,
   VoidCallback? onChanged,
   int pageSize = 20,
 }) async {
@@ -448,6 +818,7 @@ Future<void> _pump(
           body: TenantCatalogManagementPanel(
             reader: reader,
             writer: writer,
+            updateCallable: callable,
             onChanged: onChanged,
             pageSize: pageSize,
             requestIdFactory: _requestIds().call,
@@ -458,6 +829,32 @@ Future<void> _pump(
   );
   await tester.pump();
   await tester.pump();
+}
+
+Future<void> _openCorrection(WidgetTester tester, String productId) async {
+  await tester.tap(find.byKey(ValueKey('catalog-management-edit-$productId')));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _review(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('catalog-management-edit-review')));
+  await tester.pumpAndSettle();
+}
+
+/// Opens the correction form, changes one field, and confirms it.
+Future<void> _correct(
+  WidgetTester tester,
+  String productId, {
+  required String name,
+}) async {
+  await _openCorrection(tester, productId);
+  await tester.enterText(
+    find.byKey(const ValueKey('catalog-management-edit-name')),
+    name,
+  );
+  await _review(tester);
+  await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+  await tester.pumpAndSettle();
 }
 
 /// Deterministic request IDs, so a test can assert that one confirmation keeps
@@ -598,6 +995,76 @@ final class _Writer implements TenantCatalogWriter {
   }
 }
 
+/// Opens the correction form, changes only the unit cost, and confirms it.
+Future<void> _correctCost(
+  WidgetTester tester,
+  String productId, {
+  required String cost,
+}) async {
+  await _openCorrection(tester, productId);
+  await tester.enterText(
+    find.byKey(const ValueKey('catalog-management-edit-cost')),
+    cost,
+  );
+  await _review(tester);
+  await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+  await tester.pumpAndSettle();
+}
+
+/// A recording stand-in for `updateProduct`.
+///
+/// Its default answer is a well-formed response for a name correction, with
+/// whatever the test overrides merged over it.
+final class _Callable implements UpdateProductCallable {
+  _Callable({Map<String, Object?>? answer, this.error})
+    : _overrides = answer ?? const <String, Object?>{},
+      _defer = false;
+
+  _Callable.deferred()
+    : _overrides = const <String, Object?>{},
+      error = null,
+      _defer = true;
+
+  final Map<String, Object?> _overrides;
+  final Object? error;
+  final bool _defer;
+  final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
+  final List<Completer<Object?>> _pending = <Completer<Object?>>[];
+
+  void complete() {
+    if (_pending.isEmpty) return;
+    _pending.removeAt(0).complete(_answer(payloads.last));
+  }
+
+  Map<String, Object?> _answer(Map<String, Object?> payload) =>
+      <String, Object?>{
+        'updateId': 'pu_0123456789abcdef',
+        'tenantId': payload['tenantId'],
+        'productId': payload['productId'],
+        'changedFields': <String>[
+          for (final field in <String>['name', 'sku', 'price', 'cost',
+            'categoryId'])
+            if (payload.containsKey(field)) field,
+        ],
+        'name': payload['name'] ?? 'White bread loaf',
+        'sku': payload['sku'] ?? '6161100000019',
+        'price': payload['price'] ?? 65.0,
+        'priceMinor': ((payload['price'] as double? ?? 65.0) * 100).round(),
+        'categoryId': payload['categoryId'] ?? 'cat-bakery',
+        ..._overrides,
+      };
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) {
+    payloads.add(payload);
+    if (error != null) return Future<Object?>.error(error!);
+    if (!_defer) return Future<Object?>.value(_answer(payload));
+    final completer = Completer<Object?>();
+    _pending.add(completer);
+    return completer.future;
+  }
+}
+
 /// A collection reader keyed per business and per collection, answering in
 /// ascending document-ID order and honouring the exact page bound and cursor
 /// the guarded repository asked for.
@@ -610,7 +1077,7 @@ final class _Reader implements TenantDataReader {
     : _collections = const <String, Map<String, Map<String, Object?>>>{},
       _fails = true;
 
-  factory _Reader.seeded({int productCount = 2}) =>
+  factory _Reader.seeded({int productCount = 2, double? cost}) =>
       _Reader(<String, Map<String, Map<String, Object?>>>{
         _categoriesPath: <String, Map<String, Object?>>{
           'cat-bakery': <String, Object?>{'name': 'Bakery'},
@@ -622,6 +1089,7 @@ final class _Reader implements TenantDataReader {
               'name': index == 1 ? 'White bread loaf' : 'Product $index',
               'SKU': '616110000001$index',
               'price': 65,
+              if (cost != null && index == 1) 'cost': cost,
               'quantity': index == 1 ? 40 : index,
               'categoryId': 'cat-bakery',
             },

@@ -4,7 +4,7 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-07**. Claims in this file are checked
+Last verified against the code on **2026-08-08**. Claims in this file are checked
 against source, not inherited from the log; corrections are noted where they were
 made.
 
@@ -68,8 +68,8 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | Track | State | What is left |
 | --- | --- | --- |
 | **Cloud Functions** | ~95% | 47 handlers, 346 unit tests. No live Brevo, no deployment. |
-| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered, and the cost chunk changed the file not at all. `subscription` has rules and no writer. |
-| **Flutter client** | ~85% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, and record what a product cost. No way to correct a product **from the app** — the callable exists, no route calls it — no profit display, no printing, no subscription. Spreadsheet import, bulk change, and suspicious-return scoring were scoped on 2026-08-08 as rewrites and none is started. |
+| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk nor the product-edit route changed the file at all, and the suite was run over both to say so. `subscription` has rules and no writer. |
+| **Flutter client** | ~87% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, and **correct a product from the app**. No profit display, no printing, no subscription. Spreadsheet import, bulk change, and suspicious-return scoring were scoped on 2026-08-08 as rewrites and none is started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -89,10 +89,10 @@ callable exists, and not green if it is merely tested.
 | Open and close a shift | 🟢 | Shift panel on the landing route |
 | Ring up a sale | 🟢 | "New sale" → cart, tender, saved offline, submitted automatically |
 | Add or retire a product | 🟢 | "Manage catalog" on the landing route → add a category, add a product, retire one. Adding is owner/admin/manager; retiring is owner/admin |
-| **Edit a product's price or name** | 🔴 | **`updateProduct` is built and tested; nothing in the app calls it.** Still red, because red is what "only the callable exists" means on this board. The Flutter edit surface is the next chunk, and nothing is in front of it any more |
+| Edit a product's price, name, code, cost, or category | 🟢 | "Manage catalog" → **"Correct"** on any product → all five fields at once, through `updateProduct`. Name, code, and category are owner/admin/manager; price and cost are owner/admin and are not offered to anyone else. Clearing a recorded cost is its own checkbox |
 | Set the currency / checkout configuration | 🟢 | "Checkout settings" on the landing route → merges `configuration/checkout`, owner/admin only |
 | Adjust stock | 🟢 | Product stock route → `adjustStock` |
-| Record what a product cost | 🟢 | "Manage catalog" → the optional unit cost on the add-product form, owner/admin only. Every sale freezes the figure onto its own line |
+| Record what a product cost | 🟢 | "Manage catalog" → the optional unit cost on the add-product form, and on "Correct" afterwards, owner/admin only. Every sale freezes the figure onto its own line |
 | See profit or margin | 🔴 | The server computes it and nothing displays it. Needs a surface that states how many lines have no cost — see the unreachable table |
 | Record a return | 🟢 | From a sale, via receipt lookup or shift history |
 | Verify a return, restoring stock | 🟢 | Owner/admin/manager, on a pending return |
@@ -109,23 +109,28 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
+**One row went green on 2026-08-08 and it is the only row that moved**: editing a
+product. The board is 29 rows at **21 green, 7 red, 1 amber**. The route is
+`TenantCatalogManagementScreen`'s "Correct" action, and it is the first client caller
+`updateProduct` has ever had — the callable was built on 2026-08-07 and nothing called
+it for a day.
+
 **Three rows were added on 2026-08-08, all red, and none of them is new work
 appearing from nowhere** — spreadsheet import, bulk change, and suspicious-return
 flagging are capabilities the *previous* app had that this one does not, and they were
 scoped that day rather than left unnamed. Two of the three had never been written down
-anywhere; the board is 29 rows because of it, at **20 green, 8 red, 1 amber**. Adding
-them moved no code.
+anywhere; the board became 29 rows because of it. Adding them moved no code.
 
 **Two rows moved on 2026-08-07 when a product gained a cost** — "Record what a product
 cost" is green and "See profit or margin" was added red, because the server computes a
 figure nothing displays. Before that: **no row had changed colour since the catalog
 chunk, and the flake session did not change one either — it changed no board row at all, deliberately, and
 this sentence is here so that is stated rather than left silent.** Five 2026-08-07
-sessions have followed the catalog chunk: two added unit tests only, one resolved
+sessions followed the catalog chunk: two added unit tests only, one resolved
 decisions without touching code, the fourth built `updateProduct`, and the fifth fixed
 the intermittent Flutter failure that stood in front of the next capability. The fourth
-**rewrote the bolded row's text without moving it** — the capability now exists on the
-server and is unreachable from the app, which is a different sentence and the same
+**rewrote the editing row's text without moving it** — the capability existed on the
+server and was unreachable from the app, which is a different sentence and the same
 colour. Green means a person could do it in a running app today, and a callable nothing
 calls is not that. The fifth touched two test files and no capability; what it moved is
 the Flutter baseline below, from 1346 to 1347, and the ⚠️ beside it.
@@ -136,14 +141,21 @@ sell without, and it stocks its own catalog, which every surface downstream of a
 product already assumed. Neither needed a rule, a callable, or an export — the rules
 had permitted both writes all along, and nothing had ever called them.
 
-**The bolded row was a decision, then a chunk, and is now half-built.**
+**Editing a product was a decision, then a server chunk, and is now finished.**
 `updateProduct` landed on 2026-08-07 as the **twenty-fourth callable and the
 forty-seventh export**, and it changed `firestore.rules` not at all — `allow update` on
-`products` is still the checkout decrement and nothing else, byte for byte. What is
-missing is a route: no screen in `lib/` calls it, so a mistyped price is still
-corrected by an operator until the Flutter edit surface is built. That surface waited on
-a trustworthy Flutter suite, which it now has: the intermittent seam failure was
-diagnosed and fixed on 2026-08-07, so the edit surface is the current chunk.
+`products` is still the checkout decrement and nothing else, byte for byte. The route
+that calls it landed on 2026-08-08 and changed `firestore.rules` not at all either, nor
+anything in `functions/`. A mistyped price is no longer an operator's job.
+
+**Three properties of that route are worth knowing before anything reuses the
+callable**, and all three come from its contract rather than from taste. It sends
+**only the fields that moved**, because the callable authorizes on the fields a payload
+names rather than on the resulting diff — resending an unchanged price would refuse a
+manager's name correction. It offers **all five fields at once**, because the callable
+validates the *resulting* document, so a refusal can name a field the correction never
+touched. And it holds one request ID **against the correction, not merely across the
+attempt**: see the finding below, which is the reason that distinction matters.
 
 ### Rollout position
 
@@ -161,7 +173,7 @@ The fifteen frozen steps, with what is actually true:
 | 8 | Brevo delivery, webhook normalization, action pages | ⚠️ implemented, never exercised against live Brevo |
 | 9 | `TenantSession`, switching, shift restoration, epochs | ✅ |
 | 10 | Encrypted Hive cache, single-flight checkout, receipt counters | ✅ |
-| 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription; editing a product is a server callable with no client route, and profit is computed but not displayed. Checkout configuration writing, catalog management, `updateProduct`, and product cost all landed 2026-08-07 |
+| 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription; profit is computed and not displayed. Checkout configuration writing, catalog management, `updateProduct`, and product cost landed 2026-08-07; the client route that corrects a product landed 2026-08-08 |
 | 12 | Emulator, multi-device, Windows-offline, email, adversarial tests | ⚠️ emulator suites green; no multi-device, no Windows-offline, no live email |
 | 13 | Deploy development, then staging | ❌ not started |
 | 14 | Enable App Check on validated platforms | ❌ not started; no `firebase_app_check` dependency |
@@ -171,25 +183,27 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1358** |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1392** |
 | Functions | `npm --prefix functions test` | **346** |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12** |
 
-**1887 tests across five suites.** `flutter test` takes no path list — the one
+**1921 tests across five suites.** `flutter test` takes no path list — the one
 uncompilable file that forced that workaround was deleted on 2026-08-07. **All five were
-measured in the product-cost session on 2026-08-07**, so nothing here is carried. Flutter
-1347 → 1358 (eleven new), Functions 333 → 346, Rules 160 → 161; the two integration
-suites did not move.
+measured in the product-edit session on 2026-08-08**, so nothing here is carried. Flutter
+1358 → 1392 (34 new: 22 unit, 12 widget); the other four did not move, which for the
+rules suite is the measurement proving `firestore.rules` is byte-identical and for the
+functions suite is the measurement proving nothing in `functions/` was touched.
 
-✅ **The intermittent Flutter failure is diagnosed and fixed.** Measured eleven times on
-2026-08-07: **1250 passed with 1 failed**, then **1251**, then **1290 twice** once the
-configuration chunk added 39, then **1346** three times — the catalog chunk, the sweep
-session, and the `updateProduct` session — then **1347 four times** in the flake session,
-all four with the fix already in and the last of them against the frozen tree, then
-**1358** once the product-cost chunk added eleven. One failure in twelve runs, and the
-last eleven green.
+✅ **The intermittent Flutter failure is diagnosed and fixed.** Measured twelve times
+across 2026-08-07 and 2026-08-08: **1250 passed with 1 failed**, then **1251**, then
+**1290 twice** once the configuration chunk added 39, then **1346** three times — the
+catalog chunk, the sweep session, and the `updateProduct` session — then **1347 four
+times** in the flake session, all four with the fix already in and the last of them
+against the frozen tree, then **1358** once the product-cost chunk added eleven, then
+**1392** once the product-edit chunk added 34. One failure in thirteen runs, and the
+last twelve green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -379,6 +393,44 @@ The guarantees are settled, not open:
 8. **A request that changes nothing is refused, not audited as a no-op.** Reachable only
    with a fresh request ID: a genuine retry answers off the idempotency record.
 
+**The client route landed 2026-08-08 and its shape is forced by the eight guarantees
+above, not chosen.** "Correct" on any product in "Manage catalog" opens one dialog
+holding every editable field, prefilled with what the product holds. It sends only the
+fields that moved (the callable authorizes on requested fields, so an unchanged price
+resent would refuse a manager's name correction); it offers all five at once (the
+callable validates the resulting document, so a refusal can name a field the correction
+never touched); it hides price and cost from a manager rather than letting them be
+refused; and clearing a cost is a checkbox rather than an empty field, because omitting
+`cost` and sending `cost: null` mean different things.
+
+**Two gaps in the callable were found while wiring it, and neither was fixed — the
+chunk excluded `functions/`, and both are recorded here so the bulk-change chunk that
+reuses this callable meets them already written down:**
+
+1. **The idempotency fingerprint omits `cost`.** `products.ts` hashes `productId`,
+   `name`, `sku`, `priceMinor`, and `categoryId`. Two payloads under one request ID
+   differing *only* in cost therefore hash the same, and the second is answered off the
+   stored record with the new cost silently not applied — where any other field would
+   have been refused as `already-exists`. A silent wrong answer rather than a refusal.
+   **The client closes it from its own side** by holding the retained request ID against
+   a fingerprint of the exact correction, so changing any field mints a fresh ID; a
+   widget test pins the cost-only case specifically. A second client would not have that
+   protection.
+2. **`UpdateProductResponse` does not echo `cost`.** A cost that moved appears in
+   `changedFields` with no value beside it, so four of the five fields can be reconciled
+   against the request and the fifth cannot. The route confirms a cost by re-reading the
+   catalog instead. (`UpdateProductRequest` also fails to declare `cost`, which is typing
+   only — the handler reads a `Record<string, unknown>` — and changes no behaviour.)
+
+**The `cost: null` escape hatch for a malformed stored cost is unreachable from this
+route, deliberately.** `TenantProduct` is strict and one product it refuses makes the
+whole page a read failure, so a product with an unreadable cost never renders a row and
+therefore has no "Correct" button. The same holds for every `readSellableProduct`
+refusal: `productUnreadable` and `needsOperator` are modelled and worded, and are
+reachable only if the document changes between the page load and the call. Neither half
+is wrong; the intersection is an operator's job, and "the callable can do it" is a
+different sentence from "a person can do it".
+
 ### A product records what it cost, and a sale freezes it
 
 Asked for and built 2026-08-07, with one requirement attached by the product owner:
@@ -531,11 +583,10 @@ Field drift to expect on the way: the old scorer reads `soldBy` (a display name)
 
 | Capability | State |
 | --- | --- |
-| `updateProduct` | **Built and tested 2026-08-07; no client calls it.** The twenty-fourth callable. Blocked on nothing but a Flutter route, which is now the current chunk rather than a queued one. Until it lands a mistyped price is still corrected by an operator. |
 | `requestPasswordReset` | **Blocked on App Check.** Still no caller — see below. |
 | Subscription | `TenantPaths.currentSubscription` and rules exist; **nothing reads it and nothing writes it**. `grep -i subscription functions/src` finds nothing at all, so there is no schema to model. Start on the server, not in Flutter. |
 | Product cost / profit **(half closed 2026-08-07)** | A product now **carries a cost** and a sale **freezes it onto its line**, so profit is real for anything sold since. `profit` is still parsed and never *displayed* — that surface is the remaining half, and it must state `incompleteCostLineCount`, because every sale recorded before this date has no cost and never will. |
-| Bulk upload / bulk update | **Not unreachable — unbuilt, and scoped 2026-08-08 as a rewrite.** Listed here only to catch the eye of anyone who greps `lib/services/` and finds 788 working lines: they write the root `alcohol` collection, they are reachable from `lib/pos/goods.dart` alone, and they are **not the starting point**. See the standing decision. |
+| Bulk upload / bulk update | **Not unreachable — unbuilt.** Scoped 2026-08-08 as a rewrite, and bulk change is the current chunk. Listed here only to catch the eye of anyone who greps `lib/services/` and finds 788 working lines: they write the root `alcohol` collection, they are reachable from `lib/pos/goods.dart` alone, and they are **not the starting point**. See the standing decision. |
 | Category rename and delete | Permitted by `allow create, update, delete` on `categories` to owner/admin/manager, and offered to nobody. Deliberate, for the orphaning reason above; recorded here so the gap between rule and surface stays a decision. |
 
 Checkout configuration writing left this table on 2026-08-07. The route is
@@ -544,14 +595,15 @@ administrator, and it merges `configuration/checkout` rather than replacing it s
 setting a later build adds cannot be deleted by this one.
 
 Catalog management left it the same day, and took the "Catalog management" row with
-it. The route is `TenantCatalogManagementScreen`, offered as "Manage catalog", and it
-covers the create and delete halves only.
+it. The route is `TenantCatalogManagementScreen`, offered as "Manage catalog", and as
+of 2026-08-08 it covers all three halves: create, correct, and retire.
 
-**`updateProduct` entered this table the same day, which is what building it was
-always going to do.** It is the update half, and it is here rather than on the board
-because a callable nothing calls is exactly what this table is for. It is the *good*
-kind of entry: unreachable for one bounded reason, with the reason queued. Every other
-row here is blocked on a decision, a schema, or a deliberate refusal.
+**`updateProduct` entered this table on 2026-08-07 and left it on 2026-08-08**, which
+is exactly the life a row here is supposed to have. It was the *good* kind of entry:
+unreachable for one bounded reason, with the reason queued, and it stayed for one day.
+Every remaining row is blocked on a decision, a schema, or a deliberate refusal — which
+is worth saying plainly, because it means **no row in this table is now waiting on
+nothing but effort.** The next chunk cannot be picked from here.
 
 ---
 
@@ -716,8 +768,10 @@ what it actually guarantees. The one thing worth repeating here, because it was 
 argument that flipped the decision: `firestore.rules` is byte-identical, and the
 160-test rules suite was run to say so with a measurement rather than an assertion.
 
-Until a Flutter route calls it, a mistyped price is still corrected by an operator with
-the Admin SDK, and the catalog surface can create and retire products but not edit one.
+**Reached from the app on 2026-08-08, and the rules file was measured byte-identical a
+second time** — 161 tests, over a chunk that touched no server file at all. A mistyped
+price is corrected from "Manage catalog" → "Correct", and the catalog surface now
+creates, corrects, and retires.
 
 ### ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
 
@@ -1235,11 +1289,16 @@ enormous expected-denial traces.
   this file carried from 2026-08-05 is retracted; it was the stated reason for carrying
   that suite's count forward un-measured through three sessions. Backgrounding it is
   still fine and no longer necessary.
-- **A held `emulators:dev` run may already be up.** One is, as of 2026-08-07:
-  `scripts/seed-dev-emulator.js --hold` on the dev ports. `functions/.env.local` and
-  `functions/.secret.local` exist because of it and are **not** leftovers to delete.
-  The reconciliation and invitation suites take their own projects, ports, and copy
-  of the Functions build precisely so they can run beside it, and do.
+- **A held `emulators:dev` run may already be up. Check before assuming either way.**
+  One was, from 2026-08-07 — `scripts/seed-dev-emulator.js --hold` on the dev ports —
+  and by 2026-08-08 it had exited: `Get-CimInstance Win32_Process` for node and java
+  returned nothing. **`functions/.env.local` and `functions/.secret.local` outlived
+  it**, dated 2026-08-06, which makes them exactly the leftovers `run-dev-emulators.js`
+  refuses to overwrite. They were left in place rather than deleted, because deleting
+  another session's files to save a future one a command is the wrong trade. The
+  reconciliation and invitation suites take their own projects, ports, and copy of the
+  Functions build, so none of this affects them and all three emulator suites ran
+  clean on 2026-08-08.
 - **Collection-page test fakes must** answer in ascending document-ID order, be keyed
   per business, be keyed per collection, and model the equality-filter contract in
   both directions. All four mistakes have cost a debugging cycle.
@@ -1325,67 +1384,57 @@ prompt.md                                          (untracked)
 
 ## Next bounded chunk
 
-**Build the Flutter surface that edits a product.** It is the only work standing between
-the bolded board row and green, and **nothing is in front of it any more**: the
-intermittent Flutter failure that guarded it was diagnosed and fixed on 2026-08-07, so
-the suite can now certify a new route. `updateProduct` is built, tested, and called by
-nothing; this is the route that calls it.
+**Bulk change: `updateProducts` as a server callable.** Its stated prerequisite is met —
+the single-product edit surface landed on 2026-08-08, so the two permission tiers, the
+refusal vocabulary, and the "only changed fields are sent" contract are all proved once
+on one product rather than guessed at across four hundred. It is the head of the
+preference order with nothing in front of it, and it is the larger half of the two
+rewrite rows that a shop actually asks for first.
 
-Shape: an edit gateway beside the create and retire ones in
-`lib/inventory/catalog_management.dart`, calling the callable rather than writing
-Firestore directly, because **no rule permits a client to write these fields and none
-will be added** — `allow update` on `products` is the checkout decrement, byte for byte,
-and the resolved decision above says why it stays that way.
+Shape: a `functions/` chunk. `planProductUpdate` is already a pure function from stored
+document plus request to a validated plan, audit entries included, so the expensive half
+exists. What is missing is the loop, the row bound with continuation, the per-row
+outcome report, and the preview.
 
-**It now has five editable fields, not four.** `cost` was added on 2026-08-07 and is the
-second monetary one, so the price tier below covers both — and `cost` is the only field
-where sending `null` is meaningful rather than "leave it alone": it clears a recorded
-cost, and it is the escape hatch for one too malformed to correct.
+Six things the standing decision already fixes, so the chunk does not re-derive them:
 
-Five things the callable's contract forces on the route, all worth reading before
-designing it:
+- **It is N × `updateProduct` on the server, not a client batch.** `allow update` on
+  `products` permits `['quantity', 'updatedAt']` with a strictly decreasing quantity, and
+  widening it is exactly what "How a price is corrected" rejected. The old
+  `batch.update(docRef, arbitraryFields)` shape is structurally impossible here.
+- **Validate, then *preview*, then commit.** The preview is the improvement and it is
+  the whole point: the first time a person should see what four hundred rows will do is
+  before they do it.
+- **Name every broken row at once**, the same contract `updateProduct` already keeps for
+  fields.
+- **Partial success is stated, never implied** — a per-row outcome, nothing silently
+  dropped or coerced.
+- **Bounded and chained**, the same shape the reconciliation sweep uses and for the same
+  Firestore write-budget reason.
+- **One audit entry per product, correlated by the import's request ID.**
 
-- **The form has two permission tiers.** A payload naming `price` **or `cost`** requires
-  an owner or an administrator; a name, SKU, or category needs the operational three. The callable reads
-  this from the *requested* fields, not the resulting diff, so a manager cannot discover a
-  price by binary search over refusals — and the form must not offer a price field it
-  knows will be refused.
-- **Offer every field at once, not a single-field edit.** A refusal can name a field the
-  form did not touch: the callable validates the *resulting* document through
-  `readSellableProduct`, so a product already broken elsewhere is refused here. The
-  contract is "name every broken field in one request, or none".
-- **A request that changes nothing is refused**, so the form must not submit an untouched
-  product.
-- **Hold one request ID across a retry**, from `secureTenantCatalogRequestId()`. A genuine
-  retry answers off the idempotency record; a fresh ID on the same edit reaches the
-  no-op refusal instead.
-- **A blank cost field is not the same as clearing one.** The create form already makes
-  this distinction; the edit form has to make it visibly, because omitting `cost` leaves
-  the stored value alone while sending `null` deletes it. Offer clearing as its own act.
+**Two findings from the 2026-08-08 route chunk land squarely on this one**, and both are
+recorded under "A price is corrected on the server, and never a quantity": the
+idempotency fingerprint in `products.ts` omits `cost`, and `UpdateProductResponse` does
+not echo it. A batch that reuses one request ID per row, or that reports per-row
+outcomes from the response alone, meets both. **This chunk is the right place to fix the
+fingerprint**, because unlike the route chunk it is already inside `functions/`.
 
-See "A price is corrected on the server, and never a quantity" for the full contract, and
-"How a price is corrected" for why it is a callable at all.
-
-**Explicitly excluded from it:** anything in `functions/` — the callable is built and its
-contract is frozen, so a gap found while wiring the route is a finding to record, not a
-server change to make — any change to `firestore.rules`, any new export, `quantity` in any
-form (it belongs to `adjustStock` and the product stock route already reaches it),
-category rename and delete, SKU uniqueness, bulk catalog import, the printed receipt body
-and anything to do with the print service, and the `regenerateDailyMetric` question below.
-It is one route, its gateway, and its tests.
+**Explicitly excluded from it:** any change to `firestore.rules`, `quantity` in any form
+(it belongs to `adjustStock`), spreadsheet import itself — that is the *next* chunk and
+it needs category resolution by name, the deterministic-ID scheme, and opening stock
+through `adjustStock` on top of everything here — category rename and delete, SKU
+uniqueness, a Flutter surface for any of it, the printed receipt body and anything to do
+with the print service, profit display, and the `regenerateDailyMetric` question below.
 
 ### Then, in preference order
 
-- **~~The Flutter surface that edits a product~~** — promoted out of this list and into
-  the current chunk above on 2026-08-07, once the flake standing in front of it was
-  fixed. Its shape, its contract notes, and its exclusions are all up there now.
-- **Bulk change: `updateProducts` as a server callable** — takes the edit surface above
-  as a prerequisite, not by preference but because it is the same callable, the same two
-  permission tiers, and the same refusal vocabulary; proving them once on a single
-  product is how the batch stops being a guess. `planProductUpdate` is already the pure
-  core, so the chunk is the loop, the row bound and continuation, the per-row outcome
-  report, and the preview. See "Bulk catalog work is a rewrite" for what must not be
-  carried over from `lib/services/bulk_update_service.dart`.
+- **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
+  promoted out of this list into the current chunk on 2026-08-07 once the flake in front
+  of it was fixed, and it is now the board's twenty-first green row. What it found on the
+  way is recorded in the standing decision above.
+- **~~Bulk change: `updateProducts` as a server callable~~** — promoted into the current
+  chunk above on 2026-08-08, now that its prerequisite has landed.
 - **Spreadsheet import: `importProducts` as a server callable** — the larger of the two
   and the one to take second, because import has to solve everything bulk change solves
   *plus* category resolution by name, the deterministic-ID scheme, and opening stock
@@ -1400,8 +1449,12 @@ It is one route, its gateway, and its tests.
 - **Run the app against the emulators**, looking at the catalog, reconciliation, and
   stock surfaces. Queued eight times and the oldest behavioural item: neither the
   deleted-product ledger nor the run route has been seen outside a widget test.
-  **A seeded set is held open right now** — `scripts/seed-dev-emulator.js --hold` was
-  found running on 2026-08-07 and left alone; use it rather than starting a second.
+  ~~**A seeded set is held open right now**~~ — **retracted 2026-08-08: it has exited.**
+  No node or java process was running at the start of that session, so the
+  `scripts/seed-dev-emulator.js --hold` run recorded on 2026-08-07 is gone. Its
+  `functions/.env.local` and `functions/.secret.local` remain, dated 2026-08-06, and are
+  now exactly the leftovers `run-dev-emulators.js` refuses to overwrite — so whoever
+  takes this chunk starts a fresh hold and deletes those two first.
   **The Android question is narrowed but not answered.** The standing session
   instructions still skip the Android build and Android emulator tests, so a run
   scheduled today is a Windows or web run and exercises only the loopback path. That
@@ -1428,15 +1481,15 @@ Outside every chunk until deliberately scheduled: a resolution path for the four
 stock and sale differences, currency labels on the differences list, the subscription
 surfaces, discounts, camera barcode scanning, password reset (blocked on the App Check
 decision above, which is now in motion), renaming or
-deleting a category, SKU uniqueness, bulk catalog import, a `platform_audit_logs`
+deleting a category, SKU uniqueness, a `platform_audit_logs`
 surface, branding surfaces, the Sentry DSN, the 476 pre-existing analyzer issues, a
 root-widget smoke test and the startup seams it would need, and deployment.
 
-**Editing a product's descriptive fields left this list on 2026-08-07 and is now half
-built.** The `updateProduct` callable exists, is tested, and is called by nothing. The
-**Flutter edit surface** is no longer excluded either, and as of the flake session the
-same day it is no longer queued behind anything: it is the current chunk above, and the
-interface it writes against is settled rather than still being designed.
+**Editing a product's descriptive fields left this list on 2026-08-07 and was finished
+on 2026-08-08.** The `updateProduct` callable exists, is tested, and is now called by
+`TenantCatalogManagementPanel`'s "Correct" action. Neither half is excluded and neither
+is queued; the row is green. What remains excluded from *around* it is unchanged and
+listed above: category rename and delete, SKU uniqueness, and `quantity` in any form.
 
 Two of those are consequences of the catalog chunk on 2026-08-07 rather than
 inherited: **renaming or deleting a category** (it orphans the `categoryId` on every
@@ -1494,8 +1547,14 @@ server later has to agree with. That one starts on the server or not at all, and
 nothing in the sell-and-settle loop reads it. The exclusions that moved from cosmetic
 to load-bearing are tracked above instead of here, and only one of the three is still
 an open question: **password reset**, now in motion in the console. **How a price is
-corrected** is resolved *and built*, leaving only its client route, and **what a
+corrected** is resolved, built, and reachable — nothing of it is left — and **what a
 receipt is printed on** is answered and waiting on an interface.
+
+**Bulk catalog import was dropped from the list above on 2026-08-08 rather than left
+in it.** It stopped being an exclusion when it was scoped as a rewrite, and the *bulk
+change* half became the current chunk once the single-product edit surface landed.
+Spreadsheet import proper is queued behind it. Neither is excluded any more; both are
+sequenced, which is a different thing and the list should not say otherwise.
 
 ---
 

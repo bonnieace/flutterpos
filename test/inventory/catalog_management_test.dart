@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_application_1/checkout/checkout_draft.dart';
 import 'package:flutter_application_1/inventory/catalog_management.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
@@ -465,6 +466,373 @@ void main() {
     });
   });
 
+  group('update intent', () {
+    test('carries only the fields that move, and its own identity', () {
+      // The callable reads its permission tier from the fields a payload names
+      // rather than from the resulting diff, so resending an unchanged price
+      // would refuse a manager's name correction over a value nobody touched.
+      final intent = _updateIntent(name: 'Brown bread loaf');
+
+      expect(intent.payload(), <String, Object?>{
+        'tenantId': 'tenant-a',
+        'productId': 'prod-bread',
+        'requestId': _requestId,
+        'name': 'Brown bread loaf',
+      });
+      expect(intent.fields, <TenantProductField>[TenantProductField.name]);
+      expect(intent.changesMoney, isFalse);
+      expect(
+        intent.changes.single.toString(),
+        'Name: was White bread loaf, now Brown bread loaf',
+      );
+    });
+
+    test('every editable field moves in one request', () {
+      final intent = _updateIntent(
+        name: 'Brown bread loaf',
+        sku: 'BB-1',
+        price: '70.25',
+        cost: '41',
+        categoryId: 'cat-drinks',
+      );
+
+      expect(intent.payload(), <String, Object?>{
+        'tenantId': 'tenant-a',
+        'productId': 'prod-bread',
+        'requestId': _requestId,
+        'name': 'Brown bread loaf',
+        'sku': 'BB-1',
+        'price': 70.25,
+        'cost': 41.0,
+        'categoryId': 'cat-drinks',
+      });
+      // A refusal can name a field this correction did not touch, because the
+      // callable validates the resulting document. Offering all five at once is
+      // what makes "name every broken field in one request" possible at all.
+      expect(intent.fields, TenantProductField.values);
+      expect(intent.changesMoney, isTrue);
+      expect(intent.categoryName, 'Drinks');
+    });
+
+    test('a correction that changes nothing is refused before it is sent', () {
+      // The server refuses this as a caller defect, and reaching it would put an
+      // idempotency record and a round trip behind a request that does nothing.
+      expect(() => _updateIntent(), _code('product_unchanged'));
+      expect(
+        () => _updateIntent(name: '  White   bread loaf  ', price: '65.00'),
+        _code('product_unchanged'),
+      );
+    });
+
+    test('a price is proved through the till\'s own arithmetic', () {
+      expect(_updateIntent(price: '19.99').priceMinor, 1999);
+      // The stored figure is derived from the minor units, so what the till
+      // converts back is exactly what was confirmed.
+      expect(_updateIntent(price: '19.99').payload()['price'], 19.99);
+      expect(() => _updateIntent(price: '19.999'), _code('invalid_price'));
+      expect(
+        () => _updateIntent(price: '999999999999'),
+        _code('price_not_representable'),
+      );
+    });
+
+    test('a name and a code are held to the shape the till can read', () {
+      expect(_updateIntent(name: '  Brown  bread ').name, 'Brown bread');
+      expect(_updateIntent(sku: '  BB-1 ').sku, 'BB-1');
+      expect(() => _updateIntent(name: '   '), _code('invalid_product_name'));
+      expect(() => _updateIntent(sku: 'BB 1'), _code('invalid_sku'));
+    });
+
+    test('money needs an owner or administrator, the rest does not', () {
+      for (final role in <TenantRole>[TenantRole.owner, TenantRole.admin]) {
+        expect(
+          _updateIntent(price: '70', role: role).priceMinor,
+          7000,
+          reason: role.name,
+        );
+      }
+      // A manager corrects a mistyped name and cannot touch either money field.
+      expect(_updateIntent(name: 'Brown', role: TenantRole.manager).name, 'Brown');
+      expect(
+        () => _updateIntent(price: '70', role: TenantRole.manager),
+        _code('price_forbidden'),
+      );
+      expect(
+        () => _updateIntent(cost: '41', role: TenantRole.manager),
+        _code('cost_forbidden'),
+      );
+      expect(
+        () => _updateIntent(clearCost: true, role: TenantRole.manager),
+        _code('cost_forbidden'),
+      );
+      expect(
+        () => _updateIntent(name: 'Brown', role: TenantRole.cashier),
+        _code('catalog_forbidden'),
+      );
+    });
+
+    test('a manager\'s unchanged price is not a price change', () {
+      // The form does not offer the field, so it passes null rather than the
+      // figure it is showing - and a resent identical price would otherwise be
+      // refused as a money change by somebody correcting a name.
+      expect(
+        _updateIntent(name: 'Brown', price: null, role: TenantRole.manager)
+            .payload()
+            .containsKey('price'),
+        isFalse,
+      );
+    });
+
+    test('a blank cost leaves the recorded one alone', () {
+      // Omitting the key and sending null mean different things to the server,
+      // and this is the surface that has to keep them apart.
+      final intent = _updateIntent(name: 'Brown', cost: '');
+
+      expect(intent.payload().containsKey('cost'), isFalse);
+      expect(intent.clearsCost, isFalse);
+    });
+
+    test('clearing a cost is an explicit null, and its own act', () {
+      final intent = _updateIntent(clearCost: true);
+
+      expect(intent.payload()['cost'], isNull);
+      expect(intent.payload().containsKey('cost'), isTrue);
+      expect(intent.clearsCost, isTrue);
+      expect(
+        intent.changes.single.toString(),
+        'Unit cost: was 40.00, now not recorded',
+      );
+    });
+
+    test('clearing a cost that was never recorded changes nothing', () {
+      expect(
+        () => _updateIntent(clearCost: true, storedCost: null),
+        _code('product_unchanged'),
+      );
+      // Recording one for the first time is a change, and it is not a clear.
+      final intent = _updateIntent(cost: '12.50', storedCost: null);
+      expect(intent.payload()['cost'], 12.5);
+      expect(
+        intent.changes.single.toString(),
+        'Unit cost: was not recorded, now 12.50',
+      );
+    });
+
+    test('a cost the till could not record is refused where it is typed', () {
+      expect(() => _updateIntent(cost: '40.505'), _code('invalid_cost'));
+      expect(
+        () => _updateIntent(cost: '999999999999'),
+        _code('cost_not_representable'),
+      );
+    });
+
+    test('a category this surface did not offer is refused', () {
+      expect(
+        () => _updateIntent(categoryId: 'cat-household'),
+        _code('unknown_category'),
+      );
+    });
+
+    test('a product filed off this page is left where it is', () {
+      // Categories are one bounded page and a business may hold more. Leaving a
+      // product where it already sits needs no proof, or a name correction
+      // would be impossible for every product filed past the first page.
+      final intent = _updateIntent(
+        name: 'Brown',
+        storedCategoryId: 'cat-elsewhere',
+        categoryId: 'cat-elsewhere',
+      );
+
+      expect(intent.payload().containsKey('categoryId'), isFalse);
+      expect(intent.fields, <TenantProductField>[TenantProductField.name]);
+    });
+
+    test('a product decoded in another business is never corrected here', () {
+      expect(
+        () => _updateIntent(name: 'Brown', productTenantId: 'tenant-b'),
+        _code('edit_forbidden'),
+      );
+    });
+
+    test('an unusable request ID is a refusal, never a guessed record', () {
+      for (final requestId in <String>['', 'short', 'has space 12345']) {
+        expect(
+          () => _updateIntent(name: 'Brown', requestId: requestId),
+          _code('invalid_catalog_request_id'),
+          reason: requestId,
+        );
+      }
+    });
+  });
+
+  group('update gateway', () {
+    test('sends exactly the intent and decodes what the server applied', () async {
+      final callable = _UpdateCallable(
+        answer: _response(<String, Object?>{'changedFields': <String>['name']}),
+      );
+      final intent = _updateIntent(name: 'Brown bread loaf');
+
+      final result = await _gateway(callable).submit(intent);
+
+      expect(callable.payloads.single, intent.payload());
+      expect(result.updateId, 'pu_0123456789abcdef');
+      expect(result.productId, 'prod-bread');
+      expect(result.changedFields, <TenantProductField>[
+        TenantProductField.name,
+      ]);
+      expect(result.name, 'Brown bread loaf');
+      expect(result.priceMinor, 6500);
+    });
+
+    test('a response describing another product or business is refused', () async {
+      for (final overrides in <Map<String, Object?>>[
+        <String, Object?>{'tenantId': 'tenant-b'},
+        <String, Object?>{'productId': 'prod-other'},
+      ]) {
+        expect(
+          () => _gateway(
+            _UpdateCallable(answer: _response(overrides)),
+          ).submit(_updateIntent(name: 'Brown bread loaf')),
+          throwsA(isA<FormatException>()),
+          reason: overrides.toString(),
+        );
+      }
+    });
+
+    test('a response is refused unless it applied what was asked', () async {
+      // This is the surface that states what a business now sells and at what
+      // price, so a server answer is reconciled against the request rather than
+      // repeated back.
+      for (final overrides in <Map<String, Object?>>[
+        // Claims a field this correction never named.
+        <String, Object?>{
+          'changedFields': <String>['name', 'price'],
+        },
+        <String, Object?>{'changedFields': <String>['quantity']},
+        <String, Object?>{'changedFields': <String>[]},
+        // Reports the product still holding the name that was corrected.
+        <String, Object?>{'name': 'White bread loaf'},
+        // Its own two figures for one price disagree.
+        <String, Object?>{'priceMinor': 6600},
+        <String, Object?>{'updateId': ''},
+        <String, Object?>{'categoryId': 'cat/escape'},
+      ]) {
+        expect(
+          () => _gateway(
+            _UpdateCallable(answer: _response(overrides)),
+          ).submit(_updateIntent(name: 'Brown bread loaf')),
+          throwsA(isA<FormatException>()),
+          reason: overrides.toString(),
+        );
+      }
+    });
+
+    test('a refusal is classified by what the server actually said', () async {
+      for (final entry in <List<String>, TenantProductUpdateFailure>{
+        <String>['permission-denied', 'Only an owner or an administrator may '
+            'change a product\'s price.']: TenantProductUpdateFailure
+            .priceForbidden,
+        <String>['permission-denied', 'Only an owner or an administrator may '
+            'change what a product costs.']: TenantProductUpdateFailure
+            .costForbidden,
+        <String>['permission-denied', 'Not a member.']:
+            TenantProductUpdateFailure.forbidden,
+        <String>['unauthenticated', 'no auth']:
+            TenantProductUpdateFailure.forbidden,
+        <String>['not-found', 'The product does not exist in this business.']:
+            TenantProductUpdateFailure.productMissing,
+        <String>['already-exists', 'requestId was already used with different '
+            'input.']: TenantProductUpdateFailure.duplicateRequest,
+        <String>['failed-precondition', 'The category does not exist in this '
+            'business.']: TenantProductUpdateFailure.categoryMissing,
+        <String>['failed-precondition', 'This product already holds every '
+            'value in the request.']: TenantProductUpdateFailure.unchanged,
+        <String>['failed-precondition', 'This product\'s stock quantity is not '
+            'an integer, which no callable can correct. It needs an operator.']:
+            TenantProductUpdateFailure.needsOperator,
+        <String>['failed-precondition', 'This product\'s name is unreadable. '
+            'Correct it in the same request.']: TenantProductUpdateFailure
+            .productUnreadable,
+        <String>['invalid-argument', 'quantity is not editable here.']:
+            TenantProductUpdateFailure.invalidRequest,
+        <String>['unavailable', 'down']: TenantProductUpdateFailure.ambiguous,
+        <String>['internal', 'boom']: TenantProductUpdateFailure.ambiguous,
+        <String>['resource-exhausted', 'later']:
+            TenantProductUpdateFailure.refused,
+      }.entries) {
+        await expectLater(
+          _gateway(
+            _UpdateCallable(
+              error: FirebaseFunctionsException(
+                code: entry.key.first,
+                message: entry.key.last,
+              ),
+            ),
+          ).submit(_updateIntent(name: 'Brown bread loaf')),
+          throwsA(
+            isA<TenantProductUpdateException>().having(
+              (error) => error.failure,
+              'failure for ${entry.key.first}',
+              entry.value,
+            ),
+          ),
+        );
+      }
+    });
+
+    test('only an unknown outcome may have corrected the product', () {
+      for (final failure in TenantProductUpdateFailure.values) {
+        expect(
+          TenantProductUpdateException(failure).mayHaveCommitted,
+          failure == TenantProductUpdateFailure.ambiguous,
+          reason: failure.name,
+        );
+      }
+    });
+
+    test('a call that never answers is an unknown outcome', () async {
+      await expectLater(
+        _gateway(_UpdateCallable(error: TimeoutException('slow')))
+            .submit(_updateIntent(name: 'Brown bread loaf')),
+        throwsA(
+          isA<TenantProductUpdateException>().having(
+            (error) => error.failure,
+            'failure',
+            TenantProductUpdateFailure.ambiguous,
+          ),
+        ),
+      );
+      await expectLater(
+        _gateway(_UpdateCallable(error: StateError('transport closed')))
+            .submit(_updateIntent(name: 'Brown bread loaf')),
+        throwsA(isA<TenantProductUpdateException>()),
+      );
+    });
+
+    test('a session that may not correct never reaches the callable', () async {
+      final callable = _UpdateCallable(answer: _response());
+      final intent = _updateIntent(name: 'Brown bread loaf');
+
+      await expectLater(
+        TenantProductUpdateGateway(
+          session: _session(role: TenantRole.cashier),
+          callable: callable,
+        ).submit(intent),
+        throwsA(isA<TenantProductUpdateException>()),
+      );
+      // An intent built for one business can never be sent while another is
+      // open, even though both payloads would be well-formed.
+      await expectLater(
+        TenantProductUpdateGateway(
+          session: _session(tenantId: 'tenant-b'),
+          callable: callable,
+        ).submit(intent),
+        throwsA(isA<TenantProductUpdateException>()),
+      );
+      expect(callable.payloads, isEmpty);
+    });
+  });
+
   group('catalog writer', () {
     test('a create writes the named keys and a server timestamp', () async {
       final writer = _RecordingWriter();
@@ -693,6 +1061,87 @@ TenantProductRetireIntent _retireIntent({
     },
   ),
 );
+
+/// The product every correction test starts from: priced at 65, costing 40,
+/// filed under Bakery.
+TenantProduct _storedProduct({
+  String tenantId = 'tenant-a',
+  double? cost = 40,
+  String categoryId = 'cat-bakery',
+}) => TenantProduct.fromDocument(
+  path: 'tenants/$tenantId/products/prod-bread',
+  data: <String, Object?>{
+    'name': 'White bread loaf',
+    'SKU': '6161100000019',
+    'price': 65,
+    if (cost != null) 'cost': cost,
+    'quantity': 40,
+    'categoryId': categoryId,
+  },
+);
+
+/// Every field defaults to what the product already holds, so a test names only
+/// what it is correcting - which is exactly how the form behaves.
+TenantProductUpdateIntent _updateIntent({
+  String name = 'White bread loaf',
+  String sku = '6161100000019',
+  String? price = '65',
+  String? cost,
+  bool clearCost = false,
+  String categoryId = 'cat-bakery',
+  String storedCategoryId = 'cat-bakery',
+  double? storedCost = 40,
+  TenantRole role = TenantRole.owner,
+  String productTenantId = 'tenant-a',
+  String requestId = _requestId,
+}) => _repository(role: role).buildUpdateIntent(
+  product: _storedProduct(
+    tenantId: productTenantId,
+    cost: storedCost,
+    categoryId: storedCategoryId,
+  ),
+  name: name,
+  sku: sku,
+  price: price,
+  cost: cost,
+  clearCost: clearCost,
+  categoryId: categoryId,
+  categories: _categories('tenant-a'),
+  requestId: requestId,
+);
+
+/// A well-formed `updateProduct` answer, with any field replaced.
+Map<String, Object?> _response([Map<String, Object?> overrides = const {}]) =>
+    <String, Object?>{
+      'updateId': 'pu_0123456789abcdef',
+      'tenantId': 'tenant-a',
+      'productId': 'prod-bread',
+      'changedFields': <String>['name'],
+      'name': 'Brown bread loaf',
+      'sku': '6161100000019',
+      'price': 65.0,
+      'priceMinor': 6500,
+      'categoryId': 'cat-bakery',
+      ...overrides,
+    };
+
+TenantProductUpdateGateway _gateway(UpdateProductCallable callable) =>
+    TenantProductUpdateGateway(session: _session(), callable: callable);
+
+final class _UpdateCallable implements UpdateProductCallable {
+  _UpdateCallable({this.answer, this.error});
+
+  final Map<String, Object?>? answer;
+  final Object? error;
+  final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(payload);
+    if (error != null) throw error!;
+    return answer;
+  }
+}
 
 Matcher _code(String code) => throwsA(
   isA<TenantCatalogManagementException>().having(

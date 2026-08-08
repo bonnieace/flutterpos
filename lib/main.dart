@@ -409,20 +409,30 @@ class SpiritPOSApp extends StatelessWidget {
             TenantCheckoutConfigurationPublisher.allowedRoles,
         // The only path in the app that puts a product in the catalog, and the
         // last capability every other operational surface here already assumed.
-        // Both writes are direct Firestore writes, because the rules on
-        // `products` and `categories` already name exactly the roles this route
-        // is offered to: create is owner/admin/manager, delete is owner/admin.
+        // Creating and retiring are direct Firestore writes, because the rules
+        // on `products` and `categories` already name exactly the roles this
+        // route is offered to: create is owner/admin/manager, delete is
+        // owner/admin.
+        //
+        // Correcting one is the exception and it is a callable. `allow update`
+        // on `products` permits a strictly decreasing quantity and nothing else
+        // - the checkout decrement - and widening it would trade the guarantee
+        // that no client can inflate stock for a price edit that records no
+        // actor, no previous value, and no reason. `updateProduct` writes
+        // through the Admin SDK instead, so that clause stays byte-identical.
         //
         // A committed change asks for a full sync pass, because the catalog
         // refresh is the only thing that re-reads `products` and `categories`:
-        // without it this device could not sell a product that now exists, and
-        // could still sell one that no longer does.
+        // without it this device could not sell a product that now exists,
+        // could still sell one that no longer does, and would keep pricing with
+        // a figure that has just been corrected.
         catalogManagementRoute: (reader) => TenantCatalogManagementScreen(
           reader: reader,
           writer: FirebaseTenantCatalogWriter(
             firestore: FirebaseFirestore.instance,
             isOnline: isOnline,
           ),
+          updateCallable: FirebaseUpdateProductCallable(),
           onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
         ),
         catalogManagementRoles: TenantCatalogManagementRepository.allowedRoles,
