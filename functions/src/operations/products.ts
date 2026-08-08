@@ -28,6 +28,19 @@ import {
   readProductBatchInput,
 } from "./productBatch";
 import {
+  IMPORT_OPENING_STOCK_REASON,
+  MAXIMUM_IMPORT_CATEGORY_SCAN,
+  ProductImportCategories,
+  ProductImportInput,
+  ProductImportRowOutcome,
+  assertProductImportAuthorized,
+  foldCategoryName,
+  planProductImport,
+  productImportFingerprintInput,
+  productImportId,
+  readProductImportInput,
+} from "./productImport";
+import {
   EditableProductField,
   PRODUCT_UPDATE_ROLES,
   ProductUpdateInput,
@@ -501,6 +514,329 @@ export const updateProducts = onCall<
     );
     assertProductBatchAuthorized(currentActor.staff.role, input.rows);
     return applyProductBatchUpdate(db, {
+      tenantId,
+      identityDocumentId: identity.documentId,
+      requestId,
+      actorUid: currentActor.uid,
+      input,
+      transaction,
+    });
+  });
+});
+
+interface ImportProductsRequest {
+  tenantId?: unknown;
+  mode?: unknown;
+  rows?: unknown;
+  requestId?: unknown;
+}
+
+export interface ImportProductsResponse {
+  /**
+   * The identity every audit entry of this import carries, so "what did that
+   * import do" is answerable without inventing a new kind of record.
+   *
+   * Reported by a preview too, naming the import the matching commit *would*
+   * write. A preview's per-row `productId` stays null, which is where the
+   * did-it-happen question is answered.
+   */
+  importId: string;
+
+  /** The business the products were planned or created in. */
+  tenantId: string;
+
+  /** What this request did: `preview` wrote nothing, `commit` wrote. */
+  mode: ProductBatchMode;
+
+  /** How many rows the request carried. */
+  rowCount: number;
+  createdCount: number;
+  failedCount: number;
+
+  /** Every row, in the order it was sent. */
+  rows: ProductImportRowOutcome[];
+}
+
+/**
+ * Reads the categories one import needs, by ID or by name.
+ *
+ * Two shapes, and which one runs is decided by the rows rather than by a flag.
+ * A request that names every category by ID needs only those documents, so it
+ * reads exactly them. A request that names any category by *name* has to hold
+ * this business's categories to resolve against, so it scans them - bounded, and
+ * refusing the whole request rather than guessing if the business holds more
+ * than the bound. That scan then answers the ID rows too, which is why the two
+ * are alternatives rather than both.
+ *
+ * A category whose stored `name` is unusable is skipped for name resolution and
+ * still reachable by ID: it is a broken document, and refusing every import in
+ * the business over one would be a worse answer than the one row that names it
+ * failing.
+ */
+async function readProductImportCategories(
+  db: Firestore,
+  tenantRef: DocumentReference,
+  input: ProductImportInput,
+  transaction?: Transaction
+): Promise<ProductImportCategories> {
+  const ids = new Set<string>();
+  const byFoldedName = new Map<string, string[]>();
+  const categories = tenantRef.collection("categories");
+
+  if (input.rows.some((row) => row.categoryName !== undefined)) {
+    // One more than the bound, so "there are too many" is answered by the read
+    // itself rather than by a count query nobody else in this codebase runs.
+    const query = categories.limit(MAXIMUM_IMPORT_CATEGORY_SCAN + 1);
+    const snapshot = transaction ? await transaction.get(query) : await query.get();
+    if (snapshot.size > MAXIMUM_IMPORT_CATEGORY_SCAN) {
+      throw new HttpsError(
+        "failed-precondition",
+        `This business holds more than ${MAXIMUM_IMPORT_CATEGORY_SCAN} ` +
+        "categories, which is more than an import will resolve names against. " +
+        "Name each row's category by categoryId instead."
+      );
+    }
+    for (const document of snapshot.docs) {
+      ids.add(document.id);
+      const name = document.get("name");
+      if (typeof name !== "string" || name.trim().length === 0) continue;
+      const folded = foldCategoryName(name);
+      byFoldedName.set(folded, [...(byFoldedName.get(folded) ?? []), document.id]);
+    }
+    return {ids, byFoldedName};
+  }
+
+  const namedIds = [...new Set(input.rows.flatMap(
+    (row) => row.categoryId === undefined ? [] : [row.categoryId]
+  ))].sort();
+  // Reachable when every row of the request was refused before anything could be
+  // read. `getAll()` with no references is an error, not an empty answer.
+  if (namedIds.length === 0) return {ids, byFoldedName};
+  const refs = namedIds.map((id) => categories.doc(id));
+  const snapshots: DocumentSnapshot[] = transaction ?
+    await transaction.getAll(...refs) :
+    await db.getAll(...refs);
+  for (const snapshot of snapshots) {
+    if (snapshot.exists) ids.add(snapshot.id);
+  }
+  return {ids, byFoldedName};
+}
+
+/**
+ * Creates every product one import names, and records where its stock came from.
+ *
+ * Up to four documents per row, and the last two are the reason this is not a
+ * client-side batch even though `allow create` on `products` is client-reachable:
+ * a device can create a product, but it cannot write the `stock_adjustments`
+ * record or the `stock_movements` entry that give the opening units a recorded
+ * origin, because both collections are server-write-only. A device import would
+ * therefore either leave stock with no ledger entry - the defect the previous
+ * app's uploader shipped - or leave the ledger to a second, unrelated call that
+ * can fail on its own.
+ *
+ * Preview and commit read exactly the same documents through exactly the same
+ * code, differing only in whether that read is transactional and whether the
+ * plan's writes are applied.
+ */
+export async function applyProductImport(
+  db: Firestore,
+  options: {
+    tenantId: string;
+    identityDocumentId: string;
+    requestId: string;
+    actorUid: string;
+    input: ProductImportInput;
+
+    /** Absent in a preview, which reads the same documents and writes none. */
+    transaction?: Transaction;
+  }
+): Promise<ImportProductsResponse> {
+  const tenantRef = db.collection("tenants").doc(options.tenantId);
+  const categories = await readProductImportCategories(
+    db,
+    tenantRef,
+    options.input,
+    options.transaction
+  );
+  const plan = planProductImport({
+    input: options.input,
+    identityDocumentId: options.identityDocumentId,
+    categories,
+  });
+
+  const importId = productImportId(options.identityDocumentId);
+  const transaction = options.transaction;
+  if (transaction) {
+    for (const write of plan.writes) {
+      const productRef = tenantRef.collection("products").doc(write.productId);
+      transaction.create(productRef, {
+        ...write.documentData,
+        createdBy: options.actorUid,
+        createdAt: FieldValue.serverTimestamp(),
+        // Written beside `createdAt`, which the catalog's own create form does
+        // not do, because this path can create a product already holding stock:
+        // the nightly stock verification defers a product written in the last
+        // five minutes by reading `updatedAt`, and without one an imported
+        // product would be compared against a ledger entry Firestore may not
+        // have made visible to the query yet.
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      transaction.create(tenantRef.collection("audit_logs").doc(write.auditId), {
+        eventType: "product_imported",
+        tenantId: options.tenantId,
+        productId: write.productId,
+        // What makes one import answerable as one thing. A product created
+        // through the catalog form carries neither field, so a query by import
+        // matches only imported rows.
+        importId,
+        rowIndex: write.rowIndex,
+        // What the product was created holding. There is no before-and-after to
+        // record as a correction has, so the audit records the after - which is
+        // the only account of an imported price that survives a later change.
+        created: {
+          name: write.product.name,
+          sku: write.product.sku,
+          price: write.product.price,
+          cost: write.product.cost,
+          categoryId: write.product.categoryId,
+          quantity: write.product.quantity,
+        },
+        openingQuantity: write.product.quantity,
+        // The ledger entry those units came in through, and null when the row
+        // opened holding nothing. Whenever `mutatesQuantity` is true this names
+        // the record that says where the stock came from, which is the property
+        // that makes a quantity acceptable in this payload at all.
+        adjustmentId: write.adjustmentId,
+        mutatesQuantity: write.adjustmentId !== null,
+        actorUid: options.actorUid,
+        requestId: options.requestId,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      if (write.adjustmentId === null) continue;
+      // The shape `adjustStock` writes, field for field, because an imported
+      // unit and an adjusted unit are the same unit and reconciliation reads
+      // one ledger. `previousQuantity` is zero rather than "unknown": the
+      // product is being created in this transaction, so it held nothing.
+      const immutableRecord = {
+        tenantId: options.tenantId,
+        productId: write.productId,
+        sourceType: "product_import",
+        adjustmentType: "opening_balance",
+        quantityDelta: write.product.quantity,
+        previousQuantity: 0,
+        quantityAfter: write.product.quantity,
+        reason: IMPORT_OPENING_STOCK_REASON,
+        importId,
+        rowIndex: write.rowIndex,
+        actorUid: options.actorUid,
+        requestId: options.requestId,
+        createdAt: FieldValue.serverTimestamp(),
+      };
+      transaction.create(
+        tenantRef.collection("stock_adjustments").doc(write.adjustmentId),
+        immutableRecord
+      );
+      transaction.create(
+        productRef.collection("stock_movements").doc(write.adjustmentId),
+        {
+          ...immutableRecord,
+          movementId: write.adjustmentId,
+          occurredAt: FieldValue.serverTimestamp(),
+          recordedAt: FieldValue.serverTimestamp(),
+        }
+      );
+    }
+  }
+
+  return {
+    importId,
+    tenantId: options.tenantId,
+    mode: options.input.mode,
+    rowCount: options.input.rowCount,
+    createdCount: plan.createdCount,
+    failedCount: plan.failedCount,
+    rows: plan.outcomes,
+  };
+}
+
+/**
+ * Creates many products from a spreadsheet, or reports what doing so would
+ * create.
+ *
+ * The other half of the bulk catalog rewrite, and the larger one. It solves
+ * everything `updateProducts` solved - a required mode, a bounded row list,
+ * every broken row named at once, partial success stated rather than implied -
+ * plus the three problems only a create raises: resolving a category named
+ * "Bakery" against this business, deriving a permanent document ID for a product
+ * that does not exist yet, and giving opening stock a recorded origin. Those are
+ * argued in `productImport.ts`.
+ *
+ * A `preview` writes nothing at all - not the products, not the audit entries,
+ * not the stock ledger, and deliberately not an idempotency record, so a client
+ * may preview and then commit under one request ID. That flow is worth more here
+ * than anywhere else in this codebase: a spreadsheet is the one input nobody
+ * proofreads, and four hundred wrong products are far harder to undo than one,
+ * because retiring a product is not an undo and every ID stays in the ledger.
+ *
+ * A `commit` is one transaction. Rows that could not be created are reported
+ * beside the ones that were, and re-running a failed import needs a **new**
+ * request ID - which will create the rows that already landed a second time,
+ * since nothing in this system makes a SKU or a name unique. The preview is the
+ * answer to that, not a duplicate check this app has never been able to make.
+ */
+export const importProducts = onCall<
+  ImportProductsRequest,
+  Promise<ImportProductsResponse>
+>(async (
+  request: CallableRequest<ImportProductsRequest>
+): Promise<ImportProductsResponse> => {
+  const data = requireObject(request.data);
+  const tenantId = requireDocumentId(data.tenantId, "tenantId");
+  const requestId = requireRequestId(data.requestId);
+  const input = readProductImportInput(data);
+  const db = getFirestore();
+
+  // Creating a product is an operational act and `PRODUCT_UPDATE_ROLES` is
+  // exactly the trio `allow create` on `products` already names, so an import
+  // admits whoever the catalog's own add-product form admits. Cost is narrower
+  // and is decided over every row before anything is read.
+  const actor = await requireTenantMember(db, request, tenantId, PRODUCT_UPDATE_ROLES);
+  assertProductImportAuthorized(actor.staff.role, input.rows);
+  const identity = buildIdempotencyIdentity(
+    actor.uid,
+    "importProducts",
+    tenantId,
+    requestId
+  );
+
+  if (input.mode === "preview") {
+    return applyProductImport(db, {
+      tenantId,
+      identityDocumentId: identity.documentId,
+      requestId,
+      actorUid: actor.uid,
+      input,
+    });
+  }
+
+  return runIdempotentFirestoreTransaction(db, {
+    actorUid: actor.uid,
+    operation: "importProducts",
+    tenantId,
+    requestId,
+    // Only a commit ever records one, so the mode is not part of the
+    // fingerprint: every stored record of this operation is a commit.
+    input: productImportFingerprintInput(input),
+  }, async (transaction) => {
+    const currentActor = await requireTenantMember(
+      db,
+      request,
+      tenantId,
+      PRODUCT_UPDATE_ROLES,
+      transaction
+    );
+    assertProductImportAuthorized(currentActor.staff.role, input.rows);
+    return applyProductImport(db, {
       tenantId,
       identityDocumentId: identity.documentId,
       requestId,

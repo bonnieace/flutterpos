@@ -55,6 +55,7 @@ export {
 export {
   adjustStock,
   getSalesComparison,
+  importProducts,
   updateProduct,
   updateProducts,
   verifyReturnAndRestoreStock,

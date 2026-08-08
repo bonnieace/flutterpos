@@ -16478,3 +16478,327 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+## Products imported from a spreadsheet, previewed before they exist - 2026-08-08
+
+### Chunk chosen, and why the queued one was right
+
+Took the queued chunk: **spreadsheet import as the `importProducts` server callable**.
+Checked against the board first, as required. Its prerequisite had landed the same day —
+`updateProducts` — so the required mode, the row bound, the per-row outcome report, the
+authorization decided over every row before anything is read, and the preview that writes
+nothing were all built and proved rather than guessed at. Import was always meant to be
+taken second: it has to solve everything bulk change solved *plus* three problems bulk
+change never faced, and none of those would have been easier to solve while also
+inventing the preview.
+
+No unqueued capability the app needs in order to function is missing. Every remaining red
+row is blocked on a decision (password reset on App Check), an interface nobody has
+shared (the printed body), a schema that does not exist (subscription), its own reporting
+chunk (profit display), or on a Flutter surface that is deliberately one chunk covering
+both halves of this feature.
+
+### Completed in this session
+
+**A business can create up to fifty products from a spreadsheet in one request, and see
+exactly what that would create before any of it exists.** `importProducts` is the
+twenty-sixth callable and the forty-ninth export. It reuses the bulk correction's
+envelope wholesale — the same `ProductBatchMode`, the same required-mode reader, the same
+`describeRows` for a refusal that names offending rows as payload paths — and it reuses
+the validation that decides what a product may hold: an imported row's name, code, price,
+and cost are read by `readProductUpdateInput`, and the document each row would create is
+read back through `readSellableProduct` before anything is written. The two paths
+therefore cannot drift about what a product is.
+
+**No board row moved and none was meant to.** This is a server chunk with no Flutter
+surface, so "import a catalog from a spreadsheet" stays red until a route calls it —
+exactly as `updateProduct` stayed red for a day and as `updateProducts` has stayed red
+since this morning. `firestore.rules` is untouched and the 161-test rules suite was run
+to say so with a measurement rather than an assertion.
+
+### The three new problems, and how each was answered
+
+**1. A spreadsheet names "Bakery", not `ct_7f3a`.** A row names its category by
+`categoryId` **or** by `categoryName`, never both — two ways of saying one thing have no
+honest resolution when they disagree — and never neither, because a product must be filed
+somewhere. A name is matched case-insensitively over collapsed whitespace, because
+"bakery" and "Bakery" are one category to everybody who is not a computer.
+
+The key is called `categoryName` and not `category`, deliberately. A stored product's
+`category` is the **legacy alias for `categoryId`** and holds an ID; the previous app's
+uploader wrote a display name into a field of that name, which is precisely the drift this
+rewrite exists not to repeat.
+
+**An unmatched name refuses the row. It does not create the category**, and that is the
+decision this chunk had to make. A category is permanent here: the rules permit rename and
+delete, and this app offers neither, for the orphaning reason the catalog decision records.
+So "Bakry" typed once into a spreadsheet would become a grouping nobody can rename, nobody
+can remove, and whose products every grouped report separates from the ones filed under
+"Bakery". What makes refusing tolerable is the preview: a caller sees every unmatched name
+at once, before anything is written, and the catalog surface already creates categories. If
+category correction ever exists this is worth revisiting; until then, creating a category
+from a typo is a worse answer than naming it.
+
+**A name two categories share fails that row rather than guessing.** Nothing in this app
+makes a category name unique — `allow create` on `categories` checks nothing at all — so
+two "Bakery" categories are a state a business can reach, and the refusal says to name the
+category by ID.
+
+**2. The deterministic ID has to be per row, and position is the only identity a row
+has.** The client's scheme is
+`pd_<40 hex of sha256("createTenantProduct tenantId createdBy requestId")>`, scoped by
+request — exactly right for one product and wrong for four hundred, which would all
+collide on it. `productImportRowIds` digests the request identity and the row's
+**position**, and returns all three documents that row is written at: `pd_` for the
+product, `sa_` for its stock adjustment, `pi_` for its audit entry.
+
+This is the one deterministic ID in this codebase derived from a position, and it is a
+deliberate reversal of the neighbouring decision. `productBatchRowUpdateId` derives a row's
+audit entry from the *product* it corrects, so re-sending a bulk correction with its rows
+reordered lands on the same documents. An import has no product to derive from — that is
+what an import is — so order becomes part of what a retry is recognised by, and the
+fingerprint says so. A reordered retry answered off the stored record would report IDs
+belonging to different products; one *not* answered off it would create the whole catalog
+a second time. `already-exists` is the only honest outcome.
+
+**3. Opening stock arrives with the ledger entry that says where it came from.** A row may
+carry a `quantity`, and this is the only product payload in this codebase that may:
+`updateProduct` refuses one outright, with a message naming `adjustStock`. That refusal is
+not relaxed here, it is *satisfied* — the reason it exists is that a quantity written with
+no `stock_movements` entry has no recorded origin, and this path writes that entry in the
+same transaction.
+
+Four documents per created row rather than a correction's two: the product, its audit
+entry, and — only when the row opens holding stock — a `stock_adjustments` record and a
+`stock_movements` entry, both in `adjustStock`'s own shape, field for field, because an
+imported unit and an adjusted unit are the same unit and reconciliation reads one ledger.
+`sourceType` is `product_import` and `adjustmentType` is `opening_balance`, which is the
+type `adjustStock` already carries for exactly this. `previousQuantity` is `0` rather than
+unknown: the product is being created in the same transaction, so it held nothing.
+
+The product is created **holding** the opening quantity rather than created empty and then
+adjusted. The recorded history is identical — the same ledger entry, the same before and
+after — and it is one write fewer per row. Fifty rows is therefore at most 200 writes plus
+one idempotency record, against Firestore's limit of 500, which is what the row bound had
+to answer for.
+
+**A row that opens holding nothing writes no ledger entry at all**, and its audit entry
+says `mutatesQuantity: false`. Whenever that flag is true the entry names the
+`adjustmentId` that says where the stock came from, and that pairing is what makes a
+quantity acceptable in a product payload at all. There is a test for both halves.
+
+### The one place import deliberately differs from correction: a price is not gated
+
+`updateProduct` puts **price and cost** behind owner or administrator. `importProducts`
+puts **only cost** there, and that is a decision rather than an oversight.
+
+Changing a price silently alters what every subsequent sale records for a business that
+will not notice until reconciliation, which is why correcting one is narrow. Setting the
+*first* price is not that: it is creation, `allow create` on `products` already names the
+operational three, and the catalog's own add-product form already lets a manager type a
+price. An import that refused what the form beside it accepts would be a rule nobody could
+explain.
+
+Cost is gated for the reason it is gated everywhere — it is the business's margin written
+down, and the create form refuses one from a manager too. The tier is delegated to
+`assertProductUpdateAuthorized` over the single field `cost`, so neither the threshold nor
+the wording can drift, and the decision is made over every row **before anything is
+read**, so the preview refuses too. A manager who previewed green and then met a
+commit-time refusal would learn only that the app guesses.
+
+### Three decisions that are not re-derivable from what came before
+
+**1. A product named twice is not a refusal here, which reverses the bulk correction's
+rule.** `updateProducts` refuses a product named twice because two rows addressing one
+*document* are two conflicting intents with no honest outcome to report for either. Two
+import rows describing one product are not that: each creates its own document under its
+own ID, and a shop legitimately stocking two products with one name and one code is a
+state this app already permits and the till already refuses to resolve by scan. SKU
+uniqueness is stated rather than enforced everywhere else in this system, and an import is
+not the place to invent it — a check against fifty rows would not see the four hundred
+already in the catalog, which is a guarantee the next request breaks.
+
+**2. Re-running an import needs a new request ID, and that stocks the shelf twice.**
+Stated rather than prevented, and tested rather than left to be discovered. The guard is
+the request ID: a genuine retry under the same one is answered off the idempotency record
+and lands on the same documents, which is already strictly better than the previous app's
+uploader, which had no idempotency of any kind and duplicated the catalog on every retry.
+A *fresh* request ID is a different request and creates the rows again. The preview is the
+answer to that, not a duplicate check this app has never been able to make.
+
+**3. An absent cost and an explicit `null` mean the same thing here, and hash the same.**
+The opposite of `updateProduct`, where `null` clears a recorded cost and absence leaves it
+alone. There is nothing to clear on a product that does not exist yet, so a blank
+spreadsheet cell means the business did not say — and a null cost is therefore not a
+monetary row, so a manager may send one.
+
+### The category scan, and why exceeding it refuses the request
+
+Resolving names means holding this business's categories in memory, and that read is
+unbounded unless something bounds it. `MAXIMUM_IMPORT_CATEGORY_SCAN` is **500**, read as
+`limit(501)` so "there are too many" is answered by the read itself rather than by a count
+query nothing else in this codebase runs. Exceeding it refuses the **whole request**,
+because the defect belongs to the business rather than to any row, and the message says
+what to do instead: name each row's category by `categoryId`, which needs no scan at all.
+
+Which read runs is decided by the rows rather than by a flag. A request naming every
+category by ID reads exactly those documents through `getAll`; a request naming any
+category by name scans instead, and that scan answers the ID rows too — so the two are
+alternatives rather than both. A request whose every row was refused reads **nothing**,
+because `getAll()` with no references is an error rather than an empty answer. All three
+shapes have a test, including the one proving an ID-only request is unaffected by a
+business holding 502 categories.
+
+**One field is written that the catalog's own create form does not write: `updatedAt`.**
+The nightly stock verification defers a product written in the last five minutes by
+reading that field, and this is the one create path that can produce a product already
+holding stock. Without it, an imported product could be compared against a ledger entry
+Firestore has not yet made visible to the query that walks it.
+
+### A literal NUL byte was repaired in `productBatch.ts`
+
+`productBatchRowUpdateId` separated its two digest inputs with a **literal NUL byte**,
+typed into the source on 2026-08-08 rather than written as an escape. This is exactly the
+standing trap `PLAN.md` documents, from the other direction: `file` reported the module as
+`data`, and `grep` reported it as "Binary file ... matches" and returned no lines from it
+— a module hiding from every search of the repository.
+
+It is now `\u0000`, written as an escape. **The digest is byte-identical** — a template
+literal's `\u0000` is that same character — so no audit ID any bulk change would write has
+moved, and the functions suite says so. A comment at the site now records that the
+separator must stay a NUL rather than become a space, because turning it into one *would*
+change every audit ID a bulk change addresses. Repaired with a small Node script replacing
+the byte by index, which is what `PLAN.md` says is the way out: the editing tools cannot
+anchor on a string that has to contain the byte.
+
+Fixed here rather than left, because this module is now shared infrastructure — the import
+path imports three things from it — and because a session that copied the pattern into the
+new file would have copied the byte.
+
+### Files changed
+
+```text
+functions/src/operations/productImport.ts        new - every decision, as pure functions
+functions/src/operations/productImport.test.ts   new - 22 tests
+functions/src/operations/products.ts             + applyProductImport, importProducts,
+                                                   readProductImportCategories
+functions/src/operations/products.test.ts        + 9 tests against the Firestore double
+functions/src/operations/productBatch.ts         exported the mode reader and describeRows
+                                                   for reuse; repaired the NUL byte
+functions/src/operations/index.ts                + importProducts
+functions/src/index.ts                           + importProducts
+```
+
+`firestore.rules` untouched. No Dart touched. No `pubspec.yaml` change.
+
+### Tests, and the exact commands
+
+```powershell
+node functions/node_modules/typescript/bin/tsc -p functions/tsconfig.json --noEmit
+npm --prefix functions test                                  # 409 pass, 0 fail
+npm --prefix rules-tests run test:emulator                   # 161 pass, 0 fail
+npm --prefix rules-tests run test:emulator:reconciliation    # 10 pass, 0 fail
+$env:FUNCTIONS_DISCOVERY_TIMEOUT = '60000'
+npm --prefix rules-tests run test:emulator:invitations       # 12 pass, 0 fail
+flutter test --no-pub --concurrency=1 --reporter=failures-only   # 1392 pass, 0 fail
+```
+
+Every emulator command was preceded by the prelude, which is not optional:
+
+```powershell
+if (Test-Path Env:DEBUG) { Remove-Item Env:DEBUG }
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:JAVA_HOME\bin;$env:Path"
+```
+
+**Functions 378 → 409**, 31 new: 22 in `productImport.test.ts` and 9 in
+`products.test.ts`. The other four suites are unchanged, which for the rules suite is the
+measurement proving `firestore.rules` is byte-identical and for the Flutter suite is the
+measurement proving no Dart was touched. **1984 tests across five suites.**
+
+No held emulator run existed at the start of this session — `Get-CimInstance
+Win32_Process` for node and java returned nothing — so nothing was at risk of being killed
+for a port. `functions/.env.local` and `functions/.secret.local` are still there, dated
+2026-08-06, still not this session's, and still not deleted.
+
+What the 22 unit tests pin, beyond the envelope the bulk correction already proved: that a
+row must name a name, a code, and a price; that a quantity is accepted here and bounded
+where `adjustStock` bounds one; that a category must be named exactly one way; that a name
+is folded before matching and that an unmatched or an ambiguous one fails its own row; that
+the document a row would create is read back through `readSellableProduct` — proved with a
+category ID carrying a control character, built with `String.fromCharCode` rather than
+typed, for the reason the section above exists; that a created row carries **exactly** the
+six keys `TenantProductCreateIntent` writes; that a manager may import a priced product and
+may not import a cost; and that a reordered retry, a changed quantity, and a category named
+by name rather than by ID are all different requests.
+
+### Meaningful failures and their resolutions
+
+No test failed that was not made to. The type checker caught the ordinary mistakes and one
+real one: `assertProductUpdateAuthorized` takes a whole `ProductUpdateInput`, and handing
+it an import row's own requested fields would have refused **every** import by a manager,
+because those fields always include `price` and `price` is in `MONETARY_PRODUCT_FIELDS`.
+That is what forced the price/cost split above to be stated as a decision rather than
+inherited; the delegation now passes the single field `cost`.
+
+Two things were changed after being written and before being run, both wrong answers
+rather than compile errors:
+
+- **A helper read the import ID back out of the document it had just asserted on**, which
+  proves nothing at all. It now compares the audit entry's `importId` against the
+  response's, which is the property worth having: one import is answerable as one thing.
+- **Two tests in `products.test.ts` shared a name.** "a request whose every row was refused
+  reads nothing at all" existed for the bulk correction already, and `node --test` reports
+  both without complaint, so a failure in either would have been ambiguous. The import one
+  is now "an import whose every row was refused reads nothing at all".
+
+**And the NUL byte was met three times in one session, which is the part worth
+recording.** Once in `productBatch.ts`, where the previous chunk left it. Once in **the new
+`productImport.ts`**, whose `productImportRowIds` was written in the same shape and
+acquired one of its own — found only because `grep` refused to search the file while
+double-checking the separator convention, which is the same symptom as the first. And once
+in *this handover*, where the sentence describing the first repair silently acquired two.
+All three are fixed, and the last was caught by running `file` over the scratch copy before
+it reached `HISTORY.md`.
+
+**So the lesson is narrower and worse than the standing trap said.** It is not "typing a
+control character into a test fixture"; it is writing a separator as a control character at
+all, anywhere, source or prose. The escape has to be spelled out as six characters. `file`,
+or `indexOf(0x00)`, is a one-second check and is now recorded in the traps as habitual.
+
+The upside of finding the third one: all three digests in this feature area — the
+idempotency identity, a bulk correction's audit ID, and an imported row's three IDs — now
+separate their fields the same way, with the same escape and the same comment, so nobody
+comparing them has to wonder which was deliberate. That was the intention behind the
+accident, and it is now written down instead of implied.
+
+### Two exclusions named, as required
+
+**A Flutter surface for either half of this feature is excluded from this chunk and is not
+a standing exclusion.** It is queued as the next chunk, as one screen covering both
+callables, and this is now the second server chunk in a row to end with something built
+and reachable from nothing. That is deliberate and is now due: `updateProducts` and
+`importProducts` both want the same screen — pick rows, preview, read a per-row report,
+commit — and building it against either alone would design the preview twice.
+
+**The 476 pre-existing analyzer issues** remain excluded and remain correct, for the reason
+the last several handovers give: all of them are in the closed unreachable island, and
+fixing them is work on code that does not run. This chunk touched no Dart at all.
+
+### The published board is unchanged, and so is the board
+
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29
+capabilities at **20 green, 8 red, 1 amber** — one green behind `PLAN.md`, which the
+2026-08-08 route chunk put at **21 green, 7 red, 1 amber**. This session moved no row, so
+the page is exactly as far behind as it was. Publishing was not requested and the page was
+left alone.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

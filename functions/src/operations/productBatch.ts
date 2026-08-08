@@ -81,6 +81,9 @@ const MAXIMUM_NAMED_ROWS = 10;
  * treated as a preview, because the failure modes are not symmetric: a preview
  * mistaken for a commit is a report nobody acts on, and a commit mistaken for a
  * preview changes four hundred products nobody agreed to.
+ *
+ * Shared with `productImport.ts`, which asks the same question of the same
+ * caller about the same spreadsheet.
  */
 export type ProductBatchMode = "preview" | "commit";
 
@@ -193,7 +196,7 @@ export interface ProductBatchPlan {
   failedCount: number;
 }
 
-function readProductBatchMode(value: unknown): ProductBatchMode {
+export function readProductBatchMode(value: unknown): ProductBatchMode {
   if (typeof value !== "string" || !PRODUCT_BATCH_MODES.includes(value)) {
     throw new HttpsError(
       "invalid-argument",
@@ -209,8 +212,11 @@ function readProductBatchMode(value: unknown): ProductBatchMode {
  * Written as payload paths rather than as ordinals because the indexes are the
  * zero-based ones every outcome carries, and "row 3" beside an outcome indexed 3
  * is the kind of off-by-one nobody notices until they correct the wrong product.
+ *
+ * Shared with `productImport.ts` so one refusal is worded one way, whichever
+ * half of a bulk catalog change raised it.
  */
-function describeRows(indexes: readonly number[]): string {
+export function describeRows(indexes: readonly number[]): string {
   const named = indexes.slice(0, MAXIMUM_NAMED_ROWS)
     .map((index) => `rows[${index}]`)
     .join(", ");
@@ -360,8 +366,14 @@ export function productBatchRowUpdateId(
   identityDocumentId: string,
   productId: string
 ): string {
+  // The separator is a NUL, matching `buildIdempotencyIdentity`, so no pair of
+  // fields can be re-split into a different pair. It is written as an escape
+  // because it reached this file as a literal NUL byte on 2026-08-08, which made
+  // `grep` report the whole module as binary and find nothing in it. It must stay
+  // a NUL rather than become a space: this digest is what every audit entry of
+  // every bulk change is addressed by.
   const digest = createHash("sha256")
-    .update(`${identityDocumentId} ${productId}`)
+    .update(`${identityDocumentId}\u0000${productId}`)
     .digest("hex");
   return `pu_${digest.slice(0, 40)}`;
 }

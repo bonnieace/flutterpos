@@ -6,10 +6,16 @@ import {fingerprintPayload} from "../core/idempotency";
 import {FakeFirestore} from "../testing/fakeFirestore";
 import {
   applyProductBatchUpdate,
+  applyProductImport,
   applyProductUpdate,
   productUpdateFingerprintInput,
 } from "./products";
 import {productBatchRowUpdateId, readProductBatchInput} from "./productBatch";
+import {
+  MAXIMUM_IMPORT_CATEGORY_SCAN,
+  productImportRowIds,
+  readProductImportInput,
+} from "./productImport";
 import {ProductUpdateInput, readProductUpdateInput} from "./productUpdate";
 
 /**
@@ -482,5 +488,276 @@ test("a bulk change under a second request records rather than collides", async 
   );
 
   assert.equal(db.read(productPath())?.price, 30);
+  assert.equal(db.ids(`tenants/${TENANT}/audit_logs`).length, 2);
+});
+
+/**
+ * What `importProducts` does to a business's data.
+ *
+ * `productImport.test.ts` pins every decision about which rows an import creates
+ * and what it reports. What is left, and what these cover, is the part a plan
+ * cannot describe: that a created product is written in the shape every device
+ * reads, that its opening stock arrives with the ledger entry that says where it
+ * came from, that a preview writes none of it, and that resolving a category by
+ * name reads this business's categories rather than trusting the row.
+ */
+
+const IMPORT_IDENTITY = "e".repeat(64);
+
+/** A business holding two categories and no products at all. */
+function seededCategories(): FakeFirestore {
+  const db = new FakeFirestore();
+  db.seed(`tenants/${TENANT}/categories/${CATEGORY}`, {name: "Drinks"});
+  db.seed(`tenants/${TENANT}/categories/ct_snacks`, {name: "Snacks"});
+  db.clearWrites();
+  return db;
+}
+
+function importRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    name: "Cola 500ml",
+    sku: "CL500",
+    price: 19.99,
+    categoryId: CATEGORY,
+    ...overrides,
+  };
+}
+
+function importInput(rows: readonly unknown[], mode = "commit") {
+  return readProductImportInput({
+    tenantId: TENANT,
+    requestId: REQUEST,
+    mode,
+    rows,
+  });
+}
+
+function applyImport(
+  db: FakeFirestore,
+  rows: readonly unknown[],
+  options: {identityDocumentId?: string} = {}
+) {
+  return db.runTransaction((transaction) => applyProductImport(
+    db.asFirestore(),
+    {
+      tenantId: TENANT,
+      identityDocumentId: options.identityDocumentId ?? IMPORT_IDENTITY,
+      requestId: REQUEST,
+      actorUid: ACTOR,
+      input: importInput(rows),
+      transaction: transaction as unknown as Transaction,
+    }
+  ));
+}
+
+function previewImport(db: FakeFirestore, rows: readonly unknown[]) {
+  return applyProductImport(db.asFirestore(), {
+    tenantId: TENANT,
+    identityDocumentId: IMPORT_IDENTITY,
+    requestId: REQUEST,
+    actorUid: ACTOR,
+    input: importInput(rows, "preview"),
+  });
+}
+
+test("an imported product with opening stock writes four documents", async () => {
+  const db = seededCategories();
+
+  const response = await applyImport(db, [importRow({quantity: 24, cost: 12.5})]);
+
+  assert.equal(response.mode, "commit");
+  assert.equal(response.createdCount, 1);
+  const ids = productImportRowIds(IMPORT_IDENTITY, 0);
+  assert.deepEqual(db.writtenPaths(), [
+    productPath(ids.productId),
+    auditPath(ids.auditId),
+    `tenants/${TENANT}/stock_adjustments/${ids.adjustmentId}`,
+    `${productPath(ids.productId)}/stock_movements/${ids.adjustmentId}`,
+  ].sort());
+
+  // The product, in exactly the shape `TenantProductCreateIntent` writes plus
+  // the provenance and the timestamps the writer owns.
+  const product = db.read(productPath(ids.productId));
+  assert.deepEqual(Object.keys(product ?? {}).sort(), [
+    "SKU", "categoryId", "cost", "createdAt", "createdBy", "name", "price",
+    "quantity", "updatedAt",
+  ]);
+  assert.equal(product?.name, "Cola 500ml");
+  assert.equal(product?.price, 19.99);
+  assert.equal(product?.cost, 12.5);
+  assert.equal(product?.quantity, 24);
+  assert.equal(product?.createdBy, ACTOR);
+  assert.ok(product?.createdAt instanceof Timestamp);
+  // Written so the nightly stock verification defers a product whose ledger
+  // entry may not be visible to its query yet.
+  assert.ok(product?.updatedAt instanceof Timestamp);
+});
+
+test("imported stock arrives with the ledger entry that says where it came from", async () => {
+  const db = seededCategories();
+
+  const response = await applyImport(db, [importRow({quantity: 24})]);
+
+  const ids = productImportRowIds(IMPORT_IDENTITY, 0);
+  const movement = db.read(
+    `${productPath(ids.productId)}/stock_movements/${ids.adjustmentId}`
+  );
+  // `adjustStock`'s own shape, because an imported unit and an adjusted unit are
+  // the same unit and reconciliation reads one ledger. `quantityDelta` and
+  // `recordedAt` are the two fields that ledger walk actually reads.
+  assert.equal(movement?.adjustmentType, "opening_balance");
+  assert.equal(movement?.sourceType, "product_import");
+  assert.equal(movement?.quantityDelta, 24);
+  assert.equal(movement?.previousQuantity, 0);
+  assert.equal(movement?.quantityAfter, 24);
+  assert.equal(movement?.productId, ids.productId);
+  assert.equal(movement?.actorUid, ACTOR);
+  assert.ok(movement?.recordedAt instanceof Timestamp);
+
+  const adjustment = db.read(`tenants/${TENANT}/stock_adjustments/${ids.adjustmentId}`);
+  assert.equal(adjustment?.quantityDelta, 24);
+  assert.equal(adjustment?.adjustmentType, "opening_balance");
+
+  // Whenever the audit entry says a quantity moved, it names the record that
+  // says where the stock came from. That pairing is what makes an opening
+  // quantity acceptable in a product payload at all.
+  const audit = db.read(auditPath(ids.auditId));
+  assert.equal(audit?.eventType, "product_imported");
+  assert.equal(audit?.mutatesQuantity, true);
+  assert.equal(audit?.adjustmentId, ids.adjustmentId);
+  assert.equal(audit?.openingQuantity, 24);
+  assert.equal(audit?.rowIndex, 0);
+  assert.equal(audit?.importId, response.importId);
+  assert.equal(audit?.requestId, REQUEST);
+  assert.deepEqual(audit?.created, {
+    name: "Cola 500ml",
+    sku: "CL500",
+    price: 19.99,
+    cost: null,
+    categoryId: CATEGORY,
+    quantity: 24,
+  });
+});
+
+test("a product imported holding nothing writes no ledger entry", async () => {
+  const db = seededCategories();
+
+  const response = await applyImport(db, [importRow()]);
+
+  const ids = productImportRowIds(IMPORT_IDENTITY, 0);
+  assert.deepEqual(db.writtenPaths(), [
+    productPath(ids.productId),
+    auditPath(ids.auditId),
+  ].sort());
+  assert.equal(db.read(productPath(ids.productId))?.quantity, 0);
+  // No stock moved, so nothing claims any did - the same sentence the catalog's
+  // own create form makes true.
+  assert.equal(db.read(auditPath(ids.auditId))?.mutatesQuantity, false);
+  assert.equal(db.read(auditPath(ids.auditId))?.adjustmentId, null);
+  assert.equal(response.rows[0].adjustmentId, null);
+});
+
+test("a category named by name is resolved against this business", async () => {
+  const db = seededCategories();
+
+  const response = await applyImport(db, [
+    {name: "Crisps", sku: "CR1", price: 5, categoryName: "snacks"},
+    {name: "Bread", sku: "BR1", price: 4, categoryName: "Bakery"},
+    {name: "Fanta 500ml", sku: "FN500", price: 19.99, categoryId: "ct_snacks"},
+  ]);
+
+  assert.deepEqual(
+    response.rows.map((entry) => entry.status),
+    ["created", "failed", "created"]
+  );
+  assert.equal(response.rows[0].product?.categoryId, "ct_snacks");
+  assert.match(response.rows[1].message ?? "", /No category in this business/);
+  // Partial success, stated: the unmatched row wrote nothing while the other two
+  // landed, and no audit entry claims a product that does not exist.
+  assert.equal(db.ids(`tenants/${TENANT}/products`).length, 2);
+  assert.equal(db.ids(`tenants/${TENANT}/audit_logs`).length, 2);
+});
+
+test("a business with more categories than the scan is refused, not guessed at", async () => {
+  const db = seededCategories();
+  for (let index = 0; index < MAXIMUM_IMPORT_CATEGORY_SCAN; index += 1) {
+    db.seed(`tenants/${TENANT}/categories/ct_${index}`, {name: `Aisle ${index}`});
+  }
+  db.clearWrites();
+
+  // The defect belongs to the business rather than to any row, so reporting it
+  // per row would be describing the wrong thing.
+  await assert.rejects(
+    applyImport(db, [importRow({categoryId: undefined, categoryName: "Drinks"})]),
+    (error: unknown) => error instanceof HttpsError &&
+      error.code === "failed-precondition" &&
+      /Name each row's category by categoryId/.test(error.message)
+  );
+  assert.deepEqual(db.writtenPaths(), []);
+  // A request naming every category by ID needs no scan, so it is unaffected.
+  const response = await applyImport(db, [importRow()]);
+  assert.equal(response.createdCount, 1);
+});
+
+test("an import preview reads the categories and writes nothing whatsoever", async () => {
+  const db = seededCategories();
+
+  const response = await previewImport(db, [
+    importRow({quantity: 24}),
+    {name: "Crisps", sku: "CR1", price: 5, categoryName: "Snacks"},
+  ]);
+
+  assert.equal(response.mode, "preview");
+  assert.equal(response.createdCount, 2);
+  assert.equal(response.rows[0].product?.quantity, 24);
+  assert.equal(response.rows[1].product?.categoryId, "ct_snacks");
+  // Not the products, not the audit entries, not the stock ledger, and - decided
+  // at the callable rather than here - not an idempotency record either, which is
+  // what lets the commit that follows carry the same request ID.
+  assert.deepEqual(db.writtenPaths(), []);
+  assert.deepEqual(db.ids(`tenants/${TENANT}/products`), []);
+  assert.equal(response.rows[0].productId, null);
+});
+
+test("an import whose every row was refused reads nothing at all", async () => {
+  const db = seededCategories();
+
+  // `getAll()` with no document references is an error rather than an empty
+  // answer, and a request with no rows to plan must not reach it.
+  const response = await applyImport(db, [importRow({price: 19.999})]);
+
+  assert.equal(response.failedCount, 1);
+  assert.deepEqual(db.writtenPaths(), []);
+});
+
+test("a replayed import is refused by the product it already created", async () => {
+  const db = seededCategories();
+  await applyImport(db, [importRow()]);
+  db.clearWrites();
+
+  // The idempotency wrapper answers a genuine retry off its own record and never
+  // reaches this code. Reaching it means one identity was given two different
+  // imports, and `create` refuses to let the second overwrite the first - which
+  // is what makes a deterministic ID safe to reuse.
+  await assert.rejects(
+    applyImport(db, [importRow({name: "Cola 1L"})]),
+    /ALREADY_EXISTS/
+  );
+  assert.equal(db.ids(`tenants/${TENANT}/products`).length, 1);
+  assert.deepEqual(db.writtenPaths(), []);
+});
+
+test("an import under a second request stocks the shelf twice", async () => {
+  const db = seededCategories();
+  await applyImport(db, [importRow()]);
+  db.clearWrites();
+
+  // Stated rather than prevented. Nothing in this system makes a SKU or a name
+  // unique - the till already refuses an ambiguous scan - so a fresh request ID
+  // creates a second product describing the same thing. The preview is the
+  // answer to that, not a duplicate check this app has never been able to make.
+  await applyImport(db, [importRow()], {identityDocumentId: "f".repeat(64)});
+
+  assert.equal(db.ids(`tenants/${TENANT}/products`).length, 2);
   assert.equal(db.ids(`tenants/${TENANT}/audit_logs`).length, 2);
 });
