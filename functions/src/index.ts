@@ -56,6 +56,7 @@ export {
   adjustStock,
   getSalesComparison,
   updateProduct,
+  updateProducts,
   verifyReturnAndRestoreStock,
 } from "./operations";
 

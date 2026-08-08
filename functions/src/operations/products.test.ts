@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {DocumentData, Timestamp, Transaction} from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v2/https";
+import {fingerprintPayload} from "../core/idempotency";
 import {FakeFirestore} from "../testing/fakeFirestore";
-import {applyProductUpdate} from "./products";
+import {
+  applyProductBatchUpdate,
+  applyProductUpdate,
+  productUpdateFingerprintInput,
+} from "./products";
+import {productBatchRowUpdateId, readProductBatchInput} from "./productBatch";
 import {ProductUpdateInput, readProductUpdateInput} from "./productUpdate";
 
 /**
@@ -235,4 +241,246 @@ test("a second correction under one update ID is refused by the audit entry", as
   );
   assert.equal(db.read(productPath())?.price, 24.5);
   assert.deepEqual(db.writtenPaths(), []);
+});
+
+test("a corrected cost comes back beside the fields that can be reconciled", async () => {
+  const db = seededFirestore({cost: 9});
+
+  const response = await apply(db, {cost: 12.5});
+
+  // Until 2026-08-08 a cost that moved appeared in `changedFields` with no value
+  // beside it, so four of the five fields could be checked against the request
+  // and the fifth could not.
+  assert.deepEqual(response.changedFields, ["cost"]);
+  assert.equal(response.cost, 12.5);
+  assert.equal(response.costMinor, 1250);
+
+  const cleared = await apply(
+    seededFirestore({cost: 9}),
+    {cost: null},
+    {updateId: "pu_cleared"}
+  );
+  assert.equal(cleared.cost, null);
+  assert.equal(cleared.costMinor, null);
+});
+
+test("two corrections differing only in cost are not one another's retry", () => {
+  // The gap this closes: `products.ts` hashed productId, name, sku, priceMinor
+  // and categoryId, so two payloads under one request ID differing only in cost
+  // hashed the same. The second was then answered off the stored record with the
+  // new cost silently not applied, where any other field would have been refused
+  // as `already-exists` - a silent wrong answer rather than a refusal.
+  const hash = (data: Record<string, unknown>) =>
+    fingerprintPayload(productUpdateFingerprintInput(PRODUCT, requested(data)));
+
+  assert.notEqual(hash({cost: 12}), hash({cost: 13}));
+  assert.notEqual(hash({name: "Cola", cost: 12}), hash({name: "Cola"}));
+  // Clearing a cost and leaving it alone mean different things, so they must
+  // hash differently too.
+  assert.notEqual(hash({name: "Cola", cost: null}), hash({name: "Cola"}));
+  assert.equal(hash({name: "Cola", cost: 12}), hash({name: "Cola", cost: 12}));
+});
+
+/**
+ * What `updateProducts` does to a business's data.
+ *
+ * `productBatch.test.ts` pins every decision about which rows a bulk change
+ * applies and what it reports. What is left, and what these cover, is the part a
+ * plan cannot describe: that a commit writes two documents per corrected row and
+ * nothing for the rest, that a preview writes none at all, and that the whole
+ * pass reads before it writes - which is not a style preference but the only
+ * shape Firestore permits, and the double enforces it exactly as Firestore does.
+ */
+
+const BATCH_IDENTITY = "c".repeat(64);
+const SECOND_PRODUCT = "pd_fanta";
+
+/** A business holding two sellable products filed under one category. */
+function seededCatalog(): FakeFirestore {
+  const db = seededFirestore();
+  db.seed(productPath(SECOND_PRODUCT), {
+    name: "Fanta 500ml",
+    SKU: "FN500",
+    price: 19.99,
+    quantity: 7,
+    categoryId: CATEGORY,
+    createdBy: "uid-owner",
+  });
+  db.clearWrites();
+  return db;
+}
+
+function batchInput(rows: readonly unknown[], mode = "commit") {
+  return readProductBatchInput({
+    tenantId: TENANT,
+    requestId: REQUEST,
+    mode,
+    rows,
+  });
+}
+
+function applyBatch(
+  db: FakeFirestore,
+  rows: readonly unknown[],
+  options: {identityDocumentId?: string} = {}
+) {
+  return db.runTransaction((transaction) => applyProductBatchUpdate(
+    db.asFirestore(),
+    {
+      tenantId: TENANT,
+      identityDocumentId: options.identityDocumentId ?? BATCH_IDENTITY,
+      requestId: REQUEST,
+      actorUid: ACTOR,
+      input: batchInput(rows),
+      transaction: transaction as unknown as Transaction,
+    }
+  ));
+}
+
+function previewBatch(db: FakeFirestore, rows: readonly unknown[]) {
+  return applyProductBatchUpdate(db.asFirestore(), {
+    tenantId: TENANT,
+    identityDocumentId: BATCH_IDENTITY,
+    requestId: REQUEST,
+    actorUid: ACTOR,
+    input: batchInput(rows, "preview"),
+  });
+}
+
+test("a committed bulk change writes two documents per corrected row", async () => {
+  const db = seededCatalog();
+
+  const response = await applyBatch(db, [
+    {productId: PRODUCT, price: 24.5},
+    {productId: SECOND_PRODUCT, name: "Fanta 500 ml"},
+  ]);
+
+  assert.equal(response.mode, "commit");
+  assert.equal(response.updatedCount, 2);
+  assert.equal(db.read(productPath())?.price, 24.5);
+  assert.equal(db.read(productPath(SECOND_PRODUCT))?.name, "Fanta 500 ml");
+
+  const first = productBatchRowUpdateId(BATCH_IDENTITY, PRODUCT);
+  const second = productBatchRowUpdateId(BATCH_IDENTITY, SECOND_PRODUCT);
+  assert.deepEqual(db.writtenPaths(), [
+    auditPath(first),
+    auditPath(second),
+    productPath(),
+    productPath(SECOND_PRODUCT),
+  ].sort());
+
+  const audit = db.read(auditPath(first));
+  assert.equal(audit?.eventType, "product_updated");
+  assert.equal(audit?.rowIndex, 0);
+  // What makes one bulk change answerable as one thing, without inventing a new
+  // kind of record for it.
+  assert.equal(audit?.batchId, response.batchId);
+  assert.equal(audit?.requestId, REQUEST);
+  assert.deepEqual(audit?.changes, [
+    {field: "price", previous: 19.99, next: 24.5},
+  ]);
+  assert.equal(audit?.mutatesQuantity, false);
+});
+
+test("a bulk change patches its products and never their stock", async () => {
+  const db = seededCatalog();
+
+  await applyBatch(db, [
+    {productId: PRODUCT, name: "Cola 500 ml", sku: "CL-500", categoryId: CATEGORY},
+    {productId: SECOND_PRODUCT, price: 22},
+  ]);
+
+  const product = db.read(productPath());
+  assert.equal(product?.quantity, 12);
+  assert.equal(product?.price, 19.99);
+  assert.equal(product?.createdBy, "uid-owner");
+  assert.ok(product?.updatedAt instanceof Timestamp);
+  assert.equal(db.read(productPath(SECOND_PRODUCT))?.quantity, 7);
+  assert.equal(db.writes.filter((write) => write.kind === "update").length, 2);
+});
+
+test("an unchanged row and a failed row leave both their documents alone", async () => {
+  const db = seededCatalog();
+
+  const response = await applyBatch(db, [
+    // Already holds this name.
+    {productId: PRODUCT, name: "Cola 500ml"},
+    {productId: "pd_absent", name: "Ghost"},
+    {productId: SECOND_PRODUCT, name: "Fanta 500 ml"},
+  ]);
+
+  assert.deepEqual(
+    response.rows.map((row) => row.status),
+    ["unchanged", "failed", "updated"]
+  );
+  // Partial success, stated: one row wrote, and the writes prove the other two
+  // did not - including no audit entry claiming a correction that never
+  // happened.
+  assert.deepEqual(db.writtenPaths(), [
+    auditPath(productBatchRowUpdateId(BATCH_IDENTITY, SECOND_PRODUCT)),
+    productPath(SECOND_PRODUCT),
+  ].sort());
+  assert.equal(db.read(productPath())?.name, "Cola 500ml");
+});
+
+test("a preview reads the catalog and writes nothing whatsoever", async () => {
+  const db = seededCatalog();
+
+  const response = await previewBatch(db, [
+    {productId: PRODUCT, price: 24.5},
+    {productId: SECOND_PRODUCT, name: "Fanta 500 ml"},
+  ]);
+
+  assert.equal(response.mode, "preview");
+  assert.equal(response.updatedCount, 2);
+  assert.equal(response.rows[0].product?.price, 24.5);
+  // Not the corrections, not the audit entries, and - decided at the callable
+  // rather than here - not an idempotency record either, which is what lets the
+  // commit that follows carry the same request ID.
+  assert.deepEqual(db.writtenPaths(), []);
+  assert.equal(db.read(productPath())?.price, 19.99);
+  assert.equal(response.rows[0].updateId, null);
+});
+
+test("a request whose every row was refused reads nothing at all", async () => {
+  const db = seededCatalog();
+
+  // `getAll()` with no document references is an error rather than an empty
+  // answer, so the writer has to notice that there is nothing to read.
+  const response = await applyBatch(db, [{productId: PRODUCT, price: 19.999}]);
+
+  assert.equal(response.failedCount, 1);
+  assert.deepEqual(db.writtenPaths(), []);
+});
+
+test("a replayed bulk change is refused by the audit entry it already wrote", async () => {
+  const db = seededCatalog();
+  await applyBatch(db, [{productId: PRODUCT, price: 24.5}]);
+  db.clearWrites();
+
+  // As in the single-product path, the idempotency wrapper answers a genuine
+  // retry and never reaches this code. Reaching it means one identity was given
+  // two different changes, and the audit trail refuses to let the second
+  // overwrite the first.
+  await assert.rejects(
+    applyBatch(db, [{productId: PRODUCT, price: 30}]),
+    /ALREADY_EXISTS/
+  );
+  assert.equal(db.read(productPath())?.price, 24.5);
+  assert.deepEqual(db.writtenPaths(), []);
+});
+
+test("a bulk change under a second request records rather than collides", async () => {
+  const db = seededCatalog();
+  await applyBatch(db, [{productId: PRODUCT, price: 24.5}]);
+  db.clearWrites();
+
+  await applyBatch(
+    db,
+    [{productId: PRODUCT, price: 30}],
+    {identityDocumentId: "d".repeat(64)}
+  );
+
+  assert.equal(db.read(productPath())?.price, 30);
+  assert.equal(db.ids(`tenants/${TENANT}/audit_logs`).length, 2);
 });

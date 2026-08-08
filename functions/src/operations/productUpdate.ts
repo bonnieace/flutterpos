@@ -96,6 +96,20 @@ const ACCEPTED_REQUEST_KEYS = new Set<string>([
 ]);
 
 /**
+ * Every key one row of a bulk change may carry.
+ *
+ * A row names a product and the fields to correct on it, and nothing else. The
+ * business and the request ID belong to the request that carries the rows rather
+ * than to each row inside it, so a row that repeats either is refused: one
+ * payload naming two businesses is a thing a bulk operation should be unable to
+ * express, not merely something it declines.
+ */
+export const ACCEPTED_PRODUCT_ROW_KEYS = new Set<string>([
+  "productId",
+  ...EDITABLE_PRODUCT_FIELDS,
+]);
+
+/**
  * Correcting a product's description is an operational act, and these are the
  * roles the `products` create rule already names.
  */
@@ -346,9 +360,16 @@ function requireProductPriceMinorUnits(value: unknown): number {
  * rather than treated as a successful no-op, because it can only be a caller
  * defect and answering `ok` to it would put an idempotency record and an audit
  * entry behind a request that did nothing.
+ *
+ * @param acceptedKeys which keys the payload may carry. It is a parameter rather
+ *   than a constant because one row of a bulk change is the same correction in a
+ *   narrower envelope - see [ACCEPTED_PRODUCT_ROW_KEYS]. Every other rule here,
+ *   including the `quantity` refusal that is checked before anything else,
+ *   applies to a row exactly as it applies to a single request.
  */
 export function readProductUpdateInput(
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  acceptedKeys: ReadonlySet<string> = ACCEPTED_REQUEST_KEYS
 ): ProductUpdateInput {
   if ("quantity" in data) {
     // The single most important refusal in this module. A callable that could
@@ -361,7 +382,7 @@ export function readProductUpdateInput(
     );
   }
   for (const key of Object.keys(data)) {
-    if (!ACCEPTED_REQUEST_KEYS.has(key)) {
+    if (!acceptedKeys.has(key)) {
       throw new HttpsError(
         "invalid-argument",
         `${key} is not an editable product field.`
@@ -572,10 +593,20 @@ export function readSellableProduct(fields: StoredProductFields): SellableProduc
  * request that changes nothing at all is refused. That refusal is reachable only
  * with a fresh request ID: a genuine retry answers off the idempotency record
  * and never arrives here.
+ *
+ * @param input.allowUnchanged return an empty plan instead of refusing when the
+ *   product already holds every requested value. One product at a time, a
+ *   request that changes nothing can only be a caller defect and is refused. In
+ *   a bulk change it is the ordinary case: re-running a four-hundred-row
+ *   correction that half applied must be able to finish, and it cannot if the
+ *   rows that already landed take the whole request down with them. The
+ *   *resulting* document is still validated either way, so a row that changes
+ *   nothing on an unreadable product still refuses.
  */
 export function planProductUpdate(input: {
   product: StoredProductFields | undefined;
   requested: ProductUpdateInput;
+  allowUnchanged?: boolean;
 }): ProductUpdatePlan {
   const stored = input.product;
   if (!stored) {
@@ -676,7 +707,7 @@ export function planProductUpdate(input: {
       documentUpdate.category = product.categoryId;
     }
   }
-  if (changes.length === 0) {
+  if (changes.length === 0 && input.allowUnchanged !== true) {
     throw unusableProduct("This product already holds every value in the request.");
   }
 

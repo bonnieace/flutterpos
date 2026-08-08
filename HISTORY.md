@@ -16015,12 +16015,16 @@ fix**, in line with the standing instruction that a gap found while wiring the r
 is a finding to record.
 
 `products.ts` builds the idempotency fingerprint from `productId`, `name`, `sku`,
-`priceMinor`, and `categoryId`. **`costMinor` is not in it.** So one request ID
-carrying two payloads that differ *only* in cost hashes identically, and the second
-call is answered off the stored record with the new cost silently not applied. Every
-other field would have been refused as `already-exists`. It is narrow — it needs an
-unknown outcome followed by a changed mind about the cost alone — but it is a silent
-wrong answer rather than a refusal, which is the worse kind.
+`priceMinor`, and `categoryId`. ~~**`costMinor` is not in it.**~~ **Fixed 2026-08-08
+by the bulk-change chunk, which was inside `functions/`: `costMinor` is now part of
+`productUpdateFingerprintInput`, and absent, null, and a value all hash differently.**
+So one request ID carrying two payloads that differ *only* in cost hashes identically,
+and the second call is answered off the stored record with the new cost silently not
+applied. Every other field would have been refused as `already-exists`. It is narrow —
+it needs an unknown outcome followed by a changed mind about the cost alone — but it is
+a silent wrong answer rather than a refusal, which is the worse kind. The client-side
+protection below was kept: it is belt and braces now rather than the only guard, and a
+second client would otherwise inherit nothing.
 
 The route closes it from this side: the retained request ID is stored beside a
 fingerprint of the exact correction it was issued for, so changing any field, cost
@@ -16031,15 +16035,18 @@ next reader to work out which field it is really about.
 **Two smaller server observations, both harmless today and both worth knowing before
 bulk change reuses this callable:**
 
-- `UpdateProductRequest` in `products.ts` does not declare `cost`. It is typing only —
-  the handler reads from `requireObject(request.data)`, a `Record<string, unknown>` —
-  so behaviour is correct and the interface is merely incomplete documentation.
-- `UpdateProductResponse` echoes `name`, `sku`, `price`, `priceMinor`, and
-  `categoryId`, but **not `cost`**. A cost that moved appears in `changedFields` with
-  no value beside it, so the client can reconcile four of the five fields against the
-  request and not the fifth. The route therefore confirms a cost by re-reading the
-  catalog, and `TenantProductUpdateResult` documents the hole rather than pretending
-  the check is complete.
+- ~~`UpdateProductRequest` in `products.ts` does not declare `cost`.~~ **Fixed
+  2026-08-08.** It is typing only — the handler reads from
+  `requireObject(request.data)`, a `Record<string, unknown>` — so behaviour was correct
+  and the interface was merely incomplete documentation.
+- ~~`UpdateProductResponse` echoes `name`, `sku`, `price`, `priceMinor`, and
+  `categoryId`, but **not `cost`**.~~ **Fixed 2026-08-08: it now echoes `cost` and
+  `costMinor`.** A cost that moved appeared in `changedFields` with no value beside it,
+  so the client could reconcile four of the five fields against the request and not the
+  fifth. The route still confirms a cost by re-reading the catalog and
+  `TenantProductUpdateResult` still documents the hole — the Dart decoder ignores keys
+  it was not built for, so the two new fields reach it and are not yet read. Closing
+  the client half is a Flutter change and was out of that chunk's scope.
 
 ### The escape hatch for a malformed cost is not reachable from here, deliberately
 
@@ -16158,6 +16165,309 @@ printing has to say whether it revives that file or writes past it.
 `https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29
 capabilities at **20 green, 8 red, 1 amber**. This session makes it **21 green, 7 red,
 1 amber**. Publishing was not requested, so the page was left alone.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```
+
+---
+
+## Many products at once, previewed before they change - 2026-08-08
+
+### Chunk chosen, and why the queued one was right
+
+Took the queued chunk: **bulk change as the `updateProducts` server callable**.
+Checked against the board first, as required. Its stated prerequisite had landed the
+same day — the single-product edit surface — so the two permission tiers, the refusal
+vocabulary, and the "only changed fields are sent" contract were all proved once on one
+product rather than guessed at across four hundred. No unqueued capability the app
+needs in order to function is missing: every remaining red row is blocked on a decision
+(password reset on App Check), an interface nobody has shared (the printed body), a
+schema that does not exist (subscription), its own reporting chunk (profit display), or
+on this chunk landing first (spreadsheet import).
+
+### Completed in this session
+
+**A business can correct up to fifty products in one request, and see exactly what that
+would do before it does it.** `updateProducts` is the twenty-fifth callable and the
+forty-eighth export. It is N applications of `updateProduct`'s own decision executed on
+the server — the same planner, the same price arithmetic, the same strict read of the
+resulting document — plus everything a bulk change has to decide that one product at a
+time never raises.
+
+**No board row moved and none was meant to.** This is a server chunk with no Flutter
+surface; "change many products at once" stays red until a route calls it, exactly as
+`updateProduct` stayed red for a day. `firestore.rules` is untouched and the 161-test
+rules suite was run to say so with a measurement rather than an assertion.
+
+### The four properties, and why each is a decision rather than a consequence
+
+1. **A preview is a mode, not a dry-run flag.** `mode` is required and has no default,
+   because the failure modes are not symmetric: a preview mistaken for a commit is a
+   report nobody acts on, and a commit mistaken for a preview changes four hundred
+   products nobody agreed to. A preview reads exactly what a commit reads through
+   exactly the same code and writes **nothing** — not the corrections, not the audit
+   entries, and deliberately **not an idempotency record**. That last one is the point:
+   it is what lets a client preview and then commit under one request ID, and because
+   the commit's fingerprint covers the rows, a change edited between the two is refused
+   as `already-exists` rather than quietly applied as something other than what was
+   shown.
+2. **Every broken row is named at once.** A row that cannot be parsed, a product that
+   does not exist, a category that does not exist in this business, and a document too
+   malformed to correct are all *outcomes* carried back beside the rows that worked. A
+   row-at-a-time refusal turns a four-hundred-row change into four hundred round trips
+   of discovery.
+3. **Partial success is stated, never implied.** Every row comes back with `updated`,
+   `unchanged`, or `failed`, its changed fields, its audit entry ID, and what the
+   product now holds. Nothing is silently dropped and nothing is silently coerced.
+4. **Bounded, and the caller chains it.** Fifty rows per request. There is no
+   server-side cursor because there is no server-side collection to walk — the caller
+   holds the rows — so what the server owes is a bound it will not exceed and a request
+   that is independently idempotent, which is what makes a chain of them retryable at
+   any point.
+
+### What "already correct" had to mean, and why it is not a refusal here
+
+One product at a time, a request that changes nothing is refused: it can only be a
+caller defect, and answering `ok` would put an idempotency record and an audit entry
+behind a request that did nothing. **In a bulk change it is the ordinary case.**
+Re-running a four-hundred-row correction that half applied must be able to finish, and
+it cannot if the rows that already landed take the whole request down with them.
+
+So `planProductUpdate` gained one option, `allowUnchanged`, and `updateProduct` does not
+pass it. The *resulting* document is still validated either way — a row that changes
+nothing on a product no device can parse still fails — so "nothing to do here" never
+became a way to skip the read model. There is a test for exactly that.
+
+### Three defects that belong to the request, not to a row
+
+Reporting these per row would have made the report itself wrong or the request
+meaningless, so each takes the whole request down:
+
+- **An unknown top-level key**, for the same reason `updateProduct` refuses one:
+  dropping it silently would make "this never writes `quantity`" something a caller has
+  to take on trust rather than something observable from outside.
+- **More rows than the bound.** Applying the first fifty and reporting the rest as
+  failed would read as partial success rather than as a caller that needs to chain, so
+  the message says to send the rest as a further request with its own request ID.
+- **A product named twice.** This is the one worth arguing. Two rows for one product are
+  two conflicting intents, and there is **no honest outcome to report for either**: the
+  second is planned against a document the first has already changed, so both rows would
+  describe a before-and-after that never existed. The duplicate is recorded before the
+  rest of the row is read, so a spelling mistake in one of the two cannot hide the
+  ambiguity — a test pins that case specifically.
+
+### Permission is decided over the whole request, before anything is read
+
+`assertProductBatchAuthorized` collects the union of every row's requested fields and
+**delegates the decision to `assertProductUpdateAuthorized`**, so the tier can never
+drift from the one the single-product path enforces. A manager may correct names, codes,
+and categories in bulk; naming a price or a cost anywhere in the request refuses all of
+it.
+
+What is added is the message. A rename of four hundred rows carrying three stray price
+columns has to say *which three* or the refusal is not actionable, so the refusal names
+the offending rows — as `rows[1], rows[2]`, matching the zero-based `index` every
+outcome carries, and summarizing past ten as "and N more". Payload-path notation rather
+than ordinals, because "row 3" beside an outcome indexed 3 is the kind of off-by-one
+nobody notices until they correct the wrong product.
+
+Deciding it up front rather than per row also means the preview refuses too. A manager
+who previewed green and then hit a commit-time refusal would have learned only that the
+app guesses.
+
+### One `getAll`, because Firestore permits nothing else
+
+A transaction may not read after its first write, so a per-row read-then-write loop is
+not a slower version of this — it is a transaction that throws on its second row.
+`applyProductBatchUpdate` therefore gathers every product and every distinct category
+the request names into a single `getAll`, plans all rows, and only then writes. The
+in-memory double enforces the read phase exactly as Firestore does, which is why this
+was never in doubt.
+
+Two consequences worth knowing:
+
+- **A request whose every row was refused reads nothing at all.** `getAll()` with no
+  document references is an error rather than an empty answer, so the writer guards it.
+  There is a test.
+- **`FakeFirestore` gained `getAll`**, which it did not have — the preview path is its
+  first caller. The double's own rule is that nothing goes in without one, and it
+  reproduces the no-references refusal rather than inventing an empty result.
+
+### The write budget, and what the bound is actually set by
+
+Each corrected row writes two documents — the product and its audit entry — and the
+request adds one idempotency record. **Fifty rows is 101 writes against Firestore's
+limit of 500.** The bound is nowhere near that limit and is not set by it: it is set by
+wanting a transaction that fails on contention to be cheap to retry, and by matching
+`TENANT_DISCOVERY_PAGE_SIZE`, the other bounded-and-chained page in this codebase.
+Raising it costs retry latency long before it costs write budget, and that sentence is
+in the source beside the constant.
+
+### One audit entry per product, correlated without a new kind of record
+
+Every corrected row writes `audit_logs/pu_<40 hex of sha256(identity, productId)>` with
+the same `eventType: "product_updated"` and the same `mutatesQuantity: false` a single
+correction writes, plus two fields a single correction does not carry: `batchId` and
+`rowIndex`. "What did that bulk change do" is therefore answerable by querying
+`audit_logs` for one `batchId`, and because a single-product correction carries neither
+field, such a query matches only the rows of a bulk change. No batch summary document
+was invented; the idempotency record already stores the whole response.
+
+**The row's ID is derived from the product, not from its position.** Re-sending a
+request with its rows reordered lands on the same documents rather than duplicating
+every entry. A replay never reaches that code — the idempotency record answers it — and
+when one does, the audit entry's `create` refuses it, which is what makes reusing a
+deterministic ID safe. Both halves have tests.
+
+**Order is nevertheless part of the fingerprint, deliberately.** Every outcome is
+indexed by where its row sat, so answering a reordered retry off the stored record would
+hand back indexes naming different rows. Refusing it as `already-exists` is the honest
+answer, and the corrections themselves are unaffected for the reason above.
+
+### The two findings this chunk inherited were both fixed, because it was inside `functions/`
+
+`PLAN.md` queued both here explicitly, and both are retracted inline above at the text
+that recorded them:
+
+- **The idempotency fingerprint omitted `cost`.** Two payloads under one request ID
+  differing *only* in cost hashed the same, so the second was answered off the stored
+  record with the new cost silently not applied — a silent wrong answer where any other
+  field would have been refused. It is now `productUpdateFingerprintInput`, an exported
+  function so the property is testable rather than buried in a callable, and absent,
+  `null`, and a value all hash differently. That distinction is the one that matters:
+  omitting `cost` leaves a recorded cost alone and `cost: null` clears it.
+- **`UpdateProductResponse` did not echo `cost`.** It now echoes `cost` and `costMinor`.
+  The Dart decoder keeps unknown keys rather than refusing them, so the two new fields
+  reach the client harmlessly and are not yet read — closing the client half is a
+  Flutter change and out of scope here. `UpdateProductRequest` now declares `cost` too,
+  which is typing only and changed nothing.
+
+Changing what an existing request ID hashes to strands no in-flight retry, because
+nothing is deployed anywhere. That is the only reason this was free.
+
+### A name collision worth knowing about before someone greps for it
+
+`MOBILE_BULK_UPDATE_IMPLEMENTATION.md` and `MOBILE_BULK_UPDATE_SETUP.md` both document
+a method called **`updateProducts()`** — the previous app's client-side Firestore batch
+in `lib/services/bulk_update_service.dart`, which writes the root `alcohol` collection
+and is reachable from `lib/pos/goods.dart` alone. The new server callable has the same
+name and does the structurally opposite thing. Those two documents are pre-migration
+artifacts and were left alone; this paragraph is the pointer so a later reader does not
+mistake one for the other or conclude the callable already existed.
+
+### Files changed
+
+```text
+functions/src/operations/productBatch.ts         533  new: the bulk decisions as a pure
+                                                      module - bounds, duplicate refusal,
+                                                      per-row outcomes, union
+                                                      authorization, the deterministic
+                                                      IDs and the fingerprint
+functions/src/operations/productBatch.test.ts    447  new: 23 unit tests
+functions/src/operations/products.ts          +299 -8  applyProductBatchUpdate, the
+                                                      updateProducts callable,
+                                                      productUpdateFingerprintInput, and
+                                                      cost on the request and response
+                                                      types
+functions/src/operations/products.test.ts     +249 -1  9 new tests: 7 for the batch's
+                                                      Firestore effects, 2 for the cost
+                                                      echo and the fingerprint
+functions/src/operations/productUpdate.ts      +34 -3  ACCEPTED_PRODUCT_ROW_KEYS, the
+                                                      acceptedKeys parameter, and
+                                                      allowUnchanged
+functions/src/testing/fakeFirestore.ts           +15  getAll, for the preview path
+functions/src/operations/index.ts              +1 -1  updateProducts
+functions/src/index.ts                           +1  updateProducts
+PLAN.md HISTORY.md
+```
+
+No Dart file, no rule, and no index was touched. `git status` shows it.
+
+### Tests
+
+```text
+npm --prefix functions test
+  -> 378 pass, 0 fail    (baseline 346 + 32: 23 in productBatch.test.ts, 9 in
+                          products.test.ts)
+
+npm --prefix rules-tests run test:emulator
+  -> 161 pass, 0 fail    (unchanged; proves firestore.rules is byte-identical)
+
+npm --prefix rules-tests run test:emulator:reconciliation
+  -> 10 pass, 0 fail
+
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+  -> 12 pass, 0 fail
+
+flutter test --no-pub --concurrency=1 --reporter=failures-only
+  -> 1392 pass, 0 fail   (unchanged; no Dart was touched)
+```
+
+**1953 across five suites**, up from 1921. Android build and Android emulator tests
+excluded as instructed.
+
+During development the loop was
+`node functions/node_modules/typescript/bin/tsc -p functions/tsconfig.json --noEmit`
+followed by `node --test --test-reporter=tap functions/lib/operations/<file>.test.js`,
+which is about a second per file against the full command's forty. The emulator prelude
+was used for all three emulator commands, with inherited `DEBUG` removed:
+
+```powershell
+if (Test-Path Env:DEBUG) { Remove-Item Env:DEBUG }
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:JAVA_HOME\bin;$env:Path"
+```
+
+No held emulator run existed at the start of this session — `Get-CimInstance
+Win32_Process` for node and java returned nothing — so nothing was at risk of being
+killed for a port. `functions/.env.local` and `functions/.secret.local` are still there,
+dated 2026-08-06, still not this session's, and still not deleted.
+
+### Meaningful failures and their resolutions
+
+No test failed that was not made to. Every new file passed on its first run, and the
+type checker caught the only real mistakes on the way, which is what it is for. Two
+things were changed after being written and before being run, both worth recording
+because each was a wrong answer rather than a compile error:
+
+- **The refusal message named rows as ordinals.** "rows 0, 3" beside outcomes indexed 0
+  and 3 invites the reader to add one. Changed to `rows[0], rows[3]`, which is also the
+  notation `requireObject` already uses for a row's own refusal.
+- **The fingerprint nearly sorted its rows.** Sorting by product ID would have let a
+  reordered retry be recognised, which sounds like an improvement until you notice the
+  stored response is indexed by position: the retry would have been answered with
+  indexes naming different rows. Order stays significant, and the reason is now in the
+  source.
+
+### Two exclusions named, as required
+
+**Spreadsheet import is still correctly excluded and is now the head of the queue.** It
+was always the *next* chunk rather than this one, and taking it second was right: it has
+to solve everything bulk change solves plus category resolution by name, the
+deterministic-ID scheme, and opening stock through `adjustStock`. All three of those are
+new problems, and none of them would have been easier to solve while also inventing the
+preview, the row bound, and the per-row outcome report. Every one of those three now
+exists to be reused.
+
+**The 476 pre-existing analyzer issues** remain excluded and remain correct, for the
+reason the last several handovers give: all of them are in the closed unreachable island
+and fixing them is work on code that does not run. This chunk touched no Dart at all, so
+it neither adds to them nor gets closer to them.
+
+### The published board is unchanged, and so is the board
+
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29
+capabilities at **20 green, 8 red, 1 amber** — one green behind `PLAN.md`, which the
+2026-08-08 route chunk put at **21 green, 7 red, 1 amber**. This session moved no row,
+so the page is exactly as far behind as it was. Publishing was not requested and the
+page was left alone.
 
 ### Unrelated local changes, still unstaged and never touched
 

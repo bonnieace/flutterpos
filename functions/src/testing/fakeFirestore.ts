@@ -510,6 +510,21 @@ export class FakeFirestore {
     return new FakeDocumentReference(this, requireDocumentPath(path));
   }
 
+  /**
+   * The non-transactional twin of `FakeTransaction.getAll`.
+   *
+   * A preview reads the same documents a commit reads and writes none of them,
+   * so it takes this path instead of opening a transaction. Firestore rejects a
+   * `getAll()` with no references; callers guard that rather than this double
+   * inventing an empty answer Firestore would not give.
+   */
+  getAll(...refs: readonly FakeDocumentReference[]): Promise<FakeDocumentSnapshot[]> {
+    if (refs.length === 0) {
+      throw new Error("Firestore refuses a getAll() with no document references.");
+    }
+    return Promise.resolve(refs.map((ref) => this.readSnapshot(ref)));
+  }
+
   async runTransaction<T>(body: (transaction: FakeTransaction) => Promise<T>): Promise<T> {
     const transaction = new FakeTransaction(this);
     const result = await body(transaction);
