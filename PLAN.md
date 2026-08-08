@@ -4,11 +4,12 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-08**, the eighth session that day. Claims in
+Last verified against the code on **2026-08-08**, the ninth session that day. Claims in
 this file are checked against source, not inherited from the log; corrections are noted
 where they were made. **The eighth session verified them against the running app on Android
 rather than only against source**, which is a different kind of check and the first of its
-kind since 2026-08-04.
+kind since 2026-08-04. **The ninth fixed the first two defects that run found**, and did
+not itself look at the app — see the note under "Found by using the app".
 
 ### Published status board
 
@@ -70,8 +71,8 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | Track | State | What is left |
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
-| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, nor the password-reset integration test touched the file at all, and the suite was run over all seven to say so. `subscription` has rules and no writer. |
-| **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app". No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
+| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, nor the sign-in repair touched the file at all, and the suite was run over all eight to say so. `subscription` has rules and no writer. |
+| **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **two of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -81,7 +82,7 @@ callable exists, and not green if it is merely tested.
 
 | Capability | | Where it stands |
 | --- | --- | --- |
-| Sign in | 🟢 | `LoginScreen` |
+| Sign in | 🟢 | `LoginScreen`. A failure renders **a sentence this app wrote**, never an exception: the screen signs in through `EmailPasswordSignIn` and the provider's `message` is dropped at that boundary, so nothing above it can display one. An empty address or password is refused by the form, and any refusal is cleared the moment the input it describes is edited |
 | Verify an email address | 🟢 | Offered on the business selector to an unverified identity |
 | Recover a forgotten password | 🔴 | `requestPasswordReset` has no caller — blocked on App Check, see open decisions |
 | Request a new business | 🟢 | "Request business" on the selector |
@@ -111,6 +112,15 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
+**The ninth session of 2026-08-08 changed no board row's colour either, and this sentence is here
+so that is stated rather than left silent.** It fixed findings 1 and 2 below — the sign-in screen
+now says something true — which is a **defect repair inside a row that was already green**, so
+there was no colour to move. It changed **one row's text**, "Sign in", to say what a failure now
+renders and why that is structural rather than careful. It touched no rule and no `functions/`
+file, and the functions and rules counts held at 409 and 161 to say so. It also changed **no
+rollout step**: a green capability that stops printing an exception at the user is not a step,
+it is the difference between a step being true and being embarrassing.
+
 **The eighth session of 2026-08-08 changed no board row's colour, and this sentence is here so
 that is stated rather than left silent.** It drove the app on an Android emulator against real
 Auth, Firestore, and Functions, and **every green row it touched stayed green on the evidence of
@@ -123,18 +133,23 @@ carried rather than re-measured.
 
 ### Found by using the app
 
-Six defects, all at the edges, none blocking, **all recorded rather than fixed** — a behavioural
-session that starts repairing becomes an unbounded one. They are queued as chunks below.
+Six defects, all at the edges, none blocking, **recorded rather than fixed by the run itself** —
+a behavioural session that starts repairing becomes an unbounded one. They were queued as chunks
+below, and **the first two were taken and closed by the session after it**.
 
-1. **The login screen prints a raw platform-channel name when the password is empty.** Verbatim:
+1. ~~**The login screen prints a raw platform-channel name when the password is empty.**~~
+   **Closed 2026-08-08.** Verbatim, as reported:
    `"dev.flutter.pigeon.firebase_auth_platform_interface.FirebaseAuthHostApi.signInWithEmailAndPassword".`
-   A *wrong* password produces a proper sentence, so this is the empty-password path only: the
-   form calls Firebase without requiring a non-empty password, and the platform exception's
-   message is the channel name. **Deterministic**, reproduced twice. This supersedes the
-   2026-08-04 note that recorded the same string as unreproducible. It is the first thing a new
-   user can see.
-2. **That error survives editing the fields**, which is the other half of the same 2026-08-04
-   note and also reproduces.
+   A *wrong* password produced a proper sentence, so this was the empty-password path only.
+   **Deterministic**, reproduced twice, and it superseded the 2026-08-04 note that recorded the
+   same string as unreproducible. **One refinement to the diagnosis, since it decided the fix:**
+   the platform exception's message is not the channel name, it is
+   `Unable to establish connection on channel: "<channel>".` from the plugin's generated
+   `_createConnectionError`, and what reached the screen is that sentence's tail. Crucially it is
+   a `PlatformException` and **not** a `FirebaseAuthException`, which is why the old screen's
+   typed branch never saw it. See the standing decision below for what was built.
+2. ~~**That error survives editing the fields.**~~ **Closed 2026-08-08**, in the same chunk. It
+   was the other half of the same 2026-08-04 note and also reproduced.
 3. **The invitation refusal tells a user to retry something that can never succeed.**
    "Invitation could not be accepted. Please try again." is shown where
    `visibleAcceptanceAllowed` is false. **The server is right to refuse**; the sentence is what
@@ -153,6 +168,14 @@ session that starts repairing becomes an unbounded one. They are queued as chunk
    emulators by any route** — the token only ever existed in the email. This is a local
    limitation, not a product defect, and it is why the manager session below was activated out
    of band.
+
+**The chunk that closed 1 and 2 did not itself look at the app, and that is worth stating because
+"nobody looked at it" is exactly how the defect survived two years of widget tests.** The chunk's
+own shape asked for one look at the sign-in screen on a device afterwards; the session
+instruction said to skip the Android build and the Android emulator, and the instruction won. So
+the repair is covered by 32 tests, including the `dev.flutter.pigeon` assertion that would have
+caught the original, and **no person has seen it**. It is queued below as the first thing the
+next device run does.
 
 **One thing the run could not prove, stated because it would otherwise look proved.** The
 manager membership used for the profit role-boundary check was activated by a scratchpad Admin
@@ -288,33 +311,37 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1473** |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1505** |
 | Functions | `npm --prefix functions test` | **409** |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** |
 
-**2076 tests across five suites.** `flutter test` takes no path list — the one
+**2108 tests across five suites.** `flutter test` takes no path list — the one
 uncompilable file that forced that workaround was deleted on 2026-08-07. **All five were
-measured in the password-reset session on 2026-08-08**, and every figure above is **carried
-unchanged** through the Android device session that followed it, which edited no Dart, no
-`functions/`, no rule, and no test — so there was nothing for a suite to observe. That is the
-only chunk so far to carry all five rather than measure any.
+measured again in the sign-in session on 2026-08-08**, which took Flutter **1473 → 1505** (32
+new: 16 in `test/login_screen_test.dart`, 16 in `test/tenancy/sign_in_test.dart`) and moved no
+other figure at all. Holding **functions** at 409 and **rules** at 161 is the whole claim about
+the server and the rules file: that chunk touched neither, and this is the **eighth** consecutive
+chunk proving `firestore.rules` byte-identical. Before it, the Android device session **carried**
+all five unchanged rather than measuring any, because it edited no Dart, no `functions/`, no
+rule, and no test — the only chunk so far to do that.
 The invitation suite is now **two files under one emulator start** —
 `invitation-acceptance.integration.test.js` (12) and
 `password-reset-delivery.integration.test.js` (11) — and it went 12 → 23 while the other four
 did not move at all. Holding the **functions** count at 409 is the entire claim about the
 server: that chunk's one production change was adding `export` to
 `firestorePasswordResetDependencies`, which no unit test can observe and none was added for.
-Holding **rules** at 161 is the seventh chunk in a row proving `firestore.rules` byte-identical.
 Earlier the same day the profit-display session took
 Flutter 1447 → 1473 (26 new: 11 in `profit_report_test.dart`, 8 in
 `profit_statement_test.dart`, 3 in `sales_totals_panel_test.dart`, 2 in
 `daily_metrics_panel_test.dart`, 1 each in `daily_metrics_test.dart` and
 `sales_totals_test.dart`), and there too the other four did not move, which for the rules suite
 is the measurement proving `firestore.rules` is byte-identical and for the functions suite is the
-measurement proving no server file was touched. **That makes three chunks in a row where holding
-the functions count still was the entire claim about the server.** Before them: the bulk-surface session took
+measurement proving no server file was touched. **That makes four measured chunks in a row where
+holding the functions count still was the entire claim about the server** — bulk surface, profit
+display, password reset, sign-in — with the Android device session in between, which measured
+nothing because it changed nothing. Before them: the bulk-surface session took
 Flutter 1392 → 1447 (55 new: 38 in `bulk_catalog_test.dart`, 13 in
 `bulk_catalog_panel_test.dart`, 3 in `catalog_management_test.dart` for the `cost` echo, 1 in
 `catalog_management_panel_test.dart` for the route's entry point), the import session took Functions 378 → 409 (31 new: 22 in
@@ -329,8 +356,9 @@ catalog chunk, the sweep session, and the `updateProduct` session — then **134
 times** in the flake session, all four with the fix already in and the last of them
 against the frozen tree, then **1358** once the product-cost chunk added eleven, then
 **1392** once the product-edit chunk added 34, then **1447** once the bulk surface added 55,
-then **1473** once the profit display added 26, and **1473** again in the password-reset session,
-which added no Dart. One failure in sixteen runs, and the last fifteen green.
+then **1473** once the profit display added 26, **1473** again in the password-reset session,
+which added no Dart, and **1505** once the sign-in chunk added 32. One failure in seventeen runs,
+and the last sixteen green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -370,12 +398,13 @@ and `lib/main copy.dart` is still a 48-line stray that should be deleted.
 The two counts in that list have since moved three times more, by being added to rather
 than corrected: `updateProduct` made them **24** callables and **47** exports on
 2026-08-07, `updateProducts` made them **25** and **48** on 2026-08-08, and
-`importProducts` made them **26** and **49** the same day. **Neither the bulk-surface chunk
-nor the profit display later that day moved either count**, which is what a client chunk
-should do: the first reached two callables that already existed, and the second displayed a
-figure two of them already returned. The figures above are what that split fixed, not what is
-true now; the current numbers are in "Public callable interfaces" and "Full export surface"
-below.
+`importProducts` made them **26** and **49** the same day. **Nothing since has moved either
+count** — not the bulk surface, not the profit display, not the password-reset integration test,
+not the Android device run, and not the sign-in repair — which is what a client chunk should do:
+the bulk surface reached two callables that already existed, the profit display showed a figure
+two of them already returned, and the sign-in repair calls no callable at all. The figures above
+are what that split fixed, not what is true now; the current numbers are in "Public callable
+interfaces" and "Full export surface" below.
 
 ---
 
@@ -1022,6 +1051,60 @@ the original.
 Field drift to expect on the way: the old scorer reads `soldBy` (a display name),
 `dateAdded`, `productName`, `totalReturned`, and `itemsReturned`; this app records
 `soldById` (a UID) and `businessDate`.
+
+### A sign-in failure is a sentence this app wrote, and it cannot be anything else
+
+Built 2026-08-08, the last chunk of that day, closing findings 1 and 2 from the Android run. It
+changed `firestore.rules` not at all and nothing in `functions/` either — 409 functions tests and
+161 rules tests, both unchanged, are the measurement. It moved no board row's colour, because it
+is a defect repair inside a row that was already green.
+
+**The defect was that the first screen of this app printed a Flutter platform-channel name at
+whoever was signing in.** The fix is deliberately not a patch on the code that produced it.
+
+The guarantees are settled, not open:
+
+1. **The provider's `message` is dropped at a boundary, so no surface above it can render one.**
+   `lib/tenancy/sign_in.dart` holds `EmailPasswordSignIn` (the interface),
+   `FirebaseEmailPasswordSignIn` (the adapter), and `SignInException`, which carries **a code and
+   nothing else** — the same shape `email_delivery_status.dart` and `account_verification.dart`
+   already use for their callables. The old screen rendered `e.message ?? "Login failed"`. "A
+   user reads language" is now a property of the type, not of care taken at a call site.
+2. **`signInSafeError` reads a code and never a message, and its fallback names no cause.**
+   Anything that is not a `SignInException` — a platform channel error, a plugin defect, a
+   programming mistake — gets one sentence that does not mention the credential. Mapping only the
+   code that caused the report would have left every other channel-level failure printing itself,
+   and the bug class is "the error is a string nobody wrote", not that one code.
+3. **A wrong password, an unknown address, and a malformed credential are one identical
+   sentence.** Firebase collapses them into `invalid-credential` itself once email enumeration
+   protection is on, so distinguishing them here is a disclosure that survives only until that
+   setting changes — and this app already closes enumeration deliberately on the password-reset
+   endpoint. A test asserts the set of answers over all five codes has size one.
+4. **An empty address or password is refused by the form, before Firebase is called.** An empty
+   password is not a credential. The address is judged first and is trimmed; the password is
+   **not** trimmed, because a space is a character a password may contain, so one made of spaces
+   is the server's to judge. The only thing this app claims to know is that a password is absent.
+5. **A refusal is cleared by editing, and a cursor moving is not editing.** The handler compares
+   the **text**, not the notification, because a `TextEditingController` also notifies on a
+   selection change — which is exactly what the password field's own reveal toggle does, and
+   revealing a password answers nothing the refusal said.
+6. **A sign-in that succeeded leaves the button busy, deliberately.** The routing shell replaces
+   this screen when the session opens; releasing the button first would offer a second sign-in
+   against a session already being built.
+7. **The user is answered before Sentry is told.** The old order awaited
+   `Sentry.captureException` and only then set the message, so a slow or failing reporting
+   transport delayed — or swallowed — the sentence on screen.
+8. **The screen holds no Firebase type at all**, `setPersistence` included. Its swallowed failure
+   is unchanged and now documented as the *expected* case: persistence is a web concept and every
+   other platform answers `unimplemented`. The default adapter is built lazily on first
+   submission, which is what lets the whole screen be widget-tested without initializing Firebase
+   and left `lib/main.dart` untouched.
+
+**What is not proved is that anybody has looked at it.** The chunk's own shape asked for one
+device pass afterwards and the session instruction forbade the Android build, so this is 32 tests
+and no eyes — including the `no rendered string contains dev.flutter.pigeon` assertion that would
+have caught the original in 2026-08-04, asserted over every `Text` in the tree rather than over
+the error slot alone. Queued below.
 
 ### Built, tested, and still unreachable
 
@@ -1935,57 +2018,68 @@ prompt.md                                          (untracked)
 
 ## Next bounded chunk
 
-**Say something true when a sign-in fails.** Findings 1 and 2 from the Android run, and nothing
-else. It is taken next because it is the **only defect this repository knows about that a
-stranger meets before anything else works** — the sign-in screen is the first surface in the app,
-and today one of its two failure paths prints an internal Flutter channel name at the user.
+**Say something true when an invitation is refused.** Finding 3 from the Android run, and
+nothing else. It is taken next because it is the same defect as the one just fixed, on the
+other surface a stranger meets: a user who cannot yet do anything in this app is told to
+retry an action that can never succeed, and there is no other way forward from that screen.
 
-**Why this rather than a nicer one.** It is the highest-consequence thing the device run found,
-it is small, it is entirely inside a file this project owns, and it needs no decision from
-anybody. Everything larger is still blocked exactly as it was: the printed receipt body waits on
-an interface nobody has shared, suspicious-return scoring is sequenced after the first
-deployment, the subscription surfaces would invent a schema the server has none of, and
-deployment is step 13.
+**It is bigger than the one sentence it looks like, and this was checked against source rather
+than assumed. The code does not exist anywhere yet — it is thrown away twice.**
 
-**The two defects, with their reproductions, so the chunk starts from evidence:**
+- **Neither adapter converts anything.** `FirebaseAcceptVisibleTenantInvitationCallable` and
+  `FirebaseAcceptTenantInvitationCallable` both call `httpsCallable(...).call()` and return
+  `result.data` with **no `try`/`catch` at all**, so a `FirebaseFunctionsException` propagates
+  raw. That is unlike `FirebaseSendAccountVerificationCallable` and
+  `FirebaseEmailDeliveryStatusCallable` beside them, which each convert to a typed exception
+  carrying the code.
+- **Then both surfaces discard it** — `tenant_visible_invitation_acceptance.dart:326` and
+  `tenant_invitation_acceptance.dart:318` catch with `catch (_)` — so even a converted code
+  would not reach the widget.
 
-1. **Empty password.** Type a valid address, leave the password blank, submit. The error text is
-   `"dev.flutter.pigeon.firebase_auth_platform_interface.FirebaseAuthHostApi.signInWithEmailAndPassword".`
-   A *wrong* password renders a proper sentence, so the sign-in call itself maps
-   `FirebaseAuthException` correctly and this path does not: an empty password makes the platform
-   channel throw something that is not a `FirebaseAuthException`, and whatever renders it is
-   printing the exception rather than a message.
-2. **Stale error.** After any failure, edit either field. The red text stays. It should not
-   outlive the input it describes.
+So the work is the full boundary the sign-in chunk just built, twice: add the conversion, stop
+swallowing it, and map codes to sentences. `AccountVerificationCallableException` plus
+`accountVerificationSafeError` in `account_verification.dart:434` is the exact template, in the
+same directory.
 
 **The shape of it, so nothing widens:**
 
-- **Refuse an empty password in the form**, before Firebase is called. That is the actual fix for
-  1 and it is also the honest one: an empty password is not a credential.
-- **Render a sentence for every failure, never an exception.** Whatever the form catches, a user
-  sees language. Treat "the error is a string nobody wrote" as the bug class rather than patching
-  the one code that produced it, because the same shape will return from any non-`FirebaseAuthException`
-  the channel can raise.
-- **Clear the error when the input changes**, which is finding 2.
-- Cover all three with widget tests, including one that asserts **no rendered error string
-  contains `dev.flutter.pigeon`** — that assertion is the one that would have caught this in
-  2026-08-04, when the string was seen and could not be reproduced.
-- Look at the sign-in screen once on a device afterwards. The whole reason this defect survived
-  two years of widget tests is that nobody looked at it.
+- **Carry the code to the surface** on both acceptance paths, and map it there. `catch (_)` is
+  the defect; the sentence is the symptom.
+- **`failed-precondition` is the case that matters** and it is the one the device hit:
+  `visibleAcceptanceAllowed` is decided at invite time by
+  `!newlyCreated && emailVerified` in `functions/src/staff/issuance.ts:310`, so **no number of
+  retries can change it**. The sentence must send the user to the emailed link instead. Check the
+  server's actual code for this refusal before wording it — do not guess it from the flag name.
+- **Every other code still answers a sentence, and the fallback names no cause.** Same rule as
+  sign-in: the bug class is a refusal that misdirects, not the one code that produced it.
+- **Nothing is disclosed that the surface did not already show.** These screens already name the
+  business and the role to the invited identity, so this is wording, not a new read.
+- Cover both surfaces with widget tests, including one asserting that a refusal for
+  `failed-precondition` **does not contain "try again"**.
 
-**Explicitly excluded from it:** the "UNLOCK REGISTER" button label and the rest of that screen's
-visual design, which is legacy styling and not a defect; any other finding from the run (they are
-queued below, separately, on purpose); `firestore.rules`; `functions/`; deployment; and every
-standing exclusion listed below.
+**Explicitly excluded from it:** findings 4 and 5, which are queued together below and are about
+a category being named by its ID; `functions/src/staff/issuance.ts` and every other server file —
+**the server is right to refuse and must not be relaxed**; `firestore.rules`; the local Brevo
+placeholder that makes this unreachable on the emulators (finding 6, which is an environment
+limitation and not a product defect); deployment; and every standing exclusion listed below.
+
+**One thing the last chunk owes and could not pay: nobody has looked at the sign-in repair.**
+The chunk that fixed findings 1 and 2 was told to skip the Android build, so the fix has 32
+tests and no eyes. **Whenever the next device run happens, the sign-in screen is the first
+thing on it** — an empty password, a wrong password, and then editing a field. That is a
+prerequisite attached to the next device session, not a chunk of its own.
 
 **The alternative, named because it is the only queued item that would move a red row:**
 resolving what a **Windows** build can actually attest with under App Check. `PLAN.md` already
 refuses to restate the "structurally unreachable" claim without checking, `firebase_app_check`
 lists Windows among its supported platforms as of 0.4.6, and the Windows app is registered as a
 *web* app in `lib/firebase_options.dart`. That is a research chunk with a decision at the end of
-it, and it is the thing standing between a shop and in-app password recovery. It is not taken
-here because it is a decision for the product owner to make on the evidence, and gathering that
-evidence is a different shape of session from using the app.
+it, and it is the thing standing between a shop and in-app password recovery. **It has now been
+passed over three times running**, which is worth saying out loud: it is not blocked, it is
+outranked. The three device findings ahead of it are all defects a person already met in the
+running app, and this one ends in a decision only the product owner can make. When the findings
+run out it is next, and it should not be passed over a fourth time without a reason better than
+ordering.
 
 **One exclusion named because it has been inherited for many consecutive chunks: the printed
 receipt body.** Still correctly excluded and it has not become blocking — a sale is recorded,
@@ -2047,14 +2141,18 @@ finished.
   cost are now in "Standing traps": the emulator needs `ANDROID_SDK_ROOT` overridden to `D:`, the
   Gradle daemon must be stopped before either emulator starts, and staff invitation email cannot
   be delivered locally at all.
-- **~~The login screen's failure messages~~** — **promoted out of this list into the current
-  chunk.** Findings 1 and 2.
-- **The invitation refusal that says "Please try again" when retrying cannot work.** Finding 3,
-  and the smallest of them. Shown where `visibleAcceptanceAllowed` is false — an identity created
-  by its own invitation, which must use the emailed token. The server is right; the sentence
-  should say that the invitation must be accepted from the emailed link, not that the user should
-  try again. Worth pairing with the login chunk's rule that a refusal names what to do next, but
-  kept separate because it is a different screen and a different callable.
+- **~~The login screen's failure messages~~** — **done 2026-08-08**, closing findings 1 and 2. It
+  moved no board row's colour, because a defect repair inside an already-green row has none to
+  move; it changed the "Sign in" row's text. What it decided — that the provider's `message` is
+  dropped at a typed boundary so no surface above it can render one, and that a wrong password,
+  an unknown address, and a malformed credential are one sentence — is recorded in its own
+  standing decision above. **It owes one thing: nobody has looked at it**, because the session
+  was told to skip the Android build. That debt is attached to the next device run.
+- **~~The invitation refusal that says "Please try again" when retrying cannot work~~** —
+  **promoted out of this list into the current chunk.** Finding 3. It was queued here as "the
+  smallest of them"; **that was wrong and is corrected in the chunk above** — both acceptance
+  surfaces `catch (_)` and throw the code away, so there is nothing to branch on and the work is
+  to give those two callables the boundary sign-in just got.
 - **The add-product form's category picker, and the two surfaces that show a category ID.**
   Findings 4 and 5, together because both are about a category being named by its ID where a
   person expects its name. The form asks "Choose the category this product is filed under." with
@@ -2090,7 +2188,16 @@ surfaces, discounts, camera barcode scanning, **the in-app password reset surfac
 (blocked on the App Check decision above, which is now in motion), renaming or
 deleting a category, SKU uniqueness, a `platform_audit_logs`
 surface, branding surfaces, the Sentry DSN, the 476 pre-existing analyzer issues, a
-root-widget smoke test and the startup seams it would need, and deployment.
+root-widget smoke test and the startup seams it would need, **the sign-in screen's visual
+design** — the "UNLOCK REGISTER" label, the on-screen `PosKeyboard`, and the `PillInput`
+styling — and deployment.
+
+**The sign-in screen's visual design is new to this list, promoted here rather than dropped.**
+It was named as an exclusion by the chunk that repaired that screen's failure messages, and
+letting it vanish with that chunk's text would be exactly the silent inheritance this section
+exists to prevent. It is legacy styling, not a defect: `pill_input` and `glass_card` are in
+the closed unreachable island for analyzer purposes, the screen works, and nobody has asked
+for it. It becomes a decision only if somebody does.
 
 **That entry was narrowed on 2026-08-08 and the narrowing is the point.** It used to read
 "password reset" flat, which made a whole area look closed when only one half of it was. The

@@ -17708,3 +17708,183 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## The sign-in screen says something true - 2026-08-08
+
+### Completed in this session
+
+**The queued chunk, unchanged: findings 1 and 2 from the Android device run, and nothing
+else.** It was checked against the status board and the frozen fifteen-step rollout before
+being accepted. Nothing a shop needs in order to operate is missing and unqueued - the four
+red rows are blocked on App Check, on a print service's interface, on the first deployment,
+and on a schema the server does not have - so the queued chunk stood.
+
+**What a user now sees when a sign-in fails is a sentence, and it is a property of the
+shape rather than of care taken at each call site.** Three things changed and the first two
+are the findings:
+
+1. **An empty password, and an empty address, are refused by the form before Firebase is
+   called.** An empty password is not a credential. `signInInputDefect` judges the address
+   first, trims it, and deliberately does **not** trim the password: a space is a character
+   a password may contain, so a password made of them is the server's to judge and the only
+   thing this app knows is wrong is a password that is not there at all.
+2. **A refusal is cleared the moment the input it describes stops being the input.** Keyed
+   on the *text* rather than on the controller notification, because a
+   `TextEditingController` also notifies when only the selection moves - which is what the
+   password field's own reveal toggle does, and revealing a password answers nothing the
+   refusal said. Both branches are pinned by a widget test.
+3. **No exception can be rendered, by construction.** This is the part that is not in the
+   two findings and is the reason the chunk was worth taking as written. See below.
+
+### The bug class, not the code that produced it
+
+The chunk said to treat "the error is a string nobody wrote" as the defect rather than
+patching the one path that produced it. That decided the design:
+
+- **`lib/tenancy/sign_in.dart` is a narrow boundary**, in the shape
+  `email_delivery_status.dart` and `account_verification.dart` already use.
+  `EmailPasswordSignIn` is an interface; `FirebaseEmailPasswordSignIn` is the adapter;
+  `SignInException` carries **a code and nothing else**. The provider's `message` is dropped
+  at the boundary, so no surface above it can display one even by mistake. The old screen
+  rendered `e.message ?? "Login failed"`.
+- **`signInSafeError` reads a code and never a message.** Anything that is not a
+  `SignInException` - a platform channel error, a plugin defect, a programming mistake -
+  answers with one fallback sentence that names no cause. Mapping only the code that caused
+  the report would have left every other channel-level failure printing itself.
+- **A wrong password, an unknown address, and a malformed credential give one identical
+  sentence.** Firebase itself collapses them into `invalid-credential` once email
+  enumeration protection is on, so distinguishing them here is a disclosure that survives
+  only until that setting changes - and this app already closes enumeration deliberately on
+  the password-reset endpoint. Five codes, one answer, pinned by a test that asserts the set
+  of answers has size one.
+- **This changed a path that was already working.** A wrong password used to render the
+  provider's own sentence, "The password is invalid or the user does not have a password.",
+  recorded verbatim in the previous entry. It now renders ours. That is deliberate: the
+  provider's sentences are written for whoever is reading a log, they are not translated,
+  and one of them was not a sentence at all.
+- **`setPersistence` moved into the adapter**, so the screen holds no Firebase type at all.
+  Its swallowed failure is unchanged and is now documented as the expected case rather than
+  the exceptional one: persistence is a web concept and every other platform answers
+  `unimplemented`.
+
+### The mechanism behind finding 1, now known exactly
+
+The previous entry said the platform exception's "message is the channel name". **Refined
+rather than retracted:** the message is
+`Unable to establish connection on channel: "<channel>".`, produced by
+`_createConnectionError` in
+`firebase_auth_platform_interface/lib/src/pigeon/messages.pigeon.dart`. What was recorded
+verbatim from the device - the channel name in quotes followed by a full stop - is the tail
+of that sentence, which is what fitted on screen. The exception is a **`PlatformException`,
+not a `FirebaseAuthException`**, which is why the old screen's `on FirebaseAuthException`
+branch never saw it and its `catch` branch was the one that had the honest wording. Both
+test files construct that exact object, copied from the plugin source, rather than a
+paraphrase - an assertion against a paraphrase would prove nothing.
+
+### Also fixed, in the same file and named rather than smuggled
+
+**`emailFocus.requestFocus()` in the post-frame callback had no `mounted` guard**, so a
+screen disposed inside its first frame would request focus on a disposed `FocusNode`. One
+line, in a method this chunk was already rewriting.
+
+### Deliberately not done
+
+**The chunk asked for one look at the sign-in screen on a device afterwards, and this
+session did not do it**, because the session instruction says to skip the Android build and
+Android emulator tests. That is a reversal of the 2026-08-08 device session's own reversal,
+and it is stated rather than left silent: the fix is covered by 32 tests including the one
+that would have caught the original defect, and it has not been looked at by a person. **It
+is queued in `PLAN.md` as the first thing the next device run does.**
+
+**No other finding from the device run was touched.** Findings 3, 4, 5, and 6 are queued
+separately and on purpose.
+
+### Files changed
+
+```text
+lib/login_screen.dart              (rewritten sign-in path, keys, listeners)
+lib/tenancy/sign_in.dart           (new: the boundary, the input rule, the messages)
+lib/tenancy/tenancy.dart           (one export line)
+test/login_screen_test.dart        (new: 16 widget tests)
+test/tenancy/sign_in_test.dart     (new: 16 unit tests)
+HISTORY.md
+PLAN.md
+```
+
+`lib/main.dart` was **not** touched. `const LoginScreen()` still compiles because the new
+`signIn` parameter is optional, and the default adapter is built lazily on first submission -
+so a build that never submits never reaches `FirebaseAuth.instance`, which is what makes the
+widget test possible without initializing Firebase.
+
+`firestore.rules` and `functions/` were not touched at all.
+
+### Test commands and results
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1505 passed** (1473 + 32) |
+| Functions | `npm --prefix functions test` | **409 passed**, unchanged |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161 passed**, unchanged |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10 passed**, unchanged |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23 passed**, unchanged |
+
+`flutter analyze --no-pub` over the five touched paths: **no issues found**. Holding
+functions at 409 and rules at 161 is the measurement saying no server file and no rule
+moved; this is the **eighth** consecutive chunk to prove `firestore.rules` byte-identical.
+
+The Android build and the Android emulator suite were skipped, per the session instruction.
+
+### Meaningful failures and their resolutions
+
+**None.** Every suite passed on its first run, including the 32 new tests. Two things were
+checked before they could become failures, and both are recorded because the checking is the
+point:
+
+- **The NUL-escape trap.** All five touched files were scanned for a literal `0x00` byte
+  before the commit. `indexOf(0x00)` returned `-1` on every one. This is the check that has
+  caught all seven previous occurrences and it stays habitual even on a chunk with no digest
+  separator in it.
+- **A held `emulators:dev` run was found and left alone.** `scripts/seed-dev-emulator.js`
+  with `--hold`, PID 25408, from an earlier session. It was **not** killed - the standing
+  trap says never to free a port by killing an emulator you did not start - and it did not
+  need to be: the rules, invitation, and reconciliation suites take their own projects and
+  ports, and all three ran clean beside it.
+
+**One thing this session did hit and worked around**, worth recording because it is the
+`sed`-eats-the-escape trap from a third direction: **appending this entry through a shell
+heredoc failed with `unexpected EOF while looking for matching`**, on prose containing
+backticks and apostrophes. The entry was written to the session scratchpad with the editing
+tools and appended with a two-line Node script instead. Writing repository prose through a
+shell is what has corrupted six files already; this is the same lesson arriving as a syntax
+error rather than as a silent NUL byte.
+
+### Validation evidence for the two findings specifically
+
+- **Finding 1 is closed on the strongest available assertion**, the one `PLAN.md` said would
+  have caught it in 2026-08-04: `no rendered error string contains dev.flutter.pigeon`. It is
+  asserted over **every `Text` widget in the tree**, not over the error slot alone, in two
+  widget tests - one against the exact `PlatformException` the plugin throws, and one over a
+  `StateError`, a `FormatException`, and a bare `Exception` each carrying the channel name as
+  their message.
+- **Finding 2 is closed in four tests**: editing the address clears it, editing the password
+  clears it, a refusal this form made is cleared by editing too, and **moving the cursor is
+  not editing** - a selection change and the reveal toggle both leave the refusal standing.
+
+### The published board is unchanged and still four greens behind
+
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29 capabilities
+at **20 green, 8 red, 1 amber**; `PLAN.md` is at **24 green, 4 red, 1 amber**. Publishing was
+not requested this session and the page was left alone. This chunk moved no row, so the gap is
+exactly what it was.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```
