@@ -247,7 +247,14 @@ function retryDelayMilliseconds(attempt: number): number {
   return Math.min(6 * 60 * 60 * 1000, 30_000 * (2 ** Math.min(attempt - 1, 10)));
 }
 
-function firestorePasswordResetDependencies(
+/**
+ * The real Firestore and Auth adapters behind the seam above. Exported so an
+ * emulator integration test can drive the worker over real infrastructure: the
+ * unit tests substitute every one of these, so until they are exported nothing
+ * has ever run `generatePasswordResetLink` against a real Auth record, or the
+ * lease transactions against a real Firestore.
+ */
+export function firestorePasswordResetDependencies(
   db: Firestore,
   auth: Auth,
   provider: EmailProvider,

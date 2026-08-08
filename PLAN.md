@@ -4,7 +4,7 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-08**, the sixth session that day. Claims in
+Last verified against the code on **2026-08-08**, the seventh session that day. Claims in
 this file are checked against source, not inherited from the log; corrections are noted
 where they were made.
 
@@ -67,8 +67,8 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 
 | Track | State | What is left |
 | --- | --- | --- |
-| **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. No live Brevo, no deployment. |
-| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, nor the profit display touched the file at all, and the suite was run over all six to say so. `subscription` has rules and no writer. |
+| **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
+| **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, nor the password-reset integration test touched the file at all, and the suite was run over all seven to say so. `subscription` has rules and no writer. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -109,7 +109,17 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
-**One row went green in the last session of 2026-08-08: profit and margin.** The board is 29
+**The last session of 2026-08-08 changed no board row at all, deliberately, and this sentence
+is here so that is stated rather than left silent.** It wrote the emulator integration test for
+`deliverPasswordReset` — 11 tests against real Auth and real Firestore, joined to the invitation
+suite. Password reset stays **red** because red means a person cannot do it in a running app, and
+the client surface is what the App Check decision blocks; this chunk deliberately went past that
+gate rather than at it. What it moved is the invitation integration baseline below, **12 → 23**,
+and the evidence behind rollout steps 7 and 12. It touched no rule and no Dart file, and the
+functions count held at 409 — which is the measurement saying the one production change it made,
+exporting `firestorePasswordResetDependencies`, changed no behaviour.
+
+**One row went green in the session before it: profit and margin.** The board is 29
 rows at **24 green, 4 red, 1 amber**. It moved with **no server file and no rule touched** —
 409 functions tests and 161 rules tests, both unchanged, were the measurement — because
 `aggregateSales` already returned `profit` and `incompleteCostLineCount`, `daily_metrics`
@@ -213,12 +223,12 @@ The fifteen frozen steps, with what is actually true:
 | 4 | Tenant routing, pagination, selection, onboarding limits | ✅ |
 | 5 | Owner/admin invariants, global-status saga, recovery CLI | ✅ |
 | 6 | Membership mirrors, fan-out, repair | ✅ |
-| 7 | Invitations, tokenless acceptance, password reset, suppression | ⚠️ server complete; password reset unreachable from any client |
+| 7 | Invitations, tokenless acceptance, password reset, suppression | ⚠️ server complete and, since 2026-08-08, the reset delivery worker is covered against real Auth and real Firestore; password reset is still unreachable from any client |
 | 8 | Brevo delivery, webhook normalization, action pages | ⚠️ implemented, never exercised against live Brevo |
 | 9 | `TenantSession`, switching, shift restoration, epochs | ✅ |
 | 10 | Encrypted Hive cache, single-flight checkout, receipt counters | ✅ |
 | 11 | Stock, sales, returns, subscriptions, reconciliation, reporting | ⚠️ all but subscription. Checkout configuration writing, catalog management, `updateProduct`, and product cost landed 2026-08-07; the client route that corrects a product, the `updateProducts` bulk callable, the `importProducts` spreadsheet callable, the one screen that reaches both, and **the profit and margin display** all landed 2026-08-08. **Nothing in the catalog or reporting area is now built and unreachable** |
-| 12 | Emulator, multi-device, Windows-offline, email, adversarial tests | ⚠️ emulator suites green; no multi-device, no Windows-offline, no live email |
+| 12 | Emulator, multi-device, Windows-offline, email, adversarial tests | ⚠️ emulator suites green, and the **email** half is no longer empty: the password-reset worker runs against real Auth, real Firestore, and a stubbed Brevo seam as of 2026-08-08. No multi-device, no Windows-offline, no live email |
 | 13 | Deploy development, then staging | ❌ not started |
 | 14 | Enable App Check on validated platforms | ❌ not started; no `firebase_app_check` dependency |
 | 15 | Promote the identical release to production | ❌ not started |
@@ -231,19 +241,26 @@ The fifteen frozen steps, with what is actually true:
 | Functions | `npm --prefix functions test` | **409** |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **12** |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** |
 
-**2065 tests across five suites.** `flutter test` takes no path list — the one
+**2076 tests across five suites.** `flutter test` takes no path list — the one
 uncompilable file that forced that workaround was deleted on 2026-08-07. **All five were
-measured again in the profit-display session on 2026-08-08**, so nothing here is carried.
+measured again in the password-reset session on 2026-08-08**, so nothing here is carried.
+The invitation suite is now **two files under one emulator start** —
+`invitation-acceptance.integration.test.js` (12) and
+`password-reset-delivery.integration.test.js` (11) — and it went 12 → 23 while the other four
+did not move at all. Holding the **functions** count at 409 is the entire claim about the
+server: that chunk's one production change was adding `export` to
+`firestorePasswordResetDependencies`, which no unit test can observe and none was added for.
+Holding **rules** at 161 is the seventh chunk in a row proving `firestore.rules` byte-identical.
+Earlier the same day the profit-display session took
 Flutter 1447 → 1473 (26 new: 11 in `profit_report_test.dart`, 8 in
 `profit_statement_test.dart`, 3 in `sales_totals_panel_test.dart`, 2 in
 `daily_metrics_panel_test.dart`, 1 each in `daily_metrics_test.dart` and
-`sales_totals_test.dart`); the other four did not move, which for the rules suite is the
-measurement proving `firestore.rules` is byte-identical and for the functions suite is the
-measurement proving no server file was touched. **This is the second chunk in a row where
-holding both counts still was the entire claim about the server**, and the sixth in a row
-where the rules count did not move. Earlier the same day: the bulk-surface session took
+`sales_totals_test.dart`), and there too the other four did not move, which for the rules suite
+is the measurement proving `firestore.rules` is byte-identical and for the functions suite is the
+measurement proving no server file was touched. **That makes three chunks in a row where holding
+the functions count still was the entire claim about the server.** Before them: the bulk-surface session took
 Flutter 1392 → 1447 (55 new: 38 in `bulk_catalog_test.dart`, 13 in
 `bulk_catalog_panel_test.dart`, 3 in `catalog_management_test.dart` for the `cost` echo, 1 in
 `catalog_management_panel_test.dart` for the route's entry point), the import session took Functions 378 → 409 (31 new: 22 in
@@ -258,8 +275,8 @@ catalog chunk, the sweep session, and the `updateProduct` session — then **134
 times** in the flake session, all four with the fix already in and the last of them
 against the frozen tree, then **1358** once the product-cost chunk added eleven, then
 **1392** once the product-edit chunk added 34, then **1447** once the bulk surface added 55,
-then **1473** once the profit display added 26. One failure in fifteen runs, and the last
-fourteen green.
+then **1473** once the profit display added 26, and **1473** again in the password-reset session,
+which added no Dart. One failure in sixteen runs, and the last fifteen green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -955,7 +972,7 @@ Field drift to expect on the way: the old scorer reads `soldBy` (a display name)
 
 | Capability | State |
 | --- | --- |
-| `requestPasswordReset` | **Blocked on App Check.** Still no caller — see below. |
+| `requestPasswordReset` | **Blocked on App Check.** Still no caller — see below. The *worker* behind it is a different sentence and is no longer untested: `deliverPasswordReset`'s dependencies run against real Auth and real Firestore as of 2026-08-08. What keeps this row here is the client surface, which is what the decision blocks. |
 | Subscription | `TenantPaths.currentSubscription` and rules exist; **nothing reads it and nothing writes it**. `grep -i subscription functions/src` finds nothing at all, so there is no schema to model. Start on the server, not in Flutter. |
 | Category rename and delete | Permitted by `allow create, update, delete` on `categories` to owner/admin/manager, and offered to nobody. Deliberate, for the orphaning reason above; recorded here so the gap between rule and surface stays a decision. |
 
@@ -1072,15 +1089,35 @@ acted on. Three facts, so nobody re-derives them:
   `requireAppCheckedPublic`, which throws on an absent `request.app` in the emulator
   too. "Turn it off locally" means deleting production code, not changing a setting.
 
-**The one layer with no coverage** is the worker against real infrastructure: an
-emulator integration test that builds the task with `preparePasswordResetRequest` and
-dispatches `deliverPasswordReset` directly, against the real Auth emulator, real
-Firestore, and the Brevo seam. It skips only the six guarded lines, needs no decision,
-and changes no production code. ~~Unqueued and available whenever this is picked up.~~
-**Queued 2026-08-08 as the next bounded chunk**, because the exclusion rule attached to
-password reset said a third consecutive exclusion is when this gets taken, and it was
-excluded a third time by the profit-display chunk. It resolves none of the App Check
-question above and is not meant to: what it covers is the half that was never blocked.
+~~**The one layer with no coverage** is the worker against real infrastructure.~~ **Built
+2026-08-08 and this paragraph is now history.** `rules-tests/test/password-reset-delivery.integration.test.js`
+holds **11** tests that build the task with `preparePasswordResetRequest` and drive
+`processPasswordResetTask` over the real Firestore and Auth adapters, inside the invitation
+suite's project. It resolved none of the App Check question above and was not meant to: what it
+covered is the half that was never blocked.
+
+~~It changes no production code.~~ **Retracted — it changed one keyword.**
+`firestorePasswordResetDependencies` is now exported from
+`functions/src/email/passwordReset.ts`. Rebuilding those adapters inside the test would have
+been a test of the rebuild: the unit suite substitutes all eight dependencies, so the Firestore
+transactions and the Auth gateway had never executed anywhere. No signature, behaviour, or call
+site moved, and the functions suite held at 409 to say so.
+
+**What it still does not reach is three lines of `deliverPasswordReset` itself** — the keyring
+parsed out of its secret, the Brevo provider constructed out of its secrets, and the
+`getFirestore()`/`getAuth()` defaults. That is deliberate and the reason is a trap rather than
+laziness: reaching them needs `functions/integration/index.js` to export an email function, and
+every parameter in `email/config.ts` would then have to be answered at emulator startup or the
+run hangs after "Serving at port ...". That fixture's seven exports reach
+`firebase-functions/params` not at all. The parts of those three lines are unit-tested
+separately, so the residual risk is low; if it is ever taken, it is a fixture chunk, not a test
+chunk.
+
+**Nothing was found broken.** The deletion sentinels serialize against real Firestore — the
+shape that took `mergeSaleReconciliationJob` down on every sale it ever saw —
+`generatePasswordResetLink` works against the Auth emulator, real Auth folds a mixed-case
+address so the current-email HMAC recheck matches, and a missing identity raises exactly the
+`auth/user-not-found` code the gateway swallows.
 
 ### ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
 
@@ -1692,6 +1729,23 @@ enormous expected-denial traces.
   reconciliation and invitation suites take their own projects, ports, and copy of the
   Functions build, so none of this affects them and all three emulator suites ran
   clean on 2026-08-08.
+- **An integration-fixture `index.js` must not export a function whose require closure
+  reaches `firebase-functions/params`.** Every `define*` without a default makes the
+  emulator stop and ask at startup, which with no terminal to answer is a run that appears
+  to hang forever after `Serving at port ...`. Both fixtures document this; the invitation
+  fixture's seven exports and the reconciliation fixture's four were each checked against
+  it. It is why the password-reset suite drives the worker **in process** instead of
+  exporting `deliverPasswordReset`, whose closure reaches five parameters in
+  `email/config.ts`.
+- **An integration test that drives compiled `functions/lib` code must build its Admin
+  handles from the Functions copy of firebase-admin**, through
+  `createRequire(new URL("../../functions/package.json", import.meta.url))`. The two
+  installs are the same version and different module instances, so a handle from
+  `rules-tests/node_modules` fails `instanceof Timestamp` and mis-serializes `FieldValue`
+  sentinels written by the other copy — as a wrong answer, not an import error.
+- **`defineString(...).value()` outside a deployed function is just `process.env`**, so a
+  parameter a test needs is set in the suite runner's `env`, beside its secrets. A test
+  that must vary one holds the original and restores it in a `finally`.
 - **Collection-page test fakes must** answer in ascending document-ID order, be keyed
   per business, be keyed per collection, and model the equality-filter contract in
   both directions. All four mistakes have cost a debugging cycle.
@@ -1800,62 +1854,64 @@ prompt.md                                          (untracked)
 
 ## Next bounded chunk
 
-**An emulator integration test for `deliverPasswordReset`, against real Auth, real Firestore,
-and the Brevo seam.** It is taken because the rule above said to take it: password reset was
-excluded for a third consecutive chunk in the profit-display session, and the standing
-instruction attached to that exclusion is that a third exclusion is when this test gets
-written. Nothing about it is a decision — it changes no production code, needs no App Check
-answer, and is the one piece of that whole area available today.
+**Run the app against the emulators, and look at the catalog, bulk, reconciliation, and stock
+surfaces.** It is promoted out of the preference list below, where it has been queued **ten**
+times and is by a wide margin the oldest item. It is taken now because the argument for it got
+stronger every session of 2026-08-08 and nothing else implementable is unblocked: five capability
+chunks landed that day and **not one of their routes has been seen outside a widget test** — the
+correction dialog, the bulk selection, the pasted spreadsheet, and the profit statement included.
 
-**It is also the only queued item that is not blocked on somebody else.** The printed receipt
-body waits on an interface nobody has shared; suspicious-return scoring is sequenced after the
-first deployment on purpose; deployment itself is not a coding chunk. Running the app against
-the emulators is available and is queued below, and it is a behavioural session rather than a
-bounded implementation one — it is the natural companion to this chunk, not a replacement for
-it, because both bring up emulators.
+**Why it is the right next chunk rather than a nicer one.** Everything else is blocked on
+somebody else or sequenced on purpose. The printed receipt body waits on an interface nobody has
+shared; suspicious-return scoring is sequenced after the first deployment at the product owner's
+direction; the subscription surfaces would invent a schema the server has none of; deployment is
+step 13 and is not a coding chunk. This one needs no decision, no dependency, and no answer from
+anyone — only time.
 
-**What is already covered, so this test does not duplicate it.**
-`functions/src/email/passwordReset.test.ts` holds **7** unit tests: unknown identity, the
-current-Auth-email HMAC recheck, active suppression, an eligible send, a retryable provider
-error, a globally disabled canonical root, and a malformed email. Those assert the worker's
-*logic* against fakes. **What has never run is the worker against real infrastructure**, and
-that is exactly the gap.
+**The strongest single argument is the pasted spreadsheet.** A widget test pastes only what its
+author imagined, and import is the one input in this app whose failure modes are about what real
+text actually looks like: a sheet copied out of Excel, a trailing blank line, a quoted cell
+holding the delimiter, a column nobody reads. That surface refuses a whole sheet for eight
+distinct reasons and every one of them was written against an imagined paste.
 
 **The shape of it, so nothing widens:**
 
-- Build the task payload with `preparePasswordResetRequest` and dispatch `deliverPasswordReset`
-  **directly**, the way the reconciliation and invitation suites dispatch their own workers.
-  The public callable is not called and its App Check gate is not touched — that gate is
-  seventeen lines of validate-and-enqueue, and everything worth testing is past the queue.
-- Use the **real Auth emulator** for the identity lookup and the current-email HMAC recheck,
-  which is the one step no fake has ever exercised: it is the difference between "the code
-  compares two hashes" and "the hash it computes from a real Auth record matches".
-- Use **real Firestore** for `email_deliveries` and `email_suppressions`, so the suppression
-  check and the delivery record are written and read by the real client rather than a fake.
-- Keep the **Brevo seam** a seam. Nothing in this chunk sends mail, and no live provider
-  credential belongs in a test. What is proved is what reaches the seam and what is recorded
-  around it.
-- **Plaintext must not appear in Firestore**, which is a frozen guarantee of this endpoint and
-  is worth asserting against a real store rather than a map: read the delivery and suppression
-  documents back and prove they hold hashes.
+- Start a fresh held emulator set with `npm --prefix rules-tests run emulators:dev`, seeded
+  through `scripts/seed-dev-emulator.js --hold`. **Delete `functions/.env.local` and
+  `functions/.secret.local` first** — they are dated 2026-08-06, they outlived the run that
+  wrote them, and `run-dev-emulators.js` refuses to overwrite them, so a run started without
+  deleting them wedges.
+- Drive the **Windows** build. A run scheduled today is Windows or web, because the standing
+  session instructions still skip the Android build and the Android emulator, so this exercises
+  the loopback path only.
+- Look at, in this order: "Manage catalog" (add, correct, retire), "Bulk changes and import"
+  (tick and correct, then paste a sheet copied out of a real spreadsheet), the daily summary and
+  period totals as an **owner** and again as a **manager** — the profit rule is a role boundary
+  and the two sessions are supposed to see different sentences — and the stock and reconciliation
+  routes.
+- **Record what is found rather than fixing it.** A behavioural session that starts repairing
+  turns into an unbounded one. Anything found becomes a queued chunk with a written reproduction;
+  only a defect that stops the run itself gets fixed inside it.
+- The catalog route is the one that would make the seed script optional. Worth confirming once,
+  because "a business can stock itself" is currently a claim proved by widget tests.
 
-**Two operational facts to plan the ports with**, both already recorded above and both easy to
-get wrong: the Auth emulator reserves `port`, `port + 200`, and `port + 400` — dev 9099,
-invitations 9199, reconciliation 9699, so a fourth suite may not use 9299, 9399, 9499, 9599,
-9899, or 10099 — and a cold emulator's first trigger delivery costs about 25 seconds while
-every later one costs about 310 ms, so timeouts come from the first. Decide whether this
-belongs in the existing invitation suite, which already runs Auth plus Functions plus Firestore
-for the same email machinery, or in a fourth project of its own. **Reusing the invitation
-suite is the recommendation** — it needs no new ports, no new project, and no fourth copy of
-the Functions build, and password reset and staff invitation share the delivery, suppression,
-and HMAC code they would both be exercising.
+**One thing to ask before starting, and it has been open for nine sessions:** whether a
+loopback-only Windows or web run is worth doing in that form, or whether Android should be
+brought back into scope for it. The standing instructions exclude the Android build and the
+Android emulator; that says what the run *would* be, not whether it is the run wanted.
 
-**Explicitly excluded from it:** removing or relaxing `enforceAppCheck` or
-`requireAppCheckedPublic` in order to reach the callable — asked and answered on 2026-08-07,
-and the answer was that it gates almost nothing and deleting it would be deleting production
-code; adding `firebase_app_check` to `pubspec.yaml`; any client surface for reset, which is
-what the App Check decision actually blocks; live Brevo of any kind; the Windows custom
-attestation provider; deployment; and every standing exclusion listed below.
+**Explicitly excluded from it:** fixing anything found, beyond what blocks the run; deployment of
+any kind; the Android build and Android emulator tests, unless the answer above reopens them;
+touching `firestore.rules` or `functions/`; and every standing exclusion listed below.
+
+**The alternative, named because it is the only queued item that would move a red row:**
+resolving what a **Windows** build can actually attest with under App Check. `PLAN.md` already
+refuses to restate the "structurally unreachable" claim without checking, `firebase_app_check`
+lists Windows among its supported platforms as of 0.4.6, and the Windows app is registered as a
+*web* app in `lib/firebase_options.dart`. That is a research chunk with a decision at the end of
+it, and it is the thing standing between a shop and in-app password recovery. It is not taken
+here because it is a decision for the product owner to make on the evidence, and gathering that
+evidence is a different shape of session from using the app.
 
 **One exclusion named because it has been inherited for many consecutive chunks: the printed
 receipt body.** Still correctly excluded and it has not become blocking — a sale is recorded,
@@ -1902,25 +1958,26 @@ finished.
   what that service takes and how it is reached. The moment it is shared this becomes
   the next capability chunk and it is a well-shaped one; until then it is blocked on
   something no session can resolve by thinking about it.
-- **Run the app against the emulators**, looking at the catalog, reconciliation, and
-  stock surfaces. Queued **nine** times and the oldest behavioural item: neither the
-  deleted-product ledger nor the run route has been seen outside a widget test. **The bulk
-  route joins the list of things never seen outside one**, and it is the strongest argument
-  yet for taking this: a pasted spreadsheet is the one input whose failure modes are about
-  what real text looks like, and a widget test pastes only what the test author imagined.
-  ~~**A seeded set is held open right now**~~ — **retracted 2026-08-08: it has exited.**
-  No node or java process was running at the start of that session, so the
-  `scripts/seed-dev-emulator.js --hold` run recorded on 2026-08-07 is gone. Its
-  `functions/.env.local` and `functions/.secret.local` remain, dated 2026-08-06, and are
-  now exactly the leftovers `run-dev-emulators.js` refuses to overwrite — so whoever
-  takes this chunk starts a fresh hold and deletes those two first.
-  **The Android question is narrowed but not answered.** The standing session
-  instructions still skip the Android build and Android emulator tests, so a run
-  scheduled today is a Windows or web run and exercises only the loopback path. That
-  says what the run would be, not whether it is worth doing in that form. Still ask.
-  It is also the only way to see "Checkout settings" and "Manage catalog" reach a real
-  Firestore rule — and the catalog route is the one that would make the emulator seed
-  script optional, which is worth watching once.
+- **~~An emulator integration test for `deliverPasswordReset`~~** — **done 2026-08-08.** It
+  moved no board row, deliberately: the client surface is what the App Check decision blocks
+  and this chunk went past that gate rather than at it. What it moved is the invitation
+  integration baseline, 12 → 23. It is also the one chunk so far whose "changes no production
+  code" claim did not survive contact — it added `export` to
+  `firestorePasswordResetDependencies`, because rebuilding those adapters in the test would
+  have been a test of the rebuild. See the closed half of the App Check decision above.
+- **~~Run the app against the emulators~~** — **promoted out of this list into the current
+  chunk**, after being queued ten times. What it inherits from here: a fresh hold has to be
+  started because the 2026-08-07 one has exited, and `functions/.env.local` and
+  `functions/.secret.local` must be deleted first — they are dated 2026-08-06 and are exactly
+  the leftovers `run-dev-emulators.js` refuses to overwrite. The Android question is narrowed
+  and still unanswered, and is the one thing to ask before starting.
+- **A fixture chunk that reaches the last three lines of `deliverPasswordReset`** — the
+  keyring parsed out of its secret, the Brevo provider constructed out of its secrets, and the
+  `getFirestore()`/`getAuth()` defaults. Small, and deliberately not folded into the test
+  chunk that named it: it means exporting an email function from
+  `functions/integration/index.js`, whose closure reaches five parameters in
+  `email/config.ts`, and every one of them has to be answered at emulator startup or the run
+  hangs. The parts are unit-tested separately, so this buys wiring confidence and nothing else.
 - **`regenerateDailyMetric` writes `daily_metrics` with `merge: false` and no
   `createdAt`**, unlike every other document in this pipeline. Probably deliberate;
   nothing says which.
@@ -1946,11 +2003,12 @@ root-widget smoke test and the startup seams it would need, and deployment.
 
 **That entry was narrowed on 2026-08-08 and the narrowing is the point.** It used to read
 "password reset" flat, which made a whole area look closed when only one half of it was. The
-**client surface** is what App Check blocks, and it stays excluded. The **server worker** is
-not blocked by anything and never was: `deliverPasswordReset` has no attestation of any kind,
-and an emulator integration test for it against real Auth, real Firestore, and the Brevo seam
-changes no production code. That test is the **current chunk** above, taken because the rule
-attached to this exclusion said a third consecutive exclusion is when it gets taken.
+**client surface** is what App Check blocks, and it stays excluded. The **server worker** was
+not blocked by anything and never was: `deliverPasswordReset` has no attestation of any kind.
+**Its emulator integration test was written later the same day** — the rule attached to this
+exclusion said a third consecutive exclusion is when it gets taken, and it was — so that half
+is no longer an exclusion, no longer queued, and no longer untested. What is still excluded
+here is only the surface, and only for as long as the App Check decision stands.
 
 **Editing a product's descriptive fields left this list on 2026-08-07 and was finished
 on 2026-08-08.** The `updateProduct` callable exists, is tested, and is now called by
@@ -2023,8 +2081,8 @@ server later has to agree with. That one starts on the server or not at all, and
 nothing in the sell-and-settle loop reads it. The exclusions that moved from cosmetic
 to load-bearing are tracked above instead of here, and only one of the three is still
 an open question: **the in-app password reset surface**, now in motion in the console —
-though the server-side half of that area stopped being an exclusion on 2026-08-08 and is
-the current chunk. **How a price is corrected** is resolved, built, and reachable —
+though the server-side half of that area stopped being an exclusion on 2026-08-08 and was
+taken and finished the same day. **How a price is corrected** is resolved, built, and reachable —
 nothing of it is left — and **what a receipt is printed on** is answered and waiting on
 an interface.
 

@@ -59,7 +59,16 @@ if (testNamePattern) {
   }
   testCommandParts.push(`--test-name-pattern=${testNamePattern}`);
 }
-testCommandParts.push("test/invitation-acceptance.integration.test.js");
+// Two files, one emulator start. `node --test` gives each file its own process,
+// so the password-reset suite brings up its own Admin app and cannot disturb the
+// acceptance suite's fixtures; `--test-concurrency=1` keeps them sequential.
+// Password reset shares the delivery, suppression, and recipient-hash code this
+// suite's project already runs, so it needs no new ports, no fourth demo
+// project, and no fourth copy of the compiled Functions build.
+testCommandParts.push(
+  "test/invitation-acceptance.integration.test.js",
+  "test/password-reset-delivery.integration.test.js",
+);
 const testCommand = testCommandParts
   .map((part) => JSON.stringify(part))
   .join(" ");
@@ -88,6 +97,13 @@ try {
           process.env.FUNCTIONS_DISCOVERY_TIMEOUT ?? "60000",
         FUNCTIONS_EMULATOR_HOST: "127.0.0.1:5101",
         GCLOUD_PROJECT: projectId,
+        // The password-reset gateway reads this through
+        // `defineString(...).value()`, which outside a deployed function is just
+        // `process.env`. It is declared here rather than in the test so the
+        // suite's configuration stays in one place, the way the invitation
+        // secret above is; the gateway refuses anything that is not HTTPS.
+        PASSWORD_RESET_CONTINUE_URL:
+          "https://reset.integration.example.test/finish",
         STAFF_INVITATION_HMAC_SECRET_V1: invitationSecret,
       },
       stdio: "inherit",

@@ -17306,3 +17306,200 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+## The password-reset worker runs against real Auth and real Firestore - 2026-08-08
+
+Taken because the rule attached to the password-reset exclusion said to take it: the
+profit-display session excluded password reset for a third consecutive chunk, and the standing
+instruction is that a third exclusion is when the emulator integration test for
+`deliverPasswordReset` gets written. It was checked against the board first and nothing the app
+needs in order to function is missing and unqueued — the four red rows are password reset
+(blocked on the App Check decision), the printed receipt body (blocked on an external service's
+interface), suspicious-return scoring (sequenced after the first deployment on purpose), and
+subscription (no schema on the server) — so the queued chunk stood.
+
+**It resolves none of the App Check question and is not meant to.** What it covers is the half
+of that area that was never blocked by anything: `deliverPasswordReset` carries no attestation
+of any kind, and the public callable in front of it is seventeen lines of validate-and-enqueue.
+
+### What was built
+
+`rules-tests/test/password-reset-delivery.integration.test.js` — **11 tests**, joined to the
+existing invitation suite rather than given a fourth demo project. The suite goes **12 → 23**.
+
+| Test | What only real infrastructure proves |
+| --- | --- |
+| an eligible reset sends a real Auth link and stores only hashes | `generatePasswordResetLink` against a real Auth record; the whole sent-state document |
+| an address changed in real Auth after the request writes nothing | a real `updateUser` between request and dispatch |
+| a disabled real Auth identity writes nothing | `disabled` read off a real Auth record |
+| an address real Auth does not know writes nothing | the error code real Auth actually raises for a missing user |
+| a canonical root that is absent or not eligible writes nothing | the real `users/{uid}` read, absent and then disabled |
+| a suppression under the previous key version is still found | the real `getAll` across a keyring rotation |
+| a retryable provider failure leaves a retry the next attempt completes | the lease, the attempt counter, and the deletion sentinels |
+| a permanent provider failure marks the identity unavailable | the non-retryable branch of `markFailure` |
+| a repeated dispatch of a sent delivery does not send twice | the real transaction reading a terminal state |
+| a continue URL that is not HTTPS refuses to build the gateway | the gateway constructor, which every fake replaced |
+| no document any of these deliveries wrote holds an address or a link | the frozen guarantee, read back out of a real store |
+
+### One production change, and the claim it retracts
+
+`PLAN.md` said this chunk "changes no production code". ~~Retracted~~ — **it changed one
+keyword.** `firestorePasswordResetDependencies` in `functions/src/email/passwordReset.ts` is now
+exported, with a comment saying why. Nothing else about it moved: no signature, no behaviour, no
+call site, and the functions suite held at 409 to say so.
+
+The alternative was to rebuild those adapters inside the test, and that would have been a test of
+the rebuild. The adapters **are** the untested half — the unit suite substitutes all eight
+dependencies, so the Firestore transactions and the Auth gateway had never executed anywhere.
+Exporting the seam is what makes the test test something.
+
+### Eight decisions worth keeping
+
+1. **It lives in the invitation suite, as `PLAN.md` recommended, and the recommendation held.**
+   No new ports, no fourth demo project, no fourth copy of the compiled Functions build. Password
+   reset and staff invitation share the delivery, suppression, and recipient-hash code both
+   exercise. `node --test` gives each file its own process, so the new file brings up its own
+   Admin app and cannot disturb the acceptance fixtures.
+2. **What is dispatched is `processPasswordResetTask` over the real dependencies, which is
+   `deliverPasswordReset`'s body minus three lines** — the keyring parsed out of its secret, the
+   Brevo provider constructed out of its secrets, and the `getFirestore()`/`getAuth()` defaults.
+   Those three are deliberately uncovered, and the reason is a repository trap rather than
+   laziness: reaching them needs `functions/integration/index.js` to export an email function,
+   and every parameter in `email/config.ts` would then have to be answered at emulator startup or
+   the run hangs after "Serving at port ...". That fixture's seven exports reach
+   `firebase-functions/params` not at all, which is an invariant the reconciliation fixture
+   documents at length, and it is not worth spending on three lines whose parts are unit-tested
+   separately.
+3. **The seam is `fetch`, not the provider.** The test constructs the **real**
+   `BrevoEmailProvider` over a stub `fetch`, so `requireProviderConfiguration`, the message body,
+   the idempotency header, and the HTTP status mapping all run. That is what lets the failure
+   tests drive `provider_http_503` and `provider_http_400` through the real mapping instead of
+   throwing a hand-made `EmailProviderError`, and it is why "what reaches the seam" is an
+   assertion rather than a claim. No live credential, no network call.
+4. **Both the worker and the assertions use the Functions copy of firebase-admin**, reached
+   through `createRequire` against `functions/package.json`, the way the acceptance suite already
+   does for `revokePlatformAdmin`. The adapters compare `leaseExpiresAt instanceof Timestamp` and
+   write `FieldValue` sentinels from `functions/node_modules`; a handle built from the
+   `rules-tests` copy would fail those identity checks for a reason no assertion would explain.
+5. **The keyring has two versions.** A single-key fixture cannot reach `allRecipientHashes`'
+   whole point, so the suppression test writes its document under the **previous** version and
+   the task is prepared under the current one. The delivery is then recorded under the current
+   version while the suppression that stopped it was written under the previous — which is the
+   behaviour a rotation depends on, and it had never run against a real `getAll`.
+6. **The plaintext guarantee is a test, not a comment.** Every address, every mixed-case form,
+   every local part, and every action link the Auth emulator minted is collected as the file
+   runs, and the last test sweeps `email_deliveries`, `email_delivery_status`, and
+   `email_suppressions` for all of them. UIDs are deliberately unrelated to the local parts they
+   belong to — `pwreset-eligible` holds `delivery-eligible@...` — because a UID echoing a local
+   part would make that sweep pass for the wrong reason.
+7. **`PASSWORD_RESET_CONTINUE_URL` is declared in the runner env**, beside the invitation secret,
+   rather than set inside the test: outside a deployed function `defineString(...).value()` is
+   just `process.env`, and the suite's configuration belongs in one place. The one test that
+   needs a different value overrides `process.env` and restores it in a `finally`, which is the
+   shape this file already requires of anything that mutates state a sibling test reads.
+8. **The sweep test is the one that fails under `INTEGRATION_TEST_NAME_PATTERN`**, and that is
+   recorded in the file rather than worked around. Filtered down to itself it has nothing to
+   sweep, and a sweep that finds nothing is exactly the result its three floors exist to refuse.
+
+### What it found: nothing broken, and that is worth stating
+
+No defect. The worker was correct, and every risk this class of test exists to catch came back
+clean on the first run:
+
+- **The deletion sentinels serialize.** `beginDelivery` writes `nextAttemptAt: FieldValue.delete()`
+  inside a merged `set` that may be creating the document, and `markSent`/`markFailure` delete
+  `leaseId`, `leaseExpiresAt`, and `lastErrorCode` in an `update`. This is precisely the shape
+  that took `mergeSaleReconciliationJob` down on every sale it ever saw, invisibly to eleven
+  sessions of green unit tests. Here it is fine, and now measured rather than assumed.
+- **`generatePasswordResetLink` works against the Auth emulator**, returning a
+  `mode=resetPassword` link carrying an `oobCode` and the configured continue URL.
+- **Real Auth folds the address.** The records are created mixed-case, the requests arrive padded
+  and upper-cased, and the hash the task carries still matches the hash derived from what Auth
+  holds. That is the current-email HMAC recheck running for the first time against something
+  other than a map.
+- **A missing identity raises the code the gateway swallows.** `findByEmail` catches exactly
+  `auth/user-not-found` and rethrows everything else; only real Auth can say which code an
+  unknown address actually produces, and it produces that one.
+
+The whole new file runs in **2.7 seconds**, of which the eligible send is 1.68 — the first Auth
+call of the process. Nothing here waits on a cold trigger, because nothing here goes through the
+task queue.
+
+### Files changed
+
+```text
+functions/src/email/passwordReset.ts                              (one keyword, plus its comment)
+rules-tests/test/password-reset-delivery.integration.test.js      (new, 11 tests)
+rules-tests/scripts/run-invitation-emulator-tests.js              (second test file, one env var)
+PLAN.md
+HISTORY.md
+```
+
+`firestore.rules` was not touched and neither was anything in `lib/`.
+
+### Test commands and results
+
+```text
+node functions/node_modules/typescript/bin/tsc -p functions/tsconfig.json   clean
+npm --prefix functions test                                                 409 pass, 0 fail
+npm --prefix rules-tests run test:emulator                                  161 pass, 0 fail
+npm --prefix rules-tests run test:emulator:invitations                      23 pass, 0 fail  (was 12)
+npm --prefix rules-tests run test:emulator:reconciliation                   10 pass, 0 fail
+flutter test --no-pub --concurrency=1 --reporter=failures-only              1473 pass, 0 fail
+```
+
+**2076 tests across five suites**, up from 2065. Four of the five did not move, which is the
+measurement: the functions count holding at 409 is what says the export changed no behaviour and
+added no unit test, and the rules count holding at 161 is what says `firestore.rules` is
+byte-identical. The invitation suite ran twice — once mid-development and once against the frozen
+tree — and passed 23/23 both times, in 126 s and 125 s.
+
+No failure cost a debugging cycle this session. The habitual control-character check was run over
+all three touched source files before committing and found nothing.
+
+### The board did not move, deliberately, and this sentence exists so that is stated
+
+**No status board row changed colour.** The board is still 29 rows at **24 green, 4 red, 1
+amber**. Password reset stays red because a red row means a person cannot do it in a running app,
+and nothing about the client surface changed — the App Check decision still blocks it and this
+chunk deliberately did not touch it. What moved is the invitation integration baseline, 12 → 23,
+and rollout step 12's evidence.
+
+Nothing entered or left the "built, tested, and still unreachable" table either. Password reset
+is still in it, still for the same reason, and the reason is still a decision rather than effort.
+
+### Exclusions named, as required
+
+**Removing or relaxing `enforceAppCheck` or `requireAppCheckedPublic`** was excluded and stayed
+excluded — asked and answered on 2026-08-07, and the answer is that both gates are ours rather
+than the platform's, so turning them off locally means deleting production code. This chunk
+reached past them instead, which is the whole point of dispatching the worker directly.
+
+**The printed receipt body** has now been inherited for many consecutive chunks and is named
+here for that reason. Still correctly excluded and it has not become blocking: a sale is
+recorded, found by receipt lookup, and returned without anything being printed. It is not
+blocked on a decision — the transport was answered on 2026-08-07 and an external print service
+owns it — but on that service's interface, which decides what a "body" even is. Do not start it
+on a guessed contract.
+
+**Adding `firebase_app_check` to `pubspec.yaml`**, any client surface for reset, live Brevo of
+any kind, the Windows custom attestation provider, and deployment were all excluded and none of
+them was touched. **The 476 pre-existing analyzer issues** remain excluded and no Dart file was
+edited this session, so the figure is untouched.
+
+### The published board is unchanged and still four greens behind
+
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29 capabilities at
+**20 green, 8 red, 1 amber**; `PLAN.md` is at **24 green, 4 red, 1 amber**. Publishing was not
+requested this session and the page was left alone. This chunk moved no row, so the gap is
+exactly what it was.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```
