@@ -373,7 +373,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
   }) {
     _requireCreateRole();
     _requireRequestId(requestId);
-    final safeName = _normalizedName(name, 'invalid_category_name');
+    final safeName = tenantCatalogNormalizedName(name, 'invalid_category_name');
     final categoryId = _deterministicCatalogId(
       prefix: 'ct',
       operation: 'createTenantCategory',
@@ -410,9 +410,9 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
   }) {
     _requireCreateRole();
     _requireRequestId(requestId);
-    final safeName = _normalizedName(name, 'invalid_product_name');
-    final safeSku = _normalizedSku(sku);
-    final priceMinor = _priceMinorUnits(price);
+    final safeName = tenantCatalogNormalizedName(name, 'invalid_product_name');
+    final safeSku = tenantCatalogNormalizedSku(sku);
+    final priceMinor = tenantCatalogPriceMinorUnits(price);
     final int? costMinor;
     if (cost.trim().isEmpty) {
       costMinor = null;
@@ -423,7 +423,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       if (!canRecordCostInSession(session)) {
         throw const TenantCatalogManagementException('cost_forbidden');
       }
-      costMinor = _priceMinorUnits(
+      costMinor = tenantCatalogPriceMinorUnits(
         cost,
         invalidCode: 'invalid_cost',
         unrepresentableCode: 'cost_not_representable',
@@ -518,8 +518,8 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     if (product.tenantId != session.tenantId) {
       throw const TenantCatalogManagementException('edit_forbidden');
     }
-    final safeName = _normalizedName(name, 'invalid_product_name');
-    final safeSku = _normalizedSku(sku);
+    final safeName = tenantCatalogNormalizedName(name, 'invalid_product_name');
+    final safeSku = tenantCatalogNormalizedSku(sku);
     TenantCategory? category;
     for (final candidate in categories) {
       if (candidate.id == categoryId) {
@@ -559,7 +559,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
 
     int? nextPriceMinor;
     if (price != null) {
-      final priceMinor = _priceMinorUnits(price);
+      final priceMinor = tenantCatalogPriceMinorUnits(price);
       // A stored price the till cannot convert is a price that differs from
       // every representable figure, so retyping it is a real correction rather
       // than a no-op the server would refuse.
@@ -572,8 +572,8 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
             field: TenantProductField.price,
             previous: storedPriceMinor == null
                 ? '${product.price} (unusable)'
-                : _majorUnits(storedPriceMinor),
-            next: _majorUnits(priceMinor),
+                : tenantCatalogMajorUnits(storedPriceMinor),
+            next: tenantCatalogMajorUnits(priceMinor),
           ),
         );
       }
@@ -589,7 +589,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
         ? 'not recorded'
         : storedCostMinor == null
         ? '$storedCost (unusable)'
-        : _majorUnits(storedCostMinor);
+        : tenantCatalogMajorUnits(storedCostMinor);
     if (clearCost) {
       _requireMonetaryRole(TenantProductField.cost);
       if (storedCost != null) {
@@ -603,7 +603,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
         );
       }
     } else if (cost != null && cost.trim().isNotEmpty) {
-      final costMinor = _priceMinorUnits(
+      final costMinor = tenantCatalogPriceMinorUnits(
         cost,
         invalidCode: 'invalid_cost',
         unrepresentableCode: 'cost_not_representable',
@@ -615,7 +615,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
           TenantProductFieldChange._(
             field: TenantProductField.cost,
             previous: previousCost,
-            next: _majorUnits(costMinor),
+            next: tenantCatalogMajorUnits(costMinor),
           ),
         );
       }
@@ -682,12 +682,19 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     );
   }
 
-  static void _requireRequestId(String requestId) {
-    if (!_requestIdPattern.hasMatch(requestId)) {
-      throw const TenantCatalogManagementException(
-        'invalid_catalog_request_id',
-      );
-    }
+  static void _requireRequestId(String requestId) =>
+      requireTenantCatalogRequestId(requestId);
+}
+
+/// Refuses an idempotency key the server's `requireRequestId` would refuse.
+///
+/// Shared with the bulk catalog paths rather than re-spelled there: a request ID
+/// this client accepts and the server does not is a chunk of work that fails
+/// after the operator has confirmed it, and two copies of one pattern is how the
+/// two drift apart.
+void requireTenantCatalogRequestId(String requestId) {
+  if (!_requestIdPattern.hasMatch(requestId)) {
+    throw const TenantCatalogManagementException('invalid_catalog_request_id');
   }
 }
 
@@ -1008,6 +1015,8 @@ final class TenantProductUpdateResult {
     required this.sku,
     required this.price,
     required this.priceMinor,
+    required this.cost,
+    required this.costMinor,
     required this.categoryId,
   });
 
@@ -1057,6 +1066,12 @@ final class TenantProductUpdateResult {
         'updateProduct returned inconsistent price figures.',
       );
     }
+    final (cost, costMinor) = tenantCatalogOptionalMoney(
+      data,
+      'cost',
+      'costMinor',
+      source: 'updateProduct',
+    );
     // Every field that was asked for must be what the product now holds, not
     // merely a value the server was willing to report.
     if (intent.name != null && name != intent.name) {
@@ -1067,6 +1082,16 @@ final class TenantProductUpdateResult {
     }
     if (intent.priceMinor != null && priceMinor != intent.priceMinor) {
       throw const FormatException('updateProduct did not apply the price.');
+    }
+    // The fifth field, reconcilable since the response began echoing it. Before
+    // that a corrected cost appeared in `changedFields` with no value beside it,
+    // so four of the five fields could be checked against the request and this
+    // one could only be re-read.
+    if (intent.costMinor != null && costMinor != intent.costMinor) {
+      throw const FormatException('updateProduct did not apply the cost.');
+    }
+    if (intent.clearsCost && costMinor != null) {
+      throw const FormatException('updateProduct did not clear the cost.');
     }
     if (intent.categoryId != null && categoryId != intent.categoryId) {
       throw const FormatException('updateProduct did not apply the category.');
@@ -1079,6 +1104,8 @@ final class TenantProductUpdateResult {
       sku: sku,
       price: price.toDouble(),
       priceMinor: priceMinor,
+      cost: cost,
+      costMinor: costMinor,
       categoryId: categoryId,
     );
   }
@@ -1092,17 +1119,52 @@ final class TenantProductUpdateResult {
 
   /// Which fields actually moved, which can be fewer than the intent named:
   /// nothing is written for a field that already held the requested value.
-  ///
-  /// **`cost` appears here when it moved and its new value does not.** The
-  /// response carries no cost, so a cleared or corrected cost is confirmed by
-  /// re-reading the catalog rather than from this answer.
   final List<TenantProductField> changedFields;
 
   final String name;
   final String sku;
   final double price;
   final int priceMinor;
+
+  /// What one unit now costs the business, and null when none is recorded.
+  ///
+  /// Reconciled against the correction rather than merely reported: a cost that
+  /// was corrected must come back holding the requested figure, and a cost that
+  /// was cleared must come back null. Until the response echoed these two keys
+  /// this surface confirmed a corrected cost by re-reading the catalog, which
+  /// meant the one field a manager may not touch was also the one field the
+  /// answer could not prove.
+  final double? cost;
+  final int? costMinor;
+
   final String categoryId;
+}
+
+/// Reads a money pair that may legitimately be absent, proving the two agree.
+///
+/// Both null or both present: a response naming one and not the other cannot
+/// describe what a device will read, whichever half is missing. The major-unit
+/// figure is re-derived through the till's own conversion for the same reason the
+/// price is - two figures for one amount that disagree are not a value.
+///
+/// Shared with the bulk catalog decoders, which read the same pair out of a
+/// per-row product rather than out of a single-product response.
+(double?, int?) tenantCatalogOptionalMoney(
+  Map<String, Object?> data,
+  String majorKey,
+  String minorKey, {
+  required String source,
+}) {
+  final major = data[majorKey];
+  final minor = data[minorKey];
+  if (major == null && minor == null) return (null, null);
+  if (major is! num || minor is! int) {
+    throw FormatException('$source returned an invalid $majorKey.');
+  }
+  if (checkoutMinorUnitsFromMajor(major) != minor) {
+    throw FormatException('$source returned inconsistent $majorKey figures.');
+  }
+  return (major.toDouble(), minor);
 }
 
 /// Session-bound gateway with no tenant input surface.
@@ -1262,7 +1324,7 @@ String _deterministicCatalogId({
 /// [TenantProduct] and [TenantCategory] both require a non-empty string that
 /// equals its own trim and carries no control characters, so the value is
 /// normalized into that shape here rather than being refused for a stray space.
-String _normalizedName(String value, String code) {
+String tenantCatalogNormalizedName(String value, String code) {
   final name = value.trim().replaceAll(_whitespaceRun, ' ');
   if (name.isEmpty || name.length > maximumCatalogNameLength) {
     throw TenantCatalogManagementException(code);
@@ -1280,7 +1342,7 @@ String _normalizedName(String value, String code) {
 /// A SKU is what the till matches a scan against, exactly and case-folded. A
 /// scanner cannot emit a space, so a code containing one could be typed but
 /// never scanned - which is the one job the field has.
-String _normalizedSku(String value) {
+String tenantCatalogNormalizedSku(String value) {
   final sku = value.trim();
   if (sku.isEmpty || sku.length > maximumCatalogSkuLength) {
     throw const TenantCatalogManagementException('invalid_sku');
@@ -1306,7 +1368,7 @@ String _normalizedSku(String value) {
 /// [checkoutMinorUnitsFromMajor] - the same function the till and the cart use.
 /// That is what makes it impossible for this surface to accept a price the till
 /// would later refuse as `price_not_representable` with the customer waiting.
-int _priceMinorUnits(
+int tenantCatalogPriceMinorUnits(
   String value, {
   String invalidCode = 'invalid_price',
   String unrepresentableCode = 'price_not_representable',
@@ -1326,7 +1388,7 @@ int _priceMinorUnits(
 }
 
 /// Formats exact minor units the way every amount in this app is written.
-String _majorUnits(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String tenantCatalogMajorUnits(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
 
 final RegExp _whitespaceRun = RegExp(r'\s+');
 final RegExp _pricePattern = RegExp(r'^\d{1,12}(\.\d{1,2})?$');

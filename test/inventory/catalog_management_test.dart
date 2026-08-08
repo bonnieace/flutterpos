@@ -727,6 +727,86 @@ void main() {
       }
     });
 
+    test('a corrected cost is reconciled against the request', () async {
+      // The fifth field. Until the response echoed `cost` and `costMinor` a
+      // corrected cost came back named in `changedFields` with no figure beside
+      // it, so this was the one field the answer could not prove and the route
+      // confirmed it by re-reading the catalog instead.
+      final result = await _gateway(
+        _UpdateCallable(
+          answer: _response(<String, Object?>{
+            'changedFields': <String>['cost'],
+            'name': 'White bread loaf',
+            'cost': 42.5,
+            'costMinor': 4250,
+          }),
+        ),
+      ).submit(_updateIntent(cost: '42.50'));
+
+      expect(result.changedFields, <TenantProductField>[
+        TenantProductField.cost,
+      ]);
+      expect(result.cost, 42.5);
+      expect(result.costMinor, 4250);
+    });
+
+    test('a cleared cost must come back holding nothing', () async {
+      final cleared = await _gateway(
+        _UpdateCallable(
+          answer: _response(<String, Object?>{
+            'changedFields': <String>['cost'],
+            'name': 'White bread loaf',
+            'cost': null,
+            'costMinor': null,
+          }),
+        ),
+      ).submit(_updateIntent(clearCost: true));
+
+      expect(cleared.costMinor, isNull);
+
+      // A server that reported the clearance and answered with a figure is
+      // describing a product no device will read this way.
+      expect(
+        () => _gateway(
+          _UpdateCallable(
+            answer: _response(<String, Object?>{
+              'changedFields': <String>['cost'],
+              'name': 'White bread loaf',
+              'cost': 40.0,
+              'costMinor': 4000,
+            }),
+          ),
+        ).submit(_updateIntent(clearCost: true)),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('a cost answered with two figures that disagree is refused', () async {
+      for (final overrides in <Map<String, Object?>>[
+        // The pair disagrees about one amount.
+        <String, Object?>{'cost': 42.5, 'costMinor': 4200},
+        // Half a pair cannot describe an amount at all.
+        <String, Object?>{'cost': 42.5},
+        <String, Object?>{'costMinor': 4250},
+        // The correction asked for 42.50 and the product holds something else.
+        <String, Object?>{'cost': 41.0, 'costMinor': 4100},
+      ]) {
+        expect(
+          () => _gateway(
+            _UpdateCallable(
+              answer: _response(<String, Object?>{
+                'changedFields': <String>['cost'],
+                'name': 'White bread loaf',
+                ...overrides,
+              }),
+            ),
+          ).submit(_updateIntent(cost: '42.50')),
+          throwsA(isA<FormatException>()),
+          reason: overrides.toString(),
+        );
+      }
+    });
+
     test('a refusal is classified by what the server actually said', () async {
       for (final entry in <List<String>, TenantProductUpdateFailure>{
         <String>['permission-denied', 'Only an owner or an administrator may '

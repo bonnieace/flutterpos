@@ -48,6 +48,37 @@ void main() {
     );
   });
 
+  testWidgets('the bulk route is offered only when the build carries one', (
+    tester,
+  ) async {
+    await _pump(tester, _controller(), _Reader.seeded(), writer: _Writer());
+    expect(find.byKey(const ValueKey('catalog-management-bulk')), findsNothing);
+
+    final reader = _Reader.seeded();
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: _Writer(),
+      bulkRoute: (_) => Scaffold(
+        appBar: AppBar(title: const Text('Bulk')),
+        body: const Text('Bulk open'),
+      ),
+    );
+    expect(find.byKey(const ValueKey('catalog-management-bulk')), findsOne);
+
+    final readsBefore = reader.pages.length;
+    await tester.tap(find.byKey(const ValueKey('catalog-management-bulk')));
+    await tester.pumpAndSettle();
+    expect(find.text('Bulk open'), findsOne);
+
+    // Coming back re-reads, because a bulk correction changes the products this
+    // list is currently stating.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(reader.pages.length, greaterThan(readsBefore));
+  });
+
   testWidgets('a business with no categories is told what comes first', (
     tester,
   ) async {
@@ -803,6 +834,7 @@ Future<void> _pump(
   _Reader reader, {
   TenantCatalogWriter? writer,
   UpdateProductCallable? callable,
+  WidgetBuilder? bulkRoute,
   VoidCallback? onChanged,
   int pageSize = 20,
 }) async {
@@ -819,6 +851,7 @@ Future<void> _pump(
             reader: reader,
             writer: writer,
             updateCallable: callable,
+            bulkRoute: bulkRoute,
             onChanged: onChanged,
             pageSize: pageSize,
             requestIdFactory: _requestIds().call,

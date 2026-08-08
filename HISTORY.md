@@ -16802,3 +16802,262 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## Both bulk halves reach a person - 2026-08-08
+
+### What was built
+
+**One screen, two callables, and the two board rows they were holding closed.**
+`updateProducts` and `importProducts` had been built, tested, exported, and called by
+nothing — two consecutive server chunks ending in the unreachable table, which `PLAN.md`
+named as the limit. This chunk is the surface, and both rows are now green.
+
+The route is `TenantBulkCatalogScreen`, reached from **"Manage catalog" → "Bulk changes and
+import"** rather than from the landing route. It belongs beside the catalog for the reason
+the catalog belongs beside the till: correcting many products starts by looking at them, and
+the product list it needs is the list that route already shows.
+
+**Four decisions the surface had to make, and the first was the open one.**
+
+1. **Where the rows come from.** `PLAN.md` recommended it and this chunk accepted it
+   unchanged: a **bulk correction reads its rows from the catalog the app already holds** —
+   tick products on the route's own paged list, choose one field, preview — and an **import
+   starts from delimited text** pasted into the screen. No package, no file picker, no
+   binary format. `.xlsx` stays excluded, and nothing about the shape of this screen would
+   have to change to add it later, because the parser is one function returning rows.
+2. **A bulk correction is one field across many products, not a form.** Three reasons, and
+   the first is the input: these rows come from products already on the device, so there is
+   no column to read a per-product value out of. The second is that a name and a code belong
+   to one product each — two products cannot share a corrected name, and a shared code is
+   what the till refuses to resolve by scan. The third is authorization: the server decides
+   permission over the **union** of every row's requested fields, so folding a price into a
+   category move would refuse the whole request for a manager who never asked to change
+   money. So the four things offered are: file under a category, set a unit price, set a unit
+   cost, and remove the unit cost.
+3. **A page is immutable once built, and a commit re-sends the very objects the preview
+   sent.** Order is part of the server's request fingerprint, and a page keeps one request ID
+   across its own preview and its own commit — which is exactly what the server's decision to
+   write **no** idempotency record for a preview exists to allow. Rebuilding the plan for the
+   commit would issue new IDs and could reorder rows, so the plan is held in state and
+   anything that changes what it was built from throws it away.
+4. **A commit is offered only after a preview that answered every page.** A rule, not
+   caution: committing a page nobody previewed is the thing the preview exists to prevent,
+   and a preview whose chain stopped has not described the whole change.
+
+**The role asymmetry is honoured in two different ways on one screen, because the server
+imposes two different rules.** A correction naming a price or a cost *anywhere* refuses the
+whole request, so a manager is offered **no money correction at all** — the chips are absent
+and `bulk-catalog-money-hidden` says why. An import **may** take a price from a manager,
+because setting a first price is creation and the add-product form beside it already accepts
+one, and must still refuse a cost — so a manager's sheet carrying a `cost` column is refused
+**as a sheet**, before any row is read, which is where `assertProductImportAuthorized`
+decides it. A manager who previewed green and then met a commit-time refusal would learn
+only that the app guesses.
+
+**The per-row report is the product.** Every row appears — `Created`, `Corrected`,
+`Unchanged`, or `Refused` — with what it holds or would hold, or the exact refusal. A
+correction is labelled by its **position in the selection** and an import by the **line of
+the pasted sheet, header included**, because the server's index is page-local and neither of
+those is what a person recognises: page-local index 0 of the second request is the
+fifty-first product they ticked, and a person fixing a refusal is looking at their own file.
+
+**Rows this client can refuse are refused before anything is sent, and still reported.** A
+blank name, a spaced code, a price the till cannot represent, a negative opening balance, a
+row naming a category twice or not at all, a row with fewer cells than its header — each is
+that row's own refusal, carried in the report beside the server's outcomes, so every broken
+row is named at once rather than found one round trip at a time. Every one of them is
+validated by **the catalog surface's own helpers**: `tenantCatalogNormalizedName`,
+`tenantCatalogNormalizedSku`, and `tenantCatalogPriceMinorUnits` were promoted from private
+to public for exactly this, so a product created by an import, created by the add-product
+form, and corrected one at a time cannot differ in what this client will write. A private
+`_shared` wrapper converts their `TenantCatalogManagementException` into this boundary's own
+and carries the code through unchanged.
+
+**Sheet-level defects throw and row-level defects are reported, which is the split the
+server already makes.** No header, a column this import does not read, one column twice, a
+required column missing, no category column at all, more rows than the chain will hold — all
+of them refuse the sheet, because reporting them per row would make the report itself wrong.
+**A column nobody reads is refused rather than ignored**, so nothing a person supplied is
+dropped without being mentioned.
+
+**Quoting is the minimum a spreadsheet actually emits.** A double-quoted cell may hold the
+delimiter and two quotes inside one are a literal quote. Without it a product called
+`Bread, sliced` becomes two cells and shifts every column after it — a wrong import that
+looks like a valid one. The delimiter is decided from the **header alone** (tab, comma, or
+semicolon) so every row is split the same way; deciding it per row would let one row with a
+stray tab be split differently from its neighbours.
+
+**A half-answered chain is the ordinary case, not an error.** Pages are sent one after
+another, a refusal stops the chain, and the report says how many requests answered — which
+in a commit is how many were written. A page whose answer cannot be decoded is reported as
+an **unknown outcome** rather than a failure, because the request was sent: in a commit it
+may have been written, and only a re-read settles it.
+
+**The duplicate-import hazard is stated where a person can see it.** The commit confirmation
+says in as many words that running the sheet again creates the products a second time,
+because nothing in this app makes a code unique and retiring a product is not an undo.
+
+**The client half of the `cost` echo gap is closed.** `UpdateProductResponse` has echoed
+`cost` and `costMinor` since earlier the same day; `TenantProductUpdateResult` now reads
+both, proves they agree through the till's own conversion, and **reconciles them against the
+correction** — a corrected cost must come back holding the requested figure and a cleared one
+must come back null. The single-product route now states the new cost in its notice instead
+of leaving it to the re-read. The shared reader, `tenantCatalogOptionalMoney`, is the one the
+bulk decoders use for the same pair inside a per-row product.
+
+### Files changed
+
+```text
+lib/inventory/bulk_catalog.dart             (new, 1915 lines: plans, sheet parser, decoders, gateways)
+lib/inventory/bulk_catalog_panel.dart       (new, 1192 lines: the route, the chain runner, the report)
+lib/inventory/catalog_management.dart       (helpers promoted; cost echo decoded and reconciled)
+lib/inventory/catalog_management_panel.dart (bulkRoute entry point; cost stated in the notice;
+                                             one pre-existing literal NUL byte repaired)
+lib/inventory/inventory.dart                (two exports)
+lib/main.dart                               (bulkRoute wired with both Firebase callables)
+test/inventory/bulk_catalog_test.dart       (new, 1258 lines, 38 tests)
+test/inventory/bulk_catalog_panel_test.dart (new, 664 lines, 13 tests)
+test/inventory/catalog_management_test.dart (+3: the cost echo)
+test/inventory/catalog_management_panel_test.dart (+1: the bulk entry point)
+```
+
+**No file under `functions/` was touched, and `firestore.rules` was not touched.** Both
+callables were already built and neither needed a change for this. The rules suite was run
+anyway, and its unchanged count is the measurement rather than the assertion.
+
+### Tests
+
+```text
+flutter analyze --no-pub lib test                                 476 issues (the pre-existing baseline)
+flutter test --no-pub --concurrency=1 --reporter=failures-only    1447 pass
+npm --prefix functions test                                       409 pass
+npm --prefix rules-tests run test:emulator                        161 pass
+npm --prefix rules-tests run test:emulator:reconciliation         10 pass
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations   12 pass
+```
+
+**2039 tests across five suites.** Flutter 1392 → 1447 (55 new: 38 in
+`bulk_catalog_test.dart`, 13 in `bulk_catalog_panel_test.dart`, 3 in
+`catalog_management_test.dart`, 1 in `catalog_management_panel_test.dart`). The other four
+are unchanged, which for the functions and rules suites is the measurement proving no server
+file and no rule moved. The analyzer count went to 477 once, over an unused named parameter
+on a test fake, and is back at 476.
+
+All three emulator suites ran clean. No held emulator run existed at the start of this
+session; `functions/.env.local` and `functions/.secret.local` are still there, dated
+2026-08-06, still not this session's, and still not deleted.
+
+What the 38 unit tests pin: that a page's payload is exactly the four keys the server accepts
+and one row per product; that a preview and its commit are the same rows under one request
+ID; that 120 products become three requests with distinct IDs and that each row carries both
+its page-local index and its position in the selection; that a price is proved through the
+till's own arithmetic; that money is refused for a manager and a category move is not; that a
+cashier plans nothing; that a product named twice is refused, as the server refuses it; that
+a comma, tab, and semicolon sheet all parse and a quoted cell holding a delimiter survives;
+that nine kinds of unreadable row are each named at once while the one good row is still
+sent; that **a refused row consumes no row index**, which matters because the index is what
+the server derives the product's document ID from; and that every one of the thirty-one local
+refusal codes has a message rather than falling through to the fallback.
+
+What the strict decoders refuse, all pinned: another business, the wrong mode, a different
+row count, counts that do not add up, rows out of order, another product, an unknown status,
+a field the correction never named, an unchanged row claiming a change, a commit with no
+audit entry, a preview *with* one, a preview naming a document it did not write, a product
+not holding what was asked for, two figures for one price or one cost that disagree, opening
+stock with no ledger entry, a ledger entry for a row that opened holding nothing, and an
+imported product described differently from its row.
+
+The 13 widget tests cover the whole loop rather than its pieces: a cashier denied, a build
+with neither callable offering neither half, a correction previewed and applied with one
+request ID across both, a manager offered no money correction, a manager's cost column
+refused whole, a price refused where it is typed, a report thrown away when the selection
+changes, a two-request chain stopping part way and saying which request answered, an import
+reported by sheet line with its hazard stated, locally refused rows reported and never sent,
+an unreadable header refusing the sheet, and a commit whose answer cannot be trusted reported
+as an unknown outcome.
+
+### Meaningful failures and their resolutions
+
+**Four, and three of them were the tests being right.**
+
+1. **An enum cannot declare a constant called `name`.** The sheet-column enum's first two
+   members were `name` and `category`; `name` collides with `Enum.name`, which every enum
+   already has. They are `productName` and `categoryName` now, with a `label` field carrying
+   the header a refusal should tell a person to type. Caught by the analyzer immediately.
+2. **The shared validators throw the wrong exception type.** Promoting
+   `tenantCatalogPriceMinorUnits` and its two neighbours meant the bulk boundary was raising
+   `TenantCatalogManagementException` out of a function documented to raise
+   `TenantBulkCatalogException`. Three unit tests caught it. The fix is the `_shared` wrapper
+   above, which converts the type and carries the code through — deliberately not a second
+   copy of the validation, which is the whole reason they were promoted.
+3. **A page of the catalog cannot hold sixty products.** The chain test read sixty with
+   `pageSize: 60`, and `readCollectionPage` bounds a page at fifty and throws `RangeError` —
+   so the guard reported a failed read and the test could not find its own buttons. The fix
+   made the test better than it was: it now ticks forty on one page, pages forward, and ticks
+   twenty more, which is how a selection gets past fifty in reality and also proves the
+   selection survives paging.
+4. **A confirmation sentence was also a field's helper text.** A `textContaining` assertion on
+   "keep the price they were sold at" matched twice, because the price field says it too. The
+   assertion moved to a sentence only the confirmation carries. Worth recording as the
+   ordinary hazard of writing the same true thing in two places.
+
+One thing was changed after being written and before being run: the report first rendered a
+category move as `Bakery -> cat-drinks`, taking the "after" from the server's echo. The page
+now carries the `valueLabel` the confirmation uses, so it reads `Bakery -> Drinks`. That is
+safe to display as what the row holds only because the decoder proves it — an outcome is
+refused unless the product came back holding exactly the requested value, for a corrected row
+and an unchanged one alike.
+
+**The NUL trap was met twice more, and neither was written this session.** Running the
+habitual check over the files this chunk touched found a **pre-existing literal NUL byte in
+`lib/inventory/catalog_management_panel.dart`** — `_ProductEditDraft.fingerprint` joined its
+fields on one, committed on 2026-08-07 and unnoticed for a day while `grep` reported the
+1,400-line catalog route as "Binary file ... matches" and returned nothing from it. It is
+repaired to a spelled-out escape, byte-identical in meaning, so no retained request ID
+changes what it is held against. That is the **fifth** occurrence and the first in Dart, so
+the trap's framing was wrong: it is not a `functions/` habit, it is whatever file is being
+written.
+
+**And then writing the paragraph you are reading produced two more, in `PLAN.md` and in
+this file** — each time the sentence recording a repair came back holding a real NUL where
+its `\u0000` should have been, and each time the same check caught it seconds later. **The
+mechanism is now known and is worth more than the count**: writing the six-character escape
+through a shell heredoc into a script turns it back into the byte, whatever quoting is used.
+Build it as `chr(92) + 'u0000'`, or its equivalent, and concatenate. Both new Dart files were
+checked too and neither carries one. This check has caught every occurrence ever caught
+before a commit, and nothing else ever has.
+
+### Exclusions named, as required
+
+**`.xlsx` and any binary spreadsheet format** stay excluded, and the recommendation this
+chunk accepted is the reason: delimited text is the input a person already has, every
+spreadsheet exports it, it survives a copy-and-paste, and it needs no package. Nothing about
+the shape of this screen would change to add a picker later — the parser is one function from
+text to rows.
+
+**The 476 pre-existing analyzer issues** remain excluded and remain correct, for the reason
+the last several handovers give: all of them are in the closed unreachable island, and fixing
+them is work on code that does not run.
+
+**Profit display** stays excluded and is now the largest thing this app computes and does not
+show. It is not blocking, and it cannot be a small chunk: it cannot show a figure without
+also showing how many lines have no cost behind it.
+
+### The published board is now three greens behind
+
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` shows 29 capabilities
+at **20 green, 8 red, 1 amber**. `PLAN.md` is now at **23 green, 5 red, 1 amber** — the route
+chunk earlier today put it at 21, and this chunk moved two more. So the page is three greens
+behind, not one. Publishing was not requested and the page was left alone.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

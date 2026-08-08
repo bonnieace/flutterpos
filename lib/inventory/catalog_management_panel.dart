@@ -28,6 +28,7 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
     required this.reader,
     this.writer,
     this.updateCallable,
+    this.bulkRoute,
     this.onChanged,
     this.requestIdFactory,
   });
@@ -38,6 +39,13 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
   /// a read-only statement of the catalog, as every other injected capability
   /// in this app behaves.
   final TenantCatalogWriter? writer;
+
+  /// The bulk route, reached from here rather than from the landing route.
+  ///
+  /// It belongs beside the catalog for the reason the catalog belongs beside the
+  /// till: correcting many products starts by looking at them, and its own
+  /// product list is the same list this route shows.
+  final WidgetBuilder? bulkRoute;
 
   /// Corrects one product's name, code, price, cost, or category. Injected for
   /// the same reason and with the same consequence: while it is absent, nothing
@@ -58,6 +66,7 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
       reader: reader,
       writer: writer,
       updateCallable: updateCallable,
+      bulkRoute: bulkRoute,
       onChanged: onChanged,
       requestIdFactory: requestIdFactory,
     ),
@@ -76,6 +85,7 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
     required this.reader,
     this.writer,
     this.updateCallable,
+    this.bulkRoute,
     this.onChanged,
     this.requestIdFactory,
     this.pageSize = 20,
@@ -85,6 +95,7 @@ final class TenantCatalogManagementPanel extends StatefulWidget {
   final TenantDataReader reader;
   final TenantCatalogWriter? writer;
   final UpdateProductCallable? updateCallable;
+  final WidgetBuilder? bulkRoute;
   final VoidCallback? onChanged;
   final TenantCatalogRequestIdFactory? requestIdFactory;
   final int pageSize;
@@ -475,6 +486,24 @@ final class _TenantCatalogManagementPanelState
     _editFingerprint = null;
   }
 
+  /// Opens the bulk route, carrying the session and re-reading on the way back.
+  ///
+  /// The re-read is the point: a bulk correction changes products this list is
+  /// currently stating, and returning to a stale page would show prices the
+  /// business no longer sells at.
+  Future<void> _openBulk() async {
+    final builder = widget.bulkRoute;
+    if (builder == null || _busy) return;
+    final controller = TenantSessionScope.of(context);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            TenantSessionScope(controller: controller, child: builder(context)),
+      ),
+    );
+    if (mounted) _reload();
+  }
+
   void _clearProductForm() {
     _productName.clear();
     _productSku.clear();
@@ -573,6 +602,7 @@ final class _TenantCatalogManagementPanelState
         // at all. Which of the five fields the form then offers is decided
         // per session inside it.
         canEdit: widget.updateCallable != null,
+        onBulk: widget.bulkRoute == null ? null : _openBulk,
         categoryName: _categoryName,
         productName: _productName,
         productSku: _productSku,
@@ -612,6 +642,7 @@ final class _CatalogManagementContents extends StatelessWidget {
     required this.canWrite,
     required this.canRetire,
     required this.canEdit,
+    required this.onBulk,
     required this.categoryName,
     required this.productName,
     required this.productSku,
@@ -640,6 +671,9 @@ final class _CatalogManagementContents extends StatelessWidget {
   /// composition root supplied the callable. The role tier inside a correction
   /// is decided by the form, not here.
   final bool canEdit;
+
+  /// Opens the bulk route, or null when this build does not carry one.
+  final VoidCallback? onBulk;
 
   final TextEditingController categoryName;
   final TextEditingController productName;
@@ -880,6 +914,24 @@ final class _CatalogManagementContents extends StatelessWidget {
             label: const Text('Add product'),
           ),
         ],
+        if (onBulk case final onBulk?) ...[
+          const SizedBox(height: 28),
+          Text('Many products at once', style: text.titleMedium),
+          const SizedBox(height: 8),
+          const Text(
+            key: ValueKey('catalog-management-bulk-scope'),
+            'One correction can be applied across many products, and a catalog '
+            'can be created from a spreadsheet. Both are previewed row by row '
+            'before anything is written.',
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const ValueKey('catalog-management-bulk'),
+            onPressed: busy ? null : onBulk,
+            icon: const Icon(Icons.playlist_add_check_outlined),
+            label: const Text('Bulk changes and import'),
+          ),
+        ],
         const SizedBox(height: 28),
         Text('Products', style: text.titleMedium),
         const SizedBox(height: 8),
@@ -1037,9 +1089,19 @@ String _updateNotice(TenantProductUpdateResult result) {
   final fields = result.changedFields
       .map((field) => field.label.toLowerCase())
       .join(', ');
-  return 'Corrected: $fields. What each field held before is recorded against '
-      'the product. The catalog below has been re-read; this device re-reads '
-      'its own copy on the next sync.';
+  // The cost is stated from the answer rather than left to the re-read below.
+  // It is the one corrected field whose new value used to be unconfirmable: the
+  // response named it in `changedFields` with no figure beside it until it began
+  // echoing `cost` and `costMinor`.
+  final cost = result.changedFields.contains(TenantProductField.cost)
+      ? result.costMinor == null
+            ? ' Its unit cost is no longer recorded, so its sales report no '
+                  'profit and are counted as missing cost data.'
+            : ' Its unit cost is now ${_money(result.costMinor!)}.'
+      : '';
+  return 'Corrected: $fields.$cost What each field held before is recorded '
+      'against the product. The catalog below has been re-read; this device '
+      're-reads its own copy on the next sync.';
 }
 
 String _updateFailureNotice(TenantProductUpdateFailure failure) =>
@@ -1161,7 +1223,13 @@ final class _ProductEditDraft {
         price ?? '',
         cost ?? '',
         '$clearCost',
-      ].join(' ');
+      // NUL-separated, matching every other identity digest in this codebase.
+      // Written as an escape rather than typed: it reached this file as a
+      // literal NUL byte, which made `grep` report the whole module as binary
+      // and return nothing from it - the standing trap, met here in Dart for
+      // the first time. It must stay a NUL rather than become a space, because
+      // this is what a retained request ID is held against.
+      ].join('\u0000');
 }
 
 /// The one form that corrects a product, offering every editable field at once.

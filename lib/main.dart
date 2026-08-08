@@ -433,6 +433,20 @@ class SpiritPOSApp extends StatelessWidget {
             isOnline: isOnline,
           ),
           updateCallable: FirebaseUpdateProductCallable(),
+          // Both bulk halves are callables and neither could be anything else.
+          // A correction cannot be a client `WriteBatch` at all, for the reason
+          // above. An import could create products past the rules - `allow
+          // create` admits the same three roles - but no device can write the
+          // `stock_adjustments` record and `stock_movements` entry that give an
+          // opening quantity a recorded origin, because both collections are
+          // server-write-only. A device import would therefore leave stock with
+          // no ledger entry, which is the defect the previous app shipped.
+          bulkRoute: (context) => TenantBulkCatalogScreen(
+            reader: reader,
+            batchCallable: FirebaseUpdateProductsCallable(),
+            importCallable: FirebaseImportProductsCallable(),
+            onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
+          ),
           onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
         ),
         catalogManagementRoles: TenantCatalogManagementRepository.allowedRoles,

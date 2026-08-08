@@ -1,3 +1,5 @@
+export 'bulk_catalog.dart';
+export 'bulk_catalog_panel.dart';
 export 'catalog_management.dart';
 export 'catalog_management_panel.dart';
 export 'stock_actions.dart';
