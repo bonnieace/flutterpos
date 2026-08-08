@@ -15831,3 +15831,125 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+---
+
+## Bulk catalog and return scoring are scoped as rewrites - 2026-08-08
+
+No code changed. The product owner asked whether the previous app's bulk upload, bulk
+update, and fraud detection were scoped in this one, and the answer was **no for all
+three** - with an asymmetry worth recording:
+
+- **Bulk import was excluded**, so it was a decision.
+- **Suspicious-return scoring was never named anywhere** - not a board row, not a
+  rollout step, not an exclusion. A 555-line capability of the previous app had simply
+  never been written down. "Not excluded" and "not noticed" are indistinguishable in a
+  file like `PLAN.md`, and only one of them is a decision.
+
+All three are now scoped as **rewrites**: the idea and the flow carry over, the code
+does not.
+
+### What was found in the old app
+
+```text
+lib/services/bulk_upload_service.dart    320 lines   reachable only from lib/pos/goods.dart
+lib/services/bulk_update_service.dart    468 lines   reachable only from lib/pos/goods.dart
+lib/services/fraud_detection_service.dart 555 lines  reachable only from lib/screens/returns_*
+lib/model/return_analysis.dart            64 lines
+```
+
+`lib/main.dart` imports `tenancy`, `checkout`, `inventory`, `reporting`, `returns`,
+`sales`, `shift`, and `audit` - never `services/`, `screens/`, or `pos/`. All of it runs
+nowhere.
+
+### The finding that decided the bulk shape
+
+`bulk_update_service.dart` does `batch.update(docRef, arbitraryFields)` from the client.
+On `tenants/{tenantId}/products/{productId}`, `allow update` permits
+`['quantity', 'updatedAt']` with a strictly decreasing quantity - the checkout decrement
+and nothing else - and widening it is precisely what "How a price is corrected" rejected.
+**So bulk change is not a batch that needs porting; it is N × `updateProduct` executed
+on the server.** A different program, not a modified one. The consolation is that
+`planProductUpdate` is already a pure function from stored document plus request to a
+validated plan, audit entries included, so the expensive half exists.
+
+Four more reasons a port fails, recorded in the standing decision: the root `alcohol`
+collection, four bypassed create guarantees (`TenantProductCreateIntent`, the
+deterministic `pd_<hex>` ID, request-ID idempotency, and "created holding nothing" -
+`BulkProduct.quantity` writes straight through), and **two field names that drift
+silently**. The uploader writes `buyingPrice`, not the `cost` field added the day
+before, so an import's cost data would be invisible to `TenantProduct.cost` - the server
+reads `buyingPrice` only as a legacy alias on *sale lines*, never on a product. And it
+writes `category` as a display name where the model wants a `categoryId`: "Bakery"
+passes document-ID validation, matches no category document, and leaves the product
+invisible to every grouped surface without being unreadable.
+
+### The improvement, not just the port
+
+The old flow validated then committed. The rewrite is **validate → preview → commit**,
+and the preview is the point: a spreadsheet is the one input nobody proofreads, and the
+first time a person should see what 400 rows will do is before they do it. With it: name
+every broken row at once rather than one round trip per discovery, state partial success
+per row, bound and chain the work the way the reconciliation sweep already does, write
+one audit entry per product correlated by the import's request ID, and route opening
+stock through `adjustStock` semantics so imported units have an origin.
+
+### Return scoring, and why it waits
+
+Sequenced **after the first deployment** at the product owner's direction. The
+supporting reason improves the work: every threshold in the feature is a judgement about
+what normal looks like, and normal is not knowable from seed data - a ruleset tuned
+against fixtures is a guess that gets re-tuned the week real returns arrive.
+
+Six signals carry over as an idea: quick return under 4 hours, late over 72, seller
+return rate, void behaviour, refund amount past a z-score of 2, and velocity at 3
+returns in 4 hours. Four things must change. It is **client-side and keeps nothing** -
+zero Firestore access, and the score lands in `_riskCache`, widget state that dies with
+the screen - so it can never be reviewed or acted on, while the gate that matters,
+`verifyReturnAndRestoreStock`, is on the server. **One signal has no input at all**: the
+void signal keys on `type == 'void'` and this app has no void concept, so voids get
+modelled first or that signal is dropped rather than ported as dead code. Thresholds
+cannot be global constants across tenants - three returns in four hours is an ordinary
+afternoon for a bar. And **the destination already exists**: `reconciliation_anomalies`
+is a server-written collection with a live surface at
+`lib/reporting/reconciliation_anomalies_panel.dart`, and a risky return is an anomaly.
+
+### A retraction
+
+The exclusion list claimed bulk import "describes a pre-migration flow that ~~reaches no
+code in `lib/`~~". **False in letter** - 788 lines are in `lib/services/`. True in
+effect, since nothing live reaches them, which is exactly the kind of half-right claim
+that makes a later session conclude the feature was never built. Corrected inline.
+
+### Files changed
+
+```text
+PLAN.md     three board rows (29 rows now: 20 green, 8 red, 1 amber), two standing
+            decisions, three queue entries, the Flutter track line, an unreachable-table
+            pointer, the retraction, and the note that return scoring was never excluded
+            because it was never named
+HISTORY.md  this entry
+```
+
+### Tests
+
+None run, and none needed: no file outside these two documents was touched. The suites
+stand where `f751c51` left them - Flutter 1358, Functions 346, Rules 161, reconciliation
+10, invitations 12.
+
+### The published board is now behind PLAN.md
+
+It was minted earlier the same day at
+`https://claude.ai/code/artifact/8f39622f-8630-4216-abb4-a7216c52ca03` and shows **26
+capabilities at 20/5/1**. This session makes that **29 at 20/8/1**. Publishing was not
+requested, so the page was left alone, as the standing instruction requires.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

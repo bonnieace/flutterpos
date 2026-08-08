@@ -69,7 +69,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~95% | 47 handlers, 346 unit tests. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered, and the cost chunk changed the file not at all. `subscription` has rules and no writer. |
-| **Flutter client** | ~85% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, and record what a product cost. No way to correct a product **from the app** — the callable exists, no route calls it — no profit display, no printing, no subscription. |
+| **Flutter client** | ~85% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, and record what a product cost. No way to correct a product **from the app** — the callable exists, no route calls it — no profit display, no printing, no subscription. Spreadsheet import, bulk change, and suspicious-return scoring were scoped on 2026-08-08 as rewrites and none is started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -101,10 +101,20 @@ callable exists, and not green if it is merely tested.
 | Ask for reconciliation | 🟢 | Owner/admin, from the reconciliation status route |
 | See why a day disagrees, and correct a shift | 🟢 | Differences list → `amendShiftSummary` |
 | Print a receipt | 🔴 | No printed body exists. The transport is settled — an external print service, to be shared, onboards thermal printers over a local print server, TCP/IP, and Bluetooth — so this waits on that interface, not on a decision |
+| Import a catalog from a spreadsheet | 🔴 | **Scoped 2026-08-08 as a rewrite.** The old app's uploader exists in `lib/services/` and is reachable from nothing; see the standing decision |
+| Change many products at once | 🔴 | **Scoped 2026-08-08 as a rewrite.** It is N × `updateProduct` on the server, not a client batch — the old batch shape cannot work here |
+| Flag a suspicious return | 🔴 | **Scoped 2026-08-08, sequenced after the first deployment.** The old app scores six signals client-side and keeps nothing; see the standing decision |
 | See a subscription | 🔴 | Path and rules exist; nothing reads or writes it |
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**Three rows were added on 2026-08-08, all red, and none of them is new work
+appearing from nowhere** — spreadsheet import, bulk change, and suspicious-return
+flagging are capabilities the *previous* app had that this one does not, and they were
+scoped that day rather than left unnamed. Two of the three had never been written down
+anywhere; the board is 29 rows because of it, at **20 green, 8 red, 1 amber**. Adding
+them moved no code.
 
 **Two rows moved on 2026-08-07 when a product gained a cost** — "Record what a product
 cost" is green and "See profit or margin" was added red, because the server computes a
@@ -417,6 +427,106 @@ The guarantees are settled, not open:
    It is also the escape hatch for a stored cost too malformed for the callable to
    correct. The audit keeps the unreadable previous value verbatim.
 
+### Bulk catalog work is a rewrite, and the old code is not the starting point
+
+Scoped 2026-08-08 by the product owner: spreadsheet import and bulk change are wanted,
+**the idea and the flow carry over, the code does not.** The previous app holds
+`lib/services/bulk_upload_service.dart` (320 lines) and
+`lib/services/bulk_update_service.dart` (468 lines), reachable only from
+`lib/pos/goods.dart` and therefore from nothing that runs. Read them for the flow; do
+not port them.
+
+**Five reasons a port fails, and the second one is fatal rather than awkward:**
+
+1. **They write the root `alcohol` collection.** Products live at
+   `tenants/{tenantId}/products/{productId}`, and the rules deny legacy root
+   operational collections outright.
+2. **`batch.update(docRef, arbitraryFields)` is structurally impossible here.**
+   `allow update` on `products` permits `['quantity', 'updatedAt']` with a strictly
+   decreasing quantity — the checkout decrement, and nothing else. Widening it is
+   exactly what "How a price is corrected" rejected, because a rule-based edit records
+   no actor, no previous value, and no reason. **So bulk change is N × `updateProduct`
+   executed on the server, not a batch executed on a device.** That is a different
+   program, not a modified one.
+3. **The create path bypasses four guarantees**, each of which cost a chunk:
+   `TenantProductCreateIntent` validation, without which one unparseable product makes
+   the *whole* cached catalog a miss and the business stops selling; the deterministic
+   `pd_<40 hex>` ID, which is what makes a replay land on the same document instead of
+   duplicating it; request-ID idempotency, absent entirely, so a retried import today
+   duplicates the catalog; and "a product is created holding nothing", which
+   `BulkProduct.quantity` writes straight through, leaving stock with no ledger origin.
+4. **Two field names have drifted, and both fail silently.** It writes `buyingPrice`,
+   not `cost`, so an import's cost data would be invisible to `TenantProduct.cost` —
+   the server reads `buyingPrice` only as a legacy alias on *sale lines*, never on a
+   product. And it writes `category` as a display *name* where the model wants a
+   `categoryId`: "Bakery" passes document-ID validation, matches no category document,
+   and leaves the product invisible to every grouped surface without being unreadable.
+5. **It enforces SKU uniqueness by reading the entire collection into the client.**
+   Already decided against — a client-side check against what one device loaded is a
+   guarantee the next device breaks, and at tenant scale the read itself is the cost.
+
+**What the rewrite should do differently, beyond being server-side:**
+
+- **Validate, then *preview*, then commit.** The old flow validated and committed. The
+  preview is the improvement and it is the whole point: a spreadsheet is the one input
+  nobody proofreads, and the first time a person should see what 400 rows are about to
+  do is *before* they do it, not in the catalog afterwards.
+- **Name every broken row at once**, the same contract `updateProduct` already keeps for
+  fields. A row-at-a-time refusal turns a 400-row import into 400 round trips of
+  discovery.
+- **Partial success is stated, never implied.** A per-row outcome, with nothing silently
+  dropped and nothing silently coerced.
+- **Reuse `planProductUpdate`.** It is already a pure function from a stored document
+  plus a request to a validated plan, and it already produces the per-field audit
+  entries. The expensive half of bulk change is built; what is missing is the loop, the
+  bounds, and the transport.
+- **Bounded and chained.** A row cap per request with continuation, not one giant
+  commit — the same shape the reconciliation sweep already uses, and for the same
+  Firestore write-budget reason.
+- **One audit entry per product, correlated by the import's request ID**, so "what did
+  that import do" is answerable without inventing a new kind of record.
+- **Opening stock goes through `adjustStock` semantics**, so imported units have a
+  recorded origin like every other unit in the system.
+
+### A suspicious return is scored on the server, after the first deployment
+
+Scoped 2026-08-08 and **deliberately sequenced after the first deployment** — rollout
+step 13 — at the product owner's direction. The supporting reason is worth recording
+because it also makes the work better: every threshold in this feature is a judgement
+about what normal looks like, and normal is not knowable from seed data. A ruleset tuned
+against fixtures is a guess that will be re-tuned the week real returns arrive.
+
+The previous app has `lib/services/fraud_detection_service.dart` (555 lines) and
+`lib/model/return_analysis.dart`, reachable only from the legacy returns screens. **Six
+signals carry over as an idea**: a quick return (under 4 hours), a late one (over 72), a
+seller's return rate, void behaviour, a refund amount beyond a z-score of 2, and
+velocity (3 returns in 4 hours). A seventh, product-level analysis, is commented out in
+the original.
+
+**Four things must change, and the first is why it is not a port:**
+
+1. **It is client-side, and a client-computed score is not a control.** It touches
+   Firestore not at all — it takes already-fetched snapshots — and the result lands in
+   `_riskCache`, widget state that dies with the screen. Nothing is persisted, so
+   nothing can be reviewed, audited, or acted on later. The gate that matters is
+   `verifyReturnAndRestoreStock`, which is on the server.
+2. **One of the six signals has no input.** The void signal keys on `type == 'void'`,
+   and **this app has no void concept at all.** Either voids get modelled first or that
+   signal is dropped; it must not be ported as dead code that always scores zero.
+3. **Thresholds cannot be global constants in a multi-tenant app.** Three returns in
+   four hours is an ordinary afternoon for a bar and an emergency for a jeweller. They
+   belong in `configuration/`, per business, which is also why this waits for real data.
+4. **The destination already exists**, which makes this cheaper than its line count
+   suggests. `reconciliation_anomalies` is a server-written collection with a live
+   surface at `lib/reporting/reconciliation_anomalies_panel.dart`, readable by
+   owner/admin/manager — and a risky return is an anomaly. The shape is a trigger that
+   scores on return creation and writes one anomaly document, surfaced where operators
+   already look.
+
+Field drift to expect on the way: the old scorer reads `soldBy` (a display name),
+`dateAdded`, `productName`, `totalReturned`, and `itemsReturned`; this app records
+`soldById` (a UID) and `businessDate`.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -425,6 +535,7 @@ The guarantees are settled, not open:
 | `requestPasswordReset` | **Blocked on App Check.** Still no caller — see below. |
 | Subscription | `TenantPaths.currentSubscription` and rules exist; **nothing reads it and nothing writes it**. `grep -i subscription functions/src` finds nothing at all, so there is no schema to model. Start on the server, not in Flutter. |
 | Product cost / profit **(half closed 2026-08-07)** | A product now **carries a cost** and a sale **freezes it onto its line**, so profit is real for anything sold since. `profit` is still parsed and never *displayed* — that surface is the remaining half, and it must state `incompleteCostLineCount`, because every sale recorded before this date has no cost and never will. |
+| Bulk upload / bulk update | **Not unreachable — unbuilt, and scoped 2026-08-08 as a rewrite.** Listed here only to catch the eye of anyone who greps `lib/services/` and finds 788 working lines: they write the root `alcohol` collection, they are reachable from `lib/pos/goods.dart` alone, and they are **not the starting point**. See the standing decision. |
 | Category rename and delete | Permitted by `allow create, update, delete` on `categories` to owner/admin/manager, and offered to nobody. Deliberate, for the orphaning reason above; recorded here so the gap between rule and surface stays a decision. |
 
 Checkout configuration writing left this table on 2026-08-07. The route is
@@ -1268,6 +1379,17 @@ It is one route, its gateway, and its tests.
 - **~~The Flutter surface that edits a product~~** — promoted out of this list and into
   the current chunk above on 2026-08-07, once the flake standing in front of it was
   fixed. Its shape, its contract notes, and its exclusions are all up there now.
+- **Bulk change: `updateProducts` as a server callable** — takes the edit surface above
+  as a prerequisite, not by preference but because it is the same callable, the same two
+  permission tiers, and the same refusal vocabulary; proving them once on a single
+  product is how the batch stops being a guess. `planProductUpdate` is already the pure
+  core, so the chunk is the loop, the row bound and continuation, the per-row outcome
+  report, and the preview. See "Bulk catalog work is a rewrite" for what must not be
+  carried over from `lib/services/bulk_update_service.dart`.
+- **Spreadsheet import: `importProducts` as a server callable** — the larger of the two
+  and the one to take second, because import has to solve everything bulk change solves
+  *plus* category resolution by name, the deterministic-ID scheme, and opening stock
+  through `adjustStock`. Same standing decision covers it.
 - **The printed receipt body** — **waiting on an interface, not on a decision.** The
   transport question was answered on 2026-08-07: an external print service, to be
   shared, handles thermal printer onboarding over a local print server, TCP/IP, and
@@ -1291,6 +1413,15 @@ It is one route, its gateway, and its tests.
   `createdAt`**, unlike every other document in this pipeline. Probably deliberate;
   nothing says which.
 
+**Below the line: scoped, and deliberately not in this ordering yet.**
+
+- **Suspicious-return scoring** — scoped 2026-08-08 and sequenced **after the first
+  deployment**, rollout step 13. It is not queued above because taking it earlier would
+  mean tuning every threshold against seed data, and those numbers are the feature. See
+  "A suspicious return is scored on the server" for the six signals, the one that has no
+  input in this app, and why the destination already exists. **Do not pull it forward
+  without saying so** — the sequencing is a decision, not an accident of ordering.
+
 ### Standing exclusions
 
 Outside every chunk until deliberately scheduled: a resolution path for the four
@@ -1307,12 +1438,19 @@ built.** The `updateProduct` callable exists, is tested, and is called by nothin
 same day it is no longer queued behind anything: it is the current chunk above, and the
 interface it writes against is settled rather than still being designed.
 
-Three of those are consequences of the catalog chunk on 2026-08-07 rather than
+Two of those are consequences of the catalog chunk on 2026-08-07 rather than
 inherited: **renaming or deleting a category** (it orphans the `categoryId` on every
-product filed under it), **SKU uniqueness** (nothing on the server enforces it and a
-client-side check would be a guarantee the next device breaks), and **bulk catalog
-import** (`BULK_UPLOAD_GUIDE.md` describes a pre-migration flow that reaches no code
-in `lib/`).
+product filed under it) and **SKU uniqueness** (nothing on the server enforces it and a
+client-side check would be a guarantee the next device breaks).
+
+**Bulk catalog import left this list on 2026-08-08, and the reason it used to carry was
+wrong.** It read: "`BULK_UPLOAD_GUIDE.md` describes a pre-migration flow that ~~reaches
+no code in `lib/`~~". **Retracted — 788 lines of it are in `lib/services/`**
+(`bulk_upload_service.dart` and `bulk_update_service.dart`), reachable from
+`lib/pos/goods.dart`. The claim was true in effect and false in letter, which is the
+kind of thing that makes a later session conclude the feature was never built. It is now
+scoped work rather than an exclusion, as a **rewrite**; the standing decision above says
+what carries over and what must not.
 
 **Receipt printing has left this list.** It was named once in the previous handover as
 the item this list would run out of excuses for, and re-excluding it silently a second
@@ -1341,6 +1479,13 @@ thing to watch: the printing decision above points at `thermal_printer_service.d
 which is *in* that island, so whichever chunk takes printing is the one that has to
 say whether it revives that file or writes past it. Until then, analyse the paths a
 chunk touches and leave the island alone.
+
+**Suspicious-return scoring was never on this list either, and that was an oversight
+rather than a decision.** A 555-line capability of the previous app appeared in no board
+row, no rollout step, and no exclusion — it had simply never been written down. Scoped
+2026-08-08 and sequenced after the first deployment. Recorded here because "not
+excluded" and "not noticed" look identical in a file like this one, and only one of them
+is a decision.
 
 The subscription surfaces, named the same way two handovers ago, are unchanged and
 still correctly excluded: `grep -i subscription functions/src` still finds nothing at
