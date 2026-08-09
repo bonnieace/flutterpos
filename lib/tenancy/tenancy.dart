@@ -8,6 +8,7 @@ export 'tenant_directory.dart';
 export 'tenant_default_tenant.dart';
 export 'firebase_tenant_gateway.dart';
 export 'hive_tenant_selection_store.dart';
+export 'invitation_acceptance_failure.dart';
 export 'platform_tenant_review.dart';
 export 'platform_tenant_lifecycle.dart';
 export 'platform_tenant_archival.dart';

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import 'invitation_acceptance_failure.dart';
 import 'tenant_id.dart';
 import 'tenant_membership.dart';
 import 'tenant_staff_directory.dart';
@@ -17,7 +18,8 @@ abstract interface class AcceptVisibleTenantInvitationCallable {
   Future<Object?> call(Map<String, Object?> payload);
 }
 
-/// Firebase adapter for `acceptVisibleTenantInvitation`.
+/// Firebase adapter for `acceptVisibleTenantInvitation`; response validation
+/// remains above it.
 final class FirebaseAcceptVisibleTenantInvitationCallable
     implements AcceptVisibleTenantInvitationCallable {
   FirebaseAcceptVisibleTenantInvitationCallable({FirebaseFunctions? functions})
@@ -27,10 +29,17 @@ final class FirebaseAcceptVisibleTenantInvitationCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('acceptVisibleTenantInvitation')
-        .call<Object?>(payload);
-    return result.data;
+    try {
+      final result = await _functions
+          .httpsCallable('acceptVisibleTenantInvitation')
+          .call<Object?>(payload);
+      return result.data;
+    } on FirebaseFunctionsException catch (error) {
+      throw InvitationAcceptanceException(
+        error.code,
+        violation: invitationAcceptanceViolationFromDetails(error.details),
+      );
+    }
   }
 }
 
@@ -323,7 +332,7 @@ final class _TenantVisibleInvitationAcceptanceFormState
     });
     try {
       await gateway.submit(intent);
-    } catch (_) {
+    } catch (error) {
       if (!mounted ||
           !_isStillSubmitted(
             submittedUid,
@@ -335,7 +344,13 @@ final class _TenantVisibleInvitationAcceptanceFormState
       }
       setState(() {
         _submitting = false;
-        _safeError = 'Invitation could not be accepted. Please try again.';
+        // The refusal is carried here rather than discarded. `catch (_)` was
+        // the defect: it threw away a code that says whether retrying can ever
+        // work, leaving one sentence that told every refused user to try again.
+        _safeError = invitationAcceptanceSafeError(
+          error,
+          mode: InvitationAcceptanceMode.visible,
+        );
       });
       return;
     }

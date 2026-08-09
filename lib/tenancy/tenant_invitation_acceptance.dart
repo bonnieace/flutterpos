@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import 'invitation_acceptance_failure.dart';
 import 'tenant_id.dart';
 import 'tenant_types.dart';
 
@@ -77,7 +78,8 @@ abstract interface class AcceptTenantInvitationCallable {
   Future<Object?> call(Map<String, Object?> payload);
 }
 
-/// Firebase adapter for `acceptTenantInvitation`.
+/// Firebase adapter for `acceptTenantInvitation`; response validation remains
+/// above it.
 final class FirebaseAcceptTenantInvitationCallable
     implements AcceptTenantInvitationCallable {
   FirebaseAcceptTenantInvitationCallable({FirebaseFunctions? functions})
@@ -87,10 +89,17 @@ final class FirebaseAcceptTenantInvitationCallable
 
   @override
   Future<Object?> call(Map<String, Object?> payload) async {
-    final result = await _functions
-        .httpsCallable('acceptTenantInvitation')
-        .call<Object?>(payload);
-    return result.data;
+    try {
+      final result = await _functions
+          .httpsCallable('acceptTenantInvitation')
+          .call<Object?>(payload);
+      return result.data;
+    } on FirebaseFunctionsException catch (error) {
+      throw InvitationAcceptanceException(
+        error.code,
+        violation: invitationAcceptanceViolationFromDetails(error.details),
+      );
+    }
   }
 }
 
@@ -315,11 +324,16 @@ final class _TenantInvitationAcceptanceFormState
     });
     try {
       await gateway.submit(intent);
-    } catch (_) {
+    } catch (error) {
       if (!mounted || !_isStillSubmitted(submittedUid, submittedLink)) return;
       setState(() {
         _submitting = false;
-        _safeError = 'Invitation could not be accepted. Please try again.';
+        // See the visible acceptance form: `catch (_)` discarded the one thing
+        // that decides whether a retry can ever succeed.
+        _safeError = invitationAcceptanceSafeError(
+          error,
+          mode: InvitationAcceptanceMode.token,
+        );
       });
       return;
     }

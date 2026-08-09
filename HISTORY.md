@@ -17888,3 +17888,218 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+## A refused invitation says what will actually work - 2026-08-08
+
+### Completed in this session
+
+**The queued chunk, unchanged: finding 3 from the Android device run, and nothing else.** It
+was checked against the status board and the frozen fifteen-step rollout before being
+accepted. Nothing a shop needs in order to operate is missing and unqueued - the four red
+rows are blocked on App Check, on a print service's interface, on the first deployment, and
+on a schema the server does not have - so the queued chunk stood. It is the same defect class
+as the sign-in repair before it, on the other surface a stranger meets, and it is the last of
+the three device findings that leaves a user with no way forward at all.
+
+**"Invitation could not be accepted. Please try again." is gone from both acceptance
+surfaces**, and what replaced it is not a better sentence but a boundary that makes the old
+one impossible to write.
+
+### The chunk's own premise was wrong, and checking it is the finding
+
+`PLAN.md` queued this as *"`failed-precondition` is the case that matters and it is the one
+the device hit"*, and attached an instruction to **check the server's actual code for this
+refusal before wording it - do not guess it from the flag name.** That instruction paid for
+itself immediately.
+
+**The server throws `permission-denied`, not `failed-precondition`**, and it carries the
+reason in `details`:
+
+```ts
+throw new HttpsError("permission-denied", "The invitation cannot be accepted.", {
+  violation: acceptanceViolation,
+});
+```
+
+`functions/src/staff/acceptance.ts:171`. The `violation` is one of **eight** tokens produced
+by `invitationAcceptanceViolation` in `functions/src/staff/acceptancePolicy.ts`, and
+`versioned_proof_required` - the one the device hit - is the last of them. So a client
+branching on the code alone could not have told the device's refusal apart from six other
+permanent refusals and from a rejected HMAC proof. **The code was never enough; the detail
+always was, and nothing had ever read it.** The superseded claim is retracted inline in
+`PLAN.md` at the text that made it.
+
+`failed-precondition` is a real answer from these callables, but it is a different one: the
+five-minute recent-authentication rule, a missing root record, or an inactive business.
+
+### One module, because it is one server function
+
+`acceptTenantInvitation` and `acceptVisibleTenantInvitation` are two `onCall` wrappers over a
+single `acceptInvitation`, refusing through a single policy function. So the client mapping is
+a single module, `lib/tenancy/invitation_acceptance_failure.dart`, imported by both. Two
+copies would be two ways to word one server decision and the first divergence would be
+invisible - which is the same reasoning that put `planProductUpdate` behind one function for
+the single and bulk correction paths.
+
+It holds four things:
+
+- **`InvitationAcceptanceViolation`**, a one-for-one mirror of the server's union, pinned by a
+  test asserting the eight wire values as a set. A token drifting silently is exactly how a
+  refusal would fall back to the vague sentence without anybody noticing.
+- **`InvitationAcceptanceMode`**, `token` or `visible`, mirroring the server's own mode
+  parameter. It is carried because the server branches on it: a `permission-denied` naming no
+  violation means a rejected proof on one path and an ineligible signed-in identity on the
+  other, and one sentence covering both would be vague on purpose.
+- **`InvitationAcceptanceException`**, carrying **a code and a violation, and no message**.
+  Same shape and same reason as `SignInException` the session before: the provider's sentence
+  is written for a log reader, is not translated, and is sometimes not a sentence at all. The
+  violation may cross because it is a server-authored enumerated token rather than prose - the
+  rule that no string this app did not write reaches a user is unchanged.
+- **`invitationAcceptanceSafeError`**, the mapping.
+
+### The rule, which is what the defect actually violated
+
+> **Only a failure this app knows to be transient may invite a retry.**
+
+Every violation the server's policy produces is permanent *for the invitation it refused* - a
+flag fixed at invite time, a consumed token, a cancelled invitation, a suspended business - so
+none of them says "try again", and each names the one thing that can move the user forward
+instead. Exactly two answers offer a retry, `unavailable`/`deadline-exceeded` and
+`resource-exhausted`, because for those two a retry is the answer. A test asserts that
+partition over seventeen codes and both modes rather than describing it.
+
+**The sentence for the case the device hit** sends the user to the emailed link and names the
+one action that can produce another one:
+
+> This invitation has to be opened from the link in your invitation email, so it cannot be
+> accepted here. Ask your administrator to send the invitation again if you no longer have
+> that email.
+
+That last clause is not padding: `resendStaffInvitation` exists, so it is a real path rather
+than sympathy.
+
+### Four decisions that are not obvious from the finding
+
+1. **`versioned_proof_required` is permanent and the wording says so without saying why.**
+   `visibleAcceptanceAllowed` is decided once, at invite time, by `!newlyCreated &&
+   emailVerified` in `functions/src/staff/issuance.ts:310`. Verifying the address afterwards
+   does not change it. The sentence therefore does not tell the user to verify anything - that
+   advice would be true-sounding, actionable, and useless, which is the same failure mode as
+   "Please try again" wearing different clothes.
+2. **`email_unverified` is unreachable today and is mapped anyway.** The server's own
+   `mode === "visible" && emailVerified !== true` guard throws before the policy function is
+   consulted, so nothing produces that token. It is modelled because the server declares it;
+   dropping it would make a later server change answer the fallback silently. Recorded here so
+   the next reader does not delete it as dead code.
+3. **`fromWireOrNull` is tolerant, and it is the one tolerant thing in the file.** An older
+   client meeting a violation a later server adds must degrade to the code-level sentence, not
+   turn a refusal into an unrenderable failure. Shape is judged strictly and content
+   permissively, in that order: only a string, at `violation`, inside a map, naming a token
+   this client knows.
+4. **The fallback offers no retry either.** `SignInException`'s fallback does, because a user
+   staring at a sign-in screen has nothing else to do. Here there is somebody to ask, an
+   acceptance that failed for an unmodelled reason is far more often a policy refusal than a
+   blip, and the button is still on screen for anyone who wants to retry anyway. So it names
+   the administrator and stops.
+
+### `catch (_)` was the defect; the sentence was the symptom
+
+Both surfaces discarded the error entirely - `tenant_visible_invitation_acceptance.dart:326`
+and `tenant_invitation_acceptance.dart:318` - and **neither adapter converted anything**, so
+there was no code to discard in the first place. Both halves had to be built:
+
+- `FirebaseAcceptVisibleTenantInvitationCallable` and `FirebaseAcceptTenantInvitationCallable`
+  now catch `FirebaseFunctionsException` and throw `InvitationAcceptanceException`, reading
+  the violation out of `details`. Before this they each had **no `try`/`catch` at all**, unlike
+  `FirebaseSendAccountVerificationCallable` beside them.
+- Both forms now `catch (error)` and map it.
+
+The client-side refusal above them - "This invitation cannot be accepted here.", set when
+`createIntent` throws - was left alone. It is already a sentence this app wrote and it already
+promises nothing.
+
+### Deliberately not done
+
+**Nobody has looked at this on a device either.** The session instruction says to skip the
+Android build and the Android emulator, so this is 19 tests and no eyes, exactly as the
+sign-in repair was. **The debt is now two chunks deep and both are queued against the next
+device run**: the sign-in screen first, then a refused invitation.
+
+**The server was not touched and must not be.** The server is right to refuse; only the
+sentence was wrong. `functions/src/staff/issuance.ts`, `acceptance.ts`, and `acceptancePolicy.ts`
+were read and left alone.
+
+**Findings 4 and 5 were not touched**, and are queued together as the next chunk. Finding 6 is
+an environment limitation rather than a product defect and stays where it is - it is also why
+this repair cannot be exercised end to end on the emulators, since the identity that hits
+`versioned_proof_required` is precisely the one whose invitation email never arrives locally.
+
+**The other surfaces that say "Please try again." were left alone**, and there are seven of
+them - staff invitation, resend, cancellation, email replacement, staff status, staff update,
+default tenant, tenant request. They are not this finding, none of them strands a user with no
+way forward, and widening to them would have made this an unbounded chunk. Named here so the
+next session sees a decision rather than an oversight.
+
+### Files changed
+
+```text
+lib/tenancy/invitation_acceptance_failure.dart        (new: the shared boundary and mapping)
+lib/tenancy/tenant_invitation_acceptance.dart         (adapter converts; form maps)
+lib/tenancy/tenant_visible_invitation_acceptance.dart (adapter converts; form maps)
+lib/tenancy/tenancy.dart                              (one export line)
+test/tenancy/invitation_acceptance_failure_test.dart  (new: 13 unit tests)
+test/tenancy/tenant_invitation_acceptance_test.dart   (3 new widget tests, 1 updated)
+test/tenancy/tenant_visible_invitation_acceptance_test.dart (3 new widget tests, 1 updated)
+HISTORY.md
+PLAN.md
+```
+
+Two pre-existing assertions changed rather than being added to: both surfaces' "duplicate taps
+are single-flight" test asserted the old fallback string verbatim. `firestore.rules` and
+`functions/` were not touched at all.
+
+### Test commands and results
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1524 passed** (1505 + 19) |
+| Functions | `npm --prefix functions test` | **409 passed**, unchanged |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161 passed**, unchanged |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10 passed**, unchanged |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23 passed**, unchanged |
+
+**2127 tests across five suites.** `flutter analyze --no-pub lib/tenancy test/tenancy`: **no
+issues found**. Holding functions at 409 and rules at 161 is the measurement saying no server
+file and no rule moved; this is the **ninth** consecutive chunk to prove `firestore.rules`
+byte-identical.
+
+The invitation integration suite is the one that matters beyond bookkeeping here: it drives
+`acceptVisibleTenantInvitation` and `acceptTenantInvitation` against real Auth and real
+Firestore, so it is the evidence that the codes and violations this client now maps are the
+ones the server still produces.
+
+The Android build and the Android emulator suite were skipped, per the session instruction.
+
+### Meaningful failures and their resolutions
+
+**None.** Every suite passed on its first run, including the 19 new tests. Two checks are
+recorded because the checking is the point:
+
+- **The NUL-escape trap.** All seven touched files were scanned for a literal `0x00` byte
+  before the commit; the count was zero on every one. This chunk contains no digest separator
+  and no control character, and the check ran anyway - it is the only thing that has ever
+  caught one of the seven previous occurrences.
+- **This entry was written to the session scratchpad and appended with a Node script**, not
+  through a shell heredoc. The previous session recorded that appending prose containing
+  backticks and apostrophes through a heredoc fails with `unexpected EOF`, and that writing
+  repository prose through a shell is what corrupted six files already.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+.codex-app.png .codex-live.png .codex-live2.png   (untracked)
+prompt.md                                          (untracked)
+```

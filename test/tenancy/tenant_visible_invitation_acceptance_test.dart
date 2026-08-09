@@ -226,7 +226,10 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(
-        find.text('Invitation could not be accepted. Please try again.'),
+        find.text(
+          'This invitation could not be accepted. Ask your administrator to '
+          'send it again if this keeps happening.',
+        ),
         findsOneWidget,
       );
       expect(find.textContaining('raw backend'), findsNothing);
@@ -240,6 +243,113 @@ void main() {
         callable.payloads.last['requestId'],
       );
       expect(accepted, 1);
+    });
+
+    testWidgets('a permanently refused invitation is sent to the emailed link', (
+      tester,
+    ) async {
+      // Finding 3 from the 2026-08-08 Android run. The server decides
+      // `visibleAcceptanceAllowed` once, at invite time, so the old
+      // "Please try again." was advice that could never work.
+      final callable = _AcceptCallable(
+        handler: (_, _) => Future<Object?>.error(
+          const InvitationAcceptanceException(
+            'permission-denied',
+            violation: InvitationAcceptanceViolation.versionedProofRequired,
+          ),
+        ),
+      );
+      var accepted = 0;
+      await tester.pumpWidget(
+        _formApp(
+          identity: _identity(),
+          membership: _pendingMembership('tenant-a'),
+          callable: callable,
+          onSuccess: () => accepted++,
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('accept-visible-invitation-confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This invitation has to be opened from the link in your invitation '
+          'email, so it cannot be accepted here. Ask your administrator to '
+          'send the invitation again if you no longer have that email.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('try again'), findsNothing);
+      expect(find.textContaining('permission-denied'), findsNothing);
+      expect(find.textContaining('versioned_proof_required'), findsNothing);
+      expect(accepted, 0);
+    });
+
+    testWidgets('an unexplained refusal is worded for the in-app path', (
+      tester,
+    ) async {
+      // The same code with no violation beside it means something else here
+      // than it does on the emailed-link form, so the mode has to reach the
+      // mapping for either sentence to be true.
+      final callable = _AcceptCallable(
+        handler: (_, _) => Future<Object?>.error(
+          const InvitationAcceptanceException('permission-denied'),
+        ),
+      );
+      await tester.pumpWidget(
+        _formApp(
+          identity: _identity(),
+          membership: _pendingMembership('tenant-a'),
+          callable: callable,
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('accept-visible-invitation-confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This account cannot accept invitations yet. Check that your email '
+          'address is verified, and ask your administrator if it still fails.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('try again'), findsNothing);
+    });
+
+    testWidgets('a stale session is told how to make the next attempt work', (
+      tester,
+    ) async {
+      final callable = _AcceptCallable(
+        handler: (_, _) => Future<Object?>.error(
+          const InvitationAcceptanceException('failed-precondition'),
+        ),
+      );
+      await tester.pumpWidget(
+        _formApp(
+          identity: _identity(),
+          membership: _pendingMembership('tenant-a'),
+          callable: callable,
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('accept-visible-invitation-confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'For your security, sign out and sign in again, then accept the '
+          'invitation within five minutes.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('user switch discards an outstanding success', (tester) async {

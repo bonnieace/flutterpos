@@ -203,7 +203,10 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(
-        find.text('Invitation could not be accepted. Please try again.'),
+        find.text(
+          'This invitation could not be accepted. Ask your administrator to '
+          'send it again if this keeps happening.',
+        ),
         findsOneWidget,
       );
       expect(find.textContaining('raw backend'), findsNothing);
@@ -216,6 +219,102 @@ void main() {
         callable.payloads.last['requestId'],
       );
       expect(accepted, 1);
+    });
+
+    testWidgets('a rejected proof is not a refusal a retry can fix', (
+      tester,
+    ) async {
+      // The other half of finding 3. This form threw the code away with
+      // `catch (_)` too, so a link the server had rejected outright still said
+      // "Please try again."
+      final callable = _AcceptCallable(
+        handler: (_, _) => Future<Object?>.error(
+          const InvitationAcceptanceException('permission-denied'),
+        ),
+      );
+      var accepted = 0;
+      await tester.pumpWidget(
+        _formApp(
+          currentUid: 'user-a',
+          link: _link(),
+          callable: callable,
+          onSuccess: () => accepted++,
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('accept-token-invitation-confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This invitation link is no longer valid. Ask your administrator to '
+          'send a new invitation.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('try again'), findsNothing);
+      expect(find.textContaining('permission-denied'), findsNothing);
+      expect(accepted, 0);
+    });
+
+    testWidgets('a cancelled invitation names the person who can reissue it', (
+      tester,
+    ) async {
+      final callable = _AcceptCallable(
+        handler: (_, _) => Future<Object?>.error(
+          const InvitationAcceptanceException(
+            'permission-denied',
+            violation: InvitationAcceptanceViolation.invitationNotPending,
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _formApp(currentUid: 'user-a', link: _link(), callable: callable),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('accept-token-invitation-confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This invitation is no longer open. Ask your administrator to invite '
+          'you again.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('try again'), findsNothing);
+    });
+
+    testWidgets('an unreachable server is the one case that says try again', (
+      tester,
+    ) async {
+      // The rule stated from the other side: a retry is offered exactly when a
+      // retry can work.
+      final callable = _AcceptCallable(
+        handler: (_, _) => Future<Object?>.error(
+          const InvitationAcceptanceException('unavailable'),
+        ),
+      );
+      await tester.pumpWidget(
+        _formApp(currentUid: 'user-a', link: _link(), callable: callable),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('accept-token-invitation-confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This device could not reach the server. Check the connection and '
+          'try again.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('authenticated-user switch discards an outstanding success', (
