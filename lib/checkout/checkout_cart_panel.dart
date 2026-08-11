@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../tenancy/tenant_catalog.dart';
+import '../ui/records.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import 'checkout_catalog_cache.dart';
@@ -195,11 +196,28 @@ final class _CartEditorState extends State<_CartEditor> {
   /// Why the last submitted search added nothing. Cleared by the next edit.
   String? _codeNotice;
 
+  /// Bumped on every state change, so the compact layout's cart sheet can
+  /// follow along.
+  ///
+  /// The sheet is pushed as its own route and therefore does not rebuild when
+  /// this element does. Rather than route every mutation through a second
+  /// callback - and risk one of them being missed - [setState] is overridden
+  /// below to bump this, which is the one place every change already passes
+  /// through.
+  final ValueNotifier<int> _revision = ValueNotifier<int>(0);
+
   CheckoutCatalogSnapshot get _snapshot => widget.snapshot;
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _revision.value++;
+  }
 
   @override
   void dispose() {
     _search.dispose();
+    _revision.dispose();
     super.dispose();
   }
 
@@ -523,30 +541,115 @@ final class _CartEditorState extends State<_CartEditor> {
 
   // --- Rendering --------------------------------------------------------
 
+  /// Below this width the cart cannot sit beside the products.
+  ///
+  /// The figure is the previous app's, which split its till at exactly this
+  /// point. It is kept rather than re-derived because the decision it encodes
+  /// is the same one: below it, a product grid and a cart panel stop both
+  /// being usable at once, so the cart becomes a sheet instead of a column.
+  static const double wideTillBreakpoint = 768;
+
+  /// How many units the cart holds, for the compact layout's badge.
+  int get _itemCount =>
+      _quantities.values.fold<int>(0, (sum, quantity) => sum + quantity);
+
   @override
   Widget build(BuildContext context) {
     final total = _totalMinor;
     final currency = _snapshot.configuration.currency;
-    final text = Theme.of(context).textTheme;
-    return ListView(
+    return LayoutBuilder(
       key: const ValueKey('checkout-cart'),
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text('New sale', style: text.headlineSmall),
-        const SizedBox(height: 16),
-        ..._receiptSection(context),
-        ..._catalogSection(context, currency),
-        ..._saleSection(context, currency, total),
-        ..._tenderSection(context),
-        ..._saveSection(context, total),
-        const SizedBox(height: 16),
-        const Text(
-          'A saved sale is submitted and confirmed automatically. It cannot be '
-          'edited, retried, or deleted here.',
-        ),
-      ],
+      builder: (context, constraints) => constraints.maxWidth >= wideTillBreakpoint
+          ? _wideLayout(context, currency, total)
+          : _compactLayout(context, currency, total),
     );
   }
+
+  /// Products beside a cart that is always on screen.
+  ///
+  /// The proportion is the previous app's too: the grid earns the space
+  /// because it is what a cashier is aiming at, and the cart needs only enough
+  /// width to keep a line's quantity field and its two buttons on one row.
+  Widget _wideLayout(BuildContext context, String currency, int? total) => Row(
+    key: const ValueKey('checkout-wide'),
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(flex: 3, child: _productsPane(context, currency)),
+      const VerticalDivider(width: 1),
+      Expanded(flex: 2, child: _cartPane(context, currency, total)),
+    ],
+  );
+
+  /// Products at full width, with the cart one tap away.
+  ///
+  /// The cart is a sheet rather than a section further down the same scroll,
+  /// because the two are used alternately: every item added is a trip to the
+  /// cart and back, and on a phone that was a scroll past the whole catalog in
+  /// each direction. The bar states the total without the sheet being open, so
+  /// the number a customer is waiting for is never behind a tap.
+  Widget _compactLayout(BuildContext context, String currency, int? total) =>
+      Column(
+        key: const ValueKey('checkout-compact'),
+        children: [
+          Expanded(child: _productsPane(context, currency)),
+          _CartBar(
+            currency: currency,
+            total: total,
+            itemCount: _itemCount,
+            onOpen: () => _openCartSheet(context, currency),
+          ),
+        ],
+      );
+
+  Future<void> _openCartSheet(BuildContext context, String currency) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => ValueListenableBuilder<int>(
+        valueListenable: _revision,
+        // The sheet is a route of its own, so this element does not rebuild
+        // when the panel behind it does. [_revision] is what keeps the two in
+        // step - without it, adding an item from inside the sheet would leave
+        // the sheet showing the cart as it was when it opened.
+        builder: (context, _, _) => DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7,
+          maxChildSize: 0.95,
+          builder: (context, controller) => _cartPane(
+            context,
+            currency,
+            _totalMinor,
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Everything a cashier needs once the items are chosen.
+  Widget _cartPane(
+    BuildContext context,
+    String currency,
+    int? total, {
+    ScrollController? controller,
+  }) => ListView(
+    key: const ValueKey('checkout-cart-pane'),
+    controller: controller,
+    padding: const EdgeInsets.all(20),
+    children: [
+      ..._receiptSection(context),
+      ..._saleSection(context, currency, total),
+      ..._tenderSection(context),
+      ..._saveSection(context, total),
+      const SizedBox(height: 16),
+      Text(
+        'A saved sale is submitted and confirmed automatically. It cannot be '
+        'edited, retried, or deleted here.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ],
+  );
 
   /// The last durable save, stated until the cashier closes it.
   ///
@@ -607,8 +710,18 @@ final class _CartEditorState extends State<_CartEditor> {
     ];
   }
 
-  List<Widget> _catalogSection(BuildContext context, String currency) {
-    final text = Theme.of(context).textTheme;
+  /// The catalog: what is sellable, and how it is found.
+  ///
+  /// The grid replaced a `Wrap` of buttons whose widths followed their labels,
+  /// so a long product name made its own tile wider than its neighbours and
+  /// nothing lined up. A cashier scans this by position, so the columns are
+  /// fixed and the tiles are not.
+  Widget _productsPane(BuildContext context, String currency) {
+    final theme = Theme.of(context);
+    final text = theme.textTheme;
+    final quiet = text.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     final matches = _visibleProducts;
     // A `Wrap` builds every child eagerly even inside a `ListView`, and the
     // cache admits two thousand products. Only what is drawn is bounded; every
@@ -616,22 +729,28 @@ final class _CartEditorState extends State<_CartEditor> {
     final visible = matches.length > maximumRenderedCheckoutProducts
         ? matches.sublist(0, maximumRenderedCheckoutProducts)
         : matches;
-    return <Widget>[
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: <Widget>[
       Text('Products', style: text.titleSmall),
       const SizedBox(height: 4),
+      // Quietened rather than deleted. It is true, and a cashier pricing from
+      // a stale device needs it - but it is standing context, not the thing
+      // being looked at, so it no longer competes with the products for
+      // attention the way full-weight body text did.
       Text(
         key: const ValueKey('checkout-catalog-freshness'),
         'Prices and stock come from this device, last synced '
         '${_instant(_snapshot.refreshedAt)}. A sale is never blocked by a '
         'stock count.',
-        style: text.bodySmall,
+        style: quiet,
       ),
       if (!_snapshot.complete)
         Text(
           key: const ValueKey('checkout-catalog-partial'),
           'This device holds only part of the product list for this business, '
           'so a product may be missing from it.',
-          style: text.bodySmall,
+          style: quiet,
         ),
       const SizedBox(height: 8),
       TextField(
@@ -699,36 +818,39 @@ final class _CartEditorState extends State<_CartEditor> {
             'Showing ${visible.length} of ${matches.length} matching '
             'products. Narrow the search, or enter a code to add one '
             'directly.',
-            style: text.bodySmall,
+            style: quiet,
           ),
           const SizedBox(height: 8),
         ],
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final product in visible)
-              OutlinedButton(
-                key: ValueKey('checkout-product-${product.id}'),
-                onPressed: () => _add(product),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(product.name),
-                    Text(
-                      key: ValueKey('checkout-product-stock-${product.id}'),
-                      _productDetail(product, currency),
-                      style: text.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-          ],
+        GridView.builder(
+          // The cap above is what makes eager building safe, so the grid does
+          // not need to be lazy and must not scroll itself - it sits inside
+          // the pane's own scroll.
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            // An extent rather than a column count, so one grid serves a phone
+            // and a till screen without a second breakpoint deciding columns.
+            maxCrossAxisExtent: 230,
+            mainAxisExtent: 116,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: visible.length,
+          itemBuilder: (context, index) {
+            final product = visible[index];
+            return _ProductTile(
+              key: ValueKey('checkout-product-${product.id}'),
+              product: product,
+              detail: _productDetail(product, currency),
+              onTap: () => _add(product),
+            );
+          },
         ),
       ],
       const SizedBox(height: 20),
-    ];
+      ],
+    );
   }
 
   String _productDetail(TenantProduct product, String currency) {
@@ -868,6 +990,229 @@ final class _CartEditorState extends State<_CartEditor> {
           ),
       ],
     ];
+  }
+}
+
+/// One sellable product in the grid.
+///
+/// **A depleted product is marked and stays sellable.** The panel's own scope
+/// decision is that the cached figure never blocks a sale - it is what this
+/// device last saw, not what the shop holds - so this changes what a cashier
+/// can see at a glance and never what they can ring up. It is marked with a
+/// word and an icon rather than by colour alone, because colour alone is not
+/// readable to everyone and does not survive a photocopied training sheet.
+final class _ProductTile extends StatelessWidget {
+  const _ProductTile({
+    super.key,
+    required this.product,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final TenantProduct product;
+
+  /// The price-and-stock sentence, worded by the panel so that one place
+  /// decides how a cached figure is stated.
+  final String detail;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final depleted = product.quantity <= 0;
+    return Material(
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: depleted
+                  ? colors.error.withValues(alpha: 0.45)
+                  : colors.outline,
+            ),
+          ),
+          padding: const EdgeInsets.all(10),
+          // The picture and the name share a row; the price and stock run the
+          // full width beneath them. Beside the thumbnail there was room for
+          // "KES 65.00, 40 i..." and no more - and the figure that got cut was
+          // the stock, which is the one a cashier is checking.
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ProductThumbnail(product: product),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: colors.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                key: ValueKey('checkout-product-stock-${product.id}'),
+                detail,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              if (depleted)
+                Row(
+                  key: ValueKey('checkout-product-depleted-${product.id}'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 13, color: colors.error),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'Out of stock',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The picture on a product tile, or a stand-in for it.
+///
+/// **Nothing in this app can put a picture here yet, and that is deliberate
+/// rather than missing.** `TenantProduct` reads an optional HTTPS `image`, so a
+/// product that has one is drawn with it - but `importProducts` refuses an
+/// `image` column outright and `updateProduct` refuses the field as an unknown
+/// key, so the only way one exists today is an operator writing it directly.
+/// The stand-in is therefore the case that renders, and it is drawn as a
+/// deliberate mark rather than as a broken-image glyph: an initial on the
+/// surface's own tint, which is what the record cards elsewhere do for a person
+/// with no photograph.
+final class _ProductThumbnail extends StatelessWidget {
+  const _ProductThumbnail({required this.product});
+
+  final TenantProduct product;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = product.imageUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: 52,
+        height: 52,
+        child: url == null
+            ? _placeholder(context)
+            : Image.network(
+                url.toString(),
+                fit: BoxFit.cover,
+                // A product whose picture cannot be fetched still has to be
+                // sellable, so a failed load falls back rather than throwing a
+                // broken glyph into the middle of the till.
+                errorBuilder: (context, _, _) => _placeholder(context),
+                loadingBuilder: (context, child, progress) =>
+                    progress == null ? child : _placeholder(context),
+              ),
+      ),
+    );
+  }
+
+  Widget _placeholder(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      color: colors.primaryContainer,
+      alignment: Alignment.center,
+      child: Text(
+        TenantInitialsAvatar.initialsOf(product.name),
+        style: theme.textTheme.titleSmall?.copyWith(
+          color: colors.onPrimaryContainer,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// The compact layout's standing cart summary.
+///
+/// It states the total without the sheet being open, because that is the
+/// number a customer is waiting to hear and putting it behind a tap is what
+/// made the old single-scroll layout slow.
+final class _CartBar extends StatelessWidget {
+  const _CartBar({
+    required this.currency,
+    required this.total,
+    required this.itemCount,
+    required this.onOpen,
+  });
+
+  final String currency;
+  final int? total;
+  final int itemCount;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  key: const ValueKey('checkout-cart-bar-total'),
+                  total == null
+                      ? 'Total unavailable'
+                      : 'Total: $currency ${_money(total!)}',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Badge(
+                key: const ValueKey('checkout-cart-badge'),
+                isLabelVisible: itemCount > 0,
+                label: Text('$itemCount'),
+                child: FilledButton.icon(
+                  key: const ValueKey('checkout-open-cart'),
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.shopping_cart_outlined),
+                  label: const Text('Cart'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

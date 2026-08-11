@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../ui/records.dart';
+
 import '../reporting/reconciliation_anomalies.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -472,18 +474,42 @@ final class _ProductStockContents extends StatelessWidget {
       Text(product.name, style: Theme.of(context).textTheme.headlineSmall),
       const SizedBox(height: 4),
       Text('SKU ${product.sku}'),
+      const SizedBox(height: 16),
+      // The headline figures. `product-stock-quantity` now keys the number
+      // itself rather than a sentence containing it, because the caption is
+      // the card's own label - the fact it states is unchanged.
+      TenantStatStrip(
+        cards: [
+          TenantStatCard(
+            valueKey: const ValueKey('product-stock-quantity'),
+            label: 'Recorded stock',
+            value: '${product.quantity}',
+            icon: Icons.inventory_2_outlined,
+            detail: 'held by the server',
+            // Negative is a real, permitted state rather than a fault, but it
+            // is the one a person needs to notice on sight.
+            emphasis: product.quantity < 0
+                ? Theme.of(context).colorScheme.error
+                : null,
+          ),
+          TenantStatCard(
+            key: const ValueKey('product-stock-stat-movements'),
+            label: 'Ledger entries',
+            value: '${page.items.length}',
+            icon: Icons.receipt_long_outlined,
+            detail: page.hasMore ? 'on this page, more to load' : 'on this page',
+          ),
+        ],
+      ),
       const SizedBox(height: 12),
       Text(
-        key: const ValueKey('product-stock-quantity'),
-        'Recorded stock: ${product.quantity}',
-        style: Theme.of(context).textTheme.titleLarge,
-      ),
-      const SizedBox(height: 4),
-      const Text(
         'This is the quantity the server holds, not a figure derived on this '
         'device. Stock may legitimately be negative: a sale is never blocked '
         'by a stock count, so a product can be sold past zero and corrected '
         'here afterwards.',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
       if (notice case final message?) ...[
         const SizedBox(height: 12),
@@ -628,58 +654,101 @@ final class _ProductStockContents extends StatelessWidget {
     ),
   );
 
-  Widget _entry(BuildContext context, TenantStockMovement movement) => Card(
-    key: ValueKey('product-stock-entry-${movement.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                movement.increasesStock
-                    ? Icons.arrow_upward
-                    : Icons.arrow_downward,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
+  /// One ledger entry, in the record-card shape the rest of the app uses.
+  ///
+  /// The direction block leads, because a ledger is read by scanning for the
+  /// movement that went the wrong way rather than by reading every line. It
+  /// carries an arrow and a sign as well as its tint, so the direction is not
+  /// held by colour alone.
+  Widget _entry(BuildContext context, TenantStockMovement movement) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final tone = movement.increasesStock ? colors.primary : colors.error;
+    return Card(
+      key: ValueKey('product-stock-entry-${movement.id}'),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: tone.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    movement.increasesStock
+                        ? Icons.arrow_upward
+                        : Icons.arrow_downward,
+                    size: 20,
+                    color: tone,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        key: ValueKey('product-stock-delta-${movement.id}'),
+                        '${movement.increasesStock ? '+' : ''}'
+                        '${movement.quantityDelta} • ${_sourceLabel(movement)}',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: colors.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        key: ValueKey('product-stock-figures-${movement.id}'),
+                        movement.previousQuantity == null
+                            ? 'The recorded before and after quantities are '
+                                  'not part of this entry.'
+                            : '${movement.previousQuantity} to '
+                                  '${movement.quantityAfter}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (movement.reason case final reason?) ...[
+              const SizedBox(height: 8),
               Text(
-                key: ValueKey('product-stock-delta-${movement.id}'),
-                '${movement.increasesStock ? '+' : ''}'
-                '${movement.quantityDelta} • ${_sourceLabel(movement)}',
-                style: Theme.of(context).textTheme.titleMedium,
+                key: ValueKey('product-stock-reason-${movement.id}'),
+                'Reason: $reason',
+                style: theme.textTheme.bodySmall,
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            key: ValueKey('product-stock-figures-${movement.id}'),
-            movement.previousQuantity == null
-                ? 'The recorded before and after quantities are not part of '
-                      'this entry.'
-                : '${movement.previousQuantity} to ${movement.quantityAfter}',
-          ),
-          if (movement.reason case final reason?)
+            if (movement.sourceId case final sourceId?)
+              Text(
+                key: ValueKey('product-stock-source-${movement.id}'),
+                'Source: $sourceId',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
             Text(
-              key: ValueKey('product-stock-reason-${movement.id}'),
-              'Reason: $reason',
+              key: ValueKey('product-stock-recorded-${movement.id}'),
+              _recordedLabel(movement, _actorLabel(movement)),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
-          if (movement.sourceId case final sourceId?)
-            Text(
-              key: ValueKey('product-stock-source-${movement.id}'),
-              'Source: $sourceId',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          Text(
-            key: ValueKey('product-stock-recorded-${movement.id}'),
-            _recordedLabel(movement, _actorLabel(movement)),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   String? _actorLabel(TenantStockMovement movement) {
     final actorUid = movement.actorUid;

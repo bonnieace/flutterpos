@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../ui/records.dart';
+
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
@@ -343,6 +345,8 @@ final class _StaffContentsState extends State<_StaffContents> {
       const SizedBox(height: 4),
       Text('Business: ${widget.session.tenantId}'),
       const SizedBox(height: 20),
+      _staffStrip(context),
+      const SizedBox(height: 20),
       if (widget.session.canAccess(
         allowedRoles: TenantStaffInvitationGateway.allowedRoles,
       )) ...[
@@ -378,28 +382,270 @@ final class _StaffContentsState extends State<_StaffContents> {
       if (widget.page.items.isEmpty)
         const Text('No staff memberships found.')
       else
-        for (final staff in widget.page.items) ...[
-          Card(
-            child: Column(
+        LayoutBuilder(
+          builder: (context, constraints) => tenantLayoutFitsTable(constraints)
+              ? _staffTable(context)
+              : _staffCards(context),
+        ),
+      if (widget.page.hasMore)
+        const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text('More staff memberships are available.'),
+        ),
+      const SizedBox(height: 12),
+      const Text('Invitation acceptance routes remain unavailable.'),
+    ],
+  );
+
+  /// The headline figures for this page of the directory.
+  ///
+  /// Every figure is counted from [TenantStaffPage.items], so each one is
+  /// explicitly *this page* rather than the business. Saying "24 staff" from a
+  /// page of three would be a number this screen cannot know.
+  Widget _staffStrip(BuildContext context) {
+    final items = widget.page.items;
+    final active = items
+        .where((staff) => staff.status == MembershipStatus.active)
+        .length;
+    final pending = items
+        .where((staff) => staff.status == MembershipStatus.pending)
+        .length;
+    final privileged = items
+        .where(
+          (staff) =>
+              staff.isOwner ||
+              staff.role == TenantRole.owner ||
+              staff.role == TenantRole.admin,
+        )
+        .length;
+    final page = widget.page.hasMore ? 'on this page, more to load' : 'on this page';
+    return TenantStatStrip(
+      cards: [
+        TenantStatCard(
+          key: const ValueKey('staff-stat-total'),
+          label: 'Staff',
+          value: '${items.length}',
+          icon: Icons.people_outline,
+          detail: page,
+        ),
+        TenantStatCard(
+          key: const ValueKey('staff-stat-active'),
+          label: 'Active',
+          value: '$active',
+          icon: Icons.check_circle_outline,
+          detail: 'can sign in and sell',
+        ),
+        TenantStatCard(
+          key: const ValueKey('staff-stat-pending'),
+          label: 'Pending',
+          value: '$pending',
+          icon: Icons.hourglass_empty,
+          detail: 'invited, not yet accepted',
+          emphasis: pending > 0
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+              : null,
+        ),
+        TenantStatCard(
+          key: const ValueKey('staff-stat-privileged'),
+          label: 'Owners & admins',
+          value: '$privileged',
+          icon: Icons.workspace_premium_outlined,
+          detail: 'full access',
+        ),
+      ],
+    );
+  }
+
+  /// Role and standing, as words rather than as one hyphenated string.
+  List<Widget> _staffChips(BuildContext context, TenantStaffSummary staff) {
+    final colors = Theme.of(context).colorScheme;
+    return <Widget>[
+      TenantStatusChip(
+        key: ValueKey('staff-role-${staff.uid}'),
+        label: staff.role.wireValue,
+        icon: staff.isOwner || staff.role == TenantRole.owner
+            ? Icons.workspace_premium_outlined
+            : staff.role == TenantRole.admin
+            ? Icons.admin_panel_settings_outlined
+            : staff.role == TenantRole.manager
+            ? Icons.people_outline
+            : Icons.point_of_sale_outlined,
+        tone: staff.role == TenantRole.owner || staff.role == TenantRole.admin
+            ? colors.primary
+            : null,
+      ),
+      TenantStatusChip(
+        key: ValueKey('staff-status-${staff.uid}'),
+        label: staff.status.wireValue,
+        // Inactive is the one standing that changes what a person can do, so
+        // it is the one that carries a colour as well as a word.
+        tone: staff.status == MembershipStatus.inactive ? colors.error : null,
+      ),
+      if (staff.status == MembershipStatus.pending)
+        TenantStatusChip(
+          key: ValueKey('staff-invitation-${staff.uid}'),
+          label: staff.invitationStatus.wireValue,
+          icon: Icons.mail_outline,
+        ),
+    ];
+  }
+
+  Widget _staffCards(BuildContext context) => Column(
+    children: [
+      for (final staff in widget.page.items)
+        TenantRecordCard(
+          key: ValueKey('staff-card-${staff.uid}'),
+          title: staff.displayName,
+          subtitle: staff.email,
+          leading: TenantInitialsAvatar(
+            source: staff.displayName,
+            icon: staff.isOwner ? Icons.workspace_premium_outlined : null,
+          ),
+          chips: _staffChips(context, staff),
+          actions: _staffActions(context, staff),
+          details: _staffDetails(context, staff),
+        ),
+    ],
+  );
+
+  Widget _staffTable(BuildContext context) => TenantRecordTable(
+    columns: const [
+      TenantTableColumn(label: 'Member', flex: 3),
+      TenantTableColumn(label: 'Standing', flex: 2),
+      TenantTableColumn(label: '', flex: 2),
+    ],
+    rows: [
+      for (final staff in widget.page.items)
+        TenantTableRow(
+          key: ValueKey('staff-row-${staff.uid}'),
+          cells: [
+            Row(
               children: [
-                ListTile(
-                  leading: Icon(
-                    staff.isOwner
-                        ? Icons.workspace_premium_outlined
-                        : Icons.person_outline,
+                TenantInitialsAvatar(
+                  source: staff.displayName,
+                  icon: staff.isOwner
+                      ? Icons.workspace_premium_outlined
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        staff.displayName,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      Text(
+                        staff.email,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
-                  title: Text(staff.displayName),
-                  subtitle: Text(
-                    '${staff.email}\n'
-                    '${staff.role.wireValue} - ${staff.status.wireValue}'
-                    '${staff.status == MembershipStatus.pending ? ' - ${staff.invitationStatus.wireValue}' : ''}',
-                  ),
-                  trailing:
-                      widget.session.canAccess(
-                        allowedRoles: TenantStaffUpdateGateway.allowedRoles,
-                      )
-                      ? Wrap(
-                          children: [
+                ),
+              ],
+            ),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _staffChips(context, staff),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _staffActions(context, staff) ?? const SizedBox.shrink(),
+            ),
+          ],
+          details: _staffDetails(context, staff),
+        ),
+    ],
+  );
+
+  /// The forms a row opens, rendered beneath it in either layout.
+  List<Widget> _staffDetails(BuildContext context, TenantStaffSummary staff) =>
+      <Widget>[
+        if (_editingStaff?.uid == staff.uid)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: TenantStaffUpdateForm(
+              session: widget.session,
+              target: staff,
+              callable:
+                  widget.updateCallable ?? FirebaseUpdateStaffUserCallable(),
+              requestIdFactory: widget.requestIdFactory,
+              onSuccess: widget.onMutationSuccess,
+              onCancel: () => setState(() => _editingStaff = null),
+            ),
+          ),
+        if (_statusChangingStaff?.uid == staff.uid)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: TenantStaffStatusForm(
+              session: widget.session,
+              target: staff,
+              callable:
+                  widget.statusCallable ?? FirebaseSetStaffStatusCallable(),
+              requestIdFactory: widget.requestIdFactory,
+              onSuccess: widget.onMutationSuccess,
+              onCancel: () => setState(() => _statusChangingStaff = null),
+            ),
+          ),
+        if (_resendingInvitation?.uid == staff.uid)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: TenantStaffInvitationResendForm(
+              session: widget.session,
+              target: staff,
+              callable:
+                  widget.resendCallable ??
+                  FirebaseResendStaffInvitationCallable(),
+              requestIdFactory: widget.requestIdFactory,
+              onSuccess: widget.onMutationSuccess,
+              onCancel: () => setState(() => _resendingInvitation = null),
+            ),
+          ),
+        if (_cancellingInvitation?.uid == staff.uid)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: TenantStaffInvitationCancellationForm(
+              session: widget.session,
+              target: staff,
+              callable:
+                  widget.cancelInvitationCallable ??
+                  FirebaseCancelTenantInvitationCallable(),
+              requestIdFactory: widget.requestIdFactory,
+              onSuccess: widget.onMutationSuccess,
+              onCancel: () => setState(() => _cancellingInvitation = null),
+            ),
+          ),
+        if (_replacingInvitationEmail?.uid == staff.uid)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: TenantStaffInvitationEmailReplacementForm(
+              session: widget.session,
+              target: staff,
+              callable:
+                  widget.replaceEmailCallable ??
+                  FirebaseReplacePendingStaffEmailCallable(),
+              requestIdFactory: widget.requestIdFactory,
+              onSuccess: widget.onMutationSuccess,
+              onCancel: () =>
+                  setState(() => _replacingInvitationEmail = null),
+            ),
+          ),
+      ];
+
+  /// The record's own controls. Null where this session may not use any of
+  /// them, which is the same check the old trailing slot made.
+  Widget? _staffActions(BuildContext context, TenantStaffSummary staff) =>
+      widget.session.canAccess(
+        allowedRoles: TenantStaffUpdateGateway.allowedRoles,
+      )
+      ? Wrap(
+          children: [
                             IconButton(
                               key: ValueKey('edit-staff-${staff.uid}'),
                               tooltip: 'Edit ${staff.displayName}',
@@ -504,98 +750,9 @@ final class _StaffContentsState extends State<_StaffContents> {
                                       : Icons.person_add_alt_outlined,
                                 ),
                               ),
-                          ],
-                        )
-                      : null,
-                  isThreeLine: true,
-                ),
-                if (_editingStaff?.uid == staff.uid)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: TenantStaffUpdateForm(
-                      session: widget.session,
-                      target: staff,
-                      callable:
-                          widget.updateCallable ??
-                          FirebaseUpdateStaffUserCallable(),
-                      requestIdFactory: widget.requestIdFactory,
-                      onSuccess: widget.onMutationSuccess,
-                      onCancel: () => setState(() => _editingStaff = null),
-                    ),
-                  ),
-                if (_statusChangingStaff?.uid == staff.uid)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: TenantStaffStatusForm(
-                      session: widget.session,
-                      target: staff,
-                      callable:
-                          widget.statusCallable ??
-                          FirebaseSetStaffStatusCallable(),
-                      requestIdFactory: widget.requestIdFactory,
-                      onSuccess: widget.onMutationSuccess,
-                      onCancel: () =>
-                          setState(() => _statusChangingStaff = null),
-                    ),
-                  ),
-                if (_resendingInvitation?.uid == staff.uid)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: TenantStaffInvitationResendForm(
-                      session: widget.session,
-                      target: staff,
-                      callable:
-                          widget.resendCallable ??
-                          FirebaseResendStaffInvitationCallable(),
-                      requestIdFactory: widget.requestIdFactory,
-                      onSuccess: widget.onMutationSuccess,
-                      onCancel: () =>
-                          setState(() => _resendingInvitation = null),
-                    ),
-                  ),
-                if (_cancellingInvitation?.uid == staff.uid)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: TenantStaffInvitationCancellationForm(
-                      session: widget.session,
-                      target: staff,
-                      callable:
-                          widget.cancelInvitationCallable ??
-                          FirebaseCancelTenantInvitationCallable(),
-                      requestIdFactory: widget.requestIdFactory,
-                      onSuccess: widget.onMutationSuccess,
-                      onCancel: () =>
-                          setState(() => _cancellingInvitation = null),
-                    ),
-                  ),
-                if (_replacingInvitationEmail?.uid == staff.uid)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: TenantStaffInvitationEmailReplacementForm(
-                      session: widget.session,
-                      target: staff,
-                      callable:
-                          widget.replaceEmailCallable ??
-                          FirebaseReplacePendingStaffEmailCallable(),
-                      requestIdFactory: widget.requestIdFactory,
-                      onSuccess: widget.onMutationSuccess,
-                      onCancel: () =>
-                          setState(() => _replacingInvitationEmail = null),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      if (widget.page.hasMore)
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('More staff memberships are available.'),
-        ),
-      const SizedBox(height: 12),
-      const Text('Invitation acceptance routes remain unavailable.'),
-    ],
-  );
+          ],
+        )
+      : null;
 }
 
 String _staffDocumentId(String path) {

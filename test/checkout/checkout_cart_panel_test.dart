@@ -867,6 +867,143 @@ void main() {
     });
   });
 
+  group('the till lays itself out for the screen it is on', () {
+    // A phone, and a till screen. The breakpoint between them is the panel's
+    // own constant rather than a number repeated here, so moving it moves
+    // these tests with it.
+    const phone = Size(411, 900);
+    const tillScreen = Size(1400, 900);
+
+    testWidgets('puts the cart beside the products on a wide screen', (
+      tester,
+    ) async {
+      await _pumpAt(tester, sessions, catalog, drafts, tillScreen);
+
+      expect(find.byKey(const ValueKey('checkout-wide')), findsOne);
+      // Both halves are on screen at once, which is the whole point of the
+      // split: nothing about the sale is behind a tap.
+      expect(find.byKey(const ValueKey('checkout-product-product-a')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-cart-pane')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-open-cart')), findsNothing);
+    });
+
+    testWidgets('puts the cart behind a bar on a phone', (tester) async {
+      await _pumpAt(tester, sessions, catalog, drafts, phone);
+
+      expect(find.byKey(const ValueKey('checkout-compact')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-product-a')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-open-cart')), findsOne);
+      // The cart is a route that has not been pushed, so none of it is built.
+      expect(find.byKey(const ValueKey('checkout-cart-pane')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-save')), findsNothing);
+    });
+
+    testWidgets('states the total on the bar without opening the cart', (
+      tester,
+    ) async {
+      await _pumpAt(tester, sessions, catalog, drafts, phone);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-product-product-b');
+
+      // The number the customer is waiting for is never behind a tap.
+      expect(_text(tester, 'checkout-cart-bar-total'), 'Total: KES 14.00');
+      expect(
+        tester.widget<Badge>(find.byKey(const ValueKey('checkout-cart-badge')))
+            .isLabelVisible,
+        isTrue,
+      );
+    });
+
+    testWidgets('opens the cart and sells from inside the sheet', (
+      tester,
+    ) async {
+      await _pumpAt(tester, sessions, catalog, drafts, phone);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-open-cart');
+
+      expect(find.byKey(const ValueKey('checkout-line-product-b')), findsOne);
+
+      await _tapScrolled(tester, 'checkout-tender-cash');
+      await _tapScrolled(tester, 'checkout-save');
+
+      expect(drafts.requests.single.lines.single.productId, 'product-b');
+    });
+
+    testWidgets('the open sheet follows an edit made inside it', (
+      tester,
+    ) async {
+      await _pumpAt(tester, sessions, catalog, drafts, phone);
+
+      await _tap(tester, 'checkout-product-product-b');
+      await _tap(tester, 'checkout-open-cart');
+      expect(_text(tester, 'checkout-total'), 'Total: KES 7.00');
+
+      // The sheet is its own route, so it does not rebuild when the panel
+      // behind it does. Removing the only line has to empty it anyway.
+      await _tap(tester, 'checkout-line-remove-product-b');
+
+      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
+      expect(_text(tester, 'checkout-total'), 'Total: KES 0.00');
+    });
+  });
+
+  group('a product this device believes is gone', () {
+    testWidgets('is marked at zero and still sells', (tester) async {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        products: <TenantProduct>[
+          _product('tenant-a', 'depleted', price: 5, quantity: 0),
+        ],
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(
+        find.byKey(const ValueKey('checkout-product-depleted-depleted')),
+        findsOne,
+      );
+      // Marked, never blocked: the cached figure is what this device last saw,
+      // and the panel's scope decision is that it cannot stop a sale.
+      await _tap(tester, 'checkout-product-depleted');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(drafts.requests, hasLength(1));
+    });
+
+    testWidgets('is marked when the cached figure is negative', (tester) async {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        products: <TenantProduct>[
+          _product('tenant-a', 'oversold', price: 5, quantity: -3),
+        ],
+      );
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(
+        find.byKey(const ValueKey('checkout-product-depleted-oversold')),
+        findsOne,
+      );
+      // The figure itself is still stated verbatim beside the mark.
+      expect(
+        _text(tester, 'checkout-product-stock-oversold'),
+        'KES 5.00, -3 in stock',
+      );
+    });
+
+    testWidgets('a stocked product carries no such mark', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      expect(
+        find.byKey(const ValueKey('checkout-product-depleted-product-b')),
+        findsNothing,
+      );
+    });
+  });
+
   group('the cached stock figure', () {
     testWidgets('is stated on the product with when it was read', (
       tester,
@@ -1114,8 +1251,29 @@ Future<void> _pump(
   TenantSessionController controller,
   _Catalog catalog,
   CheckoutDraftSink? drafts,
+) => _pumpAt(
+  tester,
+  controller,
+  catalog,
+  drafts,
+  // Wide enough for the cart to sit beside the products, which is where every
+  // test that is not about layout wants to be: it puts the whole till on
+  // screen at once.
+  const Size(1400, 4000),
+);
+
+/// Pumps the till into a surface of an exact size.
+///
+/// The size is the input to the only layout decision this screen makes, so the
+/// tests that care about it state it rather than inheriting a default.
+Future<void> _pumpAt(
+  WidgetTester tester,
+  TenantSessionController controller,
+  _Catalog catalog,
+  CheckoutDraftSink? drafts,
+  Size size,
 ) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -1143,6 +1301,19 @@ Future<void> _settle(WidgetTester tester) async {
 
 Future<void> _tap(WidgetTester tester, String key) async {
   await tester.tap(find.byKey(ValueKey(key)));
+  await _settle(tester);
+}
+
+/// Taps [key] after scrolling it into view.
+///
+/// The cart sheet on a phone is taller than the phone, so a control below its
+/// fold is built and present but not yet tappable - which is exactly the state
+/// it is in for a cashier, who scrolls to it.
+Future<void> _tapScrolled(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await _settle(tester);
+  await tester.tap(finder);
   await _settle(tester);
 }
 

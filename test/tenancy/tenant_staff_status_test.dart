@@ -179,8 +179,7 @@ void main() {
       expect(find.text('Deactivate Staff Person?'), findsOneWidget);
       expect(callable.payloads, isEmpty);
 
-      await tester.tap(find.byKey(const ValueKey('set-staff-status-confirm')));
-      await tester.pumpAndSettle();
+      await _tapVisible(tester, 'set-staff-status-confirm');
 
       expect(callable.payloads.single, {
         'tenantId': 'tenant-a',
@@ -567,3 +566,17 @@ TenantMembership _membership(
   canonicalTenantExists: true,
   canonicalMembershipExists: true,
 );
+
+/// Taps [key] after scrolling it into view.
+///
+/// The directory now carries a strip of headline figures above the list, so a
+/// form opened from a row can sit below the fold of a short viewport - which is
+/// exactly where a real user scrolls to it. `ensureVisible` on an already
+/// visible control is a no-op, so this is safe everywhere.
+Future<void> _tapVisible(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}

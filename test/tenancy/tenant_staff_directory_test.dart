@@ -188,7 +188,16 @@ void main() {
 
       expect(find.text('Staff directory'), findsOneWidget);
       expect(find.text('Owner Person'), findsOneWidget);
-      expect(find.textContaining('owner - active'), findsOneWidget);
+      // Role and standing used to be one hyphenated string, `owner - active`,
+      // and are now a chip each. The facts asserted are the same two; only
+      // the rendering moved.
+      expect(find.byKey(const ValueKey('staff-role-owner-a')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('staff-status-owner-a')),
+        findsOneWidget,
+      );
+      expect(find.text('owner'), findsWidgets);
+      expect(find.text('active'), findsWidgets);
       expect(find.text('Invite staff'), findsOneWidget);
     });
 

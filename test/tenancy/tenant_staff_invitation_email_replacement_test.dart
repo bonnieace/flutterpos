@@ -197,10 +197,7 @@ void main() {
         findsNothing,
       );
 
-      await tester.tap(
-        find.byKey(const ValueKey('replace-staff-email-staff-a')),
-      );
-      await tester.pump();
+      await _tapVisibleThenPump(tester, 'replace-staff-email-staff-a');
       expect(
         find.text('Replace invitation email for Staff Person?'),
         findsOneWidget,
@@ -209,10 +206,7 @@ void main() {
         find.byKey(const ValueKey('replace-staff-email-input')),
         ' corrected@example.test ',
       );
-      await tester.tap(
-        find.byKey(const ValueKey('replace-staff-email-confirm')),
-      );
-      await tester.pumpAndSettle();
+      await _tapVisibleAndSettle(tester, 'replace-staff-email-confirm');
 
       expect(callable.payloads.single, {
         'tenantId': 'tenant-a',
@@ -285,20 +279,14 @@ void main() {
         find.byKey(const ValueKey('replace-staff-email-input')),
         'staff-a@example.test',
       );
-      await tester.tap(
-        find.byKey(const ValueKey('replace-staff-email-confirm')),
-      );
-      await tester.pump();
+      await _tapVisibleThenPump(tester, 'replace-staff-email-confirm');
       expect(
         find.text('Enter a different valid email address.'),
         findsOneWidget,
       );
       expect(callable.payloads, isEmpty);
 
-      await tester.tap(
-        find.byKey(const ValueKey('replace-staff-email-cancel')),
-      );
-      await tester.pump();
+      await _tapVisibleThenPump(tester, 'replace-staff-email-cancel');
       expect(dismissals, 1);
       expect(callable.payloads, isEmpty);
     });
@@ -379,10 +367,7 @@ void main() {
         find.byKey(const ValueKey('replace-staff-email-input')),
         'new@example.test',
       );
-      await tester.tap(
-        find.byKey(const ValueKey('replace-staff-email-confirm')),
-      );
-      await tester.pump();
+      await _tapVisibleThenPump(tester, 'replace-staff-email-confirm');
 
       controller.open(uid: 'admin-a', membership: _membership('tenant-b'));
       await tester.pump();
@@ -412,10 +397,7 @@ void main() {
         find.byKey(const ValueKey('replace-staff-email-input')),
         'new@example.test',
       );
-      await tester.tap(
-        find.byKey(const ValueKey('replace-staff-email-confirm')),
-      );
-      await tester.pump();
+      await _tapVisibleThenPump(tester, 'replace-staff-email-confirm');
 
       await tester.pumpWidget(
         _formApp(
@@ -635,3 +617,28 @@ TenantMembership _membership(
   canonicalTenantExists: true,
   canonicalMembershipExists: true,
 );
+
+/// Scrolls [key] into view, then taps it with a single pump.
+///
+/// The staff directory now carries a strip of headline figures above the list,
+/// so a form opened from a row can sit below the fold of a short viewport -
+/// which is where a real user scrolls to it. The scroll settles *before* the
+/// tap and the tap pumps only once, because some of these tests inspect the
+/// frame while the resulting call is still outstanding; settling after the tap
+/// would wait for the very thing they assert is unfinished.
+Future<void> _tapVisibleThenPump(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pump();
+}
+
+/// Scrolls [key] into view, taps it, and settles.
+Future<void> _tapVisibleAndSettle(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}

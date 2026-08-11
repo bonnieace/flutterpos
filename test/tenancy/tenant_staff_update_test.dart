@@ -159,8 +159,7 @@ void main() {
         find.byKey(const ValueKey('update-staff-name')),
         ' Updated Owner ',
       );
-      await tester.tap(find.byKey(const ValueKey('update-staff-submit')));
-      await tester.pumpAndSettle();
+      await _tapVisible(tester, 'update-staff-submit');
 
       expect(callable.payloads.single['tenantId'], 'tenant-a');
       expect(callable.payloads.single['uid'], 'owner-a');
@@ -186,12 +185,10 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('edit-staff-staff-a')));
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('update-staff-role')));
-      await tester.pumpAndSettle();
+      await _tapVisible(tester, 'update-staff-role');
       await tester.tap(find.text('manager').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('update-staff-submit')));
-      await tester.pumpAndSettle();
+      await _tapVisible(tester, 'update-staff-submit');
 
       expect(callable.payloads.single['uid'], 'staff-a');
       expect(callable.payloads.single['role'], 'manager');
@@ -529,3 +526,17 @@ TenantMembership _membership(
   canonicalTenantExists: true,
   canonicalMembershipExists: true,
 );
+
+/// Taps [key] after scrolling it into view.
+///
+/// The directory now carries a strip of headline figures above the list, so a
+/// form opened from a row can sit below the fold of a short viewport - which is
+/// exactly where a real user scrolls to it. `ensureVisible` on an already
+/// visible control is a no-op, so this is safe everywhere.
+Future<void> _tapVisible(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}

@@ -159,8 +159,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(reader.queryCount, 1);
 
-      await tester.tap(find.byKey(const ValueKey('invite-staff-open')));
-      await tester.pump();
+      await _tapVisibleThenPump(tester, 'invite-staff-open');
       await tester.enterText(
         find.byKey(const ValueKey('invite-staff-email')),
         ' NEW@EXAMPLE.TEST ',
@@ -173,8 +172,7 @@ void main() {
         find.byKey(const ValueKey('invite-staff-phone')),
         ' +254700000001 ',
       );
-      await tester.tap(find.byKey(const ValueKey('invite-staff-submit')));
-      await tester.pumpAndSettle();
+      await _tapVisible(tester, 'invite-staff-submit');
 
       expect(callable.payloads, hasLength(1));
       expect(callable.payloads.single['tenantId'], 'tenant-a');
@@ -296,8 +294,7 @@ void main() {
         ),
       );
       await _fillValidForm(tester);
-      await tester.tap(find.byKey(const ValueKey('invite-staff-submit')));
-      await tester.pump();
+      await _tapVisibleThenPump(tester, 'invite-staff-submit');
 
       controller.open(
         uid: 'owner-a',
@@ -324,8 +321,7 @@ void main() {
         _formApp(controller: controller, callable: callable),
       );
       await _fillValidForm(tester);
-      await tester.tap(find.byKey(const ValueKey('invite-staff-submit')));
-      await tester.pump();
+      await _tapVisibleThenPump(tester, 'invite-staff-submit');
 
       controller.open(
         uid: 'owner-b',
@@ -484,3 +480,28 @@ TenantMembership _membership(String tenantId, {required TenantRole role}) =>
       canonicalTenantExists: true,
       canonicalMembershipExists: true,
     );
+
+/// Scrolls [key] into view, then taps it with a single pump.
+///
+/// The directory now carries a strip of headline figures above the list, so a
+/// form can sit below the fold of a short viewport - which is where a real user
+/// scrolls to it. The scroll settles *before* the tap and the tap itself only
+/// pumps once, because the tests that use this deliberately inspect the frame
+/// while the resulting call is still outstanding; settling after the tap would
+/// wait for the very thing they are asserting is not finished.
+Future<void> _tapVisibleThenPump(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pump();
+}
+
+/// Scrolls [key] into view, taps it, and settles.
+Future<void> _tapVisible(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}

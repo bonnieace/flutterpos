@@ -23,7 +23,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('product-stock-quantity')))
           .data,
-      'Recorded stock: 7',
+      '7',
     );
     // A sale is never blocked by a stock count, so the surface says so instead
     // of presenting a negative quantity as an error.
@@ -489,7 +489,7 @@ void main() {
           'be read. The stock and ledger below are unaffected.',
     );
     expect(find.byKey(const ValueKey('product-stock-failure')), findsNothing);
-    _expectText(tester, 'product-stock-quantity', 'Recorded stock: 7');
+    _expectText(tester, 'product-stock-quantity', '7');
     expect(find.byKey(const ValueKey('product-stock-entry-mv-1')), findsOne);
   });
 
@@ -518,7 +518,7 @@ void main() {
       find.byKey(const ValueKey('product-stock-differences-unreadable')),
       findsOne,
     );
-    _expectText(tester, 'product-stock-quantity', 'Recorded stock: 7');
+    _expectText(tester, 'product-stock-quantity', '7');
   });
 
   testWidgets('a ledger entry outside this product hides the page', (
