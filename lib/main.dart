@@ -199,6 +199,11 @@ class SpiritPOSApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: spiritTheme,
+      // `design.md` §2.4: bouncing scroll physics everywhere, on both
+      // platforms, and no Material overscroll glow. It belongs on the app
+      // rather than on each scrollable, because "everywhere" is not a rule
+      // three hundred list views can be trusted to remember.
+      scrollBehavior: const SpiritScrollBehavior(),
       home: TenantRoutingShell(
         authUidChanges: FirebaseAuth.instance.authStateChanges().map(
           (user) => user?.uid,

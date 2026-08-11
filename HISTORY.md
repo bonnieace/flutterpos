@@ -18631,3 +18631,211 @@ lib/ui/records.dart                              (untracked)
 tool/screenshots/ (7 files) screenshots/ (102)   (untracked; regenerated to byte-identical
                                                   content, not staged)
 ```
+
+---
+
+## The ripple dies at the theme - 2026-08-11
+
+### Completed in this session
+
+**`design.md` §11 step 2**, and the first redesign step that changes anything a person can see.
+`splashFactory: NoSplash.splashFactory` on `ThemeData`, `overlayColor` on the four button themes
+reading §2.1's action tiers out of the token layer, `useMaterial3: true` stated rather than
+inherited, and `SpiritScrollBehavior` carrying §2.4's bouncing physics with no overscroll glow.
+One theme file, one line in `lib/main.dart`, **zero call sites**.
+
+It changed `firestore.rules` not at all and nothing in `functions/` either - `git diff` over both
+prints **zero lines**. It moved no board row and no rollout step; what it moved is the **Design
+system** track, 8% to 15%.
+
+### Why this was the chunk, and why App Check was passed over a fourth time
+
+The previous session queued the App Check research here on this file's own instruction: the
+device findings had run out, it is the only queued item that would move a red row, and `PLAN.md`
+said it "should not be passed over a fourth time without a reason better than ordering". **The
+product owner asked why the reskin chunks were not being taken and redirected to them.** That is
+a decision rather than drift and it is recorded in `PLAN.md` beside the chunk, so the next session
+reads a call and not an oversight. Three frictions were put to them before the redirect and none
+was contradicted: step 2 cannot be verified without a device run, the whole design system lives in
+untracked files, and step 4 needs a border-contrast answer that does not exist yet.
+
+### §2.4's instruction is wrong about this codebase, and the audit already knew
+
+§2.4 says to replace `InkWell` with an opacity-and-scale overlay. There is exactly **one**
+`InkWell` in the migrated tree (`checkout_cart_panel.dart:1029`); every other ripple in the app
+comes from Material's own `FilledButton`, `OutlinedButton`, `TextButton`, `IconButton`,
+`ChoiceChip`, `ListTile` and `SegmentedButton`. `DESIGN-AUDIT.md` §4.5 found that and §6 decision
+4 split the work rather than choosing between the two options it posed:
+
+- **Step 2** kills the ripple at the theme. One file, zero call sites.
+- **Step 3** builds `PressSurface` inside `AppButton`, so the scale-0.97 `spring.snappy` press
+  arrives at the moment every call site is already being rewritten.
+
+The arithmetic is the argument: there are **zero `AnimationController`s in the migrated tree**, so
+a step-2 call-site sweep would build the spring substrate, touch ~40 sites, and touch all of them
+again in step 3.
+
+### The guarantees
+
+1. **One line reaches every ripple**, because `InkResponse` falls back to
+   `ThemeData.splashFactory` and the M3 button defaults delegate to it explicitly.
+2. **`useMaterial3: true` is load-bearing, not decoration.** The Material 2 paths in
+   `outlined_button.dart` and `text_button.dart` **hardcode** `InkRipple.splashFactory`, so
+   flipping that flag would silently restore ripples on two of the four tiers. It was previously
+   unset, which means true by default; a test now asserts it beside the splash factory.
+3. **The four button themes are the first thing in the app to read the token layer.** Filled and
+   elevated are `action.primary`, outlined is `action.secondary`, text is `action.tertiary`.
+   `AppActionRole.hoverFill()` and `pressedFill()` answer §2.1's **two** different rules - the
+   primary tier moves its container to named colours, the other three wash their own label at 8%
+   and 12% - so `_pressOverlay` does not have to know which kind of tier it holds. That method
+   pair was built by step 1 for exactly this and had no caller until now.
+4. **The label repoint did not come with the overlay.** The outlined button is still mint where
+   §2.1 wants sage, and `test/ui/tokens_test.dart` still asserts that divergence. It closes in
+   step 3, when `AppButton` rewrites the call sites, so its image diff has one cause.
+5. **Focus resolves to the hover wash, and that is deliberately not §2.1's focus row.** §2.1 gives
+   focus-visible a 2px ring at 2px offset - a border, not an overlay - which belongs to `AppButton`
+   and to §9's audit in step 12. The thing a `WidgetStateProperty` must not do meanwhile is answer
+   `null` for a focused button: that paints no overlay at all and would leave a keyboard user with
+   *less* feedback than before this step.
+6. **`action.destructive` has no Material theme to attach to** and arrives with `AppButton`.
+7. **Scroll physics live on the app, not on each scrollable**, because §2.4 says *everywhere* and
+   that is not a rule three hundred list views can be trusted to remember. `MaterialScrollBehavior`
+   is extended rather than replaced, so desktop scrollbars and the drag-device set are untouched.
+
+### Two screenshots moved, and neither of them shows a ripple
+
+Both are `31b-a-receipt-found`, mobile and web. **The visible difference is the receipt field's
+text caret**, present in the baseline and absent now.
+
+The mechanism is the harness rather than the app. That capture case ends its `afterPump` with
+`await tester.tap(find.text('Find receipt'))` and **no `pumpAndSettle`**, so the shot lands
+wherever the frame timeline happens to be. With a ripple in flight the binding kept pumping frames
+and the caret was captured in its "on" blink phase; with no ripple the tree settles immediately
+and the caret is captured "off".
+
+**It is attributable and it is not evidence.** Two consecutive runs of identical code hash
+identically, so the pair really did move because of this change - but a ripple exists only
+mid-press and a glow only mid-drag, so what this step did cannot appear in a still image at all.
+Recorded in `PLAN.md` as a standing trap, because **step 3's springs will move that pair again**
+and the next session should read what differs before attributing it.
+
+### Deliberately not done
+
+- **No call site was touched**, and no `PressSurface` was built. Both belong to step 3.
+- **No label, radius, or fill was repointed.** The four divergences step 1 asserted are still
+  asserted; only the overlay and the splash factory moved.
+- **Two rows of §2.1's own state table are not implemented here**, and saying "the state table"
+  without naming them would overstate the chunk. **Disabled** - container `#1E3A2B`, label
+  `#5D7468` - still resolves through `styleFrom`'s Material defaults, and **loading** - the
+  container held, the label replaced by a 16px spinner, the width frozen - has no expression in a
+  `ButtonStyle` at all. Both are `AppButton`'s, which is why `AppActionRoles` already carries
+  `disabledContainer`, `disabledLabel`, `disabledBorder` and `loadingIndicatorSize` with no reader.
+  What step 2 implements is the **hover and pressed rows**, plus a focus fallback that is not the
+  focus row.
+- **No route transition.** §11 step 2 names them, and §2.4 requires anything spatial to be a
+  **spring** that retargets from its current position and velocity. A `PageTransitionsBuilder`
+  written on a duration would satisfy the step number while contradicting the section it comes
+  from, so it waits for the substrate `AppButton` builds. **This is the one part of step 2 that is
+  not finished**, and it is named here rather than left as an implied completion.
+- **The single `InkWell`**, the chips, and the `ListTile`s keep their own press treatment until
+  their steps arrive (7, 3-4, and 6 respectively), per decision 4's straggler list.
+- **No server file, no rule, no deployment.**
+
+### Files changed
+
+```text
+lib/theme.dart          (splashFactory, useMaterial3, four overlayColor properties,
+                         _pressOverlay, SpiritScrollBehavior, and the doc paragraph
+                         explaining why step 2 is theme-level)
+lib/main.dart           (one line: scrollBehavior)
+test/theme_test.dart    (+5)
+HISTORY.md
+PLAN.md
+```
+
+### Test commands and results
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1598 passed** (1593 + 5) |
+| Screenshots | `flutter test --no-pub --concurrency=1 tool/screenshots` | **78 captures, 101 images, 2 moved** - see above |
+| Functions / Rules / Reconciliation / Invitations | carried | **409 / 161 / 10 / 23** |
+
+`flutter analyze --no-pub test/theme_test.dart lib/theme.dart lib/main.dart`: **one issue, and it
+is the pre-existing Sentry `profilesSampleRate` warning** this file has carried since before the
+migration. Nothing new.
+
+**The four non-Flutter suites were carried for the second consecutive chunk**, on the same
+reasoning as the first: two Dart files and one test file changed, `git diff` over
+`firestore.rules`, `functions/` and `rules-tests/` prints zero lines, and no suite among the four
+can observe a Dart file. **`PLAN.md` now names two consecutive carries as the limit** - a third
+should measure them, on the same reasoning that made the third consecutive unreachable callable a
+surface instead. This is the **twelfth** consecutive chunk to leave `firestore.rules`
+byte-identical.
+
+**What the five new tests do and do not prove.** They assert at the `InkWell` the button actually
+builds rather than at the `ButtonStyle`, because what could go wrong here is the merge: a button
+resolves its widget style over the theme's over the M3 defaults, and a theme-level property that
+loses that race is invisible from the theme object alone. They also carry a **control** - the same
+list tree without `SpiritScrollBehavior`, asserting that it does *not* bounce and *does* build an
+overscroll indicator - so the two positive assertions cannot pass against a change that did
+nothing. What none of them prove is how any of it feels. Per `design.md` §10 that is a device
+check with the performance overlay on, and the session instruction skipped the Android build, so
+**nobody has looked at this**. The debt is now five chunks deep and step 2 is the one entry in it
+that has no other way to be verified.
+
+### Meaningful failures and their resolutions
+
+**One test failed on the first run, and the assertion was wrong rather than the code.**
+
+```text
+Expected: <Instance of 'BouncingScrollPhysics'>
+  Actual: AlwaysScrollableScrollPhysics:<AlwaysScrollableScrollPhysics -> BouncingScrollPhysics
+          -> RangeMaintainingScrollPhysics>
+```
+
+`ScrollView` **prepends** `AlwaysScrollableScrollPhysics` to whatever the behaviour supplied, so a
+position holds a chain rather than the type the behaviour named, and `isA<BouncingScrollPhysics>()`
+over the outermost link is an assertion that can only ever fail. The test now walks
+`ScrollPhysics.parent` and says why at the helper.
+
+**Two `const` expressions that are not.** `AppTokens.dark.colors.action` cannot be `const` - a
+property access is not a constant expression, which is a rule about the expression rather than
+about the value, since `AppTokens.dark` is canonicalized. Both the theme and the test hold it as
+`final`, and the theme says so at the declaration.
+
+**Four Dart string literals were terminated early by an apostrophe.** `'... the tier's overlay'`
+ends the string at `tier`, and the analyzer's cascade of "Expected to find ','" points at the
+consequences rather than the cause. Reworded rather than escaped, because a test name reading
+"the fills of its own tier" is no worse than one with a backslash in it.
+
+**The NUL-escape check ran over all five touched files and every count was zero.**
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+lib/checkout/checkout_cart_panel.dart            (another session's, unstaged)
+lib/inventory/stock_adjustment_panel.dart        (another session's, unstaged)
+lib/tenancy/tenant_staff_directory.dart          (another session's, unstaged)
+test/checkout/checkout_cart_panel_test.dart      (another session's, unstaged)
+test/inventory/stock_adjustment_panel_test.dart  (another session's, unstaged)
+test/tenancy/*_test.dart, seven files            (another session's, unstaged)
+.codex-app.png .codex-live.png .codex-live2.png  (untracked)
+prompt.md screenshots.zip                        (untracked)
+design.md DESIGN-AUDIT.md claude.md              (untracked; still carrying the token
+                                                  layer's two corrections)
+docs/printer_transport.md                        (untracked)
+lib/ui/records.dart                              (untracked)
+tool/screenshots/ (7 files) screenshots/ (102)   (untracked; regenerated, 2 images moved,
+                                                  not staged)
+```
+
+**`design.md` is still untracked, and step 2 makes that worse rather than better.** `claude.md`
+names it as the source of truth for every visual change, and there are now two committed redesign
+steps whose specification exists only in this working tree. It was raised with the product owner
+this session and not resolved; committing another session's 789-line document is not a chunk's
+call to make, and it is stated here so the next reader sees a known risk rather than an
+oversight.

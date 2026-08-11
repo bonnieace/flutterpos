@@ -4,10 +4,11 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-11**, the session that stopped four catalog
-surfaces from showing a category document ID. Claims in this file are checked against source,
-not inherited from the log; corrections are noted where they were made — **and this file's own
-description of that defect was one of the things checked and found wrong**, see "Found by using
+Last verified against the code on **2026-08-11**, the session that killed the ink ripple —
+`design.md` §11 step 2, and the first step of the redesign that moves anything a person can
+see. Claims in this file are checked against source,
+not inherited from the log; corrections are noted where they were made — **and the session
+before it found this file's own description of a defect wrong**, see "Found by using
 the app", finding 5. **The eighth session of 2026-08-08
 verified them against the running app on Android rather than only against source**, which
 is a different kind of check and the first of its kind since 2026-08-04. **The ninth fixed
@@ -92,7 +93,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~8% | `design.md` v0.3 is the specification, `DESIGN-AUDIT.md` audits it against the code, and **step 1 of its twelve is done**: `lib/ui/tokens.dart` holds every colour, type, spacing, radius, motion and density token, `spiritTheme` registers it, and **nothing reads it**. Steps 2–12 move pixels; the ripple kill is next. The specification, the audit and the harness are all untracked. |
+| **Design system** | ~15% | `design.md` v0.3 is the specification, `DESIGN-AUDIT.md` audits it against the code, and **step 1 of its twelve is done and step 2 all but one part**: `lib/ui/tokens.dart` holds every colour, type, spacing, radius, motion and density token, and the ripple is dead — `splashFactory: NoSplash`, the four button themes reading §2.1's action tiers, and bouncing scroll physics with no overscroll glow. **Route transitions are step 2's fourth part and are not done**, because §2.4 requires a spring and the substrate arrives with `AppButton`. **One thing reads the token layer; everything else still reads the old values.** Steps 3–12 remain, `AppButton` next. The specification, the audit and the harness are all untracked. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -132,6 +133,16 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The third session of 2026-08-11 changed no board row at all — not a colour and not a word of one
+— and this sentence is here so that is stated rather than left silent.** It took `design.md` §11
+step 2, the ripple kill, which is a **redesign step rather than a capability**: no shop can do
+anything today it could not do yesterday, and the **Design system** track is where it moved, 8% to
+15%. It touched no rule and no `functions/` file — `git diff` over both prints zero lines — and it
+changed **no rollout step**, because the app's fifteen and the design system's twelve are separate
+sequences. **It moved two of the 101 screenshots, and neither of them shows a ripple**; see the
+standing decision for what the delta actually is, because the honest reading of it matters more
+than the count.
 
 **The second session of 2026-08-11 changed no board row's colour either, and this sentence is here
 so that is stated rather than left silent.** It closed finding 5 — no catalog surface states a
@@ -391,23 +402,25 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1593** ⚠️ see below |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1598** ⚠️ see below |
 | Functions | `npm --prefix functions test` | **409** ⚠️ carried, see below |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** ⚠️ carried |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ⚠️ carried |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⚠️ carried; one flaky test, see below |
 
-**2196 tests across five suites** — and there is a sixth figure that is deliberately not in
+**2201 tests across five suites** — and there is a sixth figure that is deliberately not in
 this table: `flutter test --no-pub --concurrency=1 tool/screenshots` runs **78 captures**
 writing 101 images, and it asserts nothing, which is why it is not counted here.
 
-⚠️ **The four non-Flutter figures were carried rather than measured on 2026-08-11's second
-session, and that is a decision rather than a lapse.** That chunk changed ten Dart files and
+⚠️ **The four non-Flutter figures have been carried rather than measured since the second session
+of 2026-08-11, and that is a decision rather than a lapse.** Both chunks that day changed Dart and
 nothing else; `git diff` over `firestore.rules`, `functions/` and `rules-tests/` prints **zero
 lines**, which this file already calls a stronger measurement than an unchanged suite count, and
-no suite among the four can observe a Dart string. The precedent is the Android device session,
+no suite among the four can observe a Dart file. The precedent is the Android device session,
 which carried all five. **Re-measure them in any chunk that touches JavaScript, TypeScript, or a
-rule** — and a chunk that carries them must say so, which is what these marks do.
+rule** — and a chunk that carries them must say so, which is what these marks do. **Two
+consecutive carries is the limit worth naming**: a third should measure them, on the same
+reasoning that made the third consecutive unreachable callable a surface instead.
 
 ⚠️ **The Flutter figure is measured against a working tree that is not this commit, and the
 difference is eight tests.** The 2026-08-11 token-layer session found the tree already at
@@ -417,9 +430,10 @@ measured the suite **before its own work as well as after**: 1532 → **1586**, 
 `test/ui/tokens_test.dart`; the category-naming chunk later the same day took it **1586 →
 1593** (7 new: 2 in `tenant_catalog_test.dart`, 2 in `bulk_catalog_test.dart`, 1 each in
 `catalog_management_test.dart`, `catalog_management_panel_test.dart`, and
-`bulk_catalog_panel_test.dart`). **A clean checkout of the commit is 1585** — 1524 plus 54 plus
-7 — and the two figures reconcile only once the eight unstaged tests are accounted for. Whoever
-commits those eight makes 1593 the honest baseline; until then this row is a measurement of a
+`bulk_catalog_panel_test.dart`); the ripple kill took it **1593 → 1598** (5 new, all in
+`test/theme_test.dart`). **A clean checkout of the commit is 1590** — 1524 plus 54 plus 7 plus
+5 — and the two figures reconcile only once the eight unstaged tests are accounted for. Whoever
+commits those eight makes 1598 the honest baseline; until then this row is a measurement of a
 tree, not of a commit, and says so.
 
 **All five were measured again in the invitation-refusal session on 2026-08-08**, which took
@@ -498,9 +512,10 @@ against the frozen tree, then **1358** once the product-cost chunk added eleven,
 **1392** once the product-edit chunk added 34, then **1447** once the bulk surface added 55,
 then **1473** once the profit display added 26, **1473** again in the password-reset session,
 which added no Dart, **1505** once the sign-in chunk added 32, and **1524** once the
-invitation-refusal chunk added 19. **Then three times on 2026-08-11 against a tree carrying
-another session's eight unstaged tests: 1532 before the token layer, 1586 after it, and 1593
-after the category-naming repair.** One failure in twenty-one runs, and the last twenty green.
+invitation-refusal chunk added 19. **Then four times on 2026-08-11 against a tree carrying
+another session's eight unstaged tests: 1532 before the token layer, 1586 after it, 1593
+after the category-naming repair, and 1598 after the ripple kill.** One failure in twenty-two
+runs, and the last twenty-one green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -1427,6 +1442,76 @@ value `design.md` does not define.** `claude.md` says the correct outcome there 
    forbids. If one is ever decided it arrives as a second `AppColorRoles` instance and every widget
    that reads a role follows it without being edited, which is the reason the role layer exists.
 
+### The ripple dies at the theme, and the press arrives with the button
+
+Built 2026-08-11, `design.md` §11 step 2 and the first redesign step that changes what a person
+sees. It changed `firestore.rules` not at all and nothing in `functions/` either — `git diff` over
+both prints **zero lines**. It moved no board row: a redesign step is not a capability.
+
+**§2.4 says to replace `InkWell` with an opacity-and-scale overlay, and that instruction is wrong
+about this codebase.** There is exactly **one** `InkWell` in the migrated tree
+(`checkout_cart_panel.dart:1029`); every other ripple comes from Material's own button, chip, tile
+and icon-button implementations. `DESIGN-AUDIT.md` §4.5 found it and §6 decision 4 split the work
+accordingly, and this chunk is the first half of that split.
+
+The guarantees are settled, not open:
+
+1. **One line reaches every ripple in the app.** `splashFactory: NoSplash.splashFactory` on
+   `ThemeData`, because `InkResponse` falls back to it and the Material 3 button defaults delegate
+   to it explicitly. Zero call sites were touched.
+2. **`useMaterial3: true` is now stated rather than inherited, and that is load-bearing.** The
+   **Material 2** paths in `outlined_button.dart` and `text_button.dart` hardcode
+   `InkRipple.splashFactory`, so flipping that flag would silently restore ripples on two of the
+   four tiers. It was unset before, which means true-by-default; a test asserts both it and the
+   splash factory.
+3. **The four button themes are the first thing in the app to read the token layer.** Filled and
+   elevated carry `action.primary`, outlined carries `action.secondary`, text carries
+   `action.tertiary`. `AppActionRole.hoverFill()` and `pressedFill()` answer §2.1's **two**
+   different rules — the primary tier moves its container to named colours, the other three wash
+   their own label at 8% and 12% — so the theme does not have to know which kind of tier it holds.
+4. **`action.destructive` has no Material theme to attach to** and arrives with `AppButton` in
+   step 3. So does the label repoint: the outlined button is **still mint** where §2.1 wants sage,
+   and `test/ui/tokens_test.dart` still asserts that divergence. The overlay moved; the label did
+   not.
+5. **Only two rows of §2.1's state table are implemented, and the other three are named rather
+   than implied.** Hover and pressed are here. **Disabled** still resolves through Material's
+   defaults rather than to §2.1's `#1E3A2B` / `#5D7468`, and **loading** — container held, label
+   replaced by a 16px spinner, width frozen — cannot be expressed in a `ButtonStyle` at all. Both
+   are `AppButton`'s, which is why `AppActionRoles` already carries `disabledContainer`,
+   `disabledLabel`, `disabledBorder` and `loadingIndicatorSize` with no reader.
+6. **Focus resolves to the hover wash, and that is deliberately not §2.1's focus row.** §2.1 gives
+   focus-visible a 2px ring at 2px offset, which is a border rather than an overlay and belongs to
+   `AppButton` and to §9's audit in step 12. What a `WidgetStateProperty` must not do meanwhile is
+   answer `null` for a focused button — that paints no overlay at all and would leave a keyboard
+   user with less feedback than before the step.
+7. **Scroll physics bounce everywhere with no glow**, through `SpiritScrollBehavior` on the app
+   rather than a physics argument at each scrollable, because §2.4 says *everywhere* and that is
+   not a rule three hundred list views can be trusted to remember. `MaterialScrollBehavior` is
+   extended rather than replaced, so desktop scrollbars and the drag-device set are untouched.
+8. **`PressSurface` is not here, and the reason is arithmetic.** It needs a spring substrate that
+   does not exist — there are zero `AnimationControllers` in the migrated tree — so a step-2 sweep
+   would build the springs, touch ~40 call sites, and touch all of them again in step 3 when
+   `AppButton` replaces them. Inside `AppButton` it costs one pass.
+
+**Two of the 101 screenshots moved, and what changed in them is a text caret rather than a
+ripple.** Both are `31b-a-receipt-found`. The harness case ends with `tester.tap('Find receipt')`
+and **no `pumpAndSettle`**, so the capture lands wherever the frame timeline happens to be: with a
+ripple in flight the binding kept pumping frames and the field's caret was captured mid-blink in
+its "on" phase, and with no ripple the tree settles immediately and the caret is captured "off".
+The change is real and attributable — two consecutive runs of identical code hash identically —
+but **it is not a picture of the thing this step did**. A ripple exists only mid-press and a glow
+only mid-drag; neither can appear in a screenshot, which is why this step's verification is a
+device check with the performance overlay on, per `design.md` §10, and why the five tests below
+matter more than the images. **Expect that pair to move again at step 3**, when springs change the
+frame timeline once more.
+
+**One part of §11 step 2 is not done, and it is named rather than left as an implied
+completion: route transitions.** The step's title includes them, and §2.4 requires anything
+spatial to be a **spring** that retargets from its current position and velocity. A
+`PageTransitionsBuilder` written on a duration would satisfy the step number while contradicting
+the section it comes from, so it waits for the substrate `AppButton` builds in step 3. Step 2 is
+therefore the ripple, the overlays, and the scroll physics — three of its four parts.
+
 ### A category is named, and a document ID is not a name
 
 Built 2026-08-11, closing finding 5. It changed `firestore.rules` not at all and nothing in
@@ -1641,10 +1726,11 @@ shape that took `mergeSaleReconciliationJob` down on every sale it ever saw —
 address so the current-email HMAC recheck matches, and a missing identity raises exactly the
 `auth/user-not-found` code the gateway swallows.
 
-### Two design-system questions the token layer refused to answer
+### Three design-system questions the redesign has refused to answer
 
-Opened 2026-08-11 by building step 1. Neither is answerable from `design.md`, and `claude.md`
-forbids inventing the value that would close either, so both are here rather than in the code.
+The first two were opened on 2026-08-11 by building step 1 and the third by building step 2. None
+is answerable from `design.md`, and `claude.md` forbids inventing the value that would close any of
+them, so they are here rather than in the code.
 
 **Do §2.1's container borders have to clear §9's 3:1?** Measured against `surface.base`:
 `border.subtle` 1.38, `border.strong` 1.97, and the five status borders between 1.38 and 2.04. §9
@@ -1661,6 +1747,13 @@ different work:
 
 **Step 4 is where this stops being theoretical** — `StatusBadge` is that step, and it draws the
 container the whole argument is about. Answer it before then, not during.
+
+**A third was opened by step 2, and step 3's second half needs it: what is `AppSelect`?** §5.1
+names it as one of the load-bearing components and **nothing exists for it to replace** —
+`DESIGN-AUDIT.md` §6 says either drop it from §5.1 or re-scope it to the `ChoiceChip` group pattern
+that is actually in use on the catalog, bulk, and reporting surfaces. Both are defensible and only
+one of them is a component. It is not answerable from `design.md`, so it is here rather than
+decided inside the chunk that meets it.
 
 **What family is `mono`?** §2.2 opens with "One family — Roboto" and its last row says
 "monospace", and the app bundles no font at all: `lib/theme.dart` names none, deliberately, and
@@ -2362,6 +2455,14 @@ enormous expected-denial traces.
   really is the whole of the 39. Copy the set to the scratchpad before regenerating — those
   images are another session's untracked files — and hash the copy afterwards rather than
   trusting that nothing moved.
+- **A capture case that taps without settling is a photograph of the frame timeline, not of the
+  widget tree.** `31b-a-receipt-found` ends its `afterPump` with `tester.tap('Find receipt')` and
+  no `pumpAndSettle`, so **anything that changes how many frames the binding pumps moves that
+  image** while changing nothing a person would point at. The ripple kill moved it on 2026-08-11:
+  the visible delta is the receipt field's **caret blink phase**, because a ripple in flight used
+  to keep frames coming. Springs in step 3 will move it again. Two runs of identical code hash
+  identically, so a moved image here is still attributable — but read what actually differs
+  before attributing it to the thing you meant to change.
 - **A `ThemeExtension` field named `type` breaks the extension silently.**
   `ThemeExtension` declares `Object get type` and `ThemeData.extensions` is keyed by it, so
   a field of that name makes `Theme.of(context).extension<T>()` answer `null` for ever while
@@ -2503,58 +2604,72 @@ all of it is committed is the product owner's.**
 
 ## Next bounded chunk
 
-**Find out what a Windows build can actually attest with under App Check.** It is the only queued
-item that would move a red row, it has been passed over three times, and **the reason it was
-outranked has now run out**: the device findings ahead of it are closed or absorbed. This file
-said in as many words that when they ran out it was next and must not be passed over a fourth
-time without a reason better than ordering. It is next.
+**`design.md` §11 step 3, first half: `AppButton`.** Step 2 is done and step 3 is queued as **two**
+chunks rather than one, because the two halves share nothing but a step number.
 
-**It is a research chunk that ends in a decision, and the decision is the product owner's.** What
-this chunk owes is the evidence to make it with, not the choice:
+**Why `AppButton` is a chunk on its own.** The call-site migration is mechanical — roughly forty
+buttons — and the cost is `claude.md` hard rule 5, which wants every state in the screenshot
+harness: four tiers × three sizes × nine states. That matrix is the work, not the widget.
 
-- **What a Windows build can attest with today.** The three built-in providers are Play Integrity,
-  App Attest/DeviceCheck, and reCAPTCHA Enterprise. `firebase_app_check` lists Windows among its
-  supported platforms as of 0.4.6, which is *plugin* support and is not the same thing. Establish
-  whether that resolves to anything but the debug provider, which is not a production answer.
-  **Do not restate the "structurally unreachable" claim in either direction without checking it.**
-- **What the console now holds.** The product owner opened App Check there on 2026-08-07. Nothing
-  in the client sends a token, so enforcement must stay off for Firestore, Auth, Functions and
-  Storage; confirm that is still true rather than assuming it.
-- **The registration mismatch.** `DefaultFirebaseOptions.windows` carries a `1:…:web:…` app ID
-  because Firebase has no native Windows app type, so whatever Windows attests with is attesting
-  against a web app registration. Reconcile that with the console's per-app provider settings.
-- **End with the three options costed**, not chosen: ship reset on Apple/Android/web only, build
-  the custom Windows provider, or relax the endpoint under different rate limiting. The open
-  decision above already records that the exposure is **abuse volume against a shared Brevo sender
-  domain**, not enumeration; correct that too if the check says otherwise.
+**What it must carry, all of it already decided and none of it invented here:**
 
-**The shape of it, so nothing widens:** it may add a dependency and it may write documentation,
-and it **must not** build the in-app reset surface, initialize App Check in `lib/main.dart`, or
-turn on enforcement anywhere. Those follow the decision; this chunk produces it.
+- **`PressSurface` is built inside it**, per `DESIGN-AUDIT.md` §6 decision 4 — scale 0.97 on
+  `spring.snappy`, interruptible from its current position and velocity, never
+  `forward()`-from-zero on a retrigger. **This is the chunk that builds the spring substrate**,
+  because there are zero `AnimationController`s in the migrated tree today.
+- **Step 2's unfinished fourth part rides with it: route transitions.** §2.4 makes anything
+  spatial a spring, so a transition cannot be written before the substrate above exists. It is
+  carried here rather than left behind step 2, so it does not become the part nobody owns.
+- **The fourth tier arrives.** `action.destructive` has no Material button theme and exists only
+  once `AppButton` does. §2.1's rule that fixes the sale screen — *Clear this sale* is
+  destructive, *Save sale* is primary — is step 7's to apply, not this one's.
+- **Two divergences close and their assertions come out of `test/ui/tokens_test.dart` in the same
+  change**: the outlined button's label goes from mint to `action.secondary`'s sage, and the
+  primary label from `bgDark` to `#0A0F0C`. That test names them as divergences on purpose so the
+  step that closes one fails it.
+- **§9's focus ring**, 2px at 2px offset, which step 2 deliberately left as a hover-strength
+  overlay because a ring is a border rather than an overlay.
+- **`minimumSize` stays 48.** §5.2's `md` is 40h and §9's touch target is pass/fail under hard
+  rule 6; a component that shrinks a target is a defect however well it matches the table.
 
-**Explicitly excluded from it:** the in-app password-reset surface itself, which is what the
-decision gates; every server file and `firestore.rules` — `requestPasswordReset`'s
-`enforceAppCheck: true` is not to be removed to test a pipeline, for the three reasons under the
-open decision; **every token in `lib/ui/tokens.dart`** and every redesign step; deployment; and
-every standing exclusion listed below.
+**Explicitly excluded from it:** `AppTextField` and `AppSelect`, which are the step's second chunk
+— that is where finding 4's missing category picker gets closed and where the two incompatible
+field implementations become one; every other component (`StatusBadge` is step 4, `AppScaffold`
+step 5); the sale screen's action prominence, which is step 7; every server file and
+`firestore.rules`; deployment; and every standing exclusion below.
 
-**What was queued here before it: stopping a category ID reaching a person, and it is done.**
-Finding 5 is closed and the queued description of it was wrong twice over — the read-only catalog
-had the same defect, and four surfaces could state an ID rather than two. See the standing
-decision above for the one resolution that replaced six.
+**App Check was passed over a fourth time, and this is the reason rather than the ordering.** The
+previous session queued it here on this file's own instruction — the device findings had run out,
+and it is the only queued item that would move a red row. **The product owner redirected to the
+redesign**, having asked why the reskin chunks were not being taken. That is a decision, not
+drift, and it is recorded here so the next session does not re-derive it as an oversight. The
+research chunk is unchanged and sits at the head of the preference order below: what a **Windows**
+build can actually attest with, the `1:…:web:…` app-ID registration mismatch, and the three
+options costed rather than chosen. **It is now behind two redesign chunks, and the fifth
+deferral needs its own reason.**
 
-**Three things the last four chunks owe, and the debt is a device run.** Nobody has looked at
-the sign-in repair, nobody has looked at the invitation repair, nobody has looked at the category
-repair, and **nobody has looked at commit `1b2b13b`**, which repainted every screen in the app by
-wiring a `ColorScheme` the theme had named and never used. Between them that is 58 tests, 101
-screenshots, and no eyes. **Whenever the next device run happens, those come first** — for
-sign-in, an empty password, a wrong password, then editing a field; for the invitation, the
-refusal an identity that was unverified at invite time receives; for the category wording, the
-seeded product filed under `cat-not-cached` in "Manage catalog" and an import preview of a sheet
-naming `Bakery`; for the theme, any screen with a button, a spinner or an icon on it. The
-invitation one **cannot be reproduced on the emulators at all** (finding 6): it needs either a
-real Brevo key or an invitation written by hand with `visibleAcceptanceAllowed: false`. That is a
-prerequisite attached to the next device session, not a chunk of its own.
+**The device-run debt is now five chunks deep, and one of the five cannot be verified any other
+way.** Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
+`1b2b13b` — which repainted every screen by wiring a `ColorScheme` the theme had named and never
+used — or **the ripple kill**. Between them that is 63 tests, 101 screenshots, and no eyes.
+**Whenever the next device run happens, those come first** — for sign-in, an empty password, a
+wrong password, then editing a field; for the invitation, the refusal an identity that was
+unverified at invite time receives; for the category wording, the seeded product filed under
+`cat-not-cached` in "Manage catalog" and an import preview of a sheet naming `Bakery`; for the
+theme, any screen with a button, a spinner or an icon on it. The invitation one **cannot be
+reproduced on the emulators at all** (finding 6): it needs either a real Brevo key or an
+invitation written by hand with `visibleAcceptanceAllowed: false`.
+
+**The ripple kill is a different kind of debt from the other four and should be treated as
+one.** The other four are repairs whose tests are genuine evidence and whose device pass would be
+confirmation. **Step 2's central claim cannot be tested at all**: a ripple exists only mid-press
+and an overscroll glow only mid-drag, so `design.md` §10 makes its verification a device check
+with the performance overlay on. The five tests below prove the theme is wired the way §2.1 and
+§2.4 describe — including at the `InkWell` the button actually builds, which is where a
+`ButtonStyle` merge could have lost — and they prove nothing about how it feels. **Press a
+`FilledButton`, an `OutlinedButton`, a `ChoiceChip` and a `ListTile`, and drag a list past its
+end.** That is a prerequisite attached to the next device session, not a chunk of its own; step 3
+should not ship before somebody has done it, because `AppButton` builds its press on top of this.
 
 **One exclusion named because it has been inherited for many consecutive chunks: the printed
 receipt body.** Still correctly excluded and it has not become blocking — a sale is recorded,
@@ -2574,6 +2689,29 @@ finished.
   it decided — additive rather than conforming, and a density as a nested `Theme` — is recorded in
   its own standing decision above, together with the two corrections it made to `design.md` and the
   three questions it refused to answer by inventing a value.
+- **Find out what a Windows build can actually attest with under App Check** — the only queued
+  item that would move a red row, and now deferred **four** times. The device findings that
+  outranked it are gone; what moved it aside on 2026-08-11 was the product owner asking for the
+  redesign instead. It is a research chunk that ends in a decision only they can make, and it owes
+  the evidence rather than the choice: what a Windows build can attest with today (the three
+  built-ins are Play Integrity, App Attest/DeviceCheck and reCAPTCHA Enterprise, and
+  `firebase_app_check` listing Windows as supported is *plugin* support, not an attestation
+  provider — establish whether it resolves to anything but the debug provider); whether console
+  enforcement is still off everywhere, since nothing in the client sends a token; the
+  `DefaultFirebaseOptions.windows` `1:…:web:…` registration mismatch; and the three options costed
+  — Apple/Android/web only, a custom Windows provider, or an unattested endpoint under different
+  rate limiting. **Do not restate the "structurally unreachable" claim in either direction without
+  checking it**, and do not build the reset surface, initialize App Check, or turn on enforcement:
+  those follow the decision.
+- **~~The design system, step 2: remove every ink ripple~~** — **done 2026-08-11**, and with it the
+  scroll physics. `splashFactory: NoSplash` plus `overlayColor` on the four button themes reading
+  §2.1's action tiers, and `SpiritScrollBehavior` for §2.4's bouncing physics with no overscroll
+  glow. It moved no board row and no rollout step; it moved the **Design system** track from 8% to
+  15%. Two screenshots moved and neither shows a ripple — see the standing decision, and the new
+  standing trap about a capture case that taps without settling. **Step 2's fourth part, route
+  transitions, is deliberately not done** and rides with `AppButton`: §2.4 requires a spring, and
+  a transition written on a duration would satisfy the step number while contradicting the section
+  it comes from.
 - **~~Stop showing a category ID to a person~~** — **done 2026-08-11**, closing finding 5. It
   moved no board row and no rollout step, and it moved none of the 101 screenshots either — for a
   reason that is recorded rather than celebrated: the harness files every seeded product under a
@@ -2589,24 +2727,14 @@ finished.
   seen it yet. Touches `rules-tests/test/` only: no product code, no rule, no `functions/` file. It
   is queued below the App Check research because it costs a session nothing to re-run a flake and
   the research chunk is the one holding a red row shut.
-- **The design system, step 2: remove every ink ripple** — `design.md` §2.4, and one file.
-  `splashFactory: NoSplash.splashFactory` on `ThemeData` plus `overlayColor` `WidgetStateProperty`s
-  on the four button themes, implementing §2.1's 8% / 12% overlay rows. Verified against the SDK:
-  `InkResponse` falls back to `ThemeData.splashFactory` and the M3 button defaults delegate to it,
-  so one setting reaches every button, `ListTile`, `ChoiceChip`, and the single `InkWell` in the
-  migrated tree. **`PressSurface` is deliberately not in this chunk** — it needs a spring substrate
-  that does not exist, and step 3 replaces every button call site anyway, so it becomes
-  `AppButton`'s internal detail rather than a sweep of its own. See `DESIGN-AUDIT.md` §6, decision 4.
-  **This chunk's screenshot diff will be near-empty, and that is not evidence it worked**: a ripple
-  only exists mid-press. It is the first chunk in this file whose verification is a device run with
-  the performance overlay on rather than a diff, per `design.md` §10.
-- **The design system, step 3: `AppButton` and `AppTextField`** — and it is queued as **two**
-  chunks, not one. The call-site migration is mechanical (~40 buttons, ~20 fields); the cost is
-  `claude.md` hard rule 5, which wants every state in the screenshot harness, and `AppButton` is
-  4 tiers × 3 sizes × 9 states. **`AppTextField` is where finding 4 gets closed** — the add-product
-  form's picker — and where the two incompatible field implementations become one: bare `TextField`
-  in the migrated tree, and `PillInput` on sign-in, which draws its own well, its own label, and its
-  own focus glow while reading nothing from the theme.
+- **The design system, step 3, second half: `AppTextField` and `AppSelect`** — the other half of
+  the current chunk, and the one that closes **finding 4**, the add-product form's category picker.
+  It is where the two incompatible field implementations become one: bare `TextField` in the
+  migrated tree, and `PillInput` on sign-in, which draws its own well, its own label, and its own
+  focus glow while reading nothing from the theme. Roughly twenty call sites. `AppSelect` has
+  nothing to replace and `DESIGN-AUDIT.md` §6 says to drop it from §5.1 or re-scope it to the
+  `ChoiceChip` group pattern actually in use — **that is a question for the product owner before
+  this chunk starts, not a thing to decide inside it.**
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the
@@ -2821,8 +2949,8 @@ listed by area under "Repository state", because "all of them are in the island"
 was false and a count is the only thing that stops it being said again.
 
 **`theme.dart` has left the island outright.** The redesign's step 1 landed on 2026-08-11 and
-registers the token layer there, and step 2 makes it the ripple substrate; commit `1b2b13b` had
-already rewritten it into the `ColorScheme` every screen reads. It is now analysed with every chunk
+registers the token layer there, and **step 2 landed the same day and made it the ripple
+substrate**; commit `1b2b13b` had already rewritten it into the `ColorScheme` every screen reads. It is now analysed with every chunk
 that touches it — `flutter analyze` over `lib/theme.dart`, `lib/ui` and the tests beside them
 reports **no issues** — and `lib/ui/` is held to the same standard.
 
