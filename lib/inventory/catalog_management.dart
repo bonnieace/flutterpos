@@ -626,19 +626,16 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     if (category != null && category.id != product.categoryId) {
       nextCategoryId = category.id;
       nextCategoryName = category.name;
-      // The grouping being left may be off this page, in which case its ID is
-      // the only name there is for it. Stating the ID beats stating nothing.
-      var previousCategory = product.categoryId;
-      for (final candidate in categories) {
-        if (candidate.id == product.categoryId) {
-          previousCategory = candidate.name;
-          break;
-        }
-      }
       changes.add(
         TenantProductFieldChange._(
           field: TenantProductField.categoryId,
-          previous: previousCategory,
+          // The grouping being left may be off this page, and its document ID
+          // is not a name for it - see [tenantCategoryPhrase], which is the one
+          // place this app decides what to call a category it cannot name.
+          previous: tenantCategoryPhrase(
+            product.categoryId,
+            names: tenantCategoryNames(categories),
+          ),
           next: nextCategoryName,
         ),
       );

@@ -153,6 +153,41 @@ void main() {
     });
   });
 
+  group('naming a category', () {
+    test('a category this surface read is named, and one it did not is not', () {
+      final names = tenantCategoryNames(<TenantCategory>[
+        TenantCategory.fromSnapshot(_categorySnapshot('tenant-a', 'drinks')),
+      ]);
+
+      expect(names, <String, String>{'drinks': 'Drinks'});
+      expect(tenantCategoryLabel('drinks', names: names), 'Drinks');
+      expect(tenantCategoryPhrase('drinks', names: names), 'Drinks');
+      // Two causes arrive here and neither is distinguishable from the other
+      // without reading the document: a business holding more categories than
+      // one page shows, and a product filed under a category that cannot be
+      // read at all. The ID answers neither question, and is not a name.
+      expect(
+        tenantCategoryLabel('cat-not-cached', names: names),
+        unlistedTenantCategoryLabel,
+      );
+      expect(
+        tenantCategoryPhrase('cat-not-cached', names: names),
+        unlistedTenantCategoryPhrase,
+      );
+      for (final wording in <String>[
+        unlistedTenantCategoryLabel,
+        unlistedTenantCategoryPhrase,
+      ]) {
+        expect(wording, isNot(contains('cat-not-cached')));
+      }
+      // Two wordings for one answer, because only one of them can be read in
+      // each place: "filed under Category not listed here" is not a sentence
+      // anybody wrote, and a list row does not open in lower case.
+      expect(unlistedTenantCategoryLabel, startsWith('Category'));
+      expect(unlistedTenantCategoryPhrase, startsWith('a category'));
+    });
+  });
+
   group('tenant collection pagination', () {
     test(
       'derives the path, bounds pages, and advances a stable cursor',
@@ -256,6 +291,49 @@ void main() {
       expect(find.text('Catalog changes'), findsNothing);
       expect(find.textContaining('Catalog changes'), findsOneWidget);
       expect(find.text('Add product'), findsNothing);
+    });
+
+    testWidgets('a product names its category, never the ID it is filed under', (
+      tester,
+    ) async {
+      final reader = _CatalogReader(
+        handler: (query) async => query.collectionPath.endsWith('/categories')
+            ? [_categorySnapshot('tenant-a', 'drinks')]
+            : [
+                _productSnapshot('tenant-a', 'product-a'),
+                _productSnapshot(
+                  'tenant-a',
+                  'product-b',
+                  data: _productData()
+                    ..['name'] = 'Charcoal 2kg'
+                    ..['categoryId'] = 'cat-not-cached',
+                ),
+              ],
+      );
+
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(uid: 'user-a', membership: _membership('tenant-a')),
+          reader: reader,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('Drinks • SKU LAGER-001'), findsOneWidget);
+      expect(
+        find.textContaining('$unlistedTenantCategoryLabel • SKU LAGER-001'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widgetList<Text>(find.byType(Text))
+            .map((text) => text.data)
+            .nonNulls
+            .where(RegExp(r'cat-|ct_').hasMatch),
+        isEmpty,
+      );
     });
 
     testWidgets('missing and wrong-role sessions never start a query', (

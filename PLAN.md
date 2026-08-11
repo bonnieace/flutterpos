@@ -4,13 +4,16 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-11**, the session that built the design
-system's token layer. Claims in this file are checked against source, not inherited from
-the log; corrections are noted where they were made. **The eighth session of 2026-08-08
+Last verified against the code on **2026-08-11**, the session that stopped four catalog
+surfaces from showing a category document ID. Claims in this file are checked against source,
+not inherited from the log; corrections are noted where they were made — **and this file's own
+description of that defect was one of the things checked and found wrong**, see "Found by using
+the app", finding 5. **The eighth session of 2026-08-08
 verified them against the running app on Android rather than only against source**, which
 is a different kind of check and the first of its kind since 2026-08-04. **The ninth fixed
-the first two defects that run found and the tenth fixed the third**, and neither looked at
-the app — see the note under "Found by using the app".
+the first two defects that run found, the tenth fixed the third, and the second session of
+2026-08-11 fixed the fifth**, and none of them looked at the app — see the note under "Found by
+using the app".
 
 **Two things happened between that day and this one that `HISTORY.md` does not record at
 all**, and they are named here so nobody concludes the work did not happen. `grep` over the
@@ -90,7 +93,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
 | **Design system** | ~8% | `design.md` v0.3 is the specification, `DESIGN-AUDIT.md` audits it against the code, and **step 1 of its twelve is done**: `lib/ui/tokens.dart` holds every colour, type, spacing, radius, motion and density token, `spiritTheme` registers it, and **nothing reads it**. Steps 2–12 move pixels; the ripple kill is next. The specification, the audit and the harness are all untracked. |
-| **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **three of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
+| **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -129,6 +132,18 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The second session of 2026-08-11 changed no board row's colour either, and this sentence is here
+so that is stated rather than left silent.** It closed finding 5 — no catalog surface states a
+category document ID to a person any more — which is a **defect repair inside rows that were
+already green**, so there was no colour to move, and it changed **no row's text**, because no row
+ever claimed anything about how a category is named. It touched no rule and no `functions/` file:
+`git diff` over `firestore.rules`, `functions/` and `rules-tests/` prints **zero lines**, which is
+why the four non-Flutter baselines below are carried rather than re-measured. It changed **no
+rollout step**, and it moved none of the 101 screenshots — see the standing decision for why that
+proves nothing about the repair. **What it corrected in this file is, again, a claim this file
+itself made**: the queued chunk said the read-only catalog resolved category names correctly and
+that only two surfaces did not. Both are false; the retraction is inline at finding 5.
 
 **The 2026-08-11 token-layer session changed no board row at all — not a colour and not a word of
 one — and this sentence is here so that is stated rather than left silent.** It is the first chunk
@@ -174,12 +189,12 @@ carried rather than re-measured.
 
 Six defects, all at the edges, none blocking, **recorded rather than fixed by the run itself** —
 a behavioural session that starts repairing becomes an unbounded one. They were queued as chunks
-below; **the first two were taken and closed by the session after it, and the third by the
-session after that.** Three remain, and **they are no longer two chunks plus an environment
-limitation** — the pair was split on 2026-08-11 when the design system was scoped. Finding 5 is a
-queued chunk of its own; finding 4's repair is absorbed into the redesign's step 3, because that
-step rewrites the form it lives on; finding 6 is an environment limitation rather than a product
-defect.
+below; **the first two were taken and closed by the session after it, the third by the
+session after that, and the fifth on 2026-08-11.** Two remain and **neither is a queued chunk**:
+finding 4's repair is absorbed into the redesign's step 3, because that step rewrites the form it
+lives on, and finding 6 is an environment limitation rather than a product defect. **So the
+device run's findings have run out as chunks**, which matters for what comes next — see the
+current chunk.
 
 1. ~~**The login screen prints a raw platform-channel name when the password is empty.**~~
    **Closed 2026-08-08.** Verbatim, as reported:
@@ -211,10 +226,18 @@ defect.
    and `AppTextField` plus the 720px content width in `design.md` §4.2 rewrite that form, so it is
    recorded against the redesign's step 3 rather than built twice. The defect has not stopped
    mattering; only its queue position changed.
-5. **A category ID reaches the eye in two surfaces.** The import preview says "filed under
-   `cat-bakery`" to someone who typed `Bakery`, and "Manage catalog" shows `cat-not-cached` for
-   a product whose category document is missing. The read-only catalog resolves names correctly
-   in the same situation, so the resolution exists and these two do not use it.
+5. ~~**A category ID reaches the eye in two surfaces.**~~ **Closed 2026-08-11.** The import
+   preview said "filed under `cat-bakery`" to someone who typed `Bakery`, and "Manage catalog"
+   showed `cat-not-cached` for a product whose category document is missing. **Two corrections to
+   the diagnosis, and the second decided the shape of the fix:** ~~the read-only catalog resolves
+   names correctly in the same situation, so the resolution exists and these two do not use it~~
+   — **retracted.** The read-only catalog held the identical `?? product.categoryId` fallback and
+   looked right only because nothing filed off its categories page was ever rendered through it.
+   And **eight places named a category, seven of them reachable, and every one could state an
+   ID** — six through a `?? id` fallback and two by printing it outright — through **five**
+   copies of the same lookup. The resolution that did get it right is in reporting —
+   `SalesTotalsCategoryOptions.nameOf` with `?? 'one category'` — in another area, with another
+   degrade policy. See the standing decision below for what replaced all five.
 6. **Staff invitation email cannot be delivered against the local emulators**
    (`EmailProviderError`, `safeCode: 'credential_link_unavailable'`, placeholder Brevo key).
    With finding 3 this means **a newly invited identity cannot finish onboarding on the
@@ -224,13 +247,15 @@ defect.
    identity that hits `versioned_proof_required` is precisely the one whose invitation email
    never arrives.
 
-**Neither repair chunk looked at the app, and that is worth stating because "nobody looked at
-it" is exactly how the defect survived two years of widget tests.** Both chunks' own shapes
+**No repair chunk has looked at the app, and that is worth stating because "nobody looked at
+it" is exactly how these defects survived two years of widget tests.** Each chunk's own shape
 asked for one device pass afterwards; the session instruction said to skip the Android build and
-the Android emulator, and the instruction won twice. So the sign-in repair is covered by 32
-tests — including the `dev.flutter.pigeon` assertion that would have caught the original — and
-the invitation repair by 19, and **no person has seen either**. The debt is now two chunks deep
-and both are queued below against the next device run, sign-in first.
+the Android emulator, and the instruction has now won three times. So the sign-in repair is
+covered by 32 tests — including the `dev.flutter.pigeon` assertion that would have caught the
+original — the invitation repair by 19, and the category repair by 7 including two that assert
+over **every** rendered string rather than over the slot that was wrong, and **no person has seen
+any of them**. The debt is three chunks deep and all three are queued below against the next
+device run, sign-in first.
 
 **One thing the run could not prove, stated because it would otherwise look proved.** The
 manager membership used for the profit role-boundary check was activated by a scratchpad Admin
@@ -366,24 +391,35 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1586** ⚠️ see below |
-| Functions | `npm --prefix functions test` | **409** |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⚠️ one flaky test, see below |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1593** ⚠️ see below |
+| Functions | `npm --prefix functions test` | **409** ⚠️ carried, see below |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ⚠️ carried |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ⚠️ carried |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⚠️ carried; one flaky test, see below |
 
-**2189 tests across five suites** — and there is a sixth figure that is deliberately not in
+**2196 tests across five suites** — and there is a sixth figure that is deliberately not in
 this table: `flutter test --no-pub --concurrency=1 tool/screenshots` runs **78 captures**
 writing 101 images, and it asserts nothing, which is why it is not counted here.
+
+⚠️ **The four non-Flutter figures were carried rather than measured on 2026-08-11's second
+session, and that is a decision rather than a lapse.** That chunk changed ten Dart files and
+nothing else; `git diff` over `firestore.rules`, `functions/` and `rules-tests/` prints **zero
+lines**, which this file already calls a stronger measurement than an unchanged suite count, and
+no suite among the four can observe a Dart string. The precedent is the Android device session,
+which carried all five. **Re-measure them in any chunk that touches JavaScript, TypeScript, or a
+rule** — and a chunk that carries them must say so, which is what these marks do.
 
 ⚠️ **The Flutter figure is measured against a working tree that is not this commit, and the
 difference is eight tests.** The 2026-08-11 token-layer session found the tree already at
 **1532** before it edited anything, because another session's unstaged edits to
-`test/checkout/`, `test/inventory/` and `test/tenancy/` are still in it. So that chunk
+`test/checkout/`, `test/inventory/` and `test/tenancy/` are still in it. That chunk
 measured the suite **before its own work as well as after**: 1532 → **1586**, the 54 being
-`test/ui/tokens_test.dart`. **A clean checkout of the commit is 1578** — 1524 plus 54 — and
-the two figures reconcile only once the eight unstaged tests are accounted for. Whoever
-commits those eight makes 1586 the honest baseline; until then this row is a measurement of a
+`test/ui/tokens_test.dart`; the category-naming chunk later the same day took it **1586 →
+1593** (7 new: 2 in `tenant_catalog_test.dart`, 2 in `bulk_catalog_test.dart`, 1 each in
+`catalog_management_test.dart`, `catalog_management_panel_test.dart`, and
+`bulk_catalog_panel_test.dart`). **A clean checkout of the commit is 1585** — 1524 plus 54 plus
+7 — and the two figures reconcile only once the eight unstaged tests are accounted for. Whoever
+commits those eight makes 1593 the honest baseline; until then this row is a measurement of a
 tree, not of a commit, and says so.
 
 **All five were measured again in the invitation-refusal session on 2026-08-08**, which took
@@ -462,9 +498,9 @@ against the frozen tree, then **1358** once the product-cost chunk added eleven,
 **1392** once the product-edit chunk added 34, then **1447** once the bulk surface added 55,
 then **1473** once the profit display added 26, **1473** again in the password-reset session,
 which added no Dart, **1505** once the sign-in chunk added 32, and **1524** once the
-invitation-refusal chunk added 19. **Then twice on 2026-08-11 against a tree carrying another
-session's eight unstaged tests: 1532 before the token layer and 1586 after it.** One failure in
-twenty runs, and the last nineteen green.
+invitation-refusal chunk added 19. **Then three times on 2026-08-11 against a tree carrying
+another session's eight unstaged tests: 1532 before the token layer, 1586 after it, and 1593
+after the category-naming repair.** One failure in twenty-one runs, and the last twenty green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -506,11 +542,13 @@ than corrected: `updateProduct` made them **24** callables and **47** exports on
 2026-08-07, `updateProducts` made them **25** and **48** on 2026-08-08, and
 `importProducts` made them **26** and **49** the same day. **Nothing since has moved either
 count** — not the bulk surface, not the profit display, not the password-reset integration test,
-not the Android device run, not the sign-in repair, and not the invitation-refusal repair —
+not the Android device run, not the sign-in repair, not the invitation-refusal repair, not the
+token layer, and not the category-naming repair —
 which is what a client chunk should do: the bulk surface reached two callables that already
 existed, the profit display showed a figure two of them already returned, the sign-in repair
-calls no callable at all, and the invitation repair only started reading an error two existing
-callables were already returning. The figures above
+calls no callable at all, the invitation repair only started reading an error two existing
+callables were already returning, and the category repair only changed how an answer two of them
+already gave is worded. The figures above
 are what that split fixed, not what is true now; the current numbers are in "Public callable
 interfaces" and "Full export surface" below.
 
@@ -1389,6 +1427,69 @@ value `design.md` does not define.** `claude.md` says the correct outcome there 
    forbids. If one is ever decided it arrives as a second `AppColorRoles` instance and every widget
    that reads a role follows it without being edited, which is the reason the role layer exists.
 
+### A category is named, and a document ID is not a name
+
+Built 2026-08-11, closing finding 5. It changed `firestore.rules` not at all and nothing in
+`functions/` or `rules-tests/` either — `git diff` over all three prints **zero lines**. It moved
+no board row, because a defect repair inside rows that were already green has no colour to move.
+
+**The queued chunk's premise was wrong twice and checking it decided the work.** This file said
+the defect sat in two surfaces and that the read-only catalog already resolved names correctly.
+It held the identical `?? product.categoryId` fallback; it looked right on the device only
+because nothing filed off its categories page was ever rendered through it. Counted against
+source, **eight places named a category and every one of them could state an ID** — the
+read-only catalog list, the "Manage catalog" list and its "Filed under" line, the "Correct"
+dialog's off-page sentence, the correction confirmation's "Category: was …", the bulk selection
+list, the bulk correction report, and the import preview. Six reached the ID through a `?? id`
+fallback and two printed it outright; between them they held **five** copies of the lookup, and
+only the "Filed under" line was unreachable.
+
+**The rule is one sentence, and everything else follows from it:**
+
+> **A document ID is not a worse name for a category. It is not a name.**
+
+The guarantees are settled, not open:
+
+1. **One resolution, in the file that defines what a category is.** `tenantCategoryNames`,
+   `tenantCategoryLabel` and `tenantCategoryPhrase` live in `lib/tenancy/tenant_catalog.dart`
+   beside `TenantCategory`, which every one of those surfaces already imports. Modelled on
+   `tenantStaffLabel`, and the doc comment records where the two deliberately disagree: a staff
+   label **keeps the UID visible** beside a resolved name, because a UID is what every sale,
+   shift and audit record is attributed by. Nothing a person sees refers to a category by its ID.
+2. **The unlisted state stays legible rather than blank.** `cat-not-cached` is not bad data — it
+   is a product filed under a category the surface cannot read — so it reads **"Category not
+   listed here"**. Two causes arrive there and the client cannot tell them apart: a business with
+   more categories than one bounded page, and a category document that cannot be read at all. The
+   wording says only what is known and claims neither.
+3. **Two wordings for one answer, and the split is grammar.** `tenantCategoryLabel` opens a line;
+   `tenantCategoryPhrase` sits inside one, because "filed under Category not listed here" is not
+   a sentence anybody wrote. Both are asserted, so they cannot quietly become one.
+4. **The import preview names what the sheet said, in three descending degrees of certainty**:
+   the categories this surface read, then the row's own `categoryName` — a true name, because the
+   server matched it against a real category to accept the row — then the unlisted phrase. **The
+   ID is not a third degree.** The row's own name is second because the server's fold is
+   case-insensitive, so what was typed can differ in case from what is stored.
+5. **The import's wording is held with its plan.** `_importCategoryNames` is captured with the
+   preview and cleared with it, because a commit re-sends the pages the preview sent and must word
+   them identically while the route re-reads its categories between the two. A bulk correction
+   needs no equivalent: its rows carry the wording they were planned with.
+6. **A recorded decision was reversed on purpose.** "Stating the ID beats stating nothing" was a
+   comment in two modules and the reason on a test. All three now say the opposite, per
+   `design.md` §8 rule 1 — name things the way the shopkeeper does, never the way the system does.
+7. **Reporting was left alone.** `SalesTotalsCategoryOptions.nameOf` with `?? 'one category'` is
+   correct for a filter label, where naming an unlisted category is noise about something the
+   reader did not ask about. Six resolution paths became two, and the second is that one.
+8. **No behaviour changed.** No repository call, no state logic, no routing condition, no payload.
+   Two functions gained a named parameter; every wire payload in the diff is byte-identical.
+
+**The 101 screenshots moved not one byte, and that is evidence about the rest of the app rather
+than about this repair.** `tool/screenshots/fakes.dart` files every seeded product under one of
+its three seeded categories, so no capture reaches the branch this chunk changed and the four
+that render a category *could not* move. The repair is covered by the seven tests, two of which
+assert over **every `Text` in the tree** — `cat-` and `ct_`, the seeded shape and the shape
+`buildCategoryIntent` derives — rather than over the slot that was wrong, because the two
+defective surfaces were exactly the two nobody was looking at.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -2256,6 +2357,11 @@ enormous expected-denial traces.
   step 4 depends on this**: regenerate a baseline the same day, or a review sees dozens of
   moved images nobody touched. The way to attribute a change is to regenerate with it and
   again without it and hash both sets, which is how step 1 proved it moved nothing.
+  **Confirmed from the other side later the same day**: the category-naming chunk regenerated
+  against a baseline generated hours earlier and **all 101 hashed identical**, so the date drift
+  really is the whole of the 39. Copy the set to the scratchpad before regenerating — those
+  images are another session's untracked files — and hash the copy afterwards rather than
+  trusting that nothing moved.
 - **A `ThemeExtension` field named `type` breaks the extension silently.**
   `ThemeExtension` declares `Object get type` and `ThemeData.extensions` is keyed by it, so
   a field of that name makes `Theme.of(context).extension<T>()` answer `null` for ever while
@@ -2397,66 +2503,58 @@ all of it is committed is the product owner's.**
 
 ## Next bounded chunk
 
-**Stop showing a category ID to a person.** Finding 5 from the Android run, and nothing else. It
-is the surviving half of what used to be one chunk with finding 4, and it is queued **above** the
-redesign's step 2 deliberately: it is a defect a person met in the running app, and a redesign step
-is not.
+**Find out what a Windows build can actually attest with under App Check.** It is the only queued
+item that would move a red row, it has been passed over three times, and **the reason it was
+outranked has now run out**: the device findings ahead of it are closed or absorbed. This file
+said in as many words that when they ran out it was next and must not be passed over a fourth
+time without a reason better than ordering. It is next.
 
-**The two places, to be re-checked against source before anything is written:**
+**It is a research chunk that ends in a decision, and the decision is the product owner's.** What
+this chunk owes is the evidence to make it with, not the choice:
 
-- **The import preview says "filed under `cat-bakery`"** to somebody who typed `Bakery`. What they
-  typed is the row's own category name and it is already in the parsed row.
-- **"Manage catalog" shows `cat-not-cached`** for a product whose category document is missing,
-  where the read-only catalog gets the same case right.
+- **What a Windows build can attest with today.** The three built-in providers are Play Integrity,
+  App Attest/DeviceCheck, and reCAPTCHA Enterprise. `firebase_app_check` lists Windows among its
+  supported platforms as of 0.4.6, which is *plugin* support and is not the same thing. Establish
+  whether that resolves to anything but the debug provider, which is not a production answer.
+  **Do not restate the "structurally unreachable" claim in either direction without checking it.**
+- **What the console now holds.** The product owner opened App Check there on 2026-08-07. Nothing
+  in the client sends a token, so enforcement must stay off for Firestore, Auth, Functions and
+  Storage; confirm that is still true rather than assuming it.
+- **The registration mismatch.** `DefaultFirebaseOptions.windows` carries a `1:…:web:…` app ID
+  because Firebase has no native Windows app type, so whatever Windows attests with is attesting
+  against a web app registration. Reconcile that with the console's per-app provider settings.
+- **End with the three options costed**, not chosen: ship reset on Apple/Android/web only, build
+  the custom Windows provider, or relax the endpoint under different rate limiting. The open
+  decision above already records that the exposure is **abuse volume against a shared Brevo sender
+  domain**, not enumeration; correct that too if the check says otherwise.
 
-**The shape of it, so nothing widens:**
+**The shape of it, so nothing widens:** it may add a dependency and it may write documentation,
+and it **must not** build the in-app reset surface, initialize App Check in `lib/main.dart`, or
+turn on enforcement anywhere. Those follow the decision; this chunk produces it.
 
-- **Find the existing resolution first and reuse it.** Three copies of "look up a category name"
-  is how the third one drifts, so this chunk should end with **fewer** name-resolution paths than
-  it started with.
-- **A missing category document is a real state and must stay legible.** `cat-not-cached` is not
-  bad data — it is a product filed under a category nothing can read — so the replacement wording
-  has to say that rather than hide it behind a blank.
-- Cover both with a widget test, including one asserting that **no rendered string carries the
-  `cat-` document-ID shape**.
+**Explicitly excluded from it:** the in-app password-reset surface itself, which is what the
+decision gates; every server file and `firestore.rules` — `requestPasswordReset`'s
+`enforceAppCheck: true` is not to be removed to test a pipeline, for the three reasons under the
+open decision; **every token in `lib/ui/tokens.dart`** and every redesign step; deployment; and
+every standing exclusion listed below.
 
-**Explicitly excluded from it:** every server file — none of this is a server defect, and
-`importProducts` echoing an ID is correct because an ID is what it wrote; `firestore.rules`;
-category rename and delete, which stay excluded for the orphaning reason; creating a category from
-the import preview, which the import decision deliberately refuses; **every token in
-`lib/ui/tokens.dart`**, because a wording repair is not the step that starts reading them and a
-half-migrated surface is worse than an unmigrated one; finding 6, an environment limitation rather
-than a product defect; deployment; and every standing exclusion listed below.
+**What was queued here before it: stopping a category ID reaching a person, and it is done.**
+Finding 5 is closed and the queued description of it was wrong twice over — the read-only catalog
+had the same defect, and four surfaces could state an ID rather than two. See the standing
+decision above for the one resolution that replaced six.
 
-**What was queued here before it: the token layer, and it is done.** Step 1 of `design.md` §11 is
-built, additively, and it moved none of the 101 screenshots — see the standing decision above for
-the density structure it had to settle, the two corrections it made to `design.md`, and the three
-questions it recorded rather than answered. **One of those three is a product-owner question that
-step 4 will need**: §2.1's container borders measure 1.38 to 2.04 against the page where §9 makes
-3:1 pass/fail for a UI boundary.
-
-**Three things the last three chunks owe, and the debt is now a device run.** Nobody has looked at
-the sign-in repair, nobody has looked at the invitation repair, and **nobody has looked at commit
-`1b2b13b`**, which repainted every screen in the app by wiring a `ColorScheme` the theme had named
-and never used. Between them that is 51 tests, 101 screenshots, and no eyes. **Whenever the next
-device run happens, those come first** — for sign-in, an empty password, a wrong password, then
-editing a field; for the invitation, the refusal an identity that was unverified at invite time
-receives; for the theme, any screen with a button, a spinner or an icon on it. The invitation one
-**cannot be reproduced on the emulators at all** (finding 6): it needs either a real Brevo key or
-an invitation written by hand with `visibleAcceptanceAllowed: false`. That is a prerequisite
-attached to the next device session, not a chunk of its own.
-
-**The alternative, named because it is the only queued item that would move a red row:**
-resolving what a **Windows** build can actually attest with under App Check. `PLAN.md` already
-refuses to restate the "structurally unreachable" claim without checking, `firebase_app_check`
-lists Windows among its supported platforms as of 0.4.6, and the Windows app is registered as a
-*web* app in `lib/firebase_options.dart`. That is a research chunk with a decision at the end of
-it, and it is the thing standing between a shop and in-app password recovery. **It has now been
-passed over three times running**, which is worth saying out loud: it is not blocked, it is
-outranked. The three device findings ahead of it are all defects a person already met in the
-running app, and this one ends in a decision only the product owner can make. When the findings
-run out it is next, and it should not be passed over a fourth time without a reason better than
-ordering.
+**Three things the last four chunks owe, and the debt is a device run.** Nobody has looked at
+the sign-in repair, nobody has looked at the invitation repair, nobody has looked at the category
+repair, and **nobody has looked at commit `1b2b13b`**, which repainted every screen in the app by
+wiring a `ColorScheme` the theme had named and never used. Between them that is 58 tests, 101
+screenshots, and no eyes. **Whenever the next device run happens, those come first** — for
+sign-in, an empty password, a wrong password, then editing a field; for the invitation, the
+refusal an identity that was unverified at invite time receives; for the category wording, the
+seeded product filed under `cat-not-cached` in "Manage catalog" and an import preview of a sheet
+naming `Bakery`; for the theme, any screen with a button, a spinner or an icon on it. The
+invitation one **cannot be reproduced on the emulators at all** (finding 6): it needs either a
+real Brevo key or an invitation written by hand with `visibleAcceptanceAllowed: false`. That is a
+prerequisite attached to the next device session, not a chunk of its own.
 
 **One exclusion named because it has been inherited for many consecutive chunks: the printed
 receipt body.** Still correctly excluded and it has not become blocking — a sale is recorded,
@@ -2476,14 +2574,21 @@ finished.
   it decided — additive rather than conforming, and a density as a nested `Theme` — is recorded in
   its own standing decision above, together with the two corrections it made to `design.md` and the
   three questions it refused to answer by inventing a value.
+- **~~Stop showing a category ID to a person~~** — **done 2026-08-11**, closing finding 5. It
+  moved no board row and no rollout step, and it moved none of the 101 screenshots either — for a
+  reason that is recorded rather than celebrated: the harness files every seeded product under a
+  category it reads, so no capture reaches the branch that changed. What it decided — one
+  resolution replacing six, two wordings of one answer, and an import preview that names what the
+  sheet said in three descending degrees of certainty — is in its own standing decision above,
+  together with the two corrections it made to this file's description of the defect.
 - **Harden the two platform-CLI helpers against a Node warning** — small, and it protects every
   future session's reading of the invitation suite. `runPlatformGrantCli` and its revoke twin parse
   a spawned CLI's **stderr** as JSON, so any `(node:<pid>)` warning fails the test with a
   `SyntaxError` that names nothing about the CLI. Strip warning lines before parsing, or spawn with
   `NODE_NO_WARNINGS=1`, and **capture what the warning actually was** while doing it — nobody has
   seen it yet. Touches `rules-tests/test/` only: no product code, no rule, no `functions/` file. It
-  is queued below the two defect chunks because it costs a session nothing to re-run a flake and
-  costs a person real confusion to meet a category ID.
+  is queued below the App Check research because it costs a session nothing to re-run a flake and
+  the research chunk is the one holding a red row shut.
 - **The design system, step 2: remove every ink ripple** — `design.md` §2.4, and one file.
   `splashFactory: NoSplash.splashFactory` on `ThemeData` plus `overlayColor` `WidgetStateProperty`s
   on the four button themes, implementing §2.1's 8% / 12% overlay rows. Verified against the SDK:
@@ -2568,8 +2673,10 @@ finished.
   mapping — is recorded in its own standing decision above. **It owes the same thing sign-in
   does: nobody has looked at it.**
 - **~~The add-product form's category picker, and the two surfaces that show a category ID~~** —
-  **promoted out of this list into the current chunk.** Findings 4 and 5, together because both
-  are about a category being named by its ID where a person expects its name.
+  **split, and the second half is done.** Finding 5 closed on 2026-08-11; finding 4's repair is
+  the add-product form's layout and belongs to the redesign's step 3, which rewrites that form.
+  The pair was queued together because both are about a category being named the wrong way, and
+  they came apart because only one of them is wording.
 - **A fixture chunk that reaches the last three lines of `deliverPasswordReset`** — the
   keyring parsed out of its secret, the Brevo provider constructed out of its secrets, and the
   `getFirestore()`/`getAuth()` defaults. Small, and deliberately not folded into the test

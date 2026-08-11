@@ -514,6 +514,22 @@ void main() {
       expect(intent.categoryName, 'Drinks');
     });
 
+    test('the category being left is named, and never by its ID', () {
+      expect(
+        _updateIntent(categoryId: 'cat-drinks').changes.single.toString(),
+        'Category: was Bakery, now Drinks',
+      );
+      // The grouping being left may sit past this page, where its document ID is
+      // the only thing this surface holds - and an ID is not a name for it.
+      final offPage = _updateIntent(
+        storedCategoryId: 'cat-elsewhere',
+        categoryId: 'cat-drinks',
+      ).changes.single.toString();
+
+      expect(offPage, 'Category: was $unlistedTenantCategoryPhrase, now Drinks');
+      expect(offPage, isNot(contains('cat-elsewhere')));
+    });
+
     test('a correction that changes nothing is refused before it is sent', () {
       // The server refuses this as a caller defect, and reaching it would put an
       // idempotency record and a round trip behind a request that does nothing.

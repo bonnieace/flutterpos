@@ -18407,3 +18407,227 @@ lib/ui/records.dart                              (untracked; `lib/ui/tokens.dart
                                                   is not)
 tool/screenshots/ (7 files) screenshots/ (102)   (untracked; regenerated, not staged)
 ```
+
+---
+
+## A category is named, and never shown as a document ID - 2026-08-11
+
+### Completed in this session
+
+**Finding 5 from the 2026-08-08 Android run, closed.** No catalog surface states a category
+document ID to a person any more. The two the device run named were the import preview, which
+told somebody who had typed `Bakery` that their product was "filed under `cat-bakery`", and
+"Manage catalog", which listed Charcoal 2kg under `cat-not-cached` because the seed files it
+under a category document that does not exist.
+
+It changed `firestore.rules` not at all and nothing in `functions/` either - `git diff` over
+both, and over `rules-tests/`, prints **zero lines**. It moved no board row: a defect repair
+inside rows that were already green has no colour to move.
+
+### The queued chunk's premise was wrong twice, and checking it was the finding
+
+`PLAN.md` queued this as two surfaces and attached a shape: "Find the existing resolution first
+and reuse it. Three copies of 'look up a category name' is how the third one drifts." Both
+halves of the premise are false against source, and the second one changed the work.
+
+1. **The read-only catalog had the identical fallback.** `tenant_catalog.dart:346` read
+   `categoryNames[product.categoryId] ?? product.categoryId`, which is character for character
+   what the two named surfaces read. It looked correct on the device because every product seen
+   through it was filed under a category that page had read. So it was not a surface that got it
+   right; it was a surface the defect had not been triggered on.
+2. **The resolution that does exist is in reporting, and it is not this one.**
+   `SalesTotalsCategoryOptions.nameOf` answers `String?`, and `sales_totals_panel.dart:437`
+   words the null case as `'one category'` under a comment reading "an ID with no name is not
+   shown as a label of its own". That is the precedent and the right instinct, in a different
+   area, with a different and also-correct degrade policy: it drops the label rather than naming
+   an unnameable category.
+3. **Eight places name a category, seven of them reachable, and every one of them could state an
+   ID** - six through a `?? id` fallback and two by printing it outright - through **five**
+   copies of the same lookup. Counted before anything was written:
+
+| Where | What it did | Reached by |
+| --- | --- | --- |
+| Read-only catalog list | `?? id` | a product filed off the categories page |
+| "Manage catalog" list | `?? id` | **finding 5's second half** - `cat-not-cached` |
+| "Manage catalog" → "Filed under X." | `?? id` | unreachable: the ID comes from the chip row |
+| "Correct" dialog, category-off sentence | the ID, always | any product filed off the page |
+| The correction confirmation, "Category: was ..." | its own inline loop, `?? id` | moving a product out of a category filed off the page |
+| Bulk selection list | `?? id` | a product filed off the categories page |
+| Bulk correction report, "was → now" | `?? id` | the same |
+| Import preview, "filed under ..." | the ID, always | **finding 5's first half** |
+
+### One answer, and two wordings of it
+
+`tenantCategoryNames`, `tenantCategoryLabel` and `tenantCategoryPhrase` sit in
+`lib/tenancy/tenant_catalog.dart` beside `TenantCategory`, which is the file that defines what a
+category is and the file every one of those surfaces already imports. Modelled on
+`tenantStaffLabel` in `tenant_staff_names.dart`, which is the same problem for a different
+identity - and the doc comment records where the two deliberately disagree: **a staff label keeps
+the UID visible even beside a resolved name**, because a UID is what every sale, shift and audit
+record is attributed by and a person reading a history needs it. Nothing a person ever sees
+refers to a category by its ID.
+
+The guarantees are settled, not open:
+
+1. **A document ID is not a name and is never shown as one.** Five copies of the lookup answered
+   eight places and every one of them could print the ID; there is now one resolution, and the ID
+   has no path to a screen from any catalog surface. Two widget tests assert it over **every `Text` in the tree** rather than over
+   the slot that was wrong, matching `cat-` and `ct_` - the seeded shape and the shape
+   `buildCategoryIntent` derives - because the two defective surfaces were precisely the two
+   nobody was looking at.
+2. **The unlisted state stays legible rather than being hidden.** `cat-not-cached` was not bad
+   data: it is a product filed under a category this surface cannot read, and a blank would have
+   deleted the fact. It reads **"Category not listed here"**, which is true of both causes and
+   claims neither. The two causes are indistinguishable from the client - a business holding more
+   categories than one bounded page, and a category document that cannot be read at all - so the
+   wording says only what is known.
+3. **The import preview names what the sheet said, in three descending degrees of certainty.**
+   The categories this surface read first, because they are the list every other catalog surface
+   names a category from; then the row's own `categoryName`, which is a true name because the
+   server matched it against a real category in order to accept the row at all; then the unlisted
+   phrase. **The document ID is not a third degree - it is not shown at all.** The row's own name
+   is second rather than first because the fold is case-insensitive, so what somebody typed can
+   differ in case from what is stored.
+4. **The import's wording is held with its plan.** `_importCategoryNames` is captured when the
+   preview is built and cleared by `_discardPlan` with everything else, because a commit re-sends
+   the pages the preview sent and must word their rows identically, while the route re-reads its
+   categories between the two. A bulk correction needs no equivalent: its rows carry the wording
+   they were planned with, inside the immutable page.
+5. **Two wordings for one answer, and the split is grammar rather than taste.**
+   `tenantCategoryLabel` opens a line - a list row does not begin in lower case - and
+   `tenantCategoryPhrase` sits inside a sentence, because "filed under Category not listed here"
+   is not a sentence anybody wrote. Both are asserted, so a later edit cannot quietly make them
+   one.
+6. **A recorded decision was reversed on purpose.** "Stating the ID beats stating nothing"
+   appeared as a comment in `bulk_catalog.dart` and in `catalog_management.dart`, and as the
+   reason on a test in `bulk_catalog_test.dart`. All three now say the opposite, in the words
+   `design.md` §8 rule 1 asks for: name things the way the shopkeeper does, never the way the
+   system does. The old reading was defensible when a surface had nothing better; what it missed
+   is that the ID is not a worse name, it is not a name.
+7. **Reporting was left alone, deliberately.** `SalesTotalsCategoryOptions.nameOf` is correct and
+   its `'one category'` is right for a filter label, where naming an unlisted category would be
+   noise about something the reader did not ask about. Converting it would have changed a working
+   surface in another area to make one count smaller. Six resolution paths became two, and the
+   second is that one.
+8. **No behaviour changed anywhere.** No repository call, no state logic, no routing condition,
+   no payload. `describeImportOutcomes` gained a named parameter and `_runImport` gained one;
+   every wire payload in the diff is byte-identical, and the panel tests that assert
+   `payloads.last['rows'] == payloads.first['rows']` still pass unchanged.
+
+### Deliberately not done
+
+- **`lib/checkout/checkout_cart_panel.dart` was not touched.** The till resolves categories
+  through the Hive snapshot's `categoryById` and words the unresolved case as an "Other" chip, so
+  it renders no ID and has no defect. It is also another session's unstaged file.
+- **No token from `lib/ui/tokens.dart` was read**, per the chunk's own exclusion: a wording
+  repair is not the step that starts reading them, and a half-migrated surface is worse than an
+  unmigrated one.
+- **Finding 4 was not touched.** The add-product form's missing picker is recorded against the
+  redesign's step 3, which rewrites that form.
+- **No server file, no rule, no `rules-tests` file, no deployment.** `importProducts` echoing the
+  `categoryId` it wrote is correct of the server - the ID is what it wrote - and every repair
+  here is on the reading side.
+- **Category rename and delete stay unoffered**, for the orphaning reason, and the import still
+  refuses to create a category it cannot match.
+
+### Files changed
+
+```text
+lib/tenancy/tenant_catalog.dart              (+45: the naming functions and the two wordings;
+                                              the read-only catalog reads them)
+lib/inventory/catalog_management_panel.dart  (list subtitle, "Filed under", and the
+                                              category-off sentence)
+lib/inventory/catalog_management.dart        (the correction confirmation's previous category;
+                                              its inline loop deleted)
+lib/inventory/bulk_catalog.dart              (the correction report's previous category, and
+                                              the import preview's category)
+lib/inventory/bulk_catalog_panel.dart        (selection subtitle; carries the names into the
+                                              import report and holds them with the plan)
+test/tenancy/tenant_catalog_test.dart        (+2)
+test/inventory/catalog_management_test.dart  (+1)
+test/inventory/catalog_management_panel_test.dart (+1, and a stranded-category reader)
+test/inventory/bulk_catalog_test.dart        (+2)
+test/inventory/bulk_catalog_panel_test.dart  (+1, and a stranded-category reader)
+HISTORY.md
+PLAN.md
+```
+
+### Test commands and results
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1593 passed** (1586 + 7) |
+| Screenshots | `flutter test --no-pub --concurrency=1 tool/screenshots` | **78 captures, 101 images, all 101 byte-for-byte identical to the same-day baseline** |
+| Functions | `npm --prefix functions test` | **409**, carried - see below |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161**, carried |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10**, carried |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23**, carried |
+
+`flutter analyze --no-pub lib/tenancy lib/inventory test/tenancy test/inventory`: **no issues
+found**. The project-wide count is unchanged at **475**, none of them in a file this chunk
+touched.
+
+**The four non-Flutter suites were carried rather than measured, and that is a judgement worth
+stating rather than leaving silent.** This chunk changes five Dart files and five Dart test
+files and nothing else; `git diff` over `firestore.rules`, `functions/` and `rules-tests/`
+prints **zero lines**, which `PLAN.md` already records as a stronger measurement than an
+unchanged suite count, and no suite among the four can observe a Dart string. Re-running three
+emulator suites to re-confirm a number a `git diff` already proves is the kind of slow
+validation the working discipline exists to avoid. The precedent is the Android device session,
+which carried all five. **This is the eleventh consecutive chunk to leave `firestore.rules`
+byte-identical.**
+
+**The screenshot set was regenerated on the same day as its baseline, and it moved nothing.**
+That was expected rather than lucky, and the reason is worth recording because it also bounds
+what the run proves: `tool/screenshots/fakes.dart` seeds three categories and files **every**
+product under one of them, so no capture reaches the branch this chunk changed, and the
+resolved branch answers exactly what it answered before. The four captures that render a
+category - `17-read-only-catalog`, `18-manage-catalog`, `19-correct-a-product`,
+`20-bulk-changes-and-import` - therefore *could not* move. **So the harness is evidence that
+nothing else moved, and it is evidence of nothing about the repair itself**; the repair is
+covered by the seven tests. The baseline was copied to the scratchpad before the run and hashed
+against afterwards, keyed on directory name plus file name per the standing trap, so another
+session's 101 untracked images are byte-identical to what they were.
+
+The Android build and the Android emulator suite were skipped, per the session instruction. So
+this chunk owes the same thing the last three do: **nobody has looked at it.**
+
+### Meaningful failures and their resolutions
+
+**No test failed.** Three analyzer diagnostics on the way, all mechanical and all caught before a
+run: an unused local while `_selected` was being hoisted out of the ternary that needed
+promotion, an unused `_importCategoryNames` before its call sites existed, and a named parameter
+added at a call site before its declaration.
+
+**One thing worth knowing about the hoist.** `catalog_management_panel.dart` renders "Filed under
+X." from a private field, and passing a `String?` field to a `required String` parameter needs
+either a `!` or a local. It is a local, because private-final-field promotion does not apply to a
+mutable field and a `!` on something the analyzer may or may not promote is the kind of line that
+reads differently in two SDK versions.
+
+**The NUL-escape check ran over all ten touched files and every count was zero.** No digest
+separator and no control character in this chunk; the check ran anyway, because it is the only
+thing that has ever caught one of the seven previous occurrences, and this entry was written with
+the editing tools rather than through a shell heredoc for the same reason.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+lib/checkout/checkout_cart_panel.dart            (another session's, unstaged)
+lib/inventory/stock_adjustment_panel.dart        (another session's, unstaged)
+lib/tenancy/tenant_staff_directory.dart          (another session's, unstaged)
+test/checkout/checkout_cart_panel_test.dart      (another session's, unstaged)
+test/inventory/stock_adjustment_panel_test.dart  (another session's, unstaged)
+test/tenancy/*_test.dart, seven files            (another session's, unstaged)
+.codex-app.png .codex-live.png .codex-live2.png  (untracked)
+prompt.md screenshots.zip                        (untracked)
+design.md DESIGN-AUDIT.md claude.md              (untracked; design.md still carries the
+                                                  2026-08-11 token-layer corrections)
+docs/printer_transport.md                        (untracked)
+lib/ui/records.dart                              (untracked)
+tool/screenshots/ (7 files) screenshots/ (102)   (untracked; regenerated to byte-identical
+                                                  content, not staged)
+```

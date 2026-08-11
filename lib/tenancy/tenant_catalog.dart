@@ -19,6 +19,51 @@ final class TenantCategory {
   final String name;
 }
 
+/// What a surface calls a category whose name it does not hold, opening a line.
+///
+/// Every catalog surface reads **one bounded page** of categories and then has
+/// to name the category of a product that page may not hold. Two different
+/// things produce that and from here they are indistinguishable, because both
+/// arrive as an ID resolving to nothing: a business with more categories than
+/// the page shows, and a product filed under a category document that cannot be
+/// read at all. So the wording says only what is known - this surface is not
+/// listing it - and deliberately neither claims the category exists elsewhere
+/// nor hides the fact that the product has one.
+const String unlistedTenantCategoryLabel = 'Category not listed here';
+
+/// The same answer inside a sentence: "filed under a category not listed here".
+const String unlistedTenantCategoryPhrase = 'a category not listed here';
+
+/// The name lookup one surface's categories provide, keyed by document ID.
+Map<String, String> tenantCategoryNames(Iterable<TenantCategory> categories) =>
+    <String, String>{
+      for (final category in categories) category.id: category.name,
+    };
+
+/// What a person is told a product is filed under, opening a line.
+///
+/// **Never the document ID.** Eight places named a category before this function
+/// existed, through five copies of the same lookup, and every one of them could
+/// state the ID: an import preview told somebody who had typed `Bakery` that
+/// their product was filed under `cat-bakery`, and a product whose category
+/// document is missing was listed under `cat-not-cached`. A document ID is the
+/// system's name for a thing and never the shopkeeper's.
+///
+/// Deliberately unlike `tenantStaffLabel`, which keeps a UID visible even beside
+/// a resolved name: a UID is the identity every sale, shift, and audit record is
+/// attributed by, so a person reading a history needs it. A category ID is
+/// referred to by nothing a person ever sees.
+String tenantCategoryLabel(
+  String categoryId, {
+  required Map<String, String> names,
+}) => names[categoryId] ?? unlistedTenantCategoryLabel;
+
+/// The same answer as [tenantCategoryLabel], inside a sentence.
+String tenantCategoryPhrase(
+  String categoryId, {
+  required Map<String, String> names,
+}) => names[categoryId] ?? unlistedTenantCategoryPhrase;
+
 /// Strict read model for `tenants/{tenantId}/products/{productId}`.
 ///
 /// New documents use `categoryId`. The legacy `category` alias is accepted
@@ -281,10 +326,7 @@ final class _CatalogContents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final categoryNames = <String, String>{
-      for (final category in snapshot.categories.items)
-        category.id: category.name,
-    };
+    final categoryNames = tenantCategoryNames(snapshot.categories.items);
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -343,7 +385,7 @@ final class _CatalogContents extends StatelessWidget {
                 key: ValueKey('catalog-product-${product.id}'),
                 title: Text(product.name),
                 subtitle: Text(
-                  '${categoryNames[product.categoryId] ?? product.categoryId} '
+                  '${tenantCategoryLabel(product.categoryId, names: categoryNames)} '
                   '• SKU ${product.sku} • Stock ${product.quantity}',
                 ),
                 trailing: Text(product.price.toStringAsFixed(2)),

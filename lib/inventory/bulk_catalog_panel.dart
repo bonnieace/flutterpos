@@ -125,6 +125,13 @@ final class _TenantBulkCatalogPanelState
   /// could reorder rows - and order is part of what the server fingerprints.
   TenantProductBatchPlan? _batchPlan;
   TenantProductImportPlan? _importPlan;
+
+  /// The category names the import report was worded with, held with the plan
+  /// and for the same reason: a commit re-sends the pages the preview sent and
+  /// must word their rows identically, while this route re-reads its categories
+  /// between the two. A correction needs no equivalent - its rows carry the
+  /// wording they were planned with.
+  Map<String, String> _importCategoryNames = const <String, String>{};
   TenantBulkCatalogReport? _report;
 
   List<String?> _cursors = <String?>[null];
@@ -181,6 +188,7 @@ final class _TenantBulkCatalogPanelState
   void _discardPlan() {
     _batchPlan = null;
     _importPlan = null;
+    _importCategoryNames = const <String, String>{};
     _report = null;
   }
 
@@ -265,13 +273,16 @@ final class _TenantBulkCatalogPanelState
             sheet: _sheet.text,
             requestIds: _newRequestId,
           );
+          final categoryNames = tenantCategoryNames(view.categories.items);
           report = await _runImport(
             session,
             plan,
             TenantBulkCatalogMode.preview,
+            categoryNames: categoryNames,
           );
           if (!_stillCurrent(capturedKey)) return;
           _importPlan = plan;
+          _importCategoryNames = categoryNames;
       }
       setState(() => _report = report);
     } on TenantBulkCatalogException catch (error) {
@@ -316,7 +327,12 @@ final class _TenantBulkCatalogPanelState
     try {
       final report = batchPlan != null
           ? await _runBatch(session, batchPlan, TenantBulkCatalogMode.commit)
-          : await _runImport(session, importPlan!, TenantBulkCatalogMode.commit);
+          : await _runImport(
+              session,
+              importPlan!,
+              TenantBulkCatalogMode.commit,
+              categoryNames: _importCategoryNames,
+            );
       if (!_stillCurrent(capturedKey)) return;
       setState(() => _report = report);
       // A page that landed changed what this device caches, so the sync pass is
@@ -385,8 +401,9 @@ final class _TenantBulkCatalogPanelState
   Future<TenantBulkCatalogReport> _runImport(
     TenantSession session,
     TenantProductImportPlan plan,
-    TenantBulkCatalogMode mode,
-  ) async {
+    TenantBulkCatalogMode mode, {
+    required Map<String, String> categoryNames,
+  }) async {
     final gateway = TenantProductImportGateway(
       session: session,
       callable: widget.importCallable!,
@@ -400,7 +417,11 @@ final class _TenantBulkCatalogPanelState
     for (final page in plan.pages) {
       try {
         rows.addAll(
-          describeImportOutcomes(page, await gateway.send(page, mode)),
+          describeImportOutcomes(
+            page,
+            await gateway.send(page, mode),
+            names: categoryNames,
+          ),
         );
         answered++;
       } on TenantBulkCatalogRequestException catch (error) {
@@ -731,9 +752,7 @@ final class _BulkCatalogContents extends StatelessWidget {
 
   List<Widget> _correctionForm(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final categoryNames = <String, String>{
-      for (final category in view.categories.items) category.id: category.name,
-    };
+    final categoryNames = tenantCategoryNames(view.categories.items);
     return <Widget>[
       Text('What to change', style: text.titleSmall),
       const SizedBox(height: 8),
@@ -895,7 +914,7 @@ final class _BulkCatalogContents extends StatelessWidget {
                 : (value) => onToggle(product, value ?? false),
             title: Text(product.name),
             subtitle: Text(
-              '${categoryNames[product.categoryId] ?? product.categoryId} '
+              '${tenantCategoryLabel(product.categoryId, names: categoryNames)} '
               '• ${product.sku} • ${product.price.toStringAsFixed(2)}'
               '${product.cost == null ? '' : ' • costs ${product.cost!.toStringAsFixed(2)}'}',
             ),

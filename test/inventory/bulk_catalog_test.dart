@@ -224,12 +224,16 @@ void main() {
         ],
         edit: const TenantBulkCatalogEdit.category('cat-drinks'),
       ).pages.single;
-      // A product filed off this page has only its ID for a name, and stating
-      // the ID beats stating nothing.
+      // A product filed off this page has no name here, and its document ID is
+      // not one: the report says so in the words every catalog surface uses.
       expect(byCategory.rows.map((row) => row.previous), <String>[
         'Bakery',
-        'cat-unseen',
+        unlistedTenantCategoryLabel,
       ]);
+      expect(
+        byCategory.rows.map((row) => row.previous),
+        isNot(contains(contains('cat-unseen'))),
+      );
 
       final byCost = _batchPlan(
         products: <TenantProduct>[_product('pd-1'), _product('pd-2', cost: null)],
@@ -962,12 +966,83 @@ void main() {
           page: page,
           mode: TenantBulkCatalogMode.preview,
         ),
+        names: tenantCategoryNames(_categories()),
       );
 
       expect(rows.single.position, 2);
       expect(rows.single.subject, 'White bread loaf');
       expect(rows.single.detail, contains('opens holding 12'));
       expect(rows.single.detail, contains('costs 40.00'));
+    });
+
+    test('an import preview names the category, never the ID it wrote', () {
+      // The whole of finding 5's first half: the sheet says `Bakery`, the server
+      // correctly echoes the `cat-bakery` it wrote, and the person reading the
+      // preview typed neither an ID nor anything that looks like one.
+      final page = _importPage();
+      final result = TenantProductImportResult.fromCallable(
+        _importResponse(mode: 'preview'),
+        page: page,
+        mode: TenantBulkCatalogMode.preview,
+      );
+
+      expect(
+        describeImportOutcomes(
+          page,
+          result,
+          names: tenantCategoryNames(_categories()),
+        ).single.detail,
+        allOf(contains('filed under Bakery'), isNot(contains('cat-bakery'))),
+      );
+
+      // A category this surface did not read still names itself, because the
+      // sheet said what it was and the server matched it to accept the row.
+      expect(
+        describeImportOutcomes(
+          page,
+          result,
+          names: const <String, String>{},
+        ).single.detail,
+        allOf(contains('filed under Bakery'), isNot(contains('cat-bakery'))),
+      );
+    });
+
+    test('an import row that named an unread category ID names no ID', () {
+      // Nothing can name this category: the row gave an ID rather than a name,
+      // and the ID is not one this surface read. It is still not shown.
+      final page = _importPlan(
+        'name,sku,price,categoryId\nMandazi,M-1,20,cat-elsewhere',
+      ).pages.single;
+
+      final rows = describeImportOutcomes(
+        page,
+        TenantProductImportResult.fromCallable(
+          _importResponse(
+            mode: 'preview',
+            product: <String, Object?>{
+              'name': 'Mandazi',
+              'sku': 'M-1',
+              'price': 20.0,
+              'priceMinor': 2000,
+              'cost': null,
+              'costMinor': null,
+              'quantity': 0,
+              'categoryId': 'cat-elsewhere',
+            },
+          ),
+          page: page,
+          mode: TenantBulkCatalogMode.preview,
+        ),
+        names: tenantCategoryNames(_categories()),
+      );
+
+      expect(
+        rows.single.detail,
+        allOf(
+          contains('filed under $unlistedTenantCategoryPhrase'),
+          isNot(contains('cat-elsewhere')),
+        ),
+      );
     });
 
     test('a report counts rows and states whether every page answered', () {

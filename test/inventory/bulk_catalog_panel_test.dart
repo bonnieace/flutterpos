@@ -177,6 +177,32 @@ void main() {
     expect(find.byKey(const ValueKey('bulk-catalog-commit')), findsOne);
   });
 
+  testWidgets('a category nothing can read is named, never shown as an ID', (
+    tester,
+  ) async {
+    final batch = _BatchCallable();
+
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.strandedCategory(),
+      batch: batch,
+    );
+
+    // The row a person ticks, and then the report line describing what it is
+    // being moved out of. Both used to state the document ID.
+    expect(find.textContaining(unlistedTenantCategoryLabel), findsOne);
+    await _select(tester, 'pd-001');
+    await _choose(tester, 'bulk-catalog-category-cat-drinks');
+    await _tap(tester, 'bulk-catalog-preview');
+
+    expect(
+      _text(tester, 'bulk-catalog-row-detail-1'),
+      'Product 1 • $unlistedTenantCategoryLabel → Drinks',
+    );
+    expect(_documentIdsOnScreen(tester), isEmpty);
+  });
+
   testWidgets('a price the till could not record is refused where typed', (
     tester,
   ) async {
@@ -294,6 +320,13 @@ void main() {
       _text(tester, 'bulk-catalog-row-detail-3'),
       contains('opens holding 0'),
     );
+    // Finding 5's first half: the sheet said `Bakery`, the server answers with
+    // the `cat-bakery` it wrote, and the preview names what was typed.
+    expect(
+      _text(tester, 'bulk-catalog-row-detail-2'),
+      contains('filed under Bakery'),
+    );
+    expect(_documentIdsOnScreen(tester), isEmpty);
 
     await _tap(tester, 'bulk-catalog-commit');
     // The one hazard this app cannot prevent, stated where a person can see it.
@@ -453,6 +486,15 @@ Future<void> _paste(WidgetTester tester, String sheet) =>
 String _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
+/// Every rendered string carrying the shape of a category document ID, over the
+/// whole tree rather than over one slot. `cat-` is the seeded shape and `ct_` is
+/// what `buildCategoryIntent` derives; neither is a word.
+Iterable<String> _documentIdsOnScreen(WidgetTester tester) => tester
+    .widgetList<Text>(find.byType(Text))
+    .map((text) => text.data)
+    .nonNulls
+    .where(RegExp(r'cat-|ct_').hasMatch);
+
 String _label(WidgetTester tester, String key) => tester
     .widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)))
     .data!;
@@ -483,6 +525,26 @@ TenantSessionController _controller({TenantRole role = TenantRole.owner}) =>
 
 final class _Reader implements TenantDataReader {
   _Reader(this._collections);
+
+  /// One product filed under a category document nothing can read, beside one
+  /// filed under a category this page holds.
+  factory _Reader.strandedCategory() =>
+      _Reader(<String, Map<String, Map<String, Object?>>>{
+        _categoriesPath: <String, Map<String, Object?>>{
+          'cat-bakery': <String, Object?>{'name': 'Bakery'},
+          'cat-drinks': <String, Object?>{'name': 'Drinks'},
+        },
+        _productsPath: <String, Map<String, Object?>>{
+          'pd-001': <String, Object?>{
+            'name': 'Product 1',
+            'SKU': '6161100001',
+            'price': 65,
+            'cost': 40,
+            'quantity': 1,
+            'categoryId': 'cat-not-cached',
+          },
+        },
+      });
 
   factory _Reader.seeded({int productCount = 2}) =>
       _Reader(<String, Map<String, Map<String, Object?>>>{

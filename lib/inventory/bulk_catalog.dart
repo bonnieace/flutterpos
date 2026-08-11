@@ -999,9 +999,7 @@ final class TenantBulkCatalogRepository {
         throw const TenantBulkCatalogException('field_not_bulk_editable');
     }
 
-    final categoryNames = <String, String>{
-      for (final candidate in categories) candidate.id: candidate.name,
-    };
+    final categoryNames = tenantCategoryNames(categories);
     final rows = <TenantProductBatchRow>[];
     final seen = <String>{};
     for (final product in selected) {
@@ -1247,10 +1245,10 @@ String _describePrevious(
 ) {
   switch (field) {
     case TenantProductField.categoryId:
-      // A product may sit in a category this page did not read, in which case
-      // its ID is the only name there is for it. Stating the ID beats stating
-      // nothing.
-      return categoryNames[product.categoryId] ?? product.categoryId;
+      // A product may sit in a category this page did not read, and its
+      // document ID is not a name for it - one wording for that, in
+      // [tenantCategoryLabel], rather than one per surface.
+      return tenantCategoryLabel(product.categoryId, names: categoryNames);
     case TenantProductField.price:
       final minor = checkoutMinorUnitsFromMajor(product.price);
       return minor == null
@@ -1595,10 +1593,16 @@ List<TenantBulkCatalogRowReport> describeBatchOutcomes(
 ];
 
 /// The report lines one answered page of an import produces.
+///
+/// [names] are the categories this surface read. The server echoes the
+/// `categoryId` it wrote, which is correct of the server and is exactly what a
+/// person did not type: a sheet says `Bakery`, and a preview answering
+/// `cat-bakery` names the row by something nobody typed and nobody reads.
 List<TenantBulkCatalogRowReport> describeImportOutcomes(
   TenantProductImportPage page,
-  TenantProductImportResult result,
-) => <TenantBulkCatalogRowReport>[
+  TenantProductImportResult result, {
+  required Map<String, String> names,
+}) => <TenantBulkCatalogRowReport>[
   for (final outcome in result.rows)
     TenantBulkCatalogRowReport(
       position: page.rows[outcome.index].line,
@@ -1606,18 +1610,41 @@ List<TenantBulkCatalogRowReport> describeImportOutcomes(
       status: outcome.status,
       detail: switch (outcome.status) {
         TenantBulkCatalogRowStatus.failed => outcome.message ?? 'Refused.',
-        _ => _describeImportedProduct(outcome.product!),
+        _ => _describeImportedProduct(
+          outcome.product!,
+          page.rows[outcome.index],
+          names,
+        ),
       },
     ),
 ];
 
-String _describeImportedProduct(TenantBulkCatalogRowProduct product) {
+String _describeImportedProduct(
+  TenantBulkCatalogRowProduct product,
+  TenantProductImportRow row,
+  Map<String, String> names,
+) {
   final cost = product.costMinor;
   return '${product.sku} • ${tenantCatalogMajorUnits(product.priceMinor)} '
       '• ${cost == null ? 'no unit cost' : 'costs ${tenantCatalogMajorUnits(cost)}'} '
       '• opens holding ${product.quantity ?? 0} '
-      '• filed under ${product.categoryId}';
+      '• filed under ${_importedCategory(product.categoryId, row, names)}';
 }
+
+/// What an imported row is reported as filed under, in descending certainty.
+///
+/// The categories this surface read come first, because they are the list every
+/// other catalog surface names a category from. The sheet's own `categoryName`
+/// is next and is a true name: the server matched it against a real category in
+/// order to accept the row at all. It is second because the fold is
+/// case-insensitive and a business may hold more categories than one page, so
+/// what somebody typed can differ in case from what is stored. **The document
+/// ID is not a third degree** - it is not shown at all.
+String _importedCategory(
+  String categoryId,
+  TenantProductImportRow row,
+  Map<String, String> names,
+) => names[categoryId] ?? row.categoryName ?? unlistedTenantCategoryPhrase;
 
 /// What a locally refused row says, in the words the person who pasted it needs.
 String bulkCatalogRefusalMessage(TenantBulkCatalogException error) =>

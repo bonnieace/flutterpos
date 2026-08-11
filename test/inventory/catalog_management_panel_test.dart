@@ -602,6 +602,32 @@ void main() {
     expect(callable.payloads.single['cost'], isNull);
   });
 
+  testWidgets('a category nothing can read is named, never shown as an ID', (
+    tester,
+  ) async {
+    // Finding 5's second half. `cat-not-cached` is not bad data - it is a
+    // product filed under a category this surface cannot read - so the state
+    // stays legible and only the document ID goes.
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.strandedCategory(),
+      writer: _Writer(),
+      callable: _Callable(),
+    );
+
+    expect(find.textContaining(unlistedTenantCategoryLabel), findsOne);
+    expect(_documentIdsOnScreen(tester), isEmpty);
+
+    await _openCorrection(tester, 'pd-1');
+
+    expect(
+      _text(tester, 'catalog-management-edit-category-off'),
+      startsWith('This product is filed under $unlistedTenantCategoryPhrase.'),
+    );
+    expect(_documentIdsOnScreen(tester), isEmpty);
+  });
+
   testWidgets('a product with no cost is not offered a clear', (tester) async {
     await _pump(
       tester,
@@ -938,6 +964,17 @@ Future<void> _confirmProduct(WidgetTester tester) async {
 String _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
+/// Every rendered string carrying the shape of a category document ID, over the
+/// whole tree rather than over one slot: the point of the assertion is that no
+/// surface anywhere reaches for the ID, and the two that did were the two nobody
+/// was looking at. `cat-` is the seeded shape and `ct_` is what
+/// `buildCategoryIntent` derives, and neither is a word.
+Iterable<String> _documentIdsOnScreen(WidgetTester tester) => tester
+    .widgetList<Text>(find.byType(Text))
+    .map((text) => text.data)
+    .nonNulls
+    .where(RegExp(r'cat-|ct_').hasMatch);
+
 String _field(WidgetTester tester, String key) =>
     tester.widget<TextField>(find.byKey(ValueKey(key))).controller!.text;
 
@@ -1109,6 +1146,24 @@ final class _Reader implements TenantDataReader {
   _Reader.failing()
     : _collections = const <String, Map<String, Map<String, Object?>>>{},
       _fails = true;
+
+  /// One product filed under a category document nothing can read - the exact
+  /// state the seeded `cat-not-cached` produced on the device.
+  factory _Reader.strandedCategory() =>
+      _Reader(<String, Map<String, Map<String, Object?>>>{
+        _categoriesPath: <String, Map<String, Object?>>{
+          'cat-bakery': <String, Object?>{'name': 'Bakery'},
+        },
+        _productsPath: <String, Map<String, Object?>>{
+          'pd-1': <String, Object?>{
+            'name': 'Charcoal 2kg',
+            'SKU': '6161100000019',
+            'price': 65,
+            'quantity': 40,
+            'categoryId': 'cat-not-cached',
+          },
+        },
+      });
 
   factory _Reader.seeded({int productCount = 2, double? cost}) =>
       _Reader(<String, Map<String, Map<String, Object?>>>{

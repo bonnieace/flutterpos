@@ -743,9 +743,8 @@ final class _CatalogManagementContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final categoryNames = <String, String>{
-      for (final category in view.categories.items) category.id: category.name,
-    };
+    final categoryNames = tenantCategoryNames(view.categories.items);
+    final selected = _selected;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -900,11 +899,12 @@ final class _CatalogManagementContents extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             key: const ValueKey('catalog-management-selected-category'),
-            _selected == null
+            selected == null
                 ? view.categories.items.isEmpty
                       ? 'Add a category before adding a product.'
                       : 'Choose the category this product is filed under.'
-                : 'Filed under ${categoryNames[_selected] ?? _selected}.',
+                : 'Filed under '
+                      '${tenantCategoryPhrase(selected, names: categoryNames)}.',
           ),
           const SizedBox(height: 8),
           FilledButton.icon(
@@ -947,7 +947,7 @@ final class _CatalogManagementContents extends StatelessWidget {
                 key: ValueKey('catalog-management-product-${product.id}'),
                 title: Text(product.name),
                 subtitle: Text(
-                  '${categoryNames[product.categoryId] ?? product.categoryId} '
+                  '${tenantCategoryLabel(product.categoryId, names: categoryNames)} '
                   '• ${product.sku} • ${product.quantity} in stock '
                   '• ${product.price.toStringAsFixed(2)}',
                 ),
@@ -1405,9 +1405,8 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   key: const ValueKey('catalog-management-edit-category-off'),
-                  'This product is filed under ${widget.product.categoryId}, '
-                  'which is not among the categories read here. Leaving it '
-                  'there is fine; choosing one above moves it.',
+                  'This product is filed under $unlistedTenantCategoryPhrase. '
+                  'Leaving it there is fine; choosing one above moves it.',
                   style: text.bodySmall,
                 ),
               )
