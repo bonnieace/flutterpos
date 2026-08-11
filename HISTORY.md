@@ -18833,9 +18833,125 @@ tool/screenshots/ (7 files) screenshots/ (102)   (untracked; regenerated, 2 imag
                                                   not staged)
 ```
 
-**`design.md` is still untracked, and step 2 makes that worse rather than better.** `claude.md`
+~~**`design.md` is still untracked, and step 2 makes that worse rather than better.**~~
+**Resolved later the same day — see the entry below.** `claude.md`
 names it as the source of truth for every visual change, and there are now two committed redesign
 steps whose specification exists only in this working tree. It was raised with the product owner
 this session and not resolved; committing another session's 789-line document is not a chunk's
 call to make, and it is stated here so the next reader sees a known risk rather than an
 oversight.
+
+---
+
+## The working tree is emptied into the repository - 2026-08-11
+
+### Completed in this session
+
+**Not a chunk.** The product owner asked why so much was uncommitted, and then had it committed.
+Four commits, no new code, and the last of them makes the Flutter baseline honest for the first
+time since 2026-08-10.
+
+```text
+1262476  design.md, DESIGN-AUDIT.md, claude.md, docs/printer_transport.md   (2,001 lines)
+64d27b1  tool/screenshots/, six files - the harness, without its output     (2,899 lines)
+2942214  lib/ui/records.dart, three panels, ten test files                  (1,600 / -298)
+   +one  .gitignore for the generated output, plus PLAN.md and this entry
+```
+
+### What was actually there, established rather than assumed
+
+The question was asked about "tenancy files", and the first useful answer was that they were
+**modified, not untracked**, and were not seven separate edits. `tenant_staff_directory.dart` had
+been rewritten to render a `TenantStatStrip` above a `LayoutBuilder` choosing a table or cards by
+width; that pushed tap targets below the fold in the test viewport, so seven invitation suites
+were mechanically refactored onto `ensureVisible` helpers. One widget change, ten files.
+
+The provenance, from dates rather than from the log:
+
+- **`1b2b13b` (2026-08-10 17:22) committed `lib/theme.dart` and nothing else**, and its message
+  states "Flutter holds at 1524".
+- **`lib/ui/records.dart` was written at 18:26 the same evening** - an hour after that commit -
+  and never produced one of its own. `screenshots.zip` followed at 22:04, then `claude.md`
+  (09:20), `DESIGN-AUDIT.md` (10:01) and `design.md` (10:29) the next morning, and the first
+  commit after all of it was the token layer at 11:16, which staged only its own file.
+- **`HISTORY.md` has no entry for that session.** Every mention of `records.dart` in this log is
+  retrospective, written by a later session noting that it was untracked.
+
+**Why it was left is not recorded and is not reconstructed here.** What can be said is what made
+it *stick*: the working discipline says to stage only the scoped files, which is what keeps a
+chunk reviewable and is also why **work arriving outside a chunk has no path to a commit at
+all**. Four consecutive chunks read it as another session's, wrote a line saying so, and stepped
+around it. The one inference worth recording is that the governing documents were uncommitted
+too - a session following that workflow commits its own documents - which suggests the design
+system was not built as a numbered chunk under it.
+
+### Why it stopped being tolerable
+
+`DESIGN-AUDIT.md` §4.7 records a conflict between `records.dart`'s stated design and `design.md`
+§4.3 - whether a component or its caller decides what a compact rendering loses - and §6 decision
+2 **resolved it in `records.dart`'s favour**, quoting `records.dart:375-380`. So a design decision
+had been taken in favour of a file that was not in the repository, citing line numbers no
+checkout carried. Redesign steps 3 and 6 rewrite that same territory, and step 3 is the queued
+chunk, so the collision was one session away.
+
+### Reviewed rather than adopted on trust
+
+It is not this session's code, and 1,143 lines of somebody else's went in under this session's
+name, so it was checked rather than accepted because the suite was green:
+
+- **No repository call, gateway, callable or submission path is touched in any of the three
+  panels.** The sale panel's hunks all sit inside `_CartEditorState`'s build region and **move**
+  `_saleSection`, `_tenderSection` and `_saveSection` into a layout wrapper without changing what
+  they call. Its one new computation sums the cart's quantities for a badge.
+- **The overridden `setState`** bumps a `ValueNotifier` because the compact layout puts the cart
+  in a modal sheet, which is its own route and does not rebuild with the parent element. That is
+  presentation plumbing, and it is the one thing in the diff that looks like state logic and is
+  not.
+- **No permission guard was dropped while a list became a table.** Four `allowedRoles` and two
+  `canAccess` in `tenant_staff_directory.dart`, counted against `HEAD` and against the working
+  tree: identical.
+- `flutter analyze` over `records.dart`, the three panels, every test beside them and the
+  harness: **no issues**.
+
+It is a **partial** migration - three of the twenty `*_panel.dart` files in the tree - and is
+committed as one rather than dressed up as a finished sweep.
+
+### The generated screenshots are ignored, and the reason is in `.gitignore`
+
+The harness is source and is tracked; its 101 images are not. `fakes.dart` derives its business
+dates from `DateTime.now()` deliberately, because the daily summary and reconciliation compute a
+business date the same way and read by exact path, so a hardcoded date would render those screens
+permanently empty. Re-running on another day therefore moves about **39 of the 101 images** with
+no code change behind any of them, measured earlier the same day. Tracking the output would put
+those 39 into every future diff. `screenshots.zip` (9.5 MB of the same output) and the
+`.codex-*.png` scratch captures from 2026-08-03 are ignored with it.
+
+### Files changed
+
+```text
+.gitignore   (three stanzas: the generated screenshot output, the archive, the scratch PNGs)
+PLAN.md      ("Repository state" rewritten; the eight-test baseline warning retracted;
+              the header note about untracked design-system work corrected)
+HISTORY.md
+```
+
+### Test commands and results
+
+Nothing was re-run and nothing needed to be: **not one tracked byte changed** in the three
+commits that carry code. `flutter test` measured **1598** twice already this session with exactly
+these file contents in the tree - the difference is only which of them git was holding. What
+changed is that **1598 is now a clean checkout of `HEAD`** rather than a measurement of a working
+tree, which is a claim this file had been unable to make since 2026-08-10.
+
+`flutter analyze` over the newly tracked code: no issues.
+
+### What is still local, and deliberately
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction - the product owner's own file, and not
+                           mine to either commit or ignore without being asked
+screenshots/ screenshots.zip .codex-*.png    generated or scratch; ignored
+```

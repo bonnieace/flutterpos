@@ -28,9 +28,13 @@ colour" returns nothing.
   spinners. Its commit message is the only record of it.
 - **The design system itself**: `design.md` (v0.3), `DESIGN-AUDIT.md`, `claude.md`,
   `lib/ui/records.dart`, the screenshot harness in `tool/screenshots/`, and 101 generated
-  images in `screenshots/`. **All of it is untracked**, and three panels hold unstaged,
-  uncommitted consumers of `records.dart`. The 2026-08-11 token-layer session added
-  `lib/ui/tokens.dart` beside `records.dart` and staged only its own file, deliberately.
+  images in `screenshots/`. ~~**All of it is untracked**, and three panels hold unstaged,
+  uncommitted consumers of `records.dart`.~~ **All of it was committed on 2026-08-11** at the
+  product owner's direction, in four commits — see "Repository state". The generated images are
+  the one part deliberately left out, and they are now in `.gitignore` with the reason. The
+  session that wrote `records.dart` and migrated three panels onto it is **still not in this
+  log**; what is recorded is what the tree and the commit dates state, and `records.dart` landed
+  at 18:26 on 2026-08-10, an hour after `1b2b13b`.
 
 ### Published status board
 
@@ -422,19 +426,19 @@ rule** — and a chunk that carries them must say so, which is what these marks 
 consecutive carries is the limit worth naming**: a third should measure them, on the same
 reasoning that made the third consecutive unreachable callable a surface instead.
 
-⚠️ **The Flutter figure is measured against a working tree that is not this commit, and the
-difference is eight tests.** The 2026-08-11 token-layer session found the tree already at
-**1532** before it edited anything, because another session's unstaged edits to
-`test/checkout/`, `test/inventory/` and `test/tenancy/` are still in it. That chunk
-measured the suite **before its own work as well as after**: 1532 → **1586**, the 54 being
-`test/ui/tokens_test.dart`; the category-naming chunk later the same day took it **1586 →
-1593** (7 new: 2 in `tenant_catalog_test.dart`, 2 in `bulk_catalog_test.dart`, 1 each in
-`catalog_management_test.dart`, `catalog_management_panel_test.dart`, and
-`bulk_catalog_panel_test.dart`); the ripple kill took it **1593 → 1598** (5 new, all in
-`test/theme_test.dart`). **A clean checkout of the commit is 1590** — 1524 plus 54 plus 7 plus
-5 — and the two figures reconcile only once the eight unstaged tests are accounted for. Whoever
-commits those eight makes 1598 the honest baseline; until then this row is a measurement of a
-tree, not of a commit, and says so.
+⚠️ ~~**The Flutter figure is measured against a working tree that is not this commit, and the
+difference is eight tests.**~~ **Closed 2026-08-11: those eight are committed, and 1598 is a
+clean checkout of `HEAD`.** The history is kept because it explains the arithmetic in three
+commit messages. The token-layer session found the tree already at **1532** before it edited
+anything, because another session's unstaged edits to `test/checkout/`, `test/inventory/` and
+`test/tenancy/` were in it, so that chunk measured the suite **before its own work as well as
+after**: 1532 → **1586**, the 54 being `test/ui/tokens_test.dart`. The category-naming chunk took
+it **1586 → 1593** (7 new: 2 in `tenant_catalog_test.dart`, 2 in `bulk_catalog_test.dart`, 1 each
+in `catalog_management_test.dart`, `catalog_management_panel_test.dart`, and
+`bulk_catalog_panel_test.dart`), and the ripple kill **1593 → 1598** (5 new, all in
+`test/theme_test.dart`). 1524 + 54 + 7 + 5 = 1590, and the remaining eight are the
+`ensureVisible` refactors that came with the `records.dart` migration — which is why the two
+figures only reconcile now that it is committed.
 
 **All five were measured again in the invitation-refusal session on 2026-08-08**, which took
 Flutter
@@ -2565,40 +2569,46 @@ The Sentry DSN in `lib/main.dart` is an `http://` URL. Android blocks cleartext 
 every build, so those envelopes have never been delivered from a device. The debug
 network-security config deliberately does not cover it.
 
-These local edits are not this work's and must never be staged. **The list was three lines
-long until 2026-08-11 and is now this**, because the design-system work arrived in the
-working tree rather than in a commit:
+**That list was thirteen files long, and on 2026-08-11 the product owner had all of it
+committed.** It is worth recording what it was, because the *shape* of it is a hazard this
+workflow produces rather than an accident: `design.md`, `DESIGN-AUDIT.md`, `claude.md`,
+`lib/ui/records.dart`, the harness, `docs/printer_transport.md`, three migrated panels and ten
+test files sat in the working tree for a day while four consecutive chunks committed around
+them. Nobody was wrong at any step — "stage only the scoped files" is what keeps a chunk
+reviewable — but **work that arrives outside a chunk has no way of ever being committed under
+that rule**, and it accumulated until it was 1,143 lines of code plus the specification the
+committed work was being held to. Four commits closed it:
 
 ```text
-.vscode/settings.json
-android/gradle.properties
-pubspec.lock
-.codex-app.png .codex-live.png .codex-live2.png   (untracked)
-prompt.md  screenshots.zip                        (untracked)
-
-lib/checkout/checkout_cart_panel.dart             modified, another session's
-lib/inventory/stock_adjustment_panel.dart          modified, another session's
-lib/tenancy/tenant_staff_directory.dart            modified, another session's
-test/checkout/checkout_cart_panel_test.dart        modified, another session's
-test/inventory/stock_adjustment_panel_test.dart    modified, another session's
-test/tenancy/, seven *_test.dart files             modified, another session's
-
-design.md  DESIGN-AUDIT.md  claude.md              untracked
-lib/ui/records.dart                                untracked
-tool/screenshots/, 7 files                         untracked
-screenshots/, 101 images + generated README        untracked
-docs/printer_transport.md                          untracked
+1262476  design.md, DESIGN-AUDIT.md, claude.md, docs/printer_transport.md
+64d27b1  tool/screenshots/, six files - the harness, without its output
+2942214  lib/ui/records.dart, three panels, ten test files
+   +one  .gitignore for the generated output, and this file
 ```
 
-**Three consequences worth stating rather than discovering.** The unstaged test edits are
-why this tree measures **eight tests above** the Flutter baseline this file used to carry, so
-a chunk here measures the suite before its own work as well as after. `design.md` — which
-`claude.md` names as the source of truth for every visual change — **is not in the
-repository**, so the two corrections the token layer made to it live only in this working
-tree; whoever commits `design.md` carries them. And `lib/ui/` now holds one tracked file and
-one untracked one, which is deliberate: staging another session's 789-line document or its
-495-line widget module to carry a few lines of mine is not a chunk's call to make. **Whether
-all of it is committed is the product owner's.**
+**Two things that were true of that list are now false and are corrected here.** The Flutter
+baseline is no longer a measurement of a tree rather than of a commit — the eight tests that
+made it so are committed, so **1598 is a clean checkout of `HEAD`**. And `design.md` is in the
+repository, so the two corrections the token layer made to it are no longer carried by a
+working tree alone.
+
+**What is still local, and why each one stays that way:**
+
+```text
+.vscode/settings.json        editor settings, machine-local
+android/gradle.properties    machine-local
+pubspec.lock                 modified locally, not by any chunk here
+prompt.md                    the session instruction, the product owner's own file
+screenshots/                 generated - now ignored, see below
+screenshots.zip              a 9.5 MB archive of the same output - ignored
+.codex-*.png                 scratch captures from 2026-08-03 - ignored
+```
+
+**The generated screenshot output is ignored deliberately and the reason is in `.gitignore`
+rather than only here.** `fakes.dart` derives its business dates from `DateTime.now()`, so
+re-running on a different day moves about **39 of the 101 images** with nothing behind them;
+tracking the output would put those 39 into every future diff. The harness is tracked, the
+output is not, and a baseline is regenerated the same day it is compared against.
 
 ---
 
