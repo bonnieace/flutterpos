@@ -4,13 +4,29 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-08**, the tenth session that day. Claims in
-this file are checked against source, not inherited from the log; corrections are noted
-where they were made. **The eighth session verified them against the running app on Android
-rather than only against source**, which is a different kind of check and the first of its
-kind since 2026-08-04. **The ninth fixed the first two defects that run found and the tenth
-fixed the third**, and neither looked at the app — see the note under "Found by using the
-app".
+Last verified against the code on **2026-08-11**, the session that built the design
+system's token layer. Claims in this file are checked against source, not inherited from
+the log; corrections are noted where they were made. **The eighth session of 2026-08-08
+verified them against the running app on Android rather than only against source**, which
+is a different kind of check and the first of its kind since 2026-08-04. **The ninth fixed
+the first two defects that run found and the tenth fixed the third**, and neither looked at
+the app — see the note under "Found by using the app".
+
+**Two things happened between that day and this one that `HISTORY.md` does not record at
+all**, and they are named here so nobody concludes the work did not happen. `grep` over the
+log for `2026-08-10`, `2026-08-11`, `design.md`, `DESIGN-AUDIT`, `records.dart` and "brand
+colour" returns nothing.
+
+- **Commit `1b2b13b`, "Wire the brand colours into the theme every screen reads"**
+  (2026-08-10), which rewrote `lib/theme.dart` from four named colours into a full
+  `ColorScheme` plus fifteen component themes, +184 / −7 lines. Every screen built after the
+  multitenant split had been rendering Material's stock purple for buttons, icons, links and
+  spinners. Its commit message is the only record of it.
+- **The design system itself**: `design.md` (v0.3), `DESIGN-AUDIT.md`, `claude.md`,
+  `lib/ui/records.dart`, the screenshot harness in `tool/screenshots/`, and 101 generated
+  images in `screenshots/`. **All of it is untracked**, and three panels hold unstaged,
+  uncommitted consumers of `records.dart`. The 2026-08-11 token-layer session added
+  `lib/ui/tokens.dart` beside `records.dart` and staged only its own file, deliberately.
 
 ### Published status board
 
@@ -73,6 +89,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
+| **Design system** | ~8% | `design.md` v0.3 is the specification, `DESIGN-AUDIT.md` audits it against the code, and **step 1 of its twelve is done**: `lib/ui/tokens.dart` holds every colour, type, spacing, radius, motion and density token, `spiritTheme` registers it, and **nothing reads it**. Steps 2–12 move pixels; the ripple kill is next. The specification, the audit and the harness are all untracked. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **three of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -113,6 +130,16 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
+**The 2026-08-11 token-layer session changed no board row at all — not a colour and not a word of
+one — and this sentence is here so that is stated rather than left silent.** It is the first chunk
+in this file whose **pass condition was that nothing changed**: `design.md` §11 step 1 defines
+every token and wires none of them, so the 101 screenshots were regenerated with the registration
+in place and again with it backed out and hashed byte-for-byte identical. It added a **Design
+system** row to the tracks table rather than moving a capability row here, because a token layer is
+not a capability: no shop can do anything today that it could not do yesterday. It touched no rule and no `functions/`
+file — `git diff` over both prints zero lines — and it changed **no rollout step**, because the
+fifteen frozen steps are the app's and the design system's twelve are its own.
+
 **The tenth session of 2026-08-08 changed no board row's colour either, and this sentence is here
 so that is stated rather than left silent.** It closed finding 3 — a refused invitation now says
 what will actually work — which is a **defect repair inside a row that was already green**, so
@@ -148,8 +175,11 @@ carried rather than re-measured.
 Six defects, all at the edges, none blocking, **recorded rather than fixed by the run itself** —
 a behavioural session that starts repairing becomes an unbounded one. They were queued as chunks
 below; **the first two were taken and closed by the session after it, and the third by the
-session after that.** Three remain: two are one queued chunk, and the sixth is an environment
-limitation rather than a product defect.
+session after that.** Three remain, and **they are no longer two chunks plus an environment
+limitation** — the pair was split on 2026-08-11 when the design system was scoped. Finding 5 is a
+queued chunk of its own; finding 4's repair is absorbed into the redesign's step 3, because that
+step rewrites the form it lives on; finding 6 is an environment limitation rather than a product
+defect.
 
 1. ~~**The login screen prints a raw platform-channel name when the password is empty.**~~
    **Closed 2026-08-08.** Verbatim, as reported:
@@ -177,6 +207,10 @@ limitation rather than a product defect.
    this product is filed under." sits about a thousand pixels below the chip row that is
    actually the picker, under a heading that also serves as the category list. It works once
    found. The **"Correct" dialog has an inline picker**, so one screen does it both ways.
+   **Still open, but no longer a chunk of its own as of 2026-08-11**: its repair is form layout,
+   and `AppTextField` plus the 720px content width in `design.md` §4.2 rewrite that form, so it is
+   recorded against the redesign's step 3 rather than built twice. The defect has not stopped
+   mattering; only its queue position changed.
 5. **A category ID reaches the eye in two surfaces.** The import preview says "filed under
    `cat-bakery`" to someone who typed `Bakery`, and "Manage catalog" shows `cat-not-cached` for
    a product whose category document is missing. The read-only catalog resolves names correctly
@@ -332,16 +366,31 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1524** |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1586** ⚠️ see below |
 | Functions | `npm --prefix functions test` | **409** |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⚠️ one flaky test, see below |
 
-**2127 tests across five suites.** `flutter test` takes no path list — the one
-uncompilable file that forced that workaround was deleted on 2026-08-07. **All five were
-measured again in the invitation-refusal session on 2026-08-08**, which took Flutter
-**1505 → 1524** (19 new: 13 in `test/tenancy/invitation_acceptance_failure_test.dart`, 3 in
+**2189 tests across five suites** — and there is a sixth figure that is deliberately not in
+this table: `flutter test --no-pub --concurrency=1 tool/screenshots` runs **78 captures**
+writing 101 images, and it asserts nothing, which is why it is not counted here.
+
+⚠️ **The Flutter figure is measured against a working tree that is not this commit, and the
+difference is eight tests.** The 2026-08-11 token-layer session found the tree already at
+**1532** before it edited anything, because another session's unstaged edits to
+`test/checkout/`, `test/inventory/` and `test/tenancy/` are still in it. So that chunk
+measured the suite **before its own work as well as after**: 1532 → **1586**, the 54 being
+`test/ui/tokens_test.dart`. **A clean checkout of the commit is 1578** — 1524 plus 54 — and
+the two figures reconcile only once the eight unstaged tests are accounted for. Whoever
+commits those eight makes 1586 the honest baseline; until then this row is a measurement of a
+tree, not of a commit, and says so.
+
+**All five were measured again in the invitation-refusal session on 2026-08-08**, which took
+Flutter
+**1505 → 1524** — `flutter test` takes no path list, the one
+uncompilable file that forced that workaround having been deleted on 2026-08-07 — (19 new:
+13 in `test/tenancy/invitation_acceptance_failure_test.dart`, 3 in
 `test/tenancy/tenant_invitation_acceptance_test.dart`, 3 in
 `test/tenancy/tenant_visible_invitation_acceptance_test.dart`) and moved no other figure at all.
 That makes **nine** consecutive chunks proving `firestore.rules` byte-identical, and holding
@@ -378,6 +427,32 @@ Flutter 1392 → 1447 (55 new: 38 in `bulk_catalog_test.dart`, 13 in
 346 → 378 (32 new: 23 in `productBatch.test.ts`, 9 in `products.test.ts`), and the
 product-edit session took Flutter 1358 → 1392 (34 new: 22 unit, 12 widget).
 
+⚠️ **A second intermittent failure exists, and it is in the invitation integration suite.** Found
+2026-08-11 by the token-layer chunk, which touches no JavaScript at all: the suite came back **22 of
+23**, and the same test passed in 34.6 s on a plain re-run.
+
+```text
+✖ grant-platform-admin CLI completes, rejects, and resumes real grants
+  SyntaxError: Unexpected token '(', "(node:2309"... is not valid JSON
+```
+
+**The mechanism, because the assertion hides it.** `runPlatformGrantCli`
+(`rules-tests/test/invitation-acceptance.integration.test.js:1205`) spawns the real
+`grantPlatformAdmin.js` and **parses its output as JSON** — `stdout` when it expects exit 0,
+**`stderr`** when it expects a rejection. `(node:2309` is Node's own `(node:<pid>)` warning prefix,
+so a Node process warning printed to stderr ahead of the CLI's rejection JSON and the parse ate it.
+Only the stderr-parsing call can break this way, which is why one of the two invocations inside one
+test fails while the other cannot. Running the CLI directly under the same Node printed clean JSON,
+and loading `firebase-admin` under it emitted no warning either, so the warning belongs to a path
+only the real ineligibility scan reaches and it is load- or timing-dependent. **The exact warning
+has never been captured, because the test swallows stderr into the parse.**
+
+**It is not a product defect and it is not in `functions/`** — it is a test that assumes a
+subprocess's stderr is pure JSON. The fix is small and is queued below: strip `(node:` lines before
+parsing, or spawn with `NODE_NO_WARNINGS=1`, in both the grant and the revoke helper. Until then,
+**a single failure of this one test is a re-run, not a finding** — but diagnose before retrying, the
+way this one was, because the next failure of that test might not be the same cause.
+
 ✅ **The intermittent Flutter failure is diagnosed and fixed.** Measured thirteen times
 across 2026-08-07 and 2026-08-08: **1250 passed with 1 failed**, then **1251**, then
 **1290 twice** once the configuration chunk added 39, then **1346** three times — the
@@ -387,7 +462,9 @@ against the frozen tree, then **1358** once the product-cost chunk added eleven,
 **1392** once the product-edit chunk added 34, then **1447** once the bulk surface added 55,
 then **1473** once the profit display added 26, **1473** again in the password-reset session,
 which added no Dart, **1505** once the sign-in chunk added 32, and **1524** once the
-invitation-refusal chunk added 19. One failure in eighteen runs, and the last seventeen green.
+invitation-refusal chunk added 19. **Then twice on 2026-08-11 against a tree carrying another
+session's eight unstaged tests: 1532 before the token layer and 1586 after it.** One failure in
+twenty runs, and the last nineteen green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -1211,6 +1288,107 @@ and tenant request. None of them strands a user with no way forward, which is wh
 a finding, and widening to them would have made an unbounded chunk. Named so the next session
 sees a decision rather than an oversight.
 
+### The token layer is additive, and a density is a nested `Theme`
+
+Built 2026-08-11, `design.md` §11 step 1. It changed `firestore.rules` not at all and nothing in
+`functions/` either — `git diff` over both prints **zero lines**, which is a stronger measurement
+than an unchanged suite count. It moved no board row, and **an empty screenshot diff was its pass
+condition** rather than an embarrassment.
+
+**Step 1 is additive, and that was a decision rather than the obvious reading.** `design.md` §11
+says step 1 "changes no pixels"; `DESIGN-AUDIT.md` §4.8 found that conforming the token layer in
+place moves the outlined button's label off mint at ~40 call sites, every caption to
+`text.tertiary`, every card from radius 16 to 12, every input from 14 to 8 and off `bgMid`, every
+chip off stadium, and the bottom sheet from 24 to 20 — the largest image diff of the whole
+migration, attributable to nothing in particular. §6 decision 1 moved all of it into steps 2–5,
+where each diff has one cause. The cost accepted with it: for several steps the app runs on a
+half-migrated palette. **The divergences are asserted as divergences** in
+`test/ui/tokens_test.dart`, so the step that closes one fails the test and removes the row in the
+same change.
+
+**Density is a nested `Theme` per screen.** Decided by the product owner this session, and it was
+the one open item `DESIGN-AUDIT.md` §6 called "not cosmetic in any sense": §3 gives comfortable and
+compact different body roles, `bodyMedium` is a single global value, and **all 756 bare `Text(`
+call sites** in the migrated tree resolve to it through `DefaultTextStyle`, so one `ThemeData`
+cannot hold two body sizes. A back-office screen will wrap its subtree in a `Theme` built from
+`Theme.of(context).copyWith(...)` carrying the compact `AppTokens` and a `bodyMedium` swapped to
+that density's body role. It keeps §3's "chosen by the screen" literal and edits **none** of the
+756 sites; reading the role at every call site was the other correct answer and eventually edits
+all of them.
+
+**The mechanism is not in this chunk, only the half that decides.** `AppDensity` holds both value
+sets, `bodyRole` is the seam the nested `Theme` reads, and `pointerOnly` carries §3's rule that a
+touch device never gets 32px targets whatever its width — as data, so the widget that resolves
+density cannot forget it. A widget test drives the seam end to end, so the decision is proved
+rather than described. The widget arrives with the first compact screen.
+
+**One thing to know before building it, found while writing the test and deliberately not fixed in
+a frozen tree.** `AppTokens` implements no `==`, so equality is identity, and identity is free for
+`AppTokens.dark` because a `const` instance is canonicalized. A `withDensity(...)` call **inside a
+build method** allocates a new instance every build, which makes the enclosing `ThemeData` unequal
+to its predecessor and rebuilds everything below the nested `Theme` on every parent rebuild. The
+fix when that widget is written is to hold the compact token set as a `static const` beside
+`AppTokens.dark` rather than to build one per frame — not to add an `==` over six nested role
+objects.
+
+The guarantees are settled, not open:
+
+1. **A widget reaches a role, never a value.** §2.1's primitives are private to
+   `lib/ui/tokens.dart`; a widget that cannot find its role needs `design.md` amended, not a hex
+   code. That is `design.md` §0's order of operations and `claude.md` hard rule 2.
+2. **The type roles carry no colour and name no family**, and both are asserted. Colour is a
+   separate role and a widget pairs the two; the family is absent because `lib/theme.dart` names
+   none either — this app asked for `Inter` for years and no `Inter` was ever bundled.
+3. **A field named `type` would have broken the extension silently.** `ThemeExtension` declares
+   `Object get type` and it is the key `ThemeData.extensions` is looked up under, so a field of
+   that name makes `Theme.of(context).extension<AppTokens>()` answer `null` for ever with nothing
+   failing to compile. The type roles are reached as `typography`; the analyzer reported the
+   override as an `Information`-level hint, which is how it would have shipped.
+4. **`AppTokens.of` throws rather than falling back.** A `Theme` built from a fresh `ThemeData`
+   drops every extension, and answering with the defaults would render a compact screen at
+   comfortable spacing — a wiring fault wearing a layout fault's clothes. The error names
+   `copyWith`.
+5. **A published contrast figure is asserted as a measurement, not as a floor.** Which is what
+   caught §2.1's `text.primary` cell: white on `#0D1F16` is **17.147**, the document said 17.2,
+   and the first run failed by 0.0028 over a 0.05 tolerance. Corrected to 17.1 in `design.md`.
+   `DESIGN-AUDIT.md` §1.3 had recomputed 17.15, printed it beside the claim and concluded the
+   figures were correct, so a recomputation had already looked straight past it.
+6. **A spacing token is named by its value**, because §2.3 named the scale by index while §3 and
+   §5.2 name it by value and the two collide on `space.16` — 64 against 16. Only the value reading
+   is coherent: the index reading gives *compact* a larger section gap than comfortable, and
+   `space.24` is not on the scale at all. §2.3 now says so. No value moved.
+7. **Button `minimumSize` was not touched, and a test says so.** It is `Size(0, 48)` and §5.2's
+   `md` is 40h; a token layer that shrank a touch target would break §9, which is pass/fail under
+   `claude.md` hard rule 6.
+8. **§3's "12 / 8" row padding is read as horizontal-then-vertical, by arithmetic.** The document
+   never says which is which, comfortable is symmetric, and only compact carries the question: 8
+   above and below a 20-high `body.md` line is 36 inside the 40 minimum, and 12 would need 44 and
+   could not fit. Both readings are on the §2.3 scale; only one fits its own row height, and the
+   test pins both halves of that.
+
+**Three things are recorded rather than resolved, because resolving any of them means inventing a
+value `design.md` does not define.** `claude.md` says the correct outcome there is a question.
+
+1. **§2.1's container borders do not clear §9's 3:1 for a UI boundary.** Measured on
+   `surface.base`: `border.subtle` 1.38, `border.strong` 1.97, the five status borders 1.38 to
+   2.04. **The one boundary that carries information on its own — the focus ring — clears it at
+   11.71**, and it is the only boundary §9 names with a value; a status is a container plus an icon
+   plus a word, so its border is decoration rather than signal. That is an argument, not a
+   resolution: either §9's boundary row means something narrower than every border, or ten colours
+   have to become lighter. **This is a product-owner question, and it is the one item from step 1
+   that a later step cannot quietly absorb** — `StatusBadge` is step 4 and it will need the answer.
+2. **`mono` has no family and cannot have one yet.** §2.2 opens with "One family — Roboto" and its
+   last row says "monospace", and this app bundles no font at all — which is also why the
+   screenshot harness is currently more branded than the app, since it injects Roboto itself. The
+   role carries its 13 / 18 / 400 metrics and **is not yet fit for the job §2.2 gives it**: record
+   IDs and SKUs still render proportionally. A test asserts every role's family is null, so the
+   day this is answered that assertion fails deliberately. Same decision as §1.6 of the audit,
+   which is still open.
+3. **Dark is the only palette, because it is the only one defined.** §12 asks whether dark is the
+   only theme and answers nothing, and inventing a light palette is exactly what `claude.md`
+   forbids. If one is ever decided it arrives as a second `AppColorRoles` instance and every widget
+   that reads a role follows it without being edited, which is the reason the role layer exists.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -1361,6 +1539,35 @@ shape that took `mergeSaleReconciliationJob` down on every sale it ever saw —
 `generatePasswordResetLink` works against the Auth emulator, real Auth folds a mixed-case
 address so the current-email HMAC recheck matches, and a missing identity raises exactly the
 `auth/user-not-found` code the gateway swallows.
+
+### Two design-system questions the token layer refused to answer
+
+Opened 2026-08-11 by building step 1. Neither is answerable from `design.md`, and `claude.md`
+forbids inventing the value that would close either, so both are here rather than in the code.
+
+**Do §2.1's container borders have to clear §9's 3:1?** Measured against `surface.base`:
+`border.subtle` 1.38, `border.strong` 1.97, and the five status borders between 1.38 and 2.04. §9
+makes 3:1 pass/fail for "UI boundaries" and lists no exemption. Two readings, and they lead to
+different work:
+
+1. **The boundary rule means a boundary that carries information on its own.** Under it the system
+   already conforms: the focus ring — the only boundary §9 names with a value — clears 3:1 at
+   11.71, and a status is a container *plus an icon plus a word*, so no meaning rests on its border.
+   Nothing to do.
+2. **It means every border.** Then ten colours have to become lighter, and §2.1's status palette is
+   re-derived rather than adjusted, because a border cannot brighten without the container behind
+   it moving too.
+
+**Step 4 is where this stops being theoretical** — `StatusBadge` is that step, and it draws the
+container the whole argument is about. Answer it before then, not during.
+
+**What family is `mono`?** §2.2 opens with "One family — Roboto" and its last row says
+"monospace", and the app bundles no font at all: `lib/theme.dart` names none, deliberately, and
+the screenshot harness injects Roboto itself, which is why the harness is more branded than the
+app. So `mono` carries its metrics and names no family, and **record IDs and SKUs still render
+proportionally** — the role exists and does not yet do its job. `DESIGN-AUDIT.md` §6 already lists
+the Roboto half of this; the monospace half is the part with no answer at all, because "one family"
+and "monospace" cannot both be true. Until it is settled **no screenshot is evidence about type**.
 
 ### ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
 
@@ -1947,7 +2154,12 @@ enormous expected-denial traces.
   to overwrite leftovers from a killed run — delete them, and clear the ports.
 - **The Auth emulator reserves three ports:** `port`, `port + 200`, `port + 400`.
   Dev 9099, invitations 9199, reconciliation 9699; a fourth may not use 9299, 9399,
-  9499, 9599, 9899, or 10099.
+  9499, 9599, 9899, or 10099. **Refined 2026-08-11**: all three suites were run while a held
+  `emulators:dev` from the day before was still up, and they passed. What the collision
+  actually looks like is two warnings rather than a failure — the invitation suite's **eventarc
+  and Cloud Tasks** emulators default to 9299 and 9499, which is precisely what the held run's
+  Auth on 9099 reserves, and firebase-tools moved them to 9300 and 9500 by itself. So a held
+  run does not block a suite; it silently shifts two of its ports.
 - **Never free a port by killing an emulator you did not start** — a held run may be
   holding seeded data. Read its command line; `--hold` is the tell.
 - **Do not run Gradle and the emulators together**: 2–3 GB free, and the Firestore
@@ -2035,6 +2247,27 @@ enormous expected-denial traces.
   every glyph is a filled box. Set `debugShowCheckedModeBanner: false`, or read the
   banner as a clipped app-bar action. Two layout claims here were wrong and were
   settled in minutes by one rendering each.
+- **A screenshot diff is only attributable against a same-day baseline.** Regenerating the
+  set on 2026-08-11 moved **39 of 101 images** against a set generated on 2026-08-10, with
+  no code change behind any of them: `tool/screenshots/fakes.dart` derives its business
+  dates from `DateTime.now()`, because the daily summary and reconciliation compute a
+  business date the same way and read by exact path, so a hardcoded date would render those
+  screens permanently empty. `screenshots/README.md` says as much. **Every migration step's
+  step 4 depends on this**: regenerate a baseline the same day, or a review sees dozens of
+  moved images nobody touched. The way to attribute a change is to regenerate with it and
+  again without it and hash both sets, which is how step 1 proved it moved nothing.
+- **A `ThemeExtension` field named `type` breaks the extension silently.**
+  `ThemeExtension` declares `Object get type` and `ThemeData.extensions` is keyed by it, so
+  a field of that name makes `Theme.of(context).extension<T>()` answer `null` for ever while
+  compiling cleanly — the analyzer reports only an `Information`-level "overrides an
+  inherited member" hint. `AppTokens` reaches its type roles as `typography` for this reason.
+  A second half to know: a `Theme` built from a fresh `ThemeData` rather than from
+  `Theme.of(context).copyWith(...)` **drops every extension**.
+- **Do not key a directory comparison on `FullName.Substring($root.Length + 1)`** when
+  either root is an 8.3 short path — the scratchpad's is. `FullName` expands differently, so
+  every relative key is cut at the wrong offset and the comparison reports that all 101 files
+  changed. Key on `$_.Directory.Name` plus `$_.Name`. A comparison claiming *everything*
+  moved should be suspected before the change is.
 - **Do not revert a mutation with `git checkout -- <path>`** in a session that also
   edits that file. Hold the original in memory and restore in a `finally`.
 - **A `.cmd` cannot be spawned from Node without `shell: true`** — it fails as
@@ -2095,12 +2328,28 @@ enormous expected-denial traces.
 
 ### Repository state
 
-`flutter analyze --no-pub lib test` reports **476 pre-existing issues**, all in the
-disabled legacy island (`lib/pos/**`, `lib/screens/**`, `thermal_printer_service`,
-`glass_card`, `pill_input`, `theme.dart`) plus the experimental Sentry
-`profilesSampleRate` warning at `lib/main.dart:29`. Analyse the paths a chunk
-touches. The legacy screens reference each other but nothing in `lib/main.dart` or
-the tenancy shell reaches them, so they are a closed unreachable island.
+`flutter analyze --no-pub lib test` reports **475 pre-existing issues**, measured again on
+2026-08-11 and **one fewer than the 476 this file carried**, which is what commit `1b2b13b`
+rewriting `lib/theme.dart` cost it. Analyse the paths a chunk touches. Where they actually
+are, counted rather than characterised:
+
+```text
+323  lib/pos/**              legacy, read-only
+ 87  lib/screens/**          legacy, read-only
+ 47  lib/services/**         includes the two 788-line bulk upload/update services
+  6  lib/api/**
+  5  lib/widgets/**          pill_input, glass_card, pill_button - reachable from sign-in
+  3  lib/pdf_preview_screen.dart
+  1  lib/main.dart           the experimental Sentry profilesSampleRate warning
+  1  lib/keyboard_scope.dart
+  1  lib/constants/**
+```
+
+**`lib/theme.dart` now holds none**, and neither does `lib/ui/`, `test/ui/` or
+`test/support/`. The legacy screens reference each other and nothing in `lib/main.dart` or
+the tenancy shell reaches `lib/pos/**` or `lib/screens/**`, so those 410 are a closed
+unreachable island; the other 65 are not, and `lib/widgets/**` is the set the sign-in screen
+mounts.
 
 `lib/main copy.dart` is a 48-line stray in `lib/` and should be deleted; it is noted
 only so nobody mistakes it for a live entry point.
@@ -2109,66 +2358,93 @@ The Sentry DSN in `lib/main.dart` is an `http://` URL. Android blocks cleartext 
 every build, so those envelopes have never been delivered from a device. The debug
 network-security config deliberately does not cover it.
 
-These local edits are user-owned, are not this work's, and must never be staged:
+These local edits are not this work's and must never be staged. **The list was three lines
+long until 2026-08-11 and is now this**, because the design-system work arrived in the
+working tree rather than in a commit:
 
 ```text
 .vscode/settings.json
 android/gradle.properties
 pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
-prompt.md                                          (untracked)
+prompt.md  screenshots.zip                        (untracked)
+
+lib/checkout/checkout_cart_panel.dart             modified, another session's
+lib/inventory/stock_adjustment_panel.dart          modified, another session's
+lib/tenancy/tenant_staff_directory.dart            modified, another session's
+test/checkout/checkout_cart_panel_test.dart        modified, another session's
+test/inventory/stock_adjustment_panel_test.dart    modified, another session's
+test/tenancy/, seven *_test.dart files             modified, another session's
+
+design.md  DESIGN-AUDIT.md  claude.md              untracked
+lib/ui/records.dart                                untracked
+tool/screenshots/, 7 files                         untracked
+screenshots/, 101 images + generated README        untracked
+docs/printer_transport.md                          untracked
 ```
+
+**Three consequences worth stating rather than discovering.** The unstaged test edits are
+why this tree measures **eight tests above** the Flutter baseline this file used to carry, so
+a chunk here measures the suite before its own work as well as after. `design.md` — which
+`claude.md` names as the source of truth for every visual change — **is not in the
+repository**, so the two corrections the token layer made to it live only in this working
+tree; whoever commits `design.md` carries them. And `lib/ui/` now holds one tracked file and
+one untracked one, which is deliberate: staging another session's 789-line document or its
+495-line widget module to carry a few lines of mine is not a chunk's call to make. **Whether
+all of it is committed is the product owner's.**
 
 ---
 
 ## Next bounded chunk
 
-**Stop showing a category ID to a person, and put the picker where the question is.** Findings
-4 and 5 from the Android run, together, and nothing else. They are one chunk because they are
-one mistake in three places: a category is named by its ID where a person expects its name, and
-the resolution that fixes it **already exists in this codebase** — the read-only catalog
-resolves the same case correctly.
+**Stop showing a category ID to a person.** Finding 5 from the Android run, and nothing else. It
+is the surviving half of what used to be one chunk with finding 4, and it is queued **above** the
+redesign's step 2 deliberately: it is a defect a person met in the running app, and a redesign step
+is not.
 
-**The three places, to be re-checked against source before anything is written:**
+**The two places, to be re-checked against source before anything is written:**
 
-- **The import preview says "filed under `cat-bakery`"** to somebody who typed `Bakery`. What
-  they typed is the row's own category name and it is already in the parsed row.
+- **The import preview says "filed under `cat-bakery`"** to somebody who typed `Bakery`. What they
+  typed is the row's own category name and it is already in the parsed row.
 - **"Manage catalog" shows `cat-not-cached`** for a product whose category document is missing,
-  where the read-only catalog gets it right.
-- **The add-product form asks for a category with no picker beside it.** "Choose the category
-  this product is filed under." sits about a thousand pixels below the chip row that *is* the
-  picker, under a heading that also serves as the category list. The **"Correct" dialog on the
-  same screen has an inline picker**, which is the strongest argument that the form is the half
-  that is wrong.
+  where the read-only catalog gets the same case right.
 
 **The shape of it, so nothing widens:**
 
-- **Find the existing resolution first and reuse it.** Three copies of "look up a category
-  name" is how the third one drifts. This chunk should end with fewer name-resolution paths
-  than it started with, not more.
-- **A missing category document is a real state and must stay legible.** `cat-not-cached` is
-  not bad data — it is a product filed under a category nothing can read — so the replacement
-  wording has to say that rather than hide it behind a blank.
-- **The add-product form gets the inline picker the "Correct" dialog already has**, rather than
-  the prose moving next to the chips. Two ways of doing one thing on one screen is the defect.
-- Cover each of the three with a widget test, including one asserting that **no rendered string
-  carries the `cat-` document-ID shape** on the import preview or the catalog list.
+- **Find the existing resolution first and reuse it.** Three copies of "look up a category name"
+  is how the third one drifts, so this chunk should end with **fewer** name-resolution paths than
+  it started with.
+- **A missing category document is a real state and must stay legible.** `cat-not-cached` is not
+  bad data — it is a product filed under a category nothing can read — so the replacement wording
+  has to say that rather than hide it behind a blank.
+- Cover both with a widget test, including one asserting that **no rendered string carries the
+  `cat-` document-ID shape**.
 
-**Explicitly excluded from it:** every server file — none of these is a server defect, and
+**Explicitly excluded from it:** every server file — none of this is a server defect, and
 `importProducts` echoing an ID is correct because an ID is what it wrote; `firestore.rules`;
-category rename and delete, which stay excluded for the orphaning reason; creating a category
-from the import preview, which the import decision deliberately refuses; finding 6, which is an
-environment limitation and not a product defect; deployment; and every standing exclusion
-listed below.
+category rename and delete, which stay excluded for the orphaning reason; creating a category from
+the import preview, which the import decision deliberately refuses; **every token in
+`lib/ui/tokens.dart`**, because a wording repair is not the step that starts reading them and a
+half-migrated surface is worse than an unmigrated one; finding 6, an environment limitation rather
+than a product defect; deployment; and every standing exclusion listed below.
 
-**Two things the last two chunks owe and could not pay: nobody has looked at either repair.**
-Both were told to skip the Android build, so between them they have 51 tests and no eyes.
-**Whenever the next device run happens, those two screens come first** — for sign-in, an empty
-password, a wrong password, and then editing a field; for the invitation, the refusal an
-identity that was unverified at invite time receives. The second **cannot be reproduced on the
-emulators at all** (finding 6): it needs either a real Brevo key or an invitation written by
-hand with `visibleAcceptanceAllowed: false`. That is a prerequisite attached to the next device
-session, not a chunk of its own.
+**What was queued here before it: the token layer, and it is done.** Step 1 of `design.md` §11 is
+built, additively, and it moved none of the 101 screenshots — see the standing decision above for
+the density structure it had to settle, the two corrections it made to `design.md`, and the three
+questions it recorded rather than answered. **One of those three is a product-owner question that
+step 4 will need**: §2.1's container borders measure 1.38 to 2.04 against the page where §9 makes
+3:1 pass/fail for a UI boundary.
+
+**Three things the last three chunks owe, and the debt is now a device run.** Nobody has looked at
+the sign-in repair, nobody has looked at the invitation repair, and **nobody has looked at commit
+`1b2b13b`**, which repainted every screen in the app by wiring a `ColorScheme` the theme had named
+and never used. Between them that is 51 tests, 101 screenshots, and no eyes. **Whenever the next
+device run happens, those come first** — for sign-in, an empty password, a wrong password, then
+editing a field; for the invitation, the refusal an identity that was unverified at invite time
+receives; for the theme, any screen with a button, a spinner or an icon on it. The invitation one
+**cannot be reproduced on the emulators at all** (finding 6): it needs either a real Brevo key or
+an invitation written by hand with `visibleAcceptanceAllowed: false`. That is a prerequisite
+attached to the next device session, not a chunk of its own.
 
 **The alternative, named because it is the only queued item that would move a red row:**
 resolving what a **Windows** build can actually attest with under App Check. `PLAN.md` already
@@ -2194,6 +2470,38 @@ finished.
 
 ### Then, in preference order
 
+- **~~The design system, step 1: the token layer~~** — **done 2026-08-11.** It moved no board row
+  and no rollout step, and it is the only chunk in this file whose pass condition was that nothing
+  changed: 101 screenshots, hashed with the registration in and out, byte-for-byte identical. What
+  it decided — additive rather than conforming, and a density as a nested `Theme` — is recorded in
+  its own standing decision above, together with the two corrections it made to `design.md` and the
+  three questions it refused to answer by inventing a value.
+- **Harden the two platform-CLI helpers against a Node warning** — small, and it protects every
+  future session's reading of the invitation suite. `runPlatformGrantCli` and its revoke twin parse
+  a spawned CLI's **stderr** as JSON, so any `(node:<pid>)` warning fails the test with a
+  `SyntaxError` that names nothing about the CLI. Strip warning lines before parsing, or spawn with
+  `NODE_NO_WARNINGS=1`, and **capture what the warning actually was** while doing it — nobody has
+  seen it yet. Touches `rules-tests/test/` only: no product code, no rule, no `functions/` file. It
+  is queued below the two defect chunks because it costs a session nothing to re-run a flake and
+  costs a person real confusion to meet a category ID.
+- **The design system, step 2: remove every ink ripple** — `design.md` §2.4, and one file.
+  `splashFactory: NoSplash.splashFactory` on `ThemeData` plus `overlayColor` `WidgetStateProperty`s
+  on the four button themes, implementing §2.1's 8% / 12% overlay rows. Verified against the SDK:
+  `InkResponse` falls back to `ThemeData.splashFactory` and the M3 button defaults delegate to it,
+  so one setting reaches every button, `ListTile`, `ChoiceChip`, and the single `InkWell` in the
+  migrated tree. **`PressSurface` is deliberately not in this chunk** — it needs a spring substrate
+  that does not exist, and step 3 replaces every button call site anyway, so it becomes
+  `AppButton`'s internal detail rather than a sweep of its own. See `DESIGN-AUDIT.md` §6, decision 4.
+  **This chunk's screenshot diff will be near-empty, and that is not evidence it worked**: a ripple
+  only exists mid-press. It is the first chunk in this file whose verification is a device run with
+  the performance overlay on rather than a diff, per `design.md` §10.
+- **The design system, step 3: `AppButton` and `AppTextField`** — and it is queued as **two**
+  chunks, not one. The call-site migration is mechanical (~40 buttons, ~20 fields); the cost is
+  `claude.md` hard rule 5, which wants every state in the screenshot harness, and `AppButton` is
+  4 tiers × 3 sizes × 9 states. **`AppTextField` is where finding 4 gets closed** — the add-product
+  form's picker — and where the two incompatible field implementations become one: bare `TextField`
+  in the migrated tree, and `PillInput` on sign-in, which draws its own well, its own label, and its
+  own focus glow while reading nothing from the theme.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the
@@ -2289,10 +2597,20 @@ stock and sale differences, currency labels on the differences list, the subscri
 surfaces, discounts, camera barcode scanning, **the in-app password reset surface**
 (blocked on the App Check decision above, which is now in motion), renaming or
 deleting a category, SKU uniqueness, a `platform_audit_logs`
-surface, branding surfaces, the Sentry DSN, the 476 pre-existing analyzer issues, a
-root-widget smoke test and the startup seams it would need, **the sign-in screen's visual
-design** — the "UNLOCK REGISTER" label, the on-screen `PosKeyboard`, and the `PillInput`
-styling — and deployment.
+surface, branding surfaces, the Sentry DSN, the 475 pre-existing analyzer issues, a
+root-widget smoke test and the startup seams it would need, and deployment.
+
+**Four things the design system excludes, new to this list on 2026-08-11 and each its own
+decision rather than an oversight.** A light palette — §12 asks the question and answers nothing,
+so there is no second palette to write and inventing one is what `claude.md` forbids. **The
+breakpoints and the content widths** — §4.1's three names and §4.2's 720 / 1200 / 420 are not in
+the token layer, because 768 is already declared twice (`records.dart:26`,
+`checkout_cart_panel.dart:550`) with a third mechanism in `login_screen.dart:47`, and a fourth
+declaration that removes none of the three makes the drift worse; unifying them is a rewiring step
+in §4.1's own words. **The eight animated assets and the device-tier system** — step 10, ninth in
+the order deliberately, because building assets before the substrate produces a slow app with nice
+animations in it. And **`lib/pos/**` and `lib/screens/**` throughout, which `claude.md` hard rule 3
+makes read-only.
 
 **Seven other surfaces that say "Please try again." are new to this list**, and they are named
 rather than left silent because the chunk that repaired the invitation refusal deliberately did
@@ -2304,12 +2622,25 @@ work. They become a decision if a device run finds one of them misdirecting the 
 invitation did, and the boundary to reuse is
 `lib/tenancy/invitation_acceptance_failure.dart`.
 
-**The sign-in screen's visual design is new to this list, promoted here rather than dropped.**
-It was named as an exclusion by the chunk that repaired that screen's failure messages, and
-letting it vanish with that chunk's text would be exactly the silent inheritance this section
-exists to prevent. It is legacy styling, not a defect: `pill_input` and `glass_card` are in
-the closed unreachable island for analyzer purposes, the screen works, and nobody has asked
-for it. It becomes a decision only if somebody does.
+**The sign-in screen's visual design has left this list, and the reason it used to carry is now
+false in two ways.** It was excluded on the grounds that "it is legacy styling, not a defect:
+`pill_input` and `glass_card` are in the closed unreachable island for analyzer purposes, the screen
+works, and nobody has asked for it. It becomes a decision only if somebody does."
+
+**Somebody has.** `design.md` §11 step 9 is sign-in and onboarding, and `DESIGN-AUDIT.md` §4.4 names
+what is actually wrong with it: labels in uppercase where §2.2 permits it only on `label.eyebrow`, a
+radius-32 well where §2.3 says 8, a green glow `BoxShadow` where §9 requires a 2px focus ring,
+`Colors.green` for the Remember Me checkbox — a *different* green from `accentGreen` — and
+`Colors.red` for the error rather than the palette's own critical red. "UNLOCK REGISTER →" stays
+named because §8 rule 3 and §2.2 both reach it: wrong case and wrong words.
+
+**And the island claim was wrong.** `lib/main.dart:4` imports `login_screen.dart` and mounts it at
+`:460` as `signedOut`; that screen imports `pill_input`, `pos_keyboard`, `glass_card`, and
+`pill_button`. The app's root reaches all four. See the analyzer-issues entry below, which carried
+the same error.
+
+Nothing of it is excluded now; it is queued as step 9 of the redesign, which is far enough down that
+the queue position is doing the work the exclusion used to.
 
 **That entry was narrowed on 2026-08-08 and the narrowing is the point.** It used to read
 "password reset" flat, which made a whole area look closed when only one half of it was. The
@@ -2366,16 +2697,32 @@ nothing of it is queued.
 showing an incomplete figure and which nobody has asked for; **no backfill** of sales recorded
 before cost existed, which is impossible and must not be faked with zero; and **discounts**.
 
-**Named once, as it has been inherited for many consecutive chunks: the 476
-pre-existing analyzer issues.** Still correctly excluded, and the reason is stronger
-than habit — every one of them is in the closed unreachable island (`lib/pos/**`,
-`lib/screens/**`, `thermal_printer_service`, `glass_card`, `pill_input`, `theme.dart`)
-plus one experimental Sentry warning, and nothing in `lib/main.dart` or the tenancy
-shell reaches any of it. Fixing them would be work on code that does not run. The one
-thing to watch: the printing decision above points at `thermal_printer_service.dart`,
-which is *in* that island, so whichever chunk takes printing is the one that has to
-say whether it revives that file or writes past it. Until then, analyse the paths a
-chunk touches and leave the island alone.
+**Named once, as it has been inherited for many consecutive chunks: the 475
+pre-existing analyzer issues.** Still correctly excluded, but **the reason it has been carrying was
+partly false and is corrected here.** It read: "every one of them is in the closed unreachable island
+(`lib/pos/**`, `lib/screens/**`, `thermal_printer_service`, `glass_card`, `pill_input`,
+`theme.dart`) plus one experimental Sentry warning, and nothing in `lib/main.dart` or the tenancy
+shell reaches any of it."
+
+**Three of those six are reachable from the app's root.** `lib/main.dart:6` imports `theme.dart` and
+`:201` mounts `spiritTheme` as the app's only theme; `:4` imports `login_screen.dart` and `:460`
+mounts it as `signedOut`, and that screen imports `pill_input`, `glass_card`, `pill_button`, and
+`pos_keyboard`. The island is `lib/pos/**`, `lib/screens/**`, and `thermal_printer_service` — which
+is still the overwhelming bulk of the 475 — **410 of them, counted on 2026-08-11** — so the
+exclusion stands on its own weight rather than on the sentence that was wrong. The other 65 are
+listed by area under "Repository state", because "all of them are in the island" was the part that
+was false and a count is the only thing that stops it being said again.
+
+**`theme.dart` has left the island outright.** The redesign's step 1 landed on 2026-08-11 and
+registers the token layer there, and step 2 makes it the ripple substrate; commit `1b2b13b` had
+already rewritten it into the `ColorScheme` every screen reads. It is now analysed with every chunk
+that touches it — `flutter analyze` over `lib/theme.dart`, `lib/ui` and the tests beside them
+reports **no issues** — and `lib/ui/` is held to the same standard.
+
+The thing to watch is unchanged: the printing decision above points at
+`thermal_printer_service.dart`, which is genuinely *in* the island, so whichever chunk takes printing
+has to say whether it revives that file or writes past it. Until then, analyse the paths a chunk
+touches and leave `lib/pos/**` and `lib/screens/**` alone.
 
 **Suspicious-return scoring was never on this list either, and that was an oversight
 rather than a decision.** A 555-line capability of the previous app appeared in no board

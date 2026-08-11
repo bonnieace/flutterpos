@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'ui/tokens.dart';
+
 // Dark theme colors
 const Color bgDark = Color(0xFF0D1F16);
 const Color bgMid = Color(0xFF132A1F);
@@ -42,6 +44,13 @@ const Color _criticalRed = Color(0xFFFF5C6C);
 /// scaffold and the raised surface it is painted on, so the two cannot drift
 /// apart again.
 ///
+/// **[AppTokens] is registered here and read by nothing yet.** That is
+/// `design.md` §11 step 1: the token layer is defined additively, so every
+/// value below still decides what the app renders and an empty screenshot diff
+/// is the proof. The rewiring - the input well moving to `surface.sunken`, the
+/// outlined button's label off mint, the card radius from 16 to 12 - belongs to
+/// steps 2 to 5, where each image diff has exactly one cause.
+///
 /// **No `fontFamily` is named here, deliberately.** This theme asked for
 /// `Inter` for a long time and no `Inter` was ever bundled - `pubspec.yaml`
 /// declares no fonts and the repository holds no font file - so every screen
@@ -52,6 +61,7 @@ const Color _criticalRed = Color(0xFFFF5C6C);
 final ThemeData spiritTheme = ThemeData(
   brightness: Brightness.dark,
   scaffoldBackgroundColor: bgDark,
+  extensions: const <ThemeExtension<dynamic>>[AppTokens.dark],
   colorScheme: const ColorScheme.dark(
     primary: accentGreen,
     // Dark ink on a bright accent, which is what the login screen's primary

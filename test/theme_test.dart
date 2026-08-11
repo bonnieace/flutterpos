@@ -1,30 +1,8 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// WCAG 2.x contrast ratio between two opaque colours.
-///
-/// `Color.computeLuminance` is already the WCAG relative luminance, so this is
-/// only the ratio around it.
-double _contrast(Color foreground, Color background) {
-  final a = foreground.computeLuminance();
-  final b = background.computeLuminance();
-  return (math.max(a, b) + 0.05) / (math.min(a, b) + 0.05);
-}
-
-/// The WCAG AA threshold that applies to [style].
-///
-/// Large text is allowed less contrast because it is easier to read at the
-/// same ratio; everything else must reach 4.5:1.
-double _requiredContrast(TextStyle style) {
-  final size = style.fontSize ?? 14;
-  final bold = (style.fontWeight?.value ?? FontWeight.normal.value) >=
-      FontWeight.w700.value;
-  final isLarge = size >= 24 || (bold && size >= 18.67);
-  return isLarge ? 3.0 : 4.5;
-}
+import 'support/wcag.dart';
 
 void main() {
   // The whole point of these: the app paints on a near-black scaffold, and a
@@ -66,9 +44,9 @@ void main() {
     test('each one clears WCAG AA against the scaffold', () {
       for (final entry in styles.entries) {
         final style = entry.value!;
-        final required = _requiredContrast(style);
+        final required = requiredContrastFor(style);
         expect(
-          _contrast(style.color!, spiritTheme.scaffoldBackgroundColor),
+          contrastRatio(style.color!, spiritTheme.scaffoldBackgroundColor),
           greaterThanOrEqualTo(required),
           reason:
               '${entry.key} is unreadable on the scaffold: it needs $required:1',
@@ -81,8 +59,8 @@ void main() {
       // a style that only clears the darker background is not enough.
       for (final entry in styles.entries) {
         expect(
-          _contrast(entry.value!.color!, spiritTheme.colorScheme.surface),
-          greaterThanOrEqualTo(_requiredContrast(entry.value!)),
+          contrastRatio(entry.value!.color!, spiritTheme.colorScheme.surface),
+          greaterThanOrEqualTo(requiredContrastFor(entry.value!)),
           reason: '${entry.key} is unreadable on a card or dialog',
         );
       }

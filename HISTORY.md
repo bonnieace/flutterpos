@@ -18103,3 +18103,307 @@ pubspec.lock
 .codex-app.png .codex-live.png .codex-live2.png   (untracked)
 prompt.md                                          (untracked)
 ```
+
+## The design system's token layer, wired to nothing - 2026-08-11
+
+### Completed in this session
+
+**`design.md` §11 step 1, taken additively**: every role, type role, spacing value, radius,
+spring, duration and density value the specification names now exists in
+`lib/ui/tokens.dart` as one `ThemeExtension`, `spiritTheme` registers it, and **nothing
+reads it**. `DESIGN-AUDIT.md` §6 decision 1 is what made that the shape of the chunk: the
+audit found that conforming the token layer in place would repaint roughly forty button call
+sites, every caption, every card, every form and every chip at once, so step 1's "changes no
+pixels" claim was unachievable as written. Making it additive restores the claim and makes
+each later diff attributable to one component.
+
+**The pass condition was an empty screenshot diff and it was measured rather than asserted.**
+101 images, regenerated with the registration in place and again with it backed out, hashed
+both times: byte-for-byte identical. See the test section for why that comparison had to be
+run against a same-day set.
+
+### The one question the token layer could not avoid, and the answer
+
+`design.md` §3 gives `density.comfortable` and `density.compact` different body roles, but
+`bodyMedium` is a single global value and **all 756 bare `Text(` call sites** in the migrated
+tree resolve to it through `DefaultTextStyle`. One `ThemeData` cannot hold two body sizes, so
+the token layer had to choose a structure - and the choice decides whether those 756 sites are
+ever edited, and therefore the shape of steps 6 and 8. `DESIGN-AUDIT.md` §6 lists it as the
+one item still needing a decision that "is not cosmetic in any sense".
+
+**Answered by the product owner this session: a nested `Theme` per screen.** A back-office
+screen wraps its subtree in a `Theme` built from `Theme.of(context).copyWith(...)` carrying the
+compact `AppTokens` and a `bodyMedium` swapped to that density's body role. It keeps §3's
+"density is a property of the surface, chosen by the screen" literal, and it edits none of the
+756 sites. Reading the role explicitly at every call site was the other correct answer and was
+declined because it eventually edits all of them.
+
+**What is in this chunk is the deciding half, not the mechanism.** `AppDensity` holds both
+value sets, `bodyRole` is the seam a nested `Theme` reads, and `pointerOnly` carries §3's rule
+that a touch device never gets 32px targets whatever its width - as data, so the widget that
+eventually resolves density cannot forget it. The widget itself arrives with the first compact
+screen; step 1 changes no pixels and no screen is compact yet. A widget test exercises the seam
+end to end, so the decision is proved rather than described.
+
+### Two traps in `ThemeExtension`, one of which fails silently
+
+1. **A field called `type` breaks the extension.** `ThemeExtension` declares
+   `Object get type`, and it is the key `ThemeData.extensions` is stored and looked up under.
+   The first draft of `AppTokens` held the type roles in a field named `type`, which overrides
+   it - so the map would have been keyed by an `AppTypeRoles` instance and
+   `Theme.of(context).extension<AppTokens>()` would have answered `null` for ever, with
+   nothing failing to compile. The roles are reached as `typography`, the reason is written at
+   the field, and a test asserts `AppTokens.dark.type == AppTokens`.
+2. **A `Theme` built from a fresh `ThemeData` drops every extension.** `AppTokens.of` therefore
+   **throws** rather than falling back to the defaults: a compact screen silently rendered at
+   comfortable spacing looks like a layout bug rather than the wiring one it is. The
+   `FlutterError` names `copyWith`, which is the fix, and a widget test asserts it.
+
+### What the token layer proved about the specification
+
+Step 1 exists to prove the roles map onto what exists before anything moves, and it found two
+things in `design.md` and one in `DESIGN-AUDIT.md`. Both document corrections were made here,
+in that order, because `design.md` §0 puts the document first.
+
+1. **`text.primary`'s published contrast was rounded the wrong way.** §2.1's table said
+   17.2 / 15.2 against base and raised; white on `#0D1F16` measures **17.147**, which rounds to
+   17.1. The cell now reads 17.1. It is a rounding slip rather than a wrong colour, and it is
+   worth recording because **`DESIGN-AUDIT.md` §1.3 recomputed 17.15, printed it beside the
+   claim of 17.2, and concluded "The contrast figures in §2.1 are correct"** - so an independent
+   recomputation had already looked straight at it. The test asserts the measurement matches the
+   published figure to within 0.05 rather than merely clearing a floor, which is what caught it:
+   the first run failed by 0.0528.
+2. **The spacing scale was named two incompatible ways.** §2.3 described it by index -
+   "`space.1` = 4 through `space.16` = 64" - while §3 asks for a section gap of `space.24` and
+   §5.2 for padding of `space.20` and `space.16`, which are values. The two collide on the name
+   `space.16`: 64 under one reading, 16 under the other. **Only the value reading is coherent**,
+   because under the index reading §3 gives the *compact* density a larger section gap than the
+   comfortable one, and `space.24` is not on the scale at all. §2.3 now states the value naming
+   and says why. No value changed; the permitted set is the same ten.
+
+### Three things recorded rather than resolved, because resolving them means inventing a value
+
+1. **§2.1's container borders do not clear §9's 3:1 for a UI boundary.** Measured against
+   `surface.base`: `border.subtle` 1.38, `border.strong` 1.97, and the five status borders
+   between 1.38 and 2.04. §9 makes 3:1 pass/fail for "UI boundaries". **The one boundary that
+   carries information on its own - the focus ring - clears it at 11.71**, and it is the only
+   one §9 names with a value; a status is a container plus an icon plus a word, so its border is
+   decoration rather than signal. That is an argument, not a resolution: either §9's boundary row
+   means something narrower than every border, or ten colours need to become lighter. The values
+   are pinned by tests and the ratios are in the file; nothing was invented.
+2. **`mono` has no family, and cannot have one yet.** §2.2 opens with "One family - Roboto" and
+   its last row says "monospace", and this app bundles no font at all - `lib/theme.dart` names
+   none, deliberately, and the screenshot harness injects Roboto itself, which is why the harness
+   is currently more branded than the app. So `mono` carries its 13 / 18 / 400 metrics, names no
+   family like the eleven roles above it, and **is not yet fit for the job §2.2 gives it**. A
+   test asserts every role's family is null, so the day the question is answered that assertion
+   fails deliberately.
+3. **`sage.100` `#A0BCAC` is the one §2.1 primitive this file does not carry.** No role consumes
+   it. A colour nothing can reach is a value waiting to be picked up by a widget that needed a
+   role instead, so it goes in when a role wants it, and the reason is written where it would
+   have been.
+
+### The screenshot diff needs a same-day baseline, and that is new
+
+Regenerating the set produced **39 of 101 images differing from the set on disk**, which was
+generated yesterday. **None of it is this chunk**: with the registration in place and with it
+backed out, all 101 hash identically. The cause is the harness working as documented -
+`tool/screenshots/fakes.dart` derives its business dates from `DateTime.now()` because the daily
+summary and reconciliation compute a business date the same way and read by exact path, and
+`screenshots/README.md` says in as many words that re-running on another day produces the same
+screens carrying that day's dates.
+
+The consequence is a working practice rather than a defect: **a step's screenshot diff is only
+attributable if the baseline was generated the same day**, or the review will show 39 moved
+images nobody changed. Every migration step's step 4 depends on this. Recorded in `PLAN.md`
+under standing traps.
+
+### Deliberately not done
+
+- **No existing value in `theme.dart` was repointed.** The input well is still `bgMid`, the
+  outlined button's label is still mint, cards are still radius 16, inputs 14, chips stadium,
+  the bottom sheet 24. Each is a rewiring row from `DESIGN-AUDIT.md` §4.8 and belongs to steps
+  2 to 5. **The divergences are asserted as divergences**, so when the step that closes one
+  lands, the test fails and the row is removed in the same change rather than the difference
+  going unnoticed for a release.
+- **Button `minimumSize` was not touched.** It is `Size(0, 48)` and §5.2's `md` is 40h; shrinking
+  the default would break §9's 48dp touch target, which is pass/fail under `claude.md` hard rule
+  6. A test asserts all three button themes still measure 48.
+- **No breakpoint and no content width.** §4.1's three breakpoints and §4.2's 720 / 1200 / 420
+  are not in this file. 768 is already declared twice - `records.dart:26` and
+  `checkout_cart_panel.dart:550` - plus a third mechanism in `login_screen.dart:47`, and adding a
+  fourth declaration without removing three would make the drift `DESIGN-AUDIT.md` §5 found worse
+  rather than better. Unifying them is a rewiring step, in §4.1's own words.
+- **No component.** `PressSurface`, `AppButton`, `StatusBadge` and the rest are steps 2 to 5.
+  `splashFactory: NoSplash` is step 2 and is not here either.
+- **No widget file, no server file, no rule, no deployment.** `firestore.rules` and `functions/`
+  are byte-identical, measured with `git diff` rather than asserted.
+- **`design.md`'s stale header** - line 3 still says "Status: v0.1 - proposed. Not yet
+  implemented." while the changelog's top entry is v0.3 and §6.4 refers to v0.2.
+  `DESIGN-AUDIT.md` §4.13 found it; it is document hygiene rather than a token, and it was left
+  where the audit put it rather than half-corrected by a chunk that had no other business in the
+  header.
+
+### What the log itself was missing, found while reading it
+
+`HISTORY.md` ended at the 2026-08-08 invitation-refusal session, and `grep` over it for
+`2026-08-10`, `2026-08-11`, `design.md`, `DESIGN-AUDIT`, `records.dart` and "brand colour"
+returned **nothing at all**. So the log does not record:
+
+- **commit `1b2b13b`, "Wire the brand colours into the theme every screen reads"** (2026-08-10),
+  which is the parent of this session's commit and rewrote `lib/theme.dart` from 4 named colours
+  into a full `ColorScheme` plus fifteen component themes, +184 / -7 lines. Its own message is
+  detailed and is the only record of it.
+- **`lib/ui/records.dart`**, `tool/screenshots/` (7 files), `screenshots/` (101 images and a
+  generated README), `design.md`, `DESIGN-AUDIT.md`, `claude.md` and `docs/printer_transport.md`,
+  all of which are **untracked**, and unstaged consumers of `records.dart` in three panels.
+
+This entry does not reconstruct those sessions' reasoning and should not be read as doing so -
+the facts above are what the tree and the git log state. What it does mean for this chunk is
+recorded in the test section: the Flutter baseline in `PLAN.md` was measured against a different
+tree than the one on disk.
+
+### Files changed
+
+```text
+lib/ui/tokens.dart                 (new, 1,187 lines: the whole token layer)
+lib/theme.dart                     (one `extensions:` line, one import, one doc paragraph)
+test/ui/tokens_test.dart           (new, 54 tests)
+test/support/wcag.dart             (new: the contrast arithmetic, shared)
+test/theme_test.dart               (its two private copies of that arithmetic deleted and
+                                    repointed at the shared one; its 4 tests unchanged)
+HISTORY.md
+PLAN.md
+```
+
+**`design.md` was corrected twice and is not in the commit**, because the file is untracked and
+belongs to a session that has not committed it. The corrections are in the working tree; whoever
+commits `design.md` carries them. This is stated rather than resolved: staging another session's
+789-line document to carry two of my lines is not this chunk's call to make.
+
+### Test commands and results
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1586 passed** (1532 + 54) |
+| Functions | `npm --prefix functions test` | **409 passed**, unchanged |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161 passed**, unchanged |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10 passed**, unchanged |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23 passed**, unchanged — on the second run. The first was **22 of 23**; diagnosed below and not this chunk |
+| Screenshots | `flutter test --no-pub --concurrency=1 tool/screenshots` | **78 captures, 101 images, and the A/B set hashed identical** |
+
+`flutter analyze --no-pub lib/ui lib/theme.dart test/ui test/support test/theme_test.dart`:
+**no issues found**. Over the whole project, `flutter analyze --no-pub lib test` reports **475**
+pre-existing issues, **one fewer than the 476 this repository has been carrying** - commit
+`1b2b13b`'s rewrite of `lib/theme.dart` is what removed it, and `lib/theme.dart` now holds none at
+all. The 475 are grouped by area under "Repository state" in `PLAN.md`, because the claim that all
+of them sit in the unreachable island was already known to be false and only a count stops it being
+repeated.
+
+**All three emulator suites ran alongside a held `emulators:dev` run from 2026-08-10** - a
+`seed-dev-emulator.js --hold` on the dev ports, holding seeded data, which was left strictly alone
+per the standing trap. Their ports do not collide (rules and invitations on 9199 / 8180 / 5101,
+reconciliation on 9699), but the invitation suite's eventarc and Cloud Tasks emulators **did** find
+their defaults taken - 9299 and 9499 are exactly what the held run's Auth emulator on 9099 reserves -
+and firebase-tools warned and moved them to 9300 and 9500 rather than failing. That is a refinement
+of the port trap worth having: the reservation collides, and the fallback is graceful.
+
+**The Flutter baseline in `PLAN.md` was 1524 and this tree starts at 1532.** The eight are
+another session's unstaged edits to `test/checkout/`, `test/inventory/` and `test/tenancy/`,
+which are in the working tree and not this chunk's. The whole suite was therefore measured
+**before** any edit of mine as well as after, so the figure this chunk moved is attributable:
+1532 before, and 1532 + 54 after.
+
+Holding functions and rules unchanged is the entire claim about the server, and it is stronger
+here than a suite count: `git diff -- firestore.rules functions/ rules-tests/` prints **zero
+lines**. This is the tenth consecutive chunk to leave `firestore.rules` byte-identical.
+
+The Android build and the Android emulator suite were skipped, per the session instruction.
+
+### Meaningful failures and their resolutions
+
+**The invitation integration suite failed once, 22 of 23, and it is not this chunk.** Diagnosed
+before retrying, per the working discipline, and the diagnosis is worth keeping because the failure
+mode is invisible from the assertion:
+
+```text
+✖ grant-platform-admin CLI completes, rejects, and resumes real grants
+  SyntaxError: Unexpected token '(', "(node:2309"... is not valid JSON
+      at JSON.parse (<anonymous>)
+      at runPlatformGrantCli (invitation-acceptance.integration.test.js:1234:15)
+      at TestContext.<anonymous> (invitation-acceptance.integration.test.js:534:20)
+```
+
+`runPlatformGrantCli` spawns the real `grantPlatformAdmin.js` CLI and **parses its output as
+JSON** - `stdout` when it expects exit 0, **`stderr`** when it expects a rejection. The call at
+:534 is the rejection case, expecting exit 4. `(node:2309` is Node's own warning prefix,
+`(node:<pid>)`, so a Node process warning printed to stderr ahead of the CLI's rejection JSON, and
+the parse ate it. **The test is fragile to any warning Node decides to emit**, and only on the
+stderr-parsing path - a warning during the exit-0 call goes to stderr where nothing reads it,
+which is why one of the two invocations in the same test can break while the other cannot.
+
+**Attribution, and it is not a judgement call.** This chunk changes five files, all Dart or
+Markdown; `git diff` over `firestore.rules`, `functions/` and `rules-tests/` prints zero lines,
+and the suite compiles `functions/` from unchanged TypeScript through its own `npm run build`.
+Nothing in the path this test exercises differs from `1b2b13b`.
+
+**Re-ran the suite plain, as `PLAN.md` documents the command, and the same test passed in
+34.6s.** So it is intermittent, not a regression. Two things were checked before concluding
+"flake" - running the CLI directly under the same Node printed clean JSON with no warning, and
+loading `firebase-admin` under it emitted none either, so the warning belongs to a code path only
+the real ineligibility scan reaches, and it is load- or timing-dependent rather than
+deterministic. The exact warning was not captured, because the test swallows stderr into the
+parse; capturing it means changing `rules-tests`, which is outside this chunk.
+
+**Queued as its own small chunk in `PLAN.md`**, because a suite that fails one run in two on an
+unrelated Node warning will eventually be read as a real defect: `runPlatformGrantCli` should
+strip warning lines before parsing, or spawn with `NODE_NO_WARNINGS=1`, and the same holds for
+the revoke helper beside it.
+
+**One test failure of this chunk's own, and it was the useful kind.** `text.primary` measured 17.147 against
+`surface.base` where §2.1 published 17.2, failing the 0.05 tolerance by 0.0028. Resolved by
+correcting the document, not by widening the tolerance - see the corrections section. Had the
+test merely asserted "clears 4.5:1" the slip would have survived, which is the argument for
+asserting published figures.
+
+**Five analyzer diagnostics on the first draft of the token file**, four of them mechanical - a
+`library;` directive after its imports, `lerpDuration` not being in `dart:ui` (replaced with
+`lerpDouble` over microseconds), an unnecessary `physics.dart` import, and the unused
+`sage.100`. The fifth was the `type` override described above, and it arrived as an
+`Information`-level "overrides an inherited member" hint rather than as an error, which is
+exactly how it would have shipped.
+
+**The first screenshot comparison was wrong and said everything had changed.** It keyed each
+image on `FullName.Substring($root.Length + 1)`, and the scratchpad root is an 8.3 short path
+whose `FullName` expands differently - so every relative key in the baseline set was cut at the
+wrong offset and no two paths matched. Re-keyed on the parent directory name plus the file name.
+A comparison that reports "all 101 changed" should be suspected before the change is.
+
+**The NUL-escape check ran over all six touched files and every count was zero.** No digest
+separator and no control character in this chunk, and the check ran anyway - it is the only
+thing that has ever caught one of the seven previous occurrences, and this entry was written
+with the editing tools and appended with a Node script rather than through a shell heredoc, for
+the same reason.
+
+### Unrelated local changes, still unstaged and never touched
+
+```text
+.vscode/settings.json
+android/gradle.properties
+pubspec.lock
+lib/checkout/checkout_cart_panel.dart            (another session's, unstaged)
+lib/inventory/stock_adjustment_panel.dart        (another session's, unstaged)
+lib/tenancy/tenant_staff_directory.dart          (another session's, unstaged)
+test/checkout/checkout_cart_panel_test.dart      (another session's, unstaged)
+test/inventory/stock_adjustment_panel_test.dart  (another session's, unstaged)
+test/tenancy/*_test.dart, seven files            (another session's, unstaged)
+.codex-app.png .codex-live.png .codex-live2.png  (untracked)
+prompt.md screenshots.zip                        (untracked)
+design.md DESIGN-AUDIT.md claude.md              (untracked; design.md carries two
+                                                  corrections from this session)
+docs/printer_transport.md                        (untracked)
+lib/ui/records.dart                              (untracked; `lib/ui/tokens.dart` is staged
+                                                  from the same new directory and this one
+                                                  is not)
+tool/screenshots/ (7 files) screenshots/ (102)   (untracked; regenerated, not staged)
+```
