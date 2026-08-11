@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -465,16 +466,17 @@ final class _SaleReturnsContents extends StatelessWidget {
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('sale-returns-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (page.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('sale-returns-next'),
+              label: 'Next page',
+              tier: AppButtonTier.primary,
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
         ],
       ),
@@ -560,13 +562,14 @@ final class _SaleReturnsContents extends StatelessWidget {
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
-              child: FilledButton(
-                key: ValueKey('sale-returns-verify-${record.id}'),
-                onPressed: busy
+              child: AppButton(
+                       key: ValueKey('sale-returns-verify-${record.id}'),
+                       label: 'Verify and restore stock',
+                       tier: AppButtonTier.primary,
+                       onPressed: busy
                     ? null
                     : () => _confirmVerification(context, record),
-                child: const Text('Verify and restore stock'),
-              ),
+                     ),
             ),
           ],
         ],
@@ -590,15 +593,17 @@ final class _SaleReturnsContents extends StatelessWidget {
           'cannot be undone from this app.',
         ),
         actions: [
-          TextButton(
+          AppButton(
             key: const ValueKey('sale-returns-cancel-verify'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          AppButton(
             key: const ValueKey('sale-returns-confirm-verify'),
+            label: 'Verify and restore',
+            tier: AppButtonTier.primary,
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Verify and restore'),
           ),
         ],
       ),
@@ -664,15 +669,17 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
           'restores no stock: a manager must verify it first.',
         ),
         actions: [
-          TextButton(
+          AppButton(
             key: const ValueKey('sale-returns-cancel-confirm'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          AppButton(
             key: const ValueKey('sale-returns-confirm'),
+            label: 'Record return',
+            tier: AppButtonTier.primary,
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Record return'),
           ),
         ],
       ),
@@ -742,10 +749,11 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
         ),
       ),
       const SizedBox(height: 12),
-      FilledButton(
+      AppButton(
         key: const ValueKey('sale-returns-submit'),
+        label: 'Record return',
+        tier: AppButtonTier.primary,
         onPressed: _canSubmit ? _confirm : null,
-        child: const Text('Record return'),
       ),
     ],
   );

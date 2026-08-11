@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -168,15 +169,17 @@ final class _TenantCheckoutConfigurationPanelState
                     'rung up in this business at all.',
         ),
         actions: [
-          TextButton(
+          AppButton(
             key: const ValueKey('checkout-configuration-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          AppButton(
             key: const ValueKey('checkout-configuration-confirm'),
+            label: replacing ? 'Change currency' : 'Publish',
+            tier: AppButtonTier.primary,
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(replacing ? 'Change currency' : 'Publish'),
           ),
         ],
       ),
@@ -346,12 +349,13 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
             ),
           ),
           const SizedBox(height: 12),
-          FilledButton(
+          AppButton(
             key: const ValueKey('checkout-configuration-submit'),
+            label: published.canSell ? 'Change currency' : 'Publish',
+            tier: AppButtonTier.primary,
             onPressed: _canSubmit
                 ? () => widget.onPublish(_currency.text)
                 : null,
-            child: Text(published.canSell ? 'Change currency' : 'Publish'),
           ),
         ],
         if (widget.notice case final notice?) ...[

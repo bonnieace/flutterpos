@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'invitation_acceptance_failure.dart';
 import 'tenant_id.dart';
 import 'tenant_membership.dart';
@@ -410,22 +411,20 @@ final class _TenantVisibleInvitationAcceptanceFormState
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          TextButton(
+          AppButton(
             key: const ValueKey('accept-visible-invitation-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: _submitting ? null : widget.onCancel,
-            child: const Text('Cancel'),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
+          AppButton(
             key: const ValueKey('accept-visible-invitation-confirm'),
-            onPressed: _submitting ? null : _submit,
-            icon: _submitting
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.check_circle_outline),
-            label: Text(_submitting ? 'Accepting...' : 'Accept invitation'),
+            label: 'Accept invitation',
+            icon: Icons.check_circle_outline,
+            tier: AppButtonTier.primary,
+            loading: _submitting,
+            onPressed: _submit,
           ),
         ],
       ),

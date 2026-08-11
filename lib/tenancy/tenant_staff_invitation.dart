@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -393,16 +394,13 @@ final class _TenantStaffInvitationFormState
           ),
         ],
         const SizedBox(height: 16),
-        FilledButton.icon(
+        AppButton(
           key: const ValueKey('invite-staff-submit'),
-          onPressed: _submitting ? null : _submit,
-          icon: _submitting
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.person_add_alt_1_outlined),
-          label: Text(_submitting ? 'Sending...' : 'Send invitation'),
+          label: 'Send invitation',
+          icon: Icons.person_add_alt_1_outlined,
+          tier: AppButtonTier.primary,
+          loading: _submitting,
+          onPressed: _submit,
         ),
       ],
     ),

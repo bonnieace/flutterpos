@@ -4,6 +4,8 @@ import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/buttons.dart';
+
 const String _productsPath = 'tenants/tenant-a/products';
 const String _categoriesPath = 'tenants/tenant-a/categories';
 
@@ -499,9 +501,7 @@ String _label(WidgetTester tester, String key) => tester
     .widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)))
     .data!;
 
-bool _enabled(WidgetTester tester, String key) =>
-    tester.widget<ButtonStyleButton>(find.byKey(ValueKey(key))).onPressed !=
-    null;
+bool _enabled(WidgetTester tester, String key) => pressable(tester, key);
 
 TenantSessionController _controller({TenantRole role = TenantRole.owner}) =>
     TenantSessionController()..open(

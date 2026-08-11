@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'tenant_id.dart';
 import 'tenant_membership.dart';
 import 'tenant_session.dart';
@@ -279,22 +280,20 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          TextButton(
+          AppButton(
             key: const ValueKey('set-default-tenant-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: _submitting ? null : widget.onCancel,
-            child: const Text('Cancel'),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
+          AppButton(
             key: const ValueKey('set-default-tenant-confirm'),
-            onPressed: _submitting ? null : _submit,
-            icon: _submitting
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.star_outline),
-            label: Text(_submitting ? 'Saving...' : 'Make default'),
+            label: 'Make default',
+            icon: Icons.star_outline,
+            tier: AppButtonTier.primary,
+            loading: _submitting,
+            onPressed: _submit,
           ),
         ],
       ),

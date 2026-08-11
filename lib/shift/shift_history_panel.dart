@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../reporting/shift_amendment_feed.dart';
 import '../reporting/shift_amendment_feed_panel.dart';
 import '../returns/return_actions.dart';
@@ -263,12 +264,12 @@ final class _ShiftHistoryContents extends StatelessWidget {
       const SizedBox(height: 16),
       Align(
         alignment: Alignment.centerLeft,
-        child: OutlinedButton.icon(
-          key: const ValueKey('shift-history-own-sales'),
-          onPressed: () => onViewSales(const TenantOwnSaleHistoryRequest()),
-          icon: const Icon(Icons.receipt_long_outlined),
-          label: const Text('My recent sales'),
-        ),
+        child: AppButton(
+                 key: const ValueKey('shift-history-own-sales'),
+                 label: 'My recent sales',
+                 icon: Icons.receipt_long_outlined,
+                 onPressed: () => onViewSales(const TenantOwnSaleHistoryRequest()),
+               ),
       ),
       const SizedBox(height: 16),
       if (page.items.isEmpty)
@@ -283,16 +284,17 @@ final class _ShiftHistoryContents extends StatelessWidget {
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('shift-history-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (page.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('shift-history-next'),
+              label: 'Next page',
+              tier: AppButtonTier.primary,
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
         ],
       ),
@@ -356,16 +358,16 @@ final class _ShiftHistoryContents extends StatelessWidget {
             spacing: 12,
             runSpacing: 8,
             children: [
-              OutlinedButton(
+              AppButton(
                 key: ValueKey('shift-history-sales-link-${entry.id}'),
+                label: 'View sales',
                 onPressed: () => onViewSales(_salesRequest(entry)),
-                child: const Text('View sales'),
               ),
               if (entry.amendment != null && canReadCorrections)
-                OutlinedButton(
+                AppButton(
                   key: ValueKey('shift-history-corrections-link-${entry.id}'),
+                  label: 'View this shift\'s corrections',
                   onPressed: () => onViewCorrections(entry.id),
-                  child: const Text('View this shift\'s corrections'),
                 ),
             ],
           ),

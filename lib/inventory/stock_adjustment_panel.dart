@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/records.dart';
 
+import '../ui/buttons.dart';
 import '../reporting/reconciliation_anomalies.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -537,24 +538,29 @@ final class _ProductStockContents extends StatelessWidget {
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            // **Pagination is secondary, and it used to be a primary.** §2.1
+            // permits exactly one primary per screen region and on this route
+            // that is `Adjust stock`; "Next page" competing with it for the
+            // eye is the tier system not being applied rather than a taste
+            // call. The same repoint is made on every paginated feed.
+            AppButton(
               key: const ValueKey('product-stock-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (page.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('product-stock-next'),
+              label: 'Next page',
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
           // The ledger explains every movement; this narrows the business-wide
           // correction record to the manual ones recorded against this product.
-          OutlinedButton.icon(
+          AppButton(
             key: const ValueKey('product-stock-adjustments'),
+            label: 'Manual adjustments',
+            icon: Icons.fact_check_outlined,
             onPressed: onOpenAdjustments,
-            icon: const Icon(Icons.fact_check_outlined),
-            label: const Text('Manual adjustments'),
           ),
         ],
       ),
@@ -866,15 +872,17 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
           'It cannot be undone from this app except by another adjustment.',
         ),
         actions: [
-          TextButton(
+          AppButton(
             key: const ValueKey('product-stock-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          AppButton(
             key: const ValueKey('product-stock-confirm'),
+            label: 'Adjust stock',
+            tier: AppButtonTier.primary,
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Adjust stock'),
           ),
         ],
       ),
@@ -946,10 +954,11 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
         ),
       ),
       const SizedBox(height: 12),
-      FilledButton(
+      AppButton(
         key: const ValueKey('product-stock-submit'),
+        label: 'Adjust stock',
+        tier: AppButtonTier.primary,
         onPressed: _canSubmit ? _confirm : null,
-        child: const Text('Adjust stock'),
       ),
     ],
   );

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'email_delivery_status.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
@@ -388,33 +389,23 @@ final class _AccountVerificationPanelState
               spacing: 12,
               runSpacing: 12,
               children: [
-                FilledButton.icon(
+                // `busy` covers both in-flight calls on this screen, so the
+                // other one's spinner must not appear here: `loading` is this
+                // button's own flag and `onPressed` carries the shared guard.
+                AppButton(
                   key: const ValueKey('account-verification-send'),
+                  label: _accepted ? 'Send again' : 'Send verification email',
+                  icon: Icons.mark_email_read_outlined,
+                  tier: AppButtonTier.primary,
+                  loading: _sending,
                   onPressed: busy ? null : _send,
-                  icon: _sending
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.mark_email_read_outlined),
-                  label: Text(
-                    _sending
-                        ? 'Sending...'
-                        : _accepted
-                        ? 'Send again'
-                        : 'Send verification email',
-                  ),
                 ),
-                OutlinedButton.icon(
+                AppButton(
                   key: const ValueKey('account-verification-recheck'),
+                  label: 'I have verified',
+                  icon: Icons.refresh,
+                  loading: _reloading,
                   onPressed: busy ? null : _recheck,
-                  icon: _reloading
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh),
-                  label: Text(_reloading ? 'Checking...' : 'I have verified'),
                 ),
               ],
             ),

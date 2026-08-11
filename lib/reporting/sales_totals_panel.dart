@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -395,19 +396,19 @@ final class _SalesTotalsContents extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        OutlinedButton(
+        AppButton(
           key: const ValueKey('sales-totals-refresh'),
+          label: 'Read again',
           onPressed: onRetry,
-          child: const Text('Read again'),
         ),
       ],
       if (failureMessage case final message?) ...[
         Text(key: const ValueKey('sales-totals-failure'), message),
         const SizedBox(height: 12),
-        OutlinedButton(
+        AppButton(
           key: const ValueKey('sales-totals-retry'),
+          label: 'Try again',
           onPressed: onRetry,
-          child: const Text('Try again'),
         ),
       ],
     ],

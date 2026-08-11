@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'platform_tenant_review.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -543,22 +544,27 @@ final class _PlatformTenantArchivalFormState
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          TextButton(
+          AppButton(
             key: const ValueKey('platform-archival-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: _submitting ? null : widget.onCancel,
-            child: const Text('Cancel'),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
+          // **`loading` rather than a hand-rolled spinner, and `onPressed` is
+          // no longer nulled while it runs.** §2.1's loading row holds the
+          // container and replaces the label; nulling the callback would paint
+          // the *disabled* container instead, which says "you may not do this"
+          // where the truth is "this is happening". `AppButton` suppresses the
+          // press itself while loading, so the guard is kept without the
+          // wrong colours.
+          AppButton(
             key: const ValueKey('platform-archival-confirm'),
-            onPressed: _submitting ? null : _submit,
-            icon: _submitting
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.archive_outlined),
-            label: Text(_submitting ? 'Archiving...' : 'Archive business'),
+            label: 'Archive business',
+            icon: Icons.archive_outlined,
+            tier: AppButtonTier.destructive,
+            loading: _submitting,
+            onPressed: _submit,
           ),
         ],
       ),
@@ -688,7 +694,11 @@ final class _PlatformRejectedTenantScreenState
               key: const ValueKey('platform-archival-queue-error'),
             ),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _reload, child: const Text('Retry')),
+            AppButton(
+              label: 'Retry',
+              tier: AppButtonTier.primary,
+              onPressed: _reload,
+            ),
           ],
         ),
       );
@@ -707,10 +717,10 @@ final class _PlatformRejectedTenantScreenState
             return Center(
               child: _loading
                   ? const CircularProgressIndicator()
-                  : OutlinedButton(
+                  : AppButton(
                       key: const ValueKey('platform-archival-load-more'),
+                      label: 'Load more',
                       onPressed: _loadMore,
-                      child: const Text('Load more'),
                     ),
             );
           }
@@ -739,12 +749,12 @@ final class _PlatformRejectedTenantScreenState
                   if (!archiving)
                     Align(
                       alignment: Alignment.centerRight,
-                      child: OutlinedButton.icon(
-                        key: ValueKey('platform-archive-${tenant.tenantId}'),
-                        onPressed: () => _archive(tenant),
-                        icon: const Icon(Icons.archive_outlined),
-                        label: const Text('Archive'),
-                      ),
+                      child: AppButton(
+                               key: ValueKey('platform-archive-${tenant.tenantId}'),
+                               label: 'Archive',
+                               icon: Icons.archive_outlined,
+                               onPressed: () => _archive(tenant),
+                             ),
                     )
                   else
                     PlatformTenantArchivalForm(

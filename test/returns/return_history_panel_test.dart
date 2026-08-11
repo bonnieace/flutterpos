@@ -9,6 +9,8 @@ import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/buttons.dart';
+
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
 const String _businessDate = '2026-07-31';
 const String _payloadHash =
@@ -273,10 +275,8 @@ void main() {
 
     // Nothing selected and no reason: the action is unavailable.
     expect(
-      tester
-          .widget<FilledButton>(find.byKey(const ValueKey('sale-returns-submit')))
-          .onPressed,
-      isNull,
+      pressable(tester, 'sale-returns-submit'),
+      isFalse,
     );
 
     await tester.tap(find.byKey(const ValueKey('sale-returns-increase-product-1')));
@@ -293,10 +293,8 @@ void main() {
     );
     // Still refused without a reason.
     expect(
-      tester
-          .widget<FilledButton>(find.byKey(const ValueKey('sale-returns-submit')))
-          .onPressed,
-      isNull,
+      pressable(tester, 'sale-returns-submit'),
+      isFalse,
     );
 
     await tester.enterText(

@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ui/buttons.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../tenancy/tenant_repository.dart';
@@ -232,39 +233,42 @@ final class _ShiftContents extends StatelessWidget {
         runSpacing: 8,
         children: [
           if (state.phase == TenantShiftPhase.none)
-            FilledButton(
+            AppButton(
               key: const ValueKey('open-shift'),
+              label: 'Open shift',
+              tier: AppButtonTier.primary,
               onPressed: busy ? null : onOpen,
-              child: const Text('Open shift'),
             ),
           if (state.phase == TenantShiftPhase.open)
-            FilledButton(
+            AppButton(
               key: const ValueKey('start-cash-count'),
+              label: 'Start cash count',
+              tier: AppButtonTier.primary,
               onPressed: busy ? null : onStartCashCount,
-              child: const Text('Start cash count'),
             ),
           if (state.phase == TenantShiftPhase.closing) ...[
-            FilledButton(
+            AppButton(
               key: const ValueKey('close-shift'),
+              label: 'Close shift',
+              tier: AppButtonTier.primary,
               onPressed: busy ? null : onClose,
-              child: const Text('Close shift'),
             ),
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('cancel-cash-count'),
+              label: 'Cancel cash count',
               onPressed: busy ? null : onCancelCashCount,
-              child: const Text('Cancel cash count'),
             ),
           ],
-          OutlinedButton(
+          AppButton(
             key: const ValueKey('refresh-shift'),
+            label: 'Refresh shift',
             onPressed: busy ? null : onRefresh,
-            child: const Text('Refresh shift'),
           ),
           if (onViewHistory != null)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('view-shift-history'),
+              label: 'View shift history',
               onPressed: busy ? null : onViewHistory,
-              child: const Text('View shift history'),
             ),
         ],
       ),

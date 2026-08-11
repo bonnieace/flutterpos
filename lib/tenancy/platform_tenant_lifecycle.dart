@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
 import 'platform_tenant_review.dart';
@@ -565,32 +566,28 @@ final class _PlatformTenantLifecycleFormState
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            TextButton(
+            AppButton(
               key: const ValueKey('platform-lifecycle-cancel'),
+              label: 'Cancel',
+              tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
-              child: const Text('Cancel'),
             ),
             const SizedBox(width: 8),
-            FilledButton.icon(
+            AppButton(
               key: ValueKey(
                 suspending
                     ? 'platform-lifecycle-suspend-confirm'
                     : 'platform-lifecycle-reactivate-confirm',
               ),
-              onPressed: _submitting ? null : _submit,
-              icon: _submitting
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(suspending ? Icons.pause : Icons.play_arrow),
-              label: Text(
-                _submitting
-                    ? 'Saving...'
-                    : suspending
-                    ? 'Suspend business'
-                    : 'Reactivate business',
-              ),
+              label: suspending ? 'Suspend business' : 'Reactivate business',
+              icon: suspending ? Icons.pause : Icons.play_arrow,
+              // Suspending stops a business trading; reactivating restores it.
+              // One control, two tiers, decided by which it currently is.
+              tier: suspending
+                  ? AppButtonTier.destructive
+                  : AppButtonTier.primary,
+              loading: _submitting,
+              onPressed: _submit,
             ),
           ],
         ),
@@ -655,7 +652,11 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Platform tenant management'),
         actions: [
-          TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+          AppButton(
+            label: 'Sign out',
+            tier: AppButtonTier.tertiary,
+            onPressed: onSignOut,
+          ),
         ],
         bottom: const TabBar(
           isScrollable: true,
@@ -805,7 +806,11 @@ final class _PlatformLifecycleTenantScreenState
               key: const ValueKey('platform-lifecycle-queue-error'),
             ),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _reload, child: const Text('Retry')),
+            AppButton(
+              label: 'Retry',
+              tier: AppButtonTier.primary,
+              onPressed: _reload,
+            ),
           ],
         ),
       );
@@ -824,10 +829,10 @@ final class _PlatformLifecycleTenantScreenState
             return Center(
               child: _loading
                   ? const CircularProgressIndicator()
-                  : OutlinedButton(
+                  : AppButton(
                       key: const ValueKey('platform-lifecycle-load-more'),
+                      label: 'Load more',
                       onPressed: _loadMore,
-                      child: const Text('Load more'),
                     ),
             );
           }
@@ -860,19 +865,20 @@ final class _PlatformLifecycleTenantScreenState
                     Align(
                       alignment: Alignment.centerRight,
                       child: action == PlatformTenantLifecycleAction.suspend
-                          ? OutlinedButton(
+                          ? AppButton(
                               key: ValueKey(
                                 'platform-suspend-${tenant.tenantId}',
                               ),
+                              label: 'Suspend',
                               onPressed: () => _change(tenant),
-                              child: const Text('Suspend'),
                             )
-                          : FilledButton(
+                          : AppButton(
                               key: ValueKey(
                                 'platform-reactivate-${tenant.tenantId}',
                               ),
+                              label: 'Reactivate',
+                              tier: AppButtonTier.primary,
                               onPressed: () => _change(tenant),
-                              child: const Text('Reactivate'),
                             ),
                     )
                   else

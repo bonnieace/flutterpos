@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -415,26 +416,25 @@ final class _TenantStaffInvitationCancellationFormState
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          TextButton(
+          AppButton(
             key: const ValueKey('cancel-staff-invitation-dismiss'),
+            label: 'Keep invitation',
+            tier: AppButtonTier.tertiary,
             onPressed: _submitting ? null : widget.onCancel,
-            child: const Text('Keep invitation'),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
+          // This is the clearest case in the sweep for the destructive tier
+          // existing at all: the old call site reached past the theme for
+          // `colorScheme.error` and `onError` to build a red slab by hand,
+          // which is `claude.md` hard rule 2 being broken because there was no
+          // role to reach for. There is one now.
+          AppButton(
             key: const ValueKey('cancel-staff-invitation-confirm'),
-            onPressed: _submitting ? null : _submit,
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            icon: _submitting
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.person_remove_outlined),
-            label: Text(_submitting ? 'Cancelling...' : 'Cancel invitation'),
+            label: 'Cancel invitation',
+            icon: Icons.person_remove_outlined,
+            tier: AppButtonTier.destructive,
+            loading: _submitting,
+            onPressed: _submit,
           ),
         ],
       ),

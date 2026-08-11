@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -318,26 +319,27 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            TextButton(
+            AppButton(
               key: const ValueKey('set-staff-status-cancel'),
+              label: 'Cancel',
+              tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
-              child: const Text('Cancel'),
             ),
             const SizedBox(width: 8),
-            FilledButton.icon(
+            AppButton(
               key: const ValueKey('set-staff-status-confirm'),
-              onPressed: _submitting ? null : _submit,
-              icon: _submitting
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      _targetStatus == MembershipStatus.active
-                          ? Icons.person_add_alt_outlined
-                          : Icons.person_off_outlined,
-                    ),
-              label: Text(_submitting ? 'Changing...' : 'Confirm $action'),
+              label: 'Confirm $action',
+              icon: _targetStatus == MembershipStatus.active
+                  ? Icons.person_add_alt_outlined
+                  : Icons.person_off_outlined,
+              // Deactivating a member removes their access; reactivating
+              // restores it. §2.1's destructive tier is decided by what the
+              // press does, not by which screen it is on.
+              tier: _targetStatus == MembershipStatus.active
+                  ? AppButtonTier.primary
+                  : AppButtonTier.destructive,
+              loading: _submitting,
+              onPressed: _submit,
             ),
           ],
         ),

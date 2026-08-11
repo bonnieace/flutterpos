@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -460,12 +461,12 @@ final class _AnomalyContents extends StatelessWidget {
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              key: const ValueKey('reconciliation-amend-notice-trail'),
-              onPressed: () => onOpenAmendments(shiftId),
-              icon: const Icon(Icons.history_edu_outlined),
-              label: const Text('View this shift\'s corrections'),
-            ),
+            child: AppButton(
+                     key: const ValueKey('reconciliation-amend-notice-trail'),
+                     label: 'View this shift\'s corrections',
+                     icon: Icons.history_edu_outlined,
+                     onPressed: () => onOpenAmendments(shiftId),
+                   ),
           ),
         ],
       ],
@@ -502,27 +503,28 @@ final class _AnomalyContents extends StatelessWidget {
       // corrections made here would leave no visible trace. The trail is
       // readable by every role that reads this list, including the managers who
       // may not make one.
-      OutlinedButton.icon(
+      AppButton(
         key: const ValueKey('reconciliation-anomalies-amendments'),
+        label: 'View shift corrections already made',
+        icon: Icons.history_edu_outlined,
         onPressed: () => onOpenAmendments(null),
-        icon: const Icon(Icons.history_edu_outlined),
-        label: const Text('View shift corrections already made'),
       ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('reconciliation-anomalies-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (page.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('reconciliation-anomalies-next'),
+              label: 'Next page',
+              tier: AppButtonTier.primary,
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
         ],
       ),
@@ -580,15 +582,13 @@ final class _AnomalyContents extends StatelessWidget {
               runSpacing: 8,
               children: [
                 if (_canAmendRow(anomaly))
-                  OutlinedButton.icon(
+                  AppButton(
                     key: ValueKey('reconciliation-anomaly-amend-${anomaly.id}'),
+                    label: busy ? 'Correcting...' : 'Correct this shift\'s totals',
+                    icon: Icons.rule_outlined,
                     onPressed: busy
                         ? null
                         : () => _confirmAmend(context, anomaly),
-                    icon: const Icon(Icons.rule_outlined),
-                    label: Text(
-                      busy ? 'Correcting...' : 'Correct this shift\'s totals',
-                    ),
                   ),
                 // Offered for every row that names a shift, not only the one
                 // kind that can be corrected. A shift already corrected at a
@@ -597,22 +597,22 @@ final class _AnomalyContents extends StatelessWidget {
                 // here - and the answer, including "never", comes from the
                 // trail rather than from this list.
                 if (anomaly.shiftId case final shiftId?)
-                  OutlinedButton(
+                  AppButton(
                     key: ValueKey(
                       'reconciliation-anomaly-corrections-${anomaly.id}',
                     ),
+                    label: 'View this shift\'s corrections',
                     onPressed: () => onOpenAmendments(shiftId),
-                    child: const Text('View this shift\'s corrections'),
                   ),
                 // The row already names the run above; this is the only way
                 // to ask anything about it. Whether that run finished, and
                 // what else it found, is what decides whether this difference
                 // is the whole of a problem or one symptom of it.
                 if (anomaly.jobId case final jobId?)
-                  OutlinedButton(
+                  AppButton(
                     key: ValueKey('reconciliation-anomaly-run-${anomaly.id}'),
+                    label: 'About this run',
                     onPressed: () => onOpenRun(jobId),
-                    child: const Text('About this run'),
                   ),
               ],
             ),
@@ -688,15 +688,17 @@ final class _AmendShiftDialogState extends State<_AmendShiftDialog> {
       ],
     ),
     actions: [
-      TextButton(
+      AppButton(
         key: const ValueKey('reconciliation-amend-cancel'),
+        label: 'Cancel',
+        tier: AppButtonTier.tertiary,
         onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Cancel'),
       ),
-      FilledButton(
+      AppButton(
         key: const ValueKey('reconciliation-amend-confirm'),
+        label: 'Correct it',
+        tier: AppButtonTier.primary,
         onPressed: () => Navigator.of(context).pop(_reason.text),
-        child: const Text('Correct it'),
       ),
     ],
   );

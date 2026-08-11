@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -236,16 +237,16 @@ final class _LedgerContents extends StatelessWidget {
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('product-ledger-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (ledger.movements.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('product-ledger-next'),
+              label: 'Next page',
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
         ],
       ),

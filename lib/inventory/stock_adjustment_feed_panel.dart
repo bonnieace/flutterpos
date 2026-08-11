@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -218,16 +219,16 @@ final class _AdjustmentFeedContents extends StatelessWidget {
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('stock-adjustments-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (page.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('stock-adjustments-next'),
+              label: 'Next page',
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
         ],
       ),

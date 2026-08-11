@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -144,10 +145,10 @@ final class _TenantDailySummaryPanelState
             children: [
               const Text('The daily summary could not be loaded.'),
               const SizedBox(height: 12),
-              OutlinedButton(
+              AppButton(
                 key: const ValueKey('daily-summary-retry'),
+                label: 'Retry',
                 onPressed: _refresh,
-                child: const Text('Retry'),
               ),
             ],
           ),
@@ -217,11 +218,11 @@ final class _DailySummaryContents extends StatelessWidget {
       // sales the server holds rather than from reconciled figures.
       if (salesTotalsRoute != null) ...[
         const SizedBox(height: 12),
-        OutlinedButton.icon(
+        AppButton(
           key: const ValueKey('daily-summary-sales-totals'),
+          label: 'Total sales over a period',
+          icon: Icons.calculate_outlined,
           onPressed: () => _openSalesTotals(context),
-          icon: const Icon(Icons.calculate_outlined),
-          label: const Text('Total sales over a period'),
         ),
       ],
       const SizedBox(height: 16),
@@ -276,14 +277,14 @@ final class _DailySummaryContents extends StatelessWidget {
                   ),
                 if (reconciliationRoute != null) ...[
                   const SizedBox(height: 8),
-                  OutlinedButton.icon(
+                  AppButton(
                     key: ValueKey(
                       'daily-summary-reconciliation-${day.businessDate}',
                     ),
+                    label: 'Why is it in this state?',
+                    icon: Icons.help_outline,
                     onPressed: () =>
                         _openReconciliation(context, day.businessDate),
-                    icon: const Icon(Icons.help_outline),
-                    label: const Text('Why is it in this state?'),
                   ),
                 ],
               ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -457,27 +458,28 @@ final class _ReconciliationContents extends StatelessWidget {
       // A run states how many differences it found and could not resolve. This
       // is the only place that says which ones, so the count above is
       // actionable rather than merely alarming.
-      OutlinedButton.icon(
+      AppButton(
         key: const ValueKey('reconciliation-status-anomalies'),
+        label: 'View unresolved differences',
+        icon: Icons.report_gmailerrorred_outlined,
         onPressed: onOpenAnomalies,
-        icon: const Icon(Icons.report_gmailerrorred_outlined),
-        label: const Text('View unresolved differences'),
       ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('reconciliation-status-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (day.runs.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('reconciliation-status-next'),
+              label: 'Next page',
+              tier: AppButtonTier.primary,
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
         ],
       ),
@@ -522,15 +524,17 @@ final class _RequestReconciliation extends StatelessWidget {
           'once queued.',
         ),
         actions: [
-          TextButton(
+          AppButton(
             key: const ValueKey('reconciliation-request-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          AppButton(
             key: const ValueKey('reconciliation-request-confirm'),
+            label: 'Ask for it',
+            tier: AppButtonTier.primary,
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Ask for it'),
           ),
         ],
       ),
@@ -580,10 +584,11 @@ final class _RequestReconciliation extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: 12),
-      FilledButton(
+      AppButton(
         key: const ValueKey('reconciliation-request-submit'),
+        label: busy ? 'Asking...' : 'Ask for a check',
+        tier: AppButtonTier.primary,
         onPressed: busy ? null : () => _confirm(context),
-        child: Text(busy ? 'Asking...' : 'Ask for a check'),
       ),
     ],
   );

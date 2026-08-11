@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -363,22 +364,20 @@ final class _TenantStaffInvitationResendFormState
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          TextButton(
+          AppButton(
             key: const ValueKey('resend-staff-invitation-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: _submitting ? null : widget.onCancel,
-            child: const Text('Cancel'),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
+          AppButton(
             key: const ValueKey('resend-staff-invitation-confirm'),
-            onPressed: _submitting ? null : _submit,
-            icon: _submitting
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.forward_to_inbox_outlined),
-            label: Text(_submitting ? 'Resending...' : 'Confirm resend'),
+            label: 'Confirm resend',
+            icon: Icons.forward_to_inbox_outlined,
+            tier: AppButtonTier.primary,
+            loading: _submitting,
+            onPressed: _submit,
           ),
         ],
       ),

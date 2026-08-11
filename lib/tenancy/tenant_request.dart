@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_types.dart';
@@ -366,8 +367,10 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            TextButton(
+            AppButton(
               key: const ValueKey('tenant-request-cancel'),
+              label: _confirming ? 'Back' : 'Cancel',
+              tier: AppButtonTier.tertiary,
               onPressed: _submitting
                   ? null
                   : _confirming
@@ -376,29 +379,19 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
                       _safeError = null;
                     })
                   : widget.onCancel,
-              child: Text(_confirming ? 'Back' : 'Cancel'),
             ),
             const SizedBox(width: 8),
-            FilledButton.icon(
+            AppButton(
               key: ValueKey(
                 _confirming
                     ? 'tenant-request-confirm'
                     : 'tenant-request-review',
               ),
-              onPressed: _submitting ? null : (_confirming ? _submit : _review),
-              icon: _submitting
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add_business_outlined),
-              label: Text(
-                _submitting
-                    ? 'Submitting...'
-                    : _confirming
-                    ? 'Submit request'
-                    : 'Review request',
-              ),
+              label: _confirming ? 'Submit request' : 'Review request',
+              icon: Icons.add_business_outlined,
+              tier: AppButtonTier.primary,
+              loading: _submitting,
+              onPressed: _confirming ? _submit : _review,
             ),
           ],
         ),

@@ -5,6 +5,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../ui/buttons.dart';
 import 'bulk_catalog.dart';
 import 'catalog_management.dart';
 
@@ -456,15 +457,17 @@ final class _TenantBulkCatalogPanelState
         title: Text(title),
         content: SingleChildScrollView(child: Text(body)),
         actions: [
-          TextButton(
+          AppButton(
             key: const ValueKey('bulk-catalog-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          AppButton(
             key: const ValueKey('bulk-catalog-confirm'),
+            label: action,
+            tier: AppButtonTier.primary,
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(action),
           ),
         ],
       ),
@@ -726,22 +729,25 @@ final class _BulkCatalogContents extends StatelessWidget {
         const SizedBox(height: 20),
         Row(
           children: [
-            FilledButton.icon(
+            // Preview is the primary here and commit is the primary further
+            // down: they are different screen regions, and §2.1 permits one
+            // each. Nothing is written by either until the other has been.
+            AppButton(
               key: const ValueKey('bulk-catalog-preview'),
+              label: _pageCount > 1
+                  ? 'Preview ($_pageCount requests)'
+                  : 'Preview, writing nothing',
+              icon: Icons.fact_check_outlined,
+              tier: AppButtonTier.primary,
               onPressed: _canPreview ? onPreview : null,
-              icon: const Icon(Icons.fact_check_outlined),
-              label: Text(
-                _pageCount > 1
-                    ? 'Preview ($_pageCount requests)'
-                    : 'Preview, writing nothing',
-              ),
             ),
             const SizedBox(width: 12),
             if (report != null)
-              TextButton(
+              AppButton(
                 key: const ValueKey('bulk-catalog-discard'),
+                label: 'Discard this report',
+                tier: AppButtonTier.tertiary,
                 onPressed: busy ? null : onDiscard,
-                child: const Text('Discard this report'),
               ),
           ],
         ),
@@ -885,17 +891,21 @@ final class _BulkCatalogContents extends StatelessWidget {
                         'chosen, across every page.',
             ),
           ),
-          TextButton(
+          AppButton(
             key: const ValueKey('bulk-catalog-select-page'),
+            label: 'Choose this page',
+            tier: AppButtonTier.tertiary,
+            size: AppButtonSize.sm,
             onPressed: busy || view.products.items.isEmpty
                 ? null
                 : onSelectPage,
-            child: const Text('Choose this page'),
           ),
-          TextButton(
+          AppButton(
             key: const ValueKey('bulk-catalog-clear-selection'),
+            label: 'Clear',
+            tier: AppButtonTier.tertiary,
+            size: AppButtonSize.sm,
             onPressed: busy || selected.isEmpty ? null : onClearSelection,
-            child: const Text('Clear'),
           ),
         ],
       ),
@@ -923,19 +933,21 @@ final class _BulkCatalogContents extends StatelessWidget {
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          TextButton(
+          AppButton(
             key: const ValueKey('bulk-catalog-previous-page'),
+            label: 'Previous',
+            tier: AppButtonTier.tertiary,
             onPressed: pageIndex == 0 || busy ? null : onPreviousPage,
-            child: const Text('Previous'),
           ),
           Text(
             key: const ValueKey('bulk-catalog-page'),
             'Page ${pageIndex + 1}',
           ),
-          TextButton(
+          AppButton(
             key: const ValueKey('bulk-catalog-next-page'),
+            label: 'Next',
+            tier: AppButtonTier.tertiary,
             onPressed: view.products.hasMore && !busy ? onNextPage : null,
-            child: const Text('Next'),
           ),
         ],
       ),
@@ -1027,15 +1039,14 @@ final class _BulkCatalogContents extends StatelessWidget {
         ),
       const SizedBox(height: 16),
       if (report.mode == TenantBulkCatalogMode.preview)
-        FilledButton.icon(
+        AppButton(
           key: const ValueKey('bulk-catalog-commit'),
+          label: task == _BulkTask.correct
+              ? 'Apply exactly this'
+              : 'Create exactly this',
+          icon: Icons.playlist_add_check_outlined,
+          tier: AppButtonTier.primary,
           onPressed: _canCommit ? onCommit : null,
-          icon: const Icon(Icons.playlist_add_check_outlined),
-          label: Text(
-            task == _BulkTask.correct
-                ? 'Apply exactly this'
-                : 'Create exactly this',
-          ),
         )
       else
         Text(

@@ -19190,3 +19190,151 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## Every remaining button becomes an `AppButton` - 2026-08-11
+
+`design.md` §11 step 3's first half, finished. The component landed earlier the same day with
+22 of its call sites migrated; this chunk took the other **133, across 35 files**, and the
+migrated tree now holds **155 `AppButton` call sites and 7 Material buttons**.
+
+### The count was wrong again, in the other direction this time
+
+The previous session corrected "roughly forty buttons" to 168. **168 was also wrong**, by 8:
+`lib/config.dart` is a **fully commented-out file** - all 8 of its "call sites" are inside `//`
+lines, and its only importer is `lib/screens/main_hub_screen.dart`, which `claude.md` hard rule 3
+makes read-only. A count that greps source without excluding comments finds work that does not
+exist. The real figure was **162**, and it is now 155 migrated plus 7 deliberately left.
+
+**The 7 left are `checkout_cart_panel.dart`'s**, and they are step 7's rather than skipped: that
+is the sale path, where §2.1's rule that *Clear this sale* is destructive and *Save sale* is
+primary has to be applied, and applying it here would have put a step-7 decision inside a step-3
+diff.
+
+### The sweep was mechanical; the tier decisions were not
+
+A balanced-paren rewriter handled the regular shapes and **refused 17 sites it was not certain
+about**, which is the part worth keeping: a regex would have rewritten them wrongly and silently.
+Every refusal turned out to be a real decision.
+
+**Fifteen call sites were hand-rolling §2.1's loading row.** The shape was always the same - swap
+the icon for a 16px `CircularProgressIndicator`, change the label to a gerund, and null
+`onPressed`:
+
+```dart
+onPressed: _submitting ? null : _submit,
+icon: _submitting ? const SizedBox.square(dimension: 16, child: ...) : const Icon(...),
+label: Text(_submitting ? 'Archiving...' : 'Archive business'),
+```
+
+They are now `loading: _submitting` with `onPressed: _submit` left intact. **Dropping the
+`? null :` is the part that matters and it is not a simplification**: `AppButton` renders a null
+callback as §2.1's *disabled* row, so keeping it would have painted "you may not do this" over a
+control whose truth is "this is happening". `AppButton` suppresses the press itself while
+loading, so the guard survives without the wrong colours - and the width freezes, which the
+hand-rolled version never did, so those buttons used to resize under the finger as the label
+changed.
+
+**`action.destructive` found its call sites, and one of them is why the tier exists.**
+`tenant_staff_invitation_cancellation.dart` reached past the theme for
+`colorScheme.error`/`onError` to build a red slab by hand, and
+`catalog_management_panel.dart`'s confirm dialog carried a `destructive` boolean that chose a
+`backgroundColor`. Both were `claude.md` hard rule 2 being broken because there was no role to
+reach for. Nine controls are now destructive: retire a product, cancel an invitation, archive a
+business, suspend a business, reject a request, disable an identity, deactivate a member, and the
+two confirm dialogs that carry a destructive flag. **Four of them are one control with two
+meanings** - suspend/reactivate, reject/approve, disable/reactivate, deactivate/reactivate - and
+the tier is chosen from the same expression that already chose the icon and the label.
+
+**`Correct` / `Retire` closes both halves of a §9 failure.** §9 lists it twice: "20px targets on
+a touch surface, and destructive-adjacent actions rendered identically". `Retire` is now the
+destructive tier and both answer a 48dp tap.
+
+**Pagination stopped being a primary action.** `Next page` was a `FilledButton` on six feeds while
+the screen's real primary sat beside it - `Adjust stock`, `Ask for a check`. §2.1 permits exactly
+one primary per screen region, so pagination is secondary throughout now. That is the tier system
+being applied rather than a preference.
+
+### Two layout consequences, recorded rather than discovered later
+
+**A stretched form action is now centred at its natural width.** `Add category` and `Add product`
+were full-width because their `Column` stretches; `AppButton` shrink-wraps inside the stretched
+slot and centres. §5.2 describes a padding-sized button rather than a stretched one, so the new
+shape is the conformant one - but it is a **layout** change riding in a chunk whose headline is
+colour, and it is named here so a reviewer is not left wondering.
+
+**One screenshot gained a `-full` variant**: `mobile-full/34-returns-on-a-sale.png` did not exist
+before. The screen grew past the fold because every button now reserves the focus ring's 4px
+gutter and honours a 48dp minimum. Nothing was added to that screen.
+
+### The test seam
+
+`test/support/buttons.dart` is new and **is meant to be deleted**. Three test files cast to
+`FilledButton` / `OutlinedButton` / `ButtonStyleButton` to ask "is this pressable", which is a
+correct question asked through a type that is going away. `pressable(tester, key)` answers for
+both kinds - and for `AppButton` it answers `onPressed != null && !loading`, because §2.1's
+loading row is a press that has already been accepted. The file's own doc says to delete it with
+the last `ButtonStyleButton` in `lib/`.
+
+Only one cast remains, in `test/checkout/checkout_cart_panel_test.dart`, and it is correct: that
+panel is still Material because it is step 7's.
+
+### Files changed
+
+```text
+lib/inventory/       6 files, 33 sites
+lib/reporting/       5 files, 23 sites
+lib/shift/           2 files, 11 sites
+lib/sales/           2 files,  5 sites
+lib/returns/         1 file,   8 sites
+lib/audit/           1 file,   2 sites
+lib/checkout/        1 file,   3 sites   (configuration only; the cart is step 7)
+lib/tenancy/        17 files, 48 sites
+test/support/buttons.dart                       new - the pressable seam
+test/inventory/catalog_management_panel_test.dart
+test/inventory/bulk_catalog_panel_test.dart
+test/returns/return_history_panel_test.dart
+test/tenancy/account_verification_test.dart
+PLAN.md
+HISTORY.md
+```
+
+### Test commands and results
+
+```text
+flutter test --no-pub --concurrency=1                       1650 pass   (unchanged)
+flutter analyze --no-pub lib test tool                       475 issues (the pre-existing
+                                                             baseline; unchanged)
+flutter test --no-pub --concurrency=1 tool/screenshots        90 captures, 114 images
+```
+
+**The Flutter count is unchanged at 1650 and that is the correct outcome**: this chunk added no
+behaviour and no component, so it should add no test. What it changed is four test files that
+were asking a right question through a type that is going away.
+
+**The four non-Flutter suites are carried, and this is the first carry since the rule reset.**
+`git diff` over `functions/`, `firestore.rules` and `rules-tests/` prints **zero lines**. That is
+carry 1 of the 2 the rule allows.
+
+**One full-suite run crashed and it was not a test failure.** `flutter test` exited
+`-1073740791` (`0xC0000409`) part way through `login_screen_test.dart` while a `flutter run -d
+chrome` session and the held Firebase emulators were also up; free memory was under 2 GB. Killing
+the browser run and re-running gave 1650 green with no other change. Recorded as a resource
+limit rather than a flake, and added to the standing traps.
+
+### Screenshots
+
+**74 of 113 changed, 1 added, none removed, 39 byte-identical.** Baseline copied to the
+scratchpad before regenerating and both hashed on directory-plus-name, per the standing trap.
+Both sets are 2026-08-11.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

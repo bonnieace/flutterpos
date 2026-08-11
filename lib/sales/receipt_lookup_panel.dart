@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
@@ -143,10 +144,11 @@ final class _TenantReceiptLookupPanelState
         ),
       ),
       const SizedBox(height: 12),
-      FilledButton(
+      AppButton(
         key: const ValueKey('receipt-lookup-submit'),
+        label: 'Find receipt',
+        tier: AppButtonTier.primary,
         onPressed: _submit,
-        child: const Text('Find receipt'),
       ),
       if (_rejection case final message?) ...[
         const SizedBox(height: 16),
@@ -243,11 +245,11 @@ final class _ReceiptLookupResult extends StatelessWidget {
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: OutlinedButton(
-                      key: ValueKey('receipt-lookup-returns-${sale.id}'),
-                      onPressed: () => onOpenReturns(sale),
-                      child: const Text('View returns'),
-                    ),
+                    child: AppButton(
+                             key: ValueKey('receipt-lookup-returns-${sale.id}'),
+                             label: 'View returns',
+                             onPressed: () => onOpenReturns(sale),
+                           ),
                   ),
                 ],
               ),

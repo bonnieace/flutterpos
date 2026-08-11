@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'platform_tenant_review.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
@@ -971,20 +972,21 @@ final class _PlatformGlobalUserStatusFormState
           spacing: 12,
           alignment: WrapAlignment.end,
           children: [
-            TextButton(
+            AppButton(
               key: const ValueKey('platform-global-status-cancel'),
+              label: 'Cancel',
+              tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
-              child: const Text('Cancel'),
             ),
-            FilledButton(
+            AppButton(
               key: const ValueKey('platform-global-status-confirm'),
-              onPressed: _submitting ? null : _submit,
-              child: _submitting
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(disabling ? 'Disable user' : 'Reactivate user'),
+              label: disabling ? 'Disable user' : 'Reactivate user',
+              // Disabling an identity takes away every business it can reach.
+              tier: disabling
+                  ? AppButtonTier.destructive
+                  : AppButtonTier.primary,
+              loading: _submitting,
+              onPressed: _submit,
             ),
           ],
         ),
@@ -1116,15 +1118,12 @@ final class _PlatformGlobalUserStatusScreenState
               ),
             ),
             const SizedBox(width: 12),
-            FilledButton(
+            AppButton(
               key: const ValueKey('platform-global-user-lookup'),
-              onPressed: _loading ? null : _lookup,
-              child: _loading
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Load user'),
+              label: 'Load user',
+              tier: AppButtonTier.primary,
+              loading: _loading,
+              onPressed: _lookup,
             ),
           ],
         ),
@@ -1173,19 +1172,20 @@ final class _PlatformGlobalUserStatusScreenState
                     Align(
                       alignment: Alignment.centerRight,
                       child: target.user.status == PlatformGlobalStatus.active
-                          ? OutlinedButton(
+                          ? AppButton(
                               key: const ValueKey(
                                 'platform-disable-global-user',
                               ),
+                              label: 'Disable user',
                               onPressed: () => setState(() => _changing = true),
-                              child: const Text('Disable user'),
                             )
-                          : FilledButton(
+                          : AppButton(
                               key: const ValueKey(
                                 'platform-reactivate-global-user',
                               ),
+                              label: 'Reactivate user',
+                              tier: AppButtonTier.primary,
                               onPressed: () => setState(() => _changing = true),
-                              child: const Text('Reactivate user'),
                             ),
                     )
                   else

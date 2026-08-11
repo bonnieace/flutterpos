@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -214,10 +215,10 @@ final class _AmendmentContents extends StatelessWidget {
       ),
       if (page.isShiftScoped) ...[
         const SizedBox(height: 16),
-        OutlinedButton(
+        AppButton(
           key: const ValueKey('shift-amendments-show-all'),
+          label: 'Show every shift',
           onPressed: onShowAllShifts,
-          child: const Text('Show every shift'),
         ),
       ],
       const SizedBox(height: 16),
@@ -242,16 +243,17 @@ final class _AmendmentContents extends StatelessWidget {
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('shift-amendments-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (page.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('shift-amendments-next'),
+              label: 'Next page',
+              tier: AppButtonTier.primary,
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
@@ -338,20 +339,20 @@ final class _CatalogContents extends StatelessWidget {
         Text('Business: $tenantId'),
         if (adjustmentFeedRoute != null) ...[
           const SizedBox(height: 12),
-          OutlinedButton.icon(
+          AppButton(
             key: const ValueKey('catalog-adjustment-feed'),
+            label: 'View recorded stock adjustments',
+            icon: Icons.fact_check_outlined,
             onPressed: () => _openAdjustmentFeed(context),
-            icon: const Icon(Icons.fact_check_outlined),
-            label: const Text('View recorded stock adjustments'),
           ),
         ],
         if (movementFeedRoute != null) ...[
           const SizedBox(height: 12),
-          OutlinedButton.icon(
+          AppButton(
             key: const ValueKey('catalog-movement-feed'),
+            label: 'View every recorded stock movement',
+            icon: Icons.swap_vert_outlined,
             onPressed: () => _openMovementFeed(context),
-            icon: const Icon(Icons.swap_vert_outlined),
-            label: const Text('View every recorded stock movement'),
           ),
         ],
         const SizedBox(height: 20),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
+import '../ui/buttons.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -524,20 +525,25 @@ final class _TenantCatalogManagementPanelState
         title: Text(title),
         content: SingleChildScrollView(child: Text(body)),
         actions: [
-          TextButton(
+          AppButton(
             key: const ValueKey('catalog-management-cancel'),
+            label: 'Cancel',
+            tier: AppButtonTier.tertiary,
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          // The `destructive` flag used to paint `colorScheme.error` onto a
+          // filled button by hand. §2.1 has a tier for exactly this, so the
+          // flag now chooses a tier instead of a colour - which is
+          // `claude.md` hard rule 2, and it also means the destructive
+          // treatment is a transparent container with a red label and border
+          // rather than a solid red slab.
+          AppButton(
             key: const ValueKey('catalog-management-confirm'),
-            style: destructive
-                ? FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                  )
-                : null,
+            label: action,
+            tier: destructive
+                ? AppButtonTier.destructive
+                : AppButtonTier.primary,
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(action),
           ),
         ],
       ),
@@ -713,16 +719,26 @@ final class _CatalogManagementContents extends StatelessWidget {
   Widget? _actions(TenantProduct product) {
     final actions = <Widget>[
       if (canEdit)
-        TextButton(
+        AppButton(
           key: ValueKey('catalog-management-edit-${product.id}'),
+          label: 'Correct',
+          tier: AppButtonTier.tertiary,
+          size: AppButtonSize.sm,
           onPressed: busy ? null : () => onEdit(product),
-          child: const Text('Correct'),
         ),
+      // **Retire is destructive and used to be rendered identically to
+      // Correct.** `design.md` §9 names this pair twice among its known
+      // current failures - "20px targets on a touch surface, and
+      // destructive-adjacent actions rendered identically" - and this line
+      // closes both halves: the tier makes the difference visible, and
+      // `AppButton` answers a 48dp tap whatever it paints.
       if (canRetire && canWrite)
-        TextButton(
+        AppButton(
           key: ValueKey('catalog-management-retire-${product.id}'),
+          label: 'Retire',
+          tier: AppButtonTier.destructive,
+          size: AppButtonSize.sm,
           onPressed: busy ? null : () => onRetire(product),
-          child: const Text('Retire'),
         ),
     ];
     if (actions.isEmpty) return null;
@@ -825,11 +841,11 @@ final class _CatalogManagementContents extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          OutlinedButton.icon(
+          AppButton(
             key: const ValueKey('catalog-management-add-category'),
+            label: 'Add category',
+            icon: Icons.new_label_outlined,
             onPressed: _canSubmitCategory ? onAddCategory : null,
-            icon: const Icon(Icons.new_label_outlined),
-            label: const Text('Add category'),
           ),
         ],
         const SizedBox(height: 28),
@@ -907,11 +923,14 @@ final class _CatalogManagementContents extends StatelessWidget {
                       '${tenantCategoryPhrase(selected, names: categoryNames)}.',
           ),
           const SizedBox(height: 8),
-          FilledButton.icon(
+          // The one primary on this route: §2.1 permits exactly one per screen
+          // region, and putting a product in is what the route exists for.
+          AppButton(
             key: const ValueKey('catalog-management-add-product'),
+            label: 'Add product',
+            icon: Icons.add_box_outlined,
+            tier: AppButtonTier.primary,
             onPressed: _canSubmitProduct ? onAddProduct : null,
-            icon: const Icon(Icons.add_box_outlined),
-            label: const Text('Add product'),
           ),
         ],
         if (onBulk case final onBulk?) ...[
@@ -925,11 +944,11 @@ final class _CatalogManagementContents extends StatelessWidget {
             'before anything is written.',
           ),
           const SizedBox(height: 8),
-          OutlinedButton.icon(
+          AppButton(
             key: const ValueKey('catalog-management-bulk'),
+            label: 'Bulk changes and import',
+            icon: Icons.playlist_add_check_outlined,
             onPressed: busy ? null : onBulk,
-            icon: const Icon(Icons.playlist_add_check_outlined),
-            label: const Text('Bulk changes and import'),
           ),
         ],
         const SizedBox(height: 28),
@@ -965,19 +984,25 @@ final class _CatalogManagementContents extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            TextButton(
+            // `Previous` / `Next` are named in §9 as a known target failure.
+            // The tier is unchanged; what changes is that they now answer a
+            // 48dp tap. The `Pagination` component itself is step 3 of §5.1's
+            // priority 3 and is not this chunk's.
+            AppButton(
               key: const ValueKey('catalog-management-previous-page'),
+              label: 'Previous',
+              tier: AppButtonTier.tertiary,
               onPressed: pageIndex == 0 || busy ? null : onPreviousPage,
-              child: const Text('Previous'),
             ),
             Text(
               key: const ValueKey('catalog-management-page'),
               'Page ${pageIndex + 1}',
             ),
-            TextButton(
+            AppButton(
               key: const ValueKey('catalog-management-next-page'),
+              label: 'Next',
+              tier: AppButtonTier.tertiary,
               onPressed: view.products.hasMore && !busy ? onNextPage : null,
-              child: const Text('Next'),
             ),
           ],
         ),
@@ -1424,13 +1449,16 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        AppButton(
           key: const ValueKey('catalog-management-edit-cancel'),
+          label: 'Cancel',
+          tier: AppButtonTier.tertiary,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        FilledButton(
+        AppButton(
           key: const ValueKey('catalog-management-edit-review'),
+          label: 'Review correction',
+          tier: AppButtonTier.primary,
           onPressed: () => Navigator.of(context).pop(
             _ProductEditDraft(
               name: _name.text,
@@ -1441,7 +1469,6 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
               clearCost: widget.canChangeMoney && _clearCost,
             ),
           ),
-          child: const Text('Review correction'),
         ),
       ],
     );

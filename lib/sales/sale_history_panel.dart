@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_history_panel.dart';
 import '../returns/return_actions.dart';
@@ -305,11 +306,11 @@ final class _SaleHistoryContents extends StatelessWidget {
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: OutlinedButton(
-                      key: ValueKey('sale-history-returns-link-${sale.id}'),
-                      onPressed: () => onViewReturns(sale),
-                      child: const Text('View returns'),
-                    ),
+                    child: AppButton(
+                             key: ValueKey('sale-history-returns-link-${sale.id}'),
+                             label: 'View returns',
+                             onPressed: () => onViewReturns(sale),
+                           ),
                   ),
                 ],
               ),
@@ -320,16 +321,17 @@ final class _SaleHistoryContents extends StatelessWidget {
         spacing: 12,
         children: [
           if (pageIndex > 0)
-            OutlinedButton(
+            AppButton(
               key: const ValueKey('sale-history-previous'),
+              label: 'Previous page',
               onPressed: onPreviousPage,
-              child: const Text('Previous page'),
             ),
           if (page.hasMore)
-            FilledButton(
+            AppButton(
               key: const ValueKey('sale-history-next'),
+              label: 'Next page',
+              tier: AppButtonTier.primary,
               onPressed: onNextPage,
-              child: const Text('Next page'),
             ),
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import '../ui/records.dart';
 
 import 'tenant_id.dart';
@@ -352,15 +353,14 @@ final class _StaffContentsState extends State<_StaffContents> {
       )) ...[
         Align(
           alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            key: const ValueKey('invite-staff-open'),
-            onPressed: () =>
+          child: AppButton(
+                   key: const ValueKey('invite-staff-open'),
+                   label: _showInvitationForm ? 'Close invitation' : 'Invite staff',
+                   icon: Icons.person_add_alt_1_outlined,
+                   tier: AppButtonTier.primary,
+                   onPressed: () =>
                 setState(() => _showInvitationForm = !_showInvitationForm),
-            icon: const Icon(Icons.person_add_alt_1_outlined),
-            label: Text(
-              _showInvitationForm ? 'Close invitation' : 'Invite staff',
-            ),
-          ),
+                 ),
         ),
         if (_showInvitationForm) ...[
           const SizedBox(height: 16),

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/buttons.dart';
+
 void main() {
   group('account verification gateway', () {
     test('sends exactly the payload the server contract requires', () async {
@@ -266,14 +268,7 @@ void main() {
             .data,
         'The verification email could not be requested. Please try again.',
       );
-      expect(
-        tester
-            .widget<OutlinedButton>(
-              find.byKey(const ValueKey('account-verification-recheck')),
-            )
-            .onPressed,
-        isNotNull,
-      );
+      expect(pressable(tester, 'account-verification-recheck'), isTrue);
     });
 
     testWidgets('an undeliverable address is stated instead of retried', (

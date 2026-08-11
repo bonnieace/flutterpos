@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -650,32 +651,29 @@ final class _PlatformTenantReviewFormState
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            TextButton(
+            AppButton(
               key: const ValueKey('platform-review-cancel'),
+              label: 'Cancel',
+              tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
-              child: const Text('Cancel'),
             ),
             const SizedBox(width: 8),
-            FilledButton.icon(
+            AppButton(
               key: ValueKey(
                 rejecting
                     ? 'platform-review-reject-confirm'
                     : 'platform-review-approve-confirm',
               ),
-              onPressed: _submitting ? null : _submit,
-              icon: _submitting
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(rejecting ? Icons.close : Icons.check),
-              label: Text(
-                _submitting
-                    ? 'Saving...'
-                    : rejecting
-                    ? 'Reject request'
-                    : 'Approve request',
-              ),
+              label: rejecting ? 'Reject request' : 'Approve request',
+              icon: rejecting ? Icons.close : Icons.check,
+              // Rejecting a request refuses a business its account; §2.1's
+              // destructive tier is for what removes or reverses, and this is
+              // the same control wearing two meanings.
+              tier: rejecting
+                  ? AppButtonTier.destructive
+                  : AppButtonTier.primary,
+              loading: _submitting,
+              onPressed: _submit,
             ),
           ],
         ),
@@ -820,9 +818,10 @@ final class _PlatformPendingTenantReviewScreenState
             onPressed: _loading ? null : _reload,
             icon: const Icon(Icons.refresh),
           ),
-          TextButton(
+          AppButton(
+            label: 'Sign out',
+            tier: AppButtonTier.tertiary,
             onPressed: widget.onSignOut,
-            child: const Text('Sign out'),
           ),
         ],
       ),
@@ -841,7 +840,11 @@ final class _PlatformPendingTenantReviewScreenState
           children: [
             Text(_safeError!, key: const ValueKey('platform-queue-error')),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _reload, child: const Text('Retry')),
+            AppButton(
+              label: 'Retry',
+              tier: AppButtonTier.primary,
+              onPressed: _reload,
+            ),
           ],
         ),
       );
@@ -858,10 +861,10 @@ final class _PlatformPendingTenantReviewScreenState
           return Center(
             child: _loading
                 ? const CircularProgressIndicator()
-                : OutlinedButton(
+                : AppButton(
                     key: const ValueKey('platform-review-load-more'),
+                    label: 'Load more',
                     onPressed: _loadMore,
-                    child: const Text('Load more'),
                   ),
           );
         }
@@ -891,18 +894,19 @@ final class _PlatformPendingTenantReviewScreenState
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      OutlinedButton(
+                      AppButton(
                         key: ValueKey('platform-reject-${tenant.tenantId}'),
+                        label: 'Reject',
                         onPressed: () =>
                             _review(tenant, PlatformTenantReviewAction.reject),
-                        child: const Text('Reject'),
                       ),
                       const SizedBox(width: 8),
-                      FilledButton(
+                      AppButton(
                         key: ValueKey('platform-approve-${tenant.tenantId}'),
+                        label: 'Approve',
+                        tier: AppButtonTier.primary,
                         onPressed: () =>
                             _review(tenant, PlatformTenantReviewAction.approve),
-                        child: const Text('Approve'),
                       ),
                     ],
                   )
