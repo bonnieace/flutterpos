@@ -2806,8 +2806,32 @@ basis**: finishing step 3's first half is the natural stopping point, and App Ch
 only queued item that would move a red row. The research chunk itself is unchanged and sits at the
 head of the preference order below.
 
-**The device-run debt is now six chunks deep**, and `AppButton` is the one that most needs a
-device. Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
+**A device run was attempted on 2026-08-11 and got half way, which is worth recording so the next
+session does not repeat the dead ends.** The app **builds and runs on Chrome** against the live
+emulators — `flutter run -d chrome --dart-define=USE_FIREBASE_EMULATORS=true`, Hive boxes opened,
+the Auth emulator connected — and the **unmigrated sign-in screen was seen on a real run**, which
+confirms `DESIGN-AUDIT.md` §4.4 from the outside: uppercase field labels, a pill-radius well where
+§2.3 says 8, and a green glow where §9 wants a 2px ring. **The migrated landing route was not
+seen**, because sign-in could not be driven: synthetic clicks and `SendKeys` do not reach Flutter
+web's input layer, so the form cannot be filled programmatically. Three routes to a real run, in
+preference order:
+
+- **Windows desktop is one system toggle away and is the best surface for this chunk** — it has a
+  real mouse for hover and a real keyboard for the focus ring, which are two of the three states no
+  screenshot can show. `flutter run -d windows` currently fails with *"Building with plugins
+  requires symlink support. Please enable Developer Mode"*, which is a machine setting nobody
+  should flip on the product owner's behalf.
+- **Chrome works and needs a human to type.** The app is reachable; sign in as
+  `owner@example.com` with the seed script's password and the landing route is two clicks away.
+- **Android is blocked by a resource conflict, not by tooling.** A held `emulators:dev` run with
+  seeded data was up (`seed-dev-emulator.js --hold`), free memory was **2.1 GB**, and the standing
+  trap says Gradle and the Firebase emulators together kill the Firestore JVM with a native
+  `OutOfMemoryError`. Killing a held run to make room would destroy another session's seeded state,
+  which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
+  that is not also serving the emulators.
+
+**The device-run debt is therefore still six chunks deep**, and `AppButton` is the one that most
+needs a device. Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
 `1b2b13b`, **the ripple kill**, or **`AppButton`**. Between them that is 115 tests, 113
 screenshots, and no eyes. **Whenever the next device run happens, those come first** — for
 sign-in, an empty password, a wrong password, then editing a field; for the invitation, the refusal
