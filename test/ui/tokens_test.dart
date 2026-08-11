@@ -799,26 +799,54 @@ void main() {
       expect(AppDensity.comfortable.body(type), type.bodyLarge);
     });
 
-    test('what step 1 deliberately does not repoint', () {
-      // Each of these is a rewiring row from `DESIGN-AUDIT.md` §4.8, deferred
-      // to steps 2 to 5 so its image diff has one cause. **They are asserted as
-      // divergences on purpose**: when the step that closes one lands, this
-      // test fails and the row is removed here in the same change, rather than
-      // the difference going unnoticed for a release.
+    test('the two divergences step 3 closed are now agreements', () {
+      // These were asserted as divergences from step 1 until 2026-08-11, and
+      // the mechanism worked exactly as it was designed to: `AppButton` moved
+      // both values in `lib/theme.dart`, this test failed, and the two rows
+      // were rewritten here in the same change rather than the difference
+      // going unnoticed for a release. They are kept as agreements rather than
+      // deleted, because what stopped them drifting apart while both existed is
+      // the same thing that stops them drifting back.
       expect(
         colors.action.primary.label,
-        isNot(spiritTheme.colorScheme.onPrimary),
-        reason: 'the primary label is #0A0F0C in §2.1 and bgDark in the theme',
+        spiritTheme.colorScheme.onPrimary,
+        reason: 'a label on the primary container is §2.1\'s #0A0F0C',
       );
       expect(
         colors.action.secondary.label,
-        isNot(
-          spiritTheme.outlinedButtonTheme.style!.foregroundColor!.resolve(
-            <WidgetState>{},
-          ),
+        spiritTheme.outlinedButtonTheme.style!.foregroundColor!.resolve(
+          <WidgetState>{},
         ),
-        reason: 'the outlined button is still mint; §2.1 wants sage',
+        reason: 'the ordinary action stopped being mint, which is §2.1\'s point',
       );
+      expect(
+        colors.action.secondary.border,
+        spiritTheme.outlinedButtonTheme.style!.side!
+            .resolve(<WidgetState>{})!
+            .color,
+        reason:
+            'the third repoint, taken with the two above so an unmigrated '
+            'OutlinedButton and an AppButton in secondary cannot disagree',
+      );
+      expect(
+        colors.action.tertiary.label,
+        spiritTheme.textButtonTheme.style!.foregroundColor!.resolve(
+          <WidgetState>{},
+        ),
+      );
+      expect(
+        colors.action.primary.container,
+        spiritTheme.filledButtonTheme.style!.backgroundColor!.resolve(
+          <WidgetState>{},
+        ),
+      );
+    });
+
+    test('what steps 4 and 5 still have to repoint', () {
+      // The remaining rewiring rows from `DESIGN-AUDIT.md` §4.8. **They are
+      // asserted as divergences on purpose**: when the step that closes one
+      // lands, this test fails and the row moves into the agreement test above
+      // in the same change.
       expect(
         surface.sunken,
         isNot(spiritTheme.inputDecorationTheme.fillColor),

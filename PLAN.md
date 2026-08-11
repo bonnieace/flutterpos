@@ -4,9 +4,9 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-11**, the session that killed the ink ripple —
-`design.md` §11 step 2, and the first step of the redesign that moves anything a person can
-see. Claims in this file are checked against source,
+Last verified against the code on **2026-08-11**, the session that built `AppButton` —
+`design.md` §11 step 3's first half, the first component in this app a call site can reach and
+the first spring anywhere in the migrated tree. Claims in this file are checked against source,
 not inherited from the log; corrections are noted where they were made — **and the session
 before it found this file's own description of a defect wrong**, see "Found by using
 the app", finding 5. **The eighth session of 2026-08-08
@@ -97,7 +97,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~15% | `design.md` v0.3 is the specification, `DESIGN-AUDIT.md` audits it against the code, and **step 1 of its twelve is done and step 2 all but one part**: `lib/ui/tokens.dart` holds every colour, type, spacing, radius, motion and density token, and the ripple is dead — `splashFactory: NoSplash`, the four button themes reading §2.1's action tiers, and bouncing scroll physics with no overscroll glow. **Route transitions are step 2's fourth part and are not done**, because §2.4 requires a spring and the substrate arrives with `AppButton`. **One thing reads the token layer; everything else still reads the old values.** Steps 3–12 remain, `AppButton` next. The specification, the audit and the harness are all untracked. |
+| **Design system** | ~25% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1 and 2 are done bar route transitions, and step 3's first half landed 2026-08-11**: `lib/ui/tokens.dart` holds every token, the ripple is dead, scroll physics bounce with no glow, and **`AppButton` exists on a real spring substrate** — `SpringDrive`, `PressSurface`, four tiers, three sizes, six states, all six in the harness. The four Material button themes and two `ColorScheme` slots now read the token layer outright. **22 call sites are migrated and 146 across 37 files are not** — that is the next chunk. **Route transitions are step 2's fourth part and still are not done**; they are now a chunk of their own, see the current chunk for the framework reason. Steps 4–12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -137,6 +137,18 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The fourth session of 2026-08-11 changed no board row at all — not a colour and not a word of one
+— and this sentence is here so that is stated rather than left silent.** It took `design.md` §11
+step 3's first half, `AppButton`, which is a **redesign step rather than a capability**: no shop can
+do anything today it could not do yesterday. The **Design system** track moved 15% to 25%. It
+changed **no rollout step**, and it touched no rule and no `functions/` file — `git diff` over
+`functions/`, `firestore.rules` and `rules-tests/` prints zero lines. **It is the largest image diff
+of the migration so far**: 75 of the 101 screenshots moved and 12 were added, all of it from three
+theme repoints that reach every button in the app whether or not its call site was migrated.
+**What it corrected in this file is, again, a claim this file itself made**: the queued chunk said
+the call-site migration was "roughly forty buttons", and it is **168 across 38 files**. It also
+**measured all four non-Flutter suites** rather than carrying them a third time.
 
 **The third session of 2026-08-11 changed no board row at all — not a colour and not a word of one
 — and this sentence is here so that is stated rather than left silent.** It took `design.md` §11
@@ -265,12 +277,15 @@ current chunk.
 **No repair chunk has looked at the app, and that is worth stating because "nobody looked at
 it" is exactly how these defects survived two years of widget tests.** Each chunk's own shape
 asked for one device pass afterwards; the session instruction said to skip the Android build and
-the Android emulator, and the instruction has now won three times. So the sign-in repair is
+the Android emulator, and the instruction has now won five times. So the sign-in repair is
 covered by 32 tests — including the `dev.flutter.pigeon` assertion that would have caught the
 original — the invitation repair by 19, and the category repair by 7 including two that assert
 over **every** rendered string rather than over the slot that was wrong, and **no person has seen
-any of them**. The debt is three chunks deep and all three are queued below against the next
-device run, sign-in first.
+any of them**. **The two redesign chunks since are worse off, not better**: the ripple kill's 5
+tests and `AppButton`'s 51 prove the wiring and the physics, and the things they exist to deliver —
+a ripple's absence, a press that takes over mid-release, a frame budget — are all invisible to a
+widget test by construction. The debt is six chunks deep and all six are queued below against the
+next device run, sign-in first.
 
 **One thing the run could not prove, stated because it would otherwise look proved.** The
 manager membership used for the profit role-boundary check was activated by a scratchpad Admin
@@ -406,25 +421,36 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1598** ⚠️ see below |
-| Functions | `npm --prefix functions test` | **409** ⚠️ carried, see below |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ⚠️ carried |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ⚠️ carried |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⚠️ carried; one flaky test, see below |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1650** |
+| Functions | `npm --prefix functions test` | **409** ✅ measured 2026-08-11 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured 2026-08-11 |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured 2026-08-11 |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured 2026-08-11; one flaky test, see below |
 
-**2201 tests across five suites** — and there is a sixth figure that is deliberately not in
-this table: `flutter test --no-pub --concurrency=1 tool/screenshots` runs **78 captures**
-writing 101 images, and it asserts nothing, which is why it is not counted here.
+**2253 tests across five suites** — and there is a sixth figure that is deliberately not in
+this table: `flutter test --no-pub --concurrency=1 tool/screenshots` runs **90 captures**
+writing 113 images, and it asserts nothing, which is why it is not counted here. It was 78 and
+101 before the `AppButton` state matrix added 12 of each.
 
-⚠️ **The four non-Flutter figures have been carried rather than measured since the second session
-of 2026-08-11, and that is a decision rather than a lapse.** Both chunks that day changed Dart and
-nothing else; `git diff` over `firestore.rules`, `functions/` and `rules-tests/` prints **zero
-lines**, which this file already calls a stronger measurement than an unchanged suite count, and
-no suite among the four can observe a Dart file. The precedent is the Android device session,
-which carried all five. **Re-measure them in any chunk that touches JavaScript, TypeScript, or a
-rule** — and a chunk that carries them must say so, which is what these marks do. **Two
-consecutive carries is the limit worth naming**: a third should measure them, on the same
-reasoning that made the third consecutive unreachable callable a surface instead.
+✅ **The carry streak is over: all four non-Flutter figures were measured on 2026-08-11 by the
+`AppButton` chunk**, which is the rule below being obeyed rather than a suite being suspected.
+They had been carried by the two chunks before it, and the rule said a third should measure.
+`git diff` over `functions/`, `firestore.rules` and `rules-tests/` printed **zero lines** that
+session too, so the measurement was a formality — the point of writing the rule down was that a
+formality gets performed rather than assumed, and it found nothing, which is the outcome that
+makes the next carry trustworthy.
+
+**The standing rule, unchanged.** A chunk that changes only Dart may carry the four, because no
+suite among them can observe a Dart file and `git diff` over those three paths is the stronger
+measurement. **Re-measure in any chunk that touches JavaScript, TypeScript, or a rule**, and a
+chunk that carries must say so. **Two consecutive carries is the limit**: a third measures, on
+the same reasoning that made the third consecutive unreachable callable a surface instead.
+
+**The `AppButton` chunk took Flutter 1598 → 1650** (52 new: 10 in `test/ui/spring_test.dart`,
+17 in `test/ui/press_test.dart`, 24 in `test/ui/buttons_test.dart`, and 1 in
+`test/ui/tokens_test.dart` where the single divergence test became two — an agreement test and a
+smaller divergence test). The other four did not move, and this time that was **measured** rather
+than carried.
 
 ⚠️ ~~**The Flutter figure is measured against a working tree that is not this commit, and the
 difference is eight tests.**~~ **Closed 2026-08-11: those eight are committed, and 1598 is a
@@ -518,8 +544,10 @@ then **1473** once the profit display added 26, **1473** again in the password-r
 which added no Dart, **1505** once the sign-in chunk added 32, and **1524** once the
 invitation-refusal chunk added 19. **Then four times on 2026-08-11 against a tree carrying
 another session's eight unstaged tests: 1532 before the token layer, 1586 after it, 1593
-after the category-naming repair, and 1598 after the ripple kill.** One failure in twenty-two
-runs, and the last twenty-one green.
+after the category-naming repair, and 1598 after the ripple kill.** Then **1650** after
+`AppButton`, the first of these measured against a clean checkout of `HEAD` plus the chunk's own
+work rather than against another session's leftovers. One failure in twenty-three runs, and the
+last twenty-two green.
 
 **It was never a fault in the code under test.** The seam case wires a real encrypted
 outbox, a real submission worker, and a real recovery coordinator, and it waited a fixed
@@ -1516,6 +1544,75 @@ spatial to be a **spring** that retargets from its current position and velocity
 the section it comes from, so it waits for the substrate `AppButton` builds in step 3. Step 2 is
 therefore the ripple, the overlays, and the scroll physics — three of its four parts.
 
+### A button is a component, and a spring is the substrate under it
+
+Built 2026-08-11, `design.md` §11 step 3's first half. It changed `firestore.rules` not at all
+and nothing in `functions/` or `rules-tests/` either — `git diff` over all three prints **zero
+lines**, and this time all four non-Flutter suites were run to say so as well. It moved no board
+row: a redesign step is not a capability.
+
+**The queued chunk's own description was wrong, and checking it decided the scope.** This file
+said the call-site migration was "roughly forty buttons". Counted against source, the migrated
+tree holds **168** `FilledButton` / `OutlinedButton` / `TextButton` / `ElevatedButton`
+constructor calls across **38 files**, plus 13 `IconButton`s. The product owner chose to build
+the component and migrate one complete area — `tenant_routing_shell.dart`, 22 sites — leaving
+**146 across 37 files** as the next chunk.
+
+The guarantees are settled, not open:
+
+1. **A spring never starts from zero.** `SpringDrive.animateTo` is the only way to move one and
+   it always reads the live value and the live velocity out of the controller it is retargeting.
+   `AnimationController.forward()` is deliberately neither wrapped nor exposed: it is the API
+   that satisfies a spring-shaped call site while doing the one thing §2.4 and `claude.md`
+   forbid. A test catches the drive mid-flight, retargets it, and asserts both that the position
+   is the caught one and that the **velocity survives** — the half a position check cannot see.
+2. **The drive runs 0 to 1 and the widget lerps off it.** `SpringSimulation` decides it is done
+   against an absolute `Tolerance`, so a spring run directly from 1.0 to 0.97 finishes inside
+   the tolerance it is measured with and never moves.
+3. **The painted height and the tap target are different things.** §5.2 gives `sm` 32h and §9
+   makes 48dp pass/fail; both hold only by separating them. **The first implementation reserved
+   the area outside the gesture detector**, so it measured 48 and answered nothing — the test
+   now taps all four edges rather than measuring a box.
+4. **The focus ring's 4px gutter is reserved always.** A ring appearing on focus would reflow
+   the row a keyboard user just tabbed into, which is a worse failure than the one §9 names.
+5. **It is `focus-visible`, not `focused`**, read from `FocusManager.instance.highlightMode` —
+   the same place `InkResponse` reads it, so a migrated control and an unmigrated one beside it
+   agree about when a ring shows.
+6. **The label flexes, unconditionally, because Material's own button does.** `RenderFlex`
+   permits flex under unbounded constraints when `mainAxisSize` is `min` and rejects it only at
+   `max`, which here is `expand`, where the width is bounded by construction. The two failed
+   alternatives are recorded as traps below.
+7. **`action.destructive` exists for the first time.** It has no Material button theme to attach
+   to, so until this component there was no way to render §2.1's fourth tier at all. **It has no
+   call site yet**: the rule that fixes the sale screen — *Clear this sale* is destructive,
+   *Save sale* is primary — is step 7's to apply, and the landing route has nothing destructive
+   on it. It is covered by the harness matrix and by tests, not by a screen.
+8. **Three theme repoints, two of them the divergences step 1 planted.** `test/ui/tokens_test.dart`
+   asserted the outlined label's mint and the primary label's `bgDark` as divergences *on
+   purpose*; both moved, the test failed, and the rows became agreements in the same change,
+   which is exactly the mechanism working. **The third was not on the list**: the outlined
+   border, `#1E3A2B` → `#2C5340`, taken so an unmigrated `OutlinedButton` and an `AppButton` in
+   `secondary` on one screen cannot disagree about the same tier.
+9. **Six of §5's nine states, and the missing three are named rather than implied.** `error`
+   belongs to `AppTextField` per §5.2 — a button has no value to be wrong about; a button that
+   may not be used is `disabled` rather than read-only; there is no empty button.
+
+**`spring.snappy` is underdamped and §2.4 is generous about it.** Damping ratios measured this
+session: `snappy` **0.821**, `smooth` 1.012, `gentle` 1.014, `bouncy` 0.558. §2.4 claims all but
+`bouncy` are "critically or near-critically damped"; `smooth` and `gentle` are a shade *past*
+critical and `snappy` overshoots by **1.1%**. No value was changed and none should be: 1.1% of a
+press is 0.0003 of scale for one frame. `bouncy` overshoots by **12%**, an order of magnitude
+more, which is the distinction §6.2's reward layer rests on. The ratios are now asserted so
+"near-critically" cannot quietly cover a different spring later.
+
+**75 of the 101 screenshots moved and 12 were added — the largest image diff of the migration so
+far, and all of it has one cause.** The label repoints reach every button in the app through the
+theme, migrated or not. **What the 12 new ones prove and do not prove** is worth pinning: they
+are the state matrix, driven for real — four simultaneous touch pointers for `pressed`, a mouse
+per capture for `hover`, one focused node per capture for `focus-visible` — and they photograph
+the scale at a **settled** moment. Whether the spring is interruptible, and whether it drops a
+frame, remains a device check under §10.
+
 ### A category is named, and a document ID is not a name
 
 Built 2026-08-11, closing finding 5. It changed `firestore.rules` not at all and nothing in
@@ -2467,6 +2564,41 @@ enormous expected-denial traces.
   to keep frames coming. Springs in step 3 will move it again. Two runs of identical code hash
   identically, so a moved image here is still attributable — but read what actually differs
   before attributing it to the thing you meant to change.
+- **An `ErrorWidget` in a `Row` reports a six-figure overflow, and the number is a decoy.**
+  Found 2026-08-11. A build that throws is replaced by `ErrorWidget`, which is enormous, so the
+  first symptom of *any* build-time exception inside a list of controls is
+  `RenderFlex overflowed by 99200 pixels` — and the overflow is the loudest line in the log while
+  the real exception scrolls past above it. **Read the first exception in the run, not the biggest
+  one.** This cost a wrong diagnosis: the overflow was attributed to a `Flexible` in the widget
+  being built, that `Flexible` was removed, and the actual cause was a throwing `AppTokens.of` in
+  the same batch. Removing the `Flexible` then caused two further failures of its own.
+- **`Transform.getMaxScaleOnAxis()` answers 1.0 for every 2D scale.** `Transform.scale` builds
+  `Matrix4.diagonal3Values(s, s, 1.0)`, and the method takes the largest scale across all three
+  axes — so **z pins the answer at 1.0** for any shrink. A press-scale assertion written on it
+  passes against a completely static widget. Read `transform.storage[0]` instead. Found
+  2026-08-11 after the widget was briefly believed broken.
+- **A minimum-tap-target box must sit *inside* the gesture detector.** With the detector inside
+  it, the extra area is reserved, laid out, painted around — and answers nothing. `getSize`
+  reports the padded figure and a finger landing 2px inside the edge hits nothing, so a
+  size-based §9 assertion passes against a control that fails §9. **Assert a tap target by
+  tapping its edges**, never by measuring a box.
+- **A gesture callback must not read `MediaQuery` or any inherited widget off `context`.** A
+  pointer still down when its tree is torn down — a route popped mid-press, a held gesture
+  released in a tear-down — delivers its `up` to a **deactivated** element, and the lookup throws
+  "Looking up a deactivated widget's ancestor is unsafe". Read in `build` and hold the value,
+  which also registers the dependency properly. Found 2026-08-11 by a screenshot capture, not by
+  a test.
+- **A `LayoutBuilder` cannot answer an intrinsic-width query, and `AlertDialog` asks one.**
+  Dialog actions go in an `OverflowBar`, which measures intrinsics; so do `IntrinsicWidth`,
+  `Table`, and `Row` with `CrossAxisAlignment.baseline`. A widget built on a `LayoutBuilder`
+  inside any of them fails with a bare `hasSize` assertion naming **the dialog**, which is a long
+  way from the cause. Found 2026-08-11 while fixing the overflow above.
+- **`MouseTracker` asserts on a second simultaneous mouse pointer, and the damage outlives the
+  test.** Two `PointerDeviceKind.mouse` gestures at once throws
+  `(event is PointerAddedEvent) == (lastEvent is PointerRemovedEvent)`, and because the tracker
+  lives on the **binding** rather than on the test, the next test in the same file fails too and
+  looks unrelated. Multi-touch is fine — several `startGesture` pointers work — it is mice that
+  are singular.
 - **A `ThemeExtension` field named `type` breaks the extension silently.**
   `ThemeExtension` declares `Object get type` and `ThemeData.extensions` is keyed by it, so
   a field of that name makes `Theme.of(context).extension<T>()` answer `null` for ever while
@@ -2606,80 +2738,95 @@ screenshots.zip              a 9.5 MB archive of the same output - ignored
 
 **The generated screenshot output is ignored deliberately and the reason is in `.gitignore`
 rather than only here.** `fakes.dart` derives its business dates from `DateTime.now()`, so
-re-running on a different day moves about **39 of the 101 images** with nothing behind them;
+re-running on a different day moves about **39 of the images** with nothing behind them;
 tracking the output would put those 39 into every future diff. The harness is tracked, the
-output is not, and a baseline is regenerated the same day it is compared against.
+output is not, and a baseline is regenerated the same day it is compared against. The set is
+**113 images from 90 captures** since the `AppButton` state matrix; the 39 was measured against
+the 101 that preceded it and has not been re-measured, because the 12 new ones are a component
+gallery with no business date in them.
 
 ---
 
 ## Next bounded chunk
 
-**`design.md` §11 step 3, first half: `AppButton`.** Step 2 is done and step 3 is queued as **two**
-chunks rather than one, because the two halves share nothing but a step number.
+**`design.md` §11 step 3, first half, continued: the remaining 146 `AppButton` call sites.** The
+component landed 2026-08-11 with 22 of 168 migrated. This chunk is the other **146, across 37
+files**, and it finishes the first half of step 3.
 
-**Why `AppButton` is a chunk on its own.** The call-site migration is mechanical — roughly forty
-buttons — and the cost is `claude.md` hard rule 5, which wants every state in the screenshot
-harness: four tiers × three sizes × nine states. That matrix is the work, not the widget.
+**It is mechanical but it is not free, and the two costs are worth knowing before it starts.**
+Each site needs a **tier judgement** — primary, secondary, tertiary or destructive — which is a
+product decision per button rather than a rename, and §2.1 permits **exactly one primary per
+screen region**, so a screen with three `FilledButton`s today has a decision to make rather than
+three substitutions. And **9 test files reference the Material button types directly** (25
+references, `find.byType(FilledButton)` and friends); they move with their call sites.
 
-**What it must carry, all of it already decided and none of it invented here:**
+**Where the 146 are**, largest first, so the chunk can be cut if it does not fit: `catalog_management_panel` 11,
+`bulk_catalog_panel` 9, `reconciliation_anomalies_panel` 9, `return_history_panel` 8, `config.dart` 8,
+`platform_tenant_review` 7, `checkout_cart_panel` 7, `platform_tenant_lifecycle` 7,
+`reconciliation_status_panel` 6, `shift_panel` 6, `stock_adjustment_panel` 6, then a tail of 5 and
+fewer across 26 more files.
 
-- **`PressSurface` is built inside it**, per `DESIGN-AUDIT.md` §6 decision 4 — scale 0.97 on
-  `spring.snappy`, interruptible from its current position and velocity, never
-  `forward()`-from-zero on a retrigger. **This is the chunk that builds the spring substrate**,
-  because there are zero `AnimationController`s in the migrated tree today.
-- **Step 2's unfinished fourth part rides with it: route transitions.** §2.4 makes anything
-  spatial a spring, so a transition cannot be written before the substrate above exists. It is
-  carried here rather than left behind step 2, so it does not become the part nobody owns.
-- **The fourth tier arrives.** `action.destructive` has no Material button theme and exists only
-  once `AppButton` does. §2.1's rule that fixes the sale screen — *Clear this sale* is
-  destructive, *Save sale* is primary — is step 7's to apply, not this one's.
-- **Two divergences close and their assertions come out of `test/ui/tokens_test.dart` in the same
-  change**: the outlined button's label goes from mint to `action.secondary`'s sage, and the
-  primary label from `bgDark` to `#0A0F0C`. That test names them as divergences on purpose so the
-  step that closes one fails it.
-- **§9's focus ring**, 2px at 2px offset, which step 2 deliberately left as a hover-strength
-  overlay because a ring is a border rather than an overlay.
-- **`minimumSize` stays 48.** §5.2's `md` is 40h and §9's touch target is pass/fail under hard
-  rule 6; a component that shrinks a target is a defect however well it matches the table.
+**Two call sites in that list are not this chunk's**, and they are named so they are not taken by
+accident. `checkout_cart_panel.dart`'s 7 are the **sale path**, which is step 7 — that is where
+§2.1's rule that *Clear this sale* is destructive and *Save sale* is primary gets applied, and
+applying it early would put a step-7 decision inside a step-3 diff. `config.dart`'s 8 should be
+checked against `claude.md` hard rule 3 before being touched at all.
 
-**Explicitly excluded from it:** `AppTextField` and `AppSelect`, which are the step's second chunk
-— that is where finding 4's missing category picker gets closed and where the two incompatible
-field implementations become one; every other component (`StatusBadge` is step 4, `AppScaffold`
-step 5); the sale screen's action prominence, which is step 7; every server file and
-`firestore.rules`; deployment; and every standing exclusion below.
+**What this chunk does not do:** it does not add a component. `AppButton` is built and its state
+matrix is in the harness; this is migration only, and any change to the widget found necessary
+mid-sweep is a signal that a call site wants something §5.2 does not describe — record it, do not
+extend the component quietly.
 
-**App Check was passed over a fourth time, and this is the reason rather than the ordering.** The
-previous session queued it here on this file's own instruction — the device findings had run out,
-and it is the only queued item that would move a red row. **The product owner redirected to the
-redesign**, having asked why the reskin chunks were not being taken. That is a decision, not
-drift, and it is recorded here so the next session does not re-derive it as an oversight. The
-research chunk is unchanged and sits at the head of the preference order below: what a **Windows**
-build can actually attest with, the `1:…:web:…` app-ID registration mismatch, and the three
-options costed rather than chosen. **It is now behind two redesign chunks, and the fifth
-deferral needs its own reason.**
+**Explicitly excluded from it:** `AppTextField` and `AppSelect`, which are step 3's second chunk —
+where finding 4's missing category picker closes and where the two incompatible field
+implementations become one; **route transitions**, now their own chunk, see below; the 13
+`IconButton` call sites, which have no component yet and belong with whatever replaces them; every
+other component (`StatusBadge` is step 4, `AppScaffold` step 5); the sale screen; every server file
+and `firestore.rules`; deployment; and every standing exclusion below.
 
-**The device-run debt is now five chunks deep, and one of the five cannot be verified any other
-way.** Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
-`1b2b13b` — which repainted every screen by wiring a `ColorScheme` the theme had named and never
-used — or **the ripple kill**. Between them that is 63 tests, 101 screenshots, and no eyes.
-**Whenever the next device run happens, those come first** — for sign-in, an empty password, a
-wrong password, then editing a field; for the invitation, the refusal an identity that was
-unverified at invite time receives; for the category wording, the seeded product filed under
-`cat-not-cached` in "Manage catalog" and an import preview of a sheet naming `Bakery`; for the
-theme, any screen with a button, a spinner or an icon on it. The invitation one **cannot be
-reproduced on the emulators at all** (finding 6): it needs either a real Brevo key or an
-invitation written by hand with `visibleAcceptanceAllowed: false`.
+**Route transitions are now a chunk of their own, and the reason is a framework fact rather than a
+preference.** This file carried step 2's unfinished fourth part into the `AppButton` chunk on the
+reasoning that a spring transition needs a spring substrate. The substrate exists now and the
+transition still does not fit: **a `PageTransitionsBuilder` cannot produce a spring.** It only
+reshapes an animation the route already drives on a duration, so anything written through
+`pageTransitionsTheme` — the one mechanism that reaches every `MaterialPageRoute` without touching
+a call site — is a curve wearing a spring's name, which is precisely what this file said would
+"satisfy the step number while contradicting the section it comes from". A real one is a
+`PageRoute` subclass driving its own controller with a `SpringSimulation`, **22 `MaterialPageRoute`
+call-site swaps**, and care on the pop path so the route still finalizes: `didPop` reverses the
+controller and a simulation driven forward to 0 reports `completed` rather than `dismissed`, so a
+naive version leaks every popped route. The product owner moved it out on 2026-08-11.
 
-**The ripple kill is a different kind of debt from the other four and should be treated as
-one.** The other four are repairs whose tests are genuine evidence and whose device pass would be
-confirmation. **Step 2's central claim cannot be tested at all**: a ripple exists only mid-press
-and an overscroll glow only mid-drag, so `design.md` §10 makes its verification a device check
-with the performance overlay on. The five tests below prove the theme is wired the way §2.1 and
-§2.4 describe — including at the `InkWell` the button actually builds, which is where a
-`ButtonStyle` merge could have lost — and they prove nothing about how it feels. **Press a
-`FilledButton`, an `OutlinedButton`, a `ChoiceChip` and a `ListTile`, and drag a list past its
-end.** That is a prerequisite attached to the next device session, not a chunk of its own; step 3
-should not ship before somebody has done it, because `AppButton` builds its press on top of this.
+**App Check was passed over a fifth time, and the fifth deferral has its own reason, as this file
+required.** The reason is the same decision, not a new one: the product owner redirected to the
+redesign and the redesign is now mid-step — `AppButton` exists with 146 of its call sites
+unmigrated, and stopping there to research an unrelated blocker leaves the app with two button
+implementations for longer than necessary. **The sixth deferral should not be granted on that
+basis**: finishing step 3's first half is the natural stopping point, and App Check is still the
+only queued item that would move a red row. The research chunk itself is unchanged and sits at the
+head of the preference order below.
+
+**The device-run debt is now six chunks deep**, and `AppButton` is the one that most needs a
+device. Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
+`1b2b13b`, **the ripple kill**, or **`AppButton`**. Between them that is 115 tests, 113
+screenshots, and no eyes. **Whenever the next device run happens, those come first** — for
+sign-in, an empty password, a wrong password, then editing a field; for the invitation, the refusal
+an identity that was unverified at invite time receives; for the category wording, the seeded
+product filed under `cat-not-cached` in "Manage catalog" and an import preview of a sheet naming
+`Bakery`; for the theme, any screen with a button, a spinner or an icon on it. The invitation one
+**cannot be reproduced on the emulators at all** (finding 6): it needs either a real Brevo key or
+an invitation written by hand with `visibleAcceptanceAllowed: false`.
+
+**The ripple kill and `AppButton` are a different kind of debt from the other four and should be
+treated as one.** The other four are repairs whose tests are genuine evidence and whose device pass
+would be confirmation. **Their central claims cannot be tested at all**: a ripple exists only
+mid-press, an overscroll glow only mid-drag, and *interruptibility* is a property of a spring
+between two frames. `design.md` §10 makes all of it a device check with the performance overlay on.
+The 51 new tests prove the spring retargets from its position and velocity when driven directly,
+and the harness photographs a **settled** press; neither says anything about how it feels.
+**Press and release the landing route's buttons, press one twice in quick succession to feel the
+second press take over mid-release, tab through the route to see the ring, drag a list past its
+end, and watch the frame graph while doing it.**
 
 **One exclusion named because it has been inherited for many consecutive chunks: the printed
 receipt body.** Still correctly excluded and it has not become blocking — a sale is recorded,
@@ -2737,8 +2884,19 @@ finished.
   seen it yet. Touches `rules-tests/test/` only: no product code, no rule, no `functions/` file. It
   is queued below the App Check research because it costs a session nothing to re-run a flake and
   the research chunk is the one holding a red row shut.
+- **~~The design system, step 3, first half: `AppButton`~~** — **the component is done
+  2026-08-11; its remaining 146 call sites are the current chunk.** It moved no board row and no
+  rollout step, moved the **Design system** track 15% to 25%, and produced the largest image diff
+  of the migration so far — 75 of 101 changed, 12 added — from three theme repoints rather than
+  from the component. What it decided, and the three defects it found in its own first draft, are
+  in its own standing decision above. It also **corrected this file's estimate of its own size**,
+  40 buttons to 168.
+- **Route transitions, as a chunk of their own** — step 2's fourth and last part, moved out of the
+  `AppButton` chunk on 2026-08-11 once it was established that `pageTransitionsTheme` cannot carry
+  a spring. A `PageRoute` subclass on `SpringDrive`, 22 `MaterialPageRoute` swaps, and the pop-path
+  care described in the current chunk. It is the last thing standing between step 2 and done.
 - **The design system, step 3, second half: `AppTextField` and `AppSelect`** — the other half of
-  the current chunk, and the one that closes **finding 4**, the add-product form's category picker.
+  the step, and the one that closes **finding 4**, the add-product form's category picker.
   It is where the two incompatible field implementations become one: bare `TextField` in the
   migrated tree, and `PillInput` on sign-in, which draws its own well, its own label, and its own
   focus glow while reading nothing from the theme. Roughly twenty call sites. `AppSelect` has

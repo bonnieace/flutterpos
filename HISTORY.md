@@ -18955,3 +18955,238 @@ prompt.md                  the session instruction - the product owner's own fil
                            mine to either commit or ignore without being asked
 screenshots/ screenshots.zip .codex-*.png    generated or scratch; ignored
 ```
+
+---
+
+## `AppButton`, and the spring substrate under it - 2026-08-11
+
+`design.md` §11 step 3, first half. The first component in this app's history that a call
+site can reach, and the first spring anywhere in the migrated tree.
+
+### The chunk was re-scoped before it started, because its own description was wrong
+
+`PLAN.md` queued this as "the call-site migration is mechanical - roughly forty buttons".
+Counted against source, the migrated tree (everything outside `lib/pos/**`, `lib/screens/**`,
+`lib/services/**`, `lib/api/**` and `lib/widgets/**`) holds **168** `FilledButton` /
+`OutlinedButton` / `TextButton` / `ElevatedButton` constructor calls across **38 files**, plus
+13 `IconButton`s. That is four times the queued figure and it decides what fits in a session.
+
+The product owner was asked and chose: **build the component and migrate one complete area**,
+`tenant_routing_shell.dart`'s 22 sites, leaving 146 across 37 files as the next chunk. They
+also moved **route transitions out of this chunk**.
+
+### Route transitions are their own chunk now, and the reason is a framework fact
+
+`PLAN.md` carried step 2's unfinished fourth part into this chunk on the reasoning that a
+spring transition needs the substrate `AppButton` builds. The substrate is now built and the
+transition still does not fit, for a reason worth recording:
+
+**A `PageTransitionsBuilder` cannot produce a spring.** It only reshapes an animation the
+route already drives on a duration, so anything written through `pageTransitionsTheme` -
+which is the one mechanism reaching every `MaterialPageRoute` without touching a call site -
+is a curve wearing a spring's name. A real one needs a `PageRoute` subclass driving its own
+controller with a `SpringSimulation`, plus swapping the **22** `MaterialPageRoute` call sites
+in the migrated tree, plus care on the pop path so the route still finalizes. That is a chunk,
+not a rider.
+
+### What was built
+
+**`lib/ui/spring.dart` - `SpringDrive`.** An unbounded `AnimationController` plus one method,
+`animateTo`, which always reads the live value and the live velocity out of the controller it
+is retargeting. `forward()` is deliberately neither wrapped nor exposed: it is the API that
+would satisfy a spring-shaped call site while doing the one thing §2.4 forbids. Unbounded
+because a spring overshoots, and a bounded controller would let the clamp rather than the
+physics decide what `spring.bouncy` looks like.
+
+The drive runs a **normalized 0-to-1 progress** and the widget lerps the quantity off it. That
+is not tidiness: `SpringSimulation` decides it is done against `Tolerance`, whose defaults are
+absolute, and a press travelling from scale 1.0 to 0.97 is a 0.03-wide journey that finishes
+inside the tolerance it is measured with.
+
+**`lib/ui/press.dart` - `PressSurface`.** §2.4's replacement for the ink ripple: scale 0.97 on
+`spring.snappy`, plus §2.1's hover and pressed overlays, plus §9's focus ring. Three things in
+it are decisions rather than code:
+
+1. **The ring's 4px gutter is reserved always**, not painted on focus. A ring at a 2px offset
+   needs 4px outside the shape; painting it only when focused reflows the row the moment a
+   keyboard user tabs into it, which is a worse accessibility failure than the one §9 asks to
+   fix.
+2. **`focus-visible`, not `focused`.** The ring reads `FocusManager.instance.highlightMode`,
+   which is where `InkResponse` reads it, so a migrated control and an unmigrated one beside
+   it agree about when a ring appears. A tap that happens to focus a button draws nothing.
+3. **The spring is created on first press**, not on first build, so a screen full of buttons
+   nobody has touched holds no tickers.
+
+**`lib/ui/buttons.dart` - `AppButton`.** Four tiers by three sizes. `action.destructive` had no
+Material button theme to attach to and therefore could not be rendered anywhere in this app
+until now. Loading freezes the width by leaving the label laid out and unpainted rather than by
+measuring it - a measured width is a second source of truth that goes stale when the text scale
+changes.
+
+**The painted height and the tap target are separate things**, which is what lets §5.2's `sm`
+(32h) and §9's 48dp coexist. §9 is pass/fail under `claude.md` hard rule 6; §5.2 gives three
+sizes; only separating them satisfies both.
+
+### Three defects found by testing, all of them in code written this session
+
+**The 48dp tap target was reserved and dead.** The min-target `ConstrainedBox` sat *outside*
+the `GestureDetector`, so the extra area was laid out and answered nothing: a tap two pixels
+inside the top edge of a 32-high button hit padding. **A size assertion passed against this** -
+`getSize` reported 48 - which is exactly the kind of pass that ships a defect. The box now sits
+inside the detector, and the test taps all four edges instead of measuring.
+
+**A press callback read `MediaQuery` off `context`.** A pointer still down when its tree is
+torn down - a route popped mid-press, or a test releasing a held gesture in a tear-down -
+delivers its `up` to a **deactivated** element, and the lookup throws "Looking up a deactivated
+widget's ancestor is unsafe". The tokens and the reduced-motion flag are now read in `build`
+and held, which also registers the dependency properly.
+
+**A too-long label overflowed its own button by 39px** on the landing route at phone width.
+See the misattribution below.
+
+### One fix was attributed to the wrong change, and the correction matters
+
+The first run of the shell's tests produced `RenderFlex overflowed by 99200 pixels` and
+`199200 pixels`. Those were attributed to `Flexible` inside the button's label `Row` under the
+unbounded constraints an `AppBar`'s actions hand out, and `Flexible` was made conditional.
+
+**That was wrong.** The real cause was in the same batch of failures: `AppTokens.of` threw for
+every one of those buttons, and Flutter substitutes an `ErrorWidget` for a build that throws.
+An `ErrorWidget` in a `Row` is what produced the six-figure overflow numbers. Both changes
+landed together and the fix was credited to the wrong one.
+
+The cost of that mistake was two further failures. Dropping `Flexible` let a long label
+overflow a narrow slot; replacing it with a `LayoutBuilder` fixed that and broke every parent
+that measures **intrinsic** width - `AlertDialog` puts its actions in an `OverflowBar`, which
+does, and the failure is a bare `hasSize` assertion naming the dialog rather than the button.
+
+**The correct answer is what Material already does**: `Flexible` unconditionally. `RenderFlex`
+permits flex under unbounded constraints when `mainAxisSize` is `min` and rejects it only when
+`max` - which here is `expand`, where the width is bounded by construction. Both hazards now
+have tests: a 120px slot, and a real `AlertDialog`.
+
+### The token layer learned to answer without a theme, and that was a real decision
+
+`AppTokens.of` throws when the extension is absent, decided in step 1 so a nested `Theme` built
+from a fresh `ThemeData` could not silently render a compact screen at comfortable spacing.
+Correct for a screen; wrong for a component. **46 of the widget-test files build their own bare
+`ThemeData`**, and under `of` every one of them is a crash the moment a migrated widget appears
+in it - which would make "remember `theme: spiritTheme`" a rule to be remembered at ~50 sites
+and at every new one.
+
+`AppTokens.componentOf` falls back to `AppTokens.dark`. **The fallback is safe in the one
+direction that matters**: `dark` carries `AppDensity.comfortable`, the *stricter* density on
+every dimension §9 measures - 48x48 targets rather than 32x32, larger rows, larger body text.
+A component that falls back can render a compact screen at comfortable size, a cosmetic fault,
+and can never shrink a tap target below §9's floor. What it cannot catch is stated in the
+accessor's own doc: a nested `Theme` built from a fresh `ThemeData` loses its density silently,
+which is why `of` still exists and still throws.
+
+### The two divergences closed, and a third was taken deliberately
+
+`test/ui/tokens_test.dart` had asserted two values as divergences *on purpose* since step 1, so
+the step closing one would fail a test rather than pass quietly. It worked exactly as designed:
+both moved, the test failed, and the rows were rewritten as agreements in the same change.
+
+- The outlined button's label, mint to `action.secondary` sage `#B8D6C5`.
+- The primary label, `bgDark` to `#0A0F0C`, through `colorScheme.onPrimary` and `onSecondary`.
+- **And a third that was not on the list**: the outlined button's border, `mutedGreen`
+  `#1E3A2B` to `action.secondary.border` `#2C5340`. Taken because an unmigrated
+  `OutlinedButton` and an `AppButton` in `secondary` sitting on the same screen must not
+  disagree about the same tier, and each half would have looked individually defensible in
+  review.
+
+### `spring.snappy` overshoots, and the document is generous about it
+
+Measured while writing the tests. Damping ratios: `snappy` **0.821**, `smooth` 1.012, `gentle`
+1.014, `bouncy` 0.558. §2.4 says "All are critically or near-critically damped except
+`spring.bouncy`", which is true of `smooth` and `gentle` - both a shade *past* critical - and
+generous about `snappy`, which is underdamped and overshoots by **1.1%**.
+
+Not a defect and no value was changed: 1.1% of a press journey is 0.0003 of scale, for one
+frame, on a 48px button. `bouncy` overshoots by **12%**, an order of magnitude more, which is
+the distinction §6.2's reward layer rests on. The ratios are now asserted so "near-critically"
+cannot quietly cover a different spring later.
+
+### The state matrix
+
+`claude.md` hard rule 5 and §10 both require it. **Six of §5's nine states, and the other three
+are absent on purpose**: `error` belongs to `AppTextField` per §5.2 - a button has no value to
+be wrong about - a button that may not be used is `disabled` rather than read-only, and there
+is no such thing as an empty button.
+
+How each state is produced matters, because a faked state proves nothing. `enabled`, `disabled`
+and `loading` are properties, so each is one capture of the whole 4x3 grid. `pressed` holds
+four simultaneous **touch** pointers, one per tier. `hover` is one capture per tier -
+`MouseTracker` asserts on a second simultaneous **mouse** pointer, and because the tracker
+lives on the binding rather than on the test, that failure poisons the next capture in the same
+file. `focus-visible` is one capture per tier because only one node can hold the primary focus,
+and it needs `FocusHighlightStrategy.alwaysTraditional` or the ring is correctly suppressed on
+a test binding's touch platform and the picture shows its absence.
+
+**The press captures are the only place a spring is visible in this harness, and they are still
+not evidence about motion.** They photograph the scale at a settled moment. Whether the spring
+is interruptible, and whether it drops a frame, is a device check.
+
+### Files changed
+
+```text
+lib/ui/spring.dart                            new - SpringDrive
+lib/ui/press.dart                             new - PressSurface
+lib/ui/buttons.dart                           new - AppButton, AppButtonTier, AppButtonSize
+lib/ui/tokens.dart                            maybeOf + componentOf
+lib/theme.dart                                three repoints; doc rewritten for step 3
+lib/tenancy/tenant_routing_shell.dart         22 call sites
+test/ui/spring_test.dart                      new - 10
+test/ui/press_test.dart                       new - 17
+test/ui/buttons_test.dart                     new - 24
+test/ui/tokens_test.dart                      two divergences to agreements, plus the third
+tool/screenshots/component_states_test.dart   new - 12 captures
+PLAN.md
+HISTORY.md
+```
+
+### Test commands and results
+
+```text
+flutter test --no-pub --concurrency=1                       1650 pass   (was 1598, +52)
+npm --prefix functions test                                  409 pass   measured
+npm --prefix rules-tests run test:emulator                   161 pass   measured
+npm --prefix rules-tests run test:emulator:reconciliation     10 pass   measured
+FUNCTIONS_DISCOVERY_TIMEOUT=60000
+  npm --prefix rules-tests run test:emulator:invitations       23 pass   measured
+flutter analyze --no-pub lib test tool                       475 issues (the pre-existing
+                                                             baseline; the new files add none)
+flutter test --no-pub --concurrency=1 tool/screenshots        90 captures, 113 images
+```
+
+**All four non-Flutter suites were measured rather than carried**, which discharges the rule
+`PLAN.md` set after two consecutive carries. `git diff` over `functions/`, `firestore.rules`
+and `rules-tests/` prints **zero lines**, so the measurement was a formality - but the rule
+exists precisely so a formality is performed rather than assumed. **The invitation suite's
+known intermittent failure did not recur**: 23 of 23, first attempt.
+
+The +52 is 10 + 17 + 24 = 51 from the new files, plus 1 in `tokens_test.dart` where the single
+divergence test became two.
+
+### Screenshots
+
+**75 of the 101 changed, 12 were added, none was removed, 26 are byte-identical.** The largest
+image diff of the migration so far, and every pixel of it has one cause: the label repoints
+above reach every `OutlinedButton`, `TextButton` and `FilledButton` in the app through the
+theme, whether or not its call site was migrated.
+
+The baseline was copied to the scratchpad before regenerating and hashed after, keyed on
+directory-plus-name rather than on a `FullName` substring - the scratchpad root is an 8.3 short
+path, and keying on the substring reports that all 113 files changed. Baseline and comparison
+are both 2026-08-11, so the date drift in `fakes.dart` is not in this figure.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

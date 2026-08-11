@@ -108,13 +108,18 @@ final class SpiritScrollBehavior extends MaterialScrollBehavior {
 /// scaffold and the raised surface it is painted on, so the two cannot drift
 /// apart again.
 ///
-/// **[AppTokens] is registered here, and since `design.md` §11 step 2 exactly
-/// one thing reads it: the press overlay on the four button themes.** Step 1
-/// defined the layer additively and wired nothing, so every other value below
-/// still decides what the app renders. The rewiring - the input well moving to
-/// `surface.sunken`, the outlined button's label off mint, the card radius from
-/// 16 to 12 - belongs to steps 3 to 5, where each image diff has exactly one
-/// cause.
+/// **[AppTokens] is registered here, and since `design.md` §11 step 3 the four
+/// button themes and the two mint-facing `ColorScheme` slots read it
+/// outright** - containers, labels, borders and press overlays, not just the
+/// overlays step 2 wired. Step 1 defined the layer additively and wired
+/// nothing; step 2 took the overlays; step 3 took the colours under them. What
+/// is still on the old values below is named rather than left to be
+/// discovered: the input well is `bgMid` where §2.1 wants `surface.sunken`, the
+/// card radius is 16 where §2.3 wants 12, the input radius is 14 where it wants
+/// 8, and chips are stadium where §2.3 restricts the pill to buttons. Those are
+/// steps 4 and 5, where each image diff has exactly one cause, and
+/// `test/ui/tokens_test.dart` asserts every one of them as a divergence so the
+/// step that closes one fails a test rather than passing quietly.
 ///
 /// **Step 2 is the ripple kill, and it is theme-level on purpose.** §2.4 says
 /// to replace `InkWell` with an opacity-and-scale overlay, but there is exactly
@@ -122,8 +127,15 @@ final class SpiritScrollBehavior extends MaterialScrollBehavior {
 /// Material's own button, chip, and tile implementations. `DESIGN-AUDIT.md` §6
 /// decision 4 therefore split the work: the ripple dies here, in one file and
 /// zero call sites, and the scale-0.97 `spring.snappy` press arrives inside
-/// `AppButton` in step 3, at the moment every call site is already being
-/// rewritten. Doing it per call site now would touch ~40 sites twice.
+/// `AppButton` in step 3, at the moment a call site is already being rewritten.
+/// Doing it per call site would touch every site twice.
+///
+/// **What that leaves, and it is worth being plain about it.** A control that
+/// has not been migrated to `AppButton` has no ripple, no scale and no focus
+/// ring - it has the overlay wash and nothing else, because a `ButtonStyle`
+/// cannot express either of the other two. The press *feel* §2.4 asks for
+/// arrives at a call site when that call site is migrated, not before, and
+/// until then the theme is holding the line rather than delivering the design.
 ///
 /// **No `fontFamily` is named here, deliberately.** This theme asked for
 /// `Inter` for a long time and no `Inter` was ever bundled - `pubspec.yaml`
@@ -148,15 +160,23 @@ final ThemeData spiritTheme = ThemeData(
   // ripples on two of the four tiers. A test asserts both.
   useMaterial3: true,
   splashFactory: NoSplash.splashFactory,
-  colorScheme: const ColorScheme.dark(
+  colorScheme: ColorScheme.dark(
     primary: accentGreen,
     // Dark ink on a bright accent, which is what the login screen's primary
     // button already does. White on `accentGreen` fails AA outright.
-    onPrimary: bgDark,
+    //
+    // **`#0A0F0C` since step 3, and it used to be `bgDark`.** This is one of
+    // the two divergences `test/ui/tokens_test.dart` asserted on purpose from
+    // step 1 onwards: §2.1's action table names a label darker than the page
+    // for the primary tier, and the theme had the page colour. The assertion
+    // is now an agreement, in the same change, which is what those rows were
+    // written for.
+    onPrimary: _action.primary.label,
     primaryContainer: mutedGreen,
     onPrimaryContainer: accentGreen,
     secondary: accentGreen,
-    onSecondary: bgDark,
+    // `secondary` is the same mint, so what sits on it is the same ink.
+    onSecondary: _action.primary.label,
     secondaryContainer: mutedGreen,
     onSecondaryContainer: _bodyGreen,
     error: _criticalRed,
@@ -199,17 +219,28 @@ final ThemeData spiritTheme = ThemeData(
   // Stadium buttons throughout, because the login screen's are stadium and it
   // is the one screen nobody has asked to change.
   //
-  // Each of the four carries the overlay of the §2.1 tier it stands for:
+  // Each of the four carries the colours of the §2.1 tier it stands for:
   // filled and elevated are `action.primary`, the outlined button is
   // `action.secondary`, and the text button is `action.tertiary`.
-  // `action.destructive` has no Material theme to attach to and arrives with
-  // `AppButton` in step 3, which is also where the outlined button's label
-  // stops being mint - the overlay moved here, the label did not, and
-  // `test/ui/tokens_test.dart` asserts that divergence until step 3 closes it.
+  // `action.destructive` still has no Material theme to attach to and lives in
+  // `AppButton` alone, which is correct rather than a gap: there is no stock
+  // widget for it to be the theme of.
+  //
+  // **Step 3 repointed the labels these were still painting the old way**, so
+  // an unmigrated `OutlinedButton` and an `AppButton` in `secondary` are the
+  // same colour on the same screen while the migration runs. Two of the three
+  // repoints are the divergences `test/ui/tokens_test.dart` was asserting on
+  // purpose - the outlined label off mint, and the primary label to `#0A0F0C`
+  // through `colorScheme.onPrimary` above. The third, the outlined border from
+  // `mutedGreen` (`#1E3A2B`) to `action.secondary.border` (`#2C5340`), was not
+  // on that list and is taken here deliberately: the two implementations
+  // disagreeing about the border of the same tier is precisely the drift the
+  // token layer exists to prevent, and it would have been invisible in review
+  // because each half is individually defensible.
   filledButtonTheme: FilledButtonThemeData(
     style: FilledButton.styleFrom(
-      backgroundColor: accentGreen,
-      foregroundColor: bgDark,
+      backgroundColor: _action.primary.container,
+      foregroundColor: _action.primary.label,
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       shape: const StadiumBorder(),
@@ -217,8 +248,8 @@ final ThemeData spiritTheme = ThemeData(
   ),
   elevatedButtonTheme: ElevatedButtonThemeData(
     style: ElevatedButton.styleFrom(
-      backgroundColor: accentGreen,
-      foregroundColor: bgDark,
+      backgroundColor: _action.primary.container,
+      foregroundColor: _action.primary.label,
       elevation: 0,
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -227,16 +258,16 @@ final ThemeData spiritTheme = ThemeData(
   ),
   outlinedButtonTheme: OutlinedButtonThemeData(
     style: OutlinedButton.styleFrom(
-      foregroundColor: accentGreen,
+      foregroundColor: _action.secondary.label,
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      side: const BorderSide(color: mutedGreen),
+      side: BorderSide(color: _action.secondary.border!),
       shape: const StadiumBorder(),
     ).copyWith(overlayColor: _pressOverlay(_action.secondary)),
   ),
   textButtonTheme: TextButtonThemeData(
     style: TextButton.styleFrom(
-      foregroundColor: accentGreen,
+      foregroundColor: _action.tertiary.label,
     ).copyWith(overlayColor: _pressOverlay(_action.tertiary)),
   ),
   inputDecorationTheme: InputDecorationTheme(

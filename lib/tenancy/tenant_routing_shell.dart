@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../ui/buttons.dart';
 import 'account_verification.dart';
 import 'email_delivery_status.dart';
 import 'platform_tenant_review.dart';
@@ -791,7 +792,11 @@ final class _TenantInvitationAcceptanceScreen extends StatelessWidget {
     appBar: AppBar(
       title: const Text('Business invitation'),
       actions: [
-        TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+        AppButton(
+          label: 'Sign out',
+          tier: AppButtonTier.tertiary,
+          onPressed: onSignOut,
+        ),
       ],
     ),
     body: Center(
@@ -835,7 +840,11 @@ final class _InvalidTenantInvitationScreen extends StatelessWidget {
     appBar: AppBar(
       title: const Text('Business invitation'),
       actions: [
-        TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+        AppButton(
+          label: 'Sign out',
+          tier: AppButtonTier.tertiary,
+          onPressed: onSignOut,
+        ),
       ],
     ),
     body: Center(
@@ -848,7 +857,11 @@ final class _InvalidTenantInvitationScreen extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('This invitation link is invalid or incomplete.'),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onContinue, child: const Text('Continue')),
+            AppButton(
+              label: 'Continue',
+              tier: AppButtonTier.primary,
+              onPressed: onContinue,
+            ),
           ],
         ),
       ),
@@ -958,16 +971,18 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
         title: const Text('Choose a business'),
         actions: [
           if (widget.requestIdentity?.canRequestTenant == true)
-            TextButton.icon(
+            AppButton(
               key: const ValueKey('show-tenant-request'),
+              label: 'Request business',
+              icon: Icons.add_business_outlined,
+              tier: AppButtonTier.tertiary,
               onPressed: () =>
                   setState(() => _requestingTenant = !_requestingTenant),
-              icon: const Icon(Icons.add_business_outlined),
-              label: const Text('Request business'),
             ),
-          TextButton(
+          AppButton(
+            label: 'Sign out',
+            tier: AppButtonTier.tertiary,
             onPressed: widget.onSignOut,
-            child: const Text('Sign out'),
           ),
         ],
       ),
@@ -1113,7 +1128,11 @@ final class _EmptyBusinessList extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('No business memberships are available.'),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            AppButton(
+              label: 'Retry',
+              tier: AppButtonTier.primary,
+              onPressed: onRetry,
+            ),
           ],
         ),
       ),
@@ -1390,7 +1409,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     appBar: AppBar(
       title: Text(membership.tenantName),
       actions: [
-        TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+        AppButton(
+          label: 'Sign out',
+          tier: AppButtonTier.tertiary,
+          onPressed: onSignOut,
+        ),
       ],
     ),
     // Everything on this route scrolls together, including the routes below.
@@ -1439,32 +1462,41 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                           candidate.canAccess() &&
                           candidate.tenantId != membership.tenantId,
                     ))
-                  OutlinedButton.icon(
+                  AppButton(
                     key: const ValueKey('change-business'),
+                    label: 'Change business',
+                    icon: Icons.swap_horiz,
                     onPressed: () => _showBusinessSwitcher(context),
-                    icon: const Icon(Icons.swap_horiz),
-                    label: const Text('Change business'),
                   ),
                 if (isDefaultTenant)
-                  OutlinedButton.icon(
+                  // The one disabled control on this route, and it is a state
+                  // rather than a refusal: this business already is the
+                  // default, so there is nothing to press.
+                  const AppButton(
+                    label: 'Default business',
+                    icon: Icons.star,
                     onPressed: null,
-                    icon: Icon(Icons.star),
-                    label: Text('Default business'),
                   )
                 else
-                  OutlinedButton.icon(
+                  AppButton(
                     key: const ValueKey('make-default-tenant'),
+                    label: 'Make default',
+                    icon: Icons.star_outline,
                     onPressed: () => _showDefaultConfirmation(context),
-                    icon: const Icon(Icons.star_outline),
-                    label: const Text('Make default'),
                   ),
                 // The till. It is the only write-capable operational route on
                 // this screen, and it opens under the same session scope as every
                 // other one, so a business switch invalidates a sale in progress
                 // exactly as it invalidates a read.
                 if (checkoutRoute != null)
-                  FilledButton.icon(
+                  // §2.1 permits exactly one primary action per screen region,
+                  // and on the landing route this is it: everything else here
+                  // opens something to read, and this one sells.
+                  AppButton(
                     key: const ValueKey('start-checkout'),
+                    label: 'New sale',
+                    icon: Icons.point_of_sale,
+                    tier: AppButtonTier.primary,
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
@@ -1476,10 +1508,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.point_of_sale),
-                    label: const Text('New sale'),
                   ),
-                OutlinedButton.icon(
+                AppButton(
+                  label: 'View read-only catalog',
+                  icon: Icons.inventory_2_outlined,
                   onPressed: () {
                     final controller = TenantSessionScope.of(context);
                     Navigator.of(context).push(
@@ -1507,8 +1539,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.inventory_2_outlined),
-                  label: const Text('View read-only catalog'),
                 ),
                 // Beside the read-only catalog, because it is the same catalog
                 // seen by the one person who may change it. Nothing else in the
@@ -1516,8 +1546,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 // reaches its till through here first.
                 if (catalogManagementRoute != null &&
                     membership.role.canAccess(catalogManagementRoles))
-                  OutlinedButton.icon(
+                  AppButton(
                     key: const ValueKey('manage-catalog'),
+                    label: 'Manage catalog',
+                    icon: Icons.edit_note_outlined,
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
@@ -1529,16 +1561,16 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.edit_note_outlined),
-                    label: const Text('Manage catalog'),
                   ),
                 // Beside the catalog rather than beside the till: this decides
                 // what every price in that catalog means, and the person who
                 // opens it is not the person standing at the till.
                 if (checkoutConfigurationRoute != null &&
                     membership.role.canAccess(checkoutConfigurationRoles))
-                  OutlinedButton.icon(
+                  AppButton(
                     key: const ValueKey('checkout-configuration'),
+                    label: 'Checkout settings',
+                    icon: Icons.tune_outlined,
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
@@ -1550,13 +1582,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.tune_outlined),
-                    label: const Text('Checkout settings'),
                   ),
                 if (dailySummaryRoute != null &&
                     membership.role.canAccess(dailySummaryRoles))
-                  OutlinedButton.icon(
+                  AppButton(
                     key: const ValueKey('view-daily-summary'),
+                    label: 'View daily summary',
+                    icon: Icons.insights_outlined,
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
@@ -1568,13 +1600,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.insights_outlined),
-                    label: const Text('View daily summary'),
                   ),
                 if (receiptLookupRoute != null &&
                     membership.role.canAccess(receiptLookupRoles))
-                  OutlinedButton.icon(
+                  AppButton(
                     key: const ValueKey('find-receipt'),
+                    label: 'Find a receipt',
+                    icon: Icons.receipt_long_outlined,
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
@@ -1586,13 +1618,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.receipt_long_outlined),
-                    label: const Text('Find a receipt'),
                   ),
                 if (auditLogRoute != null &&
                     membership.role.canAccess(auditLogRoles))
-                  OutlinedButton.icon(
+                  AppButton(
                     key: const ValueKey('view-audit-log'),
+                    label: 'View activity log',
+                    icon: Icons.fact_check_outlined,
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
@@ -1604,13 +1636,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.fact_check_outlined),
-                    label: const Text('View activity log'),
                   ),
                 if (membership.role.canAccess(
                   TenantStaffDirectoryScreen.allowedRoles,
                 ))
-                  OutlinedButton.icon(
+                  AppButton(
+                    label: 'View staff directory',
+                    icon: Icons.people_outline,
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
@@ -1622,8 +1654,6 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.people_outline),
-                    label: const Text('View staff directory'),
                   ),
               ],
             ),
@@ -1772,9 +1802,10 @@ final class _TenantBusinessSwitcherState extends State<TenantBusinessSwitcher> {
       ),
     ),
     actions: [
-      TextButton(
+      AppButton(
+        label: 'Cancel',
+        tier: AppButtonTier.tertiary,
         onPressed: _switching ? null : widget.onCancel,
-        child: const Text('Cancel'),
       ),
     ],
   );
@@ -1836,11 +1867,12 @@ final class TenantBootstrapFailure extends StatelessWidget {
             Wrap(
               spacing: 12,
               children: [
-                FilledButton(onPressed: onRetry, child: const Text('Retry')),
-                OutlinedButton(
-                  onPressed: onSignOut,
-                  child: const Text('Sign out'),
+                AppButton(
+                  label: 'Retry',
+                  tier: AppButtonTier.primary,
+                  onPressed: onRetry,
                 ),
+                AppButton(label: 'Sign out', onPressed: onSignOut),
               ],
             ),
           ],
@@ -1876,7 +1908,7 @@ final class PlatformRouteUnavailable extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('Platform administrator access is not available.'),
             const SizedBox(height: 16),
-            OutlinedButton(onPressed: onSignOut, child: const Text('Sign out')),
+            AppButton(label: 'Sign out', onPressed: onSignOut),
           ],
         ),
       ),

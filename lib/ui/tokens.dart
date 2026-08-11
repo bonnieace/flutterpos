@@ -1130,24 +1130,60 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     density: AppDensity.comfortable,
   );
 
-  /// The tokens in scope at [context].
+  /// The tokens in scope at [context], or null where none are registered.
+  static AppTokens? maybeOf(BuildContext context) =>
+      Theme.of(context).extension<AppTokens>();
+
+  /// The tokens in scope at [context], for a surface that depends on **its
+  /// screen's density**.
   ///
   /// **Throws rather than falling back.** A missing extension means a `Theme`
   /// was built from a fresh `ThemeData` instead of a `copyWith`, and answering
   /// with the defaults would render a compact screen at comfortable spacing and
-  /// look like a layout bug rather than a wiring one.
+  /// look like a layout bug rather than a wiring one. Use this from the widget
+  /// that *resolves* density, and from anything whose geometry is meaningless
+  /// at the wrong one.
   static AppTokens of(BuildContext context) {
-    final tokens = Theme.of(context).extension<AppTokens>();
+    final tokens = maybeOf(context);
     if (tokens == null) {
       throw FlutterError(
         'No AppTokens in the theme at this point in the tree. `spiritTheme` '
         'registers it, so this is a nested `Theme` built from a fresh '
         '`ThemeData` rather than from `Theme.of(context).copyWith(...)`, which '
-        'drops every extension.',
+        'drops every extension. A leaf component should read '
+        '`AppTokens.componentOf` instead, which falls back.',
       );
     }
     return tokens;
   }
+
+  /// The tokens in scope at [context], falling back to [dark].
+  ///
+  /// **This exists because [of]'s refusal is right for a screen and wrong for a
+  /// component, and step 3 is where that became a real decision rather than a
+  /// hypothetical one.** `AppButton` is the first token-reading widget with
+  /// call sites, and a call site is reached by things that are not this app's
+  /// `MaterialApp`: 46 of the widget-test files build their own bare
+  /// `ThemeData`, as does any preview, any `showDialog` given a fresh theme,
+  /// and any future embedder. Under [of] every one of those is a crash, which
+  /// would make "remember `theme: spiritTheme`" a rule that has to be
+  /// remembered at ~50 sites and then at every new one - the same kind of rule
+  /// `SpiritScrollBehavior` exists to avoid.
+  ///
+  /// **The fallback is safe in the one direction that matters, and that is why
+  /// it is allowed rather than merely convenient.** [dark] carries
+  /// [AppDensity.comfortable], which is the **stricter** density on every
+  /// accessibility dimension §9 measures: 48 x 48 targets rather than 32 x 32,
+  /// larger rows, larger body text. So a component that falls back can render a
+  /// compact screen at comfortable size - a cosmetic fault - and can never
+  /// shrink a tap target below §9's floor, which is the pass/fail one.
+  ///
+  /// **What it cannot catch is stated rather than left implied**: a nested
+  /// `Theme` built from a fresh `ThemeData` loses its screen's density
+  /// silently here. That is exactly the fault [of] was written to catch, which
+  /// is why [of] still exists and why the widget that resolves density must use
+  /// it.
+  static AppTokens componentOf(BuildContext context) => maybeOf(context) ?? dark;
 
   /// The same tokens at another density, for the nested `Theme` a back-office
   /// screen wraps itself in.
