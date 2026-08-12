@@ -3110,6 +3110,16 @@ queued.
 record contract), then 8 (money surfaces, which are `RecordList`s with figures in them). A
 screenshot regeneration at the end covers the lot.
 
+**The product owner chose this chunk over the web callable-auth defect on 2026-08-12, and the
+choice was informed.** They want the redesign's visual steps finished. `prompt.md` tells a session
+to propose something else if "a capability the app requires in order to function is missing and
+unqueued" — **this defect is a candidate for that and the next session should think before
+inheriting the choice**, because one thing about it is not known: whether it is web-only. Nobody
+has signed in on desktop or Android recently enough to say. If it reproduces off web, the app is
+broken past login for every user and that outranks any reskin step. **If a session establishes
+that, propose the fix instead and say so in its opening line.** If it is web-only, it blocks device
+review but not shipping, and this chunk is correctly first.
+
 **Step 4's blocking question is answered**: the border is decoration, nothing is re-derived, and
 `design.md` §9 now says so. **`ConfirmDialog` is still unresolved** — `DESIGN-AUDIT.md` §4.3 flags
 that it consolidates four `await`-and-branch call sites, so it cannot ship as a visual change.
