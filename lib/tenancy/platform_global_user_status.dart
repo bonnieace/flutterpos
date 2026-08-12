@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'platform_tenant_review.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
@@ -936,28 +937,22 @@ final class _PlatformGlobalUserStatusFormState
           ),
         ],
         const SizedBox(height: 12),
-        TextField(
+        AppTextField(
           key: const ValueKey('platform-global-status-reason'),
           controller: _reason,
           enabled: !_submitting,
           maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Reason',
-            border: OutlineInputBorder(),
-          ),
+          label: 'Reason',
         ),
         if (disabling) ...[
           const SizedBox(height: 12),
           Text('Type ${widget.target.user.uid} to confirm.'),
           const SizedBox(height: 8),
-          TextField(
+          AppTextField(
             key: const ValueKey('platform-global-status-confirmation'),
             controller: _confirmation,
             enabled: !_submitting,
-            decoration: const InputDecoration(
-              labelText: 'Exact target UID',
-              border: OutlineInputBorder(),
-            ),
+            label: 'Exact target UID',
           ),
         ],
         if (_safeError != null) ...[
@@ -1106,14 +1101,11 @@ final class _PlatformGlobalUserStatusScreenState
         Row(
           children: [
             Expanded(
-              child: TextField(
+              child: AppTextField(
                 key: const ValueKey('platform-global-user-uid'),
                 controller: _uid,
                 enabled: !_loading,
-                decoration: const InputDecoration(
-                  labelText: 'Exact UID',
-                  border: OutlineInputBorder(),
-                ),
+                label: 'Exact UID',
                 onSubmitted: (_) => _lookup(),
               ),
             ),

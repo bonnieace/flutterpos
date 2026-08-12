@@ -6,6 +6,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'bulk_catalog.dart';
 import 'catalog_management.dart';
 
@@ -853,24 +854,22 @@ final class _BulkCatalogContents extends StatelessWidget {
             ],
           ),
       ] else if (!clearCost)
-        TextField(
+        AppTextField(
           key: const ValueKey('bulk-catalog-value'),
           controller: value,
           enabled: !busy,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           onChanged: (_) => onFormChanged(),
-          decoration: InputDecoration(
-            labelText: field == TenantProductField.price
-                ? 'Unit price for every product chosen'
-                : 'Unit cost for every product chosen',
-            helperText: field == TenantProductField.price
-                ? 'At most two decimal places. A new price applies to the next '
-                      'sale; sales already recorded keep the price they were '
-                      'sold at.'
-                : 'At most two decimal places. Every sale records the cost as '
-                      'it stands at that moment, so this prices the next sale '
-                      'and never changes a profit already reported.',
-          ),
+          label: field == TenantProductField.price
+              ? 'Unit price for every product chosen'
+              : 'Unit cost for every product chosen',
+          helper: field == TenantProductField.price
+              ? 'At most two decimal places. A new price applies to the next '
+                    'sale; sales already recorded keep the price they were '
+                    'sold at.'
+              : 'At most two decimal places. Every sale records the cost as '
+                    'it stands at that moment, so this prices the next sale '
+                    'and never changes a profit already reported.',
         )
       else
         const Text(
@@ -974,18 +973,15 @@ final class _BulkCatalogContents extends StatelessWidget {
         'balance in the stock ledger, so those units have a stated origin.',
       ),
       const SizedBox(height: 12),
-      TextField(
+      AppTextField(
         key: const ValueKey('bulk-catalog-sheet'),
         controller: sheet,
         enabled: !busy,
         minLines: 6,
         maxLines: 14,
         onChanged: (_) => onFormChanged(),
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-          labelText: 'Header line, then one line per product',
-          hintText: 'name,sku,price,quantity,category',
-        ),
+        label: 'Header line, then one line per product',
+        placeholder: 'name,sku,price,quantity,category',
       ),
       if (!canChangeMoney) ...[
         const SizedBox(height: 8),

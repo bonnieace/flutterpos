@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -628,7 +629,7 @@ final class _PlatformTenantReviewFormState
         ),
         if (rejecting) ...[
           const SizedBox(height: 16),
-          TextField(
+          AppTextField(
             key: const ValueKey('platform-review-reason'),
             controller: _reasonController,
             enabled: !_submitting,
@@ -636,7 +637,7 @@ final class _PlatformTenantReviewFormState
             maxLines: 4,
             maxLength: 1000,
             onChanged: _reasonChanged,
-            decoration: const InputDecoration(labelText: 'Rejection reason'),
+            label: 'Rejection reason',
           ),
         ],
         if (_safeError != null) ...[

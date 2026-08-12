@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -264,26 +265,23 @@ final class _MovementFeedContents extends StatelessWidget {
         'each entry states when it was recorded.',
       ),
       const SizedBox(height: 16),
-      DropdownButtonFormField<TenantStockMovementSource?>(
+      AppSelect<TenantStockMovementSource?>(
         key: const ValueKey('stock-movements-feed-filter'),
-        initialValue: page.source,
-        decoration: const InputDecoration(
-          labelText: 'Show',
-          border: OutlineInputBorder(),
-        ),
-        items: <DropdownMenuItem<TenantStockMovementSource?>>[
-          const DropdownMenuItem<TenantStockMovementSource?>(
+        value: page.source,
+        label: 'Show',
+        items: <AppSelectItem<TenantStockMovementSource?>>[
+          const AppSelectItem<TenantStockMovementSource?>(
             value: null,
-            child: Text('All movements'),
+            label: 'All movements',
           ),
           // `other` carries no wire value, so it is deliberately absent: an
           // unmodelled source cannot be filtered for and is only ever reached
           // through the unnarrowed page above.
           for (final source in TenantStockMovementSource.values)
             if (source != TenantStockMovementSource.other)
-              DropdownMenuItem<TenantStockMovementSource?>(
+              AppSelectItem<TenantStockMovementSource?>(
                 value: source,
-                child: Text(source.label),
+                label: source.label,
               ),
         ],
         onChanged: onSelectSource,

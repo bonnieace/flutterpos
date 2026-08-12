@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -326,11 +327,11 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        TextFormField(
+        AppTextField(
           key: const ValueKey('update-staff-name'),
           controller: _nameController,
           enabled: !_submitting,
-          decoration: const InputDecoration(labelText: 'Name'),
+          label: 'Name',
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {
@@ -341,12 +342,12 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
             }
           },
         ),
-        TextFormField(
+        AppTextField(
           key: const ValueKey('update-staff-phone'),
           controller: _phoneController,
           enabled: !_submitting,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(labelText: 'Phone (optional)'),
+          label: 'Phone (optional)',
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {
@@ -358,10 +359,10 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
           },
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<TenantRole>(
+        AppSelect<TenantRole>(
           key: const ValueKey('update-staff-role'),
-          initialValue: _role,
-          decoration: const InputDecoration(labelText: 'Role'),
+          value: _role,
+          label: 'Role',
           items:
               (widget.target.isOwner
                       ? const [TenantRole.owner]
@@ -371,9 +372,9 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
                           TenantRole.cashier,
                         ])
                   .map(
-                    (role) => DropdownMenuItem<TenantRole>(
+                    (role) => AppSelectItem<TenantRole>(
                       value: role,
-                      child: Text(role.wireValue),
+                      label: role.wireValue,
                     ),
                   )
                   .toList(),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -336,17 +337,15 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
           ),
         ] else ...[
           const SizedBox(height: 16),
-          TextField(
+          AppTextField(
             key: const ValueKey('checkout-configuration-currency'),
             controller: _currency,
             maxLength: 3,
             enabled: !widget.busy,
             textCapitalization: TextCapitalization.characters,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              labelText: 'ISO 4217 currency code',
-              helperText: 'Three letters, such as KES, UGX, or TZS.',
-            ),
+            label: 'ISO 4217 currency code',
+            helper: 'Three letters, such as KES, UGX, or TZS.',
           ),
           const SizedBox(height: 12),
           AppButton(

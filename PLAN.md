@@ -4,10 +4,9 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-12**, the session that put every route on a spring —
-`design.md` §11 step 2's fourth and last part, which **finishes step 2**. Before it, the
-2026-08-11 session that built `AppButton` — step 3's first half, the first component in this app a
-call site can reach and the first spring anywhere in the migrated tree. Claims in this file are checked against source,
+Last verified against the code on **2026-08-12**, a session that took two chunks: every route onto
+a spring, which **finishes `design.md` §11 step 2**, and then `AppTextField` and `AppSelect`, which
+**finishes step 3**. Claims in this file are checked against source,
 not inherited from the log; corrections are noted where they were made — **and the session
 before it found this file's own description of a defect wrong**, see "Found by using
 the app", finding 5. **The eighth session of 2026-08-08
@@ -98,7 +97,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~35% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1 and 2 are finished and step 3's first half with them**: every token is defined, the ripple is dead, scroll physics bounce with no glow, **`AppButton` is built on a real spring substrate and every button in the migrated tree is one** — 155 call sites across 37 files, four tiers, three sizes, six states, all six in the harness — and as of 2026-08-12 **every route arrives on a spring**: `AppPageRoute` at all 23 call sites, §6.2's compact and expanded rows both implemented. **7 Material buttons remain and all 7 are `checkout_cart_panel.dart`'s**, which is step 7's sale path on purpose. Step 3's second half (`AppTextField`; **`AppSelect` was dropped from §5.1 by the product owner on 2026-08-12**) and steps 4–12 remain. |
+| **Design system** | ~45% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2 and 3 are finished as of 2026-08-12.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); and **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, §5.2's well, label, helper/error slot and 80% counter, six states in the harness). **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in. Steps 4–12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -138,6 +137,28 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The 2026-08-12 field chunk changed no board row either, and it closed a finding — which are not
+the same thing and this file should not let them blur.** "Add or retire a product" has been 🟢
+throughout: a shop could always file a product under a category, and finding 4 was that it had to
+hunt a screenful up the page to do it. **The board measures whether a shop can do something; the
+findings list measures whether a person can find it.** Finding 4 is closed and the row did not
+move, because the row was never the thing that was wrong.
+
+What the chunk did move: `AppTextField` and `AppSelect` at 39 call sites across 17 files, which
+**finishes step 3** and takes the **Design system** track 35% to 45%. It changed **no rollout
+step**, and it touched no rule and no `functions/` file. It added **29 tests** and **10
+screenshots**, and moved 32 more — with **zero** date drift, for the first time, because the
+baseline was generated earlier the same day.
+
+**It also unmade a decision this file recorded as taken.** `DESIGN-AUDIT.md` said there was no
+`DropdownButtonFormField` in the migrated tree and the product owner dropped `AppSelect` on that
+basis. **There are five.** The audit had generalised from the two places a category is chosen. The
+decision was put back with the real figure and reversed the same session, and both audit claims are
+struck through in place. See the standing decision.
+
+**All four non-Flutter suites were measured**, which discharges the carry the route chunk used up:
+409, 161, 10, 23, all green.
 
 **The 2026-08-12 route-transition session changed no board row at all — not a colour and not a word
 of one — and this sentence is here so that is stated rather than left silent.** It took `design.md`
@@ -248,11 +269,12 @@ carried rather than re-measured.
 Six defects, all at the edges, none blocking, **recorded rather than fixed by the run itself** —
 a behavioural session that starts repairing becomes an unbounded one. They were queued as chunks
 below; **the first two were taken and closed by the session after it, the third by the
-session after that, and the fifth on 2026-08-11.** Two remain and **neither is a queued chunk**:
-finding 4's repair is absorbed into the redesign's step 3, because that step rewrites the form it
-lives on, and finding 6 is an environment limitation rather than a product defect. **So the
-device run's findings have run out as chunks**, which matters for what comes next — see the
-current chunk.
+session after that, the fifth on 2026-08-11, and the fourth on 2026-08-12 inside the redesign's
+step 3, which is exactly where it had been queued to close.** **One remains, and it is not a
+queued chunk**: finding 6 is an environment limitation rather than a product defect. **So the
+device run's findings are exhausted** — five of six closed, and nothing left that a session could
+take. That matters more than it reads: every finding here came from *one person opening the app
+once*, and the queue has been living off that single run for four sessions.
 
 1. ~~**The login screen prints a raw platform-channel name when the password is empty.**~~
    **Closed 2026-08-08.** Verbatim, as reported:
@@ -276,14 +298,19 @@ current chunk.
    `failed-precondition` as the queued chunk claimed — the code alone cannot tell that refusal
    apart from six other permanent ones, and the detail that can had never been read. See the
    standing decision below for what was built.
-4. **The add-product form asks for a category with no picker beside it.** "Choose the category
-   this product is filed under." sits about a thousand pixels below the chip row that is
-   actually the picker, under a heading that also serves as the category list. It works once
-   found. The **"Correct" dialog has an inline picker**, so one screen does it both ways.
-   **Still open, but no longer a chunk of its own as of 2026-08-11**: its repair is form layout,
-   and `AppTextField` plus the 720px content width in `design.md` §4.2 rewrite that form, so it is
-   recorded against the redesign's step 3 rather than built twice. The defect has not stopped
-   mattering; only its queue position changed.
+4. ~~**The add-product form asks for a category with no picker beside it.**~~ **Closed
+   2026-08-12**, inside the redesign's step 3, which is where it was queued to close. As reported:
+   "Choose the category this product is filed under." sat about a thousand pixels below the chip
+   row that was actually the picker, under a heading that also serves as the category list, and
+   the **"Correct" dialog had an inline picker** — so one screen did it both ways.
+   **The repair moved the picker rather than adding one.** It is in the form now, beside the
+   fields, keeping the keys and the callback it already had; the row under "Categories" became
+   plain `Chip`s, which is what that heading says it is. Nothing about what a tap does changed,
+   which is why it fitted inside a visual chunk — the existing tests that tap
+   `catalog-management-category-cat-bakery` to select a category were not touched.
+   **§4.2's 720px content width was not used**, and did not need to be: the picker's distance from
+   the field was the defect, not the measure. The width stays queued for step 6 with the other
+   content widths, per the standing exclusion.
 5. ~~**A category ID reaches the eye in two surfaces.**~~ **Closed 2026-08-11.** The import
    preview said "filed under `cat-bakery`" to someone who typed `Bakery`, and "Manage catalog"
    showed `cat-not-cached` for a product whose category document is missing. **Two corrections to
@@ -454,17 +481,21 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1680** |
-| Functions | `npm --prefix functions test` | **409** ⚠️ carried once, see below |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ⚠️ carried once |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ⚠️ carried once |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⚠️ carried once; one flaky test, see below |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1709** |
+| Functions | `npm --prefix functions test` | **409** ✅ measured 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured 2026-08-12 |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured 2026-08-12 |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured 2026-08-12; the known flaky test passed first try |
 
-**2283 tests across five suites** — and there is a sixth figure that is deliberately not in
-this table: `flutter test --no-pub --concurrency=1 tool/screenshots` runs **93 captures**
-writing **117** images, and it asserts nothing, which is why it is not counted here. It was 78 and
-101 before the `AppButton` state matrix added 12 of each, 113 before the call-site sweep pushed
-one more screen past the fold, and 114 before the route transitions added 3.
+**2312 tests across five suites, and the carry counter is back to zero.** The field chunk measured
+all four non-Flutter suites, discharging the 2 of 2 the route chunk had used up.
+
+There is a sixth figure deliberately not in this table:
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **98 captures** writing **127**
+images, and it asserts nothing, which is why it is not counted here. It was 78 and 101 before the
+`AppButton` state matrix added 12 of each, 113 before the call-site sweep pushed one more screen
+past the fold, 114 before the route transitions added 3, and 117 before the field matrix added 5
+captures and 10 images.
 
 **The Flutter figure did not move across the call-site sweep, and that is the right outcome rather
 than a gap.** A migration that adds no behaviour and no component should add no test; what it
@@ -472,13 +503,9 @@ changed is four test files that were asking a correct question — "can this be 
 Material type that is going away. They ask it through `test/support/buttons.dart` now, which is
 itself marked for deletion with the last `ButtonStyleButton` in `lib/`.
 
-⚠️ **The route-transition chunk carried all four, which is carry 2 of the 2 the rule allows — so
-the next chunk measures them, whatever it touches.** `git diff` over `functions/`,
-`firestore.rules` and `rules-tests/` prints **zero lines**; it changed Dart and nothing else.
-
-⚠️ **The call-site sweep carried all four before it, which was carry 1.** `git diff`
-over `functions/`, `firestore.rules` and `rules-tests/` printed **zero lines**; the sweep changed
-Dart and nothing else.
+✅ **The carry counter is at zero.** The call-site sweep carried all four (carry 1), the
+route-transition chunk carried all four (carry 2, the limit), and the field chunk **measured** all
+four on 2026-08-12. The next chunk may carry again, and that would be carry 1 of 2.
 
 ✅ **The carry streak before it was reset: all four non-Flutter figures were measured on 2026-08-11
 by the `AppButton` chunk**, which is the rule below being obeyed rather than a suite being
@@ -495,10 +522,13 @@ measurement. **Re-measure in any chunk that touches JavaScript, TypeScript, or a
 chunk that carries must say so. **Two consecutive carries is the limit**: a third measures, on
 the same reasoning that made the third consecutive unreachable callable a surface instead.
 
+**The field chunk took Flutter 1680 → 1709** (29 new, all in `test/ui/fields_test.dart`). The
+other four were **measured and unchanged**, as they should be: this chunk touched Dart UI and
+nothing else.
+
 **The route-transition chunk took Flutter 1650 → 1680** (30 new: 24 in `test/ui/routes_test.dart`,
 5 in `test/ui/spring_test.dart` for `SettlingSpringSimulation`, and 1 in `test/ui/tokens_test.dart`
-for `motion.routeParallax`). The other four did not move and were **carried**, not measured — see
-the carry rule above, which the next chunk now has to satisfy.
+for `motion.routeParallax`). The other four did not move and were **carried**, not measured.
 
 **The `AppButton` chunk took Flutter 1598 → 1650** (52 new: 10 in `test/ui/spring_test.dart`,
 17 in `test/ui/press_test.dart`, 24 in `test/ui/buttons_test.dart`, and 1 in
@@ -1713,6 +1743,63 @@ The guarantees are settled, not open:
 screen, it grew past the fold because every button now reserves the focus ring's 4px gutter and
 honours a 48dp minimum.
 
+### One field, everywhere - and an audit finding that was false
+
+Built 2026-08-12, finishing `design.md` §11 step 3. `AppTextField`, `AppSelect` and the
+`AppFieldWell` they share are at **39 call sites across 17 files** — 34 fields and 5 selects. It
+changed `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+
+**The three fields left in the migrated tree are named rather than counted as remaining work.**
+`checkout_cart_panel.dart` has two, and it is step 7's sale path in its entirety;
+`pill_input.dart` has one, and §4.4's uppercase labels, pill well and green glow are step 9's.
+
+The decisions are settled:
+
+1. **The error replaces the helper line, and that is a layout rule before it is a colour rule.**
+   One slot under the field holds one or the other, so the field does not change height when it
+   goes wrong and a form does not reflow under the finger typing into it. Asserted as a size
+   equality.
+2. **The counter renders only above 80% of the limit, and counts characters.** That is the unit
+   `maxLength` enforces through `LengthLimitingTextInputFormatter`; a counter that disagreed with
+   the limit it names would be worse than none. `TextField`'s own counter is suppressed rather
+   than restyled.
+3. **A field shows focus however it was focused, and a button does not.** `PressSurface` paints
+   §9's ring only under `FocusHighlightMode.traditional`, because a ring under a thumb is noise.
+   A focused field is not a highlight, it is *where the keys go*, and on a form with several of
+   them not saying which one is receiving the typing is the failure §9 is about.
+4. **A validator is supported rather than the eight `TextFormField` call sites being rewritten.**
+   Passing one registers the field with the enclosing `Form`, so `Form.validate()` reaches it as
+   before, and the message lands in the same slot an explicit `error` would. Where both exist the
+   explicit one wins: a server's refusal is about the value that was *submitted* and a validator
+   is about the value on screen.
+5. **`AppSelect` has no specification and borrows the field's entirely.** §5.1 gives it a row and
+   §5.2 specifies only the load-bearing five, which it is not among. Same label, well, border,
+   radius, height, helper and error — which is what "one pattern, everywhere" forces. The one
+   value not read straight from a §2 row is the menu's corner: §2.3 names four radii and none of
+   them lists a menu, so `radius.md` is applied as the nearest row rather than a fifth being
+   invented.
+6. **`hover` is in the harness showing no change, on purpose.** §5.2 specifies no hover treatment
+   for a field, and `claude.md` forbids inventing a token, so `92-appfield-hover` is a picture of
+   nothing happening — captured rather than omitted so a reviewer can see the absence is
+   deliberate. **Queued below as a question for the product owner.** `pressed` and `loading` are
+   absent because a field is not a control you push, and a field whose value is not ready is
+   `disabled` or `read-only`, both already in the matrix.
+
+#### The audit claim that was false, and what it cost
+
+`DESIGN-AUDIT.md` §2.2 said: "**There is no `DropdownButtonFormField` in the migrated tree.**" The
+product owner dropped `AppSelect` from §5.1 on that basis at the start of the session. **There are
+five** — `audit_log_panel`, `stock_adjustment_panel`, `stock_movement_feed_panel`,
+`tenant_staff_invitation`, `tenant_staff_update` — which is exactly the row §5.1 wrote for it. The
+audit had looked at the two places a *category* is chosen, found `ChoiceChip`, and generalised from
+two call sites to a whole tree.
+
+It cost nothing only because it was caught before anything was built around it: the decision was
+put back to the product owner with the real figure and reversed the same session. **An audit
+finding that says "nothing exists" is a claim about the whole tree and needs a whole-tree grep
+behind it.** Both claims in `DESIGN-AUDIT.md` are struck through with the correction rather than
+deleted, so the reversal is legible to whoever reads the audit next.
+
 ### A route arrives on a spring, and one parallax is deliberately missing
 
 Built 2026-08-12, finishing `design.md` §11 step 2. `AppPageRoute` is a `PageRoute` subclass and
@@ -2016,15 +2103,23 @@ different work:
    re-derived rather than adjusted, because a border cannot brighten without the container behind
    it moving too.
 
-**Step 4 is where this stops being theoretical** — `StatusBadge` is that step, and it draws the
-container the whole argument is about. Answer it before then, not during.
+**Step 4 is where this stops being theoretical, and step 4 is the current chunk** — `StatusBadge`
+draws the container the whole argument is about. **Answer it before that chunk starts, not
+during.**
 
-**A third was opened by step 2, and step 3's second half needs it: what is `AppSelect`?** §5.1
-names it as one of the load-bearing components and **nothing exists for it to replace** —
-`DESIGN-AUDIT.md` §6 says either drop it from §5.1 or re-scope it to the `ChoiceChip` group pattern
-that is actually in use on the catalog, bulk, and reporting surfaces. Both are defensible and only
-one of them is a component. It is not answerable from `design.md`, so it is here rather than
-decided inside the chunk that meets it.
+**~~A third was opened by step 2: what is `AppSelect`?~~ Closed 2026-08-12, and it was never a
+question — it was a wrong fact.** `DESIGN-AUDIT.md` said nothing existed for it to replace, and
+that is false: there are **five** `DropdownButtonFormField` call sites. Put back to the product
+owner with the real figure and reversed; `AppSelect` is built and §5.1 stands. **The lesson is
+about this list rather than about selects**: a question here is only worth the fact under it, and
+this one's fact was never checked with a grep.
+
+**A third is open in its place, from step 3: what does a field look like under a pointer?** §5.2
+specifies a field's rest, focus and error treatments and says nothing about hover. `AppTextField`
+therefore has none, and `92-appfield-hover` is a capture of no change at all. Either §5.2 gains a
+row — `surface.raised` for the well would be the obvious one, and is deliberately **not** applied
+unasked — or it gains a sentence saying a field has no hover state. It blocks nothing until step
+12, where §9's audit cannot be called complete over an unspecified state.
 
 **What family is `mono`?** §2.2 opens with "One family — Roboto" and its last row says
 "monospace", and the app bundles no font at all: `lib/theme.dart` names none, deliberately, and
@@ -2779,6 +2874,23 @@ enormous expected-denial traces.
   lives on the **binding** rather than on the test, the next test in the same file fails too and
   looks unrelated. Multi-touch is fine — several `startGesture` pointers work — it is mice that
   are singular.
+- **Changing the shape of the widget tree above a stateful subtree is not free, and the cost never
+  looks like the cause.** Hit twice on 2026-08-12, from opposite ends, and the general form is
+  worth more than either instance. Inserting or removing a wrapper — a `Stack` on focus, a
+  transition on push — re-parents everything under it. State survives only through a `GlobalKey`,
+  and even then the subtree is deactivated, reactivated and **rebuilt**. What breaks is whatever
+  was keyed to identity: a `TextField`'s platform input connection, a closure compared with `!=`,
+  a controller captured in `initState`. **Both symptoms pointed somewhere else entirely** — seven
+  failing assertions about `onChanged` and `maxLength` for the field, and four about
+  `reader.queries.last` for the route, and not one of them named focus or transitions. If a
+  widget stops accepting input or starts refetching after an unrelated visual change, look at
+  what appears and disappears *above* it, not at it.
+- **A field that takes focus and then refuses every keystroke has been re-parented.** The specific
+  instance of the above, kept because the symptom is so misleading: `AppFieldWell` originally
+  inserted its focus-ring `Stack` on focus, the way `PressSurface` does. Harmless for a button,
+  fatal for a field. The fix is that the `Stack` is always in the tree and the ring appears by
+  gaining a border. `PressSurface` still inserts its own and that is fine — a button has no
+  editing state to lose — but anything else copying that pattern should not.
 - **A route that offers a `delegatedTransition` re-parents the page below it, and that page
   reloads.** Found 2026-08-12. `ModalRoute.didChangeNext` sets `receivedTransition` when the
   incoming route offers one and the covered route's own does not match; `_buildFlexibleTransitions`
@@ -2931,66 +3043,65 @@ rather than only here.** `fakes.dart` derives its business dates from `DateTime.
 re-running on a different day moves about **39 of the images** with nothing behind them;
 tracking the output would put those 39 into every future diff. The harness is tracked, the
 output is not, and a baseline is regenerated the same day it is compared against. The set is
-**117 images from 93 captures** since the route-transition chunk added 3. **The 39 was
+**127 images from 98 captures** since the field matrix added 5 captures and 10 images. **The 39 was
 re-measured on 2026-08-12 and it is still 39**, which is the first time that figure has been
 confirmed rather than carried: the set was generated twice the same day, once with the route
 migration and once with it reverted, and those two are identical across all 117 files, so the
 whole of the day-to-day delta is the business date.
 
+**The field chunk is the proof the rule works.** Its baseline was generated a few hours earlier the
+same day, so the drift was **zero** and the diff was 10 added, 32 changed, 85 identical — every one
+of the 32 a screen that holds a field or a select, with nothing to explain away. Two chunks on the
+same day is the cheapest arrangement this harness has: the second one gets a free baseline.
+
 ---
 
 ## Next bounded chunk
 
-**`AppTextField` — step 3's second half, and the step that closes finding 4.** Step 2 is finished
-and step 3's first half with it: every route arrives on a spring and 155 of 162 buttons are
-`AppButton`s, the other 7 being step 7's.
+**`StatusBadge`, `Callout` and `Disclosure` — `design.md` §11 step 4.** Steps 1, 2 and 3 are
+finished: every token, every button, every route and every field.
 
 **What it has to build:**
 
-- **`AppTextField`, to §5.2's specification**: persistent label above the field (`label.md`,
-  `text.secondary`), `surface.sunken` well, `border.strong` 1px, `radius.sm`, 48h at comfortable
-  density. Placeholder is an *example*, never a restatement of the label. Helper text is
-  `caption` / `text.tertiary`, one line. Error **replaces** helper text at `status.problem.fg`
-  with the border at `status.problem.border`, and the message states what to do — never colour
-  alone. Counters render only above 80% of the limit.
-- **Its full state matrix in the harness**, per `claude.md` hard rule 5. For a field that is
-  `enabled`, `hover`, `focus-visible`, `disabled`, `error`, `read-only` and `empty` — seven of
-  §5's nine. `pressed` and `loading` do not apply to a text field and the chunk says so rather
-  than faking them.
-- **Roughly twenty call sites**, and they are two incompatible implementations rather than one:
-  bare `TextField` in the migrated tree, and `PillInput` on sign-in, which draws its own well, its
-  own label and its own focus glow while reading nothing from the theme.
-- **Finding 4's category picker.** The add-product form asks for a category with the chip row that
-  is actually the picker about a thousand pixels away. §4.2's 720px form width plus a field
-  component rewrites that form, which is why the finding was moved here rather than repaired
-  twice.
-- **The two `tokens_test.dart` divergences this step closes.** `surface.sunken` vs
-  `inputDecorationTheme.fillColor`, and `radius.sm` vs the input border's radius, are asserted as
-  divergences on purpose; when this step lands they fail and move into the agreement test in the
-  same change.
+- **`StatusBadge`**, §5.2's fourth load-bearing component and the one this app most needs: five
+  statuses, each with exactly one meaning, against the one green currently doing seven jobs. The
+  `status` roles already exist in the token layer with their `fg`/`bg`/`border` triples.
+- **`Callout`** and **`Disclosure`**, §5.1's rows for the same five statuses at page scale and for
+  the long explanatory prose this app has a great deal of — several helper lines were left at one
+  line in step 3 precisely because `Disclosure` is where the rest belongs.
+- **Their state matrices in the harness**, per `claude.md` hard rule 5. `Disclosure` has a real
+  open/closed pair and §6's spring governs the transition between them.
 
-**`AppSelect` is dropped from §5.1 — the product owner's call, taken 2026-08-12.**
-`DESIGN-AUDIT.md` §6 recorded that nothing exists for it to replace, and the alternatives were to
-drop it or to re-scope it to the `ChoiceChip` group pattern. It is dropped: `design.md` §5.1 is
-amended in this chunk and nothing is built speculatively. The chip-group pattern is not orphaned
-by that — it is `FilterChipBar`, which is already in §5.1 at priority 2.
+**Two things to settle before writing code, both recorded rather than assumed:**
 
-**Explicitly excluded from it:** `checkout_cart_panel.dart`'s 7 buttons and the whole sale path,
-step 7; the 13 `IconButton` call sites, which have no component yet and belong with whatever
-replaces them; every other component (`StatusBadge`, `Callout` and `Disclosure` are step 4,
-`AppScaffold` and `PageHeader` step 5a); the **navigation model**, step 5b, which
-`DESIGN-AUDIT.md` decision 3 splits out as a behaviour change needing a device check; the sign-in
-screen's own visual design, step 9 — `PillInput` is replaced here, but §4.4's uppercase labels,
-pill well and green glow are that step's; every server file and `firestore.rules`; deployment; and
-every standing exclusion below.
+- **§9 vs §2.1 on the status border.** `PLAN.md` already records that the five `status.*.border`
+  values sit between 1.38:1 and 2.04:1 on `surface.base`, which does not clear §9's 3:1 for a UI
+  boundary. `StatusBadge` is the component that makes the conflict concrete. The existing note
+  says what carries the meaning is `fg`, the icon and the word — this chunk has to hold to that
+  and say so, or the conflict has to go back to the product owner.
+- **`ConfirmDialog`'s classification.** `DESIGN-AUDIT.md` §4.3 flags that it consolidates four
+  `await`-and-branch call sites, so it cannot ship as a purely visual change. Decide whether it
+  moves out of step 4 **before** starting, not halfway through.
 
-**The next chunk must measure the four non-Flutter suites.** Two consecutive chunks have carried
-them and the rule allows two.
+**Explicitly excluded from it:** `checkout_cart_panel.dart`'s 7 buttons and 2 fields and the whole
+sale path, step 7; `pill_input.dart` and sign-in's visual design, step 9; the 13 `IconButton` call
+sites, which have no component yet; `AppScaffold` and `PageHeader`, step 5a; the **navigation
+model**, step 5b, which `DESIGN-AUDIT.md` decision 3 splits out as a behaviour change needing a
+device check; content widths and the `RecordList` contract, step 6; every server file and
+`firestore.rules`; deployment; and every standing exclusion below.
 
-**One thing to delete when its moment comes, so it is not inherited silently.**
-`test/support/buttons.dart` exists only because `lib/` holds both button systems. When
-`checkout_cart_panel.dart` is migrated in step 7, the last `ButtonStyleButton` goes with it and
-that file should be deleted and its four callers pointed at `AppButton` directly.
+**A question for the product owner, from step 3 rather than step 4.** §5.2 specifies a field's
+rest, focus and error treatments and **says nothing about hover**. `AppTextField` therefore has no
+hover treatment and `92-appfield-hover` is a capture of no change at all. Either §5.2 gains a row
+— a `surface.raised` well on hover would be the obvious one, and is *not* being applied without
+being asked for — or it gains a sentence saying a field has no hover state and the harness capture
+stands as documentation. **Do not decide this inside a chunk.**
+
+**Two things to delete when their moment comes, so they are not inherited silently.**
+`test/support/buttons.dart` and `test/support/fields.dart` exist only because `lib/` holds more
+than one button and field system. Step 7 takes the last `ButtonStyleButton` and two of the last
+three `TextField`s; step 9 takes the third. When both are done, both files should be deleted and
+their callers pointed at `AppButton` and `AppTextField` directly.
 
 **App Check was passed over a sixth time, and the previous entry said the sixth should not be
 granted on the basis the fifth was.** It is not: the reason is a fresh instruction rather than an
@@ -3023,12 +3134,17 @@ preference order:
   which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
   that is not also serving the emulators.
 
-**The device-run debt is therefore now eight chunks deep**, and `AppButton`, its call-site
-sweep, and the route transitions are the three that most need a device — between them they changed
-how nearly every screen in the app looks, how every button in it feels, and how every screen is
-entered and left. Nobody has looked at the sign-in repair, the invitation repair, the category
-repair, commit `1b2b13b`, **the ripple kill**, **`AppButton`**, or **`AppPageRoute`**. Between them
-that is 145 tests, 117 screenshots, and no eyes. **Whenever the next device run happens, those come first** — for
+**The device-run debt is therefore now nine chunks deep**, and the last four are the ones that most
+need a device — between them they changed how nearly every screen in the app looks, how every
+button feels, how every screen is entered and left, and how every box a person types into is drawn.
+Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
+`1b2b13b`, **the ripple kill**, **`AppButton`**, **`AppPageRoute`**, or **`AppTextField`**. Between
+them that is 174 tests, 127 screenshots, and no eyes.
+
+**A field is where this hurts most.** The cursor, the caret colour, the keyboard's return key, the
+counter appearing mid-word, whether a 50-character helper line wraps to two on a phone, and whether
+the ring reads as focus or as an error — all of it is asserted by a widget test and none of it is
+judged by one. **Whenever the next device run happens, those come first** — for
 sign-in, an empty password, a wrong password, then editing a field; for the invitation, the refusal
 an identity that was unverified at invite time receives; for the category wording, the seeded
 product filed under `cat-not-cached` in "Manage catalog" and an import preview of a sheet naming
@@ -3124,8 +3240,17 @@ finished.
   visual chunk**; the shape of the fix is a stable identity for "the loader changed", which is
   probably the key the caller already computes. Closing it is what would let the landing route
   parallax.
-- **The design system, step 3, second half: `AppTextField`** — the current chunk. `AppSelect` was
-  dropped from §5.1 by the product owner on 2026-08-12; see the chunk above.
+- **~~The design system, step 3, second half: `AppTextField` and `AppSelect`~~** — **done
+  2026-08-12**, and with it step 3. 39 call sites across 17 files, §5.2's well and rules, six
+  states in the harness, **finding 4 closed**, and `AppSelect` built after the audit claim it was
+  dropped on turned out to be false. It moved no board row, moved the **Design system** track 35%
+  to 45%, added 29 tests and 10 screenshots, and **measured all four non-Flutter suites**.
+- **§5.2 does not say what a field looks like under a pointer.** `AppTextField` has no hover
+  treatment because there is no row to read one from, and `92-appfield-hover` is a capture of that
+  absence. Either §5.2 gains a hover row or it gains a sentence saying a field has no hover state.
+  **A question for the product owner, not a chunk** — but it blocks calling §9's audit complete in
+  step 12.
+- **The design system, step 4: `StatusBadge`, `Callout`, `Disclosure`** — the current chunk.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the
@@ -3192,10 +3317,10 @@ finished.
   mapping — is recorded in its own standing decision above. **It owes the same thing sign-in
   does: nobody has looked at it.**
 - **~~The add-product form's category picker, and the two surfaces that show a category ID~~** —
-  **split, and the second half is done.** Finding 5 closed on 2026-08-11; finding 4's repair is
-  the add-product form's layout and belongs to the redesign's step 3, which rewrites that form.
-  The pair was queued together because both are about a category being named the wrong way, and
-  they came apart because only one of them is wording.
+  **both halves are done.** Finding 5 closed on 2026-08-11; **finding 4 closed on 2026-08-12**
+  inside the redesign's step 3, by moving the picker into the form rather than adding a second
+  one. The pair was queued together because both are about a category being named the wrong way,
+  and they came apart because only one of them was wording.
 - **A fixture chunk that reaches the last three lines of `deliverPasswordReset`** — the
   keyring parsed out of its secret, the Brevo provider constructed out of its secrets, and the
   `getFirestore()`/`getAuth()` defaults. Small, and deliberately not folded into the test

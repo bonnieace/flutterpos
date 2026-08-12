@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -313,12 +314,12 @@ final class _TenantStaffInvitationFormState
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextFormField(
+        AppTextField(
           key: const ValueKey('invite-staff-email'),
           controller: _emailController,
           enabled: !_submitting,
           keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'Email'),
+          label: 'Email',
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {
@@ -329,11 +330,11 @@ final class _TenantStaffInvitationFormState
             }
           },
         ),
-        TextFormField(
+        AppTextField(
           key: const ValueKey('invite-staff-name'),
           controller: _nameController,
           enabled: !_submitting,
-          decoration: const InputDecoration(labelText: 'Name'),
+          label: 'Name',
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {
@@ -344,12 +345,12 @@ final class _TenantStaffInvitationFormState
             }
           },
         ),
-        TextFormField(
+        AppTextField(
           key: const ValueKey('invite-staff-phone'),
           controller: _phoneController,
           enabled: !_submitting,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(labelText: 'Phone (optional)'),
+          label: 'Phone (optional)',
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {
@@ -361,16 +362,16 @@ final class _TenantStaffInvitationFormState
           },
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<TenantRole>(
+        AppSelect<TenantRole>(
           key: const ValueKey('invite-staff-role'),
-          initialValue: _role,
-          decoration: const InputDecoration(labelText: 'Role'),
+          value: _role,
+          label: 'Role',
           items:
               const [TenantRole.admin, TenantRole.manager, TenantRole.cashier]
                   .map(
-                    (role) => DropdownMenuItem<TenantRole>(
+                    (role) => AppSelectItem<TenantRole>(
                       value: role,
-                      child: Text(role.wireValue),
+                      label: role.wireValue,
                     ),
                   )
                   .toList(),

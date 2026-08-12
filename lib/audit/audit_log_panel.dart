@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -224,22 +225,19 @@ final class _AuditLogContents extends StatelessWidget {
         'it was recorded.',
       ),
       const SizedBox(height: 16),
-      DropdownButtonFormField<TenantAuditEventType?>(
+      AppSelect<TenantAuditEventType?>(
         key: const ValueKey('audit-log-filter'),
-        initialValue: page.eventType,
-        decoration: const InputDecoration(
-          labelText: 'Show',
-          border: OutlineInputBorder(),
-        ),
-        items: <DropdownMenuItem<TenantAuditEventType?>>[
-          const DropdownMenuItem<TenantAuditEventType?>(
+        value: page.eventType,
+        label: 'Show',
+        items: <AppSelectItem<TenantAuditEventType?>>[
+          const AppSelectItem<TenantAuditEventType?>(
             value: null,
-            child: Text('All events'),
+            label: 'All events',
           ),
           for (final type in TenantAuditEventType.values)
-            DropdownMenuItem<TenantAuditEventType?>(
+            AppSelectItem<TenantAuditEventType?>(
               value: type,
-              child: Text(type.label),
+              label: type.label,
             ),
         ],
         onChanged: onSelectEvent,

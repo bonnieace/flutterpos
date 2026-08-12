@@ -7,6 +7,7 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/buttons.dart';
+import '../support/fields.dart';
 
 const String _productsPath = 'tenants/tenant-a/products';
 const String _categoriesPath = 'tenants/tenant-a/categories';
@@ -977,8 +978,7 @@ Iterable<String> _documentIdsOnScreen(WidgetTester tester) => tester
     .nonNulls
     .where(RegExp(r'cat-|ct_').hasMatch);
 
-String _field(WidgetTester tester, String key) =>
-    tester.widget<TextField>(find.byKey(ValueKey(key))).controller!.text;
+String _field(WidgetTester tester, String key) => fieldText(tester, key);
 
 bool _enabled(WidgetTester tester, String key) => pressable(tester, key);
 

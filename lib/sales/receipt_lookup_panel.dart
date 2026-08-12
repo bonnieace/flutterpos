@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
@@ -133,16 +134,14 @@ final class _TenantReceiptLookupPanelState
         'describes.',
       ),
       const SizedBox(height: 16),
-      TextField(
+      AppTextField(
         key: const ValueKey('receipt-lookup-input'),
         controller: _receipt,
         autocorrect: false,
         textCapitalization: TextCapitalization.characters,
         onSubmitted: (_) => _submit(),
-        decoration: const InputDecoration(
-          labelText: 'Receipt number',
-          hintText: 'CT-A7F-20260731-0042',
-        ),
+        label: 'Receipt number',
+        placeholder: 'CT-A7F-20260731-0042',
       ),
       const SizedBox(height: 12),
       AppButton(

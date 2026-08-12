@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -390,7 +391,7 @@ final class _TenantStaffInvitationCancellationFormState
         'This removes the pending membership and invalidates its invitation.',
       ),
       const SizedBox(height: 12),
-      TextField(
+      AppTextField(
         key: const ValueKey('cancel-staff-invitation-reason'),
         controller: _reasonController,
         enabled: !_submitting,
@@ -398,11 +399,9 @@ final class _TenantStaffInvitationCancellationFormState
         maxLines: 4,
         maxLength: 500,
         onChanged: _reasonChanged,
-        decoration: InputDecoration(
-          labelText: 'Cancellation reason',
-          hintText: 'Required for the tenant audit log',
-          errorText: _reasonError,
-        ),
+        label: 'Cancellation reason',
+        placeholder: 'Required for the tenant audit log',
+        error: _reasonError,
       ),
       if (_safeError != null) ...[
         const SizedBox(height: 4),

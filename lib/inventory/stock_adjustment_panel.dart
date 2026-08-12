@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/records.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../reporting/reconciliation_anomalies.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -902,15 +903,15 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
         'deleted. Correcting a mistake means recording another adjustment.',
       ),
       const SizedBox(height: 12),
-      DropdownButtonFormField<TenantStockAdjustmentType>(
+      AppSelect<TenantStockAdjustmentType>(
         key: const ValueKey('product-stock-type'),
-        initialValue: _type,
-        decoration: const InputDecoration(labelText: 'Adjustment type'),
+        value: _type,
+        label: 'Adjustment type',
         items: [
           for (final type in TenantStockAdjustmentType.values)
-            DropdownMenuItem<TenantStockAdjustmentType>(
+            AppSelectItem<TenantStockAdjustmentType>(
               value: type,
-              child: Text(type.label),
+              label: type.label,
             ),
         ],
         onChanged: widget.busy ? null : _changeType,
@@ -936,22 +937,20 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
               : 'This type always removes stock.',
         ),
       const SizedBox(height: 12),
-      TextField(
+      AppTextField(
         key: const ValueKey('product-stock-units'),
         controller: _units,
         keyboardType: TextInputType.number,
         onChanged: (_) => setState(() {}),
-        decoration: const InputDecoration(labelText: 'Units'),
+        label: 'Units',
       ),
       const SizedBox(height: 12),
-      TextField(
+      AppTextField(
         key: const ValueKey('product-stock-reason'),
         controller: _reason,
         maxLength: maximumStockAdjustmentReasonLength,
         onChanged: (_) => setState(() {}),
-        decoration: const InputDecoration(
-          labelText: 'Reason for this adjustment',
-        ),
+        label: 'Reason for this adjustment',
       ),
       const SizedBox(height: 12),
       AppButton(

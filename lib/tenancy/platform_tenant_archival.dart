@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'platform_tenant_review.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -512,7 +513,7 @@ final class _PlatformTenantArchivalFormState
         'It cannot be reopened through tenant management.',
       ),
       const SizedBox(height: 16),
-      TextField(
+      AppTextField(
         key: const ValueKey('platform-archival-reason'),
         controller: _reasonController,
         enabled: !_submitting,
@@ -520,17 +521,17 @@ final class _PlatformTenantArchivalFormState
         maxLines: 4,
         maxLength: 1000,
         onChanged: _intentFieldChanged,
-        decoration: const InputDecoration(labelText: 'Archival reason'),
+        label: 'Archival reason',
       ),
       Text('Type ${widget.tenant.archiveConfirmation} to confirm.'),
       const SizedBox(height: 8),
-      TextField(
+      AppTextField(
         key: const ValueKey('platform-archival-confirmation'),
         controller: _confirmationController,
         enabled: !_submitting,
         autocorrect: false,
         onChanged: _intentFieldChanged,
-        decoration: const InputDecoration(labelText: 'Confirmation'),
+        label: 'Confirmation',
       ),
       if (_safeError != null) ...[
         const SizedBox(height: 12),

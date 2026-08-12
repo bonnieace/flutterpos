@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
 import 'platform_tenant_review.dart';
@@ -543,7 +544,7 @@ final class _PlatformTenantLifecycleFormState
         ),
         if (suspending) ...[
           const SizedBox(height: 16),
-          TextField(
+          AppTextField(
             key: const ValueKey('platform-lifecycle-reason'),
             controller: _reasonController,
             enabled: !_submitting,
@@ -551,7 +552,7 @@ final class _PlatformTenantLifecycleFormState
             maxLines: 4,
             maxLength: 1000,
             onChanged: _reasonChanged,
-            decoration: const InputDecoration(labelText: 'Suspension reason'),
+            label: 'Suspension reason',
           ),
         ],
         if (_safeError != null) ...[

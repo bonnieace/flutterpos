@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -675,16 +676,14 @@ final class _AmendShiftDialogState extends State<_AmendShiftDialog> {
           'choose the figure, and the cash counted at close is not changed.',
         ),
         const SizedBox(height: 12),
-        TextField(
+        AppTextField(
           key: const ValueKey('reconciliation-amend-reason'),
           controller: _reason,
           autofocus: true,
           maxLength: 500,
           maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Why is this being corrected?',
-            helperText: 'Kept in the business\'s record of the correction.',
-          ),
+          label: 'Why is this being corrected?',
+          helper: 'Kept in the business\'s record of the correction.',
         ),
       ],
     ),

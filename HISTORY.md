@@ -19565,3 +19565,184 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## One field, everywhere - 2026-08-12
+
+`design.md` §11 step 3's second half, and with it **step 3 is finished**. `AppTextField` and
+`AppSelect` are built to §5.2, and **39 call sites across 17 files** are them: 34 fields and 5
+selects. Three Material fields remain in the migrated tree and all three are deliberate -
+`checkout_cart_panel.dart`'s two are step 7's sale path, and `pill_input.dart`'s one is step 9's
+sign-in.
+
+### The audit was wrong about `AppSelect`, and the decision made on it had to be unmade
+
+`DESIGN-AUDIT.md` §2.2 said flatly: "**There is no `DropdownButtonFormField` in the migrated
+tree.**" The product owner, reading that, dropped `AppSelect` from §5.1 at the start of this
+session. **There are five**, in `audit_log_panel`, `stock_adjustment_panel`,
+`stock_movement_feed_panel`, `tenant_staff_invitation` and `tenant_staff_update` - which is exactly
+the row §5.1 wrote for it.
+
+The audit had looked at the two places a *category* is chosen, found `ChoiceChip` there, and
+generalised from two call sites to a whole tree. The decision was put back to the product owner
+with the real figure and reversed inside the same session, which is the only reason this cost
+nothing: **a decision taken on a false premise is not a decision, and the cheapest moment to say so
+is before building around it.** Both claims in `DESIGN-AUDIT.md` are struck through with the
+correction rather than deleted.
+
+### §5.2's rules that turn out to have layout consequences
+
+**The error replaces the helper line; it does not join it.** One slot under the field holds one or
+the other, so a field does not grow when it goes wrong - and a form does not reflow under the
+finger typing into it. Asserted as a size equality rather than described.
+
+**The counter renders only above 80% of the limit**, and counts *characters* rather than code
+units, because that is the unit `maxLength` enforces. A counter that disagreed with the limit it
+names would be worse than none. `TextField`'s own counter is suppressed rather than restyled: two
+counters is worse than the wrong one.
+
+**The label is above the field and always there.** This app broke that three different ways -
+floating labels in the migrated tree, a placeholder standing in for a label, and uppercase labels
+on sign-in - and the third is still there because §4.4 is step 9's.
+
+### The focus ring re-parented the field and ate every keystroke
+
+**The best bug of the session, and the second one this week with the same shape.** `PressSurface`
+inserts its `Stack` when the control takes focus, which is harmless for a button. Doing the same in
+a field changed the shape of the widget tree above its `TextField` the instant it was focused, so
+the `TextField` was re-parented, its `EditableText` state went with it, and the platform input
+connection dropped. **The field took focus and then refused every keystroke.**
+
+It was found by a test that could not type into it, and the symptom was thoroughly misleading:
+seven unrelated assertions failed - `onChanged` never firing, `maxLength` not enforcing, a
+placeholder that would not go away - and none of them named focus. The fix is that the `Stack` is
+always in the tree and the ring appears by *gaining a border* rather than by being inserted.
+
+This is the same mechanism the route chunk hit six hours earlier from the other end, where a
+shape change above a page re-parented it through a `GlobalKey` and cost a Firestore read. Recorded
+as a standing trap in its general form: **changing the shape of the tree above a stateful subtree
+is not free, and the cost does not look like the cause.**
+
+### Finding 4, closed by moving a picker rather than adding one
+
+The add-product form asked for a category and offered no way to choose one; the picker was the
+chip row a screenful above, under the "Categories" heading that also serves as the list of
+categories. The `Correct` dialog has always had an inline picker, so one screen did it both ways.
+
+**The picker moved into the form, keeping its keys and its callback**, and the row under
+"Categories" became what that heading says it is - a list, in plain `Chip`s. Nothing about what a
+tap does changed, which is why this fits inside a visual chunk; the existing tests that tap
+`catalog-management-category-cat-bakery` to select were not touched.
+
+### `AppSelect` has no specification, and that is recorded rather than invented
+
+§5.1 gives it a row; §5.2 specifies only the "load-bearing five", which it is not among. So it is
+drawn as `AppTextField`'s chrome around a menu - the same label, well, border, radius, height,
+helper and error - because "one pattern, everywhere" is §5.2's own first line and a second field
+shape would contradict it. The only value not read straight from a §2 row is the menu's corner:
+§2.3 names four radii and a menu is not among the things any of them lists, so `radius.md` is
+applied as the nearest row rather than a fifth radius being invented.
+
+### `hover` is in the harness showing nothing, on purpose
+
+§5's matrix asks for every state that applies, and `hover` applies to a field on a pointer device.
+**§5.2 specifies no hover treatment for one**, and `claude.md` forbids inventing a token, so
+`92-appfield-hover` is a picture of no change at all. It is captured rather than omitted so a
+reviewer can see the absence is deliberate: `90-appbutton-hover-*` shows a real change and this
+shows none. Queued in `PLAN.md` as a question for the product owner.
+
+`pressed` and `loading` are absent for the same reason `AppButton` has no `error`: a field is not a
+control you push, and a field whose value is not ready is `disabled` or `read-only`, both of which
+are in the matrix already.
+
+### Files changed
+
+```text
+lib/ui/fields.dart                                 new - AppTextField, AppSelect, AppFieldWell
+lib/audit/audit_log_panel.dart                     1 select
+lib/checkout/checkout_configuration_panel.dart     1 field
+lib/inventory/bulk_catalog_panel.dart              2 fields
+lib/inventory/catalog_management_panel.dart        9 fields + finding 4's picker
+lib/inventory/stock_adjustment_panel.dart          2 fields, 1 select
+lib/inventory/stock_movement_feed_panel.dart       1 select
+lib/reporting/reconciliation_anomalies_panel.dart  1 field
+lib/returns/return_history_panel.dart              1 field
+lib/sales/receipt_lookup_panel.dart                1 field
+lib/shift/shift_panel.dart                         1 field
+lib/tenancy/platform_global_user_status.dart       3 fields
+lib/tenancy/platform_tenant_archival.dart          2 fields
+lib/tenancy/platform_tenant_lifecycle.dart         1 field
+lib/tenancy/platform_tenant_review.dart            1 field
+lib/tenancy/tenant_request.dart                    2 fields
+lib/tenancy/tenant_staff_invitation.dart           3 fields, 1 select
+lib/tenancy/tenant_staff_invitation_cancellation.dart   1 field
+lib/tenancy/tenant_staff_invitation_email_replacement.dart  1 field
+lib/tenancy/tenant_staff_update.dart               2 fields, 1 select
+test/ui/fields_test.dart                           new - 29 tests
+test/support/fields.dart                           new - the field-reading seam
+test/inventory/catalog_management_panel_test.dart  one helper, through the seam
+tool/screenshots/field_states_test.dart            new - 5 captures
+DESIGN-AUDIT.md                                    two withdrawn claims
+PLAN.md
+HISTORY.md
+```
+
+### Test commands and results
+
+```text
+flutter test --no-pub --concurrency=1                       1709 pass  (1680 -> 1709)
+npm --prefix functions test                                  409 pass
+npm --prefix rules-tests run test:emulator                   161 pass
+npm --prefix rules-tests run test:emulator:reconciliation     10 pass
+FUNCTIONS_DISCOVERY_TIMEOUT=60000
+  npm --prefix rules-tests run test:emulator:invitations       23 pass
+flutter analyze --no-pub lib test tool                       475 issues (the pre-existing
+                                                             baseline; unchanged)
+flutter test --no-pub --concurrency=1 tool/screenshots        98 captures, 127 images
+```
+
+**All four non-Flutter suites were measured, which discharges the carry the route chunk used up.**
+2312 tests across five suites. The invitation suite's known flaky test passed on the first run.
+
+**Only one existing test file changed, and only its helper.**
+`catalog_management_panel_test.dart` read a value by casting the widget at a key to `TextField`,
+which is an assertion about *which component drew the screen* rather than about the value. It goes
+through `test/support/fields.dart` now - the same seam `test/support/buttons.dart` is, marked for
+deletion at the same moment, when steps 7 and 9 take the last three Material fields.
+
+### Screenshots
+
+**10 added, 32 changed, none removed, 85 identical**, and this time the attribution needed no
+second run: the baseline was generated **earlier the same day** by the route chunk, so the
+`DateTime.now()` drift that usually accounts for 39 images is **zero**. Every one of the 32 is a
+screen that holds a field or a select.
+
+```text
+D  this morning's set, after the route chunk   117 images
+E  after AppTextField                          127 images
+   added 10, changed 32, removed 0, identical 85
+```
+
+**One of the ten additions is not a matrix picture and is worth naming.**
+`web-full/12-shift-open-and-counted.png` did not exist before: nothing was added to that screen, it
+grew past the fold because a field now carries a persistent label above it and reserves the focus
+ring's 4px gutter. The same effect put `mobile-full/18-manage-catalog.png` and
+`19-correct-a-product.png` into the changed list rather than the identical one.
+
+### What this chunk owes
+
+**Nobody has looked at any of it**, and a field is the component where that matters most: the
+cursor, the caret colour, the keyboard's return key, the counter appearing mid-word, and whether a
+50-character helper line wraps to two on a phone are all things a widget test asserts and a person
+judges. The device-run debt is now **nine** chunks deep.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

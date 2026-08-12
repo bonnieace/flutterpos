@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -739,14 +740,12 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
           ),
         ),
       const SizedBox(height: 12),
-      TextField(
+      AppTextField(
         key: const ValueKey('sale-returns-reason'),
         controller: _reason,
         maxLength: maximumReturnReasonLength,
         onChanged: (_) => setState(() {}),
-        decoration: const InputDecoration(
-          labelText: 'Reason for this return',
-        ),
+        label: 'Reason for this return',
       ),
       const SizedBox(height: 12),
       AppButton(

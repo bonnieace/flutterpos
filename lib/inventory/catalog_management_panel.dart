@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../ui/routes.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -760,6 +762,7 @@ final class _CatalogManagementContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final tokens = AppTokens.componentOf(context);
     final categoryNames = tenantCategoryNames(view.categories.items);
     final selected = _selected;
     return ListView(
@@ -804,18 +807,22 @@ final class _CatalogManagementContents extends StatelessWidget {
             'one, so the first category comes before the first product.',
           )
         else
+          // **The list, not the picker.** Finding 4 was that the only place to
+          // choose a product's category was this row, a thousand pixels above
+          // the form that asks for one, under a heading that also serves as
+          // the list of categories. The picker moved into the form below,
+          // keeping its keys and its callback; what is left here is what this
+          // heading says it is.
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               for (final category in view.categories.items)
-                ChoiceChip(
-                  key: ValueKey('catalog-management-category-${category.id}'),
+                Chip(
+                  key: ValueKey(
+                    'catalog-management-category-list-${category.id}',
+                  ),
                   label: Text(category.name),
-                  selected: category.id == _selected,
-                  onSelected: canWrite && !busy
-                      ? (_) => onCategorySelected(category.id)
-                      : null,
                 ),
             ],
           ),
@@ -830,16 +837,14 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         if (canWrite) ...[
           const SizedBox(height: 12),
-          TextField(
+          AppTextField(
             key: const ValueKey('catalog-management-category-name'),
             controller: categoryName,
             enabled: !busy,
             maxLength: maximumCatalogNameLength,
             onChanged: (_) => onFormChanged(),
-            decoration: const InputDecoration(
-              labelText: 'New category name',
-              helperText: 'Such as Bakery, Drinks, or Household.',
-            ),
+            label: 'New category name',
+            helper: 'Such as Bakery, Drinks, or Household.',
           ),
           const SizedBox(height: 8),
           AppButton(
@@ -858,44 +863,40 @@ final class _CatalogManagementContents extends StatelessWidget {
             'Products cannot be added from this build.',
           )
         else ...[
-          TextField(
+          AppTextField(
             key: const ValueKey('catalog-management-product-name'),
             controller: productName,
             enabled: !busy,
             maxLength: maximumCatalogNameLength,
             onChanged: (_) => onFormChanged(),
-            decoration: const InputDecoration(labelText: 'Product name'),
+            label: 'Product name',
           ),
           const SizedBox(height: 8),
-          TextField(
+          AppTextField(
             key: const ValueKey('catalog-management-product-sku'),
             controller: productSku,
             enabled: !busy,
             maxLength: maximumCatalogSkuLength,
             onChanged: (_) => onFormChanged(),
-            decoration: const InputDecoration(
-              labelText: 'Code (SKU or barcode)',
-              helperText: 'What the till matches a scan against. No spaces.',
-            ),
+            label: 'Code (SKU or barcode)',
+            helper: 'What the till matches a scan against. No spaces.',
           ),
           const SizedBox(height: 8),
-          TextField(
+          AppTextField(
             key: const ValueKey('catalog-management-product-price'),
             controller: productPrice,
             enabled: !busy,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onChanged: (_) => onFormChanged(),
-            decoration: const InputDecoration(
-              labelText: 'Unit price',
-              helperText:
-                  'At most two decimal places, in the currency this business '
-                  'publishes. A price this app cannot record exactly is '
-                  'refused here rather than at the till.',
-            ),
+            label: 'Unit price',
+            helper:
+                'At most two decimal places, in the currency this business '
+                'publishes. A price this app cannot record exactly is '
+                'refused here rather than at the till.',
           ),
           if (canRecordCost) ...[
             const SizedBox(height: 8),
-            TextField(
+            AppTextField(
               key: const ValueKey('catalog-management-product-cost'),
               controller: productCost,
               enabled: !busy,
@@ -903,14 +904,43 @@ final class _CatalogManagementContents extends StatelessWidget {
                 decimal: true,
               ),
               onChanged: (_) => onFormChanged(),
-              decoration: const InputDecoration(
-                labelText: 'Unit cost (optional)',
-                helperText:
-                    'What one unit costs this business. Every sale records the '
-                    'cost as it stands at that moment, so correcting this later '
-                    'prices the next sale and never changes a profit figure '
-                    'already reported. Leave blank if you do not track it.',
+              label: 'Unit cost (optional)',
+              helper:
+                  'What one unit costs this business. Every sale records the '
+                  'cost as it stands at that moment, so correcting this later '
+                  'prices the next sale and never changes a profit figure '
+                  'already reported. Leave blank if you do not track it.',
+            ),
+          ],
+          // **Finding 4's repair.** The picker is here, beside the field it
+          // belongs to, rather than a screenful above under the heading that
+          // lists the categories - which is where the "Correct" dialog has
+          // always had it, so this screen stops doing the same thing two
+          // different ways. The keys and the callback are the ones the row
+          // above used to carry; nothing about what a tap does has changed.
+          if (view.categories.items.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Category',
+              style: tokens.typography.labelMedium.copyWith(
+                color: tokens.colors.text.secondary,
               ),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final category in view.categories.items)
+                  ChoiceChip(
+                    key: ValueKey('catalog-management-category-${category.id}'),
+                    label: Text(category.name),
+                    selected: category.id == _selected,
+                    onSelected: busy
+                        ? null
+                        : (_) => onCategorySelected(category.id),
+                  ),
+              ],
             ),
           ],
           const SizedBox(height: 8),
@@ -1333,56 +1363,50 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
               'leaves a different field unreadable is refused outright.',
             ),
             const SizedBox(height: 12),
-            TextField(
+            AppTextField(
               key: const ValueKey('catalog-management-edit-name'),
               controller: _name,
               maxLength: maximumCatalogNameLength,
-              decoration: const InputDecoration(labelText: 'Product name'),
+              label: 'Product name',
             ),
             const SizedBox(height: 8),
-            TextField(
+            AppTextField(
               key: const ValueKey('catalog-management-edit-sku'),
               controller: _sku,
               maxLength: maximumCatalogSkuLength,
-              decoration: const InputDecoration(
-                labelText: 'Code (SKU or barcode)',
-                helperText:
-                    'What the till matches a scan against. No spaces. The old '
-                    'code stops finding this product.',
-              ),
+              label: 'Code (SKU or barcode)',
+              helper:
+                  'What the till matches a scan against. No spaces. The old '
+                  'code stops finding this product.',
             ),
             if (widget.canChangeMoney) ...[
               const SizedBox(height: 8),
-              TextField(
+              AppTextField(
                 key: const ValueKey('catalog-management-edit-price'),
                 controller: _price,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                decoration: const InputDecoration(
-                  labelText: 'Unit price',
-                  helperText:
-                      'Applies to the next sale. Sales already recorded keep '
-                      'the price they were sold at.',
-                ),
+                label: 'Unit price',
+                helper:
+                    'Applies to the next sale. Sales already recorded keep '
+                    'the price they were sold at.',
               ),
               const SizedBox(height: 8),
-              TextField(
+              AppTextField(
                 key: const ValueKey('catalog-management-edit-cost'),
                 controller: _cost,
                 enabled: !_clearCost,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                decoration: InputDecoration(
-                  labelText: 'Unit cost',
-                  helperText: widget.product.cost == null
-                      ? 'No unit cost is recorded. Enter one to start recording '
-                            'it; leave it blank to keep reporting no profit for '
-                            'this product.'
-                      : 'Leaving this blank keeps the recorded cost as it is. '
-                            'Removing it is a separate act, below.',
-                ),
+                label: 'Unit cost',
+                helper: widget.product.cost == null
+                    ? 'No unit cost is recorded. Enter one to start recording '
+                          'it; leave it blank to keep reporting no profit for '
+                          'this product.'
+                    : 'Leaving this blank keeps the recorded cost as it is. '
+                          'Removing it is a separate act, below.',
               ),
               if (widget.product.cost != null)
                 CheckboxListTile(

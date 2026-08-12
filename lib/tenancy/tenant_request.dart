@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_types.dart';
@@ -325,24 +326,22 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
         const SizedBox(height: 8),
         const Text('New businesses remain pending until platform review.'),
         const SizedBox(height: 16),
-        TextFormField(
+        AppTextField(
           key: const ValueKey('tenant-request-name'),
           controller: _nameController,
           enabled: !_submitting,
-          decoration: const InputDecoration(labelText: 'Business name'),
+          label: 'Business name',
           autovalidateMode: AutovalidateMode.onUserInteraction,
           onChanged: _fieldChanged,
           validator: (value) => _validateName(value ?? ''),
         ),
         const SizedBox(height: 12),
-        TextFormField(
+        AppTextField(
           key: const ValueKey('tenant-request-slug'),
           controller: _slugController,
           enabled: !_submitting,
-          decoration: const InputDecoration(
-            labelText: 'Business slug',
-            helperText: 'Lower-case letters, numbers, and single hyphens.',
-          ),
+          label: 'Business slug',
+          helper: 'Lower-case letters, numbers, and single hyphens.',
           autocorrect: false,
           enableSuggestions: false,
           onChanged: _fieldChanged,

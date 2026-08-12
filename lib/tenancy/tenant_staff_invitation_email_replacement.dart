@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -435,12 +436,12 @@ final class _TenantStaffInvitationEmailReplacementFormState
           'The pending membership for ${widget.target.email} will be cancelled and a new invitation will be queued.',
         ),
         const SizedBox(height: 12),
-        TextFormField(
+        AppTextField(
           key: const ValueKey('replace-staff-email-input'),
           controller: _emailController,
           enabled: !_submitting,
           keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'Corrected email'),
+          label: 'Corrected email',
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {

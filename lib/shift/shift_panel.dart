@@ -2,6 +2,7 @@
 import 'package:flutter/services.dart';
 
 import '../ui/buttons.dart';
+import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
@@ -218,14 +219,12 @@ final class _ShiftContents extends StatelessWidget {
         Text(key: const ValueKey('shift-error'), _errorLabel()),
       const SizedBox(height: 8),
       if (state.phase == TenantShiftPhase.closing) ...[
-        TextField(
+        AppTextField(
           key: const ValueKey('counted-cash'),
           controller: countedCash,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
-            labelText: 'Counted cash (minor units)',
-          ),
+          label: 'Counted cash (minor units)',
         ),
         const SizedBox(height: 8),
       ],

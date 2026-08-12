@@ -189,15 +189,26 @@ None of the following from §5.1 exists in any form: `AppScaffold`, `PageHeader`
 `AppSheet`, `AppTabs`, `LedgerEntry`, `QuantityStepper`, `PressSurface`, `MotionAsset`,
 `RollingNumber`, `SyncIndicator`, `FilterChipBar`.
 
-One correction to the §5.1 table: `AppSelect` is listed as replacing "raw
-`DropdownButtonFormField`". **There is no `DropdownButtonFormField` in the migrated tree.** Category
-selection uses `ChoiceChip` wraps
-([catalog_management_panel.dart:791-805](lib/inventory/catalog_management_panel.dart#L791-L805),
-[:1387-1402](lib/inventory/catalog_management_panel.dart#L1387-L1402)) and mode selection uses a
-`SegmentedButton`
-([reconciliation_status_panel.dart:562-575](lib/reporting/reconciliation_status_panel.dart#L562-L575)).
-`AppSelect` has nothing to replace, and should either be dropped from §5.1 or re-scoped to the
-chip-group pattern that actually exists.
+~~One correction to the §5.1 table: `AppSelect` is listed as replacing "raw
+`DropdownButtonFormField`". **There is no `DropdownButtonFormField` in the migrated tree.**~~
+
+**Withdrawn 2026-08-12: this audit was wrong, and it was wrong in the direction that costs the
+most.** There are **five** `DropdownButtonFormField` call sites in the migrated tree —
+[audit_log_panel.dart](lib/audit/audit_log_panel.dart),
+[stock_adjustment_panel.dart](lib/inventory/stock_adjustment_panel.dart),
+[stock_movement_feed_panel.dart](lib/inventory/stock_movement_feed_panel.dart),
+[tenant_staff_invitation.dart](lib/tenancy/tenant_staff_invitation.dart) and
+[tenant_staff_update.dart](lib/tenancy/tenant_staff_update.dart) — which is exactly what §5.1 says
+`AppSelect` replaces. The original claim looked only at the two places a *category* is chosen, saw
+`ChoiceChip`, and generalised from them to the whole tree.
+
+The product owner had already acted on the false claim and dropped `AppSelect`; the decision was
+put back to them with the correct figure on 2026-08-12 and reversed. **`AppSelect` is built, and
+§5.1 stands as written.** The `ChoiceChip` group pattern is not orphaned by that — it is
+`FilterChipBar`, already in §5.1 at priority 2.
+
+**What is worth keeping from the mistake:** an audit finding that says "nothing exists" is a claim
+about the whole tree and needs a whole-tree grep behind it, not two call sites and an inference.
 
 ### 2.3 Built more than once
 
@@ -748,7 +759,8 @@ a device check with the performance overlay on, per §10 — not a screenshot.
   renders in the platform default. §2.2 says "One family — Roboto". Either bundle Roboto and name it
   in `theme.dart`, or amend §2.2 to say the family is the platform default. Until this is settled,
   no screenshot is evidence about type.
-- **`AppSelect`** (§2.2). Nothing exists for it to replace. Drop it from §5.1 or re-scope it to the
-  `ChoiceChip` group pattern that is actually in use.
+- ~~**`AppSelect`** (§2.2). Nothing exists for it to replace.~~ **Withdrawn 2026-08-12 — the claim
+  was false.** Five `DropdownButtonFormField` call sites exist; see §2.2 above. `AppSelect` was
+  built in step 3's second half and §5.1 stands as written.
 - **`ConfirmDialog`'s classification** (§4.3). It consolidates four existing `await`-and-branch call
   sites, so it cannot ship as a purely visual pull request. Decide whether it moves out of step 4.
