@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/routes.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -15,7 +16,7 @@ void openTenantReconciliationRun(
 }) {
   final controller = TenantSessionScope.of(context);
   Navigator.of(context).push(
-    MaterialPageRoute<void>(
+    AppPageRoute<void>(
       builder: (_) => TenantSessionScope(
         controller: controller,
         child: TenantReconciliationRunScreen(reader: reader, jobId: jobId),

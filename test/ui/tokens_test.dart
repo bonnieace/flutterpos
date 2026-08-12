@@ -543,6 +543,14 @@ void main() {
       // `spring.snappy`, and no expanding circle anywhere.
       expect(motion.pressScale, 0.97);
     });
+
+    test('the covered surface parallaxes at §6.2\'s 30%', () {
+      // "Route push (compact) | horizontal, incoming full / outgoing parallax
+      // at 30%". It lives in the token layer for the same reason `pressScale`
+      // does: it is a figure `design.md` states, and a widget that restated it
+      // would be a second source of truth for it.
+      expect(motion.routeParallax, 0.3);
+    });
   });
 
   group('density - design.md §3', () {

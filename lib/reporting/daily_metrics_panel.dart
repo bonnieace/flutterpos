@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -306,7 +307,7 @@ final class _DailySummaryContents extends StatelessWidget {
   void _push(BuildContext context, Widget child) {
     final controller = TenantSessionScope.of(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) =>
             TenantSessionScope(controller: controller, child: child),
       ),

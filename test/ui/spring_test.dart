@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_application_1/ui/spring.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
@@ -271,6 +272,69 @@ void main() {
       }
       expect(settled['snappy']!, lessThan(settled['smooth']!));
       expect(settled['smooth']!, lessThan(settled['gentle']!));
+    });
+  });
+
+  group('a settling spring ends where it was asked to', () {
+    /// The first time a simulation reports itself done, to the millisecond.
+    double doneAt(Simulation simulation) {
+      for (var ms = 0; ms < 5000; ms++) {
+        if (simulation.isDone(ms / 1000)) return ms / 1000;
+      }
+      return double.nan;
+    }
+
+    test('a plain SpringSimulation stops short of its end', () {
+      // The defect this class exists for, measured rather than asserted in
+      // prose: `SpringSimulation` is done when it is within
+      // `Tolerance.distance` of the end, and it reports that near-miss as its
+      // position. On a route that is a whole page parked off its own edge.
+      final plain = SpringSimulation(motion.smooth, 0, 1, 0);
+      final at = doneAt(plain);
+      expect(at, isNot(isNaN));
+      expect(plain.x(at), isNot(1.0));
+      expect(plain.x(at), closeTo(1.0, 1e-3));
+    });
+
+    test('the settling one reports the end exactly', () {
+      final settling = SettlingSpringSimulation(motion.smooth, 0, 1, 0);
+      final at = doneAt(settling);
+      expect(at, isNot(isNaN));
+      expect(settling.x(at), 1.0);
+      expect(settling.dx(at), 0.0);
+      // And it is still the same spring everywhere before that.
+      expect(settling.x(at * 10), 1.0);
+    });
+
+    test('it agrees with the plain simulation while both are still moving', () {
+      // The wrapper must not become a second set of physics. Every frame up to
+      // the last one is the spring `design.md` §2.4 specifies, unchanged.
+      final plain = SpringSimulation(motion.smooth, 0, 1, 0);
+      final settling = SettlingSpringSimulation(motion.smooth, 0, 1, 0);
+      final stops = doneAt(settling);
+      for (var ms = 0; ms < (stops * 1000).floor(); ms += 8) {
+        final t = ms / 1000;
+        expect(settling.x(t), plain.x(t), reason: 'position at ${t}s');
+        expect(settling.dx(t), plain.dx(t), reason: 'velocity at ${t}s');
+      }
+    });
+
+    test('it settles at 0 as exactly as it settles at 1', () {
+      // The pop direction, which is the one where a residue would be a page
+      // that never quite leaves.
+      final settling = SettlingSpringSimulation(motion.smooth, 1, 0, 0);
+      expect(settling.x(doneAt(settling)), 0.0);
+    });
+
+    test('a velocity it inherits still carries it', () {
+      // Interruptibility is the whole point of the substrate, and it is worth
+      // one assertion that wrapping the simulation did not quietly drop the
+      // initial velocity on the floor.
+      final settling = SettlingSpringSimulation(motion.smooth, 0.4, 0, 2.5);
+      expect(settling.x(0), closeTo(0.4, 1e-9));
+      expect(settling.dx(0), closeTo(2.5, 1e-9));
+      expect(settling.x(0.02), greaterThan(0.4), reason: 'momentum carries on');
+      expect(settling.x(doneAt(settling)), 0.0);
     });
   });
 }

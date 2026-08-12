@@ -4,9 +4,10 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-11**, the session that built `AppButton` —
-`design.md` §11 step 3's first half, the first component in this app a call site can reach and
-the first spring anywhere in the migrated tree. Claims in this file are checked against source,
+Last verified against the code on **2026-08-12**, the session that put every route on a spring —
+`design.md` §11 step 2's fourth and last part, which **finishes step 2**. Before it, the
+2026-08-11 session that built `AppButton` — step 3's first half, the first component in this app a
+call site can reach and the first spring anywhere in the migrated tree. Claims in this file are checked against source,
 not inherited from the log; corrections are noted where they were made — **and the session
 before it found this file's own description of a defect wrong**, see "Found by using
 the app", finding 5. **The eighth session of 2026-08-08
@@ -97,7 +98,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~30% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1 and 2 are done bar route transitions, and step 3's first half is finished as of 2026-08-11**: every token is defined, the ripple is dead, scroll physics bounce with no glow, and **`AppButton` is built on a real spring substrate and every button in the migrated tree is one** — 155 call sites across 37 files, with four tiers, three sizes and six states, all six in the harness. **7 Material buttons remain and all 7 are `checkout_cart_panel.dart`'s**, which is step 7's sale path on purpose. **Route transitions are step 2's fourth part and still are not done**; they are a chunk of their own — see the current chunk for the framework reason. Step 3's second half (`AppTextField`, `AppSelect`) and steps 4–12 remain. |
+| **Design system** | ~35% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1 and 2 are finished and step 3's first half with them**: every token is defined, the ripple is dead, scroll physics bounce with no glow, **`AppButton` is built on a real spring substrate and every button in the migrated tree is one** — 155 call sites across 37 files, four tiers, three sizes, six states, all six in the harness — and as of 2026-08-12 **every route arrives on a spring**: `AppPageRoute` at all 23 call sites, §6.2's compact and expanded rows both implemented. **7 Material buttons remain and all 7 are `checkout_cart_panel.dart`'s**, which is step 7's sale path on purpose. Step 3's second half (`AppTextField`; **`AppSelect` was dropped from §5.1 by the product owner on 2026-08-12**) and steps 4–12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -137,6 +138,24 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The 2026-08-12 route-transition session changed no board row at all — not a colour and not a word
+of one — and this sentence is here so that is stated rather than left silent.** It took `design.md`
+§11 step 2's fourth and last part, which is a **redesign step rather than a capability**: no shop
+can do anything today it could not do yesterday. It moved the **Design system** track 30% to 35%
+and **finished step 2**. It changed **no rollout step**, and it touched no rule and no `functions/`
+file. It added **30 tests** and **3 screenshots**, and it moved 39 more — every one of those 39
+being the documented date drift and nothing else, which for once is **measured** rather than
+argued: the set was generated twice on the same day, once with the migration and once with it
+reverted, and the two are identical across all 117 files.
+
+**What it corrected in this file is a framework claim this file made twice.** The queued chunk
+said a real spring route needs a hand-rolled `didPush` / `didPop` because
+`AnimationController.animateWith` always reports direction forward, leaking every popped route.
+**On Flutter 3.44 that is not reachable**: `TransitionRoute.createSimulation` is the supported
+seam and the pop path uses `animateBackWith`, which sets the reverse direction. It also said **22
+call sites**; there are **23**. And it found a coupling nobody had named — see the standing
+decision, because it is the reason eight of those twenty-three do not parallax.
 
 **The fifth session of 2026-08-11 changed no board row at all either.** It finished `design.md` §11
 step 3's first half by migrating the remaining **133 call sites across 35 files**, so every button
@@ -293,12 +312,13 @@ the Android emulator, and the instruction has now won five times. So the sign-in
 covered by 32 tests — including the `dev.flutter.pigeon` assertion that would have caught the
 original — the invitation repair by 19, and the category repair by 7 including two that assert
 over **every** rendered string rather than over the slot that was wrong, and **no person has seen
-any of them**. **The two redesign chunks since are worse off, not better**: the ripple kill's 5
-tests and `AppButton`'s 51 prove the wiring and the physics, and the things they exist to deliver —
-a ripple's absence, a press that takes over mid-release, a frame budget — are all invisible to a
-widget test by construction. The debt is **seven** chunks deep and all seven are queued below
-against the next device run, sign-in first — and the seventh, the call-site sweep, repainted
-almost every screen in the app.
+any of them**. **The three redesign chunks since are worse off, not better**: the ripple kill's 5
+tests, `AppButton`'s 51 and the route transition's 30 prove the wiring and the physics, and the
+things they exist to deliver — a ripple's absence, a press that takes over mid-release, a page that
+leaves from the velocity it arrived with, a frame budget — are all invisible to a
+widget test by construction. The debt is **eight** chunks deep and all eight are queued below
+against the next device run, sign-in first — the seventh, the call-site sweep, repainted
+almost every screen in the app, and the eighth changed how every one of them is entered and left.
 
 **One thing the run could not prove, stated because it would otherwise look proved.** The
 manager membership used for the profit role-boundary check was activated by a scratchpad Admin
@@ -434,17 +454,17 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1650** |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1680** |
 | Functions | `npm --prefix functions test` | **409** ⚠️ carried once, see below |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** ⚠️ carried once |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ⚠️ carried once |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⚠️ carried once; one flaky test, see below |
 
-**2253 tests across five suites** — and there is a sixth figure that is deliberately not in
-this table: `flutter test --no-pub --concurrency=1 tool/screenshots` runs **90 captures**
-writing **114** images, and it asserts nothing, which is why it is not counted here. It was 78 and
-101 before the `AppButton` state matrix added 12 of each, and 113 before the call-site sweep pushed
-one more screen past the fold.
+**2283 tests across five suites** — and there is a sixth figure that is deliberately not in
+this table: `flutter test --no-pub --concurrency=1 tool/screenshots` runs **93 captures**
+writing **117** images, and it asserts nothing, which is why it is not counted here. It was 78 and
+101 before the `AppButton` state matrix added 12 of each, 113 before the call-site sweep pushed
+one more screen past the fold, and 114 before the route transitions added 3.
 
 **The Flutter figure did not move across the call-site sweep, and that is the right outcome rather
 than a gap.** A migration that adds no behaviour and no component should add no test; what it
@@ -452,8 +472,12 @@ changed is four test files that were asking a correct question — "can this be 
 Material type that is going away. They ask it through `test/support/buttons.dart` now, which is
 itself marked for deletion with the last `ButtonStyleButton` in `lib/`.
 
-⚠️ **The call-site sweep carried all four, which is carry 1 of the 2 the rule allows.** `git diff`
-over `functions/`, `firestore.rules` and `rules-tests/` prints **zero lines**; the sweep changed
+⚠️ **The route-transition chunk carried all four, which is carry 2 of the 2 the rule allows — so
+the next chunk measures them, whatever it touches.** `git diff` over `functions/`,
+`firestore.rules` and `rules-tests/` prints **zero lines**; it changed Dart and nothing else.
+
+⚠️ **The call-site sweep carried all four before it, which was carry 1.** `git diff`
+over `functions/`, `firestore.rules` and `rules-tests/` printed **zero lines**; the sweep changed
 Dart and nothing else.
 
 ✅ **The carry streak before it was reset: all four non-Flutter figures were measured on 2026-08-11
@@ -470,6 +494,11 @@ suite among them can observe a Dart file and `git diff` over those three paths i
 measurement. **Re-measure in any chunk that touches JavaScript, TypeScript, or a rule**, and a
 chunk that carries must say so. **Two consecutive carries is the limit**: a third measures, on
 the same reasoning that made the third consecutive unreachable callable a surface instead.
+
+**The route-transition chunk took Flutter 1650 → 1680** (30 new: 24 in `test/ui/routes_test.dart`,
+5 in `test/ui/spring_test.dart` for `SettlingSpringSimulation`, and 1 in `test/ui/tokens_test.dart`
+for `motion.routeParallax`). The other four did not move and were **carried**, not measured — see
+the carry rule above, which the next chunk now has to satisfy.
 
 **The `AppButton` chunk took Flutter 1598 → 1650** (52 new: 10 in `test/ui/spring_test.dart`,
 17 in `test/ui/press_test.dart`, 24 in `test/ui/buttons_test.dart`, and 1 in
@@ -1684,6 +1713,76 @@ The guarantees are settled, not open:
 screen, it grew past the fold because every button now reserves the focus ring's 4px gutter and
 honours a 48dp minimum.
 
+### A route arrives on a spring, and one parallax is deliberately missing
+
+Built 2026-08-12, finishing `design.md` §11 step 2. `AppPageRoute` is a `PageRoute` subclass and
+all **23** `MaterialPageRoute` call sites in the migrated tree are now it. It changed
+`firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+
+The decisions are settled, not open:
+
+1. **The SDK supplies the seam this file said did not exist.**
+   `TransitionRoute.createSimulation({required bool forward})` is called on every push and pop,
+   and the pop path hands the result to `AnimationController.animateBackWith`, which sets the
+   reverse direction — so the finished route reaches `dismissed`, `finalizeRoute` runs, and the
+   leak this chunk was scoped around **cannot happen through this API**. Verified rather than
+   believed: a hundred pushes and pops, each waited on through `Route.completed`.
+2. **Interruptibility is a property of *when* that hook is called, not of code written here.**
+   `createSimulation` runs **before** the controller is stopped, so `controller.value` and
+   `controller.velocity` inside it are the live figures of the transition still in flight. A pop
+   mid-push leaves from where the page is at the speed it is going, which is §2.4's first rule.
+3. **`SettlingSpringSimulation`, because a spring stops near its end rather than at it.**
+   `SpringSimulation` is done within `Tolerance.distance` — `1e-3` — and `AnimationController`
+   keeps whatever it last reported. On a press that is invisible; on a route it is a page parked a
+   fraction of a pixel off its own edge, rendering every glyph on a fractional offset, for as long
+   as it is on screen. **`SpringDrive` still uses the plain one on purpose**: the screenshots were
+   captured against it and swapping it would move images for a difference nobody can see.
+4. **Two rows, latched once.** §6.2 gives compact a horizontal spring on `spring.smooth` with the
+   covered surface at `motion.routeParallax`, and expanded a fade-through on `motion.medium` with
+   no horizontal travel — a duration, correctly, because nothing in it moves. The row is decided
+   in `install()` and held for the life of the route; a transition that changed identity half way
+   through because a window was resized would be worse than either row.
+5. **§4.1's `medium` is not named by §6.2, and the literal reading is taken.** `expanded` is
+   `>= 1024`, so 768–1023 gets the compact row — the same grouping §4.3 uses for the sale pane.
+   **No fourth breakpoint constant was declared**; `tenantTableBreakpoint` is already 1024.
+6. **Reduced motion is a simulation that is already done**, not a shortened duration.
+   `transitionDuration = Duration.zero` is unreachable — the duration is a getter with no context —
+   and `AnimationController`'s own 0.05 scaling reads
+   `SemanticsBinding.instance.disableAnimations`, a different flag from the one §2.4 names and one
+   a widget test setting `MediaQueryData.disableAnimations` cannot see.
+7. **The route reads `MediaQuery` without depending on it**, through
+   `context.getInheritedWidgetOfExactType<MediaQuery>()`. A route is not a widget and the context
+   it holds is the *navigator's*; `MediaQuery.of` there would rebuild the navigator on every
+   metrics change, the keyboard opening included.
+
+**The eighth push in `tenant_routing_shell.dart` was missed by whatever counted the call sites**:
+this file said 22 and there are 23.
+
+#### The parallax that is missing, and the coupling behind it
+
+`MaterialApp.home` builds the landing route as a `MaterialPageRoute`, and
+`MaterialRouteTransitionMixin.canTransitionTo` refuses to animate a route out under one it does
+not recognise **unless that route offers a `delegatedTransition`**. Eight of the twenty-three
+pushes leave the landing route. The delegated transition was built, it worked, and it was taken
+out again, because it cost **an extra Firestore read on every push and every pop** — `sales,
+returns, sales` where the same tap used to read `sales, returns`.
+
+**The mechanism, because four failing tests named none of it.** `ModalRoute.didChangeNext` sets
+`receivedTransition` when the incoming route offers one, and `_buildFlexibleTransitions` wraps the
+covered route's own transition in it. That changes the **shape** of the tree above the page, so the
+page — which hangs off `route._subtreeKey`, a `GlobalKey` — is re-parented rather than updated. A
+re-parented subtree rebuilds; `_TenantSaleHistoryPanelState.build` hands `TenantRouteGuard` a
+**fresh `load` closure** every rebuild; and the guard's `didUpdateWidget` compares
+`oldWidget.load != widget.load` **by identity** and reloads.
+
+`claude.md` hard rule 1 decides it: a UI change never issues a repository call. So 15 pushes
+parallax and 8 do not, **and both halves are asserted** — the day the coupling closes, the test
+pinning the boundary fails and gets rewritten in the same change.
+
+**The coupling predates this chunk and is queued below as its own item.** It is a latent defect
+either way: any rebuild of any of those panels, from any cause, already re-queries. Repairing it is
+a behaviour change and does not belong in a visual chunk.
+
 ### A category is named, and a document ID is not a name
 
 Built 2026-08-11, closing finding 5. It changed `firestore.rules` not at all and nothing in
@@ -2680,6 +2779,16 @@ enormous expected-denial traces.
   lives on the **binding** rather than on the test, the next test in the same file fails too and
   looks unrelated. Multi-touch is fine — several `startGesture` pointers work — it is mice that
   are singular.
+- **A route that offers a `delegatedTransition` re-parents the page below it, and that page
+  reloads.** Found 2026-08-12. `ModalRoute.didChangeNext` sets `receivedTransition` when the
+  incoming route offers one and the covered route's own does not match; `_buildFlexibleTransitions`
+  then changes the **shape** of the tree above the page, so the page — which hangs off
+  `route._subtreeKey`, a `GlobalKey` — is re-parented rather than updated, and a re-parented
+  subtree rebuilds. Any panel that builds a closure in `build` and hands it to something comparing
+  closures by identity then re-runs it. Here that is `TenantRouteGuard`, and the symptom is an
+  extra Firestore read per push and per pop that looks like a test timing problem: four tests
+  failed on `reader.queries.last` naming the *outer* panel's query. **A transition mechanism can
+  cost a network read** — check the query log, not just the picture.
 - **A `ThemeExtension` field named `type` breaks the extension silently.**
   `ThemeExtension` declares `Object get type` and `ThemeData.extensions` is keyed by it, so
   a field of that name makes `Theme.of(context).extension<T>()` answer `null` for ever while
@@ -2822,72 +2931,73 @@ rather than only here.** `fakes.dart` derives its business dates from `DateTime.
 re-running on a different day moves about **39 of the images** with nothing behind them;
 tracking the output would put those 39 into every future diff. The harness is tracked, the
 output is not, and a baseline is regenerated the same day it is compared against. The set is
-**114 images from 90 captures** since the `AppButton` state matrix; the 39 was measured against
-the 101 that preceded it and has not been re-measured, because the 12 new ones are a component
-gallery with no business date in them.
+**117 images from 93 captures** since the route-transition chunk added 3. **The 39 was
+re-measured on 2026-08-12 and it is still 39**, which is the first time that figure has been
+confirmed rather than carried: the set was generated twice the same day, once with the route
+migration and once with it reverted, and those two are identical across all 117 files, so the
+whole of the day-to-day delta is the business date.
 
 ---
 
 ## Next bounded chunk
 
-**Route transitions — step 2's fourth and last part, as a chunk of its own.** Step 3's first half
-is finished: 155 of 162 buttons are `AppButton`s and the 7 that are not are step 7's. This is the
-one thing standing between step 2 and done, and it has been deferred twice with a reason each
-time.
-
-**Why it is a chunk rather than a rider, established 2026-08-11 against the SDK.** A
-`PageTransitionsBuilder` **cannot produce a spring**. It only reshapes an animation the route
-already drives on a duration, so anything written through `pageTransitionsTheme` — the one
-mechanism that reaches every `MaterialPageRoute` without touching a call site — is a curve wearing
-a spring's name, which is exactly what this file said would "satisfy the step number while
-contradicting the section it comes from".
+**`AppTextField` — step 3's second half, and the step that closes finding 4.** Step 2 is finished
+and step 3's first half with it: every route arrives on a spring and 155 of 162 buttons are
+`AppButton`s, the other 7 being step 7's.
 
 **What it has to build:**
 
-- **A `PageRoute` subclass driving its own controller with a `SpringSimulation`**, on `SpringDrive`
-  or on the same physics. `spring.smooth` is §2.4's row for route transitions.
-- **22 `MaterialPageRoute` call-site swaps** in the migrated tree.
-- **Care on the pop path, which is the part that bites.** `TransitionRoute.didPop` reverses the
-  controller, and `AnimationController.animateWith` always reports direction *forward*, so a
-  simulation driven to 0 finishes as `completed` rather than `dismissed` — and `dismissed` is what
-  `_handleStatusChanged` waits for before calling `finalizeRoute`. A naive version leaks every
-  popped route. Verify against a route that is pushed and popped a hundred times before believing
-  it.
-- **§2.4's reduced-motion clause**: under `disableAnimations` a transition is instant.
+- **`AppTextField`, to §5.2's specification**: persistent label above the field (`label.md`,
+  `text.secondary`), `surface.sunken` well, `border.strong` 1px, `radius.sm`, 48h at comfortable
+  density. Placeholder is an *example*, never a restatement of the label. Helper text is
+  `caption` / `text.tertiary`, one line. Error **replaces** helper text at `status.problem.fg`
+  with the border at `status.problem.border`, and the message states what to do — never colour
+  alone. Counters render only above 80% of the limit.
+- **Its full state matrix in the harness**, per `claude.md` hard rule 5. For a field that is
+  `enabled`, `hover`, `focus-visible`, `disabled`, `error`, `read-only` and `empty` — seven of
+  §5's nine. `pressed` and `loading` do not apply to a text field and the chunk says so rather
+  than faking them.
+- **Roughly twenty call sites**, and they are two incompatible implementations rather than one:
+  bare `TextField` in the migrated tree, and `PillInput` on sign-in, which draws its own well, its
+  own label and its own focus glow while reading nothing from the theme.
+- **Finding 4's category picker.** The add-product form asks for a category with the chip row that
+  is actually the picker about a thousand pixels away. §4.2's 720px form width plus a field
+  component rewrites that form, which is why the finding was moved here rather than repaired
+  twice.
+- **The two `tokens_test.dart` divergences this step closes.** `surface.sunken` vs
+  `inputDecorationTheme.fillColor`, and `radius.sm` vs the input border's radius, are asserted as
+  divergences on purpose; when this step lands they fail and move into the agreement test in the
+  same change.
 
-**Explicitly excluded from it:** `AppTextField` and `AppSelect`, which are step 3's second chunk —
-where finding 4's missing category picker closes and where the two incompatible field
-implementations become one; `checkout_cart_panel.dart`'s 7 buttons and the whole sale path, step
-7; the 13 `IconButton` call sites, which have no component yet and belong with whatever replaces
-them; every other component (`StatusBadge` is step 4, `AppScaffold` step 5); every server file and
-`firestore.rules`; deployment; and every standing exclusion below.
+**`AppSelect` is dropped from §5.1 — the product owner's call, taken 2026-08-12.**
+`DESIGN-AUDIT.md` §6 recorded that nothing exists for it to replace, and the alternatives were to
+drop it or to re-scope it to the `ChoiceChip` group pattern. It is dropped: `design.md` §5.1 is
+amended in this chunk and nothing is built speculatively. The chip-group pattern is not orphaned
+by that — it is `FilterChipBar`, which is already in §5.1 at priority 2.
+
+**Explicitly excluded from it:** `checkout_cart_panel.dart`'s 7 buttons and the whole sale path,
+step 7; the 13 `IconButton` call sites, which have no component yet and belong with whatever
+replaces them; every other component (`StatusBadge`, `Callout` and `Disclosure` are step 4,
+`AppScaffold` and `PageHeader` step 5a); the **navigation model**, step 5b, which
+`DESIGN-AUDIT.md` decision 3 splits out as a behaviour change needing a device check; the sign-in
+screen's own visual design, step 9 — `PillInput` is replaced here, but §4.4's uppercase labels,
+pill well and green glow are that step's; every server file and `firestore.rules`; deployment; and
+every standing exclusion below.
+
+**The next chunk must measure the four non-Flutter suites.** Two consecutive chunks have carried
+them and the rule allows two.
 
 **One thing to delete when its moment comes, so it is not inherited silently.**
 `test/support/buttons.dart` exists only because `lib/` holds both button systems. When
 `checkout_cart_panel.dart` is migrated in step 7, the last `ButtonStyleButton` goes with it and
 that file should be deleted and its four callers pointed at `AppButton` directly.
 
-**Route transitions are now a chunk of their own, and the reason is a framework fact rather than a
-preference.** This file carried step 2's unfinished fourth part into the `AppButton` chunk on the
-reasoning that a spring transition needs a spring substrate. The substrate exists now and the
-transition still does not fit: **a `PageTransitionsBuilder` cannot produce a spring.** It only
-reshapes an animation the route already drives on a duration, so anything written through
-`pageTransitionsTheme` — the one mechanism that reaches every `MaterialPageRoute` without touching
-a call site — is a curve wearing a spring's name, which is precisely what this file said would
-"satisfy the step number while contradicting the section it comes from". A real one is a
-`PageRoute` subclass driving its own controller with a `SpringSimulation`, **22 `MaterialPageRoute`
-call-site swaps**, and care on the pop path so the route still finalizes: `didPop` reverses the
-controller and a simulation driven forward to 0 reports `completed` rather than `dismissed`, so a
-naive version leaks every popped route. The product owner moved it out on 2026-08-11.
-
-**App Check was passed over a fifth time, and the fifth deferral has its own reason, as this file
-required.** The reason is the same decision, not a new one: the product owner redirected to the
-redesign and the redesign is now mid-step — `AppButton` exists with 146 of its call sites
-unmigrated, and stopping there to research an unrelated blocker leaves the app with two button
-implementations for longer than necessary. **The sixth deferral should not be granted on that
-basis**: finishing step 3's first half is the natural stopping point, and App Check is still the
-only queued item that would move a red row. The research chunk itself is unchanged and sits at the
-head of the preference order below.
+**App Check was passed over a sixth time, and the previous entry said the sixth should not be
+granted on the basis the fifth was.** It is not: the reason is a fresh instruction rather than an
+inherited one. The product owner asked on 2026-08-12 for the redesign to be run through to the end
+of its visual steps without stopping, and named 5b and 7 as the two that stay out. App Check is
+still **the only queued item that would move a red row**, and it is still at the head of the
+preference order below. It should be taken the moment the redesign's visual steps are done.
 
 **A device run was attempted on 2026-08-11 and got half way, which is worth recording so the next
 session does not repeat the dead ends.** The app **builds and runs on Chrome** against the live
@@ -2913,11 +3023,12 @@ preference order:
   which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
   that is not also serving the emulators.
 
-**The device-run debt is therefore now seven chunks deep**, and `AppButton` and its call-site
-sweep are the two that most need a device — between them they changed how nearly every screen in
-the app looks and how every button in it feels. Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
-`1b2b13b`, **the ripple kill**, or **`AppButton`**. Between them that is 115 tests, 113
-screenshots, and no eyes. **Whenever the next device run happens, those come first** — for
+**The device-run debt is therefore now eight chunks deep**, and `AppButton`, its call-site
+sweep, and the route transitions are the three that most need a device — between them they changed
+how nearly every screen in the app looks, how every button in it feels, and how every screen is
+entered and left. Nobody has looked at the sign-in repair, the invitation repair, the category
+repair, commit `1b2b13b`, **the ripple kill**, **`AppButton`**, or **`AppPageRoute`**. Between them
+that is 145 tests, 117 screenshots, and no eyes. **Whenever the next device run happens, those come first** — for
 sign-in, an empty password, a wrong password, then editing a field; for the invitation, the refusal
 an identity that was unverified at invite time receives; for the category wording, the seeded
 product filed under `cat-not-cached` in "Manage catalog" and an import preview of a sheet naming
@@ -2974,9 +3085,9 @@ finished.
   glow. It moved no board row and no rollout step; it moved the **Design system** track from 8% to
   15%. Two screenshots moved and neither shows a ripple — see the standing decision, and the new
   standing trap about a capture case that taps without settling. **Step 2's fourth part, route
-  transitions, is deliberately not done** and rides with `AppButton`: §2.4 requires a spring, and
-  a transition written on a duration would satisfy the step number while contradicting the section
-  it comes from.
+  transitions, was left out of it**: §2.4 requires a spring, and a transition written on a
+  duration would satisfy the step number while contradicting the section it comes from. That
+  reasoning held; it was taken as its own chunk on 2026-08-12 and step 2 is now finished.
 - **~~Stop showing a category ID to a person~~** — **done 2026-08-11**, closing finding 5. It
   moved no board row and no rollout step, and it moved none of the 101 screenshots either — for a
   reason that is recorded rather than celebrated: the harness files every seeded product under a
@@ -2999,14 +3110,22 @@ finished.
   diffs of the migration — 75 of 101 and then 74 of 113. Both have their own standing decision
   above, including the three defects the component found in its own first draft and the two
   successive corrections to this file's estimate of the work's size.
-- **The design system, step 3, second half: `AppTextField` and `AppSelect`** — the other half of
-  the step, and the one that closes **finding 4**, the add-product form's category picker.
-  It is where the two incompatible field implementations become one: bare `TextField` in the
-  migrated tree, and `PillInput` on sign-in, which draws its own well, its own label, and its own
-  focus glow while reading nothing from the theme. Roughly twenty call sites. `AppSelect` has
-  nothing to replace and `DESIGN-AUDIT.md` §6 says to drop it from §5.1 or re-scope it to the
-  `ChoiceChip` group pattern actually in use — **that is a question for the product owner before
-  this chunk starts, not a thing to decide inside it.**
+- **~~The design system, step 2, fourth part: route transitions~~** — **done 2026-08-12**, and with
+  it step 2. `AppPageRoute` at all **23** call sites, §6.2's two rows, and the whole thing about
+  a third the size this file predicted because Flutter 3.44's `TransitionRoute.createSimulation`
+  is the seam it said did not exist. It moved no board row and no rollout step, moved the **Design
+  system** track 30% to 35%, added 30 tests and 3 screenshots, and its own standing decision above
+  records the parallax it deliberately leaves off the landing route and why.
+- **`TenantRouteGuard` reloads whenever its `load` closure is re-created**, which is on every
+  rebuild of every panel that hosts one. `didUpdateWidget` compares `oldWidget.load !=
+  widget.load` by identity, and every `build` makes a new closure, so an unrelated rebuild costs a
+  Firestore read. Found 2026-08-12 by the route chunk, which had to abandon a correct transition
+  because of it — see that standing decision. **It is a behaviour change and does not belong in a
+  visual chunk**; the shape of the fix is a stable identity for "the loader changed", which is
+  probably the key the caller already computes. Closing it is what would let the landing route
+  parallax.
+- **The design system, step 3, second half: `AppTextField`** — the current chunk. `AppSelect` was
+  dropped from §5.1 by the product owner on 2026-08-12; see the chunk above.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the

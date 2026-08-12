@@ -2,6 +2,7 @@
 import 'package:flutter/services.dart';
 
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../tenancy/tenant_repository.dart';
@@ -74,7 +75,7 @@ final class _TenantShiftPanelState extends State<TenantShiftPanel> {
     final sessions = _sessions;
     if (reader == null || sessions == null) return;
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: sessions,
           child: TenantShiftHistoryScreen(

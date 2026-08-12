@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
@@ -418,7 +419,7 @@ final class _CatalogContents extends StatelessWidget {
   void _openStockRoute(BuildContext context, TenantProduct product) {
     final controller = TenantSessionScope.of(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: controller,
           child: productStockRoute!(product),
@@ -432,7 +433,7 @@ final class _CatalogContents extends StatelessWidget {
   void _openAdjustmentFeed(BuildContext context) {
     final controller = TenantSessionScope.of(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: controller,
           child: adjustmentFeedRoute!(),
@@ -446,7 +447,7 @@ final class _CatalogContents extends StatelessWidget {
   void _openMovementFeed(BuildContext context) {
     final controller = TenantSessionScope.of(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: controller,
           child: movementFeedRoute!(),

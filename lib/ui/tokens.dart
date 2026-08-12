@@ -872,6 +872,7 @@ final class AppMotion {
     required this.medium,
     required this.long,
     required this.pressScale,
+    required this.routeParallax,
   });
 
   /// Press states, chips, toggles, stepper.
@@ -897,6 +898,19 @@ final class AppMotion {
   /// ripple: opacity plus scale at `spring.snappy`, and no expanding circle.
   final double pressScale;
 
+  /// How far the surface being covered travels while the incoming one arrives,
+  /// as a fraction of its own width.
+  ///
+  /// §6.2's "Route push (compact)" row: *incoming full / outgoing parallax at
+  /// 30%*. It lives here rather than in the route because it is the same kind
+  /// of value [pressScale] is - a figure `design.md` states, which a widget
+  /// must not restate.
+  ///
+  /// **It has no counterpart on the expanded row**, which is a fade-through
+  /// with no horizontal travel at all, so nothing reads this above
+  /// `tenantTableBreakpoint`.
+  final double routeParallax;
+
   static const AppMotion standard = AppMotion(
     snappy: SpringDescription(mass: 1, stiffness: 380, damping: 32),
     smooth: SpringDescription(mass: 1, stiffness: 220, damping: 30),
@@ -919,6 +933,7 @@ final class AppMotion {
       curve: Curves.easeInOutCubic,
     ),
     pressScale: 0.97,
+    routeParallax: 0.3,
   );
 
   /// Every spring by its `design.md` name.
@@ -953,6 +968,7 @@ final class AppMotion {
       medium: AppMotionDuration.lerp(a.medium, b.medium, t),
       long: AppMotionDuration.lerp(a.long, b.long, t),
       pressScale: lerpDouble(a.pressScale, b.pressScale, t)!,
+      routeParallax: lerpDouble(a.routeParallax, b.routeParallax, t)!,
     );
   }
 }

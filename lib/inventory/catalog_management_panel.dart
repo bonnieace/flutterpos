@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -497,7 +498,7 @@ final class _TenantCatalogManagementPanelState
     if (builder == null || _busy) return;
     final controller = TenantSessionScope.of(context);
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (context) =>
             TenantSessionScope(controller: controller, child: builder(context)),
       ),

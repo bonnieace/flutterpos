@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
@@ -104,7 +105,7 @@ final class _TenantReceiptLookupPanelState
   void _openReturns(BuildContext context, TenantSale sale) {
     final sessions = TenantSessionScope.read(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: sessions,
           child: TenantSaleReturnsScreen(

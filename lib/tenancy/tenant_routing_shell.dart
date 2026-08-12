@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import 'account_verification.dart';
 import 'email_delivery_status.dart';
 import 'platform_tenant_review.dart';
@@ -1500,7 +1501,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => TenantSessionScope(
                             controller: controller,
                             child: checkoutRoute!(controller),
@@ -1515,7 +1516,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   onPressed: () {
                     final controller = TenantSessionScope.of(context);
                     Navigator.of(context).push(
-                      MaterialPageRoute<void>(
+                      AppPageRoute<void>(
                         builder: (_) => TenantSessionScope(
                           controller: controller,
                           child: TenantCatalogScreen(
@@ -1553,7 +1554,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => TenantSessionScope(
                             controller: controller,
                             child: catalogManagementRoute!(reader),
@@ -1574,7 +1575,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => TenantSessionScope(
                             controller: controller,
                             child: checkoutConfigurationRoute!(reader),
@@ -1592,7 +1593,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => TenantSessionScope(
                             controller: controller,
                             child: dailySummaryRoute!(reader),
@@ -1610,7 +1611,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => TenantSessionScope(
                             controller: controller,
                             child: receiptLookupRoute!(reader),
@@ -1628,7 +1629,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => TenantSessionScope(
                             controller: controller,
                             child: auditLogRoute!(reader),
@@ -1646,7 +1647,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => TenantSessionScope(
                             controller: controller,
                             child: TenantStaffDirectoryScreen(reader: reader),

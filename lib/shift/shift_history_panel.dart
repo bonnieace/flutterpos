@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import '../reporting/shift_amendment_feed.dart';
 import '../reporting/shift_amendment_feed_panel.dart';
 import '../returns/return_actions.dart';
@@ -157,7 +158,7 @@ final class _TenantShiftHistoryPanelState
   void _openSales(BuildContext context, TenantSaleHistoryRequest request) {
     final sessions = TenantSessionScope.read(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: sessions,
           child: TenantSaleHistoryScreen(
@@ -180,7 +181,7 @@ final class _TenantShiftHistoryPanelState
   void _openCorrections(BuildContext context, String shiftId) {
     final sessions = TenantSessionScope.read(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: sessions,
           child: TenantShiftAmendmentScreen(

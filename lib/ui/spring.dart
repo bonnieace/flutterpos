@@ -109,3 +109,44 @@ final class SpringDrive {
   void dispose() => _controller.dispose();
 }
 
+/// A [SpringSimulation] that finishes **exactly** where it was asked to.
+///
+/// [SpringSimulation] decides it is done against [Tolerance], whose defaults
+/// are absolute, so the last position it reports is within `1e-3` of the end
+/// rather than at it - and [AnimationController] keeps whatever the simulation
+/// last reported rather than snapping. Nothing rounds it away afterwards.
+///
+/// **On a press that residue is invisible and on a route it is not.** A press
+/// spring drives a 0-to-1 progress that a scale is lerped from, so `1e-3` of it
+/// is three hundred-thousandths of a scale factor. A route transition drives a
+/// whole screen across a whole screen width, so the same `1e-3` parks the
+/// arrived page a fraction of a pixel off its own edge **for as long as it is
+/// on screen** - and a page on a fractional offset renders every glyph on one.
+///
+/// **[SpringDrive] deliberately does not use this**, and the reason is
+/// evidence rather than taste: the 114 screenshots were captured against the
+/// plain simulation, and swapping it under them would move a set of images for
+/// a difference no one can see. When a chunk has a reason to regenerate them
+/// anyway, this is a safe change to make there.
+final class SettlingSpringSimulation extends Simulation {
+  SettlingSpringSimulation(
+    SpringDescription spring,
+    double start,
+    double end,
+    double velocity,
+  ) : _spring = SpringSimulation(spring, start, end, velocity),
+      _end = end;
+
+  final SpringSimulation _spring;
+  final double _end;
+
+  @override
+  double x(double time) => isDone(time) ? _end : _spring.x(time);
+
+  @override
+  double dx(double time) => isDone(time) ? 0 : _spring.dx(time);
+
+  @override
+  bool isDone(double time) => _spring.isDone(time);
+}
+

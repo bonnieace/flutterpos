@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -321,7 +322,7 @@ void openTenantStockAdjustmentFeed(
 }) {
   final controller = TenantSessionScope.of(context);
   Navigator.of(context).push(
-    MaterialPageRoute<void>(
+    AppPageRoute<void>(
       builder: (_) => TenantSessionScope(
         controller: controller,
         child: TenantStockAdjustmentFeedScreen(reader: reader, product: product),

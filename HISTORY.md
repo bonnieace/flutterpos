@@ -19338,3 +19338,230 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## A route arrives on a spring - 2026-08-12
+
+`design.md` §11 step 2's fourth and last part, and with it **step 2 is finished**. `AppPageRoute`
+drives its own controller with a `SpringSimulation` on `spring.smooth`, and all **23**
+`MaterialPageRoute` call sites in the migrated tree are now it. §6.2's two route rows are both
+implemented: horizontal with a 30% parallax below `tenantTableBreakpoint`, fade-through on
+`motion.medium` at or above it.
+
+### `PLAN.md` predicted a leak that this SDK cannot produce, and the correction matters
+
+The chunk was scoped around a framework fact: `AnimationController.animateWith` always reports
+direction *forward*, so a simulation driven to 0 finishes `completed` rather than `dismissed`,
+`TransitionRoute._handleStatusChanged` never calls `finalizeRoute`, and every popped route leaks.
+That was true of the API this file had in mind. **On Flutter 3.44 `TransitionRoute` takes the
+simulation itself**: `createSimulation({required bool forward})` is called on every push and pop,
+and the pop path hands the result to `AnimationController.animateBackWith`, which sets the reverse
+direction. So the hand-rolled `didPush` / `didPop` override the chunk was sized for was not
+written at all.
+
+**Two consequences, and the second is the better one.** The route is about 80 lines of code
+rather than 250. And **interruptibility comes free and correct**: `createSimulation` is called
+*before* the controller is stopped, so `controller.value` and `controller.velocity` inside it are
+the live figures of the transition still in flight. A pop arriving mid-push leaves from where the
+page actually is, at the speed it is actually going.
+
+The leak was still verified rather than assumed - `routes_test.dart` pushes and pops a hundred
+times and waits on `Route.completed` for every one, because that future resolves in
+`TransitionRoute.dispose`, which only runs if the navigator finalized the route.
+
+### `SettlingSpringSimulation`, and why the plain one is not enough for a route
+
+`SpringSimulation` decides it is done against `Tolerance`, whose defaults are absolute, and
+`AnimationController` keeps whatever the simulation last reported. So a spring driven to 1 stops
+at about `0.999`. On a press that is three hundred-thousandths of a scale factor. **On a route it
+is a whole page parked a fraction of a pixel off its own edge for as long as it is on screen**,
+and a page on a fractional offset renders every glyph on one.
+
+`SettlingSpringSimulation` wraps the spring and reports the exact end once `isDone` is true.
+`spring_test.dart` measures both: the plain simulation's last position is `isNot(1.0)` and within
+`1e-3` of it, the wrapped one's is `1.0`, and every frame before that is identical between the two
+so the wrapper cannot become a second set of physics.
+
+**`SpringDrive` deliberately still uses the plain one.** The 114 screenshots were captured against
+it and swapping it under them would move a set of images for a difference nobody can see. Recorded
+in the class doc as a safe change for whichever chunk regenerates them anyway.
+
+### The delegated transition was built, measured, and taken out again
+
+**This is the finding of the session.** `MaterialApp.home` builds the landing route as a
+`MaterialPageRoute`, and `MaterialRouteTransitionMixin.canTransitionTo` refuses to animate a route
+out under one it does not recognise **unless that route offers a `delegatedTransition`**. Eight of
+the twenty-three pushes leave the landing route, so without one they slide in over a surface that
+does not move.
+
+It was implemented, and it worked, and it cost **an extra Firestore read on every push and every
+pop**:
+
+```text
+with    delegatedTransition:  sales, returns, sales
+without delegatedTransition:  sales, returns
+```
+
+The mechanism, because the four failing tests named none of it. `ModalRoute.didChangeNext` sets
+`receivedTransition` when the incoming route offers one; `_buildFlexibleTransitions` then wraps
+the covered route's own transition in it. That changes the **shape** of the widget tree above the
+page, so the page - which hangs off `route._subtreeKey`, a `GlobalKey` - is re-parented rather
+than updated. A re-parented subtree rebuilds. `_TenantSaleHistoryPanelState.build` hands
+`TenantRouteGuard` a **fresh `load` closure** on every rebuild, and the guard's `didUpdateWidget`
+compares `oldWidget.load != widget.load` **by identity**, so it reloads.
+
+`claude.md` hard rule 1 - a UI change never issues a repository call - decides it on its own. The
+parallax therefore stops at the boundary between the two route kinds: the 15 pushes that cover
+another `AppPageRoute` parallax through `buildTransitions`, and the 8 that cover the landing route
+do not. **Both halves are asserted**, so the day the coupling is closed and the delegated
+transition goes back in, the test that pins the boundary fails and is rewritten in the same
+change.
+
+**The coupling is a latent defect that predates this chunk**, and it is not repaired here because
+repairing it is a behaviour change: any rebuild of any of these panels, from any cause, already
+re-queries. It is recorded in `PLAN.md` as its own queued item.
+
+### §4.1's third breakpoint is not named by §6.2, and the reading is recorded rather than assumed
+
+§6.2's route rows name `compact` and `expanded`. §4.1 defines three names, and `medium` - 768 to
+1023 - appears in neither row. The literal reading is taken: `expanded` is `>= 1024`, so
+everything below it gets the compact row, which is also the grouping §4.3 uses when it leaves the
+sale on one pane at medium. Asserted at 400, 900, 1024 and 1200 rather than left to inference.
+
+**No fourth breakpoint constant was declared.** `tenantTableBreakpoint` in `lib/ui/records.dart`
+is already 1024, and `PLAN.md`'s standing exclusion is that a further declaration makes the
+existing drift worse.
+
+### `motion.routeParallax`, the one new token
+
+§6.2 states 30% and `claude.md` hard rule 2 forbids a widget restating it, so it joins
+`pressScale` on `AppMotion` - the same kind of value, from the same section, in the same place.
+`AppMotion.lerp` interpolates it and `tokens_test.dart` pins it.
+
+### Reduced motion is a simulation, not a shorter duration
+
+§2.4: "springs collapse to instant, durations to 0". `_InstantSimulation` is already at its end
+and already done, so both rows collapse. The two alternatives were rejected for reasons worth
+keeping: `transitionDuration = Duration.zero` is unreachable, because the duration is a getter
+with no context and whether motion is disabled is a property of the surface; and
+`AnimationController`'s own handling scales durations by 0.05 off
+`SemanticsBinding.instance.disableAnimations`, which is a different flag from the one §2.4 names,
+is invisible to a widget test that sets `MediaQueryData.disableAnimations`, and is a scale rather
+than a collapse.
+
+### Reading `MediaQuery` from a route without depending on it
+
+The route resolves its row and its reduced-motion flag from the `MediaQuery` above the navigator,
+through `context.getInheritedWidgetOfExactType<MediaQuery>()` rather than `MediaQuery.of`. A route
+is not a widget and the context it has is the **navigator's**, so `MediaQuery.of` there would
+rebuild the navigator - and therefore consider every route in it - on every metrics change, the
+keyboard opening included.
+
+The row is latched in `install()` and held for the life of the route. A transition that changed
+identity half way through because a window was resized would be worse than either row.
+
+### Three screenshots that are deliberately of a frame timeline
+
+Every other capture in the harness is of a settled frame. A route transition has no settled state
+to photograph - at rest it is just the screen that arrived - so `91-route-push-compact`,
+`91-route-push-expanded` and `91-route-pop-compact` stop the clock 90ms in. `PLAN.md` records
+`31b-a-receipt-found` as a hazard for exactly this shape, where it is an accident; here it is the
+subject, and the pump budget is part of the specification of the picture. Two runs of identical
+code still hash identically, so they stay attributable.
+
+### Files changed
+
+```text
+lib/ui/routes.dart                                 new - AppPageRoute and its reasoning
+lib/ui/spring.dart                                 + SettlingSpringSimulation
+lib/ui/tokens.dart                                 + AppMotion.routeParallax, and its lerp
+lib/inventory/catalog_management_panel.dart        1 call site
+lib/inventory/stock_adjustment_feed_panel.dart     1
+lib/inventory/stock_movement_feed_panel.dart       1
+lib/reporting/daily_metrics_panel.dart             1
+lib/reporting/reconciliation_anomalies_panel.dart  1
+lib/reporting/reconciliation_run_panel.dart        1
+lib/reporting/shift_amendment_feed_panel.dart      1
+lib/sales/receipt_lookup_panel.dart                1
+lib/sales/sale_history_panel.dart                  1
+lib/shift/shift_history_panel.dart                 2
+lib/shift/shift_panel.dart                         1
+lib/tenancy/tenant_catalog.dart                    3
+lib/tenancy/tenant_routing_shell.dart              8
+test/ui/routes_test.dart                           new - 24 tests
+test/ui/spring_test.dart                           + 5 tests
+test/ui/tokens_test.dart                           + 1 test
+tool/screenshots/route_transitions_test.dart       new - 3 captures
+PLAN.md
+HISTORY.md
+```
+
+**`PLAN.md` said 22 call sites and there are 23.** The eighth in `tenant_routing_shell.dart` was
+missed by whatever counted them; recorded here for the same reason the button count was, which is
+that an estimate in this file becomes an acceptance criterion two sessions later.
+
+### Test commands and results
+
+```text
+flutter test --no-pub --concurrency=1                       1680 pass  (1650 -> 1680)
+flutter analyze --no-pub lib/ui lib/inventory lib/reporting
+  lib/sales lib/shift lib/tenancy test/ui                   no issues
+flutter test --no-pub --concurrency=1 tool/screenshots        93 captures, 117 images
+```
+
+The 30 new tests are 24 in `test/ui/routes_test.dart`, 5 in `test/ui/spring_test.dart`, and 1 in
+`test/ui/tokens_test.dart`.
+
+**The four non-Flutter suites are carried, which is carry 2 of the 2 the rule allows.** `git diff`
+over `functions/`, `firestore.rules` and `rules-tests/` prints **zero lines**. **The next chunk
+must measure them**, whatever it touches.
+
+### The four failures that found the delegated-transition coupling
+
+```text
+test/sales/sale_history_panel_test.dart   a sale opens the returns recorded against it
+test/shift/shift_history_panel_test.dart  a closed shift links to the sales it recorded
+test/shift/shift_history_panel_test.dart  the cashier reaches its own recent sales
+test/shift/shift_history_panel_test.dart  a corrected shift says so and opens its own corrections
+```
+
+All four assert on `reader.queries.last`, and all four failed with the *outer* panel's query
+rather than the pushed route's - which reads like a timing problem and is not one. Diagnosed by
+replacing one assertion with one that printed the whole sequence, then bisected by setting
+`delegatedTransition` to null. Both steps were reverted; `git diff` over `test/sales/` and
+`test/shift/` is empty.
+
+### Screenshots
+
+**3 added, 39 changed, none removed, 75 byte-identical.** The 39 are the documented
+`DateTime.now()` drift and **nothing else**, and that is measured rather than asserted: the set
+was generated twice today, once with the 23 call sites migrated and once with them reverted to
+`MaterialPageRoute`, and the two sets are **identical across all 117 files**. Which is the
+expected result - no existing capture pushes a route - and is the strongest form of the
+attribution the standing trap asks for.
+
+```text
+A  yesterday's set, copied to the scratchpad first   114 images
+B  today, with AppPageRoute                          117 images
+C  today, with MaterialPageRoute restored            117 images
+B vs C   0 differences
+A vs B   39 changed, 3 added
+```
+
+### What this chunk owes, and it is the same debt as the last three
+
+**Nobody has looked at any of it.** A route transition is a spring between two frames; the tests
+prove the arithmetic of the handoff and the screenshots prove the geometry at one instant, and
+neither says anything about how it feels or whether it holds a frame budget. The device-run debt
+is now **eight** chunks deep.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

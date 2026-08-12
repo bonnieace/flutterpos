@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/routes.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -397,7 +398,7 @@ final class _MovementFeedContents extends StatelessWidget {
   void _openLedger(BuildContext context, String productId) {
     final controller = TenantSessionScope.of(context);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => TenantSessionScope(
           controller: controller,
           child: productLedgerRoute!(productId),
