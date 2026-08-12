@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/records.dart';
+import '../ui/scaffold.dart';
 import '../ui/status.dart';
 
 import 'tenant_id.dart';
@@ -227,8 +228,8 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   final TenantStaffRequestIdFactory? requestIdFactory;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Staff directory')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Staff directory',
     body: TenantStaffDirectoryPanel(
       reader: reader,
       cancelInvitationCallable: cancelInvitationCallable,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -53,8 +54,8 @@ final class TenantDailySummaryScreen extends StatelessWidget {
   final List<TenantRole> salesTotalsRoles;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Daily summary')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Daily summary',
     body: TenantDailySummaryPanel(
       reader: reader,
       reconciliationRoute: reconciliationRoute,

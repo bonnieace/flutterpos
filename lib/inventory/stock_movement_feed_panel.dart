@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -44,8 +45,8 @@ final class TenantStockMovementFeedScreen extends StatelessWidget {
   final TenantProductLedgerRouteBuilder? productLedgerRoute;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Stock movements')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Stock movements',
     body: TenantStockMovementFeedPanel(
       reader: reader,
       groupReader: groupReader,

@@ -4,6 +4,7 @@ import '../tenancy/tenant_catalog.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
@@ -65,8 +66,8 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
   final TenantCatalogRequestIdFactory? requestIdFactory;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Manage catalog')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Manage catalog',
     body: TenantCatalogManagementPanel(
       reader: reader,
       writer: writer,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -18,8 +19,8 @@ final class TenantAuditLogScreen extends StatelessWidget {
   final TenantAuditEventType? eventType;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Activity log')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Activity log',
     body: TenantAuditLogPanel(reader: reader, eventType: eventType),
   );
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/scaffold.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -25,8 +26,8 @@ final class TenantProductLedgerScreen extends StatelessWidget {
   final String productId;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Product stock ledger')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Product stock ledger',
     body: TenantProductLedgerPanel(reader: reader, productId: productId),
   );
 }

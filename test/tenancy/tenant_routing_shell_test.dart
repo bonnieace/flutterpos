@@ -478,8 +478,18 @@ void main() {
         find.byKey(const ValueKey('tenant-request-slug')),
         ' New-Business ',
       );
+      // The form scrolls now. Step 5a's page header costs this route 72
+      // logical pixels of body, so at the 800 x 600 test surface the review
+      // control sits below the fold of the panel's own scroll view, and a tap
+      // at its centre lands on whatever is painted there instead.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('tenant-request-review')),
+      );
       await tester.tap(find.byKey(const ValueKey('tenant-request-review')));
       await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('tenant-request-confirm')),
+      );
       await tester.tap(find.byKey(const ValueKey('tenant-request-confirm')));
       await _pumpRouting(tester);
 

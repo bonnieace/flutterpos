@@ -4,9 +4,10 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-12**, a day that took three chunks: every route onto
+Last verified against the code on **2026-08-12**, a day that took four chunks: every route onto
 a spring, which **finishes `design.md` §11 step 2**, then `AppTextField` and `AppSelect`, which
-**finishes step 3**, and then `StatusBadge`, `Callout` and `Disclosure`, which **finish step 4**. Claims in this file are checked against source,
+**finishes step 3**, then `StatusBadge`, `Callout` and `Disclosure`, which **finish step 4**, and
+then `AppScaffold` and `PageHeader`, which **finish step 5a**. Claims in this file are checked against source,
 not inherited from the log; corrections are noted where they were made — **and the session
 before it found this file's own description of a defect wrong**, see "Found by using
 the app", finding 5. **The eighth session of 2026-08-08
@@ -97,7 +98,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~50% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3 and 4 are finished as of 2026-08-12.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); and **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, on four migrated screens. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in - and the status/notice/prose sweep across the rest of the app, which is queued as its own chunk below the way `AppButton`'s call-site sweep was. `ConfirmDialog` left step 4 for step 7. Steps 5a-12 remain. |
+| **Design system** | ~55% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 4 and 5a are finished as of 2026-08-12.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, on four migrated screens; and **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles). **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision - and the status/notice/prose sweep across the rest of the app, which is queued as its own chunk below the way `AppButton`'s call-site sweep was. `ConfirmDialog` left step 4 for step 7. Steps 5b-12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -137,6 +138,28 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The 2026-08-12 step-5a chunk changed no board row at all — not a colour and not a word of one —
+and this sentence is here so that is stated rather than left silent.** It took `design.md` §11 step
+**5a**, `AppScaffold` and `PageHeader`, which is a **redesign step rather than a capability**: no
+shop can do anything today it could not do yesterday. It moved the **Design system** track 50% to
+55% and **finishes 5a**; 5b, the navigation model, is a behaviour change and is not in it. It
+changed **no rollout step**, and it touched no rule and no `functions/` file — `git diff` over
+`functions/`, `firestore.rules` and `rules-tests/` prints zero lines. It added **28 tests** and
+**14 screenshots**, moved 85 and added 6 more full-page images from screens that grew past the
+fold, with **zero** date drift for the third chunk running.
+
+**It is the second-largest image diff of the migration, and unlike the largest it is not a theme
+repoint.** 85 of 144 images moved because the title moved out of the toolbar and into the page on
+every route at once. What did *not* move is the check: 59 identical, and every one of them is a
+screen this chunk deliberately did not touch — sign-in, the sale path, the landing route, the
+bootstrap failure, and the four component matrices.
+
+**One structural change to a screen was forced by the frame and is named rather than buried.** The
+business selector's transient panels — verify your address, request a business — used to be laid
+out at their natural height. The header costs that route 72 logical pixels of body, which at
+800 x 600 was 16 pixels more than the request form had, so the panels are now a scrollable
+`Flexible`. See the standing decision.
 
 **The 2026-08-12 step-4 chunk changed no board row at all — not a colour and not a word of one —
 and this sentence is here so that is stated rather than left silent.** It took `design.md` §11 step
@@ -502,24 +525,26 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1743** |
-| Functions | `npm --prefix functions test` | **409** ✅ measured 2026-08-12 |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured 2026-08-12 |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured 2026-08-12 |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured 2026-08-12; the known flaky test passed first try |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1771** |
+| Functions | `npm --prefix functions test` | **409** ✅ measured 2026-08-12, twice |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured 2026-08-12, twice |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured 2026-08-12, twice |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured 2026-08-12, twice; the known flaky test passed first try both times |
 
-**2346 tests across five suites, and the carry counter is at 1 of 2.** The step-4 chunk carried the
-four non-Flutter figures, which the field chunk had measured hours earlier the same day; `git diff`
-over `functions/`, `firestore.rules` and `rules-tests/` prints zero lines, which is the stronger
-measurement for a chunk that changed only Dart.
+**2374 tests across five suites, and the carry counter is back at 0 of 2.** The step-5a chunk
+**measured** all four non-Flutter suites rather than taking the last permitted carry, even though
+`git diff` over `functions/`, `firestore.rules` and `rules-tests/` prints zero lines. It cost one
+session a few minutes and it buys the next two chunks a carry each.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **111 captures** writing **144**
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **125 captures** writing **164**
 images, and it asserts nothing, which is why it is not counted here. It was 78 and 101 before the
 `AppButton` state matrix added 12 of each, 113 before the call-site sweep pushed one more screen
 past the fold, 114 before the route transitions added 3, 117 before the field matrix added 5
-captures and 10 images, and 127 before step 4 added 13 captures and 17 images — 16 of those being
-the `93-*` matrices and one being a page that grew past the fold.
+captures and 10 images, 127 before step 4 added 13 captures and 17 images — 16 of those being
+the `93-*` matrices and one being a page that grew past the fold — and 144 before step 5a added 14
+captures and 20 images, 14 of those being the `94-*` matrix and 6 being screens that grew past the
+fold once the page header took 72 pixels off their bodies.
 
 **The Flutter figure did not move across the call-site sweep, and that is the right outcome rather
 than a gap.** A migration that adds no behaviour and no component should add no test; what it
@@ -527,10 +552,11 @@ changed is four test files that were asking a correct question — "can this be 
 Material type that is going away. They ask it through `test/support/buttons.dart` now, which is
 itself marked for deletion with the last `ButtonStyleButton` in `lib/`.
 
-✅ **The carry counter is at 1 of 2.** The call-site sweep carried all four (carry 1), the
+✅ **The carry counter is at 0 of 2.** The call-site sweep carried all four (carry 1), the
 route-transition chunk carried all four (carry 2, the limit), the field chunk **measured** all four
-on 2026-08-12, and the step-4 chunk carried them again the same day (carry 1). **One more carry is
-permitted; the chunk after that measures.**
+on 2026-08-12, the step-4 chunk carried them again the same day (carry 1), and the step-5a chunk
+**measured** them rather than taking the second carry it was entitled to. **Two carries are
+available again.**
 
 ✅ **The carry streak before it was reset: all four non-Flutter figures were measured on 2026-08-11
 by the `AppButton` chunk**, which is the rule below being obeyed rather than a suite being
@@ -546,6 +572,11 @@ suite among them can observe a Dart file and `git diff` over those three paths i
 measurement. **Re-measure in any chunk that touches JavaScript, TypeScript, or a rule**, and a
 chunk that carries must say so. **Two consecutive carries is the limit**: a third measures, on
 the same reasoning that made the third consecutive unreachable callable a surface instead.
+
+**The step-5a chunk took Flutter 1743 → 1771** (28 new, all in `test/ui/scaffold_test.dart`). The
+other four were **measured and unchanged**. One existing test changed rather than being added:
+`test/tenancy/tenant_routing_shell_test.dart`'s tenant-request case gained two `ensureVisible`
+calls, because the panel it drives scrolls now — see the step-5a standing decision.
 
 **The step-4 chunk took Flutter 1709 → 1743** (34 new: 27 in `test/ui/status_test.dart`, 5 in
 `test/reporting/reconciliation_status_panel_test.dart`, and 1 each in
@@ -2038,6 +2069,78 @@ assert over **every `Text` in the tree** — `cat-` and `ct_`, the seeded shape 
 `buildCategoryIntent` derives — rather than over the slot that was wrong, because the two
 defective surfaces were exactly the two nobody was looking at.
 
+### A screen title is content, and the toolbar keeps only the way back
+
+Built 2026-08-12, finishing `design.md` §11 step **5a** — `AppScaffold` and `PageHeader`, per
+`DESIGN-AUDIT.md` §6 decision 3's split of step 5. **5b, §4.4's navigation model, is not in it and
+stays queued**: it is a behaviour change and needs a device check. `lib/ui/scaffold.dart` is 25 call
+sites across 23 files. It changed `firestore.rules` not at all and nothing in `functions/` or
+`rules-tests/` either.
+
+The decisions are settled, not open:
+
+1. **The title left the toolbar because §2.2 will not fit in one.** `display` is 32 / 40 at weight
+   700 and no 56-high Material toolbar holds it, so a screen title is a piece of *content*. §7 says
+   "Title appears once", and it now appears once — in the page, at `title.lg` below §4.1's
+   `expanded` floor and `display` at or above it. `AppBar` stays, carrying the way back and the
+   app-level actions that were already beside the title.
+2. **`AppBar` was kept rather than hand-drawn, and that is `claude.md` hard rule 1 rather than
+   laziness.** It owns the leading control and the "is there a way back from here" logic, the
+   safe-area inset, the scrolled-under treatment and the toolbar semantics. Redrawing it would move
+   routing behaviour into a visual change. The title's `header: true` semantics moved with the
+   title, so a screen reader still announces a heading.
+3. **The frame costs a route 72 logical pixels of body and that is written down rather than
+   discovered.** A toolbar *and* a header, where there used to be a toolbar: ~128 pixels of frame
+   on a 411 x 891 phone instead of 56. It buys §7's page pattern and §2.2's title roles. Whether it
+   reads as generous or as wasteful is a judgement no screenshot settles, and it is attached to the
+   next device run.
+4. **One screen had to change shape to pay for it, and it is the only one.** The business
+   selector's transient panels — verify your address, request a business — were laid out at their
+   natural height above an `Expanded` list; at 800 x 600 with the request form open the new header
+   left 16 pixels too few and the form overflowed. They are a scrollable `Flexible` now. **It is an
+   improvement rather than a concession**: at the height where it first broke, the old layout had
+   already crushed the membership list to 56 pixels to make room for the form. One test gained two
+   `ensureVisible` calls for the same reason.
+5. **The tab strip on the platform route moved out of `AppBar.bottom` and under the header.** §7's
+   order is *header → callout → filters → content*, and a tab strip is this page's filter row;
+   leaving it in the toolbar would have put it above the title it filters. The
+   `DefaultTabController` still owns the selection and nothing about what a tab does changed.
+6. **Below 768 the primary action drops under the title instead of beside it.** Laid side by side
+   on a phone, a `Row` gives an unflexed action all the width it asks for and the title takes what
+   is left — for a product name and a five-word button that is a two-pixel column of wrapped
+   letters, which fails §5.2's "never truncated" more completely than an ellipsis would. The
+   boundary is `tenantWideLayoutBreakpoint`, whose own doc comment says it answers "is there room
+   for two things side by side". **That constant had zero consumers and now has one**;
+   `DESIGN-AUDIT.md` §5 is corrected in place. Its reader `tenantLayoutIsWide` is still dead code.
+7. **The title role is resolved against the screen, not against the header's own box.** The box is
+   the page inset narrower, so a `LayoutBuilder` would have flipped `display` on at 1064 — a fourth
+   breakpoint produced by arithmetic that nobody declared and nobody could look up.
+8. **Two things were deliberately left out, both because they belong to a numbered step.** No
+   content width is constrained: §4.2's 720 / 1200 / 420 go in with the `RecordList` contract in
+   step 6, and the seam for them is now one widget instead of twenty-three. And **no density is
+   resolved** — see the open question below, which `lib/ui/tokens.dart` has been carrying since
+   step 1 and which this chunk examined and declined rather than answered.
+9. **`subtitle` and `primaryAction` ship with no call site**, which is stated rather than left to
+   be noticed. Every migrated route kept its existing title verbatim; turning a title into a
+   title-and-subtitle pair is a copy decision and §11 step 11 is the copy pass, and moving a
+   panel's primary action up into the frame crosses the screen/panel boundary that keeps these
+   routes testable. Both slots are exercised by the harness and by `test/ui/scaffold_test.dart`.
+10. **Seven raw `Scaffold`s remain and every one is named.** `checkout_cart_panel.dart` (step 7),
+    `login_screen.dart` (step 9), the landing route in `tenant_routing_shell.dart` (step 5b, and
+    see below), `_RoutingProgress`, `_TenantBootstrapError` and `PlatformRouteUnavailable` (three
+    full-page states that are `LoadingState` / `ErrorState` / `EmptyState` in §5.1, none of which
+    exists yet), and `pdf_preview_screen.dart`, which is legacy-adjacent and has no title at all.
+11. **The landing route is out, and the reason is not that it is step 5b.** It is that its title is
+    genuinely undecided: the toolbar says `membership.tenantName` and `TenantBrandingPanel`
+    underneath resolves `branding.companyName`, **and the two can differ**. Which of them is the
+    page's title is a product question, §4.4 rewrites this screen anyway, and answering it inside a
+    framing chunk would have been inventing. Its two app-bar assertions in
+    `test/tenancy/tenant_safe_landing_test.dart` are untouched and still pass.
+
+**85 of 144 images moved, 14 were added for the state matrix, and 6 more full-page images appeared**
+because those screens now grow past the fold. **59 are identical**, and that set is the check: every
+one of them is a screen this chunk did not touch.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -2210,6 +2313,43 @@ borrowed rows are the specification.** Both are fine; what is not fine is leavin
 because a later reader cannot tell a borrowed row from a specified one by looking at the code.
 **It blocks calling §5's inventory complete in step 12**, the same way the field-hover question
 blocks §9's audit.
+
+### `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
+
+**Raised again by step 5a on 2026-08-12, examined, and declined rather than answered.**
+`lib/ui/tokens.dart` has been carrying it since step 1: §3 says density is "chosen by the screen",
+the two value sets exist, and the widget that does the choosing does not. `AppScaffold` is now that
+widget — it is the only thing every route has in common — so this is the last honest place to leave
+the question open before step 6 and step 8 need it, and `DESIGN-AUDIT.md` §6 already calls it "the
+one item here that is not cosmetic in any sense".
+
+**What blocks it is one sentence in §3**: *"a touch device never gets 32px targets whatever its
+width."* Density is not a width test — it is a width test **and** an input test, and Flutter has no
+honest answer to the second. `defaultTargetPlatform` describes the OS, not the hardware: a Windows
+tablet, a Chromebook in tablet mode and a touchscreen desktop till are all pointer platforms with
+fingers on them, and this app is for a shop counter. `MouseTracker.mouseIsConnected` answers only
+after a mouse has moved. Choosing one of those and calling it the rule would put a 32 x 32 tap
+target on a real till, which is the one failure §9 makes pass/fail.
+
+**So `AppScaffold` takes no density and every screen is still comfortable**, which is the stricter
+setting on every dimension §9 measures. Nothing regressed and nothing was invented. **Either §3
+gains a rule this code can evaluate** — width alone, or width plus an explicit per-screen opt-in a
+till build can refuse — **or it gains a sentence saying comfortable is the only density that
+ships** and `AppDensity.compact` becomes documentation. **A question for the product owner, not a
+chunk.** It blocks §3 being called implemented in step 12, and step 6 and step 8 will both want the
+answer.
+
+### `design.md` states no page padding, and `AppScaffold` had to pick one
+
+**Raised by step 5a on 2026-08-12.** §4.2 states a maximum content *width* and hands it to step 6;
+no section states the inset between a page's content and the edge of the screen. `AppScaffold` uses
+`space.20`, which is on §2.3's scale and is what the three largest list screens already pad their
+bodies with, so the header lines up with the content beneath it where lining up is most visible.
+
+**Two routes pad 24 instead and are 4 pixels out until step 6 unifies them** — checkout settings and
+the landing route. This is recorded rather than fixed here because fixing it means editing bodies in
+a chunk about frames, and because step 6 is the step that owns page geometry. **Not a blocking
+question**; it becomes one only if §4 is to be called complete in step 12 without stating a value.
 
 ### Three design-system questions the redesign has refused to answer
 
@@ -3203,35 +3343,51 @@ rather than only here.** `fakes.dart` derives its business dates from `DateTime.
 re-running on a different day moves about **39 of the images** with nothing behind them;
 tracking the output would put those 39 into every future diff. The harness is tracked, the
 output is not, and a baseline is regenerated the same day it is compared against. The set is
-**127 images from 98 captures** since the field matrix added 5 captures and 10 images. **The 39 was
+**164 images from 125 captures** since step 5a added 14 captures and 20 images. **The 39 was
 re-measured on 2026-08-12 and it is still 39**, which is the first time that figure has been
 confirmed rather than carried: the set was generated twice the same day, once with the route
 migration and once with it reverted, and those two are identical across all 117 files, so the
 whole of the day-to-day delta is the business date.
 
-**The field chunk is the proof the rule works.** Its baseline was generated a few hours earlier the
-same day, so the drift was **zero** and the diff was 10 added, 32 changed, 85 identical — every one
-of the 32 a screen that holds a field or a select, with nothing to explain away. Two chunks on the
-same day is the cheapest arrangement this harness has: the second one gets a free baseline.
+**The field chunk is the proof the rule works, and step 5a is the proof it keeps working.** The
+field chunk's baseline was generated a few hours earlier the same day, so the drift was **zero** and
+the diff was 10 added, 32 changed, 85 identical. Step 5a, four chunks into the same day, got the
+same free baseline: **zero drift, 20 added, 85 changed, 59 identical** — and the 59 are the whole
+check, because every one of them is a screen it deliberately did not touch. **Four chunks on one day
+is the cheapest arrangement this harness has had**; each one after the first compares against a
+baseline that costs nothing.
 
 ---
 
 ## Next bounded chunk
 
-**The rest of the composition layer: `design.md` §11 steps 5a, 6 and 8, plus the step-4 sweep.**
-Steps 1, 2, 3 and 4 are finished — every token, every button, every route, every field, and the
-three status-and-prose components with their matrices. What is left of the *atoms* is nothing.
+**The rest of the composition layer: `design.md` §11 step 6, then step 8, plus the step-4 sweep.**
+Steps 1, 2, 3, 4 and 5a are finished — every token, every button, every route, every field, the
+three status-and-prose components, and the page frame every route now sits in. What is left of the
+*atoms* is nothing, and the frame the rest hangs off exists.
 
 **The batch is a deliberate relaxation of `claude.md` hard rule 4, granted by the product owner on
-2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** Step 4 was taken on its own because it fitted
-one session and because `StatusBadge` is used by 6 and 8, so it had to be first either way. The
-exception is a permission to batch, not an instruction to. The rule stands everywhere else: step 7,
-step 9, step 10 and steps 11–12 are one number each, and **5b (the navigation model) is not in this
-exception** — it is a behaviour change and stays queued.
+2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** Two of the four have now been taken on their
+own, each because it fitted one session: step 4 first because `StatusBadge` is used by 6 and 8, then
+5a because 6 and 8 both sit inside the page frame. The exception is a permission to batch, not an
+instruction to, and splitting on the boundaries it names has cost the batch nothing. The rule stands
+everywhere else: step 7, step 9, step 10 and steps 11–12 are one number each, and **5b (the
+navigation model) is not in this exception** — it is a behaviour change and stays queued.
 
-**Order inside what is left.** 5a (the page frame everything else sits in), then 6 (the record
-contract and content widths), then 8 (money surfaces, which are `RecordList`s with figures in
-them). One screenshot regeneration covers the lot.
+**Order inside what is left.** 6 (the record contract and content widths), then 8 (money surfaces,
+which are `RecordList`s with figures in them). One screenshot regeneration covers both. **Take 6 on
+its own if it fills a session**, which on the evidence of the last two it will: `DESIGN-AUDIT.md`
+§4.7 is explicit that `RecordList` is not a rename of what exists — it requires inventing the record
+model §5.2 describes, re-expressing thirteen screens' data in it, and deciding per screen what the
+compact form loses.
+
+**Step 6 inherits two things step 5a left it deliberately, and neither is a surprise.**
+**§4.2's content widths** — 720 for reading and forms, 1200 for record lists and tables — now have
+exactly one place to go in, `AppScaffold`, instead of twenty-three. And **§4.1's rename** of
+`tenantWideLayoutBreakpoint` / `tenantTableBreakpoint` into `compact` / `medium` / `expanded`, which
+§4.1 itself describes as a rewiring step and which also has to reach `checkout_cart_panel.dart:550`
+and `login_screen.dart:47`. Step 5a read both constants rather than declaring a fourth; step 6 is
+where they become one name.
 
 **The step-4 sweep is part of it and should not be forgotten.** Step 4 built the components and put
 them on four screens; **it did not sweep the app**, the same way `AppButton` landed as a component
@@ -3243,12 +3399,15 @@ item**: `reconciliation-request-notice` needs a status the model does not carry,
 model change rather than a restyle — see the standing decision.
 
 **The product owner chose the composition layer over the web callable-auth defect on 2026-08-12,
-and the 2026-08-12 step-4 session checked that choice rather than inheriting it.** The defect could
-not be settled either way. Both routes to a device run are still shut — Windows needs Developer
-Mode, Android needs the emulators not to be serving another session — and **the source settles
-nothing**: every callable in the migrated tree goes through `FirebaseFunctions.instance` with no
-platform branch anywhere, so the client is byte-identical on web, Windows and Android and the
-difference, if there is one, is in the emulator transport rather than in this repository.
+and the step-4 and step-5a sessions both checked that choice rather than inheriting it.** The defect
+still cannot be settled either way. **The step-5a session checked the Windows route rather than
+repeating the claim**: `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock` has no
+`AllowDevelopmentWithoutDevLicense` value at all, so Developer Mode is off and
+`flutter run -d windows` still cannot link its plugins. Android still needs the emulators not to be
+serving another session. And **the source settles nothing**: every callable in the migrated tree
+goes through `FirebaseFunctions.instance` with no platform branch anywhere, so the client is
+byte-identical on web, Windows and Android and the difference, if there is one, is in the emulator
+transport rather than in this repository.
 **So the instruction stands unchanged for the next session**: if it reproduces off web, the app is
 broken past login for every user, that outranks any reskin step, and the session that establishes
 it should propose the fix instead and say so in its opening line.
@@ -3262,11 +3421,23 @@ row and §5.2 does not cover it, so every measurement it uses is borrowed from a
 rows are the specification. **This blocks calling §5's inventory complete in step 12**, the same
 way the field-hover question blocks §9's audit.
 
+**Two questions are new from step 5a, and one of them is the older of the two.** **§3's density has
+no rule this code can evaluate** — it is a width test *and* an input test, and nothing in Flutter
+honestly answers "is this a pointer device"; `AppScaffold` is now the widget that would resolve it,
+it resolves nothing, and step 6 and step 8 both want the answer. And **`design.md` states no page
+padding**; `AppScaffold` uses `space.20` and two routes that pad 24 are 4 pixels out until step 6
+unifies them. Both have their own entries under "Open decisions".
+
 **Explicitly excluded from it:** `checkout_cart_panel.dart`'s 7 buttons, 2 fields and 1 `InkWell`
 and the whole sale path, step 7; `ConfirmDialog`, which left step 4 for step 7 on 2026-08-12;
 `pill_input.dart` and sign-in's visual design, step 9; the 13 `IconButton` call sites, which have
 no component yet; the **navigation model**, step 5b, which `DESIGN-AUDIT.md` decision 3 splits out
-as a behaviour change needing a device check; every server file and `firestore.rules`; deployment;
+as a behaviour change needing a device check, **and the landing route with it** — step 5a left that
+route's `Scaffold` alone because which string is its title is a product question, see the standing
+decision; the three full-page `Center` states in `tenant_routing_shell.dart`, which are
+§5.1's `LoadingState` / `ErrorState` / `EmptyState` and have no component yet;
+`pdf_preview_screen.dart`, which is legacy-adjacent and has no title;
+every server file and `firestore.rules`; deployment;
 and every standing exclusion below.
 
 **Two things to delete when their moment comes, so they are not inherited silently.**
@@ -3312,17 +3483,26 @@ preference order:
   which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
   that is not also serving the emulators.
 
-**The device-run debt is therefore now ten chunks deep**, and the last five are the ones that most
+**The device-run debt is therefore now eleven chunks deep**, and the last six are the ones that most
 need a device — between them they changed how nearly every screen in the app looks, how every
-button feels, how every screen is entered and left, how every box a person types into is drawn, and
-how every explanation folds away. Nobody has looked at the sign-in repair, the invitation repair,
-the category repair, commit `1b2b13b`, **the ripple kill**, **`AppButton`**, **`AppPageRoute`**,
-**`AppTextField`**, or **`Disclosure`**. Between them that is 208 tests, 144 screenshots, and no
-eyes.
+button feels, how every screen is entered and left, how every box a person types into is drawn, how
+every explanation folds away, and now **where the title of every screen sits**. Nobody has looked at
+the sign-in repair, the invitation repair, the category repair, commit `1b2b13b`, **the ripple
+kill**, **`AppButton`**, **`AppPageRoute`**, **`AppTextField`**, **`Disclosure`**, or
+**`AppScaffold`**. Between them that is 236 tests, 164 screenshots, and no eyes.
 
-**A field is still where this hurts most, and a `Disclosure` is now second.** Whether the reveal
-reads as the same screen growing or as a new one appearing, whether an 18px chevron's rotation is
-legible, and whether the spring holds a frame budget on a low tier are all judged and not asserted.
+**The page frame is now the first thing to look at, ahead of the field.** It is the one change in
+the six whose central question a screenshot genuinely cannot answer, because the question is about
+*proportion on a real screen*: a toolbar and a header cost a route roughly **128 logical pixels of
+frame on a phone where a toolbar alone cost 56**, and whether that reads as generous or as a
+near-empty strip above a title is a judgement. Open two or three back-office routes on a phone and
+say which. If the answer is "wasteful", the honest fixes are named rather than invented — a slimmer
+toolbar, or a header that scrolls away — and both are `design.md` amendments before they are code.
+
+**A field is still where this hurts most among the atoms, and a `Disclosure` is next.** Whether the
+reveal reads as the same screen growing or as a new one appearing, whether an 18px chevron's
+rotation is legible, and whether the spring holds a frame budget on a low tier are all judged and
+not asserted.
 
 **A field is where this hurts most.** The cursor, the caret colour, the keyboard's return key, the
 counter appearing mid-word, whether a 50-character helper line wraps to two on a phone, and whether
@@ -3448,7 +3628,15 @@ finished.
   of step 4, the way the call-site sweep was the second half of `AppButton`. Folded into the
   composition-layer batch above because step 6 reaches most of the same screens. **One item in it
   is not a restyle**: `reconciliation-request-notice` needs a status the model does not carry.
-- **The design system, steps 5a, 6 and 8** — the current chunk.
+- **~~The design system, step 5a: `AppScaffold` and `PageHeader`~~** — **done 2026-08-12.** The page
+  frame at **25 call sites across 23 files**, §7's page pattern, §2.2's two screen-title roles, 28
+  tests and 14 harness captures. It moved no board row and no rollout step, moved the **Design
+  system** track 50% to 55%, and **measured all four non-Flutter suites** rather than taking the
+  carry it was entitled to. Its own standing decision above records what it decided — the title
+  leaving the toolbar, the 72 pixels that costs a route, the one screen that had to change shape to
+  pay for it, the tab strip moving under the header, the action row's two arrangements, and the
+  seven raw `Scaffold`s it deliberately left alone, the landing route among them.
+- **The design system, steps 6 and 8** — the current chunk.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the
@@ -3556,7 +3744,11 @@ breakpoints and the content widths** — §4.1's three names and §4.2's 720 / 1
 the token layer, because 768 is already declared twice (`records.dart:26`,
 `checkout_cart_panel.dart:550`) with a third mechanism in `login_screen.dart:47`, and a fourth
 declaration that removes none of the three makes the drift worse; unifying them is a rewiring step
-in §4.1's own words. **The eight animated assets and the device-tier system** — step 10, ninth in
+in §4.1's own words. **That entry is narrowed rather than dropped as of 2026-08-12**: step 5a
+*reads* both `records.dart` constants — `tenantTableBreakpoint` for §2.2's title role,
+`tenantWideLayoutBreakpoint` for whether a title and its action share a row — and still declares
+nothing. **The exclusion is now specifically the rename and the content widths, and both are step
+6's**, named in the queued chunk above. **The eight animated assets and the device-tier system** — step 10, ninth in
 the order deliberately, because building assets before the substrate produces a slow app with nice
 animations in it. And **`lib/pos/**` and `lib/screens/**` throughout, which `claude.md` hard rule 3
 makes read-only.

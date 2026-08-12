@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/scaffold.dart';
 import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -37,8 +38,8 @@ final class TenantSalesTotalsScreen extends StatelessWidget {
   final DateTime Function()? clock;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Sales totals')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Sales totals',
     body: TenantSalesTotalsPanel(
       callable: callable,
       reader: reader,

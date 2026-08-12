@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import 'account_verification.dart';
 import 'email_delivery_status.dart';
 import 'platform_tenant_review.dart';
@@ -789,17 +790,15 @@ final class _TenantInvitationAcceptanceScreen extends StatelessWidget {
   final TenantInvitationAcceptanceCurrentCheck? isCurrent;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Business invitation'),
-      actions: [
-        AppButton(
-          label: 'Sign out',
-          tier: AppButtonTier.tertiary,
-          onPressed: onSignOut,
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Business invitation',
+    actions: <Widget>[
+      AppButton(
+        label: 'Sign out',
+        tier: AppButtonTier.tertiary,
+        onPressed: onSignOut,
+      ),
+    ],
     body: Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -837,17 +836,15 @@ final class _InvalidTenantInvitationScreen extends StatelessWidget {
   final Future<void> Function() onSignOut;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Business invitation'),
-      actions: [
-        AppButton(
-          label: 'Sign out',
-          tier: AppButtonTier.tertiary,
-          onPressed: onSignOut,
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Business invitation',
+    actions: <Widget>[
+      AppButton(
+        label: 'Sign out',
+        tier: AppButtonTier.tertiary,
+        onPressed: onSignOut,
+      ),
+    ],
     body: Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -967,66 +964,84 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Choose a business'),
-        actions: [
-          if (widget.requestIdentity?.canRequestTenant == true)
-            AppButton(
-              key: const ValueKey('show-tenant-request'),
-              label: 'Request business',
-              icon: Icons.add_business_outlined,
-              tier: AppButtonTier.tertiary,
-              onPressed: () =>
-                  setState(() => _requestingTenant = !_requestingTenant),
+    // The two transient panels above the list - verify your address, request a
+    // business - used to be laid out at their natural height with the list
+    // taking whatever was left. **Step 5a's page header costs this route 72
+    // logical pixels of body**, and at 800 x 600 with the request form open
+    // that was 16 pixels more than there was, so the form overflowed its
+    // column.
+    //
+    // They are collected and given a scrollable `Flexible` instead, which is
+    // the smallest arrangement that cannot overflow at any height. It changes
+    // no behaviour and it is an improvement rather than a concession: at the
+    // height where this first broke, the old layout had already crushed the
+    // membership list to 56 pixels to make room for the form.
+    final panels = <Widget>[
+      if (widget.verificationIdentity?.canSendVerification == true &&
+          widget.onReloadIdentity != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: AccountVerificationPanel(
+              identity: widget.verificationIdentity!,
+              callable:
+                  widget.sendAccountVerificationCallable ??
+                  FirebaseSendAccountVerificationCallable(),
+              onReload: widget.onReloadIdentity!,
+              deliveryStatusCallable: widget.emailDeliveryStatusCallable,
+              requestIdFactory: widget.accountVerificationRequestIdFactory,
+              isCurrent: widget.isCurrent,
             ),
-          AppButton(
-            label: 'Sign out',
-            tier: AppButtonTier.tertiary,
-            onPressed: widget.onSignOut,
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (widget.verificationIdentity?.canSendVerification == true &&
-              widget.onReloadIdentity != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: AccountVerificationPanel(
-                  identity: widget.verificationIdentity!,
+        ),
+      if (_requestingTenant && widget.requestIdentity != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: TenantRequestForm(
+                  identity: widget.requestIdentity!,
                   callable:
-                      widget.sendAccountVerificationCallable ??
-                      FirebaseSendAccountVerificationCallable(),
-                  onReload: widget.onReloadIdentity!,
-                  deliveryStatusCallable: widget.emailDeliveryStatusCallable,
-                  requestIdFactory: widget.accountVerificationRequestIdFactory,
+                      widget.requestTenantCallable ??
+                      FirebaseRequestTenantCallable(),
+                  requestIdFactory: widget.tenantRequestIdFactory,
                   isCurrent: widget.isCurrent,
+                  onSuccess: _tenantRequested,
+                  onCancel: () => setState(() => _requestingTenant = false),
                 ),
               ),
             ),
-          if (_requestingTenant && widget.requestIdentity != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: TenantRequestForm(
-                      identity: widget.requestIdentity!,
-                      callable:
-                          widget.requestTenantCallable ??
-                          FirebaseRequestTenantCallable(),
-                      requestIdFactory: widget.tenantRequestIdFactory,
-                      isCurrent: widget.isCurrent,
-                      onSuccess: _tenantRequested,
-                      onCancel: () => setState(() => _requestingTenant = false),
-                    ),
-                  ),
-                ),
+          ),
+        ),
+    ];
+    return AppScaffold(
+      title: 'Choose a business',
+      actions: <Widget>[
+        if (widget.requestIdentity?.canRequestTenant == true)
+          AppButton(
+            key: const ValueKey('show-tenant-request'),
+            label: 'Request business',
+            icon: Icons.add_business_outlined,
+            tier: AppButtonTier.tertiary,
+            onPressed: () =>
+                setState(() => _requestingTenant = !_requestingTenant),
+          ),
+        AppButton(
+          label: 'Sign out',
+          tier: AppButtonTier.tertiary,
+          onPressed: widget.onSignOut,
+        ),
+      ],
+      body: Column(
+        children: [
+          if (panels.isNotEmpty)
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: panels),
               ),
             ),
           Expanded(

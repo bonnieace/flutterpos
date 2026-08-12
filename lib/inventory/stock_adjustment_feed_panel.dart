@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -25,12 +26,10 @@ final class TenantStockAdjustmentFeedScreen extends StatelessWidget {
   final TenantProduct? product;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(
-        product == null ? 'Stock adjustments' : 'Adjustments: ${product!.name}',
-      ),
-    ),
+  Widget build(BuildContext context) => AppScaffold(
+    title: product == null
+        ? 'Stock adjustments'
+        : 'Adjustments: ${product!.name}',
     body: TenantStockAdjustmentFeedPanel(reader: reader, product: product),
   );
 }

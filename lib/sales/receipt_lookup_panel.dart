@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
@@ -26,8 +27,8 @@ final class TenantReceiptLookupScreen extends StatelessWidget {
   final TenantReturnActions? returnActions;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Find a receipt')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Find a receipt',
     body: TenantReceiptLookupPanel(
       reader: reader,
       returnActions: returnActions,

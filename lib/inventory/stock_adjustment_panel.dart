@@ -4,6 +4,7 @@ import '../ui/records.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
 import '../ui/status.dart';
 import '../reporting/reconciliation_anomalies.dart';
 import '../tenancy/tenant_catalog.dart';
@@ -35,8 +36,8 @@ final class TenantProductStockScreen extends StatelessWidget {
   final TenantStockActions? actions;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(product.name)),
+  Widget build(BuildContext context) => AppScaffold(
+    title: product.name,
     body: TenantProductStockPanel(
       reader: reader,
       product: product,

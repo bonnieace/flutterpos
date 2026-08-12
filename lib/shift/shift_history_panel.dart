@@ -2,6 +2,7 @@
 
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import '../reporting/shift_amendment_feed.dart';
 import '../reporting/shift_amendment_feed_panel.dart';
 import '../returns/return_actions.dart';
@@ -29,8 +30,8 @@ final class TenantShiftHistoryScreen extends StatelessWidget {
   final TenantReturnActions? returnActions;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Shift history')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Shift history',
     body: TenantShiftHistoryPanel(reader: reader, returnActions: returnActions),
   );
 }

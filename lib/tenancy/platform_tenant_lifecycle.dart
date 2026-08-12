@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
 import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
 import 'platform_tenant_review.dart';
@@ -649,28 +650,35 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DefaultTabController(
     length: 4,
-    child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Platform tenant management'),
-        actions: [
-          AppButton(
-            label: 'Sign out',
-            tier: AppButtonTier.tertiary,
-            onPressed: onSignOut,
-          ),
-        ],
-        bottom: const TabBar(
-          isScrollable: true,
-          tabs: [
-            Tab(text: 'Pending business reviews'),
-            Tab(text: 'Active & suspended'),
-            Tab(text: 'Rejected archive'),
-            Tab(text: 'Global user status'),
-          ],
+    child: AppScaffold(
+      title: 'Platform tenant management',
+      actions: <Widget>[
+        AppButton(
+          label: 'Sign out',
+          tier: AppButtonTier.tertiary,
+          onPressed: onSignOut,
         ),
-      ),
-      body: TabBarView(
-        children: [
+      ],
+      // **The tabs moved out of the toolbar and under the header**, which is
+      // the one ordering change step 5a makes to an existing screen. §7's page
+      // pattern is *header → callout → filters → content*, and a tab strip is
+      // the filter row of this page: leaving it in `AppBar.bottom` would have
+      // put it above the title it filters. Nothing about what a tab does
+      // changed - the `DefaultTabController` above still owns the selection.
+      body: Column(
+        children: <Widget>[
+          const TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(text: 'Pending business reviews'),
+              Tab(text: 'Active & suspended'),
+              Tab(text: 'Rejected archive'),
+              Tab(text: 'Global user status'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
           PlatformPendingTenantReviewScreen(
             identity: identity,
             dataSource: pendingDataSource,
@@ -701,6 +709,9 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
             requestIdFactory: requestIdFactory,
             isCurrent: isCurrent,
             onCurrentOperatorAffected: onSignOut,
+          ),
+              ],
+            ),
           ),
         ],
       ),

@@ -19933,3 +19933,225 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+## A screen title stops being chrome - 2026-08-12
+
+`design.md` §11 **step 5a**: `AppScaffold` and `PageHeader`, per `DESIGN-AUDIT.md` §6 decision 3's
+split of step 5. Every route in the migrated tree now sits in the same frame, with its title in the
+page instead of in the toolbar. **5b, §4.4's navigation model, is not in this and stays queued** -
+it is a behaviour change and needs a device check.
+
+**This is the second quarter of the batched composition layer, not the whole batch.** The product
+owner's 2026-08-12 exception lets steps 4, 5a, 6 and 8 ship as one chunk; `PLAN.md` orders 5a second
+because 6 and 8 both sit inside the page frame. 5a is what fitted this session. The exception is a
+permission to batch, not an instruction to, and splitting on the boundary it names has now cost the
+batch nothing twice.
+
+### The web callable-auth defect was checked again, and this time one half of it was measured
+
+`PLAN.md` tells every session to think before inheriting the product owner's choice: if "callables
+arrive with auth missing" reproduces off web, the app is broken past login for everyone and outranks
+any reskin step. **The Windows route was checked rather than restated.**
+`HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock` carries no
+`AllowDevelopmentWithoutDevLicense` value at all, so Developer Mode is off and `flutter run -d
+windows` still cannot link its plugins - a machine setting nobody should flip on the owner's behalf.
+Android still needs the emulators not to be serving another session, and this session was using
+them. The source settles nothing either, for the reason step 4 recorded. So the choice stands and
+the variable is recorded as still open.
+
+### What the frame decided
+
+**The title left the toolbar because §2.2 will not fit in one.** `display` is 32 / 40 at weight 700
+and no 56-high Material toolbar holds it. That is not a detail: it means `design.md` treats a screen
+title as a piece of *content*, which is also what §7 means by "Title appears once" and by putting
+`PageHeader` at the head of the page pattern rather than above it. So the title is in the page, at
+`title.lg` below §4.1's `expanded` floor and `display` at or above it, and the toolbar keeps the way
+back and the app-level actions that were already sitting beside it.
+
+**`AppBar` was kept rather than hand-drawn.** It owns the leading control and the "is there a way
+back from here" logic, the safe-area inset, the scrolled-under treatment and the toolbar semantics.
+Redrawing it would have moved routing behaviour into a visual change, which `claude.md` hard rule 1
+forbids. The title's `header: true` semantics moved with the title, because an `AppBar.title`
+announced itself as a heading and losing that would have been a silent accessibility regression in
+the one change whose whole subject is the title.
+
+**The frame costs a route 72 logical pixels of body, and that is written down rather than
+discovered.** A toolbar *and* a header where there used to be a toolbar: about 128 pixels of frame
+on a 411 x 891 phone instead of 56. It buys §7's page pattern and §2.2's title roles. Whether it
+reads as generous or as a near-empty strip above a title is a judgement no screenshot settles, and
+it is now the **first** item on the device-run list, ahead of the field.
+
+**Below 768 the primary action drops under the title instead of beside it, and that was found by a
+test rather than reasoned out.** Laid side by side at phone width, a `Row` hands an unflexed action
+all the width it asks for: with a product-name title and a five-word button label the title was
+squeezed to a **two-pixel** column of wrapped letters, 1,596 pixels tall, overflowing its column by
+896. §5.2's "never truncated" is about a title staying readable, and that fails it more completely
+than an ellipsis would. The boundary is `tenantWideLayoutBreakpoint`, whose own doc comment says it
+answers "is there room for two things side by side" - **it had zero consumers and now has one**.
+`DESIGN-AUDIT.md` §5 is struck through in place; its reader `tenantLayoutIsWide` is still dead code,
+because the header reads the constant against a screen width rather than against `BoxConstraints`.
+
+**The title role is resolved against the screen, not the header's own box.** First written as a
+`LayoutBuilder`, which failed its own test at exactly 1024: the box is the page inset narrower, so
+`display` would have switched on at 1064 - a fourth breakpoint produced by arithmetic that nobody
+declared and nobody could look up.
+
+**The tab strip on the platform route moved out of `AppBar.bottom` and under the header.** §7's
+order is *header -> callout -> filters -> content*, and a tab strip is this page's filter row;
+leaving it in the toolbar would have put it above the title it filters. The `DefaultTabController`
+still owns the selection.
+
+**One screen had to change shape to pay for the frame, and it is the only one.** The business
+selector laid its two transient panels - verify your address, request a business - at their natural
+height above an `Expanded` list. At 800 x 600 with the request form open, the new header left 16
+pixels too few and the form overflowed. They are a scrollable `Flexible` now. **It is an improvement
+rather than a concession**: at the height where it first broke, the old layout had already crushed
+the membership list to 56 pixels to make room for the form.
+
+**`subtitle` and `primaryAction` ship with no call site, and that is stated rather than left to be
+noticed.** Every migrated route kept its title verbatim: turning a title into a title-and-subtitle
+pair is a copy decision and §11 step 11 is the copy pass, and hoisting a panel's primary action into
+the frame crosses the screen/panel boundary that keeps these routes widget-testable. Both slots are
+exercised by the harness and by `test/ui/scaffold_test.dart`.
+
+### What it refused to decide
+
+**§3's density.** `lib/ui/tokens.dart` has carried this since step 1 and `AppScaffold` is the widget
+that would resolve it - the only thing every route has in common. It resolves nothing, because §3's
+rule is a width test **and** an input test - *"a touch device never gets 32px targets whatever its
+width"* - and Flutter has no honest answer to the second. `defaultTargetPlatform` describes the OS,
+not the hardware: a Windows tablet, a Chromebook in tablet mode and a touchscreen desktop till are
+all pointer platforms with fingers on them, and this app is for a shop counter.
+`MouseTracker.mouseIsConnected` answers only after a mouse has moved. Picking one and calling it the
+rule would put a 32 x 32 tap target on a real till, which is the one thing §9 makes pass/fail. Every
+screen therefore stays comfortable, the stricter setting on every dimension §9 measures. Recorded in
+`PLAN.md` as a question for the product owner; step 6 and step 8 will both want the answer.
+
+**A page padding.** No section of `design.md` states one. `AppScaffold` uses `space.20`, which is on
+§2.3's scale and is what the three largest list screens already pad their bodies with. Two routes
+pad 24 and are 4 pixels out until step 6 unifies them; recorded rather than fixed, because fixing it
+means editing bodies in a chunk about frames.
+
+**Content widths.** §4.2's 720 / 1200 / 420 are step 6's, together with §4.1's rename. The seam is
+now one widget instead of twenty-three.
+
+### Seven raw `Scaffold`s remain, every one named
+
+```text
+checkout_cart_panel.dart              step 7, the sale path
+login_screen.dart                     step 9
+tenant_routing_shell.dart :1424       the landing route - see below
+tenant_routing_shell.dart :875        _RoutingProgress      -> LoadingState, §5.1, unbuilt
+tenant_routing_shell.dart :1870       bootstrap failure     -> ErrorState, §5.1, unbuilt
+tenant_routing_shell.dart :1916       PlatformRouteUnavail. -> EmptyState, §5.1, unbuilt
+pdf_preview_screen.dart               legacy-adjacent, has no title at all
+```
+
+**The landing route is out, and the reason is not that it is step 5b.** Its title is genuinely
+undecided: the toolbar says `membership.tenantName`, and `TenantBrandingPanel` directly beneath
+resolves `branding.companyName` with that as a *fallback* - **so the two can differ**. Which is the
+page's title is a product question, §4.4 rewrites the screen anyway, and answering it inside a
+framing chunk would have been inventing. Its two app-bar assertions in
+`test/tenancy/tenant_safe_landing_test.dart` are untouched and still pass, which is the evidence
+that it was left alone rather than forgotten.
+
+### Files changed
+
+```text
+lib/ui/scaffold.dart                                  new - AppScaffold, PageHeader
+lib/audit/audit_log_panel.dart                        migrated
+lib/checkout/checkout_configuration_panel.dart        migrated
+lib/inventory/bulk_catalog_panel.dart                 migrated
+lib/inventory/catalog_management_panel.dart           migrated
+lib/inventory/stock_adjustment_feed_panel.dart        migrated
+lib/inventory/stock_adjustment_panel.dart             migrated
+lib/inventory/stock_movement_feed_panel.dart          migrated
+lib/inventory/stock_product_ledger_panel.dart         migrated
+lib/reporting/daily_metrics_panel.dart                migrated
+lib/reporting/reconciliation_anomalies_panel.dart     migrated
+lib/reporting/reconciliation_run_panel.dart           migrated
+lib/reporting/reconciliation_status_panel.dart        migrated
+lib/reporting/sales_totals_panel.dart                 migrated
+lib/reporting/shift_amendment_feed_panel.dart         migrated
+lib/returns/return_history_panel.dart                 migrated
+lib/sales/receipt_lookup_panel.dart                   migrated
+lib/sales/sale_history_panel.dart                     migrated
+lib/shift/shift_history_panel.dart                    migrated
+lib/tenancy/platform_tenant_lifecycle.dart            migrated + tabs under the header
+lib/tenancy/platform_tenant_review.dart               migrated
+lib/tenancy/tenant_catalog.dart                       migrated
+lib/tenancy/tenant_routing_shell.dart                 3 routes migrated + selector panels scroll
+lib/tenancy/tenant_staff_directory.dart               migrated
+test/ui/scaffold_test.dart                            new - 28 tests
+test/tenancy/tenant_routing_shell_test.dart           two ensureVisible calls
+tool/screenshots/page_frame_test.dart                 new - 7 captures
+DESIGN-AUDIT.md                                       §2.2 and §5
+PLAN.md
+HISTORY.md
+```
+
+25 `AppScaffold` call sites across 23 files.
+
+### Screenshots
+
+**20 added, 85 changed, none removed, 59 identical**, and **zero date drift for the third chunk
+running** - four chunks on one day, and each after the first got a free baseline. Fourteen of the
+twenty additions are the new `94-*` matrix captures; the other six are `-full` images for screens
+that did not previously overflow their window and now do, which is the 72 pixels the header costs
+showing up as arithmetic.
+
+```text
+F  after step 4                          144 images
+G  after step 5a                         164 images
+   added 20 (14 matrix captures + 6 new full-page), changed 85, removed 0, identical 59
+```
+
+**The 59 identical images are the check, and they are the whole check.** Every one of them is a
+screen this chunk deliberately did not touch: sign-in, the bootstrap failure, the sale path, the
+landing route, the shift panel, and the four component matrices under `90-*` to `93-*`. A single
+unexpected name in that set would have meant a route was migrated that should not have been, and a
+single expected name missing from the changed set would have meant one was missed.
+
+### Test commands and results
+
+```text
+flutter test --no-pub --concurrency=1                                  1771 pass  (1743 -> 1771)
+npm --prefix functions test                                             409 pass
+npm --prefix rules-tests run test:emulator                              161 pass
+npm --prefix rules-tests run test:emulator:reconciliation                10 pass
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 \
+  npm --prefix rules-tests run test:emulator:invitations                 23 pass
+flutter analyze --no-pub lib/ui lib/tenancy test/ui tool/screenshots   no issues
+flutter test --no-pub --concurrency=1 tool/screenshots                 125 captures, 164 images
+dart run tool/screenshots/build_index.dart                             73 screens
+```
+
+**All four non-Flutter suites were measured rather than carried**, though `git diff` over
+`functions/`, `firestore.rules` and `rules-tests/` prints zero lines and the carry counter permitted
+one more. It cost a few minutes and puts the counter back at 0 of 2, which buys the next two chunks
+a carry each. The known flaky invitation test passed first try.
+
+**One failure cost a cycle and it was the harness's own, not the code's.** A full-suite run left
+running in the background collided with a second one started in the foreground: the second reported
+`+1696 -1` with a long cascade of "did not complete" and could not write its log because the first
+still held it. Diagnosed by finding the first run's process still alive, killed, and re-run clean.
+**A "did not complete" cascade in this repository means two test runners, not a broken test.**
+
+### What this chunk owes
+
+**Nobody has looked at any of it, and for this chunk that matters more than for the five before
+it.** The others changed how a control feels or how a colour reads; this one changed the proportion
+of every back-office screen in the app. The question a screenshot cannot answer is whether 128
+pixels of frame above a phone screen's content reads as generous or as waste, and the answer decides
+whether §7's page pattern ships as written. The device-run debt is now **eleven** chunks deep: 236
+tests, 164 screenshots, no eyes.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

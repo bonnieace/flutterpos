@@ -190,15 +190,16 @@ with one customer.
 
 ### 2.2 What does not exist
 
-None of the following from §5.1 exists in any form: `AppScaffold`, `PageHeader`, ~~`AppButton`,
+None of the following from §5.1 exists in any form: ~~`AppScaffold`, `PageHeader`, `AppButton`,
 `AppTextField`, `AppSelect`~~, `EmptyState`, `ErrorState`, `LoadingState`, ~~`Disclosure`,
 `Callout`~~, `AppSheet`, `AppTabs`, `LedgerEntry`, `QuantityStepper`, ~~`PressSurface`~~,
 `MotionAsset`, `RollingNumber`, `SyncIndicator`, `FilterChipBar`.
 
 **Struck through as each was built**, so this list stays a statement of what is missing rather than
 a snapshot of one day. `PressSurface` and `AppButton` landed 2026-08-11, `AppTextField` and
-`AppSelect` on 2026-08-12, and `StatusBadge`, `Callout` and `Disclosure` the same day in step 4.
-`StatusBadge` was never in this list because it half-existed as `TenantStatusChip`; see §1.5.
+`AppSelect` on 2026-08-12, `StatusBadge`, `Callout` and `Disclosure` the same day in step 4, and
+`AppScaffold` and `PageHeader` the same day in step 5a. `StatusBadge` was never in this list because
+it half-existed as `TenantStatusChip`; see §1.5.
 
 ~~One correction to the §5.1 table: `AppSelect` is listed as replacing "raw
 `DropdownButtonFormField`". **There is no `DropdownButtonFormField` in the migrated tree.**~~
@@ -653,10 +654,17 @@ All three are fixed single-column `ListView`s at every width.**
 | `tenantWideLayoutBreakpoint` | [records.dart:26](lib/ui/records.dart#L26) | **Zero.** |
 | `tenantTableBreakpoint` | [records.dart:36](lib/ui/records.dart#L36) | **One.** |
 
-- `tenantWideLayoutBreakpoint` has no consumers. The only other reference in `lib/` is its own doc
+- ~~`tenantWideLayoutBreakpoint` has no consumers. The only other reference in `lib/` is its own doc
   comment at [:30](lib/ui/records.dart#L30). Its reader `tenantLayoutIsWide`
   ([records.dart:39](lib/ui/records.dart#L39)) has **zero callers** anywhere in `lib/`, `test/` or
-  `tool/`. Both are dead code.
+  `tool/`. Both are dead code.~~
+
+  **Half of that closed 2026-08-12 in step 5a.** `PageHeader.placesActionBesideTitle`
+  ([scaffold.dart](lib/ui/scaffold.dart)) reads `tenantWideLayoutBreakpoint` to decide whether a
+  page's title and its primary action fit on one row, which is the question the constant's own doc
+  comment says it answers. `tenantLayoutIsWide` still has zero callers - the header reads the
+  constant against a screen width rather than against `BoxConstraints` - so the *reader* is still
+  dead code and the constant is not.
 - `tenantTableBreakpoint` is consulted once, via `tenantLayoutFitsTable` at
   [tenant_staff_directory.dart:386](lib/tenancy/tenant_staff_directory.dart#L386). That is the only
   breakpoint-driven layout switch in the entire migrated app.

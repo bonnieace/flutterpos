@@ -2,6 +2,7 @@
 
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_history_panel.dart';
 import '../returns/return_actions.dart';
@@ -74,8 +75,8 @@ final class TenantSaleHistoryScreen extends StatelessWidget {
   final TenantReturnActions? returnActions;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(request.title)),
+  Widget build(BuildContext context) => AppScaffold(
+    title: request.title,
     body: TenantSaleHistoryPanel(
       reader: reader,
       request: request,

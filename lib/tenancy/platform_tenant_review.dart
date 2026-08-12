@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -809,23 +810,21 @@ final class _PlatformPendingTenantReviewScreenState
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) return _buildBody(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pending business reviews'),
-        actions: [
-          IconButton(
-            key: const ValueKey('platform-review-refresh'),
-            tooltip: 'Refresh pending requests',
-            onPressed: _loading ? null : _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-          AppButton(
-            label: 'Sign out',
-            tier: AppButtonTier.tertiary,
-            onPressed: widget.onSignOut,
-          ),
-        ],
-      ),
+    return AppScaffold(
+      title: 'Pending business reviews',
+      actions: <Widget>[
+        IconButton(
+          key: const ValueKey('platform-review-refresh'),
+          tooltip: 'Refresh pending requests',
+          onPressed: _loading ? null : _reload,
+          icon: const Icon(Icons.refresh),
+        ),
+        AppButton(
+          label: 'Sign out',
+          tier: AppButtonTier.tertiary,
+          onPressed: widget.onSignOut,
+        ),
+      ],
       body: _buildBody(context),
     );
   }

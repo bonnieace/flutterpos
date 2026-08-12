@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
@@ -250,8 +251,8 @@ final class TenantCatalogScreen extends StatelessWidget {
   final List<TenantRole> movementFeedRoles;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Product catalog')),
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Product catalog',
     body: TenantCatalogPanel(
       reader: reader,
       allowedRoles: allowedRoles,
