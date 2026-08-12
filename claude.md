@@ -23,6 +23,12 @@ invent a token. The correct outcome is a question, not a plausible hex code.
 3. **Do not touch `lib/pos/**` or `lib/screens/**`.** Legacy, read-only, out of scope.
 4. **One step per branch.** The migration order in `DESIGN.md` §11 is numbered. Do one
    number. Do not begin the next because it seems related.
+   **Exception, granted 2026-08-12 for the composition layer only:** steps **4, 5a, 6 and 8**
+   may ship as one chunk. They build on finished atoms rather than defining new ones, and they
+   touch overlapping screens, so one screenshot regeneration covers all four. The rule stands
+   everywhere else — step 7 (the sale path), step 9, step 10, and steps 11–12 are still one
+   number each, and 5b (the navigation model) is a behaviour change that is not in this
+   exception at all.
 5. **Every component ships with its full state matrix** — enabled, hover, focus-visible,
    pressed, disabled, loading, error, read-only, empty, whichever apply — and each state
    appears in the screenshot harness. A component missing a state is not done.

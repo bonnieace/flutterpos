@@ -2090,22 +2090,21 @@ The first two were opened on 2026-08-11 by building step 1 and the third by buil
 is answerable from `design.md`, and `claude.md` forbids inventing the value that would close any of
 them, so they are here rather than in the code.
 
-**Do §2.1's container borders have to clear §9's 3:1?** Measured against `surface.base`:
-`border.subtle` 1.38, `border.strong` 1.97, and the five status borders between 1.38 and 2.04. §9
-makes 3:1 pass/fail for "UI boundaries" and lists no exemption. Two readings, and they lead to
-different work:
+**~~Do §2.1's container borders have to clear §9's 3:1?~~ Answered by the product owner on
+2026-08-12: the border is decoration.** §9's 3:1 row applies to a boundary that **carries meaning
+on its own**, not to every border that exists. Nothing is re-derived; `design.md` §9 gains the
+sentence and the reasoning, so the next reader does not re-open it.
 
-1. **The boundary rule means a boundary that carries information on its own.** Under it the system
-   already conforms: the focus ring — the only boundary §9 names with a value — clears 3:1 at
-   11.71, and a status is a container *plus an icon plus a word*, so no meaning rests on its border.
-   Nothing to do.
-2. **It means every border.** Then ten colours have to become lighter, and §2.1's status palette is
-   re-derived rather than adjusted, because a border cannot brighten without the container behind
-   it moving too.
+The measurements that framed it, kept because they are what made the call: on `surface.base`,
+`border.subtle` is 1.38, `border.strong` 1.97, and the five status borders sit between 1.38 and
+2.04 — so the other reading would have re-derived ten colours and §2.1's whole status palette. The
+system already conforms under the reading taken: a status is **container + icon + label**, all five
+foreground colours clear 5:1, and the focus ring — the one boundary §9 names with a number —
+clears 3:1 at 11.71.
 
-**Step 4 is where this stops being theoretical, and step 4 is the current chunk** — `StatusBadge`
-draws the container the whole argument is about. **Answer it before that chunk starts, not
-during.**
+**It is not a blanket exemption.** Where a border is the *only* thing separating two regions a
+person must tell apart, it carries meaning and 3:1 applies. Step 12's audit checks that, not the
+decorative edges.
 
 **~~A third was opened by step 2: what is `AppSelect`?~~ Closed 2026-08-12, and it was never a
 question — it was a wrong fact.** `DESIGN-AUDIT.md` said nothing existed for it to replace, and
@@ -2874,6 +2873,40 @@ enormous expected-denial traces.
   lives on the **binding** rather than on the test, the next test in the same file fails too and
   looks unrelated. Multi-touch is fine — several `startGesture` pointers work — it is mice that
   are singular.
+- **On Flutter web, a signed-in user's callables arrive with `auth: MISSING`, and the landing
+  route then loads forever.** Found 2026-08-12, on the first run that has ever got *past* sign-in
+  on web — the 2026-08-11 attempt never signed in, so this had never been reachable. Evidence, all
+  from one run: the Auth emulator's seeded account shows `lastLoginAt` **newer** than `createdAt`,
+  so the sign-in genuinely succeeded; then the functions emulator logs
+  `"verifications":{"app":"MISSING","auth":"MISSING"}` for two back-to-back
+  `listMyTenants` calls, finishing in 131ms and 5ms. The callable is reaching the emulator without
+  an ID token, so it answers with nothing and `TenantRouteGuard` never leaves its loading state.
+  **The seed script predicts this symptom in its own comment** — "presents in the app as a business
+  list that never loads" — but attributes it to a short `TENANT_CURSOR_HMAC_SECRET`, which is not
+  the cause here: the secret file was present and correct for the whole run.
+  **`lib/dev/firebase_emulators.dart` is not obviously at fault** — it redirects Auth, Firestore
+  and Functions at the same derived host in one place, and web correctly derives `127.0.0.1`. The
+  open question is why the ID token is not attached to the callable, and whether this is
+  web-specific or would reproduce on desktop. **Until it is answered, no device run on web can see
+  a single migrated screen**, which is most of why the device-run debt reached nine chunks.
+- **The emulator switch is debug-only by design, so `--profile` cannot reach seeded data.**
+  `resolveFirebaseEmulatorTarget` throws `not_a_debug_build` when `kDebugMode` is false — a
+  deliberate property, since a runtime toggle would be reachable from a shipped binary. The
+  consequence is easy to walk into: profile mode is the honest build for judging motion, and it is
+  exactly the build that cannot see the seed. **Judging `AppPageRoute`'s springs on web debug is
+  worthless** — web debug drops frames by construction — so §6's motion can only be judged on a
+  non-web debug build. That is a real argument for the Windows desktop surface, not a preference.
+- **An interrupted `emulators:dev` leaves `functions/.secret.local` and `.env.local` behind, and
+  the next run then refuses to start.** Hit 2026-08-12; the leftovers were from **2026-08-10**, so
+  two days and several sessions passed before anyone tried again. The script writes both files for
+  the run and removes them afterwards, and refuses to overwrite an existing pair so a real
+  developer's secrets are never clobbered — correct behaviour that presents as
+  `Refusing to overwrite existing Functions emulator configuration`. **Check before deleting, and
+  check the right way**: both files are byte-identical to what the script itself writes, so compare
+  against `run-dev-emulators.js`'s own string literals rather than eyeballing them. If they match,
+  they are machine-generated placeholders holding no real secret and both are gitignored. If they
+  do **not** match, they are somebody's real configuration and deleting them is unrecoverable —
+  stop and ask.
 - **Changing the shape of the widget tree above a stateful subtree is not free, and the cost never
   looks like the cause.** Hit twice on 2026-08-12, from opposite ends, and the general form is
   worth more than either instance. Inserting or removing a wrapper — a `Stack` on focus, a
@@ -3058,8 +3091,33 @@ same day is the cheapest arrangement this harness has: the second one gets a fre
 
 ## Next bounded chunk
 
-**`StatusBadge`, `Callout` and `Disclosure` — `design.md` §11 step 4.** Steps 1, 2 and 3 are
-finished: every token, every button, every route and every field.
+**The composition layer: `design.md` §11 steps 4, 5a, 6 and 8, as one chunk.** Steps 1, 2 and 3 are
+finished — every token, every button, every route and every field. What is left of the *atoms* is
+nothing; what is left is how they are put together.
+
+**The batch is a deliberate relaxation of `claude.md` hard rule 4, granted by the product owner on
+2026-08-12 and scoped to these four steps only.** The reasoning is recorded in `claude.md` beside
+the rule: these steps build on finished atoms rather than defining new ones, they touch overlapping
+screens, and one screenshot regeneration covers all four. **The per-chunk ceremony had become a
+large fraction of each chunk** — full suite, screenshot attribution, `HISTORY.md`, `PLAN.md`,
+commit — and running four of them separately costs roughly four times that for about 1.5× the
+work. The rule stands everywhere else: step 7, step 9, step 10 and steps 11–12 are one number each,
+and **5b (the navigation model) is not in this exception** — it is a behaviour change and stays
+queued.
+
+**Order inside the chunk matters, because these four are not independent.** Do 4 first
+(`StatusBadge` is used by 6 and 8), then 5a (the page frame everything else sits in), then 6 (the
+record contract), then 8 (money surfaces, which are `RecordList`s with figures in them). A
+screenshot regeneration at the end covers the lot.
+
+**Step 4's blocking question is answered**: the border is decoration, nothing is re-derived, and
+`design.md` §9 now says so. **`ConfirmDialog` is still unresolved** — `DESIGN-AUDIT.md` §4.3 flags
+that it consolidates four `await`-and-branch call sites, so it cannot ship as a visual change.
+Decide before starting whether it moves out of step 4; the rest of step 4 does not depend on it.
+
+---
+
+**The original step 4 scope, for reference:**
 
 **What it has to build:**
 
@@ -3072,16 +3130,13 @@ finished: every token, every button, every route and every field.
 - **Their state matrices in the harness**, per `claude.md` hard rule 5. `Disclosure` has a real
   open/closed pair and §6's spring governs the transition between them.
 
-**Two things to settle before writing code, both recorded rather than assumed:**
+**~~§9 vs §2.1 on the status border~~ — answered 2026-08-12**, see the standing decision above.
+The border is decoration, nothing is re-derived, `design.md` §9 carries the sentence.
 
-- **§9 vs §2.1 on the status border.** `PLAN.md` already records that the five `status.*.border`
-  values sit between 1.38:1 and 2.04:1 on `surface.base`, which does not clear §9's 3:1 for a UI
-  boundary. `StatusBadge` is the component that makes the conflict concrete. The existing note
-  says what carries the meaning is `fg`, the icon and the word — this chunk has to hold to that
-  and say so, or the conflict has to go back to the product owner.
-- **`ConfirmDialog`'s classification.** `DESIGN-AUDIT.md` §4.3 flags that it consolidates four
-  `await`-and-branch call sites, so it cannot ship as a purely visual change. Decide whether it
-  moves out of step 4 **before** starting, not halfway through.
+**`ConfirmDialog`'s classification is still open.** `DESIGN-AUDIT.md` §4.3 flags that it
+consolidates four `await`-and-branch call sites, so it cannot ship as a purely visual change.
+Decide whether it moves out of step 4 **before** starting. Nothing else in the batch depends on
+it.
 
 **Explicitly excluded from it:** `checkout_cart_panel.dart`'s 7 buttons and 2 fields and the whole
 sale path, step 7; `pill_input.dart` and sign-in's visual design, step 9; the 13 `IconButton` call

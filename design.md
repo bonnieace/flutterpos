@@ -700,6 +700,21 @@ These are pass/fail, not aspirations. They should be asserted in tests, not eyeb
 | Motion | fully disabled under `disableAnimations` |
 | Form errors | programmatically associated, announced |
 
+**What "UI boundaries" means, decided 2026-08-12.** The 3:1 row applies to a boundary that
+**carries meaning on its own** — not to every border that exists. A decorative edge may sit below
+3:1; a boundary a person must perceive to understand the interface may not.
+
+This was raised by step 4, which draws the container the question is about. Measured against
+`surface.base`: `border.subtle` is 1.38, `border.strong` 1.97, and the five status borders sit
+between 1.38 and 2.04 — so under the other reading, ten colours would be re-derived. Under this
+one, nothing changes, and the reason is §2.1's own construction: a status is **container + icon +
+label**, so no meaning rests on the border, and all five foreground colours clear 5:1 on both
+grounds. The one boundary this file names with a number — the focus indicator — clears 3:1 at
+11.71.
+
+**This is not a licence to leave a boundary invisible.** Where a border is the *only* thing
+separating two regions a person must tell apart, it carries meaning and the 3:1 row applies to it.
+
 Known current failures: caption text at 3.4:1 and 3.7:1; `Correct` / `Retire` targets;
 `Previous` / `Next` pagination; out-of-stock signalled by red text alone; no visible focus
 ring anywhere in the screenshots.
