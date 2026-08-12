@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
 import 'platform_tenant_review.dart';
@@ -652,6 +653,7 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
     length: 4,
     child: AppScaffold(
       title: 'Platform tenant management',
+      contentWidth: AppContentWidth.records,
       actions: <Widget>[
         AppButton(
           label: 'Sign out',

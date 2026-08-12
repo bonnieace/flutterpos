@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -38,8 +39,13 @@ final class TenantCheckoutConfigurationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Checkout settings',
+    contentWidth: AppContentWidth.reading,
     body: SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      // 24 until step 6, which is 4 more than the page header above it uses
+      // and read as a form that did not line up with its own title.
+      padding: EdgeInsets.all(
+        AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
+      ),
       child: TenantCheckoutConfigurationPanel(
         reader: reader,
         writer: writer,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -28,6 +29,7 @@ final class TenantProductLedgerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Product stock ledger',
+    contentWidth: AppContentWidth.records,
     body: TenantProductLedgerPanel(reader: reader, productId: productId),
   );
 }

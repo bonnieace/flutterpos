@@ -194,13 +194,20 @@ is `tool/screenshots/`.
 
 | Directory | Viewport | What it is |
 | --- | --- | --- |
-| `web/` | 1440 x 900 logical, 1x | A desktop browser window. Above `tenantTableBreakpoint` (1024), so the surfaces that have a table draw it. |
-| `mobile/` | 411 x 891 logical, 2x | A phone. Below `tenantWideLayoutBreakpoint` (768), so those surfaces draw cards instead. |
+| `web/` | 1440 x 900 logical, 1x | A desktop browser window. `design.md` §4.1's `expanded` band, so the surfaces that have a table draw it. |
+| `mobile/` | 411 x 891 logical, 2x | A phone. §4.1's `compact` band, so those surfaces draw cards instead. |
 | `web-full/`, `mobile-full/` | Same width, full content height | Only for screens taller than their window. The viewport files above are what a person sees **on arrival**; these are the whole screen. |
 
-Both breakpoints are declared in [`lib/ui/records.dart`](../lib/ui/records.dart),
-and the two widths were chosen to straddle them: 411 is also the figure
-`tenant_routing_shell.dart` measured its landing route against.
+Both boundaries are declared once, as `AppLayout` in
+[`lib/ui/tokens.dart`](../lib/ui/tokens.dart), and the two widths were chosen to
+straddle them: 411 is also the figure `tenant_routing_shell.dart` measured its
+landing route against. They used to be two constants in `lib/ui/records.dart`
+and a third written inline; `design.md` §11 step 6 folded all three into one
+name at the same numbers.
+
+**1440 is above §4.2's widest content maximum (1200) and 411 is below its
+narrowest (720)**, which is why a `web/` image shows a centred column with ground
+either side and a `mobile/` image of the same screen shows content edge to edge.
 
 ## Regenerating
 

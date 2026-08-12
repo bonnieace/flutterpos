@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../ui/records.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import 'checkout_catalog_cache.dart';
@@ -547,7 +548,15 @@ final class _CartEditorState extends State<_CartEditor> {
   /// point. It is kept rather than re-derived because the decision it encodes
   /// is the same one: below it, a product grid and a cart panel stop both
   /// being usable at once, so the cart becomes a sheet instead of a column.
-  static const double wideTillBreakpoint = 768;
+  ///
+  /// **It is no longer a number, and that is the whole of what step 6 does to
+  /// this file.** It used to be `static const double wideTillBreakpoint = 768`,
+  /// which is the same 768 `records.dart` declared and the same one
+  /// `login_screen.dart` computed inline - three declarations of one boundary,
+  /// free to drift. `design.md` §4.1 names that boundary `medium` and asks that
+  /// a screen consult one variable; this is that variable. **The sale path's
+  /// visual design is still step 7's** and nothing else here was touched.
+  static double get wideTillBreakpoint => AppLayout.contract.mediumFloor;
 
   /// How many units the cart holds, for the compact layout's badge.
   int get _itemCount =>

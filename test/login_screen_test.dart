@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_application_1/login_screen.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/tokens.dart';
+import 'package:flutter_application_1/widgets/pos_keyboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The channel the Firebase Auth plugin signs in over.
@@ -269,6 +271,61 @@ void main() {
     expect(find.byKey(const ValueKey('login-submit')), findsOne);
     expect(_error(tester), isNull);
   });
+
+  group('the screen splits at §4.1\'s medium floor, and nowhere else', () {
+    // **Step 6's rewiring, from the outside.** `isMobile` was `width < 768`
+    // with a comment - the third of three declarations of that boundary, and
+    // the only one that was not even a named constant. It reads `AppLayout`
+    // now. These pin the behaviour to the declared floor rather than to 768,
+    // so a future move of §4.1's number moves this screen with it. **Nothing
+    // about sign-in's visual design is asserted here**: that is step 9's, and
+    // the on-screen keyboard is only the cheapest observable difference
+    // between the two branches.
+
+    testWidgets('one pixel below it, the desktop keyboard is absent', (
+      tester,
+    ) async {
+      await _pumpAt(tester, AppLayout.contract.mediumFloor - 1);
+      expect(find.byType(PosKeyboard), findsNothing);
+    });
+
+    testWidgets('at it, the desktop keyboard is drawn', (tester) async {
+      await _pumpAt(tester, AppLayout.contract.mediumFloor);
+      expect(find.byType(PosKeyboard), findsOneWidget);
+    });
+
+    testWidgets('the boundary is the one §4.1 declares, not a literal', (
+      tester,
+    ) async {
+      // The claim the step actually makes. If `AppLayout.mediumFloor` moved and
+      // this screen kept its own 768, one of the two tests above would still
+      // pass and the app would have two boundaries again.
+      expect(AppLayout.contract.mediumFloor, 768);
+      expect(
+        AppLayout.contract.breakpointOf(AppLayout.contract.mediumFloor - 1),
+        AppBreakpoint.compact,
+      );
+      expect(
+        AppLayout.contract.breakpointOf(AppLayout.contract.mediumFloor),
+        AppBreakpoint.medium,
+      );
+    });
+  });
+}
+
+/// Pumps sign-in at an exact width, for the two cases either side of §4.1's
+/// `medium` floor.
+///
+/// Tall enough that the desktop branch's two panes both lay out; the narrow
+/// branch is the one `_pump` above already covers for every other test here.
+Future<void> _pumpAt(WidgetTester tester, double width) async {
+  tester.view.physicalSize = Size(width, 1000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  await tester.pumpWidget(MaterialApp(home: LoginScreen(signIn: _SignIn())));
+  await tester.pump();
 }
 
 Future<void> _pump(WidgetTester tester, EmailPasswordSignIn? signIn) async {

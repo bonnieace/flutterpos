@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -53,6 +54,7 @@ final class TenantReconciliationRunScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Reconciliation run',
+    contentWidth: AppContentWidth.reading,
     body: TenantReconciliationRunPanel(reader: reader, jobId: jobId),
   );
 }

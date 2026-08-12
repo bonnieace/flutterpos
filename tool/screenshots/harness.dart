@@ -19,9 +19,12 @@
 ///    will not run on its own, which is why every capture goes through
 ///    `tester.runAsync`.
 ///
-/// Sizes straddle both breakpoints `lib/ui/records.dart` declares: the phone is
-/// below 768 and gets the stacked card layout, and the desktop is above 1024
-/// and gets the table.
+/// Sizes straddle both breakpoints `AppLayout` declares in `lib/ui/tokens.dart`:
+/// the phone is `design.md` §4.1's `compact` band and gets the stacked card
+/// layout, and the desktop is `expanded` and gets the table. They also straddle
+/// §4.2's content maxima in both directions - 1440 is wider than every one of
+/// them and 411 is narrower than every one - so the pair shows a page both
+/// constrained and unconstrained.
 library;
 
 import 'dart:io';
@@ -57,8 +60,8 @@ final class ScreenshotViewport {
   String toString() => name;
 }
 
-/// A desktop browser window. Above `tenantTableBreakpoint`, so the surfaces
-/// that have a table draw it.
+/// A desktop browser window. `design.md` §4.1's `expanded` band, so the
+/// surfaces that have a table draw it.
 const ScreenshotViewport webViewport = ScreenshotViewport(
   name: 'web',
   size: Size(1440, 900),

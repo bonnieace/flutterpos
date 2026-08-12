@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -812,6 +813,7 @@ final class _PlatformPendingTenantReviewScreenState
     if (widget.embedded) return _buildBody(context);
     return AppScaffold(
       title: 'Pending business reviews',
+      contentWidth: AppContentWidth.records,
       actions: <Widget>[
         IconButton(
           key: const ValueKey('platform-review-refresh'),

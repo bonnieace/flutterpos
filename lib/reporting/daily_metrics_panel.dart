@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -56,6 +57,7 @@ final class TenantDailySummaryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Daily summary',
+    contentWidth: AppContentWidth.records,
     body: TenantDailySummaryPanel(
       reader: reader,
       reconciliationRoute: reconciliationRoute,

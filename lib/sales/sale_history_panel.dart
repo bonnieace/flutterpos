@@ -3,6 +3,7 @@
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_history_panel.dart';
 import '../returns/return_actions.dart';
@@ -77,6 +78,7 @@ final class TenantSaleHistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: request.title,
+    contentWidth: AppContentWidth.records,
     body: TenantSaleHistoryPanel(
       reader: reader,
       request: request,

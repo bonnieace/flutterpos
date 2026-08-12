@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import 'account_verification.dart';
 import 'email_delivery_status.dart';
 import 'platform_tenant_review.dart';
@@ -792,6 +793,7 @@ final class _TenantInvitationAcceptanceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Business invitation',
+    contentWidth: AppContentWidth.reading,
     actions: <Widget>[
       AppButton(
         label: 'Sign out',
@@ -801,7 +803,10 @@ final class _TenantInvitationAcceptanceScreen extends StatelessWidget {
     ],
     body: Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        // 24 until step 6; see the page inset's own note in `AppScaffold`.
+        padding: EdgeInsets.all(
+          AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: Card(
@@ -838,6 +843,7 @@ final class _InvalidTenantInvitationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Business invitation',
+    contentWidth: AppContentWidth.reading,
     actions: <Widget>[
       AppButton(
         label: 'Sign out',
@@ -847,7 +853,10 @@ final class _InvalidTenantInvitationScreen extends StatelessWidget {
     ],
     body: Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        // 24 until step 6; see the page inset's own note in `AppScaffold`.
+        padding: EdgeInsets.all(
+          AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1020,6 +1029,7 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
     ];
     return AppScaffold(
       title: 'Choose a business',
+      contentWidth: AppContentWidth.records,
       actions: <Widget>[
         if (widget.requestIdentity?.canRequestTenant == true)
           AppButton(

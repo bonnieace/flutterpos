@@ -639,6 +639,129 @@ void main() {
     });
   });
 
+  group('layout - design.md §4.1 and §4.2', () {
+    const layout = AppLayout.contract;
+
+    test('the breakpoint floors are §4.1\'s, unchanged by the rename', () {
+      // §4.1: "These replace `tenantWideLayoutBreakpoint` (768) and
+      // `tenantTableBreakpoint` (1024) with the same numbers under one name."
+      // A rename that moved a figure would be a layout change wearing a
+      // rename's clothes, so both numbers are asserted rather than described.
+      expect(layout.mediumFloor, 768);
+      expect(layout.expandedFloor, 1024);
+      expect(layout.breakpointFloors, <String, double>{
+        'breakpoint.medium': 768,
+        'breakpoint.expanded': 1024,
+      });
+    });
+
+    test('the content widths are §4.2\'s three rows', () {
+      expect(layout.reading, 720);
+      expect(layout.records, 1200);
+      expect(layout.salePane, 420);
+      expect(layout.contentWidths, <String, double>{
+        'content.reading': 720,
+        'content.records': 1200,
+        'content.salePane': 420,
+      });
+    });
+
+    test('every band boundary resolves on the floor, not above it', () {
+      // §4.1 states its ranges closed at the bottom - `medium` is "768 - 1023"
+      // and `expanded` is ">= 1024" - so the floor itself belongs to the wider
+      // band. An off-by-one here is a screen that changes shape one pixel late.
+      expect(layout.breakpointOf(0), AppBreakpoint.compact);
+      expect(layout.breakpointOf(767.9), AppBreakpoint.compact);
+      expect(layout.breakpointOf(768), AppBreakpoint.medium);
+      expect(layout.breakpointOf(1023.9), AppBreakpoint.medium);
+      expect(layout.breakpointOf(1024), AppBreakpoint.expanded);
+      expect(layout.breakpointOf(4000), AppBreakpoint.expanded);
+    });
+
+    test('the three bands are contiguous and cover every width', () {
+      // No gap and no overlap: every width answers exactly one band, so no
+      // caller can find a width that is neither compact nor medium.
+      for (final width in <double>[0, 1, 767, 768, 1023, 1024, 1440, 3840]) {
+        expect(
+          <AppBreakpoint>[
+            AppBreakpoint.compact,
+            AppBreakpoint.medium,
+            AppBreakpoint.expanded,
+          ].where((band) => layout.breakpointOf(width) == band),
+          hasLength(1),
+        );
+      }
+    });
+
+    test('isAtLeast is a floor test rather than an equality', () {
+      // The comparison every caller wants. `band == expanded` would silently
+      // exclude a wider band the day a fourth is declared, and reading the
+      // enum's own ordering is what stops that being written per call site.
+      expect(layout.isAtLeast(1440, AppBreakpoint.compact), isTrue);
+      expect(layout.isAtLeast(1440, AppBreakpoint.medium), isTrue);
+      expect(layout.isAtLeast(1440, AppBreakpoint.expanded), isTrue);
+      expect(layout.isAtLeast(800, AppBreakpoint.medium), isTrue);
+      expect(layout.isAtLeast(800, AppBreakpoint.expanded), isFalse);
+      expect(layout.isAtLeast(411, AppBreakpoint.medium), isFalse);
+      expect(AppBreakpoint.compact.isAtLeast(AppBreakpoint.compact), isTrue);
+      expect(AppBreakpoint.compact.isAtLeast(AppBreakpoint.medium), isFalse);
+    });
+
+    test('the content maxima ascend, and only the sale row has none', () {
+      // §4.2 gives a form less room than a table, which is the whole reason
+      // there are two rows rather than one. Reversing them would still compile.
+      expect(
+        layout.maxWidthOf(AppContentWidth.reading),
+        lessThan(layout.maxWidthOf(AppContentWidth.records)!),
+      );
+      expect(layout.maxWidthOf(AppContentWidth.reading), 720);
+      expect(layout.maxWidthOf(AppContentWidth.records), 1200);
+      // Null rather than infinity, so a caller adds no widget at all.
+      expect(layout.maxWidthOf(AppContentWidth.full), isNull);
+    });
+
+    test('§4.1\'s compact band is not §3\'s compact density', () {
+      // The one collision `design.md` creates for itself, and they are close
+      // to opposites: a phone is `AppBreakpoint.compact` and §3 gives it the
+      // *comfortable* density, while `AppDensity.compact` is reachable only on
+      // a pointer device at `expanded`. Two types, asserted so a future
+      // refactor cannot merge them into one.
+      expect(AppBreakpoint.compact, isNot(isA<AppDensity>()));
+      expect(AppTokens.dark.density, AppDensity.comfortable);
+      expect(AppDensity.compact.pointerOnly, isTrue);
+    });
+
+    test('the registered token set carries the contract itself', () {
+      // The claim that lets `PageHeader`'s statics read `AppLayout.contract`
+      // where they have no context to read a theme from. If these two could
+      // differ, a widget and a test would be answering different questions.
+      expect(AppTokens.dark.layout, same(AppLayout.contract));
+      expect(spiritTheme.extension<AppTokens>()!.layout, AppLayout.contract);
+    });
+
+    test('a theme mid-animation never moves a breakpoint', () {
+      // Interpolating a boundary would change a screen's shape *during a
+      // fade*, for no reason a person could name. Snapping is the same
+      // treatment the spacing and radius scales get, for a stronger reason.
+      //
+      // Not `const AppLayout()`: a const constructor canonicalizes, so the
+      // two would be one object and the assertion below would hold whatever
+      // `lerp` did with them.
+      final other = AppLayout();
+      expect(other, isNot(same(AppLayout.contract)));
+      final early = AppTokens.dark.lerp(
+        AppTokens.dark.copyWith(layout: other),
+        0.25,
+      );
+      final late = AppTokens.dark.lerp(
+        AppTokens.dark.copyWith(layout: other),
+        0.75,
+      );
+      expect(early.layout, same(AppLayout.contract));
+      expect(late.layout, same(other));
+    });
+  });
+
   group('the extension itself', () {
     test('spiritTheme registers it, and it is the only extension', () {
       expect(spiritTheme.extension<AppTokens>(), same(AppTokens.dark));

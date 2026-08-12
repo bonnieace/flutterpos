@@ -47,7 +47,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'records.dart' show tenantTableBreakpoint;
 import 'spring.dart';
 import 'tokens.dart';
 
@@ -69,11 +68,12 @@ enum AppRouteTransition {
 
 /// Whether a surface of this width is §4.1's `expanded`.
 ///
-/// Reads `tenantTableBreakpoint` rather than declaring a fourth 1024 of its
-/// own. `PLAN.md`'s standing exclusion on breakpoints is that the app already
-/// declares its two in more than one place and a further declaration makes the
-/// drift worse; unifying them is §4.1's own rewiring step.
-bool _isExpanded(double width) => width >= tenantTableBreakpoint;
+/// Read `tenantTableBreakpoint` when this was written, on the grounds that a
+/// further declaration of 1024 would make the existing drift worse. Step 6 did
+/// the unification §4.1 asks for, so this now asks [AppLayout] the question in
+/// §4.1's own words, at the same number.
+bool _isExpanded(double width) =>
+    AppLayout.contract.isAtLeast(width, AppBreakpoint.expanded);
 
 /// A route that arrives on a spring.
 ///

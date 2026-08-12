@@ -3,6 +3,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
 import 'tenancy/sign_in.dart';
+import 'ui/tokens.dart';
 import 'widgets/pill_input.dart';
 import 'widgets/pos_keyboard.dart';
 import 'widgets/glass_card.dart';
@@ -43,10 +44,17 @@ class _LoginScreenState extends State<LoginScreen> {
   String _seenEmail = '';
   String _seenPassword = '';
 
-  bool get isMobile {
-    final width = MediaQuery.of(context).size.width;
-    return width < 768; // Mobile/tablet breakpoint
-  }
+  /// Whether this screen is at §4.1's `compact` band.
+  ///
+  /// **The third of the three declarations of 768 this app carried**, and the
+  /// only one that was not even a named constant - it was `width < 768` with a
+  /// comment. `design.md` §4.1 asks that a screen consult one variable, and
+  /// step 6 made [AppLayout] that variable; this reads it at the same number.
+  /// **Sign-in's visual design is still step 9's** and nothing else here was
+  /// touched.
+  bool get isMobile =>
+      AppLayout.contract.breakpointOf(MediaQuery.of(context).size.width) ==
+      AppBreakpoint.compact;
 
   @override
   void initState() {

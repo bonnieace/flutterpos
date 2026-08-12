@@ -8,6 +8,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import 'bulk_catalog.dart';
 import 'catalog_management.dart';
 
@@ -54,6 +55,7 @@ final class TenantBulkCatalogScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Bulk catalog changes',
+    contentWidth: AppContentWidth.records,
     body: TenantBulkCatalogPanel(
       reader: reader,
       batchCallable: batchCallable,

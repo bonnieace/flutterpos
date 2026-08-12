@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -51,6 +52,7 @@ final class TenantSaleReturnsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Returns',
+    contentWidth: AppContentWidth.records,
     body: TenantSaleReturnsPanel(
       reader: reader,
       request: request,

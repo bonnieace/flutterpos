@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -44,6 +45,7 @@ final class TenantShiftAmendmentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Shift corrections',
+    contentWidth: AppContentWidth.records,
     body: TenantShiftAmendmentPanel(reader: reader, shiftId: shiftId),
   );
 }

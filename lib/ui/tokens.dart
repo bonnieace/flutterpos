@@ -1094,6 +1094,145 @@ final class AppDensity {
 }
 
 // ---------------------------------------------------------------------------
+// Layout - design.md §4.1 and §4.2
+// ---------------------------------------------------------------------------
+
+/// One of §4.1's three width bands.
+///
+/// **The word `compact` means something different here from what it means in
+/// [AppDensity], and that collision is `design.md`'s own.** §3 calls a *density*
+/// compact and §4.1 calls a *width band* compact, and they are close to
+/// opposites: `AppBreakpoint.compact` is a phone, which §3 says always gets the
+/// **comfortable** density, while `AppDensity.compact` is only ever reachable on
+/// a pointer device at `AppBreakpoint.expanded`. Two enums keep them from being
+/// passed to one another; the names are the document's and are not improved on
+/// here.
+enum AppBreakpoint {
+  /// `< 768`. A phone.
+  compact,
+
+  /// `768 - 1023`. A tablet, or a split-screen window.
+  medium,
+
+  /// `>= 1024`. A desktop window.
+  expanded;
+
+  /// Whether this band is [other] or wider.
+  ///
+  /// The comparison every caller actually wants: a layout is switched on by a
+  /// *floor*, not by an equality, and `band == expanded` silently excludes the
+  /// wider bands the day a fourth is added.
+  bool isAtLeast(AppBreakpoint other) => index >= other.index;
+}
+
+/// Which of §4.2's rows a screen's content is.
+///
+/// **A screen states which it is; it does not state a number.** §4.2 gives a max
+/// width per *kind of surface*, so the kind is the thing a call site knows and
+/// the width is the thing this file knows. A screen that passed 720 directly
+/// would be a screen that has to be re-edited when §4.2 changes its mind.
+enum AppContentWidth {
+  /// Reading and forms: 720, centred.
+  reading,
+
+  /// Record lists and tables: 1200, centred.
+  records,
+
+  /// The sale's two-pane layout, which §4.2 gives no maximum at all - the
+  /// products flex and the cart pane is fixed at [AppLayout.salePane].
+  full,
+}
+
+/// §4.1's breakpoints and §4.2's content widths, as one contract.
+///
+/// **This is the "one variable" §4.1 asks for.** Before it, 768 was declared
+/// twice - `tenantWideLayoutBreakpoint` in `lib/ui/records.dart` and
+/// `wideTillBreakpoint` in `checkout_cart_panel.dart` - with a third mechanism
+/// computing the same test inline in `login_screen.dart`, and 1024 was declared
+/// once as `tenantTableBreakpoint` and read by three files. All four are gone
+/// and every one of those callers reads this.
+///
+/// **The numbers did not change and that is the point of the step.** §4.1 says
+/// its three names replace the two old constants "with the same numbers under
+/// one name", so a rewiring that moved a figure would be a layout change wearing
+/// a rename's clothes.
+///
+/// **Nothing overrides this per subtree, unlike [AppDensity].** §3 states
+/// outright that density is "chosen by the screen"; §4.1 and §4.2 state ranges
+/// and maxima as properties of the surface a person is looking at, which no
+/// screen is entitled to disagree with. It still lives on [AppTokens] rather
+/// than as a bare top-level constant, for the same reason [AppSpacing] does: a
+/// widget that has a context reads one thing, and a second token set would carry
+/// its own. The two ways in cannot drift - `test/ui/tokens_test.dart` asserts
+/// [AppTokens.dark]'s layout is [contract] itself.
+@immutable
+final class AppLayout {
+  const AppLayout();
+
+  static const AppLayout contract = AppLayout();
+
+  /// Where [AppBreakpoint.medium] starts. §4.1.
+  double get mediumFloor => 768;
+
+  /// Where [AppBreakpoint.expanded] starts. §4.1.
+  double get expandedFloor => 1024;
+
+  /// §4.2's maximum for reading surfaces and forms.
+  double get reading => 720;
+
+  /// §4.2's maximum for record lists and tables.
+  double get records => 1200;
+
+  /// The fixed width of the sale's cart pane. §4.2's third row.
+  ///
+  /// Declared here with the other two because it is the same kind of figure and
+  /// the same table states it. **Nothing reads it yet**: the sale path is §11
+  /// step 7 and is not this step's to touch.
+  double get salePane => 420;
+
+  /// Which band [width] falls in.
+  ///
+  /// [width] is a **screen** width in logical pixels. §4.1's ranges describe the
+  /// surface a person is looking at, so resolving them against a padded box
+  /// inside a page produces a boundary nobody declared - the argument
+  /// `PageHeader.showsDisplayTitle` already makes for the same reason.
+  AppBreakpoint breakpointOf(double width) {
+    if (width >= expandedFloor) return AppBreakpoint.expanded;
+    if (width >= mediumFloor) return AppBreakpoint.medium;
+    return AppBreakpoint.compact;
+  }
+
+  /// Whether [width] reaches [band] or better.
+  bool isAtLeast(double width, AppBreakpoint band) =>
+      breakpointOf(width).isAtLeast(band);
+
+  /// §4.2's maximum for [surface], or null where it states none.
+  ///
+  /// Null rather than [double.infinity] deliberately: a caller that gets null
+  /// adds no constraining widget at all, where infinity would ask it to build a
+  /// `ConstrainedBox` that constrains nothing.
+  double? maxWidthOf(AppContentWidth surface) => switch (surface) {
+    AppContentWidth.reading => reading,
+    AppContentWidth.records => records,
+    AppContentWidth.full => null,
+  };
+
+  /// Every content width by its `design.md` name, for a test that wants to
+  /// assert the table rather than the fields.
+  Map<String, double> get contentWidths => <String, double>{
+    'content.reading': reading,
+    'content.records': records,
+    'content.salePane': salePane,
+  };
+
+  /// Every breakpoint floor by its `design.md` name.
+  Map<String, double> get breakpointFloors => <String, double>{
+    'breakpoint.medium': mediumFloor,
+    'breakpoint.expanded': expandedFloor,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The extension itself
 // ---------------------------------------------------------------------------
 
@@ -1114,6 +1253,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     required this.radius,
     required this.motion,
     required this.density,
+    required this.layout,
   });
 
   final AppColorRoles colors;
@@ -1140,6 +1280,14 @@ final class AppTokens extends ThemeExtension<AppTokens> {
   /// overrides it for its own subtree; see [AppDensity].
   final AppDensity density;
 
+  /// §4.1's breakpoints and §4.2's content widths.
+  ///
+  /// **Not overridden by anything, and [AppLayout] says why.** It is on the
+  /// extension so a widget with a context reads one thing rather than importing
+  /// a constant, which is the difference between a token layer and a folder of
+  /// numbers.
+  final AppLayout layout;
+
   /// The one token set `design.md` defines.
   static const AppTokens dark = AppTokens(
     colors: AppColorRoles.dark,
@@ -1148,6 +1296,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     radius: AppRadii.scale,
     motion: AppMotion.standard,
     density: AppDensity.comfortable,
+    layout: AppLayout.contract,
   );
 
   /// The tokens in scope at [context], or null where none are registered.
@@ -1217,6 +1366,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     AppRadii? radius,
     AppMotion? motion,
     AppDensity? density,
+    AppLayout? layout,
   }) => AppTokens(
     colors: colors ?? this.colors,
     typography: typography ?? this.typography,
@@ -1224,6 +1374,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     radius: radius ?? this.radius,
     motion: motion ?? this.motion,
     density: density ?? this.density,
+    layout: layout ?? this.layout,
   );
 
   @override
@@ -1238,6 +1389,11 @@ final class AppTokens extends ThemeExtension<AppTokens> {
       radius: t < 0.5 ? radius : other.radius,
       motion: AppMotion.lerp(motion, other.motion, t),
       density: AppDensity.lerp(density, other.density, t),
+      // Same reason as the two scales above, and a stronger one: a breakpoint
+      // half way between 768 and some other 768 is a boundary that would move
+      // *while a theme animates*, so a screen could change shape mid-fade for
+      // no reason a person could name.
+      layout: t < 0.5 ? layout : other.layout,
     );
   }
 }

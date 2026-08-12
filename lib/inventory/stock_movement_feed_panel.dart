@@ -4,6 +4,7 @@ import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -47,6 +48,7 @@ final class TenantStockMovementFeedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Stock movements',
+    contentWidth: AppContentWidth.records,
     body: TenantStockMovementFeedPanel(
       reader: reader,
       groupReader: groupReader,

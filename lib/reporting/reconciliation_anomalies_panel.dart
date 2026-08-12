@@ -4,6 +4,7 @@ import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -63,6 +64,7 @@ final class TenantReconciliationAnomalyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Unresolved differences',
+    contentWidth: AppContentWidth.records,
     body: TenantReconciliationAnomalyPanel(
       reader: reader,
       kind: kind,

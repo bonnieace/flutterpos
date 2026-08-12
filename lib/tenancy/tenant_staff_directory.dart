@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/records.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../ui/status.dart';
 
 import 'tenant_id.dart';
@@ -230,6 +231,7 @@ final class TenantStaffDirectoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Staff directory',
+    contentWidth: AppContentWidth.records,
     body: TenantStaffDirectoryPanel(
       reader: reader,
       cancelInvitationCallable: cancelInvitationCallable,
@@ -384,8 +386,19 @@ final class _StaffContentsState extends State<_StaffContents> {
       if (widget.page.items.isEmpty)
         const Text('No staff memberships found.')
       else
-        LayoutBuilder(
-          builder: (context, constraints) => tenantLayoutFitsTable(constraints)
+        // §4.1's bands describe the screen a person is looking at, not the box
+        // this widget happens to be laid out in. Until step 6 those were the
+        // same thing here, because nothing constrained the page; §4.2 now caps
+        // this route at 1200 and pads it, so a `LayoutBuilder` would put the
+        // card-to-table switch at 1064 of screen - a boundary produced by
+        // arithmetic that nobody declared and nobody could look up. Neither
+        // screenshot viewport is near it, so this moves no image.
+        Builder(
+          builder: (context) =>
+              AppLayout.contract.isAtLeast(
+                MediaQuery.sizeOf(context).width,
+                AppBreakpoint.expanded,
+              )
               ? _staffTable(context)
               : _staffCards(context),
         ),

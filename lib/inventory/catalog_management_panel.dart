@@ -68,6 +68,7 @@ final class TenantCatalogManagementScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Manage catalog',
+    contentWidth: AppContentWidth.records,
     body: TenantCatalogManagementPanel(
       reader: reader,
       writer: writer,

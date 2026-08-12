@@ -35,14 +35,14 @@
 /// with and without toolbar actions, and the two title roles either side of
 /// §4.1's `expanded` boundary - and that is the matrix in the harness.
 ///
-/// **Two things this file deliberately does not do**, both because they belong
-/// to a numbered step that is not this one:
+/// **One of the two things step 5a deliberately left is now done, in step 6.**
+/// §4.2's content widths are in: [AppScaffold.contentWidth] is required at every
+/// call site, and the seam step 5a built - one widget between every route and
+/// its content - is what let 25 screens get a maximum width on one day. See that
+/// field for why it is required rather than defaulted.
 ///
-/// - **It constrains no content width.** §4.2 gives reading surfaces 720 and
-///   record lists 1200, and §11 hands "content widths" to step 6 along with the
-///   `RecordList` contract. The seam is here - every migrated route now has one
-///   widget between it and its content - and step 6 is where the constraint
-///   goes in, once for every screen at once.
+/// **The other is still owed:**
+///
 /// - **It resolves no density.** §3 says density is "chosen by the screen", and
 ///   this is the widget a screen would choose it on; `lib/ui/tokens.dart` has
 ///   been carrying that as owed since step 1. It is still owed. The rule §3
@@ -55,8 +55,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'records.dart'
-    show tenantTableBreakpoint, tenantWideLayoutBreakpoint;
 import 'tokens.dart';
 
 /// A screen's title, its optional subtitle, and its optional primary action.
@@ -68,15 +66,11 @@ import 'tokens.dart';
 ///
 /// **The title role is chosen by width, and the boundary is not a new one.**
 /// §2.2 marks `display` "expanded only" and `title.lg` "screen title
-/// (compact)", so the role has to be resolved against §4.1's `expanded` floor
-/// of 1024. That figure is already declared - `tenantTableBreakpoint` in
-/// `records.dart` - and this reads that constant rather than writing 1024 down
-/// a second time. §4.1 asks for the two constants to be *renamed* into
-/// `compact` / `medium` / `expanded` so a screen consults one variable; that is
-/// a rewiring step which also has to reach `checkout_cart_panel.dart` and
-/// `login_screen.dart`, and it belongs with §4.2's content widths in step 6.
-/// Reusing the constant now is the move that does not add a fourth declaration
-/// in the meantime.
+/// (compact)", so the role has to be resolved against §4.1's `expanded` floor.
+/// **Step 6 renamed that floor rather than moving it**: step 5a read
+/// `tenantTableBreakpoint` in `records.dart`, which was 1024, and this now reads
+/// [AppBreakpoint.expanded] off [AppLayout], which is the same 1024 under
+/// §4.1's own name. Nothing about which role a given width gets has changed.
 ///
 /// **It draws no padding of its own.** [AppScaffold] pads it, because the
 /// padding that matters is the page's and a header that carried its own would
@@ -123,16 +117,23 @@ final class PageHeader extends StatelessWidget {
   ///
   /// Exposed so a test can ask the same question the widget asks, rather than
   /// asserting a pixel width and hoping the two agree.
+  ///
+  /// **Reads [AppLayout.contract] rather than a theme, because a static has no
+  /// context to read one from.** That is safe here and would not be for a
+  /// density: [AppLayout] is the one part of the token set nothing overrides
+  /// per subtree, and `test/ui/tokens_test.dart` asserts the registered set
+  /// carries this exact contract so the two cannot drift.
   static bool showsDisplayTitle(double screenWidth) =>
-      screenWidth >= tenantTableBreakpoint;
+      AppLayout.contract.isAtLeast(screenWidth, AppBreakpoint.expanded);
 
   /// Whether [screenWidth] has room for the title and the action side by side.
   ///
-  /// **The other already-declared breakpoint, and it is the question that
-  /// constant was written to answer.** `tenantWideLayoutBreakpoint`'s own
-  /// comment says it "answers *is there room for two things side by side*",
-  /// which is exactly this; `DESIGN-AUDIT.md` §5 records that it has had **zero
-  /// consumers** since it was declared, and this is its first.
+  /// **§4.1's `medium` floor, and it is the question the constant behind it was
+  /// written to answer.** `tenantWideLayoutBreakpoint`'s own comment said it
+  /// "answers *is there room for two things side by side*", which is exactly
+  /// this; `DESIGN-AUDIT.md` §5 records that it had **zero consumers** until
+  /// step 5a, and step 6 folded it into [AppLayout.mediumFloor] at the same
+  /// number.
   ///
   /// **Below it the action goes under the title rather than beside it**, and
   /// that is a correctness rule rather than a preference. Laid side by side on
@@ -142,7 +143,7 @@ final class PageHeader extends StatelessWidget {
   /// about the title staying *readable*, and a title squeezed to nothing fails
   /// it more completely than an ellipsis would.
   static bool placesActionBesideTitle(double screenWidth) =>
-      screenWidth >= tenantWideLayoutBreakpoint;
+      AppLayout.contract.isAtLeast(screenWidth, AppBreakpoint.medium);
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +236,7 @@ final class AppScaffold extends StatelessWidget {
     super.key,
     required this.title,
     required this.body,
+    required this.contentWidth,
     this.subtitle,
     this.primaryAction,
     this.actions = const <Widget>[],
@@ -243,6 +245,25 @@ final class AppScaffold extends StatelessWidget {
 
   /// The screen's name. See [PageHeader.title].
   final String title;
+
+  /// Which of §4.2's rows this screen's content is.
+  ///
+  /// **Required rather than defaulted, and that is a decision.** §4.2 opens
+  /// "Every screen has a max content width", and it gives a different one to a
+  /// form than to a table - so there is no value that is right when a call site
+  /// says nothing. A default would also be silently wrong for the majority
+  /// here: 20 of this app's 25 routes are record lists, so defaulting to
+  /// [AppContentWidth.reading] would quietly narrow most of the app to 720 and
+  /// defaulting to [AppContentWidth.records] would quietly widen every form to
+  /// 1200. Requiring it puts the judgement in the diff, where a reviewer can
+  /// disagree with it per screen.
+  ///
+  /// **What it fixes is §4.2's own example.** The catalog row whose *Correct*
+  /// link sat 1,300 pixels from the product name it belongs to was an
+  /// unconstrained `ListView` in a 1440 window; at 1200 the two are 1,160
+  /// apart, and the rest of the distance is `RecordList`'s to close in the
+  /// second half of this step.
+  final AppContentWidth contentWidth;
 
   /// See [PageHeader.subtitle].
   final String? subtitle;
@@ -271,13 +292,16 @@ final class AppScaffold extends StatelessWidget {
   ///
   /// **A component decision on §2.3's scale, not a token, and it is
   /// provisional.** No section of `design.md` states a page padding; §4.2
-  /// states a maximum content *width* and hands it to step 6. `space.20` is
-  /// what the three largest list screens in this app already pad their bodies
-  /// with (`EdgeInsets.all(20)` on the catalog, the daily summary and
-  /// reconciliation status), so the header lines up with the content under it
-  /// on the screens where lining up is most visible. Two routes pad 24 instead
-  /// and are 4 out until step 6 unifies them; that is recorded in `PLAN.md`
-  /// rather than fixed here by editing a body in a chunk about frames.
+  /// states a maximum content *width*, which is a different thing and is now
+  /// [contentWidth]. `space.20` is what the three largest list screens in this
+  /// app already pad their bodies with (`EdgeInsets.all(20)` on the catalog,
+  /// the daily summary and reconciliation status), so the header lines up with
+  /// the content under it on the screens where lining up is most visible.
+  ///
+  /// **The three routes that padded 24 now pad this**, which is the unification
+  /// step 5a recorded as owed: checkout settings and the shell's two invitation
+  /// screens were 4 pixels out from their own headers. Nothing else moved to
+  /// reach it - the figure is still 20 and every other body already used it.
   static double horizontalInset(AppSpacing spacing) => spacing.s20;
 
   @override
@@ -287,29 +311,51 @@ final class AppScaffold extends StatelessWidget {
     // the accessor's own note for why the fallback cannot shrink a tap target.
     final tokens = AppTokens.componentOf(context);
     final inset = horizontalInset(tokens.spacing);
+    final page = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Padding(
+          padding: EdgeInsets.fromLTRB(inset, tokens.spacing.s20, inset, 0),
+          child: PageHeader(
+            title: title,
+            subtitle: subtitle,
+            primaryAction: primaryAction,
+          ),
+        ),
+        // §3's own row for the gap between one section of a page and the
+        // next. The header and the content are two sections.
+        SizedBox(height: tokens.density.sectionGap),
+        Expanded(child: body),
+      ],
+    );
+    final maximum = tokens.layout.maxWidthOf(contentWidth);
     return Scaffold(
       backgroundColor: tokens.colors.surface.base,
       appBar: AppBar(
         automaticallyImplyLeading: automaticallyImplyLeading,
         actions: actions.isEmpty ? null : actions,
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Padding(
-            padding: EdgeInsets.fromLTRB(inset, tokens.spacing.s20, inset, 0),
-            child: PageHeader(
-              title: title,
-              subtitle: subtitle,
-              primaryAction: primaryAction,
+      // **The header and the body are constrained together, above the body's
+      // own padding.** §4.2 caps *content*, and a screen whose title sat at the
+      // window edge while its records sat in a centred 1200 column would read
+      // as two pages. Constraining the shared column is also what keeps the
+      // header's 20 inset lined up with the 20 every body pads itself with.
+      //
+      // **The toolbar is deliberately outside it.** A back arrow that drifted
+      // inwards on a wide window, away from the corner every platform puts it
+      // in, would be chrome obeying a content rule.
+      //
+      // **[AppContentWidth.full] adds no widget rather than an unbounded one.**
+      // `maxWidthOf` answers null there, and a `ConstrainedBox` that constrains
+      // nothing is a line of code that has to be read before it can be ignored.
+      body: maximum == null
+          ? page
+          : Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maximum),
+                child: page,
+              ),
             ),
-          ),
-          // §3's own row for the gap between one section of a page and the
-          // next. The header and the content are two sections.
-          SizedBox(height: tokens.density.sectionGap),
-          Expanded(child: body),
-        ],
-      ),
     );
   }
 }

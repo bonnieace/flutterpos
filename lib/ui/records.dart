@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 /// Shared presentation for the surfaces that list records.
 ///
 /// The staff directory, the stock screens, and the till all show the same two
@@ -18,30 +16,19 @@ import 'package:flutter/material.dart';
 /// Nothing in this file decides what a record *is*. It takes strings and
 /// widgets and lays them out; every caller keeps its own rules about what may
 /// be shown and to whom.
-
-/// Where a phone layout becomes a tablet one.
 ///
-/// The same figure the till splits its cart at. It answers "is there room for
-/// two things side by side", which is a different question from the one below.
-const double tenantWideLayoutBreakpoint = 768;
+/// **The two breakpoints this file used to declare have moved**, in `design.md`
+/// §11 step 6. `tenantWideLayoutBreakpoint` (768) and `tenantTableBreakpoint`
+/// (1024) are now `AppLayout.mediumFloor` and `AppLayout.expandedFloor` in
+/// `lib/ui/tokens.dart`, under §4.1's names, with the same numbers - which is
+/// what §4.1 asks for in so many words. Their two readers,
+/// `tenantLayoutIsWide` and `tenantLayoutFitsTable`, are `AppLayout.isAtLeast`
+/// and took a `BoxConstraints`; the replacement takes a screen width, because
+/// §4.1's bands describe the surface a person is looking at rather than
+/// whatever box a widget happens to be inside.
+library;
 
-/// Where a list of records becomes a table of them.
-///
-/// **Deliberately not [tenantWideLayoutBreakpoint], and this is the previous
-/// app's own split.** `users.dart` called 600-1024 a tablet and only drew its
-/// table at 1024, because a table is not "two things side by side" - it is
-/// four or five columns *plus* a row of controls, and every one of them has to
-/// be readable at once. At 800 the controls column is narrower than the
-/// buttons in it. So a tablet gets the cards, which lose nothing but density.
-const double tenantTableBreakpoint = 1024;
-
-/// Whether there is room to put two things beside each other.
-bool tenantLayoutIsWide(BoxConstraints constraints) =>
-    constraints.maxWidth >= tenantWideLayoutBreakpoint;
-
-/// Whether there is room for the table form of a record list.
-bool tenantLayoutFitsTable(BoxConstraints constraints) =>
-    constraints.maxWidth >= tenantTableBreakpoint;
+import 'package:flutter/material.dart';
 
 /// One headline figure with its caption.
 ///

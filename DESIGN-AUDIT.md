@@ -649,10 +649,15 @@ Recorded for balance, because these do not need re-litigating:
 **Neither constant is consulted by the catalog, the daily summary, or the reconciliation screens.
 All three are fixed single-column `ListView`s at every width.**
 
+**Closed 2026-08-12 in step 6.** Both constants are gone, and with them the third
+mechanism and the second declaration of 768. What replaces all four is `AppLayout` in
+[tokens.dart](lib/ui/tokens.dart), under §4.1's own names, at the same numbers — which is what
+§4.1 asks for in so many words. The table below is kept as the state that motivated the step.
+
 | Constant | Declared | Consumers |
 | --- | --- | --- |
-| `tenantWideLayoutBreakpoint` | [records.dart:26](lib/ui/records.dart#L26) | **Zero.** |
-| `tenantTableBreakpoint` | [records.dart:36](lib/ui/records.dart#L36) | **One.** |
+| ~~`tenantWideLayoutBreakpoint`~~ → `AppLayout.mediumFloor` | ~~[records.dart:26](lib/ui/records.dart#L26)~~ | ~~**Zero.**~~ **Three**: `PageHeader.placesActionBesideTitle`, `checkout_cart_panel.dart`'s till split, `login_screen.dart`'s `isMobile`. |
+| ~~`tenantTableBreakpoint`~~ → `AppLayout.expandedFloor` | ~~[records.dart:36](lib/ui/records.dart#L36)~~ | ~~**One.**~~ **Three**: `PageHeader.showsDisplayTitle`, `AppPageRoute`'s transition row, the staff directory's card-to-table switch. |
 
 - ~~`tenantWideLayoutBreakpoint` has no consumers. The only other reference in `lib/` is its own doc
   comment at [:30](lib/ui/records.dart#L30). Its reader `tenantLayoutIsWide`
@@ -668,6 +673,17 @@ All three are fixed single-column `ListView`s at every width.**
 - `tenantTableBreakpoint` is consulted once, via `tenantLayoutFitsTable` at
   [tenant_staff_directory.dart:386](lib/tenancy/tenant_staff_directory.dart#L386). That is the only
   breakpoint-driven layout switch in the entire migrated app.
+
+  **Still the only one after step 6, and that is worth stating rather than letting the closure
+  above imply otherwise.** Unifying the declarations did not add a layout switch anywhere; what it
+  added is a *content maximum* on all 25 routes, which is §4.2 rather than §4.3. The responsive
+  contract — what a `RecordList` becomes at each band — is the second half of step 6 and is not
+  done. One switch, on one screen, is still the honest count.
+
+  What did change on that one screen: it asks the question of the **screen** width now rather than
+  of its own `BoxConstraints`, because §4.2 put a 1200 cap and 20 of padding between the two. At
+  1024 exactly, the old reading would have found 984 and drawn cards on a surface §4.1 calls
+  expanded.
 
 ### The three named screens
 
@@ -687,15 +703,21 @@ responsive machinery to remove first.
 
 ### Two related findings
 
-**768 is declared twice.** [checkout_cart_panel.dart:550](lib/checkout/checkout_cart_panel.dart#L550)
-declares `static const double wideTillBreakpoint = 768` and consults it at
-[:562](lib/checkout/checkout_cart_panel.dart#L562) — in a file that already imports `records.dart`
+~~**768 is declared twice.**~~ **Fixed 2026-08-12 in step 6.**
+[checkout_cart_panel.dart:550](lib/checkout/checkout_cart_panel.dart#L550)
+declared `static const double wideTillBreakpoint = 768` and consulted it at
+[:562](lib/checkout/checkout_cart_panel.dart#L562) — in a file that already imported `records.dart`
 at [line 5](lib/checkout/checkout_cart_panel.dart#L5) for a static string helper. The two
-declarations can drift.
+declarations could drift. `wideTillBreakpoint` is now a getter reading `AppLayout.mediumFloor`; the
+name is kept because it says what the till uses the boundary *for*, and **nothing else in the sale
+path was touched**, that being step 7's.
 
-**There is a third mechanism.** [login_screen.dart:47](lib/login_screen.dart#L47) computes
-`isMobile` from `MediaQuery.of(context).size.width`. So §4.1's "so a screen consults one variable"
-must unify three mechanisms across three files, not merely rename two constants.
+~~**There is a third mechanism.**~~ **Also fixed 2026-08-12.**
+[login_screen.dart:47](lib/login_screen.dart#L47) computed
+`isMobile` from `MediaQuery.of(context).size.width` against a literal 768 with a comment. So §4.1's
+"so a screen consults one variable" had to unify three mechanisms across three files, not merely
+rename two constants — and it did: `isMobile` now asks `AppLayout` whether the width is
+§4.1's `compact` band. **Sign-in's visual design is still step 9's** and nothing else there moved.
 
 ### On the generated screenshot documentation
 
@@ -711,7 +733,12 @@ current code.
 Renaming the constants touches: [screenshots/README.md](screenshots/README.md) (generated — edit
 [tool/screenshots/build_index.dart:197-201](tool/screenshots/build_index.dart#L197-L201) instead) and
 [tool/screenshots/harness.dart:22](tool/screenshots/harness.dart#L22), which explains its viewport
-choice in terms of both names.
+choice in terms of both names. **Both were edited in step 6, on 2026-08-12, and the second half of
+this finding was answered rather than only renamed**: the two viewports now also straddle §4.2's
+maxima in both directions — 1440 is wider than every one of them and 411 narrower than every one —
+so the pair shows a page constrained and unconstrained. The "exactly one screen changes shape"
+count is unchanged, because a content maximum is not a shape change; **49 of the 51 images the step
+moved are `web/` ones**, and every `mobile/` image but two is byte-identical.
 
 **The good news:** because there is almost no responsive logic to unwind, §4.3 is additive rather
 than a rewrite. The cost is in defining the record model, not in removing existing behaviour.

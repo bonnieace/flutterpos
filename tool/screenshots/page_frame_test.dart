@@ -126,6 +126,10 @@ class _Frame extends StatelessWidget {
       ),
       child: AppScaffold(
         title: title,
+        // The body below is a list of records, and step 6 requires every page
+        // to say which of §4.2's rows it is. `95-*` is the matrix that varies
+        // this; here it is held fixed so these stay pictures of the header.
+        contentWidth: AppContentWidth.records,
         subtitle: subtitle,
         primaryAction: action
             ? AppButton(

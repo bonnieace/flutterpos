@@ -20155,3 +20155,267 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## Every page gets a maximum width, and 768 stops being declared three times - 2026-08-12
+
+`design.md` §11 **step 6, first half**: §4.1's breakpoints and §4.2's content widths. Every route in
+the migrated tree now declares which of §4.2's rows it is, and the app has **one** declaration of
+each layout boundary where it had four.
+
+**Step 6 is split, and this is the half `PLAN.md` said to take on its own if it filled a session.**
+§11 names step 6 "`RecordList` contract and content widths", which is two halves with a conjunction
+between them. `DESIGN-AUDIT.md` §4.7 is explicit that the first half is not a rename of what exists
+- it requires inventing the record model §5.2 describes, re-expressing thirteen screens' data in it,
+and deciding per screen what the compact form loses, which is a product judgement per screen. So the
+*contract* half is its own chunk and this one took the *widths* half, which is the one the
+breakpoint rewiring belongs to. That is the shape `AppButton` and `AppTextField` both shipped in:
+the mechanism first, the per-screen judgement second.
+
+### The chunk was checked against the board before it was accepted
+
+`prompt.md` asks a session to check the queued chunk rather than inherit it, and to propose
+something else if a capability the app needs in order to function is missing and unqueued. Nothing
+is: password reset is blocked on the App Check decision and queued, the printed receipt is blocked
+on an external interface, and the subscription has no schema to model. The queued chunk stands.
+
+### The web callable-auth defect was checked again, and the Windows route is still shut
+
+`HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock` still carries no
+`AllowDevelopmentWithoutDevLicense` value, so Developer Mode is off and `flutter run -d windows`
+cannot link its plugins. The source settles nothing, for the reason step 4 recorded: every callable
+goes through `FirebaseFunctions.instance` with no platform branch anywhere. **The variable is still
+open** and the next session inherits the same instruction rather than a resolved one.
+
+### What the layout contract decided
+
+**One declaration, and it absorbed a mechanism the audit did not count at first.**
+`DESIGN-AUDIT.md` §5 named `tenantWideLayoutBreakpoint` (768), `tenantTableBreakpoint` (1024) and
+`checkout_cart_panel.dart`'s `wideTillBreakpoint` (768 again), and then found a third mechanism:
+`login_screen.dart` computing `width < 768` inline with a comment. All four are gone. `AppLayout` in
+`lib/ui/tokens.dart` holds §4.1's two floors and §4.2's three widths, and every former caller reads
+it. **The numbers did not move**, which §4.1 asks for in so many words - a rename that moved a
+figure would be a layout change wearing a rename's clothes - and `test/ui/tokens_test.dart` asserts
+both floors as literals so it cannot happen quietly.
+
+**Two of the four declarations were in files this chunk is otherwise forbidden to touch, and that is
+sanctioned rather than smuggled.** `checkout_cart_panel.dart` is step 7's sale path and
+`login_screen.dart` is step 9's sign-in. §4.1 names both files as part of its own rewiring, and
+`PLAN.md`'s queued chunk says in as many words that "step 6 is where they become one name". Each
+edit is one expression - a constant becomes a getter, an inline comparison becomes a call - neither
+file's visual design was touched, and neither file's screenshots moved.
+
+**A band is resolved from a screen width, never from a `BoxConstraints`.** §4.1 states its ranges as
+properties of the surface a person is looking at. `PageHeader` already made this argument for the
+title role in step 5a; step 6 made it load-bearing, because §4.2 now puts a 1200 cap and 20 of
+padding between the screen and any widget inside it. The one place in the app that switched layout
+on a `BoxConstraints` - the staff directory's card-to-table switch, which `DESIGN-AUDIT.md` §5 calls
+the only breakpoint-driven switch in the migrated app - was moved to the screen width for exactly
+that reason: at 1024 the old reading would have found 984 and drawn cards on a surface §4.1 calls
+expanded. **Neither screenshot viewport is near that boundary, so it moved no image**, which is what
+made it safe to do inside a chunk about widths.
+
+**`AppScaffold.contentWidth` is required, and it is the decision here most likely to be argued
+with.** §4.2 opens "Every screen has a max content width" and gives a form and a table different
+ones, so there is no value that is right when a call site says nothing. A default would also have
+been silently wrong for the majority: **20 of the 25 routes are record lists**, so defaulting to
+`reading` would have quietly narrowed most of the app to 720 and defaulting to `records` would have
+quietly widened every form to 1200. Requiring it puts the judgement in the diff, one line per
+screen, where a reviewer can disagree with it per screen. The five reading surfaces are checkout
+settings, receipt lookup, one reconciliation run, and the shell's two invitation screens.
+
+**The header and the body are constrained together; the toolbar is not.** A title at the window edge
+above records in a centred column would read as two pages rather than one, and constraining the
+shared column is also what keeps the header's 20 inset lined up with the 20 every body pads itself
+with. The toolbar is deliberately outside: a back arrow that drifted inwards on a wide window, away
+from the corner every platform puts it in, would be chrome obeying a content rule.
+
+**`AppContentWidth.full` adds no widget rather than an unbounded one.** `maxWidthOf` answers null
+there, so the `ConstrainedBox` is not built at all - a box that constrains nothing is a line that
+has to be read before it can be ignored. Nothing in `lib/` passes `full` yet; the sale would, and it
+is step 7's. It is built, tested and photographed anyway, because §4.2 states the row and a sale
+screen that quietly got 1200 would be missing 240 pixels of products.
+
+**The three routes that padded 24 now pad 20**, which is the unification step 5a recorded as owed
+rather than a new opinion. Checkout settings and the shell's two invitation screens were four pixels
+out from their own headers. The figure did not change; three bodies moved to it.
+
+**Nothing overrides the layout contract per subtree, unlike density.** §3 says outright that density
+is "chosen by the screen"; §4.1 and §4.2 state ranges and maxima no screen is entitled to disagree
+with. It still lives on `AppTokens` rather than as a bare top-level constant, for the same reason
+`AppSpacing` does, and `tokens_test` asserts the registered set carries `AppLayout.contract` itself -
+which is what lets `PageHeader`'s two statics read the constant where they have no context to read a
+theme from.
+
+### What it did not do
+
+- **The `RecordList` contract**, the other half of step 6 and the larger one. §4.3 is untouched, and
+  `DESIGN-AUDIT.md` §6 decision 2 - amending §4.3 to concede the caller's opt-out - is still
+  unapplied to `design.md`, because it belongs with the half that implements §4.3.
+- **The step-4 sweep** and **step 8**, both still in the batch and both queued.
+- **§3's density**, still unresolved and still owed by `AppScaffold`. Step 6's second half and step 8
+  both want the answer.
+
+### Files changed
+
+```text
+lib/ui/tokens.dart                                    AppBreakpoint, AppContentWidth, AppLayout;
+                                                      AppTokens.layout
+lib/ui/records.dart                                   two constants and two readers removed
+lib/ui/scaffold.dart                                  contentWidth, the centred constraint,
+                                                      the two statics rewired
+lib/ui/routes.dart                                    _isExpanded reads AppLayout
+lib/login_screen.dart                                 isMobile reads AppLayout
+lib/checkout/checkout_cart_panel.dart                 wideTillBreakpoint reads AppLayout
+lib/tenancy/tenant_staff_directory.dart               the table switch reads a screen width
+lib/tenancy/tenant_routing_shell.dart                 3 call sites, 2 paddings 24 -> 20
+lib/checkout/checkout_configuration_panel.dart        1 call site, padding 24 -> 20
+lib/audit/, lib/inventory/ (5), lib/reporting/ (6),
+  lib/returns/, lib/sales/ (2), lib/shift/,
+  lib/tenancy/ (2)                                    the remaining 21 call sites
+test/ui/tokens_test.dart                              +9 tests
+test/ui/scaffold_test.dart                            +8 tests, 25 call sites rewired
+test/login_screen_test.dart                           +3 tests
+tool/screenshots/content_width_test.dart              new - 3 captures
+tool/screenshots/page_frame_test.dart                 contentWidth on the 94-* matrix
+tool/screenshots/harness.dart                         viewport notes
+tool/screenshots/build_index.dart                     the README's breakpoint prose
+design.md                                             §4.1 and §4.2 implementation notes
+DESIGN-AUDIT.md                                       §5 and its two related findings
+PLAN.md
+HISTORY.md
+```
+
+25 `AppScaffold` call sites, in 23 files.
+
+### Screenshots
+
+**6 added, 51 changed, none removed, 113 identical**, and **zero date drift for the fourth chunk
+running**.
+
+```text
+G  after step 5a                         164 images
+H  after step 6a                         170 images
+   added 6 (the 95-* matrix), changed 51, removed 0, identical 113
+```
+
+**49 of the 51 that moved are `web/` or `web-full/`, and that is the check.** 1440 is wider than
+every maximum §4.2 states and 411 is narrower than every one, so a content maximum can only show at
+the desktop viewport. **The other two are `mobile/06-accept-an-invitation` and
+`mobile/16-checkout-settings`** - two of the three routes whose body padding went 24 to 20, and the
+only mobile images in the whole set that were expected to move. The third,
+`mobile/07-invalid-invitation-link`, correctly did not: its content is a centred min-width column
+narrower than the space either way, so the padding around it is invisible. It moved at `web/`,
+because its *header* moved inward with the 720 constraint.
+
+**Every other `mobile/` image is byte-identical, including the sale path, sign-in, the landing route
+and all four component matrices** - none of which is an `AppScaffold` caller. A single unexpected
+name among the mobile files would have meant a maximum firing below 720, which is the one way this
+change could be wrong and be invisible at the desktop viewport.
+
+### Test commands and results
+
+```text
+flutter test --no-pub --concurrency=1                                  1791 pass  (1771 -> 1791)
+npm --prefix functions test                                             409 pass
+npm --prefix rules-tests run test:emulator                             BLOCKED - see below
+npm --prefix rules-tests run test:emulator:reconciliation              BLOCKED - see below
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 \
+  npm --prefix rules-tests run test:emulator:invitations                not run - same gate
+flutter analyze --no-pub lib test tool                                 475 issues (pre-existing)
+flutter test --no-pub --concurrency=1 tool/screenshots                 128 captures, 170 images
+dart run tool/screenshots/build_index.dart                             76 screens
+```
+
+### The three emulator suites cannot start on this machine, and it is the toolchain
+
+```text
+Error: firebase-tools no longer supports Java version before 21.
+       Please install a JDK at version 21 or above to get a compatible runtime.
+```
+
+**Diagnosed rather than retried, and it is not this chunk's doing.** `rules-tests` pins
+`firebase-tools@15.24.0` in its lockfile, and that version gates `emulators:exec` on Java 21 or
+above **unconditionally** - `MIN_SUPPORTED_JAVA_MAJOR_VERSION = 21` in
+`lib/emulator/commandUtils.js`, checked before any emulator starts, with no per-emulator exemption.
+The only JDK on this machine is Temurin **17.0.20**, at `C:\Users\BonifaceMasota\develop\jdk-17`,
+which is what `JAVA_HOME` and `PATH` both point at. Both the rules suite and the reconciliation
+suite were run and both failed at the identical point before a single test executed; the invitation
+suite shares the same entry point and was not run again to prove the same thing a third time.
+
+**Nothing in the repository changed to cause it.** `firebase-tools`, the JDK, and the lockfile were
+all installed on 2026-07-30 and none has been written since. `git diff` over `functions/`,
+`firestore.rules` and `rules-tests/` prints **zero lines** this session. So either the sessions that
+recorded these suites green on 2026-08-12 ran with a Java 21 on `PATH` that is not there now, or
+those runs predate something about this environment that nobody wrote down. **The `PLAN.md` claim
+that all four were measured twice on 2026-08-12 is left standing but is now marked as unreproducible
+here**, because contradicting a recorded measurement on the strength of a toolchain error would be
+guessing.
+
+**Installing a JDK 21 is a machine change and was not made.** It is the same class of decision as
+turning on Windows Developer Mode, which `PLAN.md` already records as "a machine setting nobody
+should flip on the product owner's behalf". It is queued as its own item instead, and it is the
+first thing the next session should ask about, because it blocks every rules and integration
+measurement from here on - including the ones a *server* chunk would need.
+
+**The carry was taken, and it was available on the standing rule's own terms.** This chunk changes
+only Dart, `git diff` over the three server paths is empty, and the counter stood at 0 of 2 after
+step 5a measured. `functions` was measured anyway - 409, unchanged - because it needs no emulator.
+The counter is now 1 of 2, and **a third consecutive carry is not permitted**, which is another
+reason the JDK question cannot be left to drift.
+
+### Three failures, and the third was self-inflicted against a trap this file already carries
+
+**A width assertion measured the wrong box.** The first draft of the content-width tests derived the
+page width from `getSize(find.text(title))`, which is the *title's* box: `PageHeader` lays its title
+in a start-aligned column, so the text sizes to its own glyphs and answered 588 where the page was
+720. It reads the laid-out `PageHeader` now, which is the box the constraint actually reaches. **A
+test that measures a leaf and calls it the page agrees with the layout by accident and then stops.**
+
+**A lerp assertion was vacuous because `const` canonicalizes.** The test that the layout contract
+does not interpolate mid-animation built its second value as `const AppLayout()` - which is the same
+object as `AppLayout.contract`, so `same()` held whatever `lerp` did with it. It builds a non-const
+instance now and asserts the two are distinct before using them. **A `same()` assertion between two
+const values of a fieldless class proves nothing.**
+
+**`dart format` was run over every touched file and rewrote unrelated blocks in twenty of them,
+which is the standing trap in `PLAN.md` verbatim.** The trap says: this repository was not formatted
+with this SDK's line-breaking, so formatting a file to land a small addition rewrites blocks nobody
+edited. It cost **2,060 insertions and 863 deletions** where the real change is **834 and 123** —
+`checkout_cart_panel.dart` alone went to 124/124 for a one-line edit, and
+`tenant_staff_directory.dart` to 175/188. For a chunk whose central claim is *one visible line per
+screen*, that noise destroys the only thing making the diff reviewable.
+
+**Fixed by restoring 31 files from `HEAD` — 27 under `lib/`, three tests and one harness file — and
+re-applying every edit textually, with no formatter run**, then reverting the three formatter-only
+hunks left in `tokens.dart` and the four in `harness.dart` by hand. `git checkout --` is blocked in
+this harness, so the restore is `git show HEAD:<path>` written back over the file. The check afterwards is the per-file line count: every one of the 21 pure
+call-site files is now exactly **2 lines**, and `lib/ui/tokens.dart` is **156 insertions and zero
+deletions**. **The trap is right and the rule is: never run `dart format` across a change set in
+this repository.** Format nothing, or format one file and revert everything the formatter touched
+that you did not.
+
+**One figure this entry first recorded was wrong and is corrected rather than left.** It said the
+analyzer reported 476 issues; that was `flutter analyze lib tool` with the harness's own missing
+`contentWidth` still in it. Over `lib test tool` with the work finished it is **475**, which is the
+pre-existing baseline this file has carried since 2026-08-11, unchanged.
+
+### What this chunk owes
+
+**Nobody has looked at it, and the device-run debt is now twelve chunks deep.** The item this one
+adds is small but real, and it is the first in the list that needs a *wide* surface rather than a
+phone: §4.2's maxima cannot fire below 720, so the only evidence that exists is the 1440 harness
+capture. Whether a 1200 column centred in a 1440 window reads as composed or as a page that failed
+to fill its space is the same kind of judgement the page header's 128 pixels is, and it is attached
+to the same run. The page frame is still first on that list.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

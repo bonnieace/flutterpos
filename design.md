@@ -299,6 +299,14 @@ never gets 32px targets, whatever its width.
 These replace `tenantWideLayoutBreakpoint` (768) and `tenantTableBreakpoint` (1024) with
 the same numbers under one name, so a screen consults one variable.
 
+**Done 2026-08-12**, in step 6. The one variable is `AppLayout` in `lib/ui/tokens.dart`,
+reached as `AppTokens.layout` where a widget has a context. It absorbed a **third**
+mechanism the table above did not know about — `login_screen.dart` computed `width < 768`
+inline — and the numbers did not move. A band is resolved from a **screen** width, not
+from a widget's own `BoxConstraints`: the ranges above describe the surface a person is
+looking at, and resolving them inside a padded page invents a fourth boundary by
+arithmetic.
+
 ### 4.2 Content width
 
 **Every screen has a max content width.** This is the fix for the catalog row whose
@@ -309,6 +317,12 @@ the same numbers under one name, so a screen consults one variable.
 | Reading and forms | 720 | centred |
 | Record lists and tables | 1200 | centred |
 | Sale (two-pane) | full | products flex, cart pane fixed 420 |
+
+**Done 2026-08-12**, in step 6, for all 25 migrated routes at once — the sale is step 7's
+and is the one row still unclaimed. Which row a page is, is a **required** argument to
+`AppScaffold`, not a default: this table gives a form and a table different maxima, so
+there is no value that is right when a call site says nothing. The toolbar is
+deliberately outside the constraint; the header and the body are inside it together.
 
 ### 4.3 The responsive contract
 

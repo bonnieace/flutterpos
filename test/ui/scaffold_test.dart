@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
-import 'package:flutter_application_1/ui/records.dart'
-    show tenantTableBreakpoint, tenantWideLayoutBreakpoint;
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,20 +9,22 @@ const _tokens = AppTokens.dark;
 
 /// A width below §4.1's `expanded` floor, and one above it.
 ///
-/// Written as arithmetic on the declared constant rather than as two literals,
-/// so a test cannot keep passing after the boundary moves.
-const double _compactWidth = tenantTableBreakpoint - 1;
-const double _expandedWidth = tenantTableBreakpoint;
+/// Written as arithmetic on the declared floor rather than as two literals, so
+/// a test cannot keep passing after the boundary moves. Step 6 renamed the
+/// declaration - `tenantTableBreakpoint` in `records.dart` became
+/// `AppLayout.expandedFloor` - and did not move it.
+final double _compactWidth = AppLayout.contract.expandedFloor - 1;
+final double _expandedWidth = AppLayout.contract.expandedFloor;
 
 /// Mounts [child] at [width], under the app's own theme.
 Future<void> _pump(
   WidgetTester tester,
   Widget child, {
-  double width = _compactWidth,
+  double? width,
   double height = 800,
   ThemeData? theme,
 }) async {
-  tester.view.physicalSize = Size(width, height);
+  tester.view.physicalSize = Size(width ?? _compactWidth, height);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -45,7 +45,11 @@ void main() {
       // phone width would be 32/40 in a 411-wide column.
       await _pump(
         tester,
-        const AppScaffold(title: 'Daily summary', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Daily summary',
+          body: SizedBox(),
+        ),
       );
 
       final style = _styleOf(tester, 'Daily summary');
@@ -59,7 +63,11 @@ void main() {
       // expanded begins.
       await _pump(
         tester,
-        const AppScaffold(title: 'Daily summary', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Daily summary',
+          body: SizedBox(),
+        ),
         width: _expandedWidth,
       );
 
@@ -84,7 +92,11 @@ void main() {
       // fourth breakpoint produced by arithmetic that nobody declared.
       await _pump(
         tester,
-        const AppScaffold(title: 'Activity log', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Activity log',
+          body: SizedBox(),
+        ),
         width: _expandedWidth,
       );
 
@@ -102,7 +114,11 @@ void main() {
       for (final width in <double>[_compactWidth, _expandedWidth]) {
         await _pump(
           tester,
-          const AppScaffold(title: 'Manage catalog', body: SizedBox()),
+          const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Manage catalog',
+          body: SizedBox(),
+        ),
           width: width,
         );
         expect(
@@ -123,7 +139,11 @@ void main() {
           'Adjustments: Fresh whole milk 500ml, refrigerated, case of twelve';
       await _pump(
         tester,
-        const AppScaffold(title: title, body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: title,
+          body: SizedBox(),
+        ),
         width: 411,
       );
 
@@ -145,7 +165,11 @@ void main() {
       final handle = tester.ensureSemantics();
       await _pump(
         tester,
-        const AppScaffold(title: 'Shift history', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Shift history',
+          body: SizedBox(),
+        ),
       );
 
       expect(
@@ -162,7 +186,11 @@ void main() {
       // way back - and its title slot is empty.
       await _pump(
         tester,
-        const AppScaffold(title: 'Find a receipt', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Find a receipt',
+          body: SizedBox(),
+        ),
       );
 
       expect(tester.widget<AppBar>(find.byType(AppBar)).title, isNull);
@@ -186,6 +214,7 @@ void main() {
       await _pump(
         tester,
         const AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Returns',
           body: Center(child: Text('Returns')),
         ),
@@ -199,7 +228,11 @@ void main() {
     testWidgets('is absent when none is given', (tester) async {
       await _pump(
         tester,
-        const AppScaffold(title: 'Sales totals', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Sales totals',
+          body: SizedBox(),
+        ),
       );
 
       expect(
@@ -217,6 +250,7 @@ void main() {
       await _pump(
         tester,
         const AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Reconciliation status',
           subtitle: '2026-08-12 UTC',
           body: SizedBox(),
@@ -244,6 +278,7 @@ void main() {
               ],
             ),
             child: const AppScaffold(
+              contentWidth: AppContentWidth.records,
               title: 'Activity log',
               subtitle: 'Every event this business recorded',
               body: SizedBox(),
@@ -261,14 +296,14 @@ void main() {
 
   group('the primary action', () {
     test('the side-by-side boundary is the other declared constant', () {
-      // `tenantWideLayoutBreakpoint` was written to answer exactly "is there
+      // `AppLayout.contract.mediumFloor` was written to answer exactly "is there
       // room for two things side by side" and had zero consumers until now.
       expect(
-        PageHeader.placesActionBesideTitle(tenantWideLayoutBreakpoint - 1),
+        PageHeader.placesActionBesideTitle(AppLayout.contract.mediumFloor - 1),
         isFalse,
       );
       expect(
-        PageHeader.placesActionBesideTitle(tenantWideLayoutBreakpoint),
+        PageHeader.placesActionBesideTitle(AppLayout.contract.mediumFloor),
         isTrue,
       );
     });
@@ -279,6 +314,7 @@ void main() {
       await _pump(
         tester,
         AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Manage catalog',
           primaryAction: AppButton(
             label: 'Add a product',
@@ -287,7 +323,7 @@ void main() {
           ),
           body: const SizedBox(),
         ),
-        width: tenantWideLayoutBreakpoint,
+        width: AppLayout.contract.mediumFloor,
       );
 
       final title = tester.getRect(find.text('Manage catalog'));
@@ -300,6 +336,7 @@ void main() {
       await _pump(
         tester,
         AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Manage catalog',
           primaryAction: AppButton(
             label: 'Add a product',
@@ -327,10 +364,11 @@ void main() {
       // route can carry, which is a product name.
       const title =
           'Adjustments: Fresh whole milk 500ml, refrigerated, case of twelve';
-      for (final width in <double>[411, tenantWideLayoutBreakpoint, 1440]) {
+      for (final width in <double>[411, AppLayout.contract.mediumFloor, 1440]) {
         await _pump(
           tester,
           AppScaffold(
+            contentWidth: AppContentWidth.records,
             title: title,
             primaryAction: AppButton(
               label: 'Record an adjustment',
@@ -363,7 +401,11 @@ void main() {
     testWidgets('is absent from the layout when none is given', (tester) async {
       await _pump(
         tester,
-        const AppScaffold(title: 'Stock movements', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Stock movements',
+          body: SizedBox(),
+        ),
       );
 
       expect(
@@ -385,6 +427,7 @@ void main() {
       await _pump(
         tester,
         AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Choose a business',
           actions: <Widget>[
             AppButton(
@@ -419,7 +462,11 @@ void main() {
       // before.
       await _pump(
         tester,
-        const AppScaffold(title: 'Product catalog', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Product catalog',
+          body: SizedBox(),
+        ),
       );
 
       expect(tester.widget<AppBar>(find.byType(AppBar)).actions, isNull);
@@ -437,6 +484,7 @@ void main() {
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => const AppScaffold(
+                    contentWidth: AppContentWidth.records,
                     title: 'Product stock ledger',
                     body: SizedBox(),
                   ),
@@ -463,6 +511,7 @@ void main() {
       await _pump(
         tester,
         const AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Business invitation',
           automaticallyImplyLeading: false,
           body: SizedBox(),
@@ -476,11 +525,198 @@ void main() {
     });
   });
 
+  group('every page has a max content width - design.md §4.2', () {
+    /// The width of the page column: the header's laid-out box plus the two
+    /// insets the frame draws around it.
+    ///
+    /// Measured off the laid-out header rather than off a `ConstrainedBox`,
+    /// because a constraint that is applied and then not honoured by anything
+    /// below it would still be found by `find.byType`. **Not off the title
+    /// text**, which is inside a start-aligned column and sizes to its own
+    /// glyphs rather than to the page.
+    double pageWidth(WidgetTester tester) =>
+        tester.getSize(find.byType(PageHeader)).width +
+        AppScaffold.horizontalInset(_tokens.spacing) * 2;
+
+    testWidgets('a reading surface stops at 720 on a wide window', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.reading,
+          title: 'Checkout settings',
+          body: SizedBox(),
+        ),
+        width: 1440,
+      );
+
+      expect(pageWidth(tester), _tokens.layout.reading);
+    });
+
+    testWidgets('a record list stops at 1200 on the same window', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Manage catalog',
+          body: SizedBox(),
+        ),
+        width: 1440,
+      );
+
+      expect(pageWidth(tester), _tokens.layout.records);
+    });
+
+    testWidgets('a `full` page takes the whole window', (tester) async {
+      // §4.2's third row states no maximum at all. Nothing in `lib/` passes
+      // this yet - the sale is step 7's - and it is asserted anyway, because
+      // the row exists and a page that quietly got 1200 instead would be a
+      // sale screen missing 240 pixels of products.
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.full,
+          title: 'New sale',
+          body: SizedBox(),
+        ),
+        width: 1440,
+      );
+
+      expect(pageWidth(tester), 1440);
+    });
+
+    testWidgets('no maximum fires on a phone, whichever row a page is', (
+      tester,
+    ) async {
+      // 411 is narrower than every figure §4.2 states, so all three rows must
+      // render identically there. A constraint that fired here would be one
+      // that had been written as a fixed width by mistake, and it would show
+      // as a column of content with ground down both sides of a phone.
+      for (final width in AppContentWidth.values) {
+        await _pump(
+          tester,
+          AppScaffold(
+            contentWidth: width,
+            title: 'Daily summary',
+            body: const SizedBox(),
+          ),
+          width: 411,
+        );
+
+        expect(
+          pageWidth(tester),
+          411,
+          reason: '$width must not constrain a 411-wide window',
+        );
+      }
+    });
+
+    testWidgets('the toolbar is not constrained with the content', (
+      tester,
+    ) async {
+      // The back arrow belongs in the window's corner, where every platform
+      // puts it. A toolbar that obeyed the content rule would drift inwards on
+      // a wide window and read as chrome that had been laid out as content.
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.reading,
+          title: 'Checkout settings',
+          body: SizedBox(),
+        ),
+        width: 1440,
+      );
+
+      expect(tester.getSize(find.byType(AppBar)).width, 1440);
+      expect(pageWidth(tester), _tokens.layout.reading);
+    });
+
+    testWidgets('the header and the body are constrained together', (
+      tester,
+    ) async {
+      // §4.2 caps *content*, and a title at the window edge above records in a
+      // centred column would read as two pages rather than one.
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Manage catalog',
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(height: 10, child: Text('a record')),
+          ),
+        ),
+        width: 1440,
+      );
+
+      expect(
+        tester.getTopLeft(find.text('a record')).dx,
+        tester.getTopLeft(find.text('Manage catalog')).dx -
+            AppScaffold.horizontalInset(_tokens.spacing),
+      );
+    });
+
+    testWidgets('the page column is centred rather than pinned left', (
+      tester,
+    ) async {
+      // §4.2's own word for both constrained rows is "centred".
+      await _pump(
+        tester,
+        const AppScaffold(
+          contentWidth: AppContentWidth.reading,
+          title: 'Checkout settings',
+          body: SizedBox(),
+        ),
+        width: 1440,
+      );
+
+      final left = tester.getTopLeft(find.text('Checkout settings')).dx;
+      final inset = AppScaffold.horizontalInset(_tokens.spacing);
+      expect(left - inset, (1440 - _tokens.layout.reading) / 2);
+    });
+
+    testWidgets('`full` adds no constraining widget at all', (tester) async {
+      // `maxWidthOf` answers null rather than infinity so this branch builds
+      // nothing. Counting the frame's own `ConstrainedBox`es is the only way
+      // to tell "unconstrained" from "constrained to the window".
+      Future<int> boxes(AppContentWidth width) async {
+        await _pump(
+          tester,
+          AppScaffold(
+            contentWidth: width,
+            title: 'New sale',
+            body: const SizedBox(),
+          ),
+          width: 1440,
+        );
+        return find
+            .descendant(
+              of: find.byType(Scaffold),
+              matching: find.byType(ConstrainedBox),
+            )
+            .evaluate()
+            .length;
+      }
+
+      expect(
+        await boxes(AppContentWidth.records),
+        await boxes(AppContentWidth.full) + 1,
+      );
+    });
+  });
+
   group('the frame reads the token layer and nothing else', () {
     testWidgets('the page is painted `surface.base`', (tester) async {
       await _pump(
         tester,
-        const AppScaffold(title: 'Shift corrections', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Shift corrections',
+          body: SizedBox(),
+        ),
       );
 
       expect(
@@ -502,6 +738,7 @@ void main() {
       await _pump(
         tester,
         const AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Unresolved differences',
           subtitle: 'Four kinds, one list',
           body: SizedBox(),
@@ -549,6 +786,7 @@ void main() {
       await _pump(
         tester,
         const AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Bulk catalog changes',
           body: Align(
             alignment: Alignment.topLeft,
@@ -572,6 +810,7 @@ void main() {
       await _pump(
         tester,
         const AppScaffold(
+          contentWidth: AppContentWidth.records,
           title: 'Staff directory',
           body: SizedBox.expand(key: ValueKey('body')),
         ),
@@ -596,7 +835,11 @@ void main() {
       // dimension §9 measures - see the accessor's own note.
       await _pump(
         tester,
-        const AppScaffold(title: 'Reconciliation run', body: SizedBox()),
+        const AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Reconciliation run',
+          body: SizedBox(),
+        ),
         theme: ThemeData(brightness: Brightness.dark),
       );
 

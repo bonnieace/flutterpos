@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -30,6 +31,7 @@ final class TenantStockAdjustmentFeedScreen extends StatelessWidget {
     title: product == null
         ? 'Stock adjustments'
         : 'Adjustments: ${product!.name}',
+contentWidth: AppContentWidth.records,
     body: TenantStockAdjustmentFeedPanel(reader: reader, product: product),
   );
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import '../ui/status.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -36,6 +37,7 @@ final class TenantReconciliationStatusScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Reconciliation status',
+    contentWidth: AppContentWidth.records,
     body: TenantReconciliationStatusPanel(
       reader: reader,
       businessDate: businessDate,

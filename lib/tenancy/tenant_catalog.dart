@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
@@ -253,6 +254,7 @@ final class TenantCatalogScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Product catalog',
+    contentWidth: AppContentWidth.records,
     body: TenantCatalogPanel(
       reader: reader,
       allowedRoles: allowedRoles,
