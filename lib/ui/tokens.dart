@@ -399,11 +399,15 @@ final class AppActionRoles {
 ///
 /// **[border] is decoration, not signal, and it does not clear §9's 3:1 for a
 /// UI boundary** - the five sit between 1.38:1 and 2.04:1 on
-/// [AppSurfaceRoles.base]. That is a conflict between §2.1's values and §9's
+/// [AppSurfaceRoles.base]. ~~That is a conflict between §2.1's values and §9's
 /// boundary row, recorded in `PLAN.md` rather than resolved by inventing
-/// lighter colours here. What carries the meaning is [fg], the icon and the
-/// word, and all five [fg] values clear 5:1 on both grounds and 4.5:1 on their
-/// own [bg].
+/// lighter colours here.~~ **Answered 2026-08-12 and it is not a conflict:**
+/// §9's 3:1 row applies to a boundary that carries meaning **on its own**, and
+/// `design.md` §9 now carries that sentence. What carries the meaning here is
+/// [fg], the icon and the word, and all five [fg] values clear 5:1 on both
+/// grounds and 4.5:1 on their own [bg]. `StatusBadge` in `lib/ui/status.dart`
+/// is the component that raised the question and the one that draws the
+/// container.
 @immutable
 final class AppStatusRole {
   const AppStatusRole({

@@ -8,6 +8,24 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+
+  testWidgets('the adjustment explanation is kept, and starts out of the way', (
+    tester,
+  ) async {
+    // §5.2 names this paragraph by name as prose to keep and move inside a
+    // `Disclosure`. The words are unchanged.
+    const explanation =
+        'An adjustment is recorded permanently with its reason and cannot be '
+        'deleted. Correcting a mistake means recording another adjustment.';
+    final reader = _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader, callable: _Callable(_response()));
+
+    expect(find.text(explanation), findsNothing);
+    await tester.tap(find.text('What an adjustment records'));
+    await tester.pumpAndSettle();
+    expect(find.text(explanation), findsOneWidget);
+  });
   testWidgets('the recorded quantity and the ledger are stated as read', (
     tester,
   ) async {

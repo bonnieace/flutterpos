@@ -19746,3 +19746,190 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## Five statuses, two notices, and prose that folds away - 2026-08-12
+
+`design.md` §11 **step 4**: `StatusBadge`, `Callout` and `Disclosure`, built to §5.2 and §5.1, with
+their state matrices in the harness and a first set of call sites on four real screens.
+
+**This is the first quarter of the batched composition layer, not the whole batch.** The product
+owner's 2026-08-12 exception lets steps 4, 5a, 6 and 8 ship as one chunk, and `PLAN.md` orders 4
+first because `StatusBadge` is used by 6 and 8. Step 4 is what fitted this session; 5a, 6 and 8
+stay batched and stay next. The exception is a permission to batch, not an instruction to, and
+splitting on the boundary it names first costs the batch nothing.
+
+### The web callable-auth defect was considered first, and could not be settled here
+
+`PLAN.md`'s queued chunk explicitly told this session to think before inheriting the product
+owner's choice: if the "callables arrive with auth missing" defect reproduces off web, the app is
+broken past login for everyone and outranks any reskin step. **Settling it needs a device run, and
+both routes to one are still shut** - `flutter run -d windows` needs Developer Mode, which is a
+machine setting nobody should flip on the owner's behalf, and Android needs the emulators not to be
+serving another session. Reading the source settles nothing either: every callable goes through
+`FirebaseFunctions.instance` with no platform branch anywhere, so the client code is identical on
+all three surfaces and the difference, if there is one, is in the emulator transport. So the
+product owner's choice stands, and the open variable is recorded as still open rather than quietly
+resolved.
+
+### `ConfirmDialog` left step 4, and the answer was already written down
+
+`PLAN.md` required this decided before starting. `DESIGN-AUDIT.md` §4.3 had the argument - it
+consolidates four `await`-and-branch call sites, so it cannot ship as a visual change - but not the
+destination. **§11 step 7's own row already says "destructive confirm"**, so it has a home in the
+step that is already scoped as touching control flow. Nothing else in step 4 depended on it. The
+decision is recorded inline in `DESIGN-AUDIT.md` §4.3.
+
+### What each component decided, and what it refused to decide
+
+**Only one of the three is specified in §5.2.** `Disclosure` has a paragraph and `StatusBadge` a
+one-line row; `Callout` has a §5.1 row saying it replaces "permanent notice paragraphs" and no
+measurements at all. It is therefore drawn the way `AppSelect` was in step 3 - out of §2 rows that
+already exist, each named in the class doc comment - rather than out of taste.
+
+**The glyphs are the component's and that is stated rather than smuggled.** §5.2 makes the icon
+mandatory on a status and names no glyph for any of the five. Leaving it to each call site would
+reproduce, in glyphs, exactly the one-green-for-seven-jobs drift §1 is about, so `AppStatus`
+carries a default per status and a call site may override it. An icon is not a token - not a
+colour, size, radius, spacing, duration or spring - which is why this is a decision rather than an
+invention `claude.md` forbids.
+
+**Two values §5.2 does not define were borrowed rather than invented**, and both are recorded in
+`PLAN.md` as questions: `Disclosure`'s info glyph and chevron, and `Callout`'s leading glyph, all
+take §5.2's *only* named leading-icon size, `AppButton`'s 18. The nearest-named-row precedent is
+`AppSelect`'s menu radius from step 3.
+
+**The status border question is closed in the token layer too.** `AppStatusRole`'s doc comment
+still said the §2.1-vs-§9 border contrast was an unresolved conflict recorded in `PLAN.md`. It was
+answered on 2026-08-12 and `design.md` §9 carries the sentence; the stale half is struck through in
+place.
+
+### Closed means gone from the tree, and the epsilon is the physics rather than a fudge
+
+A collapsed `Disclosure` renders no part of its explanation, so a screen reader does not read out
+prose nobody can see. Deciding *when* closed has arrived is the interesting part:
+`SpringSimulation` finishes against `Tolerance`, whose defaults are absolute, so a spring asked for
+zero parks within `1e-3` of it and stays there. Keying the removal on `extent == 0` left the prose
+mounted forever after every close - which is how it was found, by a test that closed it and still
+saw it. The condition is the widget's own flag **and**
+`extent <= Tolerance.defaultTolerance.distance`, which asks the physics where "arrived" is instead
+of guessing at it.
+
+`SettlingSpringSimulation` in `lib/ui/spring.dart` is the other way to solve this and was
+deliberately not wired into `SpringDrive`: that would change every press spring in the app for an
+invisible difference, which is a wider blast radius than one component's reveal needs.
+
+### The reveal is a spring, and the chevron rides the same one
+
+§2.4 makes anything spatial a spring, and §2.4's own table names "expansion" under `spring.smooth`.
+`AnimatedCrossFade` and `ExpansionTile` are both a duration and a curve, so neither was usable.
+The chevron rotates off the same `SpringDrive` rather than off a second animation that could
+disagree with it mid-flight. Two tests carry the claim: one that the reveal is between its ends one
+frame in, and one that a second tap mid-flight moves it less than 4px in the next frame rather than
+jumping to a mirrored position.
+
+### Semantics: two labels that merged into one sentence twice
+
+`Semantics(label: summary, child: PressSurface(child: Text(summary)))` announces "How a correction
+reaches many products\nHow a correction reaches many products". The two labels merge into one node.
+The header sets `button`, `expanded` and `enabled` and **no label**, letting the `Text` supply it.
+Found by the semantics test, which is the only kind of test that could have.
+
+### Call sites: four screens, and one status left deliberately alone
+
+- **`tenant_staff_directory.dart`** - membership standing and invitation standing are `StatusBadge`
+  now. Standing used to be a chip coloured `colors.error` or nothing. **Inactive is `neutral`, not
+  `problem`**: §2.1 gives "closed" to neutral, and a deactivated member is closed rather than a
+  difference found. **The role chip is deliberately still a `TenantStatusChip`** - a role is not one
+  of the five statuses and dressing it as one is the failure this step exists to fix. It belongs to
+  `FilterChipBar`, §5.1 priority 2.
+- **`reconciliation_status_panel.dart`** - a badge above the verdict sentence, the manager notice as
+  a `Callout`, and both long explanations as `Disclosure`s. The sentence stays beside the badge
+  because it names *why*, which no five-word status can.
+- **`catalog_management_panel.dart`** and **`stock_adjustment_panel.dart`** - the two paragraphs
+  §5.2 names **by name** as prose to keep and fold away. The words are unchanged; only the summary
+  line above each is new, and it is new because the component requires one.
+
+**`reconciliation-request-notice` was left as a `Text` on purpose.** It is a `String?` the panel
+passes down, and nothing in the model says whether a given notice is a success or a refusal.
+Choosing a status by inspecting the sentence would be the guesswork this step is here to remove,
+and making the parent pass a status is a change to what the parent computes - not a visual change.
+Queued in `PLAN.md`.
+
+**`unrecognised` is `info`, not `problem`.** §2.1 gives "unreadable" to `problem`, which looks like
+the obvious home. But the existing comment on `_verdict` had already decided the opposite question
+in words - a server state this app does not model is not evidence of anything wrong - and painting
+it red would be inventing in colour an answer the code refuses to invent in prose.
+
+### Files changed
+
+```text
+lib/ui/status.dart                                    new - AppStatus, StatusBadge, Callout, Disclosure
+lib/ui/tokens.dart                                    one doc comment, the border question struck through
+lib/tenancy/tenant_staff_directory.dart               2 badges
+lib/reporting/reconciliation_status_panel.dart        1 badge, 1 callout, 2 disclosures
+lib/inventory/catalog_management_panel.dart           1 disclosure
+lib/inventory/stock_adjustment_panel.dart             1 disclosure
+test/ui/status_test.dart                              new - 27 tests
+test/reporting/reconciliation_status_panel_test.dart  5 tests
+test/inventory/catalog_management_panel_test.dart     1 test
+test/inventory/stock_adjustment_panel_test.dart       1 test
+test/tenancy/tenant_staff_directory_test.dart         one existing test gained a badge assertion
+tool/screenshots/status_states_test.dart              new - 8 captures
+DESIGN-AUDIT.md                                       §1.5, §2.2 and §4.3
+PLAN.md
+HISTORY.md
+```
+
+### Screenshots
+
+**17 added, 11 changed, none removed, 116 identical**, and **zero date drift for the second chunk
+running** - the baseline was generated earlier the same day. Sixteen of the seventeen additions are
+the new `93-*` matrix captures, which are the harness growing rather than a screen moving. Every
+one of the 11 changes is one of the four screens migrated, at one of its viewports.
+
+```text
+E  after AppTextField                    127 images
+F  after step 4                          144 images
+   added 17 (16 matrix captures + web-full/27), changed 11, removed 0, identical 116
+```
+
+**The one non-matrix addition is worth naming, and it is not the direction expected.**
+`web-full/27-reconciliation-status.png` did not exist before: that page now overflows a 1440-wide
+window where it used to fit. **A `Disclosure` is not free at desktop width.** Both paragraphs there
+are one or two lines at 1440px, so folding them saves almost nothing while the header's own padding
+and the new badge add about forty pixels. On a phone, where the same paragraphs are four and five
+lines, it is the win §5.2 describes - `mobile-full/27` got shorter. Worth knowing before step 6
+folds more prose away: the component pays off at compact width and can cost at expanded.
+
+### Test commands and results
+
+```text
+flutter test --no-pub --concurrency=1                        1743 pass  (1709 -> 1743)
+flutter analyze --no-pub lib test tool                       475 issues (the pre-existing
+                                                             baseline; unchanged)
+flutter test --no-pub --concurrency=1 tool/screenshots       111 captures, 144 images
+```
+
+**The four non-Flutter suites were carried, not measured**, and this is **carry 1 of 2** under the
+standing rule. `git diff` over `functions/`, `firestore.rules` and `rules-tests/` prints **zero
+lines**, which is the stronger measurement: no suite among the four can observe a Dart file. The
+field chunk measured all four earlier the same day, so the figures carried are hours old.
+
+### What this chunk owes
+
+**Nobody has looked at any of it**, and `Disclosure` is a component where that matters as much as a
+field did: whether the reveal reads as the same screen growing or as a new one appearing, whether
+the chevron's rotation is legible at 18px, and whether the spring holds a frame budget on a low
+tier are all judged and not asserted. The device-run debt is now **ten** chunks deep.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

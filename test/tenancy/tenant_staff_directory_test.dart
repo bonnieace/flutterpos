@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -199,6 +200,16 @@ void main() {
       expect(find.text('owner'), findsWidgets);
       expect(find.text('active'), findsWidgets);
       expect(find.text('Invite staff'), findsOneWidget);
+
+      // Step 4: standing is one of design.md §2.1's five statuses rather than a
+      // chip whose colour was `colors.error` or nothing. Active is `ok`.
+      final standing = tester.widget<StatusBadge>(
+        find.byKey(const ValueKey('staff-status-owner-a')),
+      );
+      expect(standing.status, AppStatus.ok);
+      // The badge announces a sentence and shows a word, because "active" on
+      // its own is not what a screen reader should read out of a staff row.
+      expect(standing.semanticLabel, 'Membership active');
     });
 
     testWidgets('a cashier is denied without starting any reads', (

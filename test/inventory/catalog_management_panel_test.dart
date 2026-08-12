@@ -51,6 +51,33 @@ void main() {
     );
   });
 
+  testWidgets('the bulk explanation is kept, and it starts out of the way', (
+    tester,
+  ) async {
+    // §5.2 names this paragraph by name: the writing is good and should be
+    // kept, and it being permanently on screen is what makes this form three
+    // times taller than it needs to be. The words are unchanged.
+    const explanation =
+        'One correction can be applied across many products, and a catalog '
+        'can be created from a spreadsheet. Both are previewed row by row '
+        'before anything is written.';
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      bulkRoute: (_) => const Scaffold(body: Text('Bulk open')),
+    );
+
+    expect(find.text(explanation), findsNothing);
+    await tester.tap(find.text('How bulk changes and import work'));
+    await tester.pumpAndSettle();
+    expect(find.text(explanation), findsOneWidget);
+    // Opening an explanation reads nothing and writes nothing - it is a visual
+    // change, which is the whole reason it fits inside this step.
+    expect(find.byKey(const ValueKey('catalog-management-bulk')), findsOne);
+  });
+
   testWidgets('the bulk route is offered only when the build carries one', (
     tester,
   ) async {

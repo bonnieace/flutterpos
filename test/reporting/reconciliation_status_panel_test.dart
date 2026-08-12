@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -276,6 +277,110 @@ void main() {
           )
           .data,
       'The published totals have never been generated for this day.',
+    );
+  });
+
+  testWidgets('a regenerated day wears the ok badge beside its sentence', (
+    tester,
+  ) async {
+    // Step 4: the day's standing is a `StatusBadge` as well as a sentence. The
+    // sentence stays because it names *why*; the badge is what makes the
+    // standing legible without reading it.
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(),
+      },
+    )..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    final badge = tester.widget<StatusBadge>(
+      find.byKey(const ValueKey('reconciliation-status-badge')),
+    );
+    expect(badge.status, AppStatus.ok);
+    expect(badge.label, 'Reconciled');
+  });
+
+  testWidgets('a day the server stopped on wears the problem badge', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{
+        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(
+          overrides: <String, Object?>{
+            'status': 'quarantined',
+            'lastErrorCode': 'invalid_dirty_revision',
+          },
+        ),
+      },
+    )..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    final badge = tester.widget<StatusBadge>(
+      find.byKey(const ValueKey('reconciliation-status-badge')),
+    );
+    expect(badge.status, AppStatus.problem);
+    expect(badge.label, 'Stopped');
+  });
+
+  testWidgets('a day with no sales is neutral, not a problem', (tester) async {
+    // §2.1 gives "closed" to `neutral`. A day nothing was sold on is not a
+    // difference found, and painting it red would be the one-green failure in
+    // the other direction.
+    final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    final badge = tester.widget<StatusBadge>(
+      find.byKey(const ValueKey('reconciliation-status-badge')),
+    );
+    expect(badge.status, AppStatus.neutral);
+    expect(badge.label, 'No sales');
+  });
+
+  testWidgets('the two explanations start collapsed and open on a tap', (
+    tester,
+  ) async {
+    // §5.2's argument for `Disclosure`: the writing is kept and the screen is
+    // returned. Both paragraphs are this app's own words, unchanged.
+    final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.textContaining('Nothing here can retry, cancel, or re-order a run.'),
+      findsNothing,
+    );
+    await tester.tap(find.text('What this page can and cannot do'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Nothing here can retry, cancel, or re-order a run.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a manager is told about the one request in a callout', (
+    tester,
+  ) async {
+    final reader = _Reader()..respond(<TenantQueryDocumentSnapshot>[]);
+    final callable = _Callable(_queued());
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      reader,
+      callable: callable,
+    );
+
+    final callout = tester.widget<Callout>(
+      find.byKey(const ValueKey('reconciliation-request-forbidden')),
+    );
+    // `info`, not `problem`: nothing failed and nothing is hidden.
+    expect(callout.status, AppStatus.info);
+    expect(
+      callout.message,
+      startsWith('Only an owner or administrator can ask the server'),
     );
   });
 

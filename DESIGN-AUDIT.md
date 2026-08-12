@@ -97,6 +97,12 @@ repaints roughly forty call sites, including nine of the ten buttons on the land
 
 ### 1.5 Status roles
 
+**Built 2026-08-12 as `StatusBadge` in `lib/ui/status.dart`, and `TenantStatusChip` survives it
+for one reason worth naming.** The chip is still used for a staff member's *role* - owner, admin,
+manager, cashier - which is not one of §2.1's five statuses and must not be dressed as one. A role
+belongs to `FilterChipBar`, already in §5.1 at priority 2. Standing beside a badge it is now
+visibly the odd one out: it is a 20-radius pill where §2.3 gives a chip `radius.sm`.
+
 All five triples are new. The nearest existing thing is `TenantStatusChip`
 ([records.dart:184](lib/ui/records.dart#L184)), which takes one arbitrary `Color? tone` and
 *derives* its container at 12% alpha and its border at 50% alpha
@@ -184,10 +190,15 @@ with one customer.
 
 ### 2.2 What does not exist
 
-None of the following from §5.1 exists in any form: `AppScaffold`, `PageHeader`, `AppButton`,
-`AppTextField`, `AppSelect`, `EmptyState`, `ErrorState`, `LoadingState`, `Disclosure`, `Callout`,
-`AppSheet`, `AppTabs`, `LedgerEntry`, `QuantityStepper`, `PressSurface`, `MotionAsset`,
-`RollingNumber`, `SyncIndicator`, `FilterChipBar`.
+None of the following from §5.1 exists in any form: `AppScaffold`, `PageHeader`, ~~`AppButton`,
+`AppTextField`, `AppSelect`~~, `EmptyState`, `ErrorState`, `LoadingState`, ~~`Disclosure`,
+`Callout`~~, `AppSheet`, `AppTabs`, `LedgerEntry`, `QuantityStepper`, ~~`PressSurface`~~,
+`MotionAsset`, `RollingNumber`, `SyncIndicator`, `FilterChipBar`.
+
+**Struck through as each was built**, so this list stays a statement of what is missing rather than
+a snapshot of one day. `PressSurface` and `AppButton` landed 2026-08-11, `AppTextField` and
+`AppSelect` on 2026-08-12, and `StatusBadge`, `Callout` and `Disclosure` the same day in step 4.
+`StatusBadge` was never in this list because it half-existed as `TenantStatusChip`; see §1.5.
 
 ~~One correction to the §5.1 table: `AppSelect` is listed as replacing "raw
 `DropdownButtonFormField`". **There is no `DropdownButtonFormField` in the migrated tree.**~~
@@ -397,6 +408,14 @@ consolidation of four call sites that each `await` a value the caller branches o
 already has an API. It is the one §5.1 component that cannot be built without touching control
 flow, which brushes `claude.md` hard rule 1. It should be planned and reviewed as a behaviour
 change, not as styling.
+
+**Resolved 2026-08-12, at the start of step 4: `ConfirmDialog` leaves step 4 and joins step 7.**
+`PLAN.md` required this to be decided before step 4 started, and the decision follows from this
+section plus one thing this section did not say: **§11 step 7 already names "destructive confirm"
+in its own row.** So there is no need to invent a home for it - it has one, in the step that is
+already scoped as touching control flow on the sale path. Step 4 ships `StatusBadge`, `Callout` and
+`Disclosure`, all three of which are pure display and none of which awaits anything. Nothing else
+in step 4 depended on it, which is what made the decision cheap.
 
 ### 4.4 The sign-in fields are not what §5.2 describes
 

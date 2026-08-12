@@ -4,6 +4,7 @@ import '../ui/records.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/status.dart';
 import '../reporting/reconciliation_anomalies.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -898,9 +899,16 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
     children: [
       Text('Adjust stock', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 4),
-      const Text(
-        'An adjustment is recorded permanently with its reason and cannot be '
-        'deleted. Correcting a mistake means recording another adjustment.',
+      // §5.2 names the stock-adjustment explanation as prose to keep and move
+      // inside a `Disclosure`. The words are unchanged; the summary above them
+      // is new because the component requires one.
+      const Disclosure(
+        key: ValueKey('product-stock-adjustment-disclosure'),
+        summary: 'What an adjustment records',
+        child: Text(
+          'An adjustment is recorded permanently with its reason and cannot be '
+          'deleted. Correcting a mistake means recording another adjustment.',
+        ),
       ),
       const SizedBox(height: 12),
       AppSelect<TenantStockAdjustmentType>(

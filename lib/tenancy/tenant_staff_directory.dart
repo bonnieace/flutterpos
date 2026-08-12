@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/records.dart';
+import '../ui/status.dart';
 
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
@@ -474,18 +475,37 @@ final class _StaffContentsState extends State<_StaffContents> {
             ? colors.primary
             : null,
       ),
-      TenantStatusChip(
+      // §2.1's five statuses, each with exactly one meaning. Standing used to
+      // be a chip whose colour was `colors.error` or nothing, which is the one
+      // green doing several jobs that §1 is about.
+      StatusBadge(
         key: ValueKey('staff-status-${staff.uid}'),
         label: staff.status.wireValue,
-        // Inactive is the one standing that changes what a person can do, so
-        // it is the one that carries a colour as well as a word.
-        tone: staff.status == MembershipStatus.inactive ? colors.error : null,
+        status: switch (staff.status) {
+          MembershipStatus.active => AppStatus.ok,
+          MembershipStatus.pending => AppStatus.attention,
+          // Inactive is the one standing that changes what a person can do.
+          // `neutral` rather than `problem`: a deactivated member is closed,
+          // not a difference found, and §2.1 gives "closed" to neutral.
+          MembershipStatus.inactive => AppStatus.neutral,
+        },
+        semanticLabel: 'Membership ${staff.status.wireValue}',
       ),
       if (staff.status == MembershipStatus.pending)
-        TenantStatusChip(
+        StatusBadge(
           key: ValueKey('staff-invitation-${staff.uid}'),
           label: staff.invitationStatus.wireValue,
+          // An envelope says more here than any of the five default glyphs,
+          // which is what the override exists for.
           icon: Icons.mail_outline,
+          status: switch (staff.invitationStatus) {
+            TenantStaffInvitationStatus.accepted => AppStatus.ok,
+            TenantStaffInvitationStatus.pending ||
+            TenantStaffInvitationStatus.sent => AppStatus.attention,
+            TenantStaffInvitationStatus.cancelled ||
+            TenantStaffInvitationStatus.expired => AppStatus.neutral,
+          },
+          semanticLabel: 'Invitation ${staff.invitationStatus.wireValue}',
         ),
     ];
   }

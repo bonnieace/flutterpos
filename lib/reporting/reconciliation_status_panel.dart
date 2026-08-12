@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/status.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
@@ -357,10 +358,14 @@ final class _ReconciliationContents extends StatelessWidget {
         style: Theme.of(context).textTheme.headlineSmall,
       ),
       const SizedBox(height: 4),
-      const Text(
-        'The server regenerates each day\'s totals from the sales it holds. '
-        'This page explains where that work stands. Nothing here can retry, '
-        'cancel, or re-order a run.',
+      const Disclosure(
+        key: ValueKey('reconciliation-status-scope-disclosure'),
+        summary: 'What this page can and cannot do',
+        child: Text(
+          'The server regenerates each day\'s totals from the sales it holds. '
+          'This page explains where that work stands. Nothing here can retry, '
+          'cancel, or re-order a run.',
+        ),
       ),
       const SizedBox(height: 16),
       Card(
@@ -369,6 +374,19 @@ final class _ReconciliationContents extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // The badge and the sentence say the same thing at two lengths.
+              // The sentence stays because it names *why*, which no five-word
+              // status can; the badge is what makes the day's standing legible
+              // down a page without reading it.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: StatusBadge(
+                  key: const ValueKey('reconciliation-status-badge'),
+                  status: _outcomeStatus(day.outcome),
+                  label: _outcomeLabel(day.outcome),
+                ),
+              ),
+              const SizedBox(height: 8),
               Text(
                 key: const ValueKey('reconciliation-status-verdict'),
                 _verdict(day),
@@ -428,11 +446,16 @@ final class _ReconciliationContents extends StatelessWidget {
             onRequest: onRequest,
           )
         else
-          const Text(
+          // A permanent notice paragraph, which is §5.1's own description of
+          // what `Callout` replaces. `info` rather than `problem`: nothing has
+          // failed and nothing is hidden - the sentence says so itself.
+          const Callout(
             key: ValueKey('reconciliation-request-forbidden'),
-            'Only an owner or administrator can ask the server to reconcile. '
-            'This page is readable by managers as well, so nothing here is '
-            'hidden from you except that one request.',
+            status: AppStatus.info,
+            message:
+                'Only an owner or administrator can ask the server to '
+                'reconcile. This page is readable by managers as well, so '
+                'nothing here is hidden from you except that one request.',
           ),
       ],
       const SizedBox(height: 24),
@@ -441,10 +464,15 @@ final class _ReconciliationContents extends StatelessWidget {
         style: Theme.of(context).textTheme.titleMedium,
       ),
       const SizedBox(height: 4),
-      const Text(
-        'A run is one unit of server work. Each one takes the oldest business '
-        'day still waiting in the whole business, so a completed run is not by '
-        'itself proof that this day was regenerated - the state above is.',
+      const Disclosure(
+        key: ValueKey('reconciliation-status-runs-disclosure'),
+        summary: 'What a run is, and what it does not prove',
+        child: Text(
+          'A run is one unit of server work. Each one takes the oldest '
+          'business day still waiting in the whole business, so a completed '
+          'run is not by itself proof that this day was regenerated - the '
+          'state above is.',
+        ),
       ),
       const SizedBox(height: 12),
       if (day.runs.items.isEmpty)
@@ -593,6 +621,37 @@ final class _RequestReconciliation extends StatelessWidget {
     ],
   );
 }
+
+/// The day's standing, as one of `design.md` §2.1's five statuses.
+///
+/// **[TenantReconciliationDayOutcome.unrecognised] is `info` rather than
+/// `problem`, and that is a decision rather than a default.** §2.1 gives
+/// "unreadable" to `problem`, which reads as the obvious home for it - but the
+/// comment on [_verdict] below has already decided the opposite question: a
+/// server deploy that introduces a state this app does not model is not
+/// evidence of anything wrong, and reporting it as a difference would be
+/// inventing an answer in colour after refusing to invent one in words.
+/// `info`'s own meaning is "informational", which is exactly what that row is.
+AppStatus _outcomeStatus(TenantReconciliationDayOutcome outcome) =>
+    switch (outcome) {
+      TenantReconciliationDayOutcome.regenerated => AppStatus.ok,
+      TenantReconciliationDayOutcome.awaitingRegeneration =>
+        AppStatus.attention,
+      TenantReconciliationDayOutcome.blocked => AppStatus.problem,
+      TenantReconciliationDayOutcome.noSalesRecorded => AppStatus.neutral,
+      TenantReconciliationDayOutcome.unrecognised => AppStatus.info,
+    };
+
+/// The badge's word. Sentence case per §8, and short enough that the badge
+/// stays one line on a phone - the sentence beside it is where the detail is.
+String _outcomeLabel(TenantReconciliationDayOutcome outcome) =>
+    switch (outcome) {
+      TenantReconciliationDayOutcome.regenerated => 'Reconciled',
+      TenantReconciliationDayOutcome.awaitingRegeneration => 'Awaiting',
+      TenantReconciliationDayOutcome.blocked => 'Stopped',
+      TenantReconciliationDayOutcome.noSalesRecorded => 'No sales',
+      TenantReconciliationDayOutcome.unrecognised => 'Unrecognised',
+    };
 
 String _verdict(TenantReconciliationDay day) => switch (day.outcome) {
   TenantReconciliationDayOutcome.noSalesRecorded =>

@@ -4,9 +4,9 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-12**, a session that took two chunks: every route onto
-a spring, which **finishes `design.md` §11 step 2**, and then `AppTextField` and `AppSelect`, which
-**finishes step 3**. Claims in this file are checked against source,
+Last verified against the code on **2026-08-12**, a day that took three chunks: every route onto
+a spring, which **finishes `design.md` §11 step 2**, then `AppTextField` and `AppSelect`, which
+**finishes step 3**, and then `StatusBadge`, `Callout` and `Disclosure`, which **finish step 4**. Claims in this file are checked against source,
 not inherited from the log; corrections are noted where they were made — **and the session
 before it found this file's own description of a defect wrong**, see "Found by using
 the app", finding 5. **The eighth session of 2026-08-08
@@ -97,7 +97,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~45% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2 and 3 are finished as of 2026-08-12.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); and **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, §5.2's well, label, helper/error slot and 80% counter, six states in the harness). **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in. Steps 4–12 remain. |
+| **Design system** | ~50% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3 and 4 are finished as of 2026-08-12.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); and **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, on four migrated screens. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in - and the status/notice/prose sweep across the rest of the app, which is queued as its own chunk below the way `AppButton`'s call-site sweep was. `ConfirmDialog` left step 4 for step 7. Steps 5a-12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -137,6 +137,25 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The 2026-08-12 step-4 chunk changed no board row at all — not a colour and not a word of one —
+and this sentence is here so that is stated rather than left silent.** It took `design.md` §11 step
+4, which is a **redesign step rather than a capability**: no shop can do anything today it could
+not do yesterday. It moved the **Design system** track 45% to 50% and **finished step 4**. It
+changed **no rollout step**, and it touched no rule and no `functions/` file — `git diff` over
+`functions/`, `firestore.rules` and `rules-tests/` prints zero lines. It added **34 tests** and
+**17 screenshots**, and moved 11 more, with **zero** date drift for the second chunk running.
+
+**It also resolved the one thing `PLAN.md` said had to be resolved before step 4 started.**
+`ConfirmDialog` leaves step 4 and joins step 7 — not on a fresh argument, but because
+`DESIGN-AUDIT.md` §4.3 had the argument already and `design.md` §11 step 7's own row already says
+"destructive confirm". See the standing decision.
+
+**And it did what `prompt.md` asks about the web callable-auth defect rather than inheriting the
+choice silently.** The defect could not be settled: both routes to a device run are still shut, and
+the source settles nothing either — every callable goes through `FirebaseFunctions.instance` with
+no platform branch anywhere, so the client is identical on all three surfaces. **The open variable
+is still open**, and the next session inherits the same instruction rather than a resolved one.
 
 **The 2026-08-12 field chunk changed no board row either, and it closed a finding — which are not
 the same thing and this file should not let them blur.** "Add or retire a product" has been 🟢
@@ -343,9 +362,11 @@ any of them**. **The three redesign chunks since are worse off, not better**: th
 tests, `AppButton`'s 51 and the route transition's 30 prove the wiring and the physics, and the
 things they exist to deliver — a ripple's absence, a press that takes over mid-release, a page that
 leaves from the velocity it arrived with, a frame budget — are all invisible to a
-widget test by construction. The debt is **eight** chunks deep and all eight are queued below
+widget test by construction. The debt is **ten** chunks deep and all ten are queued below
 against the next device run, sign-in first — the seventh, the call-site sweep, repainted
-almost every screen in the app, and the eighth changed how every one of them is entered and left.
+almost every screen in the app, the eighth changed how every one of them is entered and left, the
+ninth redrew every box a person types into, and the tenth folded four explanations away behind a
+spring nobody has watched.
 
 **One thing the run could not prove, stated because it would otherwise look proved.** The
 manager membership used for the profit role-boundary check was activated by a scratchpad Admin
@@ -481,21 +502,24 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1709** |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1743** |
 | Functions | `npm --prefix functions test` | **409** ✅ measured 2026-08-12 |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured 2026-08-12 |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured 2026-08-12 |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured 2026-08-12; the known flaky test passed first try |
 
-**2312 tests across five suites, and the carry counter is back to zero.** The field chunk measured
-all four non-Flutter suites, discharging the 2 of 2 the route chunk had used up.
+**2346 tests across five suites, and the carry counter is at 1 of 2.** The step-4 chunk carried the
+four non-Flutter figures, which the field chunk had measured hours earlier the same day; `git diff`
+over `functions/`, `firestore.rules` and `rules-tests/` prints zero lines, which is the stronger
+measurement for a chunk that changed only Dart.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **98 captures** writing **127**
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **111 captures** writing **144**
 images, and it asserts nothing, which is why it is not counted here. It was 78 and 101 before the
 `AppButton` state matrix added 12 of each, 113 before the call-site sweep pushed one more screen
-past the fold, 114 before the route transitions added 3, and 117 before the field matrix added 5
-captures and 10 images.
+past the fold, 114 before the route transitions added 3, 117 before the field matrix added 5
+captures and 10 images, and 127 before step 4 added 13 captures and 17 images — 16 of those being
+the `93-*` matrices and one being a page that grew past the fold.
 
 **The Flutter figure did not move across the call-site sweep, and that is the right outcome rather
 than a gap.** A migration that adds no behaviour and no component should add no test; what it
@@ -503,9 +527,10 @@ changed is four test files that were asking a correct question — "can this be 
 Material type that is going away. They ask it through `test/support/buttons.dart` now, which is
 itself marked for deletion with the last `ButtonStyleButton` in `lib/`.
 
-✅ **The carry counter is at zero.** The call-site sweep carried all four (carry 1), the
-route-transition chunk carried all four (carry 2, the limit), and the field chunk **measured** all
-four on 2026-08-12. The next chunk may carry again, and that would be carry 1 of 2.
+✅ **The carry counter is at 1 of 2.** The call-site sweep carried all four (carry 1), the
+route-transition chunk carried all four (carry 2, the limit), the field chunk **measured** all four
+on 2026-08-12, and the step-4 chunk carried them again the same day (carry 1). **One more carry is
+permitted; the chunk after that measures.**
 
 ✅ **The carry streak before it was reset: all four non-Flutter figures were measured on 2026-08-11
 by the `AppButton` chunk**, which is the rule below being obeyed rather than a suite being
@@ -521,6 +546,11 @@ suite among them can observe a Dart file and `git diff` over those three paths i
 measurement. **Re-measure in any chunk that touches JavaScript, TypeScript, or a rule**, and a
 chunk that carries must say so. **Two consecutive carries is the limit**: a third measures, on
 the same reasoning that made the third consecutive unreachable callable a surface instead.
+
+**The step-4 chunk took Flutter 1709 → 1743** (34 new: 27 in `test/ui/status_test.dart`, 5 in
+`test/reporting/reconciliation_status_panel_test.dart`, and 1 each in
+`test/inventory/catalog_management_panel_test.dart` and
+`test/inventory/stock_adjustment_panel_test.dart`). The other four were **carried**, not measured.
 
 **The field chunk took Flutter 1680 → 1709** (29 new, all in `test/ui/fields_test.dart`). The
 other four were **measured and unchanged**, as they should be: this chunk touched Dart UI and
@@ -1743,6 +1773,81 @@ The guarantees are settled, not open:
 screen, it grew past the fold because every button now reserves the focus ring's 4px gutter and
 honours a 48dp minimum.
 
+### Five statuses, and three components two of which have no specification
+
+`design.md` §11 step 4. `StatusBadge`, `Callout` and `Disclosure` are in `lib/ui/status.dart`, with
+`AppStatus` as the five-valued enum §2.1 describes.
+
+**Only `StatusBadge` and `Disclosure` are specified.** §5.2 gives the badge a one-line row -
+`radius.sm`, `label.md`, 24h, icon 14px leading, `space.8` padding, the full triple - and gives
+`Disclosure` a paragraph. **`Callout` has a §5.1 row and no measurements at all.** It is therefore
+drawn out of §2 rows that already exist, each named in its own doc comment: the status triple for
+the container, `radius.md` from §2.3's "cards, rows, sheets" row, `space.16` padding and `space.12`
+between glyph and words, `title.md` for a title and the density's body role for the message. This
+is the same move `AppSelect` made in step 3 for the same reason, and it is recorded so a reader
+does not mistake a borrowed row for a specified one.
+
+**The prose is `text.secondary`, not the status colour, and that is a reading of §2.1 rather than a
+deviation from it.** §2.1's rule is that a status is a container plus an icon plus a word. It does
+not say every word inside the container is tinted, and a whole paragraph set in status red is
+harder to read than a paragraph beside a red glyph.
+
+**The glyphs are the component's decision.** §5.2 makes an icon mandatory - "it is what makes the
+status legible without colour" - and names no glyph for any of the five. A default per status is
+what stops that requirement from being a blank each call site fills differently, which is how one
+green came to mean seven things. A call site may still override it, and the staff directory does,
+for an invitation. An icon is not a token, so this is not the invention `claude.md` forbids; it is
+recorded here because it is a decision rather than a reading.
+
+**Two sizes were borrowed, and both are open questions rather than settled ones.** §5.2 names
+exactly two icon sizes - `AppButton`'s leading icon at 18 and `StatusBadge`'s at 14 - and neither
+`Disclosure`'s info glyph and chevron nor `Callout`'s glyph is among them. Both take 18, as the
+nearest named row for a leading glyph on a line of body text. See the open decision below.
+
+**Closed means gone from the tree, and how "closed" is decided is the interesting part.** A
+collapsed `Disclosure` renders no part of its explanation, so a screen reader does not read out
+prose nobody can see. `SpringSimulation` finishes against `Tolerance`, whose defaults are absolute,
+so a spring asked for zero parks within `1e-3` of it and **stays there** - keying the removal on
+`extent == 0` leaves the prose mounted forever after every close. The condition is the widget's own
+flag **and** `extent <= Tolerance.defaultTolerance.distance`, which asks the physics where arrived
+is rather than guessing. `SettlingSpringSimulation` is the other way to solve it and was
+deliberately not wired into `SpringDrive`: that changes every press spring in the app for an
+invisible difference.
+
+**The reveal is `spring.smooth`, which §2.4's own table names "expansion" for**, and the chevron
+rotates off the same drive rather than off a second animation that could disagree with it
+mid-flight. `AnimatedCrossFade` and `ExpansionTile` were both unusable: each is a duration and a
+curve.
+
+**`ConfirmDialog` left step 4 for step 7.** `DESIGN-AUDIT.md` §4.3 says it consolidates four
+`await`-and-branch call sites and so cannot ship as a visual change, which brushes `claude.md` hard
+rule 1. What §4.3 did not say is that it already has a home: **§11 step 7's own row names
+"destructive confirm"**. Nothing else in step 4 depended on it, so the decision cost nothing.
+
+**Four screens were migrated and one status was deliberately left alone.** The staff directory's
+membership and invitation standings, the reconciliation day's outcome, that page's manager notice,
+and the four long explanations §5.2 names or matches. **`reconciliation-request-notice` stays a
+`Text`**: it is a `String?` the panel passes down and nothing in the model says whether a given
+notice is a success or a refusal, so choosing a status would mean either inspecting the sentence -
+guesswork - or changing what the parent computes, which is not a visual change.
+
+**Two mappings are decisions rather than lookups.** An **inactive** member is `neutral`, not
+`problem`: §2.1 gives "closed" to neutral and a deactivated member is closed rather than a
+difference found. An **unrecognised** reconciliation state is `info`, not `problem`, even though
+§2.1 lists "unreadable" under problem - because the comment on `_verdict` had already decided in
+words that a server state this app does not model is not evidence of anything wrong, and painting
+it red would invent in colour the answer the code refuses to invent in prose.
+
+**A `Disclosure` is not free at desktop width, and the screenshots say so.** The reconciliation page
+now overflows a 1440-wide window where it used to fit: its two paragraphs are one and two lines at
+that width, so folding them saves almost nothing while the header's padding and the new badge add
+about forty pixels. At 411 the same paragraphs are four and five lines and the page got shorter,
+which is the win §5.2 describes. **Worth knowing before step 6 folds more prose away.**
+
+**The role chip survives, and it is now visibly the odd one out.** `TenantStatusChip` still draws a
+staff member's *role*, which is not one of the five statuses and must not be dressed as one. It is
+a 20-radius pill beside a `radius.sm` badge. It belongs to `FilterChipBar`, §5.1 priority 2.
+
 ### One field, everywhere - and an audit finding that was false
 
 Built 2026-08-12, finishing `design.md` §11 step 3. `AppTextField`, `AppSelect` and the
@@ -2083,6 +2188,28 @@ shape that took `mergeSaleReconciliationJob` down on every sale it ever saw —
 `generatePasswordResetLink` works against the Auth emulator, real Auth folds a mixed-case
 address so the current-email HMAC recheck matches, and a missing identity raises exactly the
 `auth/user-not-found` code the gateway swallows.
+
+### `Callout` has no specification, and three glyph sizes were borrowed
+
+**Raised by step 4 on 2026-08-12 and not decided inside it**, because `claude.md` forbids inventing
+a value `design.md` does not define and the honest alternative to inventing one is asking.
+
+`design.md` §5.1 gives `Callout` a row — it replaces "permanent notice paragraphs" — and §5.2
+specifies only the "load-bearing five", which it is not among. So every measurement it uses is read
+from a §2 row that exists for something else: `radius.md` from §2.3's "cards, rows, sheets",
+`space.16` padding, `space.12` between glyph and words, `title.md` and the density's body role. The
+precedent is `AppSelect`, which took the same treatment in step 3 for the same reason.
+
+Separately, §5.2 names exactly **two** icon sizes anywhere — `AppButton`'s leading icon at 18 and
+`StatusBadge`'s at 14 — and specifies none for `Disclosure`'s info glyph, `Disclosure`'s chevron, or
+`Callout`'s glyph. All three take 18, as the nearest named row for a leading glyph on a line of body
+text.
+
+**Either §5.2 gains a `Callout` paragraph and an icon-size row, or it gains a sentence saying the
+borrowed rows are the specification.** Both are fine; what is not fine is leaving it unstated,
+because a later reader cannot tell a borrowed row from a specified one by looking at the code.
+**It blocks calling §5's inventory complete in step 12**, the same way the field-hover question
+blocks §9's audit.
 
 ### Three design-system questions the redesign has refused to answer
 
@@ -3091,76 +3218,56 @@ same day is the cheapest arrangement this harness has: the second one gets a fre
 
 ## Next bounded chunk
 
-**The composition layer: `design.md` §11 steps 4, 5a, 6 and 8, as one chunk.** Steps 1, 2 and 3 are
-finished — every token, every button, every route and every field. What is left of the *atoms* is
-nothing; what is left is how they are put together.
+**The rest of the composition layer: `design.md` §11 steps 5a, 6 and 8, plus the step-4 sweep.**
+Steps 1, 2, 3 and 4 are finished — every token, every button, every route, every field, and the
+three status-and-prose components with their matrices. What is left of the *atoms* is nothing.
 
 **The batch is a deliberate relaxation of `claude.md` hard rule 4, granted by the product owner on
-2026-08-12 and scoped to these four steps only.** The reasoning is recorded in `claude.md` beside
-the rule: these steps build on finished atoms rather than defining new ones, they touch overlapping
-screens, and one screenshot regeneration covers all four. **The per-chunk ceremony had become a
-large fraction of each chunk** — full suite, screenshot attribution, `HISTORY.md`, `PLAN.md`,
-commit — and running four of them separately costs roughly four times that for about 1.5× the
-work. The rule stands everywhere else: step 7, step 9, step 10 and steps 11–12 are one number each,
-and **5b (the navigation model) is not in this exception** — it is a behaviour change and stays
-queued.
+2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** Step 4 was taken on its own because it fitted
+one session and because `StatusBadge` is used by 6 and 8, so it had to be first either way. The
+exception is a permission to batch, not an instruction to. The rule stands everywhere else: step 7,
+step 9, step 10 and steps 11–12 are one number each, and **5b (the navigation model) is not in this
+exception** — it is a behaviour change and stays queued.
 
-**Order inside the chunk matters, because these four are not independent.** Do 4 first
-(`StatusBadge` is used by 6 and 8), then 5a (the page frame everything else sits in), then 6 (the
-record contract), then 8 (money surfaces, which are `RecordList`s with figures in them). A
-screenshot regeneration at the end covers the lot.
+**Order inside what is left.** 5a (the page frame everything else sits in), then 6 (the record
+contract and content widths), then 8 (money surfaces, which are `RecordList`s with figures in
+them). One screenshot regeneration covers the lot.
 
-**The product owner chose this chunk over the web callable-auth defect on 2026-08-12, and the
-choice was informed.** They want the redesign's visual steps finished. `prompt.md` tells a session
-to propose something else if "a capability the app requires in order to function is missing and
-unqueued" — **this defect is a candidate for that and the next session should think before
-inheriting the choice**, because one thing about it is not known: whether it is web-only. Nobody
-has signed in on desktop or Android recently enough to say. If it reproduces off web, the app is
-broken past login for every user and that outranks any reskin step. **If a session establishes
-that, propose the fix instead and say so in its opening line.** If it is web-only, it blocks device
-review but not shipping, and this chunk is correctly first.
+**The step-4 sweep is part of it and should not be forgotten.** Step 4 built the components and put
+them on four screens; **it did not sweep the app**, the same way `AppButton` landed as a component
+plus one route and then took a second chunk for its remaining 133 call sites. What is left to sweep:
+every remaining permanent notice paragraph, every remaining multi-line explanation, and every
+remaining status rendered as a word or a coloured `Text`. Step 6 touches most of the same screens,
+which is why it belongs in this batch rather than after it. **One item in the sweep is not a sweep
+item**: `reconciliation-request-notice` needs a status the model does not carry, so it is a small
+model change rather than a restyle — see the standing decision.
 
-**Step 4's blocking question is answered**: the border is decoration, nothing is re-derived, and
-`design.md` §9 now says so. **`ConfirmDialog` is still unresolved** — `DESIGN-AUDIT.md` §4.3 flags
-that it consolidates four `await`-and-branch call sites, so it cannot ship as a visual change.
-Decide before starting whether it moves out of step 4; the rest of step 4 does not depend on it.
+**The product owner chose the composition layer over the web callable-auth defect on 2026-08-12,
+and the 2026-08-12 step-4 session checked that choice rather than inheriting it.** The defect could
+not be settled either way. Both routes to a device run are still shut — Windows needs Developer
+Mode, Android needs the emulators not to be serving another session — and **the source settles
+nothing**: every callable in the migrated tree goes through `FirebaseFunctions.instance` with no
+platform branch anywhere, so the client is byte-identical on web, Windows and Android and the
+difference, if there is one, is in the emulator transport rather than in this repository.
+**So the instruction stands unchanged for the next session**: if it reproduces off web, the app is
+broken past login for every user, that outranks any reskin step, and the session that establishes
+it should propose the fix instead and say so in its opening line.
 
----
+**Two questions for the product owner, both from step 4 and neither decided inside a chunk.**
+§5.2 names exactly two icon sizes — `AppButton`'s leading icon at 18 and `StatusBadge`'s at 14 —
+and specifies none for `Disclosure`'s info glyph and chevron or for `Callout`'s glyph. All three
+take 18 as the nearest named row. And **`Callout` has no specification at all**: §5.1 gives it a
+row and §5.2 does not cover it, so every measurement it uses is borrowed from a §2 row. Either
+§5.2 gains a `Callout` paragraph and an icon-size row, or it gains a sentence saying the borrowed
+rows are the specification. **This blocks calling §5's inventory complete in step 12**, the same
+way the field-hover question blocks §9's audit.
 
-**The original step 4 scope, for reference:**
-
-**What it has to build:**
-
-- **`StatusBadge`**, §5.2's fourth load-bearing component and the one this app most needs: five
-  statuses, each with exactly one meaning, against the one green currently doing seven jobs. The
-  `status` roles already exist in the token layer with their `fg`/`bg`/`border` triples.
-- **`Callout`** and **`Disclosure`**, §5.1's rows for the same five statuses at page scale and for
-  the long explanatory prose this app has a great deal of — several helper lines were left at one
-  line in step 3 precisely because `Disclosure` is where the rest belongs.
-- **Their state matrices in the harness**, per `claude.md` hard rule 5. `Disclosure` has a real
-  open/closed pair and §6's spring governs the transition between them.
-
-**~~§9 vs §2.1 on the status border~~ — answered 2026-08-12**, see the standing decision above.
-The border is decoration, nothing is re-derived, `design.md` §9 carries the sentence.
-
-**`ConfirmDialog`'s classification is still open.** `DESIGN-AUDIT.md` §4.3 flags that it
-consolidates four `await`-and-branch call sites, so it cannot ship as a purely visual change.
-Decide whether it moves out of step 4 **before** starting. Nothing else in the batch depends on
-it.
-
-**Explicitly excluded from it:** `checkout_cart_panel.dart`'s 7 buttons and 2 fields and the whole
-sale path, step 7; `pill_input.dart` and sign-in's visual design, step 9; the 13 `IconButton` call
-sites, which have no component yet; `AppScaffold` and `PageHeader`, step 5a; the **navigation
-model**, step 5b, which `DESIGN-AUDIT.md` decision 3 splits out as a behaviour change needing a
-device check; content widths and the `RecordList` contract, step 6; every server file and
-`firestore.rules`; deployment; and every standing exclusion below.
-
-**A question for the product owner, from step 3 rather than step 4.** §5.2 specifies a field's
-rest, focus and error treatments and **says nothing about hover**. `AppTextField` therefore has no
-hover treatment and `92-appfield-hover` is a capture of no change at all. Either §5.2 gains a row
-— a `surface.raised` well on hover would be the obvious one, and is *not* being applied without
-being asked for — or it gains a sentence saying a field has no hover state and the harness capture
-stands as documentation. **Do not decide this inside a chunk.**
+**Explicitly excluded from it:** `checkout_cart_panel.dart`'s 7 buttons, 2 fields and 1 `InkWell`
+and the whole sale path, step 7; `ConfirmDialog`, which left step 4 for step 7 on 2026-08-12;
+`pill_input.dart` and sign-in's visual design, step 9; the 13 `IconButton` call sites, which have
+no component yet; the **navigation model**, step 5b, which `DESIGN-AUDIT.md` decision 3 splits out
+as a behaviour change needing a device check; every server file and `firestore.rules`; deployment;
+and every standing exclusion below.
 
 **Two things to delete when their moment comes, so they are not inherited silently.**
 `test/support/buttons.dart` and `test/support/fields.dart` exist only because `lib/` holds more
@@ -3168,12 +3275,18 @@ than one button and field system. Step 7 takes the last `ButtonStyleButton` and 
 three `TextField`s; step 9 takes the third. When both are done, both files should be deleted and
 their callers pointed at `AppButton` and `AppTextField` directly.
 
-**App Check was passed over a sixth time, and the previous entry said the sixth should not be
-granted on the basis the fifth was.** It is not: the reason is a fresh instruction rather than an
-inherited one. The product owner asked on 2026-08-12 for the redesign to be run through to the end
-of its visual steps without stopping, and named 5b and 7 as the two that stay out. App Check is
-still **the only queued item that would move a red row**, and it is still at the head of the
-preference order below. It should be taken the moment the redesign's visual steps are done.
+**App Check was passed over a seventh time**, on the same fresh instruction the sixth was: the
+product owner asked on 2026-08-12 for the redesign to be run through to the end of its visual steps
+without stopping, and named 5b and 7 as the two that stay out. App Check is still **the only queued
+item that would move a red row**, and it is still at the head of the preference order below. It
+should be taken the moment the redesign's visual steps are done.
+
+**A question for the product owner, from step 3 rather than step 4.** §5.2 specifies a field's
+rest, focus and error treatments and **says nothing about hover**. `AppTextField` therefore has no
+hover treatment and `92-appfield-hover` is a capture of no change at all. Either §5.2 gains a row
+— a `surface.raised` well on hover would be the obvious one, and is *not* being applied without
+being asked for — or it gains a sentence saying a field has no hover state and the harness capture
+stands as documentation. **Do not decide this inside a chunk.**
 
 **A device run was attempted on 2026-08-11 and got half way, which is worth recording so the next
 session does not repeat the dead ends.** The app **builds and runs on Chrome** against the live
@@ -3199,12 +3312,17 @@ preference order:
   which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
   that is not also serving the emulators.
 
-**The device-run debt is therefore now nine chunks deep**, and the last four are the ones that most
+**The device-run debt is therefore now ten chunks deep**, and the last five are the ones that most
 need a device — between them they changed how nearly every screen in the app looks, how every
-button feels, how every screen is entered and left, and how every box a person types into is drawn.
-Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
-`1b2b13b`, **the ripple kill**, **`AppButton`**, **`AppPageRoute`**, or **`AppTextField`**. Between
-them that is 174 tests, 127 screenshots, and no eyes.
+button feels, how every screen is entered and left, how every box a person types into is drawn, and
+how every explanation folds away. Nobody has looked at the sign-in repair, the invitation repair,
+the category repair, commit `1b2b13b`, **the ripple kill**, **`AppButton`**, **`AppPageRoute`**,
+**`AppTextField`**, or **`Disclosure`**. Between them that is 208 tests, 144 screenshots, and no
+eyes.
+
+**A field is still where this hurts most, and a `Disclosure` is now second.** Whether the reveal
+reads as the same screen growing or as a new one appearing, whether an 18px chevron's rotation is
+legible, and whether the spring holds a frame budget on a low tier are all judged and not asserted.
 
 **A field is where this hurts most.** The cursor, the caret colour, the keyboard's return key, the
 counter appearing mid-word, whether a 50-character helper line wraps to two on a phone, and whether
@@ -3310,12 +3428,27 @@ finished.
   states in the harness, **finding 4 closed**, and `AppSelect` built after the audit claim it was
   dropped on turned out to be false. It moved no board row, moved the **Design system** track 35%
   to 45%, added 29 tests and 10 screenshots, and **measured all four non-Flutter suites**.
+- **§5.2 covers `Callout` not at all, and names no icon size for `Disclosure` or `Callout`.** Every
+  measurement `Callout` uses is borrowed from a §2 row, and all three glyphs take `AppButton`'s 18
+  as the nearest named leading-icon size. Either §5.2 gains a `Callout` paragraph and an icon-size
+  row, or a sentence saying the borrowed rows are the specification. **A question for the product
+  owner, not a chunk** — but it blocks calling §5's inventory complete in step 12.
 - **§5.2 does not say what a field looks like under a pointer.** `AppTextField` has no hover
   treatment because there is no row to read one from, and `92-appfield-hover` is a capture of that
   absence. Either §5.2 gains a hover row or it gains a sentence saying a field has no hover state.
   **A question for the product owner, not a chunk** — but it blocks calling §9's audit complete in
   step 12.
-- **The design system, step 4: `StatusBadge`, `Callout`, `Disclosure`** — the current chunk.
+- **~~The design system, step 4: `StatusBadge`, `Callout`, `Disclosure`~~** — **done 2026-08-12.**
+  Three components, `AppStatus`, 8 harness captures and 34 tests, on four migrated screens. It
+  moved no board row and no rollout step, moved the **Design system** track 45% to 50%, and its own
+  standing decision above records what it decided — the glyph defaults, the two borrowed icon
+  sizes, the `text.secondary` prose, the tolerance the reveal closes against, the two status
+  mappings that are decisions rather than lookups, and `ConfirmDialog` leaving for step 7.
+- **The step-4 sweep: every remaining status, notice and permanent explanation** — the second half
+  of step 4, the way the call-site sweep was the second half of `AppButton`. Folded into the
+  composition-layer batch above because step 6 reaches most of the same screens. **One item in it
+  is not a restyle**: `reconciliation-request-notice` needs a status the model does not carry.
+- **The design system, steps 5a, 6 and 8** — the current chunk.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the

@@ -4,6 +4,7 @@ import '../tenancy/tenant_catalog.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -968,11 +969,19 @@ final class _CatalogManagementContents extends StatelessWidget {
           const SizedBox(height: 28),
           Text('Many products at once', style: text.titleMedium),
           const SizedBox(height: 8),
-          const Text(
-            key: ValueKey('catalog-management-bulk-scope'),
-            'One correction can be applied across many products, and a catalog '
-            'can be created from a spreadsheet. Both are previewed row by row '
-            'before anything is written.',
+          // §5.2 names this paragraph by name as prose that should be kept and
+          // moved inside a `Disclosure`. The words are unchanged; only the
+          // summary line above them is new, and it is new because the component
+          // requires one.
+          const Disclosure(
+            key: ValueKey('catalog-management-bulk-disclosure'),
+            summary: 'How bulk changes and import work',
+            child: Text(
+              key: ValueKey('catalog-management-bulk-scope'),
+              'One correction can be applied across many products, and a '
+              'catalog can be created from a spreadsheet. Both are previewed '
+              'row by row before anything is written.',
+            ),
           ),
           const SizedBox(height: 8),
           AppButton(
