@@ -20913,3 +20913,208 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+## The catalog becomes a `RecordList`, and a product that cannot be sold says so - 2026-08-13
+
+The **second and third screens of `design.md` Â§11 step 6's sweep**, taken together because they are
+the same records: the **read-only catalog** (screen 17) and **manage catalog** (screen 18). They are
+the screens Â§5.2 names by name - the `Correct` / `Retire` pair is its own worked example of the
+contract being broken - and `PLAN.md` queued them first for that reason. It changes `firestore.rules`
+not at all and nothing in `functions/` or `rules-tests/` either: `git diff` **and** `git status` over
+all three print zero lines.
+
+Two of step 6's twelve screens were migrated before this; **four are now done and eight remain**.
+
+### What the two screens were
+
+Both drew a product as a `Card` around a `ListTile`, and both put four separate facts into one
+bullet-separated subtitle:
+
+```text
+17  Drinks â€¢ SKU LAGER-001 â€¢ Stock -2          trailing: a bare price Text
+18  Bakery â€¢ 6161100000019 â€¢ 40 in stock       trailing: Row(Correct, Retire) at sm
+    â€¢ 65.00
+```
+
+That sentence is what Â§5.2 replaces with key-value attributes, and the difference is not cosmetic: on
+a table each fact is a column a person can scan down a page of, and on a card each is a labelled
+line. Nobody can scan the third field of a bullet list.
+
+### What was decided
+
+1. **The category is the record's `subtitle`, not an attribute.** Â§5.2's identity row admits "an
+   address, a code, a category" as a second identifying line in as many words. The deciding case is
+   the one the category wording exists for: a product filed under a category this page did not read
+   reads *"Category: Category not listed here"* as an attribute, and simply *"Category not listed
+   here"* as a subtitle. It is also why this screen has **five** table columns rather than the six
+   `PLAN.md` predicted.
+2. **Only a product that cannot be sold carries a standing.** Â§2.1 gives `problem` three meanings and
+   names *"out of stock"* as one of them, so the badge is a lookup rather than a judgement. What *is*
+   a judgement is the silence on every other product: `RecordList`'s own rule, written when the
+   activity log refused to badge an ordinary event, is that a list where every row wears a badge is a
+   list with no signal in it. "In stock" is the ordinary case and says nothing.
+3. **A negative quantity is out of stock rather than a fourth status.** The read model accepts a
+   signed integer deliberately - an oversold product is a state this app records rather than refuses
+   - and what it means at the till is what zero means: the next customer cannot be served. The figure
+   is still stated beside the badge, so the badge adds a meaning rather than replacing a number.
+4. **One definition of both, shared by the two screens.** `tenantProductStanding` and
+   `tenantProductAttributes` live beside `TenantProduct` in `lib/tenancy/tenant_catalog.dart`, for
+   the reason `tenantCategoryLabel` does: five copies of one lookup is how two screens come to
+   disagree about what the same product is, and this repository has already paid for that once.
+5. **Nothing is marked out of the narrow form, and `PLAN.md`'s prediction was wrong twice over.** It
+   said the catalog would be "the first real consumer of `RecordAttribute.inNarrowForm`" because it
+   is "the screen with six columns". It has five, for the reason in decision 1, and three key-value
+   lines fit a card at every band. `inNarrowForm` **drops** a fact rather than shortening one, so
+   using it to reach a tidier card would cost a shopkeeper the code they scan by. The concession
+   still has no consumer, two screens after it was built.
+6. **The `Code` column takes twice an ordinary share, and the first render is why.** A code is Â§2.2's
+   *"compared character by character"* string and a real one is a 13-digit barcode; at an equal share
+   the 1200-wide table wrapped it to `61611000000` / `19`, which is the one thing a code must never
+   do. The knob is `RecordAttribute.flex`, which Â§4.3 already gives the caller for exactly this and
+   which the activity log already uses - so nothing about the component moved.
+7. **`size: AppButtonSize.sm` is gone, and it is gone by the decision being taken away.** Â§9 names
+   this pair among its known current failures on two counts - a destructive action rendered like its
+   neighbour, and *"20px targets on a touch surface"*. Step 3 closed the first with the destructive
+   tier. `RecordActionSet` closes the second by drawing every action at `AppButtonSize.lg` whatever
+   the caller wanted, because the component resolves no density and a 1024-wide surface may well be a
+   touchscreen till. **This is the sentence Â§5.2 wrote the catalog example for, and it is now false
+   of the catalog.**
+8. **Opening a product's stock is a control now.** Screen 17 hid it in `ListTile.onTap`: the whole
+   row was the control and nothing on screen said so. Â§5.2's "never bare text links" reaches an
+   invisible link the same way, and Â§4.3's table has no row to tap at all. It is a `RecordAction`
+   labelled "View stock" - a 48dp target with the verb written on it. **What decides whether it is
+   offered is unchanged**: the guarded session resolves `productStockRoute` to null for a role the
+   inventory domain does not admit, exactly as it did when that decided `onTap`. No routing
+   condition, no repository call, and no role list moved.
+9. **`Pagination` was examined and declined again**, which `PLAN.md` asks each sweeping session to say
+   out loud rather than let arrive with a record list. Screen 18's pagination is a `Previous` /
+   `Page n` / `Next` row, which *is* one of `DESIGN-AUDIT.md` Â§2.3's four idioms - unlike the staff
+   directory's one sentence, so the reason for declining is different this time and is a queue
+   position rather than an argument: `Pagination` is Â§5.1 priority 3 and is not step 6's. Nothing
+   about it moved, and the three controls are the `AppButton`s step 3 made them.
+10. **`details` has no consumer here, and `PLAN.md` was wrong about that too.** It said screen 18
+    would be "the second consumer of `details`: `catalog_management_panel.dart` opens a correction
+    form per product". It does not - `_edit` opens `_EditProductDialog` through `showDialog`, and has
+    since the correction route landed on 2026-08-08. A dialog is not a form inside a record, and
+    turning one into the other would be a behaviour change rather than a restyle.
+
+### What it did not touch, deliberately
+
+The bulk route, the add-product form, the category picker, the `Disclosure`, every notice paragraph,
+and the pagination row are all unchanged. So is screen 17's closing sentence - *"Open a product to
+see and correct its stock."* - which still describes what the new action does; rewording it belongs
+to the step-4 prose sweep rather than here. `lib/inventory/catalog_management_panel.dart` is 1,512
+lines and this chunk moved about 60 of them.
+
+### A key collision, found by a test rather than by review
+
+The attribute key prefix on screen 17 is `catalog-product`, so the "In stock" value key is
+`catalog-product-stock-product-a` - which is exactly the key first chosen for the "View stock"
+action. The role test asserting the action is **absent** for a cashier is what caught it: it found
+one widget where none was expected, and the widget was a `Text` reading `-2`. The action is
+`catalog-product-view-stock-` now. One prefix with two owners is a defect a passing test can hide,
+because the collision only shows where the two are expected to disagree.
+
+### Tests
+
+**Flutter 1833 â†’ 1839**, six new:
+
+```text
+test/tenancy/tenant_catalog_test.dart             4
+  only a product that cannot be sold carries a standing
+  the three facts are stated in the order a table draws them
+  a product that cannot be sold says so, and its neighbour says nothing
+  the catalog lays a record out on a phone
+test/inventory/catalog_management_panel_test.dart 2
+  a product that cannot be sold says so on this list too
+  both actions are reachable on a phone
+```
+
+**Two of the six are the class of defect the staff directory chunk found**, and they are written
+because `PLAN.md` said to expect it again: a layout that has only ever been laid out wide. Screen 17
+had only ever been driven at 800 and screen 18 only at **1400**, and both now assert at Â§4.1's
+`compact` band that the actions are reachable and `takeException()` is null. Neither found anything -
+the catalog's records carry two actions and no inline form, so there is no `Row` in the path that a
+narrow column could break. That is the outcome that makes the assertion worth keeping rather than a
+reason not to have written it.
+
+Two existing tests changed rather than being added, both in `tenant_catalog_test.dart`:
+
+- *"a product names its category, never the ID it is filed under"* asserted
+  `find.textContaining('Drinks â€¢ SKU LAGER-001')`. It reads the subtitle and the code attribute by
+  key now - the same two facts, in their new rendering, and the sweep for document-ID-shaped strings
+  over the whole tree is untouched.
+- *"the product stock route is offered only to its roles"* read `ListTile.onTap` and asserted it was
+  null. It asserts the record is drawn and carries no action, which is the same fact rendered as
+  something a person can see.
+
+**All five suites were measured rather than carried**, though this chunk was entitled to carry the
+four: it is Dart-only and `git diff` over the three server paths prints zero lines. The carry counter
+stays at **0**.
+
+```text
+Flutter          1839  flutter test --no-pub --concurrency=1 --reporter=failures-only
+Functions         409  npm --prefix functions test
+Rules             161  npm --prefix rules-tests run test:emulator                        ~67 s
+Reconciliation     10  npm --prefix rules-tests run test:emulator:reconciliation
+Invitations        23  FUNCTIONS_DISCOVERY_TIMEOUT=60000 ... test:emulator:invitations
+```
+
+The prelude was run before every emulator command, as the standing procedure requires. All four
+passed first time and no suite was retried.
+
+`flutter analyze --no-pub lib test tool` reports **475 issues**, unchanged, and none of them in
+`lib/ui`, `lib/tenancy`, `lib/inventory`, `test/` or `tool/screenshots`.
+
+### Screenshots
+
+**195 images, unchanged in count: 0 added, 9 changed, 186 byte-identical, and zero date drift.** The
+baseline was the staff-directory chunk's, generated earlier the same day, so the whole diff is this
+chunk and no reverted second regeneration was needed.
+
+```text
+web/17-read-only-catalog          mobile/17-read-only-catalog
+web-full/17-read-only-catalog     mobile-full/17-read-only-catalog
+web-full/18-manage-catalog        mobile-full/18-manage-catalog
+web-full/19-correct-a-product     mobile/19-correct-a-product
+                                  mobile-full/19-correct-a-product
+```
+
+**All nine are the three catalog captures and nothing else**, which is the check. `web/18` and
+`mobile/18` are *unchanged* while their `-full` variants moved, and that is not an anomaly: at
+1440 x 900 the fold on screen 18 shows the headings and the add-product form, and the product list is
+a thousand pixels below it. `19-correct-a-product` moved for the same reason on the web fold - the
+dialog covers what changed - and moved on the phone because the list behind it is shorter now.
+
+**`web-full/18-manage-catalog` is the picture worth opening.** It is Â§5.2's own example, fixed: seven
+products as a five-column table, `Correct` as a secondary and `Retire` as a destructive at 48dp each,
+and `Out of stock` picking out `Milk 500ml` at -3 and `Water 1L` at 0 out of seven rows. The seed data
+carried both of those quantities already, so the badge is exercised by the real fixture rather than by
+a case invented to show it.
+
+**No capture was added, and that is a decision.** The staff directory added
+`13b-staff-directory-editing` because no picture had ever opened one of its inline forms.
+`19-correct-a-product` already photographs this screen's only opened state, and the two-column
+`medium` band has its own matrix at `96-*`; a per-screen `tablet` viewport would add 128 images to
+every future diff for a rendering the component's own pictures already cover.
+
+### One thing the pictures show that was not tuned
+
+The `Status` column is empty on five of screen 18's seven rows and takes `_statusFlex = 2` on all of
+them, because Â§5.2 puts status in leading position and step 6b gave it twice an attribute's share so
+a phrase like "Awaiting verification" does not ellipsise. On a catalog the phrase is two words and
+most rows are silent, so the column reads as a wide left margin. **It was left alone on purpose**, the
+same way the four-action `_actionsFlex` observation was: tuning a component constant from one
+screenshot of one screen inside a sweep chunk is how a component acquires a value that fits the last
+screen somebody looked at. It is carried in `PLAN.md` as an observation with the two honest fixes
+named.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

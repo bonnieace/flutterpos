@@ -4,11 +4,12 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-13**, which took two chunks: §4.3's `RecordList`
+Last verified against the code on **2026-08-13**, which took three chunks: §4.3's `RecordList`
 contract, **the second and larger half of `design.md` §11 step 6**, as the component plus one
-migrated screen — and then **the first screen of step 6's sweep**, the staff directory, which brought
+migrated screen — then **the first screen of step 6's sweep**, the staff directory, which brought
 `RecordItem.details` with it and retired `TenantRecordCard`, `TenantRecordTable` and
-`TenantStatusChip`. The day before it took five: every route onto
+`TenantStatusChip` — and then **the second and third screens of that sweep**, the read-only catalog
+and manage catalog, which are the two §5.2 names by name. The day before it took five: every route onto
 a spring, which **finishes `design.md` §11 step 2**, then `AppTextField` and `AppSelect`, which
 **finishes step 3**, then `StatusBadge`, `Callout` and `Disclosure`, which **finish step 4**,
 then `AppScaffold` and `PageHeader`, which **finish step 5a**, and then §4.1's breakpoints and
@@ -103,7 +104,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~67% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 4, 5a and 6 are finished as of 2026-08-13.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, on four migrated screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **two** migrated screens. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision - the status/notice/prose sweep across the rest of the app, and **`RecordList`'s remaining ten screens**, both queued below as their own chunks the way `AppButton`'s call-site sweep was. `ConfirmDialog` left step 4 for step 7. Steps 5b and 7-12 remain. |
+| **Design system** | ~70% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 4, 5a and 6 are finished as of 2026-08-13.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, on four migrated screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **four** migrated screens, which include **the `Correct` / `Retire` pair §5.2 names by name** and is the count that moves as the sweep runs. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision - the status/notice/prose sweep across the rest of the app, and **`RecordList`'s remaining eight screens**, both queued below as their own chunks the way `AppButton`'s call-site sweep was. `ConfirmDialog` left step 4 for step 7. Steps 5b and 7-12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -143,6 +144,38 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The 2026-08-13 catalog chunk changed no board row at all — not a colour and not a word of one — and
+this sentence is here so that is stated rather than left silent.** It took the **second and third
+screens of step 6's sweep**, the read-only catalog and manage catalog, which is a **redesign step
+rather than a capability**: "Add or retire a product", "Edit a product's price, name, code, cost, or
+category" and "Adjust stock" have all been 🟢 throughout, and a shop can do exactly what it could do
+this morning. It moved the **Design system** track 67% to 70%. It changed **no rollout step**, and it
+touched no rule and no `functions/` file — `git diff` *and* `git status` over `functions/`,
+`firestore.rules` and `rules-tests/` print zero lines. It added **6 tests**, added and removed **no**
+screenshots, and moved **9** — all nine the three catalog captures, with **zero** date drift.
+
+**It is the chunk that makes §5.2's own worked example false of the app.** §9 names the catalog's
+`Correct` / `Retire` pair twice among its known current failures, on two counts: a destructive action
+rendered identically to its neighbour, and *"20px targets on a touch surface"*. Step 3 closed the
+first with the destructive tier. This closes the second, and it closes it by taking the decision away
+rather than by correcting it at the call site: `RecordActionSet` draws every action at
+`AppButtonSize.lg` whatever the caller wanted, so `size: AppButtonSize.sm` is gone with the call site
+that set it.
+
+**It corrects this file three times, and all three are predictions this file made about this exact
+screen.** Step 18 was going to have **six columns** and be "the first real consumer of
+`RecordAttribute.inNarrowForm`": it has **five**, because the category is the record's second
+identifying line rather than an attribute, and three key-value lines fit a card at every band — so
+`inNarrowForm` **still has no consumer**, four screens into the sweep. And 18 was going to be "the
+second consumer of `details`": it is not, because `_edit` opens a `showDialog` and has since the
+correction route landed on 2026-08-08. A dialog is not a form inside a record.
+
+**One defect it found is its own, and one picture is the reason it was found.** The first render put
+a 13-digit barcode in a column at an equal share and the table wrapped it to `61611000000` / `19` —
+which is the one thing §2.2's *"compared character by character"* string must never do. The fix is
+`RecordAttribute.flex: 2`, a knob §4.3 already gives the caller and the activity log already uses, so
+nothing about the component moved.
 
 **The 2026-08-13 sweep chunk changed no board row at all — not a colour and not a word of one — and
 this sentence is here so that is stated rather than left silent.** It took the **first screen of step
@@ -615,18 +648,19 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1833** |
-| Functions | `npm --prefix functions test` | **409** ✅ measured twice on 2026-08-13, and three times on 2026-08-12 |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured twice on 2026-08-13 (~150 s) |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured twice on 2026-08-13 (~60 s) |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured twice on 2026-08-13 (~75 s) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1839** |
+| Functions | `npm --prefix functions test` | **409** ✅ measured three times on 2026-08-13, and three times on 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured three times on 2026-08-13 (~67 s) |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured three times on 2026-08-13 (~60 s) |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured three times on 2026-08-13 (~75 s) |
 
-**2436 tests across five suites, all five measured twice on 2026-08-13, and the carry counter is at
-0.** The sweep chunk was entitled to carry the four non-Flutter figures — it is Dart-only and
-`git diff` over the three server paths prints zero lines — and measured them anyway, because the day
-before, two sessions in a row concluded from a bare `emulators:exec` that no emulator could start
-here. Running them with the prelude is what stops that being something a later session takes on
-trust. All four passed first time and the three emulator suites cost about **285 s** between them.
+**2442 tests across five suites, all five measured three times on 2026-08-13, and the carry counter
+is at 0.** Both sweep chunks were entitled to carry the four non-Flutter figures — both are Dart-only
+and `git diff` over the three server paths prints zero lines — and both measured them anyway, because
+the day before, two sessions in a row concluded from a bare `emulators:exec` that no emulator could
+start here. Running them with the prelude is what stops that being something a later session takes on
+trust. All four passed first time in each run and the three emulator suites cost about **200 s**
+between them.
 
 ⛔ **Every emulator command needs the prelude. A session that forgets it will conclude its own
 machine is broken, because that has now happened twice.** See "The emulator prelude is not optional"
@@ -656,8 +690,11 @@ the procedure instead of at a missing JDK.
 
 There is a sixth figure deliberately not in this table:
 `flutter test --no-pub --concurrency=1 tool/screenshots` runs **148 captures** writing **195**
-images, and it asserts nothing, which is why it is not counted here. It was 140 and 187 before the
-sweep chunk added 5 captures and 8 images — `96-record-details` at all three bands, and
+images, and it asserts nothing, which is why it is not counted here. **The catalog chunk moved
+neither figure**, which is the first sweep chunk to add no capture at all: `19-correct-a-product`
+already photographs the only opened state either catalog screen has, and a per-screen `tablet`
+viewport would add 128 images to every future diff for a rendering the `96-*` matrix already covers.
+It was 140 and 187 before the staff-directory chunk added 5 captures and 8 images — `96-record-details` at all three bands, and
 `13b-staff-directory-editing` at both screenshot viewports, which is the first picture of a form open
 inside a record. It was 128 and 170 before step
 6b added the 12 captures and 17 images of the `96-*` `RecordList` matrix — four cases at **three**
@@ -687,8 +724,18 @@ changed is four test files that were asking a correct question — "can this be 
 Material type that is going away. They ask it through `test/support/buttons.dart` now, which is
 itself marked for deletion with the last `ButtonStyleButton` in `lib/`.
 
-✅ **The carry counter is at 0: both 2026-08-13 chunks measured all five.** The sweep chunk measured
-them without being obliged to, for the reason given above. Before it, the step-6b chunk measured all
+**The catalog chunk took Flutter 1833 → 1839** (6 new: 4 in `test/tenancy/tenant_catalog_test.dart` —
+2 unit, for the standing and for the three attributes, and 2 widget, for the badge appearing on one
+product and not its neighbour and for the record laying out at §4.1's `compact` band — and 2 in
+`test/inventory/catalog_management_panel_test.dart`, for the same badge on the second surface and for
+both actions being reachable on a phone). The other four were **measured** and unchanged. Two
+existing tests changed rather than being added, both in `tenant_catalog_test.dart`: the category test
+read `find.textContaining('Drinks • SKU LAGER-001')` and reads the subtitle and the code attribute by
+key now, and the stock-route test read `ListTile.onTap` and asserts the record carries no action —
+the same facts in their new rendering, and the document-ID sweep over the whole tree is untouched.
+
+✅ **The carry counter is at 0: all three 2026-08-13 chunks measured all five.** Both sweep chunks
+measured them without being obliged to, for the reason given above. Before them, the step-6b chunk measured all
 five too, and it did not
 intend to. It measured `functions` (409, unchanged), carried the other three on the inherited belief
 that they could not run, and **published that belief as a blocking decision** — at which point the
@@ -2529,6 +2576,68 @@ step 6b's, generated the same day, so the whole diff is the chunk with no revert
 The 3 are the staff directory's own. `web-full/13-staff-directory` is **new**, and that is the
 four-action row: the table did not reach past a 1440 x 900 window before and does now.
 
+### A product states its facts as facts, and only one that cannot be sold has a standing
+
+The **second and third screens of step 6's sweep**, taken together on 2026-08-13 because they are the
+same records: the read-only catalog (17) and manage catalog (18). It changed `firestore.rules` not at
+all and nothing in `functions/` or `rules-tests/` either.
+
+**These are the two screens §5.2 wrote its catalog example against**, and the example is now false of
+them. Both drew a product as a `Card` around a `ListTile` with four facts in one bullet-separated
+subtitle — `Bakery • 6161100000019 • 40 in stock • 65.00` — which is precisely the shape §5.2
+replaces with key-value attributes. Nobody can scan the third field of a bullet list down a page.
+
+The decisions, all settled rather than open:
+
+1. **The category is the record's `subtitle`, not an attribute.** §5.2's identity row admits "an
+   address, a code, a category" as a second identifying line in as many words. The deciding case is
+   the one the category wording exists for: a product filed under a category this page did not read
+   reads *"Category: Category not listed here"* as an attribute and simply *"Category not listed
+   here"* as a subtitle. It is also why the table has **five** columns rather than six.
+2. **Only a product that cannot be sold carries a standing.** §2.1 gives `problem` three meanings and
+   names *"out of stock"* as one of them, so the badge is a lookup. What is a judgement is the
+   silence on every other product, and it is the rule the activity log set: a list where every row
+   wears a badge is a list with no signal in it.
+3. **A negative quantity is out of stock rather than a fourth status.** The read model accepts a
+   signed integer deliberately, and what an oversold product means at the till is what zero means.
+   The figure is still stated beside the badge.
+4. **One definition of both, shared by the two screens.** `tenantProductStanding` and
+   `tenantProductAttributes` sit beside `TenantProduct`, for the reason `tenantCategoryLabel` does.
+5. **Nothing is marked out of the narrow form**, and `RecordAttribute.inNarrowForm` therefore still
+   has no consumer four screens in. It **drops** a fact rather than shortening one, so reaching a
+   tidier card with it would cost a shopkeeper the code they scan by.
+6. **The `Code` column takes twice an ordinary share.** A 13-digit barcode wrapped to two lines at an
+   equal share. `RecordAttribute.flex` is §4.3's own knob for this and the activity log already uses
+   it, so the component did not move — which is the difference between this and the `_actionsFlex`
+   observation below.
+7. **`size: AppButtonSize.sm` is gone by the decision being removed**, not by being changed here.
+   `RecordActionSet` draws every action at `lg`, and that is the half of §9's catalog complaint a
+   tier could not close.
+8. **Opening a product's stock is a control now.** Screen 17 hid it in `ListTile.onTap` — the whole
+   row was the control and nothing said so, which is an invisible bare text link. It is a
+   `RecordAction` labelled "View stock". **What decides whether it is offered is unchanged**: the
+   guarded session resolves `productStockRoute` to null for a role the inventory domain does not
+   admit, exactly as it did when that decided `onTap`.
+9. **`Pagination` was examined and declined, and the reason is different from the staff
+   directory's.** Screen 18's `Previous` / `Page n` / `Next` row *is* one of `DESIGN-AUDIT.md` §2.3's
+   four idioms, where the staff directory's was one sentence. So the reason is a queue position
+   rather than an argument: §5.1 priority 3, not step 6's. Nothing about it moved.
+10. **`details` has no consumer here**, because `_edit` opens `_EditProductDialog` through
+    `showDialog` and has since 2026-08-08. Turning a dialog into a form inside a record would be a
+    behaviour change rather than a restyle.
+
+**It found a key collision, and a test found it rather than a review.** The attribute prefix on
+screen 17 is `catalog-product`, so the "In stock" value key is `catalog-product-stock-product-a` —
+which is what the "View stock" action was first given. The test asserting the action is **absent**
+for a cashier is what caught it: one widget where none was expected, and the widget was a `Text`
+reading `-2`. **One prefix with two owners is a defect a passing test can hide**, because the
+collision only shows where the two are expected to disagree.
+
+**9 of 195 images moved, none were added or removed, and 186 are byte-identical.** All nine are the
+three catalog captures. `web/18` and `mobile/18` are *unchanged* while their `-full` variants moved,
+which is not an anomaly: at 1440 x 900 the fold on 18 shows the headings and the add-product form and
+the product list is a thousand pixels below it.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -3815,8 +3924,9 @@ rather than only here.** `fakes.dart` derives its business dates from `DateTime.
 re-running on a different day moves about **39 of the images** with nothing behind them;
 tracking the output would put those 39 into every future diff. The harness is tracked, the
 output is not, and a baseline is regenerated the same day it is compared against. The set is
-**195 images from 148 captures** since the sweep chunk added `96-record-details` at three bands and
-`13b-staff-directory-editing` at two.
+**195 images from 148 captures** since the staff-directory chunk added `96-record-details` at three
+bands and `13b-staff-directory-editing` at two; **the catalog chunk added none**, being the first
+sweep chunk whose screens had no unphotographed state.
 ~~**The 39 was
 re-measured on 2026-08-12 and it is still 39**~~ — **it is 42 as of 2026-08-13**, re-measured the
 same way and larger because step 5a and step 6a pushed three more date-bearing screens past the
@@ -3824,9 +3934,10 @@ fold into `-full` images. It has been confirmed rather than carried twice now: t
 twice the same day, once with the migration and once with it reverted, and everything outside the
 migrated screen is identical. The 2026-08-12 measurement was the first of its kind — the route
 chunk's set was generated twice and the two were identical across all 117 files — and the whole of
-the day-to-day delta is the business date either way. **The sweep chunk later on 2026-08-13 needed
-none of it**: it shared a day with step 6b's baseline, so its drift was **zero** and one regeneration
-settled the whole diff.
+the day-to-day delta is the business date either way. **The two sweep chunks later on 2026-08-13
+needed none of it**: each shared a day with the baseline before it, so drift was **zero** both times
+and one regeneration settled each diff. The catalog chunk's was **0 added, 9 changed, 186
+identical**, and all nine are its own three captures.
 
 **The field chunk is the proof the rule works, and step 5a is the proof it keeps working.** The
 field chunk's baseline was generated a few hours earlier the same day, so the drift was **zero** and
@@ -3860,56 +3971,71 @@ start, check "The emulator prelude is not optional" before writing anything down
 
 ---
 
-**The queued chunk is the rest of step 6's sweep: `RecordList` at its remaining ten screens, and the
-catalog first.** Steps 1, 2, 3, 4, 5a and 6 are finished, the component exists with all six of its
-slots including `RecordItem.details`, and **two of the twelve screens are migrated** — the activity
-log by step 6b and the staff directory by the sweep's first chunk. What is left, from `design.md`
-§11's own list:
+**The queued chunk is the rest of step 6's sweep: `RecordList` at its remaining eight screens, and the
+stock family next.** Steps 1, 2, 3, 4, 5a and 6 are finished, the component exists with all six of its
+slots including `RecordItem.details`, and **four of the twelve screens are migrated** — the activity
+log by step 6b, the staff directory by the sweep's first chunk, and the two catalog screens by its
+second. What is left, from `design.md` §11's own list:
 
 ```text
-17  read-only catalog          33  shift sales
-18  manage catalog             34  returns on a sale
-21  product stock              (13 staff directory - done)
-22  stock corrections          (35 activity log - done)
-23  stock movements
-24  one product ledger
-30  shift corrections
-32  shift history
+21  product stock              32  shift history
+22  stock corrections          33  shift sales
+23  stock movements            34  returns on a sale
+24  one product ledger         (13 staff directory - done)
+30  shift corrections          (17 read-only catalog - done)
+                               (18 manage catalog - done)
+                               (35 activity log - done)
 ```
 
-**That is ten, not twelve, and step 6's list is twelve screens rather than thirteen.** Both figures
-were inherited wrongly through step 6b's records; `13, 17, 18, 21–24, 30, 32–35` counts 12. Corrected
-here and in the standing decision.
+**That is eight**, and step 6's list is twelve screens rather than thirteen: `13, 17, 18, 21–24, 30,
+32–35` counts 12. Both figures were inherited wrongly through step 6b's records and were corrected by
+the sweep's first chunk.
 
-**Cost it from what the staff directory actually took rather than from what this file predicted.**
-The prediction — five actions, two behind a menu, five test files — was oversized: a staff record can
-carry at most four actions, one moved behind the menu at 800 x 600, and one test file needed changing.
-What the screen really cost was two things this file did not name: **the `details` slot** (now built)
-and **a pre-existing overflow in five inline forms** that only a narrow column could expose. Expect
-the second class of thing again. A form or an action row that has only ever been laid out at ~760
-logical pixels gets 342 in a `medium` two-column card, and `Row` is how it fails.
+**Take 21–24 together, and expect them to be cheaper than the catalog was.** They are one family
+reading one ledger — a stock figure, the corrections against it, every movement, and one product's
+own history — so the record model is decided once and used four times, the way the two catalog
+screens shared `tenantProductStanding` and `tenantProductAttributes`. `stock_movement_feed_panel.dart`
+is the largest of them at 14.8 KB, against the catalog panel's 59.2 KB.
 
-**Take the catalog first — 17 and 18 together.** They are the screens §5.2 names by name: the
-`Correct` / `Retire` text links are its own example of the contract being broken, on two counts, and
-`RecordActionSet` is what fixes both. It is also the screen with **six columns**, which makes it the
-first real consumer of `RecordAttribute.inNarrowForm` — the staff directory needed none, because two
-attributes fit a card. And it is the second consumer of `details`: `catalog_management_panel.dart`
-opens a correction form per product. Expect it to be the largest single screen in the sweep; 18 is
-1,512 lines and its panel is the biggest UI file outside the till.
+**Cost it from what the two migrated families actually took rather than from what this file
+predicts.** This file has now over-predicted the same sweep twice: the staff directory's "five
+actions, two behind a menu, five test files" was really four, one and one, and the catalog's "six
+columns, the first real consumer of `inNarrowForm`, the second consumer of `details`" was really
+five columns, no consumer, and no `details` at all. **What the two screens really cost was
+elsewhere**: a shared record vocabulary, a status decision, and a column share that only a rendered
+table exposes. Look at the first render before believing the arithmetic.
 
-**One thing carried forward from the sweep's first chunk, for whoever takes 18.** At `expanded`, a
-record with four inline actions wraps its action column to three runs and makes that row three times
-taller than its neighbours — see `web-full/13-staff-directory`. Step 6b set `_actionsFlex = 3` on the
+**Two classes of thing to expect, both drawn from what actually happened.** First, **a layout that
+has only ever been laid out wide**: the staff directory's five inline forms were overflowing on every
+phone from step 3 onwards and nobody had opened one there. The catalog had none of that and both
+screens now assert it at `compact`, which is cheap and is why it is worth doing. Second, **a value
+that is only wrong once a table draws it**: a 13-digit barcode wrapped to two lines at an equal
+column share, and `RecordAttribute.flex` is the knob for it. The stock screens carry quantities,
+timestamps and reasons, and a reason is the long one.
+
+**One thing carried forward from the sweep's first chunk, still untuned.** At `expanded`, a record
+with four inline actions wraps its action column to three runs and makes that row three times taller
+than its neighbours — see `web-full/13-staff-directory`. Step 6b set `_actionsFlex = 3` on the
 two-action case, which was the only case it had. **Do not tune it inside a sweep chunk.** If it is
 wrong, the two honest fixes are named: the actions column earns a caller knob the way
 `RecordAttribute.flex` has one, or §4.3's `expanded` cell says something other than "all inline". The
-catalog's records carry two or three actions, so it may well not arise again.
+catalog's records carry two and did not reach it.
 
-**`Pagination` was examined and declined by the first sweep chunk, and the reason does not carry.**
-The staff directory's pagination is one sentence — "More staff memberships are available." — not one
-of `DESIGN-AUDIT.md` §2.3's four idioms. **The remaining ten screens are where the four idioms
-actually live**, §5.1 has `Pagination` at priority 3, and it is still not step 6's. It stays excluded,
-and a session that folds it in must say so rather than let it arrive with a record list.
+**A second observation joins it, from the catalog, and it is carried rather than tuned for the same
+reason.** The `Status` column is empty on five of screen 18's seven rows and takes `_statusFlex = 2`
+on all of them, so on a catalog it reads as a wide left margin — see `web-full/18-manage-catalog`.
+The share exists because §2.1's statuses attract phrases and step 6b measured "Awaiting verification".
+The two honest fixes, if it is wrong: the share is derived from the widest label the list actually
+carries, or §5.2's "leading position" is read as leading *within* the identity rather than as a
+column. **Neither is a sweep chunk's decision**, and tuning a component constant from one screenshot
+of one screen is how a component acquires a value that fits the last screen somebody looked at.
+
+**`Pagination` has now been examined and declined twice, and the two reasons differ.** The staff
+directory's pagination is one sentence — not one of `DESIGN-AUDIT.md` §2.3's four idioms. **Screen
+18's `Previous` / `Page n` / `Next` row is one of them**, so the catalog chunk declined it on a queue
+position instead: §5.1 has `Pagination` at priority 3 and it is not step 6's. **The remaining eight
+screens are where the rest of the four idioms live**, it stays excluded, and a session that folds it
+in must say so rather than let it arrive with a record list.
 
 **The step-4 sweep and step 8 come after it, in that order**, and both are described below.
 
@@ -3919,15 +4045,15 @@ been taken on their own, each because it fitted one session: step 4 first becaus
 used by 6 and 8, then 5a because 6 and 8 both sit inside the page frame, then 6a because the
 breakpoint rewiring is what §4.2 and §4.3 both stand on, then 6b because §4.3 is a model rather than
 a restyle. The exception is a permission to batch, not an instruction to, and splitting on the
-boundaries it names has cost the batch nothing four times running — five, counting the sweep's first
-screen, which is step 6's own sweep rather than a fifth boundary. The rule stands everywhere else:
+boundaries it names has cost the batch nothing four times running — six, counting the sweep's first
+two chunks, which are step 6's own sweep rather than further boundaries. The rule stands everywhere else:
 step 7, step 9, step 10 and steps 11–12 are one number each, and **5b (the navigation model) is not
 in this exception** — it is a behaviour change and stays queued.
 
 **The step-4 sweep is still owed and should not be forgotten.** Step 4 built the components and put
 them on four screens; **it did not sweep the app**, the same way `AppButton` landed as a component
 plus one route and then took a second chunk for its remaining 133 call sites, and the same way
-`RecordList` has now landed as a component plus two routes. What is left to sweep:
+`RecordList` has now landed as a component plus four routes. What is left to sweep:
 every remaining permanent notice paragraph, every remaining multi-line explanation, and every
 remaining status rendered as a word or a coloured `Text`. It reaches most of the same screens the
 `RecordList` sweep does, **and a status rendered as a coloured `Text` on one of those screens is a
@@ -3937,7 +4063,7 @@ item**: `reconciliation-request-notice` needs a status the model does not carry,
 model change rather than a restyle — see the standing decision.
 
 **The product owner chose the composition layer over the web callable-auth defect on 2026-08-12,
-and the step-4, step-5a, step-6a, step-6b and sweep sessions all checked that choice rather than
+and the step-4, step-5a, step-6a, step-6b and both sweep sessions all checked that choice rather than
 inheriting it.** The defect still cannot be settled either way. **The Windows route
 was last checked in step 6a and was shut**: `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock` has no
 `AllowDevelopmentWithoutDevLicense` value at all, so Developer Mode is off and
@@ -3992,7 +4118,11 @@ and nothing else; **`Pagination`**, §5.1 priority 3, whose four idioms sit on t
 sweep touches and which is the thing a sweeping session will be most tempted to fold in;
 the remaining `IconButton` call sites, which have
 no component yet — **the count is 8 as of 2026-08-13**, down from 13, because the staff directory's 5
-became `RecordAction`s and are the first that `RecordActionSet` took; the **navigation model**, step
+became `RecordAction`s and are the first that `RecordActionSet` took, and the catalog chunk took none
+of the 8 because neither catalog screen carried one; **the unit cost as a catalog column**, which is
+new to this list and is a *permission* boundary rather than a taste one — a manager may stock the
+catalog and may not be shown what the business pays, so a column that appears for an owner and not a
+manager is a role-dependent record model and is not a restyle; the **navigation model**, step
 5b, which `DESIGN-AUDIT.md` decision 3 splits out
 as a behaviour change needing a device check, **and the landing route with it** — step 5a left that
 route's `Scaffold` alone because which string is its title is a product question, see the standing
@@ -4052,15 +4182,24 @@ preference order:
   which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
   that is not also serving the emulators.
 
-**The device-run debt is therefore now fourteen chunks deep**, and the last nine are the ones that
+**The device-run debt is therefore now fifteen chunks deep**, and the last ten are the ones that
 most need a device — between them they changed how nearly every screen in the app looks, how every
 button feels, how every screen is entered and left, how every box a person types into is drawn, how
 every explanation folds away, where the title of every screen sits, how wide every page
 is, and now **what a list of records even is**. Nobody has looked at the sign-in repair, the
 invitation repair, the category repair, commit
 `1b2b13b`, **the ripple kill**, **`AppButton`**, **`AppPageRoute`**, **`AppTextField`**,
-**`Disclosure`**, **`AppScaffold`**, **`AppLayout`**, **`RecordList`**, or **the staff directory on
-it**. Between them that is 298 tests, 195 screenshots, and no eyes.
+**`Disclosure`**, **`AppScaffold`**, **`AppLayout`**, **`RecordList`**, **the staff directory on
+it**, or **either catalog screen on it**. Between them that is 304 tests, 195 screenshots, and no
+eyes.
+
+**The catalog chunk adds the item a shopkeeper would notice first**, and it is a judgement rather
+than a check: **whether "Out of stock" on a catalog is a signal or a nag.** Two of the seven seeded
+products wear it, which is the ratio the decision was made for — but a real shop's catalog may be a
+third out of stock on a Friday, and a badge on a third of the rows is halfway to the badge on every
+row the rule exists to prevent. Open "Manage catalog" against real data and count. If it reads as
+noise, the fix is not to delete the badge but to say what the threshold is, and that is a
+`design.md` amendment before it is code.
 
 **The sweep's first screen adds the item with the strongest argument for a phone specifically**, and
 it is not a matter of taste: **the staff directory's five inline forms were overflowing on every phone
@@ -4120,7 +4259,17 @@ and the harness photographs a **settled** press; neither says anything about how
 second press take over mid-release, tab through the route to see the ring, drag a list past its
 end, and watch the frame graph while doing it.**
 
-**One exclusion named because it has been inherited for many consecutive chunks: the printed
+**One exclusion named because it has been inherited for many consecutive chunks, and it is this
+chunk's own neighbour: renaming or deleting a category.** Still correctly excluded and it has not
+become blocking. It has carried since 2026-08-07 for one reason that has not changed — deleting a
+category orphans the `categoryId` on every product filed under it, and renaming one is only safe
+because nothing stores the name — and the catalog chunk was the first to work inside both catalog
+screens since it was written. It found nothing that makes it more urgent: a category is a `Chip` in a
+`Wrap` on both screens, neither is a `RecordList`, and `unlistedTenantCategoryLabel` already answers
+the one state a person meets. It becomes a decision when somebody asks to correct a misspelt
+category, which nobody has.
+
+**A second exclusion named because it has been inherited for many consecutive chunks: the printed
 receipt body.** Still correctly excluded and it has not become blocking — a sale is recorded,
 found by receipt lookup, and returned without anything being printed. It is **not** blocked on
 a decision, which is the part worth restating: the transport was answered on 2026-08-07 and an
@@ -4253,13 +4402,15 @@ finished.
   could have reached. Its own standing decision above records what it decided, including the one
   thing most likely to be argued with: columns are the union across the list rather than the first
   record's.
-- **~~The `RecordList` sweep: the remaining twelve screens~~ — its first screen is done 2026-08-13**,
-  and ten remain (step 6's list is twelve screens, not thirteen; both figures were inherited wrongly).
-  The staff directory deleted the hand-rolled choice and retired `TenantRecordCard`,
+- **~~The `RecordList` sweep: the remaining twelve screens~~ — three of them are done 2026-08-13**,
+  and **eight remain** (step 6's list is twelve screens, not thirteen; both figures were inherited
+  wrongly). The staff directory deleted the hand-rolled choice and retired `TenantRecordCard`,
   `TenantRecordTable`, `TenantTableColumn`, `TenantTableRow` and `TenantStatusChip`, and brought
   `RecordItem.details` with it. It cost **one** test file rather than five — a staff record can carry
   at most four actions, so only one moved behind the menu — and found a phone-width overflow in five
-  inline forms that predated `RecordList` by a step. **The catalog, 17 and 18, is next**, described in
+  inline forms that predated `RecordList` by a step. **The catalog, 17 and 18, went next** and made
+  §5.2's own `Correct` / `Retire` example false of the app; it corrected three of this file's
+  predictions about itself and cost two test files. **The stock family, 21–24, is next**, described in
   full above.
 - **The design system, step 8: money surfaces** — after the sweep, not with it. `StatTile`, tabular
   figures and tables across the five reporting screens, which are `RecordList`s with figures in

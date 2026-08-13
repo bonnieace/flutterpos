@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -188,6 +189,70 @@ void main() {
     });
   });
 
+  group('a product as a record', () {
+    TenantProduct product({required int quantity}) =>
+        TenantProduct.fromSnapshot(
+          _productSnapshot(
+            'tenant-a',
+            'product-a',
+            data: _productData()..['quantity'] = quantity,
+          ),
+        );
+
+    test('only a product that cannot be sold carries a standing', () {
+      // §2.1 gives `problem` three meanings and names "out of stock" as one of
+      // them, so the badge is a lookup. What is a judgement is the silence on
+      // every other product: a list where every row wears a badge has no signal
+      // in it, and being in stock is the ordinary case.
+      expect(tenantProductStanding(product(quantity: 40)), isNull);
+      expect(tenantProductStanding(product(quantity: 1)), isNull);
+
+      for (final empty in <int>[0, -3]) {
+        final standing = tenantProductStanding(product(quantity: empty));
+        expect(standing, isNotNull, reason: 'quantity $empty cannot be sold');
+        expect(standing!.status, AppStatus.problem);
+        // §9: never colour alone. The word is the whole point.
+        expect(standing.label, 'Out of stock');
+      }
+    });
+
+    test('the three facts are stated in the order a table draws them', () {
+      final attributes = tenantProductAttributes(
+        product(quantity: 7),
+        keyPrefix: 'somewhere',
+      );
+
+      expect(
+        attributes.map((attribute) => attribute.label),
+        <String>['Code', 'In stock', 'Unit price'],
+      );
+      expect(
+        attributes.map((attribute) => attribute.value),
+        <String>['LAGER-001', '7', '120.50'],
+      );
+      // Nothing is marked out of the narrow form: `inNarrowForm` drops a fact
+      // rather than shortening one, and three lines fit a card at every band.
+      expect(
+        attributes.every((attribute) => attribute.inNarrowForm),
+        isTrue,
+      );
+      // A 13-digit barcode wrapped to two lines at an equal share, which is
+      // what a string compared character by character must never do.
+      expect(
+        attributes.map((attribute) => attribute.flex),
+        <int>[2, 1, 1],
+      );
+      expect(
+        attributes.map((attribute) => attribute.valueKey),
+        <Key>[
+          const ValueKey('somewhere-code-product-a'),
+          const ValueKey('somewhere-stock-product-a'),
+          const ValueKey('somewhere-price-product-a'),
+        ],
+      );
+    });
+  });
+
   group('tenant collection pagination', () {
     test(
       'derives the path, bounds pages, and advances a stable cursor',
@@ -321,11 +386,17 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.textContaining('Drinks • SKU LAGER-001'), findsOneWidget);
+      // The same two facts, in Â§4.3's rendering rather than in one
+      // bullet-separated sentence: the category is the record's second
+      // identifying line and the code is a labelled attribute. What the test is
+      // about is unchanged - a category is named, and its document ID is not.
+      expect(_text(tester, 'catalog-product-category-product-a'), 'Drinks');
+      expect(_text(tester, 'catalog-product-code-product-a'), 'LAGER-001');
       expect(
-        find.textContaining('$unlistedTenantCategoryLabel • SKU LAGER-001'),
-        findsOneWidget,
+        _text(tester, 'catalog-product-category-product-b'),
+        unlistedTenantCategoryLabel,
       );
+      expect(_text(tester, 'catalog-product-code-product-b'), 'LAGER-001');
       expect(
         tester
             .widgetList<Text>(find.byType(Text))
@@ -334,6 +405,97 @@ void main() {
             .where(RegExp(r'cat-|ct_').hasMatch),
         isEmpty,
       );
+    });
+
+    testWidgets('a product that cannot be sold says so, and its neighbour '
+        'says nothing', (tester) async {
+      final reader = _CatalogReader(
+        handler: (query) async => query.collectionPath.endsWith('/categories')
+            ? [_categorySnapshot('tenant-a', 'drinks')]
+            : [
+                // -2 in the shared fixture: an oversold product is a state this
+                // app records rather than refuses, and what it means at the
+                // till is what zero means.
+                _productSnapshot('tenant-a', 'product-a'),
+                _productSnapshot(
+                  'tenant-a',
+                  'product-b',
+                  data: _productData()
+                    ..['name'] = 'Warm lager'
+                    ..['quantity'] = 6,
+                ),
+              ],
+      );
+
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(uid: 'user-a', membership: _membership('tenant-a')),
+          reader: reader,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<StatusBadge>(
+              find.byKey(const ValueKey('product-stock-standing-product-a')),
+            )
+            .label,
+        'Out of stock',
+      );
+      expect(
+        find.byKey(const ValueKey('product-stock-standing-product-b')),
+        findsNothing,
+      );
+      // The figure is still stated beside the badge, so the badge adds a
+      // meaning rather than replacing a number.
+      expect(_text(tester, 'catalog-product-stock-product-a'), '-2');
+      expect(_text(tester, 'catalog-product-stock-product-b'), '6');
+    });
+
+    testWidgets('the catalog lays a record out on a phone', (tester) async {
+      // §4.1's `compact` band. This list has only ever been driven at 800 and
+      // wider, which is exactly how the staff directory's five inline forms
+      // came to be overflowing on every phone without anybody knowing.
+      tester.view.physicalSize = const Size(411, 891);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final reader = _CatalogReader(
+        handler: (query) async => query.collectionPath.endsWith('/categories')
+            ? [_categorySnapshot('tenant-a', 'drinks')]
+            : [_productSnapshot('tenant-a', 'product-a')],
+      );
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(
+              uid: 'user-a',
+              membership: _membership('tenant-a', role: TenantRole.manager),
+            ),
+          reader: reader,
+          productStockRoute: (product) =>
+              Scaffold(body: Text('stock route ${product.id}')),
+          productStockRoles: const [TenantRole.manager],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // One action, so §4.3's overflow rule does not apply at any band and the
+      // control is inline on a phone as it is on a desktop window.
+      final action = find.byKey(
+        const ValueKey('catalog-product-view-stock-product-a'),
+      );
+      await tester.ensureVisible(action);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      expect(find.text('stock route product-a'), findsOneWidget);
     });
 
     testWidgets('missing and wrong-role sessions never start a query', (
@@ -386,13 +548,16 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('Cold lager'), findsOneWidget);
+      // The record is drawn either way; what a role decides is whether it
+      // carries the action. This used to be a `ListTile.onTap` of null, which
+      // is the same fact rendered as nothing a person could see.
       expect(
-        tester
-            .widget<ListTile>(
-              find.byKey(const ValueKey('catalog-product-product-a')),
-            )
-            .onTap,
-        isNull,
+        find.byKey(const ValueKey('catalog-product-product-a')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('catalog-product-view-stock-product-a')),
+        findsNothing,
       );
 
       // A manager opens it, under the same session scope the catalog runs in.
@@ -412,7 +577,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.tap(
-        find.byKey(const ValueKey('catalog-product-product-a')),
+        find.byKey(const ValueKey('catalog-product-view-stock-product-a')),
       );
       await tester.pumpAndSettle();
       expect(find.text('stock route product-a'), findsOneWidget);
@@ -593,6 +758,9 @@ final class _CatalogReader implements TenantDataReader {
     return handler(query);
   }
 }
+
+String _text(WidgetTester tester, String key) =>
+    tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
 Widget _catalogApp({
   required TenantSessionController controller,

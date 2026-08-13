@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/status.dart';
@@ -717,39 +718,60 @@ final class _CatalogManagementContents extends StatelessWidget {
     return null;
   }
 
-  /// The actions offered against one product, or nothing at all.
+  /// One product as §5.2's rows.
+  ///
+  /// **This is the pair §5.2 names by name.** *"`Correct` / `Retire` rendered
+  /// as text links"* is its own worked example of the contract being broken, on
+  /// two counts: a destructive action that looks like its neighbour, and a tap
+  /// target §9 measures at 20 pixels on a touch surface. Step 3 closed the first
+  /// by giving `Retire` the destructive tier. `RecordActionSet` closes the
+  /// second, and it closes it by taking the decision away rather than by
+  /// correcting it here: every action it draws is `AppButtonSize.lg`, because
+  /// the component resolves no density and a 1024-wide surface may well be a
+  /// touchscreen till. The `size: AppButtonSize.sm` these two carried is gone
+  /// with the call site that set it.
+  RecordItem _record(TenantProduct product, Map<String, String> names) =>
+      RecordItem(
+        id: product.id,
+        // The key this screen's tests have always addressed a product by.
+        recordKey: ValueKey('catalog-management-product-${product.id}'),
+        title: product.name,
+        subtitle: tenantCategoryLabel(product.categoryId, names: names),
+        subtitleKey: ValueKey('catalog-management-category-of-${product.id}'),
+        status: tenantProductStanding(product),
+        attributes: tenantProductAttributes(
+          product,
+          keyPrefix: 'catalog-management-product',
+        ),
+        actions: _actions(product),
+      );
+
+  /// The actions offered against one product, or none at all.
   ///
   /// Correcting and retiring are separate capabilities with separate role sets
   /// and separate transports, so a build or a session may offer either, both, or
   /// neither.
-  Widget? _actions(TenantProduct product) {
-    final actions = <Widget>[
-      if (canEdit)
-        AppButton(
-          key: ValueKey('catalog-management-edit-${product.id}'),
-          label: 'Correct',
-          tier: AppButtonTier.tertiary,
-          size: AppButtonSize.sm,
-          onPressed: busy ? null : () => onEdit(product),
-        ),
-      // **Retire is destructive and used to be rendered identically to
-      // Correct.** `design.md` §9 names this pair twice among its known
-      // current failures - "20px targets on a touch surface, and
-      // destructive-adjacent actions rendered identically" - and this line
-      // closes both halves: the tier makes the difference visible, and
-      // `AppButton` answers a 48dp tap whatever it paints.
-      if (canRetire && canWrite)
-        AppButton(
-          key: ValueKey('catalog-management-retire-${product.id}'),
-          label: 'Retire',
-          tier: AppButtonTier.destructive,
-          size: AppButtonSize.sm,
-          onPressed: busy ? null : () => onRetire(product),
-        ),
-    ];
-    if (actions.isEmpty) return null;
-    return Row(mainAxisSize: MainAxisSize.min, children: actions);
-  }
+  List<RecordAction> _actions(TenantProduct product) => <RecordAction>[
+    if (canEdit)
+      RecordAction(
+        label: 'Correct',
+        actionKey: ValueKey('catalog-management-edit-${product.id}'),
+        icon: Icons.edit_outlined,
+        onPressed: busy ? null : () => onEdit(product),
+      ),
+    // **Retire removes something and used to be rendered identically to
+    // Correct.** `design.md` §9 names this pair among its known current
+    // failures, and the destructive tier is half of the answer; the other half
+    // is the 48dp target `RecordActionSet` gives every action it draws.
+    if (canRetire && canWrite)
+      RecordAction(
+        label: 'Retire',
+        actionKey: ValueKey('catalog-management-retire-${product.id}'),
+        icon: Icons.remove_shopping_cart_outlined,
+        destructive: true,
+        onPressed: busy ? null : () => onRetire(product),
+      ),
+  ];
 
   bool get _canSubmitProduct =>
       canWrite &&
@@ -996,25 +1018,23 @@ final class _CatalogManagementContents extends StatelessWidget {
         const SizedBox(height: 28),
         Text('Products', style: text.titleMedium),
         const SizedBox(height: 8),
-        if (view.products.items.isEmpty)
-          const Text(
+        // §4.3's responsive contract, on the screen §5.2 wrote its catalog
+        // example against. The four facts that were one bullet-separated
+        // subtitle are a category on the identity and three key-value
+        // attributes; the two controls that were a `Row` in the tile's
+        // `trailing` slot are a `RecordActionSet`, which is what decides
+        // whether they are inline or behind a menu at a given width.
+        RecordList(
+          identityLabel: 'Product',
+          items: <RecordItem>[
+            for (final product in view.products.items)
+              _record(product, categoryNames),
+          ],
+          empty: const Text(
             key: ValueKey('catalog-management-no-products'),
             'No products on this page.',
-          )
-        else
-          for (final product in view.products.items)
-            Card(
-              child: ListTile(
-                key: ValueKey('catalog-management-product-${product.id}'),
-                title: Text(product.name),
-                subtitle: Text(
-                  '${tenantCategoryLabel(product.categoryId, names: categoryNames)} '
-                  '• ${product.sku} • ${product.quantity} in stock '
-                  '• ${product.price.toStringAsFixed(2)}',
-                ),
-                trailing: _actions(product),
-              ),
-            ),
+          ),
+        ),
         if (!canRetire) ...[
           const SizedBox(height: 8),
           const Text(

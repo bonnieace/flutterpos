@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/buttons.dart';
@@ -335,6 +336,111 @@ void main() {
       find.byKey(const ValueKey('catalog-management-product-cost')),
       findsNothing,
     );
+  });
+
+  testWidgets('a product that cannot be sold says so on this list too', (
+    tester,
+  ) async {
+    // The same standing on both catalog surfaces, from one function, so the two
+    // screens cannot come to disagree about what the same product is.
+    await _pump(
+      tester,
+      _controller(),
+      _Reader(const <String, Map<String, Map<String, Object?>>>{
+        _categoriesPath: <String, Map<String, Object?>>{
+          'cat-bakery': <String, Object?>{'name': 'Bakery'},
+        },
+        _productsPath: <String, Map<String, Object?>>{
+          'pd-1': <String, Object?>{
+            'name': 'White bread loaf',
+            'SKU': '6161100000019',
+            'price': 65,
+            'quantity': 0,
+            'categoryId': 'cat-bakery',
+          },
+          'pd-2': <String, Object?>{
+            'name': 'Mandazi',
+            'SKU': '6161100000026',
+            'price': 20,
+            'quantity': 120,
+            'categoryId': 'cat-bakery',
+          },
+        },
+      }),
+      writer: _Writer(),
+    );
+
+    expect(
+      tester
+          .widget<StatusBadge>(
+            find.byKey(const ValueKey('product-stock-standing-pd-1')),
+          )
+          .label,
+      'Out of stock',
+    );
+    expect(
+      find.byKey(const ValueKey('product-stock-standing-pd-2')),
+      findsNothing,
+    );
+    expect(_text(tester, 'catalog-management-product-stock-pd-1'), '0');
+    // The category is the record's second identifying line rather than a
+    // "Category: Category" attribute, and it is still named rather than an ID.
+    expect(_text(tester, 'catalog-management-category-of-pd-1'), 'Bakery');
+  });
+
+  testWidgets('both actions are reachable on a phone', (tester) async {
+    // §4.1's `compact` band. This route has only ever been driven at 1400 and
+    // its two controls have only ever been laid out in a `ListTile`'s trailing
+    // slot, which is the class of thing the staff directory chunk found
+    // overflowing on every phone.
+    tester.view.physicalSize = const Size(411, 891);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final writer = _Writer();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TenantSessionScope(
+          controller: _controller(),
+          child: Scaffold(
+            body: TenantCatalogManagementPanel(
+              reader: _Reader.seeded(),
+              writer: writer,
+              updateCallable: _Callable(),
+              requestIdFactory: _requestIds().call,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Two actions, so §4.3's `(>3)` overflow rule does not apply and both are
+    // inline at every band - it is the card that is narrow here, not the set.
+    //
+    // Scrolled to rather than `ensureVisible`d: the route is one long
+    // `ListView`, so a record below the fold has not been built yet and there
+    // is nothing for `ensureVisible` to find. It is also what a person does.
+    for (final key in const <String>[
+      'catalog-management-edit-pd-1',
+      'catalog-management-retire-pd-1',
+    ]) {
+      await tester.scrollUntilVisible(
+        find.byKey(ValueKey(key)),
+        300,
+        scrollable: find.byType(Scrollable).first,
+        maxScrolls: 30,
+      );
+      expect(find.byKey(ValueKey(key)), findsOneWidget);
+    }
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-retire-pd-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('It still holds 40 in stock'), findsOne);
   });
 
   testWidgets('an owner is offered the unit cost the manager is not', (

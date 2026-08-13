@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
@@ -119,6 +121,78 @@ final class TenantProduct {
   final String categoryId;
   final Uri? imageUrl;
 }
+
+/// A product's standing, as one of §2.1's five - or nothing at all.
+///
+/// **Only a product that cannot be sold has a standing to state.** §2.1 gives
+/// `problem` three meanings and names *"out of stock"* as one of them, so the
+/// badge is a lookup rather than a judgement. What is a judgement is the silence
+/// on every other product: `RecordList`'s own rule is that a list where every
+/// row wears a badge is a list with no signal in it, and "this product is in
+/// stock" is the ordinary case rather than a standing.
+///
+/// **A negative quantity is out of stock rather than a fourth status.** The read
+/// model accepts a signed integer deliberately - an oversold product is a real
+/// state this app records rather than refuses - and what it means at the till is
+/// the same thing zero means: the next customer cannot be served. The figure
+/// itself is still stated beside it, so nothing is hidden by the badge agreeing
+/// with the row above it.
+///
+/// Shared by both catalog surfaces rather than written twice, for the reason
+/// [tenantCategoryLabel] is: five copies of one lookup is how two screens come
+/// to disagree about what the same product is.
+RecordStatus? tenantProductStanding(TenantProduct product) =>
+    product.quantity > 0
+    ? null
+    : RecordStatus(
+        status: AppStatus.problem,
+        label: 'Out of stock',
+        badgeKey: ValueKey('product-stock-standing-${product.id}'),
+      );
+
+/// The three facts both catalog surfaces state about a product, in the order
+/// §4.3's table draws them as columns.
+///
+/// **The category is not among them, and that is a decision.** It is the
+/// record's `subtitle` - §5.2's identity row explicitly admits "an address, a
+/// code, a category" as a second identifying line - because as an attribute it
+/// reads "Category: Category not listed here" whenever the product is filed
+/// under one this page did not read, which is the one case the wording exists
+/// for.
+///
+/// **Nothing here is marked out of the narrow form.** Three key-value lines fit
+/// a card at every band, and `RecordAttribute.inNarrowForm` drops a fact rather
+/// than shortening one - so using it to reach a tidier card would cost a
+/// shopkeeper the code they scan by. `PLAN.md` predicted the catalog would be
+/// the concession's first consumer; it is not, and the prediction was sized off
+/// a six-column table that a subtitle makes five.
+List<RecordAttribute> tenantProductAttributes(
+  TenantProduct product, {
+  required String keyPrefix,
+}) => <RecordAttribute>[
+  RecordAttribute(
+    label: 'Code',
+    value: product.sku,
+    valueKey: ValueKey('$keyPrefix-code-${product.id}'),
+    // **Twice an ordinary column, and the first render is why.** A code is
+    // §2.2's "compared character by character" string and a real one is a
+    // 13-digit barcode; at an equal share the table wrapped it to
+    // `61611000000` / `19`, which is the one thing a code must never do. The
+    // knob is `RecordAttribute.flex`, which §4.3 already gives the caller for
+    // exactly this, so nothing about the component moved.
+    flex: 2,
+  ),
+  RecordAttribute(
+    label: 'In stock',
+    value: '${product.quantity}',
+    valueKey: ValueKey('$keyPrefix-stock-${product.id}'),
+  ),
+  RecordAttribute(
+    label: 'Unit price',
+    value: product.price.toStringAsFixed(2),
+    valueKey: ValueKey('$keyPrefix-price-${product.id}'),
+  ),
+];
 
 /// One typed catalog page with a document-ID cursor.
 final class TenantCatalogPage<T> {
@@ -381,24 +455,19 @@ final class _CatalogContents extends StatelessWidget {
         const SizedBox(height: 24),
         Text('Products', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        if (snapshot.products.items.isEmpty)
-          const Text('No products found.')
-        else
-          for (final product in snapshot.products.items)
-            Card(
-              child: ListTile(
-                key: ValueKey('catalog-product-${product.id}'),
-                title: Text(product.name),
-                subtitle: Text(
-                  '${tenantCategoryLabel(product.categoryId, names: categoryNames)} '
-                  '• SKU ${product.sku} • Stock ${product.quantity}',
-                ),
-                trailing: Text(product.price.toStringAsFixed(2)),
-                onTap: productStockRoute == null
-                    ? null
-                    : () => _openStockRoute(context, product),
-              ),
-            ),
+        // §4.3's responsive contract. This list used to be a `Card` around a
+        // `ListTile` whose subtitle carried three separate facts in one
+        // bullet-separated sentence, which is the shape §5.2 replaces with
+        // key-value attributes: on a table each is a column a person can scan
+        // down, and on a card each is a labelled line.
+        RecordList(
+          identityLabel: 'Product',
+          items: <RecordItem>[
+            for (final product in snapshot.products.items)
+              _record(context, product, categoryNames),
+          ],
+          empty: const Text('No products found.'),
+        ),
         if (snapshot.products.hasMore)
           const Padding(
             padding: EdgeInsets.only(top: 8),
@@ -415,6 +484,46 @@ final class _CatalogContents extends StatelessWidget {
       ],
     );
   }
+
+  /// One product as §5.2's rows.
+  ///
+  /// **The whole row used to be the control, and now the control is a
+  /// control.** Opening a product's stock was a `ListTile.onTap` with nothing
+  /// on screen saying so - §5.2's "never bare text links" reaches an invisible
+  /// link the same way, and §4.3's table has no row to tap at all. It is a
+  /// `RecordAction` now, which is a 48dp target with the verb written on it.
+  /// **What decides whether it is offered is unchanged**: the guarded session
+  /// resolves `productStockRoute` to null for a role the inventory domain does
+  /// not admit, exactly as it did when that decided `onTap`.
+  RecordItem _record(
+    BuildContext context,
+    TenantProduct product,
+    Map<String, String> names,
+  ) => RecordItem(
+    id: product.id,
+    // The key this screen's tests have always addressed a product by, kept
+    // across the form change so they keep addressing the record rather than
+    // one band's rendering of it.
+    recordKey: ValueKey('catalog-product-${product.id}'),
+    title: product.name,
+    subtitle: tenantCategoryLabel(product.categoryId, names: names),
+    subtitleKey: ValueKey('catalog-product-category-${product.id}'),
+    status: tenantProductStanding(product),
+    attributes: tenantProductAttributes(product, keyPrefix: 'catalog-product'),
+    actions: <RecordAction>[
+      if (productStockRoute != null)
+        RecordAction(
+          label: 'View stock',
+          // Not `catalog-product-stock-`, which is the "In stock" attribute's
+          // own value key. One prefix with two owners, and what caught it was
+          // the role test asserting this action is *absent* for a cashier: it
+          // found a `Text` reading `-2` where no widget was expected.
+          actionKey: ValueKey('catalog-product-view-stock-${product.id}'),
+          icon: Icons.inventory_2_outlined,
+          onPressed: () => _openStockRoute(context, product),
+        ),
+    ],
+  );
 
   /// Opens the stock route under the same session scope this route runs in, so
   /// a tenant switch invalidates it exactly as it does every other guarded
