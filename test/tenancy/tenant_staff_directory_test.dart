@@ -190,8 +190,9 @@ void main() {
       expect(find.text('Staff directory'), findsOneWidget);
       expect(find.text('Owner Person'), findsOneWidget);
       // Role and standing used to be one hyphenated string, `owner - active`,
-      // and are now a chip each. The facts asserted are the same two; only
-      // the rendering moved.
+      // then a chip each. Step 6's sweep makes standing the record's one
+      // `RecordStatus` and role a `RecordAttribute` beside it. The facts
+      // asserted are the same two; only the rendering moved, twice.
       expect(find.byKey(const ValueKey('staff-role-owner-a')), findsOneWidget);
       expect(
         find.byKey(const ValueKey('staff-status-owner-a')),
@@ -200,6 +201,10 @@ void main() {
       expect(find.text('owner'), findsWidgets);
       expect(find.text('active'), findsWidgets);
       expect(find.text('Invite staff'), findsOneWidget);
+      // Role is a labelled key-value line rather than a badge, because it is
+      // not one of §2.1's five statuses and a list where two things wear a
+      // badge has neither of them meaning anything.
+      expect(find.text('Role'), findsWidgets);
 
       // Step 4: standing is one of design.md §2.1's five statuses rather than a
       // chip whose colour was `colors.error` or nothing. Active is `ok`.
@@ -210,6 +215,83 @@ void main() {
       // The badge announces a sentence and shows a word, because "active" on
       // its own is not what a screen reader should read out of a staff row.
       expect(standing.semanticLabel, 'Membership active');
+      // Step 6: one key addresses the record whichever of §4.3's three forms
+      // the band resolved to, where this screen used to key a card and a table
+      // row separately.
+      expect(
+        find.byKey(const ValueKey('staff-record-owner-a')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a pending member states an invitation, and others do not', (
+      tester,
+    ) async {
+      // The screen used to draw a second `StatusBadge` for the invitation. A
+      // record carries one standing, and the one that survives is the one that
+      // decides what a person can do - so the invitation is an attribute, and
+      // only a pending member has one to state.
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          _staffSnapshot('tenant-a', 'owner-a', role: TenantRole.owner),
+          _staffSnapshot(
+            'tenant-a',
+            'staff-a',
+            name: 'Pending Person',
+            status: MembershipStatus.pending,
+            invitationStatus: TenantStaffInvitationStatus.sent,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(controller: controller, reader: reader),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('staff-invitation-staff-a')),
+        findsOneWidget,
+      );
+      expect(find.text('sent'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('staff-invitation-owner-a')),
+        findsNothing,
+      );
+      // Exactly one badge per member, and never two.
+      expect(find.byType(StatusBadge), findsExactly(2));
+    });
+
+    testWidgets('a member with nothing to do carries no actions at all', (
+      tester,
+    ) async {
+      // A manager may read this directory and change nothing, so `ActionSet`
+      // gets an empty list rather than a control that does nothing - which is
+      // the same check the old trailing slot made by returning null.
+      final controller = TenantSessionController()
+        ..open(
+          uid: 'manager-a',
+          membership: _membership('tenant-a', role: TenantRole.manager),
+        );
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          _staffSnapshot(
+            'tenant-a',
+            'owner-a',
+            role: TenantRole.owner,
+            name: 'Owner Person',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(controller: controller, reader: reader),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Owner Person'), findsOneWidget);
+      expect(find.byKey(const ValueKey('edit-staff-owner-a')), findsNothing);
+      expect(find.byTooltip('More actions'), findsNothing);
     });
 
     testWidgets('a cashier is denied without starting any reads', (

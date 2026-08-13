@@ -194,6 +194,42 @@ void main() {
       expect(callable.payloads.single['role'], 'manager');
     });
 
+    testWidgets('the form fits the narrowest record it is opened inside', (
+      tester,
+    ) async {
+      // The defect this found, which predates `RecordList` and was reachable
+      // without it: the form's Cancel / Save pair was a `Row` at
+      // `MainAxisAlignment.end`, and a `Row` answers a column narrower than its
+      // children by overflowing. §4.1's `compact` band is 411 and §4.3's
+      // `medium` gives a record half a page, so both are narrower than the
+      // ~760 this form has only ever been driven at. Nothing had opened it on a
+      // phone.
+      tester.view.physicalSize = const Size(411, 891);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final controller = TenantSessionController()
+        ..open(uid: 'admin-a', membership: _membership('tenant-a'));
+      final reader = _DirectoryReader(includeStaff: true);
+      await tester.pumpWidget(
+        _directoryApp(
+          controller: controller,
+          reader: reader,
+          callable: _UpdateCallable(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // An active accepted member carries two actions - edit and deactivate -
+      // so both are inline at every band and no menu is involved. It is the
+      // *card* that is narrow here, not the action set.
+      await _tapVisible(tester, 'edit-staff-staff-a');
+
+      expect(find.byKey(const ValueKey('update-staff-submit')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('manager is read-only and cashier starts no calls or reads', (
       tester,
     ) async {

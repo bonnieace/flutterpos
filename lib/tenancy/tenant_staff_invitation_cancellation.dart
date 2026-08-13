@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -412,8 +413,13 @@ final class _TenantStaffInvitationCancellationFormState
         ),
       ],
       const SizedBox(height: 12),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
+      // form is laid out inside a record now, and a record at §4.1's `medium`
+      // band is half a page wide.
+      Wrap(
+        alignment: WrapAlignment.end,
+        spacing: AppTokens.componentOf(context).spacing.s8,
+        runSpacing: AppTokens.componentOf(context).spacing.s8,
         children: [
           AppButton(
             key: const ValueKey('cancel-staff-invitation-dismiss'),
@@ -421,7 +427,6 @@ final class _TenantStaffInvitationCancellationFormState
             tier: AppButtonTier.tertiary,
             onPressed: _submitting ? null : widget.onCancel,
           ),
-          const SizedBox(width: 8),
           // This is the clearest case in the sweep for the destructive tier
           // existing at all: the old call site reached past the theme for
           // `colorScheme.error` and `onError` to build a red slab by hand,

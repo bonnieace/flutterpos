@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -465,8 +466,13 @@ final class _TenantStaffInvitationEmailReplacementFormState
           ),
         ],
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
+        // form is laid out inside a record now, and a record at §4.1's `medium`
+        // band is half a page wide.
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: AppTokens.componentOf(context).spacing.s8,
+          runSpacing: AppTokens.componentOf(context).spacing.s8,
           children: [
             AppButton(
               key: const ValueKey('replace-staff-email-cancel'),
@@ -474,7 +480,6 @@ final class _TenantStaffInvitationEmailReplacementFormState
               tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
             ),
-            const SizedBox(width: 8),
             AppButton(
               key: const ValueKey('replace-staff-email-confirm'),
               label: 'Replace email',

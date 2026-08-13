@@ -54,6 +54,9 @@ const Map<String, String> captions = <String, String>{
   '13-staff-directory':
       'Staff. Above 1024 logical pixels this is a table; below 768 the same '
       'records are cards. Compare the two.',
+  '13b-staff-directory-editing':
+      'The same directory with one member’s form open, which is the state '
+          '`RecordItem.details` exists for.',
   '14-new-sale':
       'The till. On a desktop the cart is a second pane; on a phone it is a '
       'sheet reached from a badge.',

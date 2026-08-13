@@ -4,9 +4,9 @@
 /// shapes - a strip of headline figures, and a list of records - and before
 /// this file each drew its own. The previous single-tenant app had one look for
 /// both and it is the look this app is measured against, so the shapes are
-/// lifted from it: a bordered card on a raised surface, a small letter-spaced
-/// caption over a large figure, and a record row that leads with something to
-/// aim at rather than with text.
+/// lifted from it: a bordered card on a raised surface, and a small
+/// letter-spaced caption over a large figure. **The record half has left**, to
+/// `RecordList`; what is still here is the figures and the initials block.
 ///
 /// **What is not lifted is its colour.** That app hardcoded `bgMid`,
 /// `Colors.white54`, and a fixed border in every widget, so a palette change
@@ -27,22 +27,22 @@
 /// §4.1's bands describe the surface a person is looking at rather than
 /// whatever box a widget happens to be inside.
 ///
-/// **Two of the widgets here are superseded and are on their way out.**
-/// `design.md` §11 step 6's second half built `RecordList` in
-/// `lib/ui/record_list.dart`, which is §4.3's contract: one component, one
-/// record model, and the form resolved from the screen width rather than chosen
-/// by the caller. [TenantRecordCard] and [TenantRecordTable] are the two halves
-/// it replaces, and the argument [TenantRecordTable] makes below - that the
-/// caller knows which columns survive the loss - **was accepted rather than
-/// overruled**: it is now `RecordAttribute.inNarrowForm`, and §4.3 was amended
-/// to concede it. What did not survive is the other half of the position, that
-/// the caller also chooses the *form*.
+/// **Three of the widgets that were here are gone, and this is what is left.**
+/// `TenantRecordCard`, `TenantRecordTable` and `TenantStatusChip` were deleted
+/// on 2026-08-13 when the staff directory - the only screen that ever called
+/// the first two - moved onto `RecordList` in `lib/ui/record_list.dart`, which
+/// is §4.3's contract: one component, one record model, and the form resolved
+/// from the screen width rather than chosen by the caller. The argument
+/// `TenantRecordTable` used to make in its own doc comment, that the caller
+/// knows which of its columns survive the loss, **was accepted rather than
+/// overruled** - it is `RecordAttribute.inNarrowForm`, and §4.3 was amended to
+/// concede it. What did not survive is the other half of the position, that the
+/// caller also chooses the *form*. `TenantStatusChip` went with them because
+/// `StatusBadge` replaced it in step 4 and that was its last call site.
 ///
-/// They stay until the screens still calling them are swept onto `RecordList`.
-/// That is one screen, the staff directory, which is the only consumer either
-/// has ever had. [TenantStatCard] and [TenantStatStrip] are a different story
-/// and are step 8's - they are `StatTile` and `StatRow`, not records - and
-/// [TenantStatusChip] is superseded by `StatusBadge` from step 4.
+/// [TenantStatCard] and [TenantStatStrip] are a different story and are step
+/// 8's - they are `StatTile` and `StatRow`, not records - and
+/// [TenantInitialsAvatar] survives on the till, which is step 7's.
 library;
 
 import 'package:flutter/material.dart';
@@ -180,56 +180,6 @@ final class TenantStatStrip extends StatelessWidget {
   );
 }
 
-/// A short status word, shown as a chip.
-///
-/// Status is carried by a word and, where it matters, a colour - never by
-/// colour alone, which is unreadable to a colourblind reader and does not
-/// survive a printed rota.
-final class TenantStatusChip extends StatelessWidget {
-  const TenantStatusChip({
-    super.key,
-    required this.label,
-    this.icon,
-    this.tone,
-  });
-
-  final String label;
-  final IconData? icon;
-
-  /// Null for an ordinary state, which takes the surface's own outline.
-  final Color? tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colour = tone ?? theme.colorScheme.onSurfaceVariant;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: colour.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colour.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon case final glyph?) ...[
-            Icon(glyph, size: 13, color: colour),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: colour,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// A square, rounded initials block.
 ///
 /// The previous app keyed a colour per person from a fixed table, which cannot
@@ -280,207 +230,6 @@ final class TenantInitialsAvatar extends StatelessWidget {
               ),
             )
           : Icon(icon, size: 22, color: colors.onPrimaryContainer),
-    );
-  }
-}
-
-/// One record, as a card.
-///
-/// The compact half of every list here. It leads with the avatar so a column
-/// of these can be scanned by position, states the two lines that identify the
-/// record, and carries its status as chips rather than as a hyphenated string.
-final class TenantRecordCard extends StatelessWidget {
-  const TenantRecordCard({
-    super.key,
-    required this.title,
-    this.subtitle,
-    this.leading,
-    this.chips = const <Widget>[],
-    this.actions,
-    this.details = const <Widget>[],
-  });
-
-  final String title;
-  final String? subtitle;
-  final Widget? leading;
-
-  /// Status words. Rendered under the title on a phone, where there is no
-  /// column to put them in.
-  final List<Widget> chips;
-
-  /// The record's own controls, kept at the top right where a thumb reaches.
-  final Widget? actions;
-
-  /// Anything the caller wants under the record, such as an expanded form.
-  final List<Widget> details;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (leading case final lead?) ...[
-                  lead,
-                  const SizedBox(width: 12),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onSurface,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (subtitle case final line?) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          line,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                      if (chips.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(spacing: 6, runSpacing: 6, children: chips),
-                      ],
-                    ],
-                  ),
-                ),
-                if (actions case final controls?) controls,
-              ],
-            ),
-            ...details,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One column of a [TenantRecordTable].
-final class TenantTableColumn {
-  const TenantTableColumn({required this.label, this.flex = 1});
-
-  final String label;
-  final int flex;
-}
-
-/// The wide form of a record list.
-///
-/// A table earns its place only where there is width for every column at once;
-/// below that it is a card list, which is what [TenantRecordTable] leaves to
-/// the caller rather than deciding here - the caller knows which of its columns
-/// survive the loss.
-final class TenantRecordTable extends StatelessWidget {
-  const TenantRecordTable({
-    super.key,
-    required this.columns,
-    required this.rows,
-  });
-
-  final List<TenantTableColumn> columns;
-
-  /// One list of cells per row, in column order, plus nothing else: a row that
-  /// disagrees with [columns] in length is a caller defect and is asserted
-  /// rather than padded, because a silently short row misaligns every column
-  /// after it.
-  final List<TenantTableRow> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-            child: Row(
-              children: [
-                for (final column in columns)
-                  Expanded(
-                    flex: column.flex,
-                    child: Text(
-                      column.label.toUpperCase(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          for (final row in rows) _TenantRecordTableRow(columns: columns, row: row),
-        ],
-      ),
-    );
-  }
-}
-
-/// One row of a [TenantRecordTable], with anything it wants to expand under it.
-final class TenantTableRow {
-  const TenantTableRow({
-    required this.cells,
-    this.details = const <Widget>[],
-    this.key,
-  });
-
-  final List<Widget> cells;
-
-  /// Rendered full width beneath the row, for a form the row opens.
-  final List<Widget> details;
-
-  final Key? key;
-}
-
-final class _TenantRecordTableRow extends StatelessWidget {
-  const _TenantRecordTableRow({required this.columns, required this.row});
-
-  final List<TenantTableColumn> columns;
-  final TenantTableRow row;
-
-  @override
-  Widget build(BuildContext context) {
-    assert(
-      row.cells.length == columns.length,
-      'A table row carries ${row.cells.length} cells for '
-      '${columns.length} columns, which would misalign every column after the '
-      'short one.',
-    );
-    return Container(
-      key: row.key,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              for (var index = 0; index < columns.length; index++)
-                Expanded(flex: columns[index].flex, child: row.cells[index]),
-            ],
-          ),
-          ...row.details,
-        ],
-      ),
     );
   }
 }

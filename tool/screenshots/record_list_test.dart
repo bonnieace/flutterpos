@@ -21,6 +21,11 @@
 ///   phone, three and a menu on a tablet, five inline on a desktop window.
 /// - **`96-record-list-empty`** - the caller's own words where the rows would
 ///   be. `EmptyState` is §5.1's, at priority 2, and does not exist.
+/// - **`96-record-details`** - the slot §5.2 does not name, added on 2026-08-13
+///   with the staff directory: a form one of a record's actions opened. **The
+///   `medium` picture is the one worth looking at** - it is the case that
+///   exposed a `Row` in five staff forms that could not fit half a page, and it
+///   is where a form's buttons wrap to a second line.
 ///
 /// **A record's states are not §5's nine.** A record is not a control: it has
 /// no hover, no focus-visible, no pressed and no loading, because the only
@@ -30,6 +35,8 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_application_1/ui/status.dart';
@@ -147,6 +154,100 @@ RecordItem _manyActions() => RecordItem(
   ],
 );
 
+/// One member with a form open under them, which is `RecordItem.details`.
+///
+/// The form is the shape all five of the staff directory's are - a field, then
+/// a cancel and a confirm - so the picture answers the question that matters
+/// about the slot: whether a form is usable in the width the band gives it.
+List<RecordItem> _withDetailsOpen() => <RecordItem>[
+  RecordItem(
+    id: 'm1',
+    title: 'Amina Hassan',
+    subtitle: 'amina@devcorner.test',
+    status: const RecordStatus(status: AppStatus.ok, label: 'Active'),
+    attributes: const <RecordAttribute>[
+      RecordAttribute(label: 'Role', value: 'manager'),
+    ],
+    actions: <RecordAction>[
+      RecordAction(label: 'Edit', icon: Icons.edit_outlined, onPressed: () {}),
+      RecordAction(
+        label: 'Deactivate',
+        icon: Icons.person_off_outlined,
+        destructive: true,
+        onPressed: () {},
+      ),
+    ],
+    details: const _StandInForm(),
+  ),
+  RecordItem(
+    id: 'm2',
+    title: 'Brian Kimani',
+    subtitle: 'brian@devcorner.test',
+    status: const RecordStatus(status: AppStatus.ok, label: 'Active'),
+    attributes: const <RecordAttribute>[
+      RecordAttribute(label: 'Role', value: 'cashier'),
+    ],
+    actions: <RecordAction>[
+      RecordAction(label: 'Edit', icon: Icons.edit_outlined, onPressed: () {}),
+      RecordAction(
+        label: 'Deactivate',
+        icon: Icons.person_off_outlined,
+        destructive: true,
+        onPressed: () {},
+      ),
+    ],
+  ),
+];
+
+final class _StandInForm extends StatefulWidget {
+  const _StandInForm();
+
+  @override
+  State<_StandInForm> createState() => _StandInFormState();
+}
+
+final class _StandInFormState extends State<_StandInForm> {
+  final TextEditingController _name = TextEditingController(
+    text: 'Amina Hassan',
+  );
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        AppTextField(label: 'Full name', controller: _name),
+        SizedBox(height: tokens.spacing.s16),
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: tokens.spacing.s8,
+          runSpacing: tokens.spacing.s8,
+          children: <Widget>[
+            AppButton(
+              label: 'Cancel',
+              tier: AppButtonTier.tertiary,
+              onPressed: () {},
+            ),
+            AppButton(
+              label: 'Save changes',
+              icon: Icons.save_outlined,
+              tier: AppButtonTier.primary,
+              onPressed: () {},
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _Page extends StatelessWidget {
   const _Page({required this.title, required this.list});
 
@@ -200,6 +301,15 @@ void main() {
         identityLabel: 'Member',
         items: <RecordItem>[_manyActions()],
       ),
+    ),
+  );
+
+  screenshotCase(
+    '96-record-details',
+    viewports: everyBandViewports,
+    build: () => _Page(
+      title: 'Staff directory',
+      list: RecordList(identityLabel: 'Member', items: _withDetailsOpen()),
     ),
   );
 

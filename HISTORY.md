@@ -20686,3 +20686,230 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+## The staff directory becomes a `RecordList`, and a record gets somewhere to open a form - 2026-08-13
+
+The first screen of `design.md` §11 step **6**'s sweep, and the one `PLAN.md` said to take first.
+`RecordList` gains the one slot step 6b deliberately left out - somewhere to put a form a record
+opens - and the **staff directory** becomes its second consumer, which retires `TenantRecordCard`,
+`TenantRecordTable`, `TenantTableColumn`, `TenantTableRow` and `TenantStatusChip` outright. It
+changes `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either - `git
+diff` and `git status` over all three print zero lines.
+
+### Why this screen, and why the slot came with it
+
+`PLAN.md` named both, in the same paragraph, and neither was discovered here. The staff directory is
+**the only screen in the app that hand-rolls §4.3's choice** - a `Builder` reading
+`AppLayout.contract` and two entirely separate builders under it, presenting different information
+to the two bands - so migrating it *deletes* code rather than adding it, and it is the last consumer
+either superseded widget ever had. And `RecordItem` had nowhere to put a form: both widgets it
+replaces carried a `details` list, this screen opens five of them, so the slot had to arrive with the
+screen that needs it rather than as a slot with no consumer.
+
+**The slot is named as the component's own addition rather than written into §5.2.** §5.2 names five
+rows and this is a sixth. `claude.md` forbids inventing a value the document does not define, and the
+honest form of that here is a doc comment saying where the row came from and why - not a quiet
+amendment to `design.md`.
+
+### What was decided
+
+1. **`RecordItem.details` is drawn at every band.** Keeping it to the card forms would mean an
+   action that opens a form on a phone doing nothing visible on a desktop window - a behaviour that
+   differs by band, which is the opposite of what §4.3 is for. §4.3's concession is over
+   *attributes*; nothing else a record carries drops out at a width. This is one of the two
+   questions `PLAN.md` asked the sweep to settle once rather than per screen.
+2. **In a table it takes the whole row beneath the cells, not a share of one.** A form is a form and
+   a column of a table is not where a form goes - which is exactly what `TenantTableRow.details` did,
+   so the behaviour is inherited rather than invented.
+3. **A row with nothing open lays out exactly as it did before the slot existed.** The `Column` is
+   only introduced when `details` is non-null, so a table of ordinary rows keeps the density's row
+   height and not that plus a gap. Twelve of step 6's thirteen screens are that case, and there is a
+   test asserting it.
+4. **A record carries one standing, and this screen showed two badges.** Membership status survives
+   as the `RecordStatus` because it is the one that decides what a person can do; the invitation
+   state becomes a `RecordAttribute` beside the role. Nothing is lost to §9 - it is still a labelled
+   word rather than a colour - and a pending member is the only one with an invitation state to
+   state.
+5. **The role stops being a chip, and its glyph and its tint go with it.** Role is not one of §2.1's
+   five statuses, so it cannot be a `StatusBadge`; it is a key-value attribute. The chip carried a
+   per-role icon and `colors.primary` for owners and admins, and a colour that meant "this person is
+   privileged" on its own is the drift §1 is about. The word carried it and the word is still there.
+6. **The initials block is gone from this screen.** It was `TenantRecordCard.leading`, and §5.2 names
+   five rows and no leading one. Adding an avatar slot to `RecordList` for one caller would be
+   inventing a specification row. `TenantInitialsAvatar` survives because the till still uses it, and
+   the till is step 7's.
+7. **Nothing is marked out of the narrow form.** Two attributes fit a card.
+   `RecordAttribute.inNarrowForm` is for the six-column catalog later in this sweep; using it here
+   would drop a fact for no gain.
+8. **The action order is the order this screen already had**, so which action a narrow band folds
+   into the overflow menu is *inherited* rather than newly decided. On a pending member that is
+   "Replace email"; on a phone it is all of them. Reordering would be a product decision about which
+   action a small screen hides, and this is a restyle.
+9. **Two actions are destructive and three are not.** "Cancel invitation" withdraws something that
+   was issued. "Deactivate" removes access; "Activate" gives a till back, and the same control is
+   destructive in one direction only - which is the tier being decided by what the press does rather
+   than by which row it is on.
+10. **Five hand-written state-clearing blocks became one `_open` helper.** Each of the five actions
+    used to null the other four inline. The behaviour is unchanged, including the toggle: the toggle
+    is **per form**, so pressing an action whose own form is open closes it and pressing a different
+    action on the same member replaces the open form. `current()` is read inside the `setState` so it
+    answers for the press rather than for the frame the closure was built in.
+11. **`Pagination` was examined and declined**, which `PLAN.md` asked for by name because a sweeping
+    session is where somebody folds it in. This screen's pagination is one sentence - "More staff
+    memberships are available." - not one of `DESIGN-AUDIT.md` §2.3's four idioms, and `Pagination`
+    is §5.1 priority 3. Nothing about it was touched.
+
+### `PLAN.md`'s cost estimate for this screen was wrong, and the correction is arithmetic
+
+It said the records carry **five** actions, that §4.3's `ActionSet` row moves **two** behind an
+overflow menu at the 800 x 600 default test surface, and that **five test files** would each need to
+open the menu first. Measured: **a staff record can never carry five.** Resend, cancel and replace
+each require a pending membership whose invitation is `pending` or `sent`; a status change requires
+`accepted`. The two groups are mutually exclusive, so the most any record carries is **four** - edit,
+resend, cancel, replace - or **two**, edit and activate/deactivate.
+
+At `medium`, four actions keep three inline and overflow one. So **one** action moved behind a menu
+and **one** test file needed the menu opened: `tenant_staff_invitation_email_replacement_test.dart`.
+The other four tap actions that are still inline. The prediction was the right shape and the wrong
+size, and the reason it was oversized is that `96-record-actions` photographs a synthetic five-action
+record - which is fine for a component matrix and is not this screen.
+
+### One defect found, and it predates `RecordList` by a step
+
+**All five staff forms ended in a `Row` at `MainAxisAlignment.end` holding two 48-high `AppButton`s,
+and a `Row` answers a column narrower than its children by overflowing.** The pair needs roughly 490
+logical pixels. It had only ever been driven at the ~760 a full-width card gave it; §4.1's `compact`
+band gives a card about 340, and §4.3's `medium` gives a two-column card 342. **It overflowed on a
+phone from the moment step 3 made those buttons `AppButton`s** - nobody had opened one of these forms
+on a phone, and no capture had either, because `13-staff-directory` photographs the route on arrival.
+
+It surfaced as three test failures the moment the forms were laid out inside a record. The fix is a
+`Wrap` at `WrapAlignment.end` in each of the five, with `spacing` and `runSpacing` from the token
+layer rather than the literal `SizedBox(width: 8)` they replaced - which is why five files gained an
+import of `lib/ui/tokens.dart` and nothing else.
+
+**The regression test was verified to fail without the fix**, not merely to pass with it: with
+`tenant_staff_update.dart` reverted to its `Row`, `the form fits the narrowest record it is opened
+inside` fails with *"A RenderFlex overflowed by 50 pixels on the right"*. It was restored
+immediately.
+
+### One thing the pictures show that this chunk did not fix
+
+**At `expanded`, a record with four actions wraps its action column to three runs and is three times
+taller than its neighbours.** `web-full/13-staff-directory` is the evidence: four rows with two
+actions are compact and level, and the pending row's Edit / Resend / Cancel / Replace stack down the
+right-hand side. Step 6b's own doc comment predicted the mechanism exactly - *"at any smaller share
+the set wraps to a second line, which does not shorten the column: it makes every row in the table as
+tall as its actions"* - and chose `_actionsFlex = 3` on the two-action case, which was the only case
+it had. This is the first real four-action table.
+
+**It is named rather than tuned.** The share is a component decision argued at 1200 in step 6b; a
+caller cannot change it, and re-deciding it from one screenshot in a sweep chunk would be tuning a
+figure that has a reason. Four inline actions at `expanded` is what §4.3's row asks for, and the row
+is legible - it is just tall. Carried to `PLAN.md` as an observation, with the honest fix named: if
+it is wrong, either the actions column earns a caller knob the way `RecordAttribute.flex` is, or
+§4.3's `expanded` cell says something other than "all inline".
+
+**The `AppSelect` font trap reappears** in `13b-staff-directory-editing`: the update form's Role
+select renders its selected value as filled rectangles. That is the harness gap the step-6b entry
+already documented - a component theme's text style replaces the text theme's rather than merging,
+and `DropdownButton` replaces where `TextField` merges - it is not an app defect, and it is not new.
+
+### Files changed
+
+```text
+lib/ui/record_list.dart                                     +details slot, both renderings
+lib/ui/records.dart                                         -TenantRecordCard, -TenantRecordTable,
+                                                            -TenantTableColumn, -TenantTableRow,
+                                                            -TenantStatusChip  (-286 lines net)
+lib/ui/tokens.dart                                          one stale comment: labelEyebrow's two
+                                                            uppercasing surfaces are now one
+lib/tenancy/tenant_staff_directory.dart                      the migration
+lib/tenancy/tenant_staff_status.dart                         Row -> Wrap
+lib/tenancy/tenant_staff_update.dart                         Row -> Wrap
+lib/tenancy/tenant_staff_invitation_resend.dart              Row -> Wrap
+lib/tenancy/tenant_staff_invitation_cancellation.dart        Row -> Wrap
+lib/tenancy/tenant_staff_invitation_email_replacement.dart   Row -> Wrap
+test/ui/record_list_test.dart                                +5
+test/tenancy/tenant_staff_directory_test.dart                +2, and one existing test extended
+test/tenancy/tenant_staff_update_test.dart                   +1, the overflow regression
+test/tenancy/tenant_staff_invitation_email_replacement_test.dart  one tap goes via the menu
+tool/screenshots/record_list_test.dart                       +96-record-details, three bands
+tool/screenshots/landing_screens_test.dart                   +13b-staff-directory-editing
+tool/screenshots/build_index.dart                            its caption
+```
+
+### Tests
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1833**, all pass (1825 → 1833, **8 new**) |
+| Functions | `npm --prefix functions test` | **409**, all pass — measured |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161**, all pass — measured |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10**, all pass — measured |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23**, all pass — measured |
+
+**All five measured, so the carry counter stays at 0.** A Dart-only chunk is entitled to carry the
+four non-Flutter figures and this one did not, for one reason: the day before, two sessions in a row
+concluded from a bare `emulators:exec` that no emulator could start on this machine. Running them
+with the prelude - three lines, and they were run first time here without incident - is what keeps
+that from being a thing anybody has to take on trust again. The emulator suites took about **150 s**,
+**60 s** and **75 s**.
+
+The 8 new are **5 in `test/ui/record_list_test.dart`** for the `details` slot (drawn at every band;
+only on the record that opened one; below the actions; full row in a table; and an ordinary table row
+unchanged by the slot existing), **2 in `test/tenancy/tenant_staff_directory_test.dart`** (a pending
+member states an invitation and others do not, with exactly one badge each; and a manager gets an
+empty action set rather than a control that does nothing), and **1 in
+`test/tenancy/tenant_staff_update_test.dart`** for the narrow-form overflow.
+
+Two existing tests changed rather than being added. `tenant_staff_directory_test.dart`'s owner case
+gained assertions that role is a labelled key-value line and that one key addresses the record in
+either form - the same two facts it already asserted, in their new rendering. And
+`tenant_staff_invitation_email_replacement_test.dart` reaches its action through the overflow menu,
+which is §4.3's row rather than a change of intent; the helper says so in as many words.
+
+`flutter analyze --no-pub lib test tool` reports **475 issues**, unchanged, and none of them in
+`lib/ui`, `lib/tenancy`, `test/` or `tool/screenshots`.
+
+### Screenshots
+
+**195 images, up from 187: 8 added, 3 changed, 184 byte-identical, and zero date drift.** The
+baseline was generated earlier the same day by step 6b, so the whole diff is this chunk - no second
+reverted regeneration was needed, which is the arrangement `PLAN.md` describes as the cheapest this
+harness has.
+
+The 3 that changed are the staff directory's own: `web/13-staff-directory`,
+`mobile/13-staff-directory`, `mobile-full/13-staff-directory`. **184 identical is the check** - every
+other screen in the app, every other component matrix, the sale path, sign-in, and the landing route.
+
+The 8 added:
+
+```text
+web/13b-staff-directory-editing         the state RecordItem.details exists for
+web-full/13b-staff-directory-editing
+mobile/13b-staff-directory-editing
+mobile-full/13b-staff-directory-editing
+web/96-record-details                   the slot's own matrix, three bands
+tablet/96-record-details
+mobile/96-record-details
+web-full/13-staff-directory             new: the table grew past a 1440 x 900 window
+```
+
+**`web-full/13-staff-directory` is new rather than changed**, and that is the four-action row: the
+table did not reach past the fold at 1440 x 900 before, and it does now because the pending member's
+actions wrap to three runs. It is the picture the observation above is drawn from.
+
+**`tablet/96-record-details` is the one worth opening.** It is the case that exposed the form
+overflow - a form inside a 342-wide card - and it is now the evidence that the fix works, with
+"Cancel" and "Save changes" on one line at half a page.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

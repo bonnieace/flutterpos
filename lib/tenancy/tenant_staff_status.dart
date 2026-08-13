@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
@@ -316,8 +317,16 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
           ),
         ],
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        // A `Wrap` rather than a `Row`, because this form is now laid out
+        // inside a record - and a record at §4.1's `medium` band is half a
+        // page wide. Two 48-high pills with verb phrases on them do not fit
+        // 342 logical pixels, and a `Row` answers that by overflowing. It
+        // answered the same way on a phone before this form was ever in a
+        // `RecordList`; nothing had opened it there.
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: AppTokens.componentOf(context).spacing.s8,
+          runSpacing: AppTokens.componentOf(context).spacing.s8,
           children: [
             AppButton(
               key: const ValueKey('set-staff-status-cancel'),
@@ -325,7 +334,6 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
               tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
             ),
-            const SizedBox(width: 8),
             AppButton(
               key: const ValueKey('set-staff-status-confirm'),
               label: 'Confirm $action',

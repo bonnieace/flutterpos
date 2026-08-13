@@ -51,12 +51,14 @@
 /// stricter setting on every dimension §9 measures. `PLAN.md` carries it as a
 /// question for the product owner rather than a gap.
 ///
-/// **One slot §5.2 does not name is deliberately absent**: somewhere to put a
-/// form a record opens. `TenantRecordCard` and `TenantRecordTable` both have one
-/// and the staff directory and the catalog both use it, so the sweep that
-/// migrates them is where it gets added, with the screen that needs it and a
-/// reason. Adding it here would be a slot with no consumer and no row in the
-/// specification.
+/// **One slot is this component's own rather than §5.2's**: [RecordItem.details],
+/// somewhere to put a form a record opens. It was deliberately absent in step
+/// 6b, which shipped `RecordList` against a read-only list, and it arrived on
+/// 2026-08-13 with the staff directory - the first consumer whose actions open
+/// five inline forms and would otherwise have had nowhere to put them. It is
+/// **not** a specification row and is not presented as one: §5.2 names five
+/// rows and this is a sixth, added because a record's actions have to be able to
+/// do something and the two widgets this component replaces both had one.
 library;
 
 import 'package:flutter/material.dart';
@@ -200,6 +202,7 @@ final class RecordItem {
     this.provenance,
     this.provenanceKey,
     this.actions = const <RecordAction>[],
+    this.details,
   });
 
   /// What makes this record itself - a document ID, a UID, a SKU.
@@ -249,6 +252,27 @@ final class RecordItem {
   final Key? provenanceKey;
 
   final List<RecordAction> actions;
+
+  /// A form one of this record's [actions] opened, laid out beneath the record.
+  ///
+  /// **The one slot here that §5.2 does not name.** It exists because a record's
+  /// actions have to be able to do something: five of the staff directory's
+  /// actions open a small form against that member, and both widgets this
+  /// component replaces carried a `details` list for exactly that. §5.2 names
+  /// five rows and this is a sixth, so it is described as the component's own
+  /// addition rather than written into the document as a specification row.
+  ///
+  /// **It appears in every form, and that is a decision rather than an
+  /// oversight.** A card has the whole card width for it and a table row draws
+  /// it full width underneath, the way the superseded table did. Keeping it to
+  /// the card forms would mean an action that opens a form on a phone does
+  /// nothing visible on a desktop window - a behaviour that differs by band,
+  /// which is the opposite of what §4.3 is for. The caller's concession is over
+  /// *attributes*; nothing else a record carries drops out at a width.
+  ///
+  /// The caller owns what is in it, when it is shown, and how it is dismissed.
+  /// This component owns only where it goes.
+  final Widget? details;
 
   /// The attributes a narrow rendering keeps. See
   /// [RecordAttribute.inNarrowForm].
@@ -630,6 +654,14 @@ final class _RecordCard extends StatelessWidget {
               SizedBox(height: tokens.spacing.s12),
               RecordActionSet(actions: item.actions, form: form),
             ],
+            // Beneath the actions rather than above them, because it is what
+            // one of them opened: a form that appeared between a record and the
+            // control that revealed it would push that control down the page as
+            // it opened.
+            if (item.details case final opened?) ...<Widget>[
+              SizedBox(height: tokens.spacing.s12),
+              opened,
+            ],
           ],
         ),
       ),
@@ -807,6 +839,82 @@ final class _RecordTableRow extends StatelessWidget {
     }
     final tokens = AppTokens.componentOf(context);
     final body = tokens.density.body(tokens.typography);
+    final cellRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        if (hasStatus)
+          Expanded(
+            flex: _RecordTable._statusFlex,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: item.status?._badge() ?? const SizedBox.shrink(),
+            ),
+          ),
+        Expanded(
+          flex: identityFlex,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                item.title,
+                key: item.titleKey,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: tokens.typography.titleMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+              if (item.subtitle case final line?)
+                Text(
+                  line,
+                  key: item.subtitleKey,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: body.copyWith(color: tokens.colors.text.secondary),
+                ),
+              // Provenance rides under the identity rather than taking a
+              // column of its own: it is the same sentence on every row, and
+              // a column of near-identical timestamps is width spent on
+              // nothing.
+              if (item.provenance case final line?)
+                Text(
+                  line,
+                  key: item.provenanceKey,
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        for (final column in columns)
+          Expanded(
+            flex: column.flex,
+            // A record silent about this column gets an empty cell rather
+            // than a dash: a dash is a value, and "no status change was
+            // recorded" is not the same claim as "the status changed to
+            // nothing".
+            child: switch (cells[column.label]) {
+              final attribute? => Text(
+                attribute.value,
+                key: attribute.valueKey,
+                style: body.copyWith(color: tokens.colors.text.secondary),
+              ),
+              null => const SizedBox.shrink(),
+            },
+          ),
+        if (hasActions)
+          Expanded(
+            flex: _RecordTable._actionsFlex,
+            child: RecordActionSet(
+              actions: item.actions,
+              form: RecordForm.table,
+              alignment: WrapAlignment.end,
+            ),
+          ),
+      ],
+    );
     return Container(
       key: item.recordKey ?? ValueKey<String>('record-${item.id}'),
       constraints: BoxConstraints(minHeight: tokens.density.minimumRowHeight),
@@ -816,82 +924,22 @@ final class _RecordTableRow extends StatelessWidget {
           top: BorderSide(color: tokens.colors.surface.borderSubtle),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: <Widget>[
-          if (hasStatus)
-            Expanded(
-              flex: _RecordTable._statusFlex,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: item.status?._badge() ?? const SizedBox.shrink(),
-              ),
-            ),
-          Expanded(
-            flex: identityFlex,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  item.title,
-                  key: item.titleKey,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: tokens.typography.titleMedium.copyWith(
-                    color: tokens.colors.text.primary,
-                  ),
-                ),
-                if (item.subtitle case final line?)
-                  Text(
-                    line,
-                    key: item.subtitleKey,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: body.copyWith(color: tokens.colors.text.secondary),
-                  ),
-                // Provenance rides under the identity rather than taking a
-                // column of its own: it is the same sentence on every row, and
-                // a column of near-identical timestamps is width spent on
-                // nothing.
-                if (item.provenance case final line?)
-                  Text(
-                    line,
-                    key: item.provenanceKey,
-                    style: tokens.typography.caption.copyWith(
-                      color: tokens.colors.text.tertiary,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          for (final column in columns)
-            Expanded(
-              flex: column.flex,
-              // A record silent about this column gets an empty cell rather
-              // than a dash: a dash is a value, and "no status change was
-              // recorded" is not the same claim as "the status changed to
-              // nothing".
-              child: switch (cells[column.label]) {
-                final attribute? => Text(
-                  attribute.value,
-                  key: attribute.valueKey,
-                  style: body.copyWith(color: tokens.colors.text.secondary),
-                ),
-                null => const SizedBox.shrink(),
-              },
-            ),
-          if (hasActions)
-            Expanded(
-              flex: _RecordTable._actionsFlex,
-              child: RecordActionSet(
-                actions: item.actions,
-                form: RecordForm.table,
-                alignment: WrapAlignment.end,
-              ),
-            ),
-        ],
-      ),
+      // The row alone where there is nothing open, so a table of ordinary rows
+      // lays out exactly as it did before this slot existed. A form takes the
+      // whole width beneath the cells rather than a share of one of them: it is
+      // a form, and a column of a table is not where a form goes.
+      child: switch (item.details) {
+        null => cellRow,
+        final opened => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            cellRow,
+            SizedBox(height: tokens.spacing.s12),
+            opened,
+          ],
+        ),
+      },
     );
   }
 }

@@ -197,7 +197,11 @@ void main() {
         findsNothing,
       );
 
-      await _tapVisibleThenPump(tester, 'replace-staff-email-staff-a');
+      await _chooseFromOverflow(
+        tester,
+        record: 'staff-record-staff-a',
+        action: 'replace-staff-email-staff-a',
+      );
       expect(
         find.text('Replace invitation email for Staff Person?'),
         findsOneWidget,
@@ -632,6 +636,35 @@ Future<void> _tapVisibleThenPump(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
   await tester.tap(finder);
   await tester.pump();
+}
+
+/// Chooses one of a record's actions out of §4.3's overflow menu.
+///
+/// **This action is behind a menu, and that is `design.md` §4.3's `ActionSet`
+/// row rather than a change of intent.** Past three actions a record keeps three
+/// inline below `expanded` and folds the rest away; the 800 x 600 default test
+/// surface is `medium`, and a pending member carries four - edit, resend,
+/// cancel, replace - so replace is the one that moves. The menu item does not
+/// exist in the widget tree until the menu is open, which is why [action] cannot
+/// simply be tapped the way it could when every action was an `IconButton`.
+///
+/// The menu is found inside [record] rather than by tooltip alone, so a list
+/// where a second member also overflows cannot silently open the wrong one.
+Future<void> _chooseFromOverflow(
+  WidgetTester tester, {
+  required String record,
+  required String action,
+}) async {
+  final menu = find.descendant(
+    of: find.byKey(ValueKey(record)),
+    matching: find.byTooltip('More actions'),
+  );
+  await tester.ensureVisible(menu);
+  await tester.pumpAndSettle();
+  await tester.tap(menu);
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(ValueKey(action)));
+  await tester.pumpAndSettle();
 }
 
 /// Scrolls [key] into view, taps it, and settles.

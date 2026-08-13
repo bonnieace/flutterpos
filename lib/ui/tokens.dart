@@ -611,9 +611,11 @@ final class AppTypeRoles {
   ///
   /// **The only role uppercase is permitted on** (§2.2, and §8 rule 7 for the
   /// copy). The case itself is the caller's - a `TextStyle` cannot uppercase a
-  /// string - which is why the two surfaces that uppercase today,
-  /// `TenantStatCard`'s caption and every `TenantRecordTable` header, are a
-  /// conformance item for the step that migrates them rather than for this one.
+  /// string - which is why a surface that uppercases is a conformance item for
+  /// the step that migrates it rather than for this one. There were two.
+  /// `TenantRecordTable`'s headers closed on 2026-08-13, when `RecordList`
+  /// replaced it and drew them in [labelMedium]; `TenantStatCard`'s caption is
+  /// the one left, and it is step 8's.
   final TextStyle labelEyebrow;
 
   /// `caption` 12 / 16, 400. Timestamps, attribution.

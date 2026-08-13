@@ -49,6 +49,7 @@ RecordItem _item({
   List<RecordAttribute> attributes = const <RecordAttribute>[],
   String? provenance,
   List<RecordAction> actions = const <RecordAction>[],
+  Widget? details,
 }) => RecordItem(
   id: id,
   title: title,
@@ -57,6 +58,7 @@ RecordItem _item({
   attributes: attributes,
   provenance: provenance,
   actions: actions,
+  details: details,
 );
 
 List<RecordAction> _actions(int count, {void Function(String)? onPressed}) => <
@@ -768,6 +770,138 @@ void main() {
         );
         expect(find.byKey(key), findsOne, reason: 'at $size');
       }
+    });
+  });
+
+  group('a form a record opens', () {
+    // The one slot here that §5.2 does not name. It arrived with the staff
+    // directory, whose five actions each open a form against one member, and
+    // it is the component's own addition rather than a specification row - so
+    // what these assert is the two rules the component *did* choose: it appears
+    // in every form, and it takes the full width beneath the record.
+
+    testWidgets('it is drawn at every band', (tester) async {
+      // Not a card-only slot. An action that opens a form on a phone and does
+      // nothing visible on a desktop window would be a behaviour that differs
+      // by band, which is the opposite of what §4.3 is for.
+      for (final size in <Size>[_compact, _medium, _expanded]) {
+        await _pumpAt(
+          tester,
+          size,
+          RecordList(
+            identityLabel: 'Member',
+            items: <RecordItem>[
+              _item(details: const Text('Change this member’s role')),
+            ],
+          ),
+        );
+        expect(
+          find.text('Change this member’s role'),
+          findsOne,
+          reason: 'at $size',
+        );
+      }
+    });
+
+    testWidgets('only the record that opened one has one', (tester) async {
+      await _pumpAt(
+        tester,
+        _compact,
+        RecordList(
+          identityLabel: 'Member',
+          items: <RecordItem>[
+            _item(id: 'a', details: const Text('Change this member’s role')),
+            _item(id: 'b'),
+          ],
+        ),
+      );
+      expect(find.text('Change this member’s role'), findsOne);
+      final form = tester.getRect(find.text('Change this member’s role'));
+      final opened = tester.getRect(
+        find.byKey(const ValueKey<String>('record-a')),
+      );
+      final other = tester.getRect(find.byKey(const ValueKey<String>('record-b')));
+      // Inside the record that opened it, and above the next one.
+      expect(form.top, greaterThan(opened.top));
+      expect(form.bottom, lessThanOrEqualTo(opened.bottom));
+      expect(form.bottom, lessThanOrEqualTo(other.top));
+    });
+
+    testWidgets('it sits below the actions that opened it', (tester) async {
+      await _pumpAt(
+        tester,
+        _expanded,
+        RecordList(
+          identityLabel: 'Member',
+          items: <RecordItem>[
+            _item(
+              actions: _actions(1),
+              details: const Text('Change this member’s role'),
+            ),
+          ],
+        ),
+      );
+      // A form that appeared between the record and the control that revealed
+      // it would push that control down the page as it opened.
+      expect(
+        tester.getTopLeft(find.text('Change this member’s role')).dy,
+        greaterThan(
+          tester.getBottomLeft(
+            find.byKey(const ValueKey<String>('action-0')),
+          ).dy,
+        ),
+      );
+    });
+
+    testWidgets('in a table it takes the row rather than a column', (
+      tester,
+    ) async {
+      await _pumpAt(
+        tester,
+        _expanded,
+        RecordList(
+          identityLabel: 'Member',
+          items: <RecordItem>[
+            _item(
+              attributes: const <RecordAttribute>[
+                RecordAttribute(label: 'Role', value: 'manager'),
+              ],
+              actions: _actions(2),
+              details: const Text('Change this member’s role'),
+            ),
+          ],
+        ),
+      );
+      final form = tester.getRect(find.text('Change this member’s role'));
+      final identity = tester.getRect(find.text('Fresh whole milk 500ml'));
+      // Beneath the cells and starting where the row's content starts: a form
+      // is a form, and a column of a table is not where a form goes.
+      expect(form.top, greaterThan(identity.bottom));
+      expect(form.left, closeTo(identity.left, 0.5));
+      expect(form.width, greaterThan(identity.width));
+    });
+
+    testWidgets('a table of ordinary rows is unchanged by the slot existing', (
+      tester,
+    ) async {
+      // The regression this could have been. `details` is null on every record
+      // in twelve of the thirteen screens step 6 covers, so a row without one
+      // has to lay out exactly as it did before the slot was added: the row
+      // height is the density's and nothing else.
+      await _pumpAt(
+        tester,
+        _expanded,
+        RecordList(
+          identityLabel: 'Event',
+          items: <RecordItem>[_item(id: 'a', title: 'x'), _item(id: 'b', title: 'y')],
+        ),
+      );
+      final first = tester.getRect(find.byKey(const ValueKey<String>('record-a')));
+      final second = tester.getRect(
+        find.byKey(const ValueKey<String>('record-b')),
+      );
+      expect(first.height, _tokens.density.minimumRowHeight);
+      expect(second.height, first.height);
     });
   });
 

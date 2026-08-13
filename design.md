@@ -358,10 +358,17 @@ and actions are on every rendering at every band; there is nothing to opt out of
 argument for dropping any of them.
 
 **Done 2026-08-13**, in step 6's second half, as `RecordList` in
-`lib/ui/record_list.dart`, with the **activity log** as its first consumer. The other
-twelve screens in step 6's list are a sweep, the way `AppButton`'s 133 call sites were.
+`lib/ui/record_list.dart`, with the **activity log** as its first consumer and the **staff
+directory** as its second, later the same day. Step 6's list above is **twelve** screens, so
+**ten remain** and they are a sweep, the way `AppButton`'s 133 call sites were.
 `ActionSet` is built with it, `StatRow` is step 8's, and `FilterChips`, `Form` and `Sale`
 are unclaimed.
+
+The staff directory is the screen this row was written about: it was the only one that made §4.3's
+choice itself, with two separate builders under a breakpoint test that showed the two bands
+*different information*. It also needed one thing this document does not specify — somewhere to put
+a form a record opens — and that is `RecordItem.details`, named in the component as the component's
+own addition rather than added here as a sixth row of §5.2.
 
 ### 4.4 Navigation
 
@@ -470,7 +477,10 @@ record gets one.
 
 The catalog is not yet on it. Its `Correct` / `Retire` links are in the sweep that follows,
 and what fixes them is `ActionSet`: a record's actions are `AppButton`s at 48dp, and a
-`destructive` one takes §2.1's destructive tier instead of looking like its neighbour.
+`destructive` one takes §2.1's destructive tier instead of looking like its neighbour. **The staff
+directory proved that half on 2026-08-13** — its five 40dp icon buttons with tooltips became 48dp
+labelled actions, with the invitation cancellation and the deactivation on the destructive tier —
+and the catalog is the next screen in the sweep.
 
 #### `StatusBadge`
 

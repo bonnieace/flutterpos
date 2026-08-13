@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/record_list.dart';
 import '../ui/records.dart';
 import '../ui/scaffold.dart';
-import '../ui/tokens.dart';
 import '../ui/status.dart';
+import '../ui/tokens.dart';
 
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
@@ -383,25 +384,20 @@ final class _StaffContentsState extends State<_StaffContents> {
           const SizedBox(height: 16),
         ],
       ],
-      if (widget.page.items.isEmpty)
-        const Text('No staff memberships found.')
-      else
-        // §4.1's bands describe the screen a person is looking at, not the box
-        // this widget happens to be laid out in. Until step 6 those were the
-        // same thing here, because nothing constrained the page; §4.2 now caps
-        // this route at 1200 and pads it, so a `LayoutBuilder` would put the
-        // card-to-table switch at 1064 of screen - a boundary produced by
-        // arithmetic that nobody declared and nobody could look up. Neither
-        // screenshot viewport is near it, so this moves no image.
-        Builder(
-          builder: (context) =>
-              AppLayout.contract.isAtLeast(
-                MediaQuery.sizeOf(context).width,
-                AppBreakpoint.expanded,
-              )
-              ? _staffTable(context)
-              : _staffCards(context),
-        ),
+      // §4.3's responsive contract. This screen used to *make* that choice
+      // itself - a `Builder` reading `AppLayout.contract` and two entirely
+      // separate builders under it, which presented different information to
+      // the two bands - and §4.3 says in as many words that a screen cannot opt
+      // out of the form. So the choice moves into `RecordList`, which knows
+      // three renderings rather than two, and this screen states its records
+      // once.
+      RecordList(
+        identityLabel: 'Member',
+        items: <RecordItem>[
+          for (final staff in widget.page.items) _record(staff),
+        ],
+        empty: const Text('No staff memberships found.'),
+      ),
       if (widget.page.hasMore)
         const Padding(
           padding: EdgeInsets.only(top: 8),
@@ -471,322 +467,254 @@ final class _StaffContentsState extends State<_StaffContents> {
     );
   }
 
-  /// Role and standing, as words rather than as one hyphenated string.
-  List<Widget> _staffChips(BuildContext context, TenantStaffSummary staff) {
-    final colors = Theme.of(context).colorScheme;
-    return <Widget>[
-      TenantStatusChip(
-        key: ValueKey('staff-role-${staff.uid}'),
-        label: staff.role.wireValue,
-        icon: staff.isOwner || staff.role == TenantRole.owner
-            ? Icons.workspace_premium_outlined
-            : staff.role == TenantRole.admin
-            ? Icons.admin_panel_settings_outlined
-            : staff.role == TenantRole.manager
-            ? Icons.people_outline
-            : Icons.point_of_sale_outlined,
-        tone: staff.role == TenantRole.owner || staff.role == TenantRole.admin
-            ? colors.primary
-            : null,
-      ),
-      // §2.1's five statuses, each with exactly one meaning. Standing used to
-      // be a chip whose colour was `colors.error` or nothing, which is the one
-      // green doing several jobs that §1 is about.
-      StatusBadge(
-        key: ValueKey('staff-status-${staff.uid}'),
-        label: staff.status.wireValue,
-        status: switch (staff.status) {
-          MembershipStatus.active => AppStatus.ok,
-          MembershipStatus.pending => AppStatus.attention,
-          // Inactive is the one standing that changes what a person can do.
-          // `neutral` rather than `problem`: a deactivated member is closed,
-          // not a difference found, and §2.1 gives "closed" to neutral.
-          MembershipStatus.inactive => AppStatus.neutral,
-        },
-        semanticLabel: 'Membership ${staff.status.wireValue}',
+  /// One member as §5.2's five rows, plus the form their own actions open.
+  ///
+  /// **A record carries one standing, and this screen used to show two badges.**
+  /// Membership status is the one that survives as the [RecordStatus], because
+  /// it is the one that decides what a person can do; the invitation state is an
+  /// attribute beside the role. Nothing is dropped - both are still a labelled
+  /// word rather than a colour, which is what §9 requires - and a pending member
+  /// is the only one who has an invitation state to state at all.
+  ///
+  /// **Two things this screen used to draw are gone, and both are the model
+  /// being obeyed rather than an oversight.** The initials block was
+  /// `TenantRecordCard`'s `leading` slot; §5.2 names five rows and no leading
+  /// one, so adding an avatar to `RecordList` would be inventing a
+  /// specification row for one caller. And the role's glyph and its primary
+  /// tint for owners and admins go with the chip: role is not one of §2.1's five
+  /// statuses, so it cannot be a badge, and a colour that carried "this person
+  /// is privileged" on its own is the exact drift §1 is about. The word is what
+  /// carried it and the word is still there.
+  ///
+  /// **Nothing is marked out of the narrow form.** Two attributes fit a card;
+  /// `RecordAttribute.inNarrowForm` is for the six-column catalog that comes
+  /// later in this sweep, and using it here would drop a fact for no gain.
+  RecordItem _record(TenantStaffSummary staff) => RecordItem(
+    id: staff.uid,
+    // One key for whichever form the band resolves to, where this screen used
+    // to have `staff-card-` and `staff-row-`. That the two had to be addressed
+    // separately is what made every test here a test of one layout.
+    recordKey: ValueKey('staff-record-${staff.uid}'),
+    title: staff.displayName,
+    subtitle: staff.email,
+    // §2.1's five statuses, each with exactly one meaning. Standing used to
+    // be a chip whose colour was `colors.error` or nothing, which is the one
+    // green doing several jobs that §1 is about.
+    status: RecordStatus(
+      badgeKey: ValueKey('staff-status-${staff.uid}'),
+      label: staff.status.wireValue,
+      status: switch (staff.status) {
+        MembershipStatus.active => AppStatus.ok,
+        MembershipStatus.pending => AppStatus.attention,
+        // Inactive is the one standing that changes what a person can do.
+        // `neutral` rather than `problem`: a deactivated member is closed,
+        // not a difference found, and §2.1 gives "closed" to neutral.
+        MembershipStatus.inactive => AppStatus.neutral,
+      },
+      semanticLabel: 'Membership ${staff.status.wireValue}',
+    ),
+    attributes: <RecordAttribute>[
+      RecordAttribute(
+        label: 'Role',
+        value: staff.role.wireValue,
+        valueKey: ValueKey('staff-role-${staff.uid}'),
       ),
       if (staff.status == MembershipStatus.pending)
-        StatusBadge(
-          key: ValueKey('staff-invitation-${staff.uid}'),
-          label: staff.invitationStatus.wireValue,
-          // An envelope says more here than any of the five default glyphs,
-          // which is what the override exists for.
-          icon: Icons.mail_outline,
-          status: switch (staff.invitationStatus) {
-            TenantStaffInvitationStatus.accepted => AppStatus.ok,
-            TenantStaffInvitationStatus.pending ||
-            TenantStaffInvitationStatus.sent => AppStatus.attention,
-            TenantStaffInvitationStatus.cancelled ||
-            TenantStaffInvitationStatus.expired => AppStatus.neutral,
-          },
-          semanticLabel: 'Invitation ${staff.invitationStatus.wireValue}',
+        RecordAttribute(
+          label: 'Invitation',
+          value: staff.invitationStatus.wireValue,
+          valueKey: ValueKey('staff-invitation-${staff.uid}'),
+        ),
+    ],
+    actions: _staffActions(staff),
+    details: _staffDetails(staff),
+  );
+
+  /// The form this member's own actions opened, or null where none is open.
+  ///
+  /// At most one is open at a time, which is what every action's `setState`
+  /// enforces by clearing the other four - so this returns the one rather than
+  /// a list, and `RecordItem.details` is a single slot for the same reason.
+  Widget? _staffDetails(TenantStaffSummary staff) {
+    if (_editingStaff?.uid == staff.uid) {
+      return TenantStaffUpdateForm(
+        session: widget.session,
+        target: staff,
+        callable: widget.updateCallable ?? FirebaseUpdateStaffUserCallable(),
+        requestIdFactory: widget.requestIdFactory,
+        onSuccess: widget.onMutationSuccess,
+        onCancel: () => setState(() => _editingStaff = null),
+      );
+    }
+    if (_statusChangingStaff?.uid == staff.uid) {
+      return TenantStaffStatusForm(
+        session: widget.session,
+        target: staff,
+        callable: widget.statusCallable ?? FirebaseSetStaffStatusCallable(),
+        requestIdFactory: widget.requestIdFactory,
+        onSuccess: widget.onMutationSuccess,
+        onCancel: () => setState(() => _statusChangingStaff = null),
+      );
+    }
+    if (_resendingInvitation?.uid == staff.uid) {
+      return TenantStaffInvitationResendForm(
+        session: widget.session,
+        target: staff,
+        callable:
+            widget.resendCallable ?? FirebaseResendStaffInvitationCallable(),
+        requestIdFactory: widget.requestIdFactory,
+        onSuccess: widget.onMutationSuccess,
+        onCancel: () => setState(() => _resendingInvitation = null),
+      );
+    }
+    if (_cancellingInvitation?.uid == staff.uid) {
+      return TenantStaffInvitationCancellationForm(
+        session: widget.session,
+        target: staff,
+        callable:
+            widget.cancelInvitationCallable ??
+            FirebaseCancelTenantInvitationCallable(),
+        requestIdFactory: widget.requestIdFactory,
+        onSuccess: widget.onMutationSuccess,
+        onCancel: () => setState(() => _cancellingInvitation = null),
+      );
+    }
+    if (_replacingInvitationEmail?.uid == staff.uid) {
+      return TenantStaffInvitationEmailReplacementForm(
+        session: widget.session,
+        target: staff,
+        callable:
+            widget.replaceEmailCallable ??
+            FirebaseReplacePendingStaffEmailCallable(),
+        requestIdFactory: widget.requestIdFactory,
+        onSuccess: widget.onMutationSuccess,
+        onCancel: () => setState(() => _replacingInvitationEmail = null),
+      );
+    }
+    return null;
+  }
+
+  /// The record's own controls. Empty where this session may not use any of
+  /// them, which is the same check the old trailing slot made.
+  ///
+  /// **The order is the order this screen already had**, so which of them a
+  /// narrow band folds into §4.3's overflow menu is inherited rather than newly
+  /// decided: on a pending member that is "Replace email", and on a phone it is
+  /// all of them. Reordering them would be a product decision about which
+  /// action a small screen hides, and this chunk is a restyle.
+  ///
+  /// **A member can never have five.** Resend, cancel and replace all require a
+  /// pending membership with an unaccepted invitation, and a status change
+  /// requires an accepted one, so the two groups are mutually exclusive: the
+  /// most any record carries is four - edit, resend, cancel, replace - or two,
+  /// edit and activate/deactivate.
+  ///
+  /// Each of these was a 40dp `IconButton` with the member's name in a tooltip
+  /// and no visible label. §5.2 makes them an `ActionSet`, which is §9's 48dp
+  /// target with the verb written on it.
+  List<RecordAction> _staffActions(TenantStaffSummary staff) {
+    if (!widget.session.canAccess(
+      allowedRoles: TenantStaffUpdateGateway.allowedRoles,
+    )) {
+      return const <RecordAction>[];
+    }
+    return <RecordAction>[
+      RecordAction(
+        label: 'Edit',
+        actionKey: ValueKey('edit-staff-${staff.uid}'),
+        icon: Icons.edit_outlined,
+        onPressed: () => _open(
+          staff,
+          current: () => _editingStaff,
+          assign: (target) => _editingStaff = target,
+        ),
+      ),
+      if (TenantStaffInvitationResendGateway.canResendTo(staff))
+        RecordAction(
+          label: 'Resend invitation',
+          actionKey: ValueKey('resend-staff-invitation-${staff.uid}'),
+          icon: Icons.forward_to_inbox_outlined,
+          onPressed: () => _open(
+            staff,
+            current: () => _resendingInvitation,
+            assign: (target) => _resendingInvitation = target,
+          ),
+        ),
+      if (TenantStaffInvitationCancellationGateway.canCancel(staff))
+        RecordAction(
+          label: 'Cancel invitation',
+          actionKey: ValueKey('cancel-staff-invitation-${staff.uid}'),
+          icon: Icons.person_remove_outlined,
+          // Withdraws an invitation that was issued, which is §2.1's
+          // destructive tier rather than a control that looks like its
+          // neighbour - half of what §5.2 says the catalog gets wrong.
+          destructive: true,
+          onPressed: () => _open(
+            staff,
+            current: () => _cancellingInvitation,
+            assign: (target) => _cancellingInvitation = target,
+          ),
+        ),
+      if (TenantStaffInvitationEmailReplacementGateway.canReplaceEmailFor(
+        staff,
+      ))
+        RecordAction(
+          label: 'Replace email',
+          actionKey: ValueKey('replace-staff-email-${staff.uid}'),
+          icon: Icons.alternate_email_outlined,
+          onPressed: () => _open(
+            staff,
+            current: () => _replacingInvitationEmail,
+            assign: (target) => _replacingInvitationEmail = target,
+          ),
+        ),
+      if (TenantStaffStatusGateway.canChangeTarget(staff))
+        RecordAction(
+          label: staff.status == MembershipStatus.active
+              ? 'Deactivate'
+              : 'Activate',
+          actionKey: ValueKey('set-staff-status-${staff.uid}'),
+          icon: staff.status == MembershipStatus.active
+              ? Icons.person_off_outlined
+              : Icons.person_add_alt_outlined,
+          // Only one direction removes access, and only that one is
+          // destructive: activating a member gives them their till back.
+          destructive: staff.status == MembershipStatus.active,
+          onPressed: () => _open(
+            staff,
+            current: () => _statusChangingStaff,
+            assign: (target) => _statusChangingStaff = target,
+          ),
         ),
     ];
   }
 
-  Widget _staffCards(BuildContext context) => Column(
-    children: [
-      for (final staff in widget.page.items)
-        TenantRecordCard(
-          key: ValueKey('staff-card-${staff.uid}'),
-          title: staff.displayName,
-          subtitle: staff.email,
-          leading: TenantInitialsAvatar(
-            source: staff.displayName,
-            icon: staff.isOwner ? Icons.workspace_premium_outlined : null,
-          ),
-          chips: _staffChips(context, staff),
-          actions: _staffActions(context, staff),
-          details: _staffDetails(context, staff),
-        ),
-    ],
-  );
-
-  Widget _staffTable(BuildContext context) => TenantRecordTable(
-    columns: const [
-      TenantTableColumn(label: 'Member', flex: 3),
-      TenantTableColumn(label: 'Standing', flex: 2),
-      TenantTableColumn(label: '', flex: 2),
-    ],
-    rows: [
-      for (final staff in widget.page.items)
-        TenantTableRow(
-          key: ValueKey('staff-row-${staff.uid}'),
-          cells: [
-            Row(
-              children: [
-                TenantInitialsAvatar(
-                  source: staff.displayName,
-                  icon: staff.isOwner
-                      ? Icons.workspace_premium_outlined
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        staff.displayName,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      Text(
-                        staff.email,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: _staffChips(context, staff),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: _staffActions(context, staff) ?? const SizedBox.shrink(),
-            ),
-          ],
-          details: _staffDetails(context, staff),
-        ),
-    ],
-  );
-
-  /// The forms a row opens, rendered beneath it in either layout.
-  List<Widget> _staffDetails(BuildContext context, TenantStaffSummary staff) =>
-      <Widget>[
-        if (_editingStaff?.uid == staff.uid)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: TenantStaffUpdateForm(
-              session: widget.session,
-              target: staff,
-              callable:
-                  widget.updateCallable ?? FirebaseUpdateStaffUserCallable(),
-              requestIdFactory: widget.requestIdFactory,
-              onSuccess: widget.onMutationSuccess,
-              onCancel: () => setState(() => _editingStaff = null),
-            ),
-          ),
-        if (_statusChangingStaff?.uid == staff.uid)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: TenantStaffStatusForm(
-              session: widget.session,
-              target: staff,
-              callable:
-                  widget.statusCallable ?? FirebaseSetStaffStatusCallable(),
-              requestIdFactory: widget.requestIdFactory,
-              onSuccess: widget.onMutationSuccess,
-              onCancel: () => setState(() => _statusChangingStaff = null),
-            ),
-          ),
-        if (_resendingInvitation?.uid == staff.uid)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: TenantStaffInvitationResendForm(
-              session: widget.session,
-              target: staff,
-              callable:
-                  widget.resendCallable ??
-                  FirebaseResendStaffInvitationCallable(),
-              requestIdFactory: widget.requestIdFactory,
-              onSuccess: widget.onMutationSuccess,
-              onCancel: () => setState(() => _resendingInvitation = null),
-            ),
-          ),
-        if (_cancellingInvitation?.uid == staff.uid)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: TenantStaffInvitationCancellationForm(
-              session: widget.session,
-              target: staff,
-              callable:
-                  widget.cancelInvitationCallable ??
-                  FirebaseCancelTenantInvitationCallable(),
-              requestIdFactory: widget.requestIdFactory,
-              onSuccess: widget.onMutationSuccess,
-              onCancel: () => setState(() => _cancellingInvitation = null),
-            ),
-          ),
-        if (_replacingInvitationEmail?.uid == staff.uid)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: TenantStaffInvitationEmailReplacementForm(
-              session: widget.session,
-              target: staff,
-              callable:
-                  widget.replaceEmailCallable ??
-                  FirebaseReplacePendingStaffEmailCallable(),
-              requestIdFactory: widget.requestIdFactory,
-              onSuccess: widget.onMutationSuccess,
-              onCancel: () =>
-                  setState(() => _replacingInvitationEmail = null),
-            ),
-          ),
-      ];
-
-  /// The record's own controls. Null where this session may not use any of
-  /// them, which is the same check the old trailing slot made.
-  Widget? _staffActions(BuildContext context, TenantStaffSummary staff) =>
-      widget.session.canAccess(
-        allowedRoles: TenantStaffUpdateGateway.allowedRoles,
-      )
-      ? Wrap(
-          children: [
-                            IconButton(
-                              key: ValueKey('edit-staff-${staff.uid}'),
-                              tooltip: 'Edit ${staff.displayName}',
-                              onPressed: () => setState(() {
-                                _cancellingInvitation = null;
-                                _replacingInvitationEmail = null;
-                                _resendingInvitation = null;
-                                _statusChangingStaff = null;
-                                _editingStaff = _editingStaff?.uid == staff.uid
-                                    ? null
-                                    : staff;
-                              }),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                            if (TenantStaffInvitationResendGateway.canResendTo(
-                              staff,
-                            ))
-                              IconButton(
-                                key: ValueKey(
-                                  'resend-staff-invitation-${staff.uid}',
-                                ),
-                                tooltip:
-                                    'Resend invitation to ${staff.displayName}',
-                                onPressed: () => setState(() {
-                                  _cancellingInvitation = null;
-                                  _editingStaff = null;
-                                  _replacingInvitationEmail = null;
-                                  _statusChangingStaff = null;
-                                  _resendingInvitation =
-                                      _resendingInvitation?.uid == staff.uid
-                                      ? null
-                                      : staff;
-                                }),
-                                icon: const Icon(
-                                  Icons.forward_to_inbox_outlined,
-                                ),
-                              ),
-                            if (TenantStaffInvitationCancellationGateway.canCancel(
-                              staff,
-                            ))
-                              IconButton(
-                                key: ValueKey(
-                                  'cancel-staff-invitation-${staff.uid}',
-                                ),
-                                tooltip:
-                                    'Cancel invitation for ${staff.displayName}',
-                                onPressed: () => setState(() {
-                                  _editingStaff = null;
-                                  _replacingInvitationEmail = null;
-                                  _resendingInvitation = null;
-                                  _statusChangingStaff = null;
-                                  _cancellingInvitation =
-                                      _cancellingInvitation?.uid == staff.uid
-                                      ? null
-                                      : staff;
-                                }),
-                                icon: const Icon(Icons.person_remove_outlined),
-                              ),
-                            if (TenantStaffInvitationEmailReplacementGateway.canReplaceEmailFor(
-                              staff,
-                            ))
-                              IconButton(
-                                key: ValueKey(
-                                  'replace-staff-email-${staff.uid}',
-                                ),
-                                tooltip:
-                                    'Replace invitation email for ${staff.displayName}',
-                                onPressed: () => setState(() {
-                                  _cancellingInvitation = null;
-                                  _editingStaff = null;
-                                  _resendingInvitation = null;
-                                  _statusChangingStaff = null;
-                                  _replacingInvitationEmail =
-                                      _replacingInvitationEmail?.uid ==
-                                          staff.uid
-                                      ? null
-                                      : staff;
-                                }),
-                                icon: const Icon(
-                                  Icons.alternate_email_outlined,
-                                ),
-                              ),
-                            if (TenantStaffStatusGateway.canChangeTarget(staff))
-                              IconButton(
-                                key: ValueKey('set-staff-status-${staff.uid}'),
-                                tooltip: staff.status == MembershipStatus.active
-                                    ? 'Deactivate ${staff.displayName}'
-                                    : 'Activate ${staff.displayName}',
-                                onPressed: () => setState(() {
-                                  _cancellingInvitation = null;
-                                  _editingStaff = null;
-                                  _replacingInvitationEmail = null;
-                                  _resendingInvitation = null;
-                                  _statusChangingStaff =
-                                      _statusChangingStaff?.uid == staff.uid
-                                      ? null
-                                      : staff;
-                                }),
-                                icon: Icon(
-                                  staff.status == MembershipStatus.active
-                                      ? Icons.person_off_outlined
-                                      : Icons.person_add_alt_outlined,
-                                ),
-                              ),
-          ],
-        )
-      : null;
+  /// Opens one form against [staff], closing whichever was open.
+  ///
+  /// The five actions each cleared the other four by hand before this, five
+  /// times over; the behaviour is unchanged and the repetition is not.
+  ///
+  /// **The toggle is per form rather than per member**, which is what the five
+  /// copies each did: pressing an action whose own form is already open on this
+  /// member closes it, and pressing a *different* action on the same member
+  /// replaces the open form rather than closing everything. [current] is read
+  /// inside the `setState` so it answers for the press rather than for the frame
+  /// the closure was built in.
+  void _open(
+    TenantStaffSummary staff, {
+    required TenantStaffSummary? Function() current,
+    required void Function(TenantStaffSummary? target) assign,
+  }) {
+    setState(() {
+      final wasOpen = current()?.uid == staff.uid;
+      _cancellingInvitation = null;
+      _editingStaff = null;
+      _replacingInvitationEmail = null;
+      _resendingInvitation = null;
+      _statusChangingStaff = null;
+      if (!wasOpen) assign(staff);
+    });
+  }
 }
 
 String _staffDocumentId(String path) {

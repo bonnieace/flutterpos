@@ -125,19 +125,41 @@ void main() {
     },
   );
 
-  screenshotCase(
-    '13-staff-directory',
-    build: () => inSession(
-      TenantStaffDirectoryScreen(
-        reader: FakeTenantReader.business(),
-        inviteCallable: FakeStaffCallable(),
-        cancelInvitationCallable: FakeStaffCallable(),
-        replaceEmailCallable: FakeStaffCallable(),
-        resendCallable: FakeStaffCallable(),
-        statusCallable: FakeStaffCallable(),
-        updateCallable: FakeStaffCallable(),
-      ),
-      controller: seedSession(role: TenantRole.admin, uid: adminUid),
+  Widget staffDirectory() => inSession(
+    TenantStaffDirectoryScreen(
+      reader: FakeTenantReader.business(),
+      inviteCallable: FakeStaffCallable(),
+      cancelInvitationCallable: FakeStaffCallable(),
+      replaceEmailCallable: FakeStaffCallable(),
+      resendCallable: FakeStaffCallable(),
+      statusCallable: FakeStaffCallable(),
+      updateCallable: FakeStaffCallable(),
     ),
+    controller: seedSession(role: TenantRole.admin, uid: adminUid),
+  );
+
+  screenshotCase('13-staff-directory', build: staffDirectory);
+
+  /// The same route with one member's form open - the state `RecordItem.details`
+  /// exists for, and the state nothing had ever photographed.
+  ///
+  /// It is worth its own picture because it is where a defect was hiding. The
+  /// five forms this route opens each ended in a `Row` of two 48-high pills at
+  /// `MainAxisAlignment.end`, which fitted the ~760 logical pixels a full-width
+  /// card gave it and overflowed the ~340 a phone does. Nobody had opened one on
+  /// a phone, and no capture had either.
+  ///
+  /// The member is the manager rather than the pending hire deliberately: an
+  /// active accepted membership carries two actions, so both are inline at every
+  /// band and one tap reaches the form at each viewport.
+  screenshotCase(
+    '13b-staff-directory-editing',
+    build: staffDirectory,
+    afterPump: (tester) async {
+      final edit = find.byKey(const ValueKey('edit-staff-$managerUid'));
+      await tester.ensureVisible(edit);
+      await tester.pumpAndSettle();
+      await tester.tap(edit);
+    },
   );
 }
