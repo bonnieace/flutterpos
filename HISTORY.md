@@ -21312,3 +21312,245 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## The shift family becomes a `RecordList`, and step 6's sweep is finished - 2026-08-13
+
+The **eighth, ninth, tenth and eleventh screens of `design.md` §11 step 6's sweep** — its last four —
+taken together because `PLAN.md` queued them together and for the reason it gave: they are one family
+around a shift. **Screen 30** (shift corrections), **32** (shift history), **33** (shift sales) and
+**34** (returns on a sale). It changes `firestore.rules` not at all and nothing in `functions/` or
+`rules-tests/` either: `git diff` **and** `git status` over all three print zero lines.
+
+**All twelve of step 6's screens are now on `RecordList`**, so §4.3's sweep is complete and
+`design.md` §11 step 6 is finished in both halves.
+
+### What the four screens were
+
+Four hand-built `Card` lists, each stacking three to seven unlabelled sentences under a bold line.
+The two worth quoting are 32 and 33, because between them they show both failures §5.2 exists to
+stop:
+
+```text
+32  2026-08-12 - You (Amina Hassan)          33  CT-8F8-20260813-0002
+    Counted cash: 1250.00                        Total: KES 285.00 after 5.00 discount
+    Recorded sales: 987.50 over 9 transactions   1 items: 2 x Bar soap - blue
+    Counted cash is over by 262.50.              Paid by Cash. Recorded by the cashier at
+    The recorded sales above were corrected      the till; the payment itself is not verified.
+    once after this shift closed, to the         Recorded 2026-08-13 10:30 UTC by Brian Kimani
+    total its own sales prove. The counted
+    cash was not changed. Last corrected …
+```
+
+Screen 32 buries the transaction count in the middle of a sentence about money and states a
+seventy-word paragraph on every corrected row. Screen 33 hides the discount as the sixth word of the
+total and appends the same seventy-character payment caution to every sale. Nobody can scan a column
+that does not exist.
+
+Screen 34 had the opposite problem: its record had **no identity at all**. The first line of each
+card was the *status* — a glyph and `Verified - stock restored` in `titleMedium` — so the thing §5.2
+puts in the leading position was standing where the identity goes.
+
+### What was decided
+
+1. **A shift carries a standing, and it is the first `yes` in this sweep.** `PLAN.md` said to settle
+   this by looking §2.1 up rather than by carrying the stock family's answer across, and the lookup
+   is unambiguous once the wrong question is discarded. "Closed" is *not* the standing: every shift
+   on this page is closed — the read model throws `shift_not_closed` for anything else — so a
+   `neutral` badge on every row is the no-signal case the activity log ruled out. What varies is the
+   one thing the screen exists to settle: `ok` for a drawer that agrees with the sales (§2.1's
+   "reconciled, confirmed"), `problem` for one that does not ("difference found"), and `attention`
+   for a shift that closed with no summary and can therefore be compared with nothing
+   ("unreconciled"). The amount keeps its own attribute, so no figure is ever carried by a badge.
+2. **A return's standing was already the first thing on its record.** Pending or verified is §2.1's
+   "pending, awaiting" and its "confirmed" exactly, and it decides what a person may do to the
+   record, which is what makes it the standing rather than an attribute. `Verified - stock restored`
+   becomes the badge word `Verified`; what the verification did, when and by whom is the `Verified`
+   attribute beside it, and the page already says above the list that stock moves only on
+   verification.
+3. **A correction and a sale carry none, and the reasons differ.** "A correction was recorded" is not
+   one of §2.1's five — the activity log's rule, reached again. A sale is the more interesting
+   refusal: the one thing that varies between sales on one page is whether *this device* has seen the
+   server confirm one, and every surface in this app states that in its provenance line. A badge here
+   would say on one screen what a sentence says on the next.
+4. **A sentence that names whichever of two figures moved cannot be a column.** Screen 30's
+   `Corrected its recorded sales from … and its transaction count from …` is assembled from two
+   independent facts, so the same document would be filed under a different heading depending on what
+   it happened to change — the same argument the stock chunk used to split a reason from a source.
+   They are `Recorded sales` and `Transactions` now, each `115.00 to 345.00` in the stock family's
+   own `10 to 7` shape, and the figure that did not move says **`Unchanged`** rather than going
+   silent: an empty cell in that column would read as a figure nobody recorded.
+5. **Screen 30's `Difference` is one column holding up to four sentences, deliberately.** The money
+   variance, the transaction variance, a shift whose two records of the same money disagreed, and a
+   difference struck off the unresolved list are four statements about *one* disagreement. Splitting
+   them costs four columns to say what happened once, and two of the four are silent on almost every
+   record — a table of mostly empty headings. The label is constant and only the value varies, which
+   is the same shape as `Before and after` → `Not recorded`.
+6. **Two page-invariant sentences left the record and are stated once on the page.** Both were the
+   same mistake in two places: a claim about *how the system works* repeated on every row that
+   happened to raise it.
+   - Screen 32's correction paragraph asserted, per corrected shift, that the correction rewrote the
+     recorded sales to the total that shift's own sales prove and never the counted cash. That is
+     true of every correction; it is one clause on the page's own note now, and the attribute states
+     what actually differs: `Corrected twice, last 2026-08-12 19:30 UTC`.
+   - Screen 32's cashier line — "the record of who corrected it, and why, is available to managers,
+     administrators, and owners" — is about the *session*, not the shift. One line above the list,
+     and only when a listed shift was actually corrected.
+7. **The payment caution went the same way, and the wording is not new.** See the render note below
+   for why the first draft's alternative was rejected by a picture. `sales_totals_panel.dart` already
+   states `checkoutTenderDisclaimer` once per surface and already uses **`Not recorded`** as the
+   value for a sale that names no method — so screen 33 adopts an existing vocabulary rather than
+   inventing a second one for the same fact. The unrecorded note is a *different* sentence from
+   `checkoutTenderUnrecordedMessage` for the reason the totals page gives in its own comment: that
+   one says "This sale", which is a claim about one record and is wrong above a list of them.
+8. **`Verify and restore stock` stops being a primary button, and the component took the decision
+   away.** `RecordActionSet` draws every action `secondary` unless it is destructive, and verifying a
+   return removes nothing, so it is not. §2.1 gives `action.primary` to "exactly one per screen
+   region" and a page of five pending returns had five. This is the same kind of removal as
+   `AppButtonSize.sm` disappearing with the catalog's call site.
+9. **A count under a heading never has to agree.** `over 1 transaction` / `over 3 transactions` was
+   the same singular-plural rule every reporting surface holds. §5.2 makes the noun the key and the
+   figure the value, so the agreement rule simply stops reaching this figure. The test that proved
+   the singular now proves that.
+10. **`Pagination` was examined and declined a fourth time**, on the same queue-position ground the
+    catalog and stock chunks used: all four screens carry a `Previous page` / `Next page` pair, which
+    is one of `DESIGN-AUDIT.md` §2.3's four idioms, and `Pagination` is §5.1 priority 3 and not step
+    6's. Nothing about it moved.
+
+### What the first render decided, and it decided the largest open question in the chunk
+
+The chunk was built with the payment caution kept **on** the record — `Paid by Cash. Recorded by the
+cashier at the till; the payment itself is not verified.` as the value of a `Payment` attribute —
+because keeping copy verbatim is safer than improving it and because `sale_history.dart` requires
+every surface showing a tender to carry the disclaimer. **`web/33-shift-sales` refused it.** At
+`flex: 2` the value wrapped to four lines on *every* row and was the tallest thing on the page: two
+sales made a table twice as tall as the four-column one beside it, and twenty would have made a page
+of paragraphs. The contract is per *surface*, not per value — which is precisely how
+`sales_totals_panel.dart` already reads it — and a single-sale screen like receipt lookup (31, not in
+step 6's list) keeps the sentence beside the value because there the two are the same thing.
+
+Two more, both caller-side and both the knob §4.3 already gives the caller:
+
+- **`Total` takes twice an ordinary share.** `KES 285.00` is a currency code and an amount where its
+  neighbours are one figure each; at an equal share it ran into the `Discount` column beside it.
+- **`Transactions` takes twice an ordinary share for its *heading*, not its value.** The value is
+  `1 to 3`; the word "Transactions" is four times as wide, and at an equal share the header ran into
+  `Difference`.
+
+### What the pictures show and this chunk did not fix
+
+**`_RecordTable` puts no gap between its cells at all**, so at six columns a value can end one pixel
+from where the next begins: `web/30-shift-corrections` reads `A late sale arrived after|Corrected
+from expectation` across the `Reason` / `Evidence` boundary. **It is not this chunk's defect** —
+`web/23-stock-movements`, generated by the stock chunk, runs `Before and after|Adjustment type|Reason`
+together in its header row in exactly the same way — and it is left alone for the reason `PLAN.md`
+gives for the three observations it already carries: it is the same arithmetic, the five component
+constants were all measured against a two-column activity log, and a gutter changes every column's
+effective width on all twelve migrated screens. The honest fixes are named in `PLAN.md`, and the
+chunk that settles them now has all twelve screens in front of it.
+
+### Files changed
+
+```text
+lib/reporting/shift_amendment_feed_panel.dart     screen 30
+lib/shift/shift_history_panel.dart                screen 32
+lib/sales/sale_history_panel.dart                 screen 33
+lib/returns/return_history_panel.dart             screen 34
+test/reporting/shift_amendment_feed_panel_test.dart
+test/shift/shift_history_panel_test.dart
+test/sales/sale_history_panel_test.dart
+test/returns/return_history_panel_test.dart
+test/shift/shift_panel_test.dart                  one assertion, in its new rendering
+```
+
+9 files, **+905 / -410**. Four private `_entry` / `_record` `Card` builders are deleted, with
+`_change` and `_tenderLabel` and two `_muted` helpers going with them.
+
+**`dart format` was run over the four `lib` files and then largely reverted, which is worth
+recording.** This repository is **not** formatted with the formatter in the current Dart SDK:
+`dart format --set-exit-if-changed lib test` at `HEAD` reports **201 of 322 files** would change. So
+formatting a whole file rewrites regions the chunk never touched — six such hunks in
+`return_history_panel.dart` alone, and a stripped UTF-8 BOM in two files. Every formatter-only hunk
+was restored by hand. One was deliberately kept: the `shift-history-own-sales` button's indentation,
+which was left malformed by an earlier mechanical replacement and sits inside the region this chunk
+rewrote.
+
+### Tests
+
+**All five suites measured, none carried.**
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1847 -> 1855  (+8)
+npm --prefix functions test                                                409  unchanged (~27 s)
+npm --prefix rules-tests run test:emulator                                 161  unchanged (~64 s)
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged
+```
+
+The prelude was run before every emulator command. All four passed first time and no suite was
+retried.
+
+The eight new Flutter tests: **one *states the same facts on a phone* per screen** — §4.1's `compact`
+band at 411, every key asserted present and `takeException()` null — because three of these four had
+only ever been driven at 800 x 600 and one at 1400, which is exactly how the staff directory's five
+inline forms overflowed on every phone for a step without anybody knowing. The other four are the
+cases the new model creates: a shift whose drawer agrees carries `Cash matches` and **no** difference
+attribute, a cashier with no corrected shift is told nothing about a trail they did not ask about, a
+sale with no discount contributes no `Discount` column to `RecordList.columnsOf`, and a page whose
+sales all name a method says nothing about the ones that do not.
+
+Existing assertions changed rather than being added, every one a fact in its new rendering:
+`Counted cash: 1250.00` → `1250.00` under a `Counted cash` label (two files, including
+`shift_panel_test.dart`), `Recorded sales: 987.50 over 3 transactions` → `987.50` plus a separate
+`3`, `Counted cash is over by 262.50.` → the badge `Cash over` plus `262.50`, the no-summary sentence
+→ the badge `No closing summary` and its semantic label, both correction paragraphs → their one-line
+attributes and the two page notes, `Total: KES 9.00 after 1.00 discount` → `KES 9.00` plus `1.00`,
+`1 item: 2 x Tusker` → `2 x Tusker` under `Sold` plus `1` under `Items`, the tender sentence → `Card`
+/ `Not recorded` plus the page's disclaimer, `Verified - stock restored` → the badge `Verified`,
+`Reason given: …` → the reason itself, and screen 30's `change` / `inconsistent` / `cleared` lines →
+the `Recorded sales`, `Transactions` and `Difference` columns.
+
+Two tests needed a scroll they did not need before, and both are the same fact: a §5.2 record states
+more per row than the four lines it replaced, so the fold arrives sooner on an 800 x 600 test surface
+and a lazily-built `ListView` has not built the paging controls yet.
+
+`dart analyze` over the four changed panels reports **no issues**.
+
+### Screenshots
+
+**196 images: 1 added, 0 removed, 11 changed, 184 byte-identical, and zero date drift.** The baseline
+was the stock chunk's, generated earlier the same day, so the whole diff is this chunk and no
+reverted second regeneration was needed.
+
+```text
+web/30-shift-corrections     mobile/30-shift-corrections   mobile-full/30-shift-corrections  (new)
+web/32-shift-history         mobile/32-shift-history       mobile-full/32-shift-history
+web/33-shift-sales           mobile/33-shift-sales         mobile-full/33-shift-sales
+web/34-returns-on-a-sale     mobile/34-returns-on-a-sale   mobile-full/34-returns-on-a-sale
+```
+
+**All eleven are the four migrated captures.** `mobile-full/30-shift-corrections` is the one
+addition: screen 30's record states six facts where the card stated seven short lines, and on a phone
+that is now taller than the fold. No `web-full` variant appeared, so nothing crossed the fold at
+1440 x 900.
+
+**`web/33-shift-sales` is the picture worth opening**, because it is the one that settled a decision:
+two sales as a six-column table with two-line rows and the payment caution stated once beneath them,
+against the four-line rows of the first render.
+
+**A pre-existing harness warning was seen and is not this chunk's.** `19-correct-a-product` taps a
+control its `scrollUntilVisible` did not bring fully on screen and logs a hit-test warning; the
+capture passes and `web/19-correct-a-product` is byte-identical across both regenerations, so nothing
+about it moved. It is recorded here only so the next session does not read it as new.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

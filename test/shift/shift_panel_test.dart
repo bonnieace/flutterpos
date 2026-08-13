@@ -536,8 +536,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.text('Counted cash: 1250.00'),
-      findsOneWidget,
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('shift-history-counted-shift-closed')),
+          )
+          .data,
+      '1250.00',
       reason: 'the recorded figures are shown, never recomputed',
     );
   });

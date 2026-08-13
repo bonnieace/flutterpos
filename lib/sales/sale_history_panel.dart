@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
@@ -260,66 +261,42 @@ final class _SaleHistoryContents extends StatelessWidget {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
       const SizedBox(height: 16),
-      if (page.items.isEmpty)
-        const Text(
+      // §4.3's responsive contract.
+      RecordList(
+        identityLabel: 'Sale',
+        items: <RecordItem>[for (final sale in page.items) _record(sale)],
+        empty: const Text(
           key: ValueKey('sale-history-empty'),
           'No sales were found.',
-        )
-      else
-        for (final sale in page.items)
-          Card(
-            key: ValueKey('sale-history-entry-${sale.id}'),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    sale.receiptNumber,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    key: ValueKey('sale-history-total-${sale.id}'),
-                    'Total: ${sale.currency} ${_money(sale.totalMinor)}'
-                    '${sale.discountMinor > 0 ? ' after ${_money(sale.discountMinor)} discount' : ''}',
-                  ),
-                  Text(
-                    key: ValueKey('sale-history-lines-${sale.id}'),
-                    '${sale.lines.length} '
-                    '${sale.lines.length == 1 ? 'item' : 'items'}: '
-                    '${sale.lines.map((line) => '${line.quantity} x ${line.name}').join(', ')}',
-                  ),
-                  Text(
-                    key: ValueKey('sale-history-tender-${sale.id}'),
-                    _tenderLabel(sale),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    key: ValueKey('sale-history-recorded-at-${sale.id}'),
-                    _recordedAtLabel(
-                      sale,
-                      tenantStaffLabel(
-                        sale.soldById,
-                        names: staffNames,
-                        selfUid: selfUid,
-                      ),
-                    ),
-                    style: _muted(context),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: AppButton(
-                             key: ValueKey('sale-history-returns-link-${sale.id}'),
-                             label: 'View returns',
-                             onPressed: () => onViewReturns(sale),
-                           ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        ),
+      ),
+      // **Said once under the list, in the words `sales_totals_panel.dart`
+      // already says them.** It rode on every row as the second half of "Paid
+      // by Cash. …", which at §5.2's key-value made the payment column three
+      // lines tall on every record and the tallest thing on the page - a
+      // seventy-character invariant repeated twenty times. It is a property of
+      // how a tender is captured rather than of any sale, and this screen still
+      // states it, which is what `sale_history.dart` requires of a surface that
+      // shows one.
+      if (page.items.any((sale) => sale.tender != null)) ...[
+        const SizedBox(height: 8),
+        const Text(
+          key: ValueKey('sale-history-tender-disclaimer'),
+          checkoutTenderDisclaimer,
+        ),
+      ],
+      // Deliberately a different sentence from `checkoutTenderUnrecordedMessage`
+      // for the reason the totals page gives: that one says "This sale", which
+      // is a claim about one record and is wrong above a list of them. The fact
+      // is the same and is stated again rather than reused wrongly.
+      if (page.items.any((sale) => sale.tender == null)) ...[
+        const SizedBox(height: 8),
+        const Text(
+          key: ValueKey('sale-history-tender-unrecorded-note'),
+          'A sale recorded before payment methods were captured names no '
+          'payment method, so its payment is stated as not recorded.',
+        ),
+      ],
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -342,8 +319,75 @@ final class _SaleHistoryContents extends StatelessWidget {
     ],
   );
 
-  TextStyle? _muted(BuildContext context) =>
-      Theme.of(context).textTheme.bodySmall;
+  /// One sale as §5.2's rows.
+  ///
+  /// **No standing, and that is the same reading the ledger reached.** §2.1's
+  /// five each mean one thing and "a sale was rung up" is not among them. The
+  /// one thing that varies between these records is whether this device has
+  /// seen the server confirm the sale, and every surface in this app states that
+  /// in its provenance line rather than as a badge - so a badge here would say
+  /// on one screen what a sentence says on the next.
+  RecordItem _record(TenantSale sale) => RecordItem(
+    id: sale.id,
+    recordKey: ValueKey('sale-history-entry-${sale.id}'),
+    title: sale.receiptNumber,
+    titleKey: ValueKey('sale-history-receipt-${sale.id}'),
+    attributes: <RecordAttribute>[
+      // Twice an ordinary share, because it is a currency code and an amount
+      // where its neighbours are one figure each. The first render wrapped
+      // `KES 285.00` against the discount beside it.
+      RecordAttribute(
+        label: 'Total',
+        value: '${sale.currency} ${_money(sale.totalMinor)}',
+        valueKey: ValueKey('sale-history-total-${sale.id}'),
+        flex: 2,
+      ),
+      // Its own column rather than a clause on the total, because a discount is
+      // the fact a person scans a page of sales for and "after 5.00 discount"
+      // is unscannable at the end of another figure. Silent where there was
+      // none: a discount of nothing is not a discount.
+      if (sale.discountMinor > 0)
+        RecordAttribute(
+          label: 'Discount',
+          value: _money(sale.discountMinor),
+          valueKey: ValueKey('sale-history-discount-${sale.id}'),
+        ),
+      RecordAttribute(
+        label: 'Items',
+        value: '${sale.lines.length}',
+        valueKey: ValueKey('sale-history-items-${sale.id}'),
+      ),
+      RecordAttribute(
+        label: 'Sold',
+        value: sale.lines
+            .map((line) => '${line.quantity} x ${line.name}')
+            .join(', '),
+        valueKey: ValueKey('sale-history-lines-${sale.id}'),
+        flex: 2,
+      ),
+      // **`Not recorded` is the totals page's own word for the same absence**,
+      // rather than a second vocabulary invented here for the same fact. The
+      // sentence that used to be appended to every one of these values is under
+      // the list now; see the note there for why.
+      RecordAttribute(
+        label: 'Payment',
+        value: sale.tender?.label ?? 'Not recorded',
+        valueKey: ValueKey('sale-history-tender-${sale.id}'),
+      ),
+    ],
+    provenance: _recordedAtLabel(
+      sale,
+      tenantStaffLabel(sale.soldById, names: staffNames, selfUid: selfUid),
+    ),
+    provenanceKey: ValueKey('sale-history-recorded-at-${sale.id}'),
+    actions: <RecordAction>[
+      RecordAction(
+        label: 'View returns',
+        actionKey: ValueKey('sale-history-returns-link-${sale.id}'),
+        onPressed: () => onViewReturns(sale),
+      ),
+    ],
+  );
 }
 
 String _recordedLabel(TenantShiftSaleHistoryRequest request) {
@@ -355,18 +399,6 @@ String _recordedLabel(TenantShiftSaleHistoryRequest request) {
   }
   return 'Recorded: ${_money(total)} over $count transactions. Counted cash '
       'was ${_money(request.countedCashMinor)}.';
-}
-
-/// States how the sale was paid for without implying the payment was checked.
-///
-/// The disclaimer travels with the value on purpose: a bare "Paid by M-Pesa"
-/// reads as a settled transaction, and nothing in this system has confirmed
-/// that the money arrived.
-String _tenderLabel(TenantSale sale) {
-  final tender = sale.tender;
-  return tender == null
-      ? checkoutTenderUnrecordedMessage
-      : 'Paid by ${tender.label}. $checkoutTenderDisclaimer';
 }
 
 String _recordedAtLabel(TenantSale sale, String soldByLabel) {

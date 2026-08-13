@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -19,25 +20,32 @@ void main() {
       _text(tester, 'shift-amendment-subject-amend_abc'),
       'Shift shift-1 on 2026-08-04',
     );
+    // The record is the correction, so the correction's own document ID is its
+    // second identifying line. It used to be the last clause of the evidence
+    // sentence.
     expect(
-      _text(tester, 'shift-amendment-change-amend_abc'),
-      'Corrected its recorded sales from 115.00 to 345.00 and its transaction '
-      'count from 1 to 3.',
+      _text(tester, 'shift-amendment-record-amend_abc'),
+      'Recorded as amend_abc',
     );
+    // Two figures, two columns. One assembled sentence used to name whichever
+    // of them moved, which is a heading that changes per record.
+    expect(
+      _text(tester, 'shift-amendment-sales-amend_abc'),
+      '115.00 to 345.00',
+    );
+    expect(_text(tester, 'shift-amendment-transactions-amend_abc'), '1 to 3');
     // The direction is the server's own: observed minus expected, so a negative
-    // variance is a shift that recorded less than its sales prove.
+    // variance is a shift that recorded less than its sales prove. The cleared
+    // difference rides in the same column because it is the same disagreement.
     expect(
       _text(tester, 'shift-amendment-difference-amend_abc'),
       'The shift had recorded 230.00 less than its sales prove, and counted 2 '
-      'transactions fewer.',
+      'transactions fewer. This removed difference sv_shift-1_gen-9 from the '
+      'unresolved list.',
     );
     expect(
       _text(tester, 'shift-amendment-reason-amend_abc'),
-      'Reason given: Late sales arrived after the close.',
-    );
-    expect(
-      _text(tester, 'shift-amendment-cleared-amend_abc'),
-      'This removed difference sv_shift-1_gen-9 from the unresolved list.',
+      'Late sales arrived after the close.',
     );
     // The signed-in owner made this one, so the row says so rather than
     // repeating their own UID back at them.
@@ -48,7 +56,16 @@ void main() {
     expect(
       _text(tester, 'shift-amendment-evidence-amend_abc'),
       'Shift belonged to cashier-a. Corrected from expectation '
-      'se_2026-08-04_shift-1 at generation gen-9. Recorded as amend_abc.',
+      'se_2026-08-04_shift-1 at generation gen-9.',
+    );
+    // §2.1's five each mean one thing and "a correction was recorded" is not
+    // among them, so no row wears a badge and the table draws no status column.
+    expect(
+      tester
+          .widget<RecordList>(find.byType(RecordList))
+          .items
+          .map((item) => item.status),
+      everyElement(isNull),
     );
     // The one guarantee this whole surface rests on is stated on the page, not
     // only enforced in the read model.
@@ -101,14 +118,15 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(
-      _text(tester, 'shift-amendment-change-amend_abc'),
-      'Corrected its transaction count from 1 to 2.',
-    );
+    // The figure that did not move says so rather than going silent: an empty
+    // cell in this column would read as a figure nobody recorded.
+    expect(_text(tester, 'shift-amendment-sales-amend_abc'), 'Unchanged');
+    expect(_text(tester, 'shift-amendment-transactions-amend_abc'), '1 to 2');
     // Singular, because one transaction is one transaction.
     expect(
       _text(tester, 'shift-amendment-difference-amend_abc'),
-      'The shift had counted 1 transaction fewer.',
+      'The shift had counted 1 transaction fewer. This removed difference '
+      'sv_shift-1_gen-9 from the unresolved list.',
     );
   });
 
@@ -130,10 +148,15 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
+    // It is one clause of the difference this correction settled rather than a
+    // column of its own: it is silent on almost every record, and a table
+    // spends a whole column on a heading whether or not any row fills it.
     expect(
-      _text(tester, 'shift-amendment-inconsistent-amend_abc'),
-      'Before this, the shift\'s two records of the same money did not agree '
-      'with each other. Both were rewritten.',
+      _text(tester, 'shift-amendment-difference-amend_abc'),
+      contains(
+        'Before this, the shift\'s two records of the same money did not agree '
+        'with each other. Both were rewritten.',
+      ),
     );
   });
 
@@ -151,9 +174,38 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      find.byKey(const ValueKey('shift-amendment-cleared-amend_abc')),
-      findsNothing,
+      _text(tester, 'shift-amendment-difference-amend_abc'),
+      isNot(contains('unresolved list')),
     );
+  });
+
+  testWidgets('a correction states the same facts on a phone', (tester) async {
+    // The class of defect the staff directory found: a screen that has only
+    // ever been laid out wide. This one has no actions at all, so what a phone
+    // has to fit is six facts and a provenance line.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_amendment('amend_abc')]);
+
+    await _pump(tester, _controller(), reader, width: 411);
+
+    expect(
+      RecordList.formFor(tester.view.physicalSize.width),
+      RecordForm.stackedCards,
+    );
+    for (final key in <String>[
+      'shift-amendment-amend_abc',
+      'shift-amendment-subject-amend_abc',
+      'shift-amendment-record-amend_abc',
+      'shift-amendment-sales-amend_abc',
+      'shift-amendment-transactions-amend_abc',
+      'shift-amendment-difference-amend_abc',
+      'shift-amendment-reason-amend_abc',
+      'shift-amendment-evidence-amend_abc',
+      'shift-amendment-actor-amend_abc',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a business with no corrections says so', (tester) async {
@@ -335,8 +387,9 @@ Future<void> _pump(
   int pageSize = 20,
   String? shiftId,
   bool settle = true,
+  double width = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

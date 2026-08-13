@@ -360,11 +360,10 @@ argument for dropping any of them.
 **Done 2026-08-13**, in step 6's second half, as `RecordList` in
 `lib/ui/record_list.dart`, with the **activity log** as its first consumer and the **staff
 directory** as its second, later the same day — then the two **catalog** screens, then the whole
-**stock family** (21–24). Step 6's list above is **twelve** screens, so **four remain** — 30, 32, 33
-and 34, the shift family — and they are a sweep, the way `AppButton`'s 133 call sites were. This
-count was left stale by the catalog chunk and is corrected here rather than carried.
-`ActionSet` is built with it, `StatRow` is step 8's, and `FilterChips`, `Form` and `Sale`
-are unclaimed.
+**stock family** (21–24), and finally the **shift family** (30, 32, 33, 34). Step 6's list above is
+**twelve** screens and **all twelve are migrated**, so the sweep is finished, the way `AppButton`'s
+133 call sites were. `ActionSet` is built with it, `StatRow` is step 8's, and `FilterChips`, `Form`
+and `Sale` are unclaimed.
 
 The staff directory is the screen this row was written about: it was the only one that made §4.3's
 choice itself, with two separate builders under a breakpoint test that showed the two bands
@@ -477,12 +476,19 @@ person scans a list for. **"Never truncated below two lines"** is read as a floo
 than a ban — an identity gets two lines before it ellipsises, where every other line on a
 record gets one.
 
-The catalog is not yet on it. Its `Correct` / `Retire` links are in the sweep that follows,
-and what fixes them is `ActionSet`: a record's actions are `AppButton`s at 48dp, and a
+~~The catalog is not yet on it.~~ **It is, as of 2026-08-13, and the complaint above is now false of
+the app.** What fixed it is `ActionSet`: a record's actions are `AppButton`s at 48dp — so the 20px
+target is gone by the decision being removed rather than corrected at the call site — and a
 `destructive` one takes §2.1's destructive tier instead of looking like its neighbour. **The staff
-directory proved that half on 2026-08-13** — its five 40dp icon buttons with tooltips became 48dp
-labelled actions, with the invitation cancellation and the deactivation on the destructive tier —
-and the catalog is the next screen in the sweep.
+directory proved the tier half** the same day, when its five 40dp icon buttons with tooltips became
+48dp labelled actions with the invitation cancellation and the deactivation on the destructive tier.
+
+**A record's standing is a lookup in §2.1 and not every record has one.** Four families are on this
+contract and they answer it differently, which is the answer working: a member's membership status, a
+product that cannot be sold, a shift whose drawer disagrees with its sales, and a return awaiting
+verification all carry a badge; an audit event, a ledger entry, a correction and a sale carry none.
+The rule that decides it is that a list where every row wears a badge is a list with no signal in it,
+so a standing every record shares is not a standing.
 
 #### `StatusBadge`
 

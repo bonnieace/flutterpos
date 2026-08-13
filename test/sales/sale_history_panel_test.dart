@@ -6,6 +6,7 @@ import 'package:flutter_application_1/checkout/checkout_receipt.dart';
 import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
@@ -31,15 +32,101 @@ void main() {
     );
     expect(find.byKey(const ValueKey('sale-history-entry-co-2')), findsOne);
     expect(
+      tester.widget<Text>(find.byKey(const ValueKey('sale-history-receipt-co-1'))).data,
+      isNotEmpty,
+    );
+    // The discount is its own column rather than a clause on the end of the
+    // total: it is the fact a person scans a page of sales for, and nobody
+    // scans the sixth word of another figure.
+    expect(
       tester.widget<Text>(find.byKey(const ValueKey('sale-history-total-co-1'))).data,
-      'Total: KES 9.00 after 1.00 discount',
+      'KES 9.00',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('sale-history-discount-co-1'))).data,
+      '1.00',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('sale-history-items-co-1'))).data,
+      '1',
     );
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('sale-history-lines-co-1'))).data,
-      '1 item: 2 x Tusker',
+      '2 x Tusker',
+    );
+    // §2.1's five each mean one thing and "a sale was rung up" is not among
+    // them, so no row wears a badge.
+    expect(
+      tester
+          .widget<RecordList>(find.byType(RecordList))
+          .items
+          .map((item) => item.status),
+      everyElement(isNull),
     );
     // The screen states the recorded figures; it computes no replacement.
     expect(find.textContaining('Actual total'), findsNothing);
+  });
+
+  testWidgets('a sale with no discount states none', (tester) async {
+    // Silent rather than zero: a discount of nothing is not a discount, and
+    // §4.3's empty cell is what a table has for a record that says nothing.
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot(
+          'co-2',
+          sequence: 2,
+          overrides: <String, Object?>{
+            'discount': 0.0,
+            'discountMinor': 0,
+            'total': 10.0,
+            'totalMinor': 1000,
+          },
+        ),
+      ]);
+
+    await _pump(tester, _controller(), reader, _shiftRequest());
+
+    expect(
+      find.byKey(const ValueKey('sale-history-discount-co-2')),
+      findsNothing,
+    );
+    expect(
+      RecordList.columnsOf(
+        tester.widget<RecordList>(find.byType(RecordList)).items,
+      ).map((column) => column.label),
+      isNot(contains('Discount')),
+    );
+  });
+
+  testWidgets('a sale states the same facts on a phone', (tester) async {
+    // The class of defect the staff directory found: a screen that has only
+    // ever been laid out wide. One action is under §4.3's threshold, so it is
+    // still a 48dp button here rather than something behind a menu.
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot('co-1'),
+      ]);
+
+    await _pump(tester, _controller(), reader, _shiftRequest(), width: 411);
+
+    expect(
+      RecordList.formFor(tester.view.physicalSize.width),
+      RecordForm.stackedCards,
+    );
+    for (final key in <String>[
+      'sale-history-entry-co-1',
+      'sale-history-receipt-co-1',
+      'sale-history-total-co-1',
+      'sale-history-discount-co-1',
+      'sale-history-items-co-1',
+      'sale-history-lines-co-1',
+      'sale-history-tender-co-1',
+      'sale-history-recorded-at-co-1',
+      'sale-history-returns-link-co-1',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('each sale states how it was paid for, and how sure that is', (
@@ -62,18 +149,63 @@ void main() {
 
     await _pump(tester, _controller(), reader, _shiftRequest());
 
-    final paid = tester
-        .widget<Text>(find.byKey(const ValueKey('sale-history-tender-co-2')))
-        .data;
-    expect(paid, contains('Card'));
-    expect(paid, contains(checkoutTenderDisclaimer));
+    // The method is the record's fact and the caution is the page's. It used to
+    // be one sentence per row, which at §5.2's key-value made the payment
+    // column three lines tall on every record - and `Not recorded` is the word
+    // `sales_totals_panel.dart` already uses for the same absence rather than a
+    // second vocabulary for it.
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-tender-co-2')))
+          .data,
+      'Card',
+    );
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('sale-history-tender-co-1')))
           .data,
-      checkoutTenderUnrecordedMessage,
+      'Not recorded',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-history-tender-disclaimer')),
+          )
+          .data,
+      checkoutTenderDisclaimer,
+    );
+    expect(
+      find.byKey(const ValueKey('sale-history-tender-unrecorded-note')),
+      findsOne,
     );
     expect(find.textContaining('unpaid'), findsNothing);
+  });
+
+  testWidgets('a page whose sales all name a method says nothing about the '
+      'ones that do not', (tester) async {
+    // Both notes answer a question only a listed record raises, so neither is
+    // above a list where nothing raises it.
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/sales', <TenantQueryDocumentSnapshot>[
+        _snapshot(
+          'co-1',
+          overrides: <String, Object?>{
+            'payloadSchemaVersion': 2,
+            'tender': 'cash',
+          },
+        ),
+      ]);
+
+    await _pump(tester, _controller(), reader, _shiftRequest());
+
+    expect(
+      find.byKey(const ValueKey('sale-history-tender-disclaimer')),
+      findsOne,
+    );
+    expect(
+      find.byKey(const ValueKey('sale-history-tender-unrecorded-note')),
+      findsNothing,
+    );
   });
 
   testWidgets('a sale naming an unmodelled tender hides the whole page', (
@@ -358,7 +490,16 @@ Future<void> _pump(
   TenantSaleHistoryRequest request, {
   int pageSize = 20,
   bool settle = true,
+  double? width,
 }) async {
+  // The default surface is 800 x 600, which is §4.1's `medium` band. A case
+  // that wants another band asks for it by width.
+  if (width != null) {
+    tester.view.physicalSize = Size(width, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(

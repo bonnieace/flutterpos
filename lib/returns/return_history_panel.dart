@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
@@ -452,19 +454,24 @@ final class _SaleReturnsContents extends StatelessWidget {
         Text(key: const ValueKey('sale-returns-notice'), message),
       ],
       const SizedBox(height: 16),
-      if (page.items.isEmpty)
-        const Text(
-          key: ValueKey('sale-returns-empty'),
-          'No returns were recorded against this sale.',
-        )
-      else ...[
+      if (page.items.isNotEmpty) ...[
         Text(
           key: const ValueKey('sale-returns-counts'),
           _countsLabel(page),
         ),
         const SizedBox(height: 12),
-        for (final record in page.items) _entry(context, record),
       ],
+      // §4.3's responsive contract.
+      RecordList(
+        identityLabel: 'Return',
+        items: <RecordItem>[
+          for (final record in page.items) _entry(context, record),
+        ],
+        empty: const Text(
+          key: ValueKey('sale-returns-empty'),
+          'No returns were recorded against this sale.',
+        ),
+      ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -511,74 +518,78 @@ final class _SaleReturnsContents extends StatelessWidget {
     ],
   );
 
-  Widget _entry(BuildContext context, TenantReturn record) => Card(
-    key: ValueKey('sale-returns-entry-${record.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                record.isVerified
-                    ? Icons.verified_outlined
-                    : Icons.hourglass_empty,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                key: ValueKey('sale-returns-status-${record.id}'),
-                record.isVerified
-                    ? 'Verified - stock restored'
-                    : 'Pending verification',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            key: ValueKey('sale-returns-lines-${record.id}'),
-            '${record.returnedUnits} '
-            '${record.returnedUnits == 1 ? 'unit' : 'units'} across '
-            '${record.lines.length} '
-            '${record.lines.length == 1 ? 'product' : 'products'}: '
-            '${record.lines.map(_lineLabel).join(', ')}',
-          ),
-          Text(
-            key: ValueKey('sale-returns-reason-${record.id}'),
-            'Reason: ${record.reason}',
-          ),
-          const SizedBox(height: 8),
-          Text(
-            key: ValueKey('sale-returns-recorded-${record.id}'),
-            _recordedLabel(record, _label(record.createdBy)),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (record.verification case final verification?)
-            Text(
-              key: ValueKey('sale-returns-verified-${record.id}'),
-              'Verified ${_instant(verification.verifiedAt)} by '
-              '${_label(verification.verifiedBy)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            )
-          else if (canVerify) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: AppButton(
-                       key: ValueKey('sale-returns-verify-${record.id}'),
-                       label: 'Verify and restore stock',
-                       tier: AppButtonTier.primary,
-                       onPressed: busy
-                    ? null
-                    : () => _confirmVerification(context, record),
-                     ),
-            ),
-          ],
-        ],
-      ),
+  /// One return as §5.2's rows.
+  ///
+  /// **The standing was already the first thing on this record and is now a
+  /// badge rather than a heading.** A return is pending or it is verified, which
+  /// is §2.1's "pending, awaiting" and its "confirmed" exactly, and it decides
+  /// what a person can do to the record - which is what makes it the standing
+  /// rather than an attribute. It used to be a glyph beside a `titleMedium`
+  /// sentence, so the record had a status where its identity goes and no
+  /// identity at all.
+  ///
+  /// **"Stock restored" leaves the badge and stays on the record.** A badge is
+  /// one word about a standing; what the verification did, when, and by whom is
+  /// the `Verified` attribute beside it, and the page says above the list that
+  /// stock moves only on verification. §9 is unaffected either way: both states
+  /// carry an icon and a word, and neither is carried by colour.
+  RecordItem _entry(BuildContext context, TenantReturn record) => RecordItem(
+    id: record.id,
+    recordKey: ValueKey('sale-returns-entry-${record.id}'),
+    // The units and the products they came from are what one return *is* on a
+    // page that is already about one sale. The itemisation is a fact about it
+    // and takes a column of its own.
+    title:
+        '${record.returnedUnits} '
+        '${record.returnedUnits == 1 ? 'unit' : 'units'} across '
+        '${record.lines.length} '
+        '${record.lines.length == 1 ? 'product' : 'products'}',
+    titleKey: ValueKey('sale-returns-subject-${record.id}'),
+    status: RecordStatus(
+      badgeKey: ValueKey('sale-returns-status-${record.id}'),
+      status: record.isVerified ? AppStatus.ok : AppStatus.attention,
+      label: record.isVerified ? 'Verified' : 'Pending verification',
+      icon: record.isVerified ? Icons.verified_outlined : Icons.hourglass_empty,
+      semanticLabel: record.isVerified
+          ? 'Verified; stock restored'
+          : 'Pending verification; no stock restored yet',
     ),
+    attributes: <RecordAttribute>[
+      RecordAttribute(
+        label: 'Returned',
+        value: record.lines.map(_lineLabel).join(', '),
+        valueKey: ValueKey('sale-returns-lines-${record.id}'),
+        flex: 2,
+      ),
+      RecordAttribute(
+        label: 'Reason',
+        value: record.reason,
+        valueKey: ValueKey('sale-returns-reason-${record.id}'),
+        flex: 2,
+      ),
+      // An attribute rather than a second provenance line, because a record has
+      // one provenance and this is a second event against the same record:
+      // recording it and verifying it are two acts by two people at two times.
+      if (record.verification case final verification?)
+        RecordAttribute(
+          label: 'Verified',
+          value:
+              '${_instant(verification.verifiedAt)} by '
+              '${_label(verification.verifiedBy)}',
+          valueKey: ValueKey('sale-returns-verified-${record.id}'),
+          flex: 2,
+        ),
+    ],
+    provenance: _recordedLabel(record, _label(record.createdBy)),
+    provenanceKey: ValueKey('sale-returns-recorded-${record.id}'),
+    actions: <RecordAction>[
+      if (!record.isVerified && canVerify)
+        RecordAction(
+          label: 'Verify and restore stock',
+          actionKey: ValueKey('sale-returns-verify-${record.id}'),
+          onPressed: busy ? null : () => _confirmVerification(context, record),
+        ),
+    ],
   );
 
   /// Names the exact products and units whose stock will move before anything

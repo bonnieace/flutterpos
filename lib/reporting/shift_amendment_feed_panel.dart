@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
@@ -226,15 +227,20 @@ final class _AmendmentContents extends StatelessWidget {
         ),
       ],
       const SizedBox(height: 16),
-      if (page.items.isEmpty)
-        Text(
+      // §4.3's responsive contract. A correction is the densest record in this
+      // app - it states what moved, what disagreed, why, and where it was read
+      // from - so what a column is worth was decided by what a person scans a
+      // correction trail for rather than by giving every sentence its own.
+      RecordList(
+        identityLabel: 'Correction',
+        items: <RecordItem>[for (final record in page.items) _record(record)],
+        empty: Text(
           key: const ValueKey('shift-amendments-empty'),
           page.isShiftScoped
               ? 'This shift\'s summary has never been corrected.'
               : 'No shift summary has been corrected in this business.',
-        )
-      else
-        for (final record in page.items) _record(context, record),
+        ),
+      ),
       const SizedBox(height: 8),
       Text(
         'This list is not in time order: a record is addressed by the request '
@@ -264,82 +270,83 @@ final class _AmendmentContents extends StatelessWidget {
     ],
   );
 
-  Widget _record(BuildContext context, TenantShiftAmendmentRecord record) => Card(
-    key: ValueKey('shift-amendment-${record.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            key: ValueKey('shift-amendment-subject-${record.id}'),
-            'Shift ${record.shiftId} on ${record.businessDate}',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            key: ValueKey('shift-amendment-change-${record.id}'),
-            _change(record),
-          ),
-          Text(
-            key: ValueKey('shift-amendment-difference-${record.id}'),
-            _difference(record),
-          ),
-          if (!record.previousRepresentationsAgreed)
-            Text(
-              key: ValueKey('shift-amendment-inconsistent-${record.id}'),
-              'Before this, the shift\'s two records of the same money did not '
-              'agree with each other. Both were rewritten.',
-            ),
-          if (record.clearedAnomalyId case final anomalyId?)
-            Text(
-              key: ValueKey('shift-amendment-cleared-${record.id}'),
-              'This removed difference $anomalyId from the unresolved list.',
-            ),
-          const SizedBox(height: 4),
-          Text(
-            key: ValueKey('shift-amendment-reason-${record.id}'),
-            'Reason given: ${record.reason}',
-          ),
-          const SizedBox(height: 4),
-          Text(
-            key: ValueKey('shift-amendment-actor-${record.id}'),
-            _actor(record),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          Text(
-            key: ValueKey('shift-amendment-evidence-${record.id}'),
-            _evidence(record),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+  /// One correction as §5.2's rows.
+  ///
+  /// **The record is the correction, not the shift it corrected**, which is why
+  /// the shift is the title and the correction's own ID is the second
+  /// identifying line. It used to be the last clause of the evidence sentence,
+  /// where nothing could be scanned by it.
+  ///
+  /// **No standing.** §2.1's five each mean exactly one thing and "a correction
+  /// was recorded" is not among them - the same reading the activity log and the
+  /// stock ledger reached, and for the same reason: a list where every row wears
+  /// a badge is a list with no signal in it. What a correction *cleared* is a
+  /// fact about it and is stated as one.
+  RecordItem _record(TenantShiftAmendmentRecord record) => RecordItem(
+    id: record.id,
+    recordKey: ValueKey('shift-amendment-${record.id}'),
+    title: 'Shift ${record.shiftId} on ${record.businessDate}',
+    titleKey: ValueKey('shift-amendment-subject-${record.id}'),
+    subtitle: 'Recorded as ${record.id}',
+    subtitleKey: ValueKey('shift-amendment-record-${record.id}'),
+    attributes: <RecordAttribute>[
+      // **Two figures, two columns**, where one assembled sentence used to name
+      // whichever of them moved. A sentence that sometimes says sales, sometimes
+      // the count and sometimes both cannot be a column: the same document would
+      // be filed under a different heading depending on what it happened to
+      // change. The unmoved case says so rather than going silent, because an
+      // empty cell here would read as a figure nobody recorded.
+      RecordAttribute(
+        label: 'Recorded sales',
+        value: record.changedSales
+            ? '${_money(record.previousTotalSalesMinor)} to '
+                  '${_money(record.totalSalesMinor)}'
+            : 'Unchanged',
+        valueKey: ValueKey('shift-amendment-sales-${record.id}'),
+        flex: 2,
       ),
-    ),
+      // Twice an ordinary share for its *heading* rather than its value: the
+      // word "Transactions" is wider than "1 to 3", and at an equal share the
+      // first render ran it into the column beside it.
+      RecordAttribute(
+        label: 'Transactions',
+        value: record.changedTransactionCount
+            ? '${record.previousTransactionCount} to ${record.transactionCount}'
+            : 'Unchanged',
+        valueKey: ValueKey('shift-amendment-transactions-${record.id}'),
+        flex: 2,
+      ),
+      RecordAttribute(
+        label: 'Difference',
+        value: _difference(record),
+        valueKey: ValueKey('shift-amendment-difference-${record.id}'),
+        flex: 3,
+      ),
+      RecordAttribute(
+        label: 'Reason',
+        value: record.reason,
+        valueKey: ValueKey('shift-amendment-reason-${record.id}'),
+        flex: 2,
+      ),
+      RecordAttribute(
+        label: 'Evidence',
+        value: _evidence(record),
+        valueKey: ValueKey('shift-amendment-evidence-${record.id}'),
+        flex: 2,
+      ),
+    ],
+    provenance: _actor(record),
+    provenanceKey: ValueKey('shift-amendment-actor-${record.id}'),
   );
 
-  /// What the correction actually moved, said only about the figures that moved.
+  /// Everything this correction found wrong and everything it settled.
   ///
-  /// A correction may change the money, the transaction count, or both, and
-  /// claiming a figure changed when it did not would misstate the record.
-  String _change(TenantShiftAmendmentRecord record) {
-    final parts = <String>[
-      if (record.changedSales)
-        'its recorded sales from ${_money(record.previousTotalSalesMinor)} to '
-            '${_money(record.totalSalesMinor)}',
-      if (record.changedTransactionCount)
-        'its transaction count from ${record.previousTransactionCount} to '
-            '${record.transactionCount}',
-    ];
-    if (parts.isEmpty) {
-      // Reachable only for a shift whose two money representations disagreed:
-      // both were rewritten from one figure without either total changing.
-      return 'This correction rewrote the shift\'s totals without changing '
-          'either figure.';
-    }
-    return 'Corrected ${parts.join(' and ')}.';
-  }
-
-  /// The difference that was resolved, in the direction the server recorded it.
+  /// **One column rather than three, and the three used to be three lines.**
+  /// The money variance, the transaction variance, a shift whose two records of
+  /// the same money disagreed, and a difference struck off the unresolved list
+  /// are four statements about *one* disagreement, so splitting them would spend
+  /// four columns saying what happened once - and two of the four are silent on
+  /// most records, which is a table of mostly empty cells.
   String _difference(TenantShiftAmendmentRecord record) {
     final money = record.salesVarianceMinor == 0
         ? null
@@ -354,10 +361,17 @@ final class _AmendmentContents extends StatelessWidget {
       if (money case final part?) part,
       if (counts case final part?) part,
     ];
-    if (parts.isEmpty) {
-      return 'The server recorded no difference in the figures themselves.';
-    }
-    return 'The shift had ${parts.join(', and ')}.';
+    final sentences = <String>[
+      parts.isEmpty
+          ? 'The server recorded no difference in the figures themselves.'
+          : 'The shift had ${parts.join(', and ')}.',
+      if (!record.previousRepresentationsAgreed)
+        'Before this, the shift\'s two records of the same money did not agree '
+            'with each other. Both were rewritten.',
+      if (record.clearedAnomalyId case final anomalyId?)
+        'This removed difference $anomalyId from the unresolved list.',
+    ];
+    return sentences.join(' ');
   }
 
   /// Who asked, and when the server committed it.
@@ -381,10 +395,14 @@ final class _AmendmentContents extends StatelessWidget {
 
   /// The evidence the correction was read from, so the record can be traced
   /// rather than merely believed.
+  ///
+  /// It named the correction's own document last, and that clause is the
+  /// record's second identifying line now: a person tracing one addresses it by
+  /// that ID, and an identity is where an ID a person addresses a record by
+  /// belongs.
   String _evidence(TenantShiftAmendmentRecord record) =>
       'Shift belonged to ${record.staffId}. Corrected from expectation '
-      '${record.expectationId} at generation ${record.expectationGeneration}. '
-      'Recorded as ${record.id}.';
+      '${record.expectationId} at generation ${record.expectationGeneration}.';
 }
 
 String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);

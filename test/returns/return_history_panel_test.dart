@@ -7,6 +7,8 @@ import 'package:flutter_application_1/checkout/checkout_receipt.dart';
 import 'package:flutter_application_1/returns/returns.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/record_list.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/buttons.dart';
@@ -15,6 +17,20 @@ const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
 const String _businessDate = '2026-07-31';
 const String _payloadHash =
     '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+/// The word on a record's standing and its status role together, because §9
+/// refuses a standing carried by colour and asserting only one half would let
+/// the other drift.
+void _expectStatus(
+  WidgetTester tester,
+  String key,
+  String label,
+  AppStatus status,
+) {
+  final badge = tester.widget<StatusBadge>(find.byKey(ValueKey(key)));
+  expect(badge.label, label);
+  expect(badge.status, status);
+}
 
 void main() {
   testWidgets('verified and pending returns are shown distinctly', (
@@ -34,17 +50,17 @@ void main() {
           .data,
       'On this page: 1 verified, 1 pending.',
     );
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sale-returns-status-ret-2')))
-          .data,
-      'Verified - stock restored',
-    );
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sale-returns-status-ret-1')))
-          .data,
+    // The standing was already the first thing on this record; it is a badge
+    // now rather than a glyph beside a heading, so §2.1 decides its colour and
+    // §9's icon-and-word requirement is the component's rather than this
+    // screen's. "Stock restored" leaves the badge and stays on the record: the
+    // `Verified` attribute names when and by whom.
+    _expectStatus(tester, 'sale-returns-status-ret-2', 'Verified', AppStatus.ok);
+    _expectStatus(
+      tester,
+      'sale-returns-status-ret-1',
       'Pending verification',
+      AppStatus.attention,
     );
     expect(
       tester
@@ -52,18 +68,26 @@ void main() {
             find.byKey(const ValueKey('sale-returns-verified-ret-2')),
           )
           .data,
-      'Verified 2026-08-01 06:00 UTC by Amina (manager-a)',
+      '2026-08-01 06:00 UTC by Amina (manager-a)',
     );
     // A pending return has restored nothing, so it names no verifier.
     expect(
       find.byKey(const ValueKey('sale-returns-verified-ret-1')),
       findsNothing,
     );
+    // The units and the products they came from are what one return is on a
+    // page about one sale; the itemisation is a fact about it.
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-returns-subject-ret-1')))
+          .data,
+      '3 units across 2 products',
+    );
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('sale-returns-lines-ret-1')))
           .data,
-      '3 units across 2 products: 2 x Tusker, 1 x product-2',
+      '2 x Tusker, 1 x product-2',
     );
     expect(
       tester
@@ -189,7 +213,7 @@ void main() {
             find.byKey(const ValueKey('sale-returns-verified-ret-2')),
           )
           .data,
-      'Verified 2026-08-01 06:00 UTC by manager-a',
+      '2026-08-01 06:00 UTC by manager-a',
     );
     expect(find.byKey(const ValueKey('sale-returns-failure')), findsNothing);
   });
@@ -479,6 +503,41 @@ void main() {
     expect(find.byKey(const ValueKey('sale-returns-verified-ret-2')), findsOne);
   });
 
+  testWidgets('a return states the same facts on a phone', (tester) async {
+    // The class of defect the staff directory found: a screen that has only
+    // ever been laid out wide. One action is under §4.3's threshold, so it is
+    // still a 48dp button here rather than something behind a menu.
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      reader,
+      verifyCallable: _VerifyCallable(const <String, Object?>{}),
+      width: 411,
+    );
+
+    expect(
+      RecordList.formFor(tester.view.physicalSize.width),
+      RecordForm.stackedCards,
+    );
+    for (final key in <String>[
+      'sale-returns-entry-ret-1',
+      'sale-returns-subject-ret-1',
+      'sale-returns-status-ret-1',
+      'sale-returns-lines-ret-1',
+      'sale-returns-reason-ret-1',
+      'sale-returns-recorded-ret-1',
+      'sale-returns-verify-ret-1',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('each refusal is reported as its own outcome', (tester) async {
     final refusals = <List<String>, String>{
       <String>['failed-precondition', 'This return has already been verified.']:
@@ -646,11 +705,12 @@ Future<void> _pump(
   bool settle = true,
   TenantReturnWriter? writer,
   VerifyReturnCallable? verifyCallable,
+  double width = 1400,
 }) async {
   // The record form adds a text field, so the page carries more than one
   // Scrollable and `scrollUntilVisible` can no longer identify the list. A tall
   // surface builds every row instead, which is what these assertions need.
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

@@ -1,8 +1,10 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../reporting/shift_amendment_feed.dart';
 import '../reporting/shift_amendment_feed_panel.dart';
@@ -246,8 +248,22 @@ final class _ShiftHistoryContents extends StatelessWidget {
         'Counted cash and recorded sales are shown exactly as the server holds '
         'them, and are never recomputed here. Reconciliation resolves any '
         'difference. A shift whose recorded sales it corrected says so on its '
-        'own row.',
+        'own row: a correction rewrites the recorded sales to the total that '
+        'shift\'s own sales prove, and never the counted cash.',
       ),
+      // Said once, above the list, because it is the same sentence on every
+      // corrected row and it is about this session rather than about any shift.
+      // It used to be repeated inside each corrected record, where §5.2 has a
+      // key-value line and no room for a paragraph.
+      if (!canReadCorrections &&
+          page.items.any((entry) => entry.amendment != null)) ...[
+        const SizedBox(height: 4),
+        const Text(
+          key: ValueKey('shift-history-corrections-denied'),
+          'The record of who corrected a shift, and why, is available to '
+          'managers, administrators, and owners.',
+        ),
+      ],
       const SizedBox(height: 16),
       if (TenantShiftHistoryRepository.canReadEveryCashier(session))
         SegmentedButton<TenantShiftHistoryScope>(
@@ -269,20 +285,22 @@ final class _ShiftHistoryContents extends StatelessWidget {
       Align(
         alignment: Alignment.centerLeft,
         child: AppButton(
-                 key: const ValueKey('shift-history-own-sales'),
-                 label: 'My recent sales',
-                 icon: Icons.receipt_long_outlined,
-                 onPressed: () => onViewSales(const TenantOwnSaleHistoryRequest()),
-               ),
+          key: const ValueKey('shift-history-own-sales'),
+          label: 'My recent sales',
+          icon: Icons.receipt_long_outlined,
+          onPressed: () => onViewSales(const TenantOwnSaleHistoryRequest()),
+        ),
       ),
       const SizedBox(height: 16),
-      if (page.items.isEmpty)
-        const Text(
+      // §4.3's responsive contract.
+      RecordList(
+        identityLabel: 'Shift',
+        items: <RecordItem>[for (final entry in page.items) _entry(entry)],
+        empty: const Text(
           key: ValueKey('shift-history-empty'),
           'No closed shifts were found.',
-        )
-      else
-        for (final entry in page.items) _entry(context, entry),
+        ),
+      ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -305,86 +323,104 @@ final class _ShiftHistoryContents extends StatelessWidget {
     ],
   );
 
-  /// One closed shift, its recorded figures, and what can be reached from it.
-  Widget _entry(BuildContext context, TenantShiftHistoryEntry entry) => Card(
-    key: ValueKey('shift-history-entry-${entry.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${entry.businessDate} - ${_staffLabel(entry)}',
-            style: Theme.of(context).textTheme.titleMedium,
+  /// One closed shift as §5.2's rows.
+  ///
+  /// **This is the first record in the sweep whose standing is a lookup rather
+  /// than a silence**, and the lookup is §2.1's own table. A closed shift is not
+  /// merely closed - every shift on this page is, and a badge every row wears is
+  /// a badge with no signal in it. What varies, and what this whole screen
+  /// exists to settle, is whether the drawer agrees with the sales: `ok` is
+  /// §2.1's "reconciled, confirmed", a shift that disagrees is its "difference
+  /// found", and a shift that closed without a summary can be compared with
+  /// nothing at all, which is "unreconciled".
+  ///
+  /// The figure keeps its own attribute either way, so the amount is never
+  /// carried by the badge alone - and the badge's semantic label is the sentence
+  /// this row used to state, so a screen reader hears no less than it did.
+  RecordItem _entry(TenantShiftHistoryEntry entry) {
+    final summary = entry.summary;
+    final variance = entry.cashVarianceMinor;
+    return RecordItem(
+      id: entry.id,
+      recordKey: ValueKey('shift-history-entry-${entry.id}'),
+      title: '${entry.businessDate} - ${_staffLabel(entry)}',
+      titleKey: ValueKey('shift-history-subject-${entry.id}'),
+      status: RecordStatus(
+        badgeKey: ValueKey('shift-history-status-${entry.id}'),
+        status: switch (variance) {
+          null => AppStatus.attention,
+          0 => AppStatus.ok,
+          _ => AppStatus.problem,
+        },
+        label: switch (variance) {
+          null => 'No closing summary',
+          0 => 'Cash matches',
+          final over when over > 0 => 'Cash over',
+          _ => 'Cash short',
+        },
+        semanticLabel: variance == null
+            ? 'No closing summary was recorded for this shift.'
+            : _varianceLabel(variance),
+      ),
+      attributes: <RecordAttribute>[
+        RecordAttribute(
+          label: 'Counted cash',
+          value: _money(entry.closingCashMinor),
+          valueKey: ValueKey('shift-history-counted-${entry.id}'),
+        ),
+        // Two figures the close recorded, and two columns: one sentence naming
+        // both meant the transaction count could not be read down a page.
+        if (summary != null) ...<RecordAttribute>[
+          RecordAttribute(
+            label: 'Recorded sales',
+            value: _money(summary.totalSalesMinor),
+            valueKey: ValueKey('shift-history-sales-${entry.id}'),
           ),
-          const SizedBox(height: 8),
-          Text(
-            key: ValueKey('shift-history-counted-${entry.id}'),
-            'Counted cash: ${_money(entry.closingCashMinor)}',
-          ),
-          if (entry.summary case final summary?) ...[
-            Text(
-              key: ValueKey('shift-history-sales-${entry.id}'),
-              'Recorded sales: ${_money(summary.totalSalesMinor)} '
-              'over ${summary.transactionCount} '
-              '${summary.transactionCount == 1 ? 'transaction' : 'transactions'}',
-            ),
-            Text(
-              key: ValueKey('shift-history-variance-${entry.id}'),
-              _varianceLabel(entry.cashVarianceMinor!),
-            ),
-          ] else
-            Text(
-              key: ValueKey('shift-history-no-summary-${entry.id}'),
-              'No closing summary was recorded for this shift.',
-            ),
-          // Said before anything is offered, and said to everyone who can read
-          // the shift: the recorded sales on this row are the corrected figure,
-          // and no other line here discloses that.
-          if (entry.amendment case final amendment?) ...[
-            const SizedBox(height: 8),
-            Text(
-              key: ValueKey('shift-history-amended-${entry.id}'),
-              _amendedLabel(amendment),
-            ),
-            if (!canReadCorrections)
-              Text(
-                key: ValueKey('shift-history-corrections-denied-${entry.id}'),
-                'The record of who corrected it, and why, is available to '
-                'managers, administrators, and owners.',
-                style: _mutedStyle(context),
-              ),
-          ],
-          const SizedBox(height: 8),
-          Text(_closedLabel(entry), style: _mutedStyle(context)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              AppButton(
-                key: ValueKey('shift-history-sales-link-${entry.id}'),
-                label: 'View sales',
-                onPressed: () => onViewSales(_salesRequest(entry)),
-              ),
-              if (entry.amendment != null && canReadCorrections)
-                AppButton(
-                  key: ValueKey('shift-history-corrections-link-${entry.id}'),
-                  label: 'View this shift\'s corrections',
-                  onPressed: () => onViewCorrections(entry.id),
-                ),
-            ],
+          RecordAttribute(
+            label: 'Transactions',
+            value: '${summary.transactionCount}',
+            valueKey: ValueKey('shift-history-transactions-${entry.id}'),
           ),
         ],
-      ),
-    ),
-  );
+        // Silent where the two figures agree, because the badge has already
+        // said so and a difference of nothing is not a difference.
+        if (variance != null && variance != 0)
+          RecordAttribute(
+            label: 'Cash difference',
+            value: _money(variance.abs()),
+            valueKey: ValueKey('shift-history-variance-${entry.id}'),
+          ),
+        // Said to everyone who can read the shift, whether or not they may read
+        // the trail behind it: the recorded sales beside it are the corrected
+        // figure, and no other line here discloses that.
+        if (entry.amendment case final amendment?)
+          RecordAttribute(
+            label: 'Corrections',
+            value: _amendedLabel(amendment),
+            valueKey: ValueKey('shift-history-amended-${entry.id}'),
+            flex: 2,
+          ),
+      ],
+      provenance: _closedLabel(entry),
+      provenanceKey: ValueKey('shift-history-closed-${entry.id}'),
+      actions: <RecordAction>[
+        RecordAction(
+          label: 'View sales',
+          actionKey: ValueKey('shift-history-sales-link-${entry.id}'),
+          onPressed: () => onViewSales(_salesRequest(entry)),
+        ),
+        if (entry.amendment != null && canReadCorrections)
+          RecordAction(
+            label: 'View this shift\'s corrections',
+            actionKey: ValueKey('shift-history-corrections-link-${entry.id}'),
+            onPressed: () => onViewCorrections(entry.id),
+          ),
+      ],
+    );
+  }
 
-  String _staffLabel(TenantShiftHistoryEntry entry) => tenantStaffLabel(
-    entry.staffId,
-    names: staffNames,
-    selfUid: session.uid,
-  );
+  String _staffLabel(TenantShiftHistoryEntry entry) =>
+      tenantStaffLabel(entry.staffId, names: staffNames, selfUid: session.uid);
 
   /// Carries the already-validated shift identity into the sales page, so the
   /// sales route proves attribution against this exact shift without a second
@@ -401,26 +437,23 @@ final class _ShiftHistoryContents extends StatelessWidget {
         recordedTotalSalesMinor: entry.summary?.totalSalesMinor,
         countedCashMinor: entry.closingCashMinor,
       );
-
-  TextStyle? _mutedStyle(BuildContext context) =>
-      Theme.of(context).textTheme.bodySmall;
 }
 
 /// What a server-side correction did to the recorded sales on this row.
 ///
-/// The counted cash is named explicitly because it is the figure a cashier is
-/// accountable for and the one property the correction path guarantees it never
-/// touches. Saying only that the shift "was corrected" would leave a reader to
-/// wonder whether their drawer count had been rewritten too.
+/// **The guarantee this used to repeat is stated once on the page now.** It was
+/// a paragraph on every corrected row saying that the correction rewrote the
+/// recorded sales to the total that shift's own sales prove and never the
+/// counted cash - which is a property of the correction path rather than of any
+/// shift, and is true of every row that carries this attribute. §5.2's
+/// attributes are key-value, so what stayed here is what differs between rows:
+/// how many times, and when the last one was.
 String _amendedLabel(ShiftSummaryAmendment amendment) {
   final times = amendment.count == 1 ? 'once' : '${amendment.count} times';
   final amendedAt = amendment.amendedAt;
-  final when = amendedAt == null
-      ? 'The time of the last correction was not recorded.'
-      : 'Last corrected ${_instant(amendedAt)}.';
-  return 'The recorded sales above were corrected $times after this shift '
-      'closed, to the total its own sales prove. The counted cash was not '
-      'changed. $when';
+  return amendedAt == null
+      ? 'Corrected $times; the time of the last correction was not recorded'
+      : 'Corrected $times, last ${_instant(amendedAt)}';
 }
 
 /// The difference between two recorded figures, named rather than recomputed.
