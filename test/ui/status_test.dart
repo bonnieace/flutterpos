@@ -205,6 +205,34 @@ void main() {
       expect(find.bySemanticsLabel('In stock'), findsOneWidget);
       handle.dispose();
     });
+
+    testWidgets('in a box narrower than its word it shortens, not overflows', (
+      tester,
+    ) async {
+      // **A defect found 2026-08-13 by `RecordList`, whose table gives the
+      // status a share of the row rather than whatever the word wants.** The
+      // badge already declared `maxLines: 1` and `ellipsis`, and neither could
+      // ever fire: its `Row` sits at `MainAxisSize.min` and offers its children
+      // unbounded width, so a constrained badge painted the yellow overflow
+      // stripe instead of a shortened word. Every badge in the app before this
+      // sat in a `Wrap` and was never constrained, which is why nothing caught
+      // it.
+      await _pump(
+        tester,
+        const SizedBox(
+          width: 80,
+          child: StatusBadge(
+            status: AppStatus.problem,
+            label: 'Awaiting verification',
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(StatusBadge)).width,
+        lessThanOrEqualTo(80),
+      );
+    });
   });
 
   group('a callout is a status at page scale', () {

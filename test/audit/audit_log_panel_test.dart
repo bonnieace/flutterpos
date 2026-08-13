@@ -24,12 +24,18 @@ void main() {
       TenantAuditEventType.staffInvited.label,
     );
     // The invited colleague is named beside the authoritative UID.
+    //
+    // The word "About" left this string in step 6: it is the *label* of a
+    // `RecordAttribute` now, which is what the table draws as a column header
+    // and the card draws as the key half of a key-value line. The value is the
+    // colleague, which is what it always meant.
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('audit-log-target-aud_001')))
           .data,
-      'About Amina (cashier-a)',
+      'Amina (cashier-a)',
     );
+    expect(find.text('About'), findsOne);
     // The signed-in admin caused this one, so the row says so rather than
     // repeating their own UID back at them.
     expect(

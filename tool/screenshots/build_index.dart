@@ -107,7 +107,15 @@ const Map<String, String> captions = <String, String>{
       'made to it.',
 };
 
-const List<String> viewports = <String>['web', 'mobile'];
+/// The viewport directories, in the order a screen's figures are laid out.
+///
+/// **`tablet` is written by the `RecordList` matrix and by nothing else**, which
+/// is why the loop below skips a missing file rather than expecting one per
+/// screen. §4.1 has always had three bands; `medium` only became a band with a
+/// *rendering* of its own in step 6's second half, and photographing every
+/// screen a third time for a band almost all of them are indifferent to would
+/// be 128 images nobody reads.
+const List<String> viewports = <String>['web', 'tablet', 'mobile'];
 
 void main() {
   final root = Directory('screenshots');
@@ -139,9 +147,12 @@ void main() {
     ..writeln('<h1>Every screen, large and small</h1>')
     ..writeln(
       '<p>${ordered.length} screens, each rendered at a desktop browser window '
-      '(1440&thinsp;&times;&thinsp;900) and a phone (411&thinsp;&times;&thinsp;891). '
-      'Both are exact viewports: what you see is what a person sees on arrival, '
-      'before scrolling. Where a screen is taller than its window, '
+      '(1440&thinsp;&times;&thinsp;900) and a phone (411&thinsp;&times;&thinsp;891), '
+      'and the <code>RecordList</code> matrix at a tablet '
+      '(834&thinsp;&times;&thinsp;1000) as well, because '
+      '&sect;4.3&rsquo;s middle band is the one it has a rendering of its own '
+      'in. All are exact viewports: what you see is what a person sees on '
+      'arrival, before scrolling. Where a screen is taller than its window, '
       '<em>whole screen</em> opens the same render at full height.</p>',
     )
     ..writeln('</header>');
@@ -195,8 +206,19 @@ is `tool/screenshots/`.
 | Directory | Viewport | What it is |
 | --- | --- | --- |
 | `web/` | 1440 x 900 logical, 1x | A desktop browser window. `design.md` §4.1's `expanded` band, so the surfaces that have a table draw it. |
+| `tablet/` | 834 x 1000 logical, 1x | A tablet, or a half-screen desktop window. §4.1's `medium` band. **Written by the `RecordList` matrix only** - see below. |
 | `mobile/` | 411 x 891 logical, 2x | A phone. §4.1's `compact` band, so those surfaces draw cards instead. |
-| `web-full/`, `mobile-full/` | Same width, full content height | Only for screens taller than their window. The viewport files above are what a person sees **on arrival**; these are the whole screen. |
+| `web-full/`, `tablet-full/`, `mobile-full/` | Same width, full content height | Only for screens taller than their window. The viewport files above are what a person sees **on arrival**; these are the whole screen. |
+
+**`medium` is photographed for one component and not for every screen**, and that
+is a decision rather than an omission. §4.1 has declared three bands since it was
+written, but until `design.md` §4.3 landed in step 6 there was nothing a screen
+*became* at `medium` that it did not also become at `compact` - the difference
+was a content maximum firing or not firing, and both of those show at the two
+widths above. `RecordList` is the first component with a rendering of its own in
+the middle band, so its matrix is captured at all three and every other screen
+stays at two. Rendering the whole app a third time would add 128 images to a diff
+in which almost all of them would be indistinguishable from the phone.
 
 Both boundaries are declared once, as `AppLayout` in
 [`lib/ui/tokens.dart`](../lib/ui/tokens.dart), and the two widths were chosen to
@@ -315,6 +337,7 @@ const String _style = '''
   }
   figure { margin: 0; }
   figure.web { flex: 1 1 640px; min-width: 320px; }
+  figure.tablet { flex: 0 0 380px; }
   figure.mobile { flex: 0 0 260px; }
   img {
     display: block;

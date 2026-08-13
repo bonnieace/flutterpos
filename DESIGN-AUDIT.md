@@ -172,7 +172,12 @@ important exception, recorded in §4.5.
 | `TenantRecordTable` [:381](lib/ui/records.dart#L381) | `RecordTable` | 1 |
 | `TenantInitialsAvatar` [:235](lib/ui/records.dart#L235) | not in §5.1 | 1 widget + 1 static call |
 
-There is no `RecordRow`, and nothing that *chooses* between card and table.
+~~There is no `RecordRow`, and nothing that *chooses* between card and table.~~ **Superseded
+2026-08-13**: `RecordList` in `lib/ui/record_list.dart` is the thing that chooses, and it is one
+component rather than three — §4.3 states the three names as three *renderings*, so a caller states
+its records once. `TenantRecordCard` and `TenantRecordTable` remain until the sweep moves their one
+consumer, the staff directory, off them. `TenantStatusChip` was already superseded by `StatusBadge`
+in step 4; `TenantStatCard` and `TenantStatStrip` are `StatTile` and `StatRow` and are step 8's.
 
 **Only three files import `records.dart`**: [checkout_cart_panel.dart:5](lib/checkout/checkout_cart_panel.dart#L5),
 [tenant_staff_directory.dart:3](lib/tenancy/tenant_staff_directory.dart#L3),
@@ -497,7 +502,17 @@ it, and, for each of the thirteen screens in step 6, **deciding what the compact
 decision is precisely what `records.dart` argues belongs to the caller. It is a product judgement
 per screen, not a styling change, and step 6 as written assumes it is free.
 
-**Resolved: `design.md` concedes the opt-out.** See §6, decision 2.
+**Resolved: `design.md` concedes the opt-out.** See §6, decision 2. **Applied to `design.md` on
+2026-08-13**, thirteen days after the decision and in the chunk that implements §4.3, which is where
+step 6a said it belonged.
+
+**Built the same day, and this finding is what shaped it.** `RecordList` in
+`lib/ui/record_list.dart` is the record model this paragraph says has to be invented — identity,
+attributes, status, provenance, actions — with the three renderings resolved from the screen width
+rather than chosen by the caller. **The concession is `RecordAttribute.inNarrowForm`, one flag per
+attribute**, so the per-screen judgement this finding describes is visible in each call site rather
+than in a layout rule. The estimate here was right about the shape and right about the cost: it
+shipped as the component plus **one** screen, and the other twelve are a sweep.
 
 ### 4.8 Step 1 is a full-app repaint, not a no-op
 
@@ -555,6 +570,11 @@ uppercase.
 
 Conforming means un-uppercasing the stat captions and table headers, visible on the staff directory
 and both stock screens. Another thing step 1 cannot do silently.
+
+**Half closed 2026-08-13.** `RecordList`'s table draws its headers in sentence case in `label.md`,
+which is the row §2.2 gives them, and a test asserts both. What is left is `TenantRecordTable`'s own
+headers — which go away with their one consumer in the sweep — and `TenantStatCard`'s caption, which
+is step 8's.
 
 ### 4.10 §4.4's navigation model is a behaviour change
 
@@ -752,7 +772,7 @@ Taken 2026-08-11 in response to this audit. Not yet applied to `design.md`.
 | # | Item | Decision |
 | --- | --- | --- |
 | 1 | §11 step 1's "changes no pixels" claim (§4.8) | **Step 1 becomes additive.** Define every role, wire nothing. The rewiring moves into steps 2–5, where each diff is attributable to one component. §11's claim then stands as written, and an **empty screenshot diff is step 1's pass condition**. |
-| 2 | §4.3's "a screen cannot opt out" vs `records.dart` (§4.7) | **`design.md` concedes the opt-out.** The caller decides what a compact rendering loses, as `records.dart:375-380` argues. §4.3 to be amended. |
+| 2 | §4.3's "a screen cannot opt out" vs `records.dart` (§4.7) | **`design.md` concedes the opt-out.** The caller decides what a compact rendering loses, as `records.dart:375-380` argues. ~~§4.3 to be amended.~~ **§4.3 amended 2026-08-13**, in the chunk that implements it, and the amendment states the limit as well as the concession: it is per *attribute*, and the form is never the caller's. |
 | 3 | §11 step 5 mixing styling with navigation (§4.10) | **Split step 5.** 5a = `AppScaffold` + `PageHeader`, visual only. 5b = navigation model, reviewed as a behaviour change with a device check. |
 | 4 | `PressSurface` scope: theme-level `NoSplash` vs per-call-site (§4.5) | **Neither as posed. `PressSurface` moves inside `AppButton`.** Step 2 is the theme-level ripple kill only; `AppButton` is built on `PressSurface` in step 3, so no call site is touched twice. |
 | 5 | The false current-state claims in §2.1, §5.1, §5.2, §7 and §9 | **Fix them** before they become acceptance criteria for work already done. |

@@ -147,12 +147,23 @@ final class StatusBadge extends StatelessWidget {
                 children: <Widget>[
                   Icon(icon ?? status.defaultIcon, size: iconSize, color: role.fg),
                   SizedBox(width: tokens.spacing.s4),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.typography.labelMedium.copyWith(
-                      color: role.fg,
+                  // **`Flexible`, or the `maxLines` below never fires.** A
+                  // `Row` at `MainAxisSize.min` offers its children unbounded
+                  // width, so a badge in a box narrower than its own word
+                  // overflowed rather than ellipsising - which is the yellow
+                  // stripe, not a shortened word. Found 2026-08-13 by
+                  // `RecordList`, whose table gives a status column a share of
+                  // the row rather than whatever the word wants; before that
+                  // every badge in this app sat in a `Wrap` and was never
+                  // constrained.
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.typography.labelMedium.copyWith(
+                        color: role.fg,
+                      ),
                     ),
                   ),
                 ],

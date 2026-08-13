@@ -339,8 +339,29 @@ each breakpoint, and that declaration lives with the component, not with the scr
 | `Form` | single column | single column | single column, 720 max |
 | `Sale` | products + cart sheet | products + cart sheet | two panes |
 
-A screen that renders a `RecordList` gets the right form for free. A screen cannot opt
-out; if it needs to, that's a new component and it gets specified here.
+A screen that renders a `RecordList` gets the right form for free. **A screen cannot opt
+out of the form**; if it needs a different one, that's a new component and it gets
+specified here.
+
+**It does decide what the narrow form loses, and that is the one concession this table
+makes.** `DESIGN-AUDIT.md` §6 decision 2, taken 2026-08-11 and applied here 2026-08-13. A
+table has room for six columns and a stacked card does not, and only the screen knows
+which of its columns are the ones a person came for — the audit that opened this
+concession quotes `lib/ui/records.dart` making the same argument in its own comments a day
+before this document was written. So: **the component owns the form, the caller owns the
+loss.** In the code that is one flag per attribute, and an attribute that drops out of the
+narrow form is a decision visible in the call site rather than in a layout rule nobody can
+find.
+
+The limit of the concession is that it is per *attribute*. Identity, status, provenance
+and actions are on every rendering at every band; there is nothing to opt out of and no
+argument for dropping any of them.
+
+**Done 2026-08-13**, in step 6's second half, as `RecordList` in
+`lib/ui/record_list.dart`, with the **activity log** as its first consumer. The other
+twelve screens in step 6's list are a sweep, the way `AppButton`'s 133 call sites were.
+`ActionSet` is built with it, `StatRow` is step 8's, and `FilterChips`, `Form` and `Sale`
+are unclaimed.
 
 ### 4.4 Navigation
 
@@ -432,6 +453,24 @@ One component, three renderings, chosen by breakpoint per §4.3. Contract:
 
 The `Correct` / `Retire` text links on the catalog fail this on two counts: 20px targets
 on a touch surface, and destructive-adjacent actions rendered identically.
+
+**Done 2026-08-13**, as one `RecordList` in `lib/ui/record_list.dart` rather than three
+widgets: the three names above are three *renderings* by §4.3's own words, so they are one
+component and a form resolved from the screen width, not three call sites a screen chooses
+between. The five rows above are the model — `RecordItem` carries an identity, a
+`RecordStatus`, a list of `RecordAttribute`, a provenance line and a list of
+`RecordAction`, and every rendering is a way of laying those five out.
+
+Two readings this specification left open, decided in the component and recorded rather
+than buried. **"Status — leading position"** is read as *first in the record*, so the badge
+sits above the identity on a card and in the first column of a table; it is the thing a
+person scans a list for. **"Never truncated below two lines"** is read as a floor rather
+than a ban — an identity gets two lines before it ellipsises, where every other line on a
+record gets one.
+
+The catalog is not yet on it. Its `Correct` / `Retire` links are in the sweep that follows,
+and what fixes them is `ActionSet`: a record's actions are `AppButton`s at 48dp, and a
+`destructive` one takes §2.1's destructive tier instead of looking like its neighbour.
 
 #### `StatusBadge`
 

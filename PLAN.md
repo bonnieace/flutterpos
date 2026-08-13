@@ -4,7 +4,9 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-12**, a day that took five chunks: every route onto
+Last verified against the code on **2026-08-13**, which took one chunk: §4.3's `RecordList`
+contract, **the second and larger half of `design.md` §11 step 6**, as the component plus one
+migrated screen. The day before it took five: every route onto
 a spring, which **finishes `design.md` §11 step 2**, then `AppTextField` and `AppSelect`, which
 **finishes step 3**, then `StatusBadge`, `Callout` and `Disclosure`, which **finish step 4**,
 then `AppScaffold` and `PageHeader`, which **finish step 5a**, and then §4.1's breakpoints and
@@ -99,7 +101,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~60% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 4 and 5a are finished as of 2026-08-12, and step 6's first half with them.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, on four migrated screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); and **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision - and the status/notice/prose sweep across the rest of the app, which is queued as its own chunk below the way `AppButton`'s call-site sweep was. `ConfirmDialog` left step 4 for step 7. **Step 6's second half - §4.3's `RecordList` contract, which is the larger half - is not started.** Steps 5b and 7-12 remain. |
+| **Design system** | ~65% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 4, 5a and 6 are finished as of 2026-08-13.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, on four migrated screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` with it, on one migrated screen. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision - the status/notice/prose sweep across the rest of the app, and **`RecordList`'s remaining twelve screens**, both queued below as their own chunks the way `AppButton`'s call-site sweep was. `ConfirmDialog` left step 4 for step 7. Steps 5b and 7-12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -139,6 +141,31 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The 2026-08-13 step-6b chunk changed no board row at all — not a colour and not a word of one —
+and this sentence is here so that is stated rather than left silent.** It took the second and larger
+half of `design.md` §11 step **6** — §4.3's `RecordList` contract — which is a **redesign step
+rather than a capability**: no shop can do anything today it could not do yesterday. It moved the
+**Design system** track 60% to 65% and **finishes step 6**. It changed **no rollout step**, and it
+touched no rule and no `functions/` file — `git diff` *and* `git status` over `functions/`,
+`firestore.rules` and `rules-tests/` print zero lines. It added **34 tests** and **17 screenshots**,
+and moved 45 — of which **three are the chunk and 42 are date drift**, measured by generating the
+whole set twice today with the one migrated screen reverted and restored.
+
+**It shipped as the component plus one screen, not the component plus thirteen**, which is the shape
+`AppButton` shipped in and is the reason this file predicted §4.3 would not fit one session. The
+migrated screen is the **activity log**, chosen for what it costs: it is a read-only list with no
+actions, so §4.3's `ActionSet` overflow rule moves nothing that five test files tap by key. **The
+staff directory is first in the sweep** and that churn is named there rather than discovered.
+
+**It found a defect in step 4's own component, and the defect was unreachable until now.**
+`StatusBadge` declared `maxLines: 1` and `ellipsis` and could honour neither, because its `Row` sits
+at `MainAxisSize.min` and offers unbounded width; every badge in the app until today sat in a `Wrap`
+and was never constrained. `RecordList`'s table is the first thing to give a status a share of a row.
+One `Flexible`, one test.
+
+**The carry is now 2 of 2 and the next chunk has no legal move.** See the JDK open decision, which
+was raised in this session's opening line as this file instructed.
 
 **The 2026-08-12 step-6a chunk changed no board row at all — not a colour and not a word of one —
 and this sentence is here so that is stated rather than left silent.** It took the first half of
@@ -547,13 +574,13 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1791** |
-| Functions | `npm --prefix functions test` | **409** ✅ measured 2026-08-12, three times |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ⛔ **cannot run here** — Java 21 gate, see below |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ⛔ same gate, confirmed by running it |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⛔ same entry point; not run a third time to prove the same thing |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1825** |
+| Functions | `npm --prefix functions test` | **409** ✅ measured 2026-08-13, and three times on 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ⛔ **cannot run here** — Java 21 gate, re-confirmed by running it 2026-08-13 |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ⛔ same gate, confirmed by running it 2026-08-12 |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ⛔ same entry point; not run again to prove the same thing |
 
-**2394 tests across five suites, and the carry counter is at 1 of 2.**
+**2428 tests across five suites, and the carry counter is at 2 of 2 — the limit.**
 
 ⛔ **The three emulator suites cannot start on this machine, and it is the toolchain rather than a
 failure.** `emulators:exec` exits before any test runs with *"firebase-tools no longer supports Java
@@ -578,8 +605,10 @@ should raise**, because a third consecutive carry is not permitted and because a
 cannot be validated at all until it is answered.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **128 captures** writing **170**
-images, and it asserts nothing, which is why it is not counted here. It was 78 and 101 before the
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **140 captures** writing **187**
+images, and it asserts nothing, which is why it is not counted here. It was 128 and 170 before step
+6b added the 12 captures and 17 images of the `96-*` `RecordList` matrix — four cases at **three**
+bands rather than two, plus five full-page images. It was 78 and 101 before the
 `AppButton` state matrix added 12 of each, 113 before the call-site sweep pushed one more screen
 past the fold, 114 before the route transitions added 3, 117 before the field matrix added 5
 captures and 10 images, 127 before step 4 added 13 captures and 17 images — 16 of those being
@@ -588,22 +617,40 @@ captures and 20 images, 14 of those being the `94-*` matrix and 6 being screens 
 fold once the page header took 72 pixels off their bodies, and 164 before step 6a added the 3
 captures and 6 images of the `95-*` content-width matrix.
 
+**The harness has a third viewport as of 2026-08-13, and only one matrix writes to it.**
+`screenshots/tablet/` is 834 x 1000 at 1x, §4.1's `medium` band. Until §4.3 there was nothing a
+screen *became* at `medium` that it did not also become at `compact` — the difference was a content
+maximum firing or not firing, and 1440 and 411 straddle every one of them — so two viewports were
+the whole contract. `RecordList` is the first component with a rendering of its own in the middle
+band. **It is deliberately not in `screenshotViewports`**: rendering all 80 screens a third time
+would add 128 images to a diff in which almost every one would be indistinguishable from the phone,
+so a case that has a `medium` form asks for `everyBandViewports` by name. `build_index.dart` skips a
+missing file, which is what makes that safe.
+
 **The Flutter figure did not move across the call-site sweep, and that is the right outcome rather
 than a gap.** A migration that adds no behaviour and no component should add no test; what it
 changed is four test files that were asking a correct question — "can this be pressed" — through a
 Material type that is going away. They ask it through `test/support/buttons.dart` now, which is
 itself marked for deletion with the last `ButtonStyleButton` in `lib/`.
 
-⚠️ **The carry counter is at 1 of 2, and the next chunk cannot take the second by choice.** The
+⛔ **The carry counter is at 2 of 2, and the next chunk has no legal move.** The step-6b chunk of
+2026-08-13 measured `functions` (409, unchanged, and it needs no emulator), **ran the rules suite and
+watched it fail at the Java gate again**, and carried the other two. That is the second consecutive
+carry, and the rule below says a third **measures**. Measuring is exactly what the JDK gate makes
+impossible, so **the next chunk cannot proceed on the test pyramid as written until the product owner
+answers the JDK question**. This is the mechanism working rather than failing: it converts an
+environment problem into a decision that has to be taken, instead of letting three suites quietly
+stop being evidence for a fourth chunk running.
+
+⚠️ **The counter's history, up to that point.** The
 call-site sweep carried all four (carry 1), the route-transition chunk carried all four (carry 2,
 the limit), the field chunk **measured** all four on 2026-08-12, the step-4 chunk carried them again
 the same day (carry 1), and the step-5a chunk **measured** them rather than taking the second carry
 it was entitled to. The step-6a chunk measured `functions` (409, unchanged, and it needs no
 emulator) and **carried the other three because it could not run them** — carry 1 of 2 again, but
-taken under duress rather than as an economy. **If the JDK question is not answered, the chunk after
-next has no legal move**: the rule says a third consecutive carry measures, and measuring is exactly
-what is impossible. That is the mechanism working — it makes an environment problem visible instead
-of letting three suites quietly stop being evidence.
+taken under duress rather than as an economy. ~~**If the JDK question is not answered, the chunk
+after next has no legal move.**~~ **That chunk is the one above and it has arrived**, one earlier
+than this paragraph expected: step 6b took the second carry on 2026-08-13.
 
 ✅ **The carry streak before it was reset: all four non-Flutter figures were measured on 2026-08-11
 by the `AppButton` chunk**, which is the rule below being obeyed rather than a suite being
@@ -619,6 +666,14 @@ suite among them can observe a Dart file and `git diff` over those three paths i
 measurement. **Re-measure in any chunk that touches JavaScript, TypeScript, or a rule**, and a
 chunk that carries must say so. **Two consecutive carries is the limit**: a third measures, on
 the same reasoning that made the third consecutive unreachable callable a surface instead.
+
+**The step-6b chunk took Flutter 1791 → 1825** (34 new: 33 in `test/ui/record_list_test.dart` and 1
+in `test/ui/status_test.dart` for the badge defect `RecordList` found). `functions` was **measured**
+and unchanged; the rules suite was **run and failed at the Java gate**; the other two were carried.
+One existing assertion changed rather than being added:
+`test/audit/audit_log_panel_test.dart` expected `'About Amina (cashier-a)'` from one `Text` and now
+expects `'Amina (cashier-a)'` plus a separate `About`, because the word is a `RecordAttribute`'s
+**label** now — a column header in a table and the key half of a key-value line on a card.
 
 **The step-6a chunk took Flutter 1771 → 1791** (20 new: 9 in `test/ui/tokens_test.dart` for the
 layout contract, 8 in `test/ui/scaffold_test.dart` for the content widths, and 3 in
@@ -2272,6 +2327,79 @@ routes whose padding went 24 to 20. Every other mobile image is byte-identical, 
 name in that set would have been a maximum firing below 720** — the one way this change could be
 wrong and be invisible at the wide viewport.
 
+### One record model, three renderings, and the loss the caller owns
+
+`design.md` §11 step **6, second half**, taken 2026-08-13 — §4.3's responsive contract, as
+`RecordList` in `lib/ui/record_list.dart`, with the **activity log** as its first consumer. It
+changed `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+
+**It is the component plus one screen, and that is the shape this file predicted §4.3 needed.** The
+queued chunk said the work is inventing a record model, re-expressing thirteen screens' data in it,
+and deciding per screen what the compact form loses — a product judgement per screen rather than a
+styling change. So the mechanism went first and the twelve remaining screens are a sweep, exactly as
+`AppButton` shipped as a component plus one route and then took a second chunk for its other 133
+call sites.
+
+The decisions are settled, not open:
+
+1. **The model is §5.2's five rows and nothing else.** `RecordItem` carries an identity, an optional
+   `RecordStatus`, a list of `RecordAttribute`, a provenance line, and a list of `RecordAction`.
+   `TenantRecordCard` and `TenantRecordTable` shared **no model at all** — that is `DESIGN-AUDIT.md`
+   §4.7's finding — and the one screen that chose between them called two builders presenting
+   different information.
+2. **`design.md` §4.3 now concedes the opt-out, in writing.** `DESIGN-AUDIT.md` §6 decision 2 was
+   taken on 2026-08-11 and had never been applied; step 6a left it deliberately for the half that
+   implements §4.3, and this is that half. The concession is **per attribute** —
+   `RecordAttribute.inNarrowForm` — and the limit is stated with it: identity, status, provenance
+   and actions are on every rendering at every band, and the *form* is never the caller's.
+3. **Columns are a property of the list, not of its first record.** The first draft copied
+   `TenantRecordTable`'s shape — first record's attributes are the columns, every other record must
+   agree — and real data killed it immediately: an audit event either changed a status or did not,
+   so the top record would decide what the rest are allowed to say. `RecordList.columnsOf` is the
+   ordered union of every label any record carries. A silent record gets an **empty cell, not a
+   dash**: a dash is a value. What is asserted is one record carrying the same label twice.
+4. **Two readings of §5.2 are decisions, and both went into the document rather than only into the
+   code.** *"Status — leading position"* is first **in the record**: above the identity on a card,
+   first column in a table. *"Never truncated below two lines"* is a **floor**: an identity gets two
+   lines then ellipsises, where every other line on a record gets one.
+5. **§4.3's `(>3)` is honoured rather than ignored.** Three or fewer actions are inline at every
+   band; past three, compact takes an overflow menu, medium keeps three, expanded draws them all.
+   It is the only reading under which §5.2's "on compact, an overflow menu" and §4.3's "overflow
+   after 3" are both true — any other hides a record's single action behind a menu on a phone.
+6. **Every action is `AppButtonSize.lg` in every form.** That is the half of §5.2's catalog
+   complaint §9 makes pass/fail — "20px targets on a touch surface". `sm` exists for a pointer at
+   compact density, this component resolves no density, and a 1024-wide surface may be a touchscreen
+   till.
+7. **An ordinary audit event carries no status.** Only `isCritical` gets a badge. §2.1's five each
+   mean one thing and "an event was recorded" is not among them; a log where every row wears a badge
+   is a log with no signal in it.
+8. **Three column shares are component decisions and are argued rather than tuned.** Identity takes
+   three times an attribute's share because it carries a title, a subtitle and a provenance line;
+   actions take the same, because two 48-high pills side by side is the ordinary case and a wrapped
+   set makes **every row** as tall as its actions; status takes two, because §2.1's statuses attract
+   phrases rather than words. All three measured at 1200, §4.2's maximum for this surface.
+9. **The overflow menu is Material's**, coloured from the token layer. §5.1's inventory has no menu
+   component at all.
+10. **The harness gained a `tablet/` viewport**, and it is the first band §4.1 declared that no
+    picture covered. See the note under "Test baselines" for why it is not in `screenshotViewports`.
+11. **One slot is deliberately absent**: somewhere to put a form a record opens. Both superseded
+    widgets have one and both the staff directory and the catalog use it, so the sweep adds it with
+    the screen that needs it. §5.2 names no such row, and adding it now would be a slot with no
+    consumer.
+
+**It found a defect in `StatusBadge`, and the defect was unreachable before it.** The badge declared
+`maxLines: 1` and `ellipsis` and could honour neither: its `Row` sits at `MainAxisSize.min`, which
+offers children unbounded width, so a badge in a box narrower than its word painted the overflow
+stripe. Every badge in this app until today sat in a `Wrap`. One `Flexible`, one test, and it
+surfaced as a **capture failure** — `96-record-list @ web`, over by 5.5 pixels on "Out of stock" —
+rather than as a review finding.
+
+**45 of 170 images moved, 17 were added for the `96-*` matrix, and 125 are identical.** **Three of
+the 45 are this chunk** — `web/35-activity-log`, `mobile/35-activity-log`, `mobile-full/35-activity-log`
+— and the other 42 are date drift. That split is **measured**: the whole set was generated twice on
+2026-08-13, once with `lib/audit/audit_log_panel.dart` reverted to `HEAD` and once with it migrated,
+and exactly those three differ between the runs.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -2437,7 +2565,9 @@ precedent is `AppSelect`, which took the same treatment in step 3 for the same r
 Separately, §5.2 names exactly **two** icon sizes anywhere — `AppButton`'s leading icon at 18 and
 `StatusBadge`'s at 14 — and specifies none for `Disclosure`'s info glyph, `Disclosure`'s chevron, or
 `Callout`'s glyph. All three take 18, as the nearest named row for a leading glyph on a line of body
-text.
+text. **A fourth joined them on 2026-08-13**: `RecordActionSet`'s overflow glyph and the glyphs on
+its menu items, at the same 18 for the same reason. §5.1's inventory names no menu component at all,
+so there is no row to read one from.
 
 **Either §5.2 gains a `Callout` paragraph and an icon-size row, or it gains a sentence saying the
 borrowed rows are the specification.** Both are fine; what is not fine is leaving it unstated,
@@ -2467,8 +2597,18 @@ setting on every dimension §9 measures. Nothing regressed and nothing was inven
 gains a rule this code can evaluate** — width alone, or width plus an explicit per-screen opt-in a
 till build can refuse — **or it gains a sentence saying comfortable is the only density that
 ships** and `AppDensity.compact` becomes documentation. **A question for the product owner, not a
-chunk.** It blocks §3 being called implemented in step 12, and step 6 and step 8 will both want the
-answer.
+chunk.** It blocks §3 being called implemented in step 12, and step 8 will want the answer.
+
+**Met by step 6b on 2026-08-13, examined again, and declined again — and the meeting is the useful
+part.** §3's table gives `density.compact` to "catalog, ledger, reconciliation, activity log, staff —
+at ≥1024", which is exactly the set `RecordList` covers, and `RecordList` draws a **table** at
+exactly that floor. So the one screen shape §3 wrote the compact density for now exists, and it is
+still comfortable: 64-high rows where §3 offers 40, 48dp actions where §3 offers 32. **Nothing about
+the question changed and the code that would answer it is now written**, which narrows the cost of
+answering to two constants and a wrapper. What still blocks it is the same sentence — *a touch device
+never gets 32px targets whatever its width* — and the same absence of any honest way to ask Flutter
+whether a pointer is present. **It is now the largest single thing standing between this app and
+§3.**
 
 ### `design.md` states no page padding, and `AppScaffold` had to pick one
 
@@ -2518,11 +2658,21 @@ outside this repository:**
 - **Run the emulator suites on a machine that has 21.** Cheapest if one exists, and it splits the
   test pyramid across two machines, which is its own cost.
 
-**It is not urgent for a Dart chunk and it is blocking for anything else.** The carry rule allows a
-Dart-only chunk to carry these three, and step 6a did. It also says a **third consecutive carry
-measures**, and measuring is precisely what is impossible — so the chunk after next has no legal
-move. Any chunk that touches `functions/`, `firestore.rules` or `rules-tests/` is blocked outright,
-because it must re-measure and cannot.
+~~**It is not urgent for a Dart chunk and it is blocking for anything else.**~~ **It is now blocking
+for every chunk, and that happened on 2026-08-13.** The carry rule allows a Dart-only chunk to carry
+these three; step 6a did, and step 6b did — which is **carry 2 of 2, the limit**. The rule says a
+**third consecutive carry measures**, and measuring is precisely what is impossible. So the next
+chunk has no legal move on the test pyramid as written, whatever it touches, and a chunk touching
+`functions/`, `firestore.rules` or `rules-tests/` was already blocked outright.
+
+**The rules suite was run again on 2026-08-13 and failed identically**, which is worth one line
+because it means nothing about the machine has changed since step 6a found it: `java -version`
+reports Temurin **17.0.20**, and `emulators:exec` exits before any test with *"firebase-tools no
+longer supports Java version before 21."*
+
+**This is the first item in this file to become genuinely blocking, and it is one decision.** The
+three routes below are unchanged and none is a repository question this session can settle on the
+owner's behalf.
 
 ### Three design-system questions the redesign has refused to answer
 
@@ -3535,12 +3685,15 @@ rather than only here.** `fakes.dart` derives its business dates from `DateTime.
 re-running on a different day moves about **39 of the images** with nothing behind them;
 tracking the output would put those 39 into every future diff. The harness is tracked, the
 output is not, and a baseline is regenerated the same day it is compared against. The set is
-**170 images from 128 captures** since step 6a added the `95-*` matrix's 3 captures and 6 images.
-**The 39 was
-re-measured on 2026-08-12 and it is still 39**, which is the first time that figure has been
-confirmed rather than carried: the set was generated twice the same day, once with the route
-migration and once with it reverted, and those two are identical across all 117 files, so the
-whole of the day-to-day delta is the business date.
+**187 images from 140 captures** since step 6b added the `96-*` matrix's 12 captures and 17 images.
+~~**The 39 was
+re-measured on 2026-08-12 and it is still 39**~~ — **it is 42 as of 2026-08-13**, re-measured the
+same way and larger because step 5a and step 6a pushed three more date-bearing screens past the
+fold into `-full` images. It has been confirmed rather than carried twice now: the set was generated
+twice the same day, once with the migration and once with it reverted, and everything outside the
+migrated screen is identical. The 2026-08-12 measurement was the first of its kind — the route
+chunk's set was generated twice and the two were identical across all 117 files — and the whole of
+the day-to-day delta is the business date either way.
 
 **The field chunk is the proof the rule works, and step 5a is the proof it keeps working.** The
 field chunk's baseline was generated a few hours earlier the same day, so the drift was **zero** and
@@ -3551,71 +3704,101 @@ same day, got it again: **zero drift, 6 added, 51 changed, 113 identical**, and 
 `web/`. **Five chunks on one day is the cheapest arrangement this harness has had**; each one after
 the first compares against a baseline that costs nothing.
 
+**Step 6b, alone on the next day, paid the full price and is worth reading as the counter-example.**
+Its raw diff was 17 added and **45 changed**, of which three are the chunk. Establishing that cost a
+second full regeneration with the migrated file reverted to `HEAD` — about two minutes — and it is
+the only way the claim "three images moved" is a measurement rather than an assertion. **A chunk
+that cannot share a day with its baseline must do this**, and the reverted run is cheap enough that
+there is no excuse not to.
+
 ---
 
 ## Next bounded chunk
 
-**`design.md` §11 step 6's second half: §4.3's `RecordList` contract.** Steps 1, 2, 3, 4 and 5a are
-finished, and step 6's first half with them — every token, every button, every route, every field,
-the three status-and-prose components, the page frame every route sits in, and now one declaration
-of every layout boundary with a maximum content width on all 25 pages. **This is the largest single
-piece of the redesign that remains before the sale path.**
+**Nothing, until the JDK question is answered — and that is not a stalling tactic, it is the carry
+rule.** Read the open decision and the ⛔ note under "Test baselines". Three of the five baselines
+cannot run on this machine at all, step 6a carried them and step 6b carried them again, and **the
+rule says a third consecutive carry measures**. Measuring is precisely what the Java 21 gate makes
+impossible. So the next session's opening line is this question, not a step number: **install a JDK
+21 and point `JAVA_HOME` at it, pin `firebase-tools` back to a version that accepts 17, or run those
+three suites on a machine that has 21.** It costs the product owner one decision, it unblocks every
+server chunk behind it, and it has now converted from a nuisance into the single thing gating the
+queue.
 
-**Take it on its own, and do not batch step 8 with it.** The batch exception below permits it; the
-evidence says do not. Step 6a took a session on its own and it was the *smaller* half by a wide
-margin. `DESIGN-AUDIT.md` §4.7 is explicit about why: `RecordList` is **not a rename of what
-exists**. `records.dart` has `TenantRecordCard` (title / subtitle / chips / actions / details) and
-`TenantRecordTable` (columns + cells) with **no shared model between them**, and the one screen that
-chooses between the two calls two entirely separate builders that present different information.
-The work is inventing the record model §5.2 describes — identity, attributes, status, provenance,
-actions — re-expressing thirteen screens' data in it, and **deciding per screen what the compact
-form loses**, which is a product judgement per screen rather than a styling change.
+**If the answer is "carry on regardless", the chunk is the `RecordList` sweep**, and it is described
+in full below so no session has to re-derive it.
 
-**What it can now assume, which step 6a is the reason for.** §4.1's three bands are one variable,
-`AppLayout`, and §4.3's table is written in exactly those names — so "what does a `RecordList`
-become at `medium`" is a question the code can now ask in one call. §4.2's maxima are already
-applied, so a `RecordList` inherits its width from the page rather than declaring one. And the
-resolution rule is settled: **a band is resolved from a screen width, never from a
-`BoxConstraints`** — see the standing decision, and note that §4.3 is where that rule earns its
-keep, because a `RecordList` is always inside a padded, capped column.
+---
 
-**One thing to settle first, and it is a document edit rather than code.** `DESIGN-AUDIT.md` §6
-decision 2 — **`design.md` concedes §4.3's "a screen cannot opt out"** — was taken on 2026-08-11 and
-has never been applied to `design.md`. Step 6a deliberately left it, because it belongs with the
-half that implements §4.3. Apply it in the same chunk, or the code and the specification will
-disagree about the one clause the chunk is built on.
+**`design.md` §11 step 6's second half is done, so the queued chunk is the sweep: `RecordList` at
+its remaining twelve screens.** Steps 1, 2, 3, 4, 5a and 6 are finished — every token, every button,
+every route, every field, the three status-and-prose components, the page frame every route sits in,
+one declaration of every layout boundary with a maximum content width on all 25 pages, and now
+§4.3's contract as a component with one migrated consumer.
+
+**This is the same shape `AppButton`'s second chunk had, and it should be costed the same way**: 133
+call sites took a full session and added no tests, because a sweep adds no behaviour and no
+component. This one is smaller in count and larger per item, because each screen carries a
+**judgement `AppButton`'s did not** — which of its columns survive a phone. That is
+`RecordAttribute.inNarrowForm`, one flag per attribute, and `DESIGN-AUDIT.md` §6 decision 2 puts the
+call squarely with the screen.
+
+**Take the staff directory first, and know what it costs before starting.** It is the only screen
+that hand-rolls §4.3's choice today — a `Builder` reading `AppLayout.contract` and two entirely
+separate builders under it — so migrating it deletes code rather than adding it, and it retires
+`TenantRecordCard` and `TenantRecordTable`, which have no other consumer. **What it costs is the
+action churn step 6b deliberately avoided**: its records carry five `IconButton`s, §4.3's `ActionSet`
+row moves two of them behind an overflow menu at the 800 x 600 default test surface, and **five test
+files tap those actions by key** — `tenant_staff_invitation_cancellation_test.dart`,
+`..._email_replacement_test.dart`, `..._resend_test.dart`, `tenant_staff_status_test.dart` and
+`tenant_staff_update_test.dart`. Each will need to open the menu first. It also needs the one slot
+`RecordList` does not have yet.
+
+**That slot is the first thing the sweep must add, and it was left out deliberately rather than
+missed.** `RecordItem` has nowhere to put a form a record opens. Both superseded widgets have one
+(`details`), and the staff directory and the catalog both use it — five inline forms and a
+correction dialog between them. §5.2 names no such row, so building it into step 6b would have been
+a slot with no consumer; **build it with the screen that needs it**, and say in the doc comment that
+it is the component's own addition rather than a specification row.
+
+**Two more things the sweep should decide once and record, rather than per screen.** Whether a
+record's `details` survive the table form or only the cards — a form under a table row is full-width
+and the cards have no such problem. And whether pagination moves with it: `DESIGN-AUDIT.md` §2.3
+names **four different pagination idioms** across these same screens, §5.1 has `Pagination` at
+priority 3, and every screen the sweep touches has one. It is not step 6's and should not be folded
+in silently, but the sweep is the moment somebody will be tempted.
 
 **The step-4 sweep and step 8 come after it, in that order**, and both are described below.
 
 **The batch is a deliberate relaxation of `claude.md` hard rule 4, granted by the product owner on
-2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** Three of the four pieces have now been taken
-on their own, each because it fitted one session: step 4 first because `StatusBadge` is used by 6
-and 8, then 5a because 6 and 8 both sit inside the page frame, then 6a because the breakpoint
-rewiring is what §4.2 and §4.3 both stand on. The exception is a permission to batch, not an
-instruction to, and splitting on the boundaries it names has cost the batch nothing three times
-running. The rule stands everywhere else: step 7, step 9, step 10 and steps 11–12 are one number
-each, and **5b (the navigation model) is not in this exception** — it is a behaviour change and
-stays queued.
+2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** All four pieces of step 6's own half have now
+been taken on their own, each because it fitted one session: step 4 first because `StatusBadge` is
+used by 6 and 8, then 5a because 6 and 8 both sit inside the page frame, then 6a because the
+breakpoint rewiring is what §4.2 and §4.3 both stand on, then 6b because §4.3 is a model rather than
+a restyle. The exception is a permission to batch, not an instruction to, and splitting on the
+boundaries it names has cost the batch nothing four times running. The rule stands everywhere else:
+step 7, step 9, step 10 and steps 11–12 are one number each, and **5b (the navigation model) is not
+in this exception** — it is a behaviour change and stays queued.
 
-**Before any of it: the JDK question.** Three of the five test baselines cannot be run on this
-machine — see the open decision. A Dart-only chunk may carry them, and step 6a did, but that was
-carry 1 of 2 and **the chunk after next has no legal move**, because the rule says a third
-consecutive carry measures and measuring is impossible. Raise it in the opening line; it costs the
-product owner one decision and it unblocks every server chunk behind it.
-
-**The step-4 sweep is part of it and should not be forgotten.** Step 4 built the components and put
+**The step-4 sweep is still owed and should not be forgotten.** Step 4 built the components and put
 them on four screens; **it did not sweep the app**, the same way `AppButton` landed as a component
-plus one route and then took a second chunk for its remaining 133 call sites. What is left to sweep:
+plus one route and then took a second chunk for its remaining 133 call sites, and the same way
+`RecordList` has now landed as a component plus one route. What is left to sweep:
 every remaining permanent notice paragraph, every remaining multi-line explanation, and every
-remaining status rendered as a word or a coloured `Text`. Step 6 touches most of the same screens,
-which is why it belongs in this batch rather than after it. **One item in the sweep is not a sweep
+remaining status rendered as a word or a coloured `Text`. It reaches most of the same screens the
+`RecordList` sweep does, **and a status rendered as a coloured `Text` on one of those screens is a
+`RecordStatus` now rather than a loose `StatusBadge`** — so taking the two sweeps together is worth
+considering, and is the one place the batch exception still buys something. **One item in the sweep is not a sweep
 item**: `reconciliation-request-notice` needs a status the model does not carry, so it is a small
 model change rather than a restyle — see the standing decision.
 
 **The product owner chose the composition layer over the web callable-auth defect on 2026-08-12,
-and the step-4, step-5a and step-6a sessions all checked that choice rather than inheriting it.**
-The defect still cannot be settled either way. **The Windows route was re-checked in step 6a and is
-still shut**: `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock` has no
+and the step-4, step-5a, step-6a and step-6b sessions all checked that choice rather than inheriting
+it.** The defect still cannot be settled either way, and **step 6b re-checked only the half that can
+be re-checked cheaply**: `java -version` still reports 17, so the Android route is still shut by the
+toolchain gate as well as by the resource conflict. The Windows registry was not re-read, because
+nothing in this session could have changed it and step 6a read it the day before. **The Windows route
+was last checked in step 6a and was shut**: `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock` has no
 `AllowDevelopmentWithoutDevLicense` value at all, so Developer Mode is off and
 `flutter run -d windows` still cannot link its plugins. **Android is now shut for a second,
 independent reason**: the emulators it would run against cannot start at all on this machine, per
@@ -3637,29 +3820,37 @@ row and §5.2 does not cover it, so every measurement it uses is borrowed from a
 rows are the specification. **This blocks calling §5's inventory complete in step 12**, the same
 way the field-hover question blocks §9's audit.
 
-**One question is left from step 5a, and it is the older and larger of the two it raised.** **§3's
+**One question is left from step 5a, it is the older and larger of the two it raised, and step 6b
+has now met it rather than anticipated it.** **§3's
 density has no rule this code can evaluate** — it is a width test *and* an input test, and nothing
-in Flutter honestly answers "is this a pointer device"; `AppScaffold` is the widget that would
-resolve it, it resolves nothing, and **step 6's second half and step 8 both want the answer**, which
-is now one step nearer than it was. §3's own table gives `density.compact` to "catalog, ledger,
-reconciliation, activity log, staff — at ≥1024", and those are exactly the screens `RecordList`
-covers, so the next chunk will meet it rather than merely anticipate it. It has its own entry under
-"Open decisions".
+in Flutter honestly answers "is this a pointer device". §3's own table gives `density.compact` to
+"catalog, ledger, reconciliation, activity log, staff — at ≥1024", and `RecordList` now draws a
+**table** at exactly that floor on exactly those screens. So the screen shape §3 wrote the compact
+density for exists, and it is still comfortable: 64-high rows where §3 offers 40, 48dp actions where
+§3 offers 32. **Answering it is now two constants and a wrapper**, and step 8 wants it. It has its
+own entry under "Open decisions" and it is the largest single thing standing between this app and
+§3.
 
 **Its companion is closed.** `design.md` still states no page padding, but the three routes that
 padded 24 now pad `space.20` with everything else, so the question is a naming gap rather than an
 inconsistency. Step 6a also found this file's own description of it wrong: there were **three**
 routes and the landing route was not one of them.
 
-**Explicitly excluded from it:** **step 8 and the step-4 sweep**, which the batch exception permits
-but which the size of §4.3 argues against folding in — take them next, in that order;
+**Explicitly excluded from it:** **step 8**, which the batch exception permits but which is
+downstream of the sweep rather than beside it — `StatTile` and tabular figures land on screens that
+are `RecordList`s with figures in them; **the step-4 sweep**, unless taken deliberately *with* this
+one for the reason given above, in which case say so;
 `checkout_cart_panel.dart`'s 7 buttons, 2 fields and 1 `InkWell`
 and the whole sale path, step 7 — **note that step 6a touched one expression in that file**, the
 till's breakpoint, which §4.1 named as its own and which is not a licence to touch anything else
 there; `ConfirmDialog`, which left step 4 for step 7 on 2026-08-12;
 `pill_input.dart` and sign-in's visual design, step 9 — **same note**, step 6a rewired `isMobile`
-and nothing else; the 13 `IconButton` call sites, which have
-no component yet; the **navigation model**, step 5b, which `DESIGN-AUDIT.md` decision 3 splits out
+and nothing else; **`Pagination`**, §5.1 priority 3, whose four idioms sit on the very screens the
+sweep touches and which is the thing a sweeping session will be most tempted to fold in;
+the remaining `IconButton` call sites, which have
+no component yet — **the count is still 13 and step 6b did not reduce it**, because the screen it
+migrated had no actions at all, and the staff directory's 5 are the first that `RecordActionSet`
+takes; the **navigation model**, step 5b, which `DESIGN-AUDIT.md` decision 3 splits out
 as a behaviour change needing a device check, **and the landing route with it** — step 5a left that
 route's `Scaffold` alone because which string is its title is a product question, see the standing
 decision; the three full-page `Center` states in `tenant_routing_shell.dart`, which are
@@ -3716,14 +3907,24 @@ preference order:
   which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
   that is not also serving the emulators.
 
-**The device-run debt is therefore now twelve chunks deep**, and the last seven are the ones that
+**The device-run debt is therefore now thirteen chunks deep**, and the last eight are the ones that
 most need a device — between them they changed how nearly every screen in the app looks, how every
 button feels, how every screen is entered and left, how every box a person types into is drawn, how
-every explanation folds away, where the title of every screen sits, and now **how wide every page
-is**. Nobody has looked at the sign-in repair, the invitation repair, the category repair, commit
+every explanation folds away, where the title of every screen sits, how wide every page
+is, and now **what a list of records even is**. Nobody has looked at the sign-in repair, the
+invitation repair, the category repair, commit
 `1b2b13b`, **the ripple kill**, **`AppButton`**, **`AppPageRoute`**, **`AppTextField`**,
-**`Disclosure`**, **`AppScaffold`**, or **`AppLayout`**. Between them that is 256 tests, 170
-screenshots, and no eyes.
+**`Disclosure`**, **`AppScaffold`**, **`AppLayout`**, or **`RecordList`**. Between them that is 290
+tests, 187 screenshots, and no eyes.
+
+**Step 6b adds the item with the least evidence behind it of anything on this list.** Two-column
+cards at §4.1's `medium` band are a rendering **no person has seen at any size on any surface** —
+the harness could not photograph that band until this chunk added a viewport for it, and what exists
+now is four pictures of a synthetic catalog. **Chrome settles it**, the same way it settles §4.2's
+maxima: open a back-office list, drag the window narrower past 1024 and past 768, and watch it
+change form twice. Whether the two-column card reads as a denser list or as a page that could not
+decide between a phone and a desktop is exactly the judgement §4.3 exists to make, and it is the
+cheapest unanswered question in this file.
 
 **Step 6a adds the first item on that list that needs a *wide* surface rather than a phone.** §4.2's
 maxima cannot fire below 720, so nothing about them is visible on the device everything else on this
@@ -3885,14 +4086,29 @@ finished.
   the check rather than an aside. Its own standing decision above records what it decided, including
   the one reason to argue with it: `contentWidth` is required rather than defaulted.
 - **Install a JDK 21, or pin `firebase-tools` back, or find a machine that has one** — **new
-  2026-08-12 and it outranks everything below it that touches the server.** Three of the five test
-  baselines cannot be run here at all. It is not a chunk so much as one decision the product owner
-  has to make; see the open decision for the three routes and their costs. **The carry rule gives it
-  a deadline**: the chunk after next cannot legally carry again.
-- **The design system, step 6, second half: §4.3's `RecordList` contract** — the current chunk.
-- **The design system, step 8: money surfaces** — after it, not with it. `StatTile`, tabular
+  2026-08-12, and as of 2026-08-13 it outranks everything else in this list, server or not.** Three
+  of the five test baselines cannot be run here at all. It is not a chunk so much as one decision the
+  product owner has to make; see the open decision for the three routes and their costs. ~~**The
+  carry rule gives it a deadline**: the chunk after next cannot legally carry again.~~ **The deadline
+  has passed.** Step 6b took carry 2 of 2, and a third consecutive carry must instead *measure*,
+  which is impossible. **The next session should open with this and not with a step number.**
+- **~~The design system, step 6, second half: §4.3's `RecordList` contract~~** — **done
+  2026-08-13**, and with it step 6. One record model, three renderings resolved from the screen
+  width, `RecordActionSet` with them, 12 harness captures across **three** bands, 34 tests, and the
+  **activity log** as the one migrated consumer. It moved no board row and no rollout step, moved
+  the **Design system** track 60% to 65%, applied `DESIGN-AUDIT.md` §6 decision 2 to `design.md` at
+  last, and found a constrained-overflow defect in step 4's own `StatusBadge` that nothing before it
+  could have reached. Its own standing decision above records what it decided, including the one
+  thing most likely to be argued with: columns are the union across the list rather than the first
+  record's.
+- **The `RecordList` sweep: the remaining twelve screens** — the current chunk, described in full
+  above. Staff directory first, because it deletes the hand-rolled choice and retires
+  `TenantRecordCard` and `TenantRecordTable`; it also carries the whole cost, in five test files
+  that tap a record's actions by key.
+- **The design system, step 8: money surfaces** — after the sweep, not with it. `StatTile`, tabular
   figures and tables across the five reporting screens, which are `RecordList`s with figures in
-  them and therefore genuinely downstream of the chunk above.
+  them and therefore genuinely downstream of the chunk above. **It wants §3's density answered**,
+  and §3's density is now two constants away from being answerable.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the

@@ -77,8 +77,36 @@ const ScreenshotViewport mobileViewport = ScreenshotViewport(
   devicePixelRatio: 2,
 );
 
+/// A tablet, or a half-screen desktop window. `design.md` §4.1's `medium` band.
+///
+/// **New in step 6's second half, and it is the first band this harness could
+/// not photograph.** §4.1 has had three bands since it was written and the two
+/// viewports above straddle both floors, which was enough while every
+/// difference between them was a maximum firing or not firing. §4.3 changes
+/// that: `medium` is the only band with a rendering of its own - two-column
+/// cards - and a contract whose middle row no picture shows is a contract
+/// reviewed on two of its three cases.
+///
+/// **It is not in [screenshotViewports], deliberately.** Adding it there would
+/// render every screen in the app a third time for a band in which almost every
+/// one of them is identical to the phone, and 128 more images is a diff nobody
+/// reads. The component matrices that have a `medium` case ask for it by name.
+const ScreenshotViewport tabletViewport = ScreenshotViewport(
+  name: 'tablet',
+  size: Size(834, 1000),
+  devicePixelRatio: 1,
+);
+
 const List<ScreenshotViewport> screenshotViewports = <ScreenshotViewport>[
   webViewport,
+  mobileViewport,
+];
+
+/// Every band §4.1 declares, for a capture whose subject is the responsive
+/// contract itself.
+const List<ScreenshotViewport> everyBandViewports = <ScreenshotViewport>[
+  webViewport,
+  tabletViewport,
   mobileViewport,
 ];
 

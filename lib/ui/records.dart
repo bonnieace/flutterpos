@@ -26,6 +26,23 @@
 /// and took a `BoxConstraints`; the replacement takes a screen width, because
 /// §4.1's bands describe the surface a person is looking at rather than
 /// whatever box a widget happens to be inside.
+///
+/// **Two of the widgets here are superseded and are on their way out.**
+/// `design.md` §11 step 6's second half built `RecordList` in
+/// `lib/ui/record_list.dart`, which is §4.3's contract: one component, one
+/// record model, and the form resolved from the screen width rather than chosen
+/// by the caller. [TenantRecordCard] and [TenantRecordTable] are the two halves
+/// it replaces, and the argument [TenantRecordTable] makes below - that the
+/// caller knows which columns survive the loss - **was accepted rather than
+/// overruled**: it is now `RecordAttribute.inNarrowForm`, and §4.3 was amended
+/// to concede it. What did not survive is the other half of the position, that
+/// the caller also chooses the *form*.
+///
+/// They stay until the screens still calling them are swept onto `RecordList`.
+/// That is one screen, the staff directory, which is the only consumer either
+/// has ever had. [TenantStatCard] and [TenantStatStrip] are a different story
+/// and are step 8's - they are `StatTile` and `StatRow`, not records - and
+/// [TenantStatusChip] is superseded by `StatusBadge` from step 4.
 library;
 
 import 'package:flutter/material.dart';

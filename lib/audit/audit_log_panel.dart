@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -246,16 +248,24 @@ final class _AuditLogContents extends StatelessWidget {
         onChanged: onSelectEvent,
       ),
       const SizedBox(height: 16),
-      if (page.items.isEmpty)
-        Text(
+      // §4.3's responsive contract: stacked cards on a phone, two-column cards
+      // on a tablet, and a table on a desktop window - which this route never
+      // had before step 6, and which is the form an activity log is most
+      // legible in. Nothing about what an event says has changed; only what
+      // shape it is said in.
+      RecordList(
+        identityLabel: 'Event',
+        items: <RecordItem>[
+          for (final record in page.items) _record(record),
+        ],
+        empty: Text(
           key: const ValueKey('audit-log-empty'),
           page.isEventScoped
               ? 'No "${page.eventType!.label}" event has been recorded for '
                     'this business.'
               : 'No event has been recorded for this business.',
-        )
-      else
-        for (final record in page.items) _entry(context, record),
+        ),
+      ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -278,51 +288,56 @@ final class _AuditLogContents extends StatelessWidget {
     ],
   );
 
-  Widget _entry(BuildContext context, TenantAuditRecord record) => Card(
-    key: ValueKey('audit-log-entry-${record.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                record.isCritical
-                    ? Icons.warning_amber_outlined
-                    : Icons.history_outlined,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  key: ValueKey('audit-log-event-${record.id}'),
-                  _eventLabel(record),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (record.fromStatus != null || record.toStatus != null)
-            Text(
-              key: ValueKey('audit-log-status-${record.id}'),
+  /// One event as §5.2's five rows.
+  ///
+  /// **Only a critical event carries a status, and an ordinary one carries
+  /// none.** §2.1's five statuses each mean exactly one thing and "an event was
+  /// recorded" is not among them, so a badge on every row would be a badge that
+  /// says nothing - which is the drift §1 describes, arriving by a different
+  /// door. It is also what this screen already meant: the warning triangle was
+  /// drawn for `isCritical` and the ordinary glyph was a decoration beside every
+  /// other row.
+  ///
+  /// The record ID is deliberately not shown. It was never on this card, and
+  /// §2.2's `mono` role - the one for "strings a person compares character by
+  /// character" - names no family until the `Inter` / Roboto question is
+  /// answered.
+  RecordItem _record(TenantAuditRecord record) => RecordItem(
+    id: record.id,
+    recordKey: ValueKey('audit-log-entry-${record.id}'),
+    title: _eventLabel(record),
+    titleKey: ValueKey('audit-log-event-${record.id}'),
+    status: record.isCritical
+        ? RecordStatus(
+            status: AppStatus.problem,
+            label: 'Critical',
+            icon: Icons.warning_amber_outlined,
+            semanticLabel: 'Critical event',
+          )
+        : null,
+    attributes: <RecordAttribute>[
+      if (record.fromStatus != null || record.toStatus != null)
+        RecordAttribute(
+          label: 'Change',
+          value:
               '${record.fromStatus ?? 'unknown'} to '
               '${record.toStatus ?? 'unknown'}',
-            ),
-          if (record.targetUid case final targetUid?)
-            Text(
-              key: ValueKey('audit-log-target-${record.id}'),
-              'About ${tenantStaffLabel(targetUid, names: view.names, selfUid: selfUid)}',
-            ),
-          Text(
-            key: ValueKey('audit-log-recorded-${record.id}'),
-            _recordedLabel(record, _actorLabel(record)),
-            style: Theme.of(context).textTheme.bodySmall,
+          valueKey: ValueKey('audit-log-status-${record.id}'),
+        ),
+      if (record.targetUid case final targetUid?)
+        RecordAttribute(
+          label: 'About',
+          value: tenantStaffLabel(
+            targetUid,
+            names: view.names,
+            selfUid: selfUid,
           ),
-        ],
-      ),
-    ),
+          valueKey: ValueKey('audit-log-target-${record.id}'),
+          flex: 2,
+        ),
+    ],
+    provenance: _recordedLabel(record, _actorLabel(record)),
+    provenanceKey: ValueKey('audit-log-recorded-${record.id}'),
   );
 
   /// The platform acts on a business without being a member of it, so those

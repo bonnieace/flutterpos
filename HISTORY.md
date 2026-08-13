@@ -20419,3 +20419,178 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## A record list becomes one component, and §4.3's middle band gets its first picture - 2026-08-13
+
+`design.md` §11 step **6, second half**: §4.3's responsive contract, as `RecordList` in
+`lib/ui/record_list.dart`, with the **activity log** as its first consumer. It changes
+`firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either — `git diff` and
+`git status` over all three print zero lines.
+
+### Why this is the component plus one screen rather than the component plus thirteen
+
+`PLAN.md` queued the whole of §4.3 as one chunk and said in the same paragraph why that is the
+largest remaining piece: `RecordList` is **not** a rename of what exists, and the work is inventing
+a record model, re-expressing thirteen screens' data in it, and **deciding per screen what the
+compact form loses** — a product judgement per screen. So it ships the way `AppButton` did: the
+component, its model, its state matrix and one migrated route first; the remaining twelve screens as
+their own sweep. Three of the four pieces of the composition-layer batch have now been taken on
+their own for the same reason, and this is the fourth.
+
+**The screen chosen is the activity log, and it was chosen for what it costs rather than for what it
+proves.** The staff directory is the one screen that already hand-rolls the card/table choice and is
+therefore the obvious proof — but its records carry five actions, §4.3's `ActionSet` row moves two of
+them into an overflow menu at the 800x600 default test surface, and five test files tap those actions
+by key. The activity log is a read-only list with **no actions at all**, whose provenance line is
+already §5.2's own sentence verbatim ("Recorded {ts} by {actor}"), and whose existing keys survive
+the migration intact. It is one of §3's named compact-density screens and one of step 6's thirteen.
+**The staff directory is now first in the sweep**, and the action churn is named there rather than
+discovered.
+
+### What was decided
+
+1. **The model is §5.2's five rows and nothing else.** `RecordItem` carries an identity, an optional
+   `RecordStatus`, a list of `RecordAttribute`, a provenance line and a list of `RecordAction`.
+   `TenantRecordCard` took title / subtitle / chips / actions / details and `TenantRecordTable` took
+   columns and cells, with no shared model between them; that is the gap `DESIGN-AUDIT.md` §4.7
+   names and it is what this closes.
+2. **The caller owns the loss, and the component owns the form.** `DESIGN-AUDIT.md` §6 decision 2,
+   taken 2026-08-11 and **never applied to `design.md` until now** — step 6a deliberately left it
+   for the half that implements §4.3. §4.3 now concedes the opt-out in writing, and in the code it
+   is one flag, `RecordAttribute.inNarrowForm`. The limit of the concession is stated with it: it is
+   per *attribute*, and identity, status, provenance and actions are on every rendering at every
+   band.
+3. **Columns belong to the list, not to its first record.** The first draft took
+   `items.first.attributes` as the table's columns and asserted every other record agreed — the
+   shape `TenantRecordTable` uses. Real data killed it inside ten minutes: an audit event either
+   changed a status or did not, so the first record would decide what the other nineteen are allowed
+   to say. `RecordList.columnsOf` is the ordered union of every label any record carries, a silent
+   record gets an empty cell, and what is asserted instead is one record carrying the same label
+   twice.
+4. **An empty cell rather than a dash.** A dash is a value. "No status change was recorded" is not
+   the same claim as "the status changed to nothing".
+5. **Two readings of §5.2 are decisions rather than lookups, and both went into the document.**
+   *"Status — leading position"* is read as first **in the record**: above the identity on a card,
+   first column in a table. *"Never truncated below two lines"* is read as a floor rather than a
+   ban: an identity gets two lines then ellipsises, where every other line on a record gets one.
+6. **§4.3's `(>3)` is load-bearing and is honoured.** Three or fewer actions are inline at every
+   band; past three, compact takes an overflow menu, medium keeps three and overflows the rest, and
+   expanded draws them all. It is the only reading under which §5.2's "on compact, an overflow menu"
+   and §4.3's "overflow after 3" are both true — otherwise a record with one action hides it behind
+   a menu on a phone.
+7. **Every action is `AppButtonSize.lg` in every form**, which is the half of §5.2's catalog
+   complaint that §9 makes pass/fail. `sm` exists for a pointer at compact density, this component
+   resolves no density, and a 1024-wide surface may well be a touchscreen till.
+8. **An ordinary audit event carries no status.** Only `isCritical` gets a badge. §2.1's five each
+   mean exactly one thing and "an event was recorded" is not among them; a log where every row wears
+   a badge is a log with no signal in it. It is also what the screen already meant — the warning
+   triangle was drawn for `isCritical` and the other glyph was decoration.
+9. **The overflow menu is Material's `PopupMenuButton`, coloured from the token layer.** §5.1's
+   inventory has no menu component at all, and inventing one inside a list component is how a second
+   one gets built later.
+10. **Two column shares are component decisions and are argued rather than tuned.** The identity
+    column takes three times an attribute's share because it carries a title, a subtitle and a
+    provenance line. The actions column takes the same, because an action is a 48-high pill with a
+    verb phrase on it and two side by side is the ordinary case — at any smaller share the set wraps
+    and makes **every row in the table** as tall as its actions. The status column takes two,
+    because §2.1's statuses attract phrases rather than words. All three measured at 1200, which is
+    §4.2's maximum for this surface and therefore the widest a table ever gets.
+11. **The harness grew a third viewport**, `tablet/` at 834 x 1000. §4.1 has declared three bands
+    since it was written, and until §4.3 there was nothing a screen *became* at `medium` that it did
+    not also become at `compact` — the difference was a content maximum firing or not firing, and
+    both of those show at 1440 and 411. `RecordList` is the first component with a rendering of its
+    own in the middle band. **It is not in `screenshotViewports`**: rendering every screen a third
+    time would add 128 images to a diff in which almost all of them would be indistinguishable from
+    the phone, so the matrices that have a `medium` case ask for it by name.
+
+### One defect found in step 4's own component, and it could not have been found before
+
+**`StatusBadge` overflowed instead of ellipsising whenever it was given a box narrower than its own
+word.** It already declared `maxLines: 1` and `TextOverflow.ellipsis`, and neither could ever fire:
+its `Row` sits at `MainAxisSize.min`, which offers its children unbounded width, so a constrained
+badge painted the yellow overflow stripe. **Every badge in the app until today sat in a `Wrap` and
+was never constrained**, which is why nothing caught it; `RecordList`'s table is the first thing to
+give a status a share of a row rather than whatever the word wants. It surfaced as a capture failure
+— `96-record-list @ web`, overflowing by 5.5 pixels on "Out of stock" — rather than as a review
+finding. The fix is one `Flexible`, and it is covered by a test that asserts an 80-wide box holds a
+badge reading "Awaiting verification".
+
+### Tests
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1825**, all pass (1791 → 1825, **34 new**) |
+| Functions | `npm --prefix functions test` | **409**, all pass — measured |
+| Rules | `npm --prefix rules-tests run test:emulator` | ⛔ **cannot run** — Java 21 gate, confirmed again |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | ⛔ same gate, carried |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | ⛔ same gate, carried |
+
+The rules suite was run and failed at the identical point step 6a recorded: *"firebase-tools no
+longer supports Java version before 21."* `java -version` reports Temurin **17.0.20**. The other two
+share the entry point and were not run a third time to prove the same thing.
+
+The 34 new are **33 in `test/ui/record_list_test.dart`** and **1 in `test/ui/status_test.dart`** for
+the badge defect. One existing assertion changed rather than being added:
+`test/audit/audit_log_panel_test.dart` expected `'About Amina (cashier-a)'` from one `Text` and now
+expects `'Amina (cashier-a)'` plus a separate `About` — the word is the attribute's *label* now,
+which is what the table draws as a column header and the card draws as the key half of a key-value
+line.
+
+`flutter analyze lib/ui lib/audit test/ui test/audit tool/screenshots` reports **no issues**.
+
+**The carry is 2 of 2 and there is no third.** This chunk changes only Dart and `git diff` over the
+three server paths is empty, which the standing rule accepts as the stronger measurement — but the
+rule also says a third consecutive carry *measures*, and measuring is exactly what the JDK gate
+makes impossible. **The chunk after this one has no legal move until the product owner answers it.**
+It was raised in this session's opening line, as `PLAN.md` instructed.
+
+### Screenshots
+
+**187 images, up from 170: 17 added, 45 moved, 125 byte-identical.** Of the 45 that moved, **three
+are this chunk** and **42 are date drift**, and that is measured rather than argued: the whole set
+was generated twice today, once with `lib/audit/audit_log_panel.dart` reverted to `HEAD` and once
+with it migrated, and exactly three files differ between those two runs — `web/35-activity-log`,
+`mobile/35-activity-log` and `mobile-full/35-activity-log`. The other 42 are screens carrying a date
+the harness reads from the wall clock, and the committed baseline was generated 2026-08-12.
+
+The 17 added are the `96-*` matrix: four cases at three bands, plus five full-page images for the
+cases taller than their window.
+
+**`web-full/35-activity-log.png` does not exist and did not before**, which is worth stating rather
+than leaving as an absence: the table fits a 1440 x 900 window where the same events as stacked
+cards would not, so there is nothing below the fold to photograph.
+
+**One thing the pictures show that this chunk did not cause and did not fix.** The activity log's
+`Show` filter renders its selected value as filled rectangles in every capture, at both viewports.
+That is the harness's font trap, already documented in `harness.dart`: a component theme's text
+style *replaces* the text theme's rather than merging onto it, so a style the app names without a
+family arrives at the engine with none. The harness applies Roboto to eight component themes and
+`dropdownMenuTheme` is not among them. It is a harness gap rather than an app defect — on a device
+the platform's own face draws it — and it predates this chunk on every screen with an `AppSelect`.
+
+### What this chunk owes
+
+**Nobody has looked at any of it, and the device-run debt is now thirteen chunks deep.** The new
+item is the one the tablet viewport exists for: **two-column cards at `medium` are a rendering no
+person has seen at any size, on any surface**, and a harness picture of a synthetic catalog is the
+only evidence there is. **Chrome is enough for it**, as it is for §4.2's maxima — resize the window
+past 768 and past 1024 and watch the list change form twice. Whether the two-column card reads as a
+denser list or as a page that could not decide between a phone and a desktop is a judgement, and it
+is the kind §4.3 was written to settle.
+
+The second item is smaller and is a copy question rather than a layout one: the activity log's
+attribute labels are now **column headers**, and "About" and "Change" were written as sentence
+fragments inside a card rather than as headers of a column. §11 step 11 is the copy pass and this is
+its business, but a device run should say whether they read as headers today.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```
