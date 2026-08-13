@@ -359,8 +359,10 @@ argument for dropping any of them.
 
 **Done 2026-08-13**, in step 6's second half, as `RecordList` in
 `lib/ui/record_list.dart`, with the **activity log** as its first consumer and the **staff
-directory** as its second, later the same day. Step 6's list above is **twelve** screens, so
-**ten remain** and they are a sweep, the way `AppButton`'s 133 call sites were.
+directory** as its second, later the same day — then the two **catalog** screens, then the whole
+**stock family** (21–24). Step 6's list above is **twelve** screens, so **four remain** — 30, 32, 33
+and 34, the shift family — and they are a sweep, the way `AppButton`'s 133 call sites were. This
+count was left stale by the catalog chunk and is corrected here rather than carried.
 `ActionSet` is built with it, `StatRow` is step 8's, and `FilterChips`, `Form` and `Sale`
 are unclaimed.
 

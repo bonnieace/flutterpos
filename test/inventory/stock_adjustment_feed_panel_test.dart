@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -59,14 +60,18 @@ void main() {
           .data,
       '10 to 7',
     );
+    // The reason is a labelled value now rather than a sentence carrying its
+    // own key: §5.2's attributes are key-value, so `Reason` is the column
+    // header in a table and the key half of a line on a card.
     expect(
       tester
           .widget<Text>(
             find.byKey(const ValueKey('stock-adjustments-reason-sa_abc')),
           )
           .data,
-      'Reason: Broken in transit',
+      'Broken in transit',
     );
+    expect(find.text(stockReasonLabel), findsWidgets);
     // The signed-in manager recorded this one, so the row says so rather than
     // repeating their own UID back at them. Their name was never read, so only
     // the authoritative UID is available for them.
@@ -223,6 +228,60 @@ void main() {
     await tester.pump();
     expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_xyz')), findsOne);
   });
+
+  testWidgets('a correction states the same facts on a phone', (tester) async {
+    // The class of defect the staff directory found a step earlier: a surface
+    // that has only ever been laid out wide. §4.1's `compact` band gives a
+    // record about 340 logical pixels where the 1400 every other case in this
+    // file uses gives it the whole page.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_adjustment('sa_abc')]);
+
+    await _pump(tester, _controller(), reader, width: 411);
+
+    expect(
+      RecordList.formFor(tester.view.physicalSize.width),
+      RecordForm.stackedCards,
+    );
+    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_abc')), findsOne);
+    // Identity, the product it is against, both attributes and the provenance
+    // line: §4.3 concedes a *loss* only per attribute, and this record marks
+    // none of them, so a phone states everything a table does.
+    for (final key in <String>[
+      'stock-adjustments-delta-sa_abc',
+      'stock-adjustments-product-sa_abc',
+      'stock-adjustments-figures-sa_abc',
+      'stock-adjustments-reason-sa_abc',
+      'stock-adjustments-recorded-sa_abc',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a correction carries no standing and nothing to do', (
+    tester,
+  ) async {
+    // §2.1's five statuses each mean one thing and "a correction was recorded"
+    // is not among them, so this list wears no badge at all - the same reading
+    // the activity log made. It is also read-only: nothing on this surface can
+    // record, amend, or undo an adjustment, so the record offers no action and
+    // the table draws no actions column.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_adjustment('sa_abc')]);
+
+    await _pump(tester, _controller(), reader);
+
+    final list = tester.widget<RecordList>(find.byType(RecordList));
+    expect(list.identityLabel, 'Adjustment');
+    expect(list.items.single.status, isNull);
+    expect(list.items.single.actions, isEmpty);
+    expect(list.items.single.details, isNull);
+    expect(
+      RecordList.columnsOf(list.items).map((column) => column.label),
+      <String>[stockBeforeAndAfterLabel, stockReasonLabel],
+    );
+  });
 }
 
 Future<void> _pump(
@@ -232,8 +291,9 @@ Future<void> _pump(
   int pageSize = 20,
   TenantProduct? product,
   bool settle = true,
+  double width = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

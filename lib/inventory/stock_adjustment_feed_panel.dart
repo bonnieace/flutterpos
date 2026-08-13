@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
@@ -11,6 +12,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'stock_adjustment_feed.dart';
+import 'stock_movement_labels.dart';
 
 /// Read-only route listing the manual stock corrections a business recorded.
 final class TenantStockAdjustmentFeedScreen extends StatelessWidget {
@@ -207,15 +209,29 @@ final class _AdjustmentFeedContents extends StatelessWidget {
         'entry states when it was recorded.',
       ),
       const SizedBox(height: 16),
-      if (page.items.isEmpty)
-        Text(
+      // §4.3's responsive contract: stacked cards on a phone, two-column cards
+      // on a tablet, and a table on a desktop window. A correction used to be a
+      // `Card` of four unlabelled lines - the product, the figures, the reason
+      // and the attribution - which is the shape §5.2 replaces with key-value
+      // attributes and a provenance line.
+      RecordList(
+        identityLabel: 'Adjustment',
+        items: <RecordItem>[
+          for (final record in page.items)
+            stockAdjustmentRecord(
+              record,
+              keyPrefix: 'stock-adjustments',
+              names: view.names,
+              selfUid: selfUid,
+            ),
+        ],
+        empty: Text(
           key: const ValueKey('stock-adjustments-empty'),
           page.isProductScoped
               ? 'No manual adjustment has been recorded for this product.'
               : 'No manual adjustment has been recorded in this business.',
-        )
-      else
-        for (final record in page.items) _entry(context, record),
+        ),
+      ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -237,80 +253,6 @@ final class _AdjustmentFeedContents extends StatelessWidget {
     ],
   );
 
-  Widget _entry(BuildContext context, TenantStockAdjustmentRecord record) =>
-      Card(
-        key: ValueKey('stock-adjustments-entry-${record.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    record.increasesStock
-                        ? Icons.arrow_upward
-                        : Icons.arrow_downward,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    key: ValueKey('stock-adjustments-delta-${record.id}'),
-                    '${record.increasesStock ? '+' : ''}'
-                    '${record.quantityDelta} • ${_typeLabel(record)}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                key: ValueKey('stock-adjustments-product-${record.id}'),
-                'Product ${record.productId}',
-              ),
-              Text(
-                key: ValueKey('stock-adjustments-figures-${record.id}'),
-                '${record.previousQuantity} to ${record.quantityAfter}',
-              ),
-              Text(
-                key: ValueKey('stock-adjustments-reason-${record.id}'),
-                'Reason: ${record.reason}',
-              ),
-              Text(
-                key: ValueKey('stock-adjustments-recorded-${record.id}'),
-                _recordedLabel(
-                  record,
-                  tenantStaffLabel(
-                    record.actorUid,
-                    names: view.names,
-                    selfUid: selfUid,
-                  ),
-                ),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-      );
-}
-
-/// An unmodelled category is shown as itself: a server deploy adding one is not
-/// evidence of anything wrong, and hiding the row would hide a real correction.
-String _typeLabel(TenantStockAdjustmentRecord record) =>
-    record.type?.label ?? record.adjustmentType;
-
-String _recordedLabel(TenantStockAdjustmentRecord record, String actorLabel) {
-  final recordedAt = record.recordedAt;
-  final when = recordedAt == null
-      ? 'Recorded instant unavailable'
-      : 'Recorded ${_instant(recordedAt)}';
-  return '$when by $actorLabel';
-}
-
-String _instant(DateTime value) {
-  final utc = value.toUtc();
-  String pad(int part) => part.toString().padLeft(2, '0');
-  return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
-      '${pad(utc.hour)}:${pad(utc.minute)} UTC';
 }
 
 /// Opens the feed under the caller's own session scope, so a tenant switch

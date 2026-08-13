@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
@@ -227,14 +228,27 @@ final class _LedgerContents extends StatelessWidget {
         'it was recorded.',
       ),
       const SizedBox(height: 16),
-      if (ledger.movements.items.isEmpty)
-        const Text(
+      // §4.3's responsive contract. Every entry is stated in the shared record
+      // vocabulary, so this surface and the business-wide feed cannot describe
+      // the same document differently - which is what `stock_movement_labels`
+      // has existed for since before it held a record model.
+      RecordList(
+        identityLabel: 'Movement',
+        items: <RecordItem>[
+          for (final movement in ledger.movements.items)
+            stockMovementRecord(
+              movement,
+              keyPrefix: 'product-ledger',
+              rowKey: movement.id,
+              names: view.names,
+              selfUid: selfUid,
+            ),
+        ],
+        empty: const Text(
           key: ValueKey('product-ledger-empty'),
           'No stock movement has been recorded against this product.',
-        )
-      else
-        for (final movement in ledger.movements.items)
-          _entry(context, movement),
+        ),
+      ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -256,59 +270,4 @@ final class _LedgerContents extends StatelessWidget {
     ],
   );
 
-  /// Every label here is the shared one, so this surface and the business-wide
-  /// feed cannot describe the same document differently.
-  Widget _entry(BuildContext context, TenantStockMovement movement) => Card(
-    key: ValueKey('product-ledger-entry-${movement.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                movement.increasesStock
-                    ? Icons.arrow_upward
-                    : Icons.arrow_downward,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  key: ValueKey('product-ledger-delta-${movement.id}'),
-                  '${movement.increasesStock ? '+' : ''}'
-                  '${movement.quantityDelta} • '
-                  '${stockMovementSourceLabel(movement)}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            key: ValueKey('product-ledger-figures-${movement.id}'),
-            stockMovementFiguresLabel(movement),
-          ),
-          if (stockMovementDetailLabel(movement) case final detail?)
-            Text(
-              key: ValueKey('product-ledger-detail-${movement.id}'),
-              detail,
-            ),
-          Text(
-            key: ValueKey('product-ledger-recorded-${movement.id}'),
-            stockMovementRecordedLabel(
-              movement,
-              stockMovementActorLabel(
-                movement,
-                names: view.names,
-                selfUid: selfUid,
-              ),
-            ),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    ),
-  );
 }

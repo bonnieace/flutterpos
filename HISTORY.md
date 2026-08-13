@@ -21118,3 +21118,197 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+## The stock family becomes one record, and a screen stops describing it three ways - 2026-08-13
+
+The **fourth, fifth, sixth and seventh screens of `design.md` §11 step 6's sweep**, taken together
+because `PLAN.md` queued them together and for the reason it gave: they are one family reading one
+ledger. **Screen 21** (product stock), **22** (stock corrections), **23** (stock movements) and
+**24** (one product ledger). It changes `firestore.rules` not at all and nothing in `functions/` or
+`rules-tests/` either: `git diff` **and** `git status` over all three print zero lines.
+
+Four of step 6's twelve screens were migrated before this; **eight are now done and four remain** —
+30 (shift corrections), 32 (shift history), 33 (shift sales) and 34 (returns on a sale).
+
+### What the four screens were
+
+Every one of them drew a ledger entry as a `Card` of an arrow glyph, a bold line, and three or four
+unlabelled sentences. Look at what 21 and 23 said about **the same document**:
+
+```text
+21  ^ +24 - Adjustment: restock            23  ^ +24 - Manual adjustment
+    16 to 40                                   [Product pd-bread-white]   <- sm pill
+    Reason: Morning delivery received          16 to 40
+    Source: co-1                               Reason: Morning delivery received
+    Recorded 2026-08-12 07:30 UTC              Recorded 2026-08-12 07:30 UTC by Grace
+```
+
+One calls it `Adjustment: restock` and the other `Manual adjustment`. One says *"The recorded before
+and after quantities are not part of this entry"* where the other says *"Before and after were not
+recorded"*. One drops the attribution half of the provenance line when nobody recorded the movement;
+the other names the server. That is three descriptions of one record, and
+`lib/inventory/stock_movement_labels.dart` was written on 2026-08-08 to stop exactly it — *"two
+copies of 'Before and after were not recorded' is two chances to change one and not the other"*.
+**Screen 21 was the copy it had never been folded into**, and screen 22 was a fourth nobody had
+noticed was the same shape at all: the same `adjustStock` transaction writes the adjustment record 22
+lists and the movement 21, 23 and 24 list.
+
+### What was decided
+
+1. **The shared thing is the whole `RecordItem`, not the strings inside it.** The labels file held
+   four sentence builders and three screens each assembled their own `Card` from them, which is what
+   let 21 drift. It now exports `stockMovementRecord` and `stockAdjustmentRecord`, and the four
+   screens differ in exactly two things: what identifies a record on their own page (`subtitle`) and
+   what a person can do to it (`actions`). Nothing else.
+2. **No record carries a status.** §2.1's five each mean exactly one thing and "stock moved" is not
+   among them, so this is the activity log's decision reached again from the same rule: a list where
+   every row wears a badge is a list with no signal in it. The tinted 40 x 40 arrow block that led
+   each entry on screen 21 said only what the sign on the delta already says, and said it in colour —
+   so removing it costs the reader nothing and settles a §9 question rather than raising one.
+3. **The typed adjustment category becomes an attribute.** It is what screen 21 folded into its own
+   title as `Adjustment: damage` and what the other three did not state at all. A typed category is a
+   fact *about* a record rather than what the record is, so it is stated where the other facts are:
+   nothing is lost from 21, and 22, 23 and 24 gain it.
+4. **A reason and a source are two columns, and a record carries both where it has both.** The two
+   feeds used to show a reason *or* a source through one precedence-based line; screen 21 showed
+   both. A table has one column per label, so precedence would file one document under different
+   columns depending on which screen drew it. `Reason` takes twice an ordinary share — it is free
+   text a person typed at a till and is the longest thing on any of these four screens.
+5. **"Before and after were not recorded" becomes the value `Not recorded`.** The sentence has become
+   a key and a value, and each of the three surfaces' versions of it repeated the label it now sits
+   under. Same operation the activity log's `About Amina (cashier-a)` went through in step 6b.
+6. **Screen 23's product ID and the control that opens its ledger are two things with two keys.**
+   They used to be one widget that changed *type*: a `Text` reading `Product pd-milk-500` when the
+   composition root injected no route, and an `AppButtonSize.sm` tertiary pill wearing the same
+   sentence as its label when it did. §5.2 forbids both halves of that — "never bare text links", and
+   a 20px target. The ID is now the record's `subtitle` and is stated either way; `Open ledger` is a
+   `RecordAction` at 48dp, offered only when the route was injected. The injection contract is
+   unchanged and its test still proves it.
+7. **Screen 21's exception report was deliberately not migrated, and it is named rather than left
+   silent.** The "Reconciliation found" section is a list of one status word, a paragraph of guidance
+   naming what will and will not resolve the difference, and a provenance line. §5.2 has no row for
+   prose and a column of four-sentence paragraphs is not what §4.3's table is for. Turning those four
+   paragraphs into key-value attributes is a rewrite of what the screen *says*, and this chunk
+   changes what shape a screen says things in. It belongs to the step-4 sweep, which `PLAN.md`
+   already describes as "every remaining permanent notice paragraph, every remaining multi-line
+   explanation" — and `Callout` is the component it wants.
+
+### The defect the first render found, and the one the fixture was hiding
+
+**`Source` took twice an ordinary column in the first draft, by symmetry with `Reason`.** The render
+said otherwise: a source is a checkout or return ID and is four or five characters, while the
+identity column beside it — carrying a title, a subtitle *and* a provenance line against four
+attribute columns — is the one short of width. It is `flex: 1` now. Same knob and same lesson as the
+catalog's 13-digit barcode a chunk earlier, in the opposite direction.
+
+**And `tool/screenshots/fakes.dart` required `adjustmentType` on every seeded movement**, so the
+seeded *sale* carried `adjustmentType: 'sale'`. That was invisible while a row was four unlabelled
+lines and became a column reading `Adjustment type: sale` the moment §4.3 drew a table. The server
+writes a category on `adjustStock` movements and a `sourceId` on a reconciled sale, never both; the
+helper's two fields are optional now and the sale carries `sourceId: 'co-1'`. **A fixture where every
+record fills every column also proves nothing about the empty cell §4.3 promises**, and the picture
+shows one now.
+
+### Files changed
+
+```text
+lib/inventory/stock_movement_labels.dart          the record vocabulary
+lib/inventory/stock_adjustment_panel.dart         screen 21's ledger
+lib/inventory/stock_adjustment_feed_panel.dart    screen 22
+lib/inventory/stock_movement_feed_panel.dart      screen 23
+lib/inventory/stock_product_ledger_panel.dart     screen 24
+tool/screenshots/fakes.dart                       the seeded movement's real shape
+test/inventory/stock_adjustment_panel_test.dart
+test/inventory/stock_adjustment_feed_panel_test.dart
+test/inventory/stock_movement_feed_panel_test.dart
+test/inventory/stock_product_ledger_panel_test.dart
+```
+
+10 files, **+648 / -405**. Four private `_entry` builders, three private label functions on screen
+21, two on screen 22 and five one-line forwarders on screen 23 are **deleted**;
+`stockMovementDetailLabel` and `stockMovementFiguresLabel` go with them, replaced by
+`stockFiguresValue` and two attributes.
+
+### Tests
+
+**All five suites measured, none carried.**
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1839 -> 1847  (+8)
+npm --prefix functions test                                                409  unchanged
+npm --prefix rules-tests run test:emulator                                 161  unchanged (~78 s)
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged (~60 s)
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged
+```
+
+The eight new Flutter tests are **two per screen**, and they are the two things a migration of this
+shape can get wrong. Each screen gets *a record states the same facts on a phone* — §4.1's `compact`
+band at 411, asserting every key survives the card and `takeException()` is null — because all four
+of these screens had only ever been driven at 1400, which is precisely how the staff directory's five
+inline forms overflowed on every phone for a step without anybody knowing. And each gets a *no
+standing / nothing to do* test reading the `RecordList` directly: identity label, every status null,
+actions empty where the surface is read-only, and on screen 24 the exact column union `[Before and
+after, Adjustment type, Reason, Source]` — the case where one record is silent about a column another
+fills.
+
+Six existing assertions changed rather than being added, all of them one fact in its new rendering:
+`Reason: Broken in transit` -> `Broken in transit` under a `Reason` label (three files), `Before and
+after were not recorded` -> `Not recorded` (two files), `From co-1` -> `co-1` under `Source`, `-3 •
+Adjustment: damage` -> `-3 • Manual adjustment` plus a separate `damage` under `Adjustment type`, and
+screen 23's two ledger-opening taps moved from `stock-movements-feed-product-…` to
+`stock-movements-feed-ledger-…` because the fact and the control are now two widgets.
+
+The prelude was run before every emulator command, as the standing procedure requires. All four
+passed first time and no suite was retried.
+
+`flutter analyze` over `lib/inventory`, `lib/ui`, `lib/theme.dart`, `test/inventory` and
+`tool/screenshots` reports **no issues**.
+
+### Screenshots
+
+**195 images, unchanged in count: 0 added, 0 removed, 12 changed, 183 byte-identical, and zero date
+drift.** The baseline was the catalog chunk's, generated earlier the same day, so the whole diff is
+this chunk and no reverted second regeneration was needed.
+
+```text
+web/21-product-stock       web-full/21-product-stock   mobile/21-product-stock      mobile-full/21-product-stock
+web/22-stock-corrections                               mobile/22-stock-corrections  mobile-full/22-stock-corrections
+web/23-stock-movements                                 mobile/23-stock-movements    mobile-full/23-stock-movements
+web/24-one-product-ledger                              mobile/24-one-product-ledger
+```
+
+**All twelve are the four migrated captures and nothing else**, which is the check. No page crossed
+the fold in either direction — every `-full` variant that existed still exists and no new one
+appeared — which is worth stating because a card rendering is usually taller than the row it
+replaces: the arrow block and its gutter came off each entry at the same time.
+
+**`web/23-stock-movements` is the picture worth opening.** Four movements as a five-column table with
+`Open ledger` at 48dp on every row, and the seeded sale showing an *empty* `Adjustment type` and
+`Reason` against a `Source` of `co-1` — which is `RecordList.columnsOf`'s union rule and §4.3's empty
+cell, both visible in one fixture for the first time.
+
+### Two things the pictures show that were not tuned
+
+**The identity column wraps its provenance line to two lines on screen 23.** With four attribute
+columns and an actions column, `_identityFlex = 3` leaves roughly a quarter of 1200 for a title, a
+subtitle and a `caption` attribution — and `Recorded 2026-08-10 08:30 UTC by Grace Wanjiru
+(owner-dev)` does not fit on one. It is **not** a §5.2 failure: "never truncated below two lines"
+governs the identity, and nothing here is truncated at all. It is left alone for the reason the
+`_actionsFlex` and `_statusFlex` observations were: tuning a component constant from one screenshot
+of one screen inside a sweep chunk is how a component acquires a value that fits the last screen
+somebody looked at. The two honest fixes are named in `PLAN.md`.
+
+**The `Show` filter renders as blank boxes in every `AppSelect` capture**, including the
+byte-identical `web/35-activity-log` from a previous chunk. It is a pre-existing harness artefact and
+predates this chunk; it is recorded here only so the next session does not read it as this chunk's.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

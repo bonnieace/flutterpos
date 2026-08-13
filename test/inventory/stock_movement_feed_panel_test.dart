@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -57,15 +58,32 @@ void main() {
           .data,
       '10 to 7',
     );
+    // A reason and a typed category are labelled values now rather than
+    // sentences that carried their own key, and the category is new to this
+    // screen: the stock route used to be the only one that stated it, inside a
+    // title that read `Adjustment: damage` where this one read `Manual
+    // adjustment` for the same document.
     expect(
       tester
           .widget<Text>(
             find.byKey(
-              const ValueKey('stock-movements-feed-detail-product-1-sa_abc'),
+              const ValueKey('stock-movements-feed-reason-product-1-sa_abc'),
             ),
           )
           .data,
-      'Reason: Broken in transit',
+      'Broken in transit',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey(
+                'stock-movements-feed-adjustment-type-product-1-sa_abc',
+              ),
+            ),
+          )
+          .data,
+      'damage',
     );
     // The signed-in manager recorded this correction, so the row says so.
     expect(
@@ -88,7 +106,7 @@ void main() {
             ),
           )
           .data,
-      'Before and after were not recorded',
+      'Not recorded',
     );
     expect(
       tester
@@ -100,15 +118,17 @@ void main() {
           .data,
       'Recorded 2026-08-01 09:00 UTC by the server',
     );
+    // The sale it came from is its own column, so one document is filed under
+    // the same label whichever of the three movement surfaces draws it.
     expect(
       tester
           .widget<Text>(
             find.byKey(
-              const ValueKey('stock-movements-feed-detail-product-2-sale_co-1'),
+              const ValueKey('stock-movements-feed-source-product-2-sale_co-1'),
             ),
           )
           .data,
-      'From co-1',
+      'co-1',
     );
     expect(reader.queries.single.equalityFilters, <String, Object?>{
       'tenantId': 'tenant-a',
@@ -325,13 +345,8 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(
-      find.byKey(
-        const ValueKey('stock-movements-feed-product-product-1-sa_abc'),
-      ),
-      findsOne,
-    );
-    expect(find.byType(TextButton), findsNothing);
+    // The product it names is the record's second identifying line and is
+    // stated either way; only the control that opens the ledger is withheld.
     expect(
       tester
           .widget<Text>(
@@ -341,6 +356,17 @@ void main() {
           )
           .data,
       'Product product-1',
+    );
+    expect(find.byType(TextButton), findsNothing);
+    expect(
+      find.byKey(
+        const ValueKey('stock-movements-feed-ledger-product-1-sa_abc'),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester.widget<RecordList>(find.byType(RecordList)).items.single.actions,
+      isEmpty,
     );
   });
 
@@ -368,7 +394,7 @@ void main() {
 
     await tester.tap(
       find.byKey(
-        const ValueKey('stock-movements-feed-product-product-2-sa_def'),
+        const ValueKey('stock-movements-feed-ledger-product-2-sa_def'),
       ),
     );
     await tester.pumpAndSettle();
@@ -401,12 +427,70 @@ void main() {
 
     await tester.tap(
       find.byKey(
-        const ValueKey('stock-movements-feed-product-product-1-sa_abc'),
+        const ValueKey('stock-movements-feed-ledger-product-1-sa_abc'),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(scoped, same(controller));
+  });
+
+  testWidgets('a movement states the same facts on a phone', (tester) async {
+    // The class of defect the staff directory found a step earlier: a screen
+    // that has only ever been laid out wide. §4.3 hides an action behind a menu
+    // only past three, so this row's one action is still a 48dp button on a
+    // phone rather than something a person has to go looking for.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_movement('product-1', 'sa_abc')]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      width: 411,
+      productLedgerRoute: (productId) => const Scaffold(body: Text('ledger')),
+    );
+
+    expect(
+      RecordList.formFor(tester.view.physicalSize.width),
+      RecordForm.stackedCards,
+    );
+    for (final key in <String>[
+      'stock-movements-feed-entry-product-1-sa_abc',
+      'stock-movements-feed-delta-product-1-sa_abc',
+      'stock-movements-feed-product-product-1-sa_abc',
+      'stock-movements-feed-figures-product-1-sa_abc',
+      'stock-movements-feed-reason-product-1-sa_abc',
+      'stock-movements-feed-recorded-product-1-sa_abc',
+      'stock-movements-feed-ledger-product-1-sa_abc',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
+    }
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('stock-movements-feed-ledger-product-1-sa_abc'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('ledger'), findsOne);
+  });
+
+  testWidgets('a movement carries no standing', (tester) async {
+    // §2.1's five each mean one thing and "stock moved" is not among them, so
+    // no row wears a badge and the table draws no status column.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _movement('product-1', 'sa_abc'),
+        _movement('product-2', 'sale_co-1'),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    final list = tester.widget<RecordList>(find.byType(RecordList));
+    expect(list.identityLabel, 'Movement');
+    expect(list.items.map((item) => item.status), everyElement(isNull));
   });
 }
 
@@ -418,8 +502,9 @@ Future<void> _pump(
   TenantStockMovementSource? source,
   TenantProductLedgerRouteBuilder? productLedgerRoute,
   bool settle = true,
+  double width = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

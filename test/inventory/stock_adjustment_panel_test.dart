@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -46,13 +47,28 @@ void main() {
     // A sale is never blocked by a stock count, so the surface says so instead
     // of presenting a negative quantity as an error.
     expect(find.textContaining('may legitimately be negative'), findsOne);
+    // This route used to be the third description of one document: it said
+    // `Adjustment: damage` where the two feeds beside it said `Manual
+    // adjustment`, and it wrote its own figures sentence and its own
+    // attribution. All three now come from the shared record vocabulary, and
+    // the typed category is stated where the other facts are.
     expect(
       tester
           .widget<Text>(
             find.byKey(const ValueKey('product-stock-delta-sa_abc')),
           )
           .data,
-      '-3 • Adjustment: damage',
+      '-3 • ${TenantStockMovementSource.manualAdjustment.label}',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('product-stock-adjustment-type-sa_abc'),
+            ),
+          )
+          .data,
+      'damage',
     );
     expect(
       tester
@@ -73,15 +89,74 @@ void main() {
       'Recorded 2026-08-01 09:00 UTC by You (Amina)',
     );
     // A reconciled sale carries no before/after pair, which is named rather
-    // than filled in with a locally derived figure.
+    // than filled in with a locally derived figure. It is two words now
+    // because the sentence has become a key and a value.
     expect(
       tester
           .widget<Text>(
             find.byKey(const ValueKey('product-stock-figures-sale_chk-1')),
           )
           .data,
-      'The recorded before and after quantities are not part of this entry.',
+      'Not recorded',
     );
+    // A sale movement names no member of the business, so it names the server
+    // rather than dropping the attribution half of §5.2's provenance line -
+    // which is what this route used to do and neither feed beside it did.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('product-stock-recorded-sale_chk-1')),
+          )
+          .data,
+      endsWith('by the server'),
+    );
+  });
+
+  testWidgets('the ledger states the same facts on a phone', (tester) async {
+    // The class of defect the staff directory found a step earlier: a screen
+    // that has only ever been laid out wide. This is the widest of the four
+    // stock screens - a stat strip, an exception report, a ledger and a form
+    // on one page - and nothing had drawn its ledger below 768.
+    final reader = _Reader()
+      ..respondMovements(<TenantQueryDocumentSnapshot>[_adjustment('sa_abc')]);
+
+    await _pump(tester, _controller(), reader, width: 411);
+
+    expect(
+      RecordList.formFor(tester.view.physicalSize.width),
+      RecordForm.stackedCards,
+    );
+    for (final key in <String>[
+      'product-stock-entry-sa_abc',
+      'product-stock-delta-sa_abc',
+      'product-stock-figures-sa_abc',
+      'product-stock-adjustment-type-sa_abc',
+      'product-stock-reason-sa_abc',
+      'product-stock-recorded-sa_abc',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a ledger entry carries no standing and nothing to do', (
+    tester,
+  ) async {
+    // §2.1's five each mean one thing and "stock moved" is not among them, so
+    // no row wears a badge. The tinted arrow block that used to lead each entry
+    // said only what the sign on the delta says, and it said it in colour.
+    final reader = _Reader()
+      ..respondMovements(<TenantQueryDocumentSnapshot>[
+        _adjustment('sa_abc'),
+        _sale('sale_chk-1'),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    final list = tester.widget<RecordList>(find.byType(RecordList));
+    expect(list.identityLabel, 'Movement');
+    expect(list.items.map((item) => item.status), everyElement(isNull));
+    expect(list.items.map((item) => item.actions), everyElement(isEmpty));
   });
 
   testWidgets('a product with an empty ledger says so', (tester) async {
@@ -564,11 +639,12 @@ Future<void> _pump(
   int pageSize = 20,
   AdjustStockCallable? callable,
   List<String> requestIds = const <String>['adjust-stock-abcdefgh'],
+  double width = 1400,
 }) async {
   // The adjustment form adds text fields, so the page carries more than one
   // Scrollable and `scrollUntilVisible` can no longer identify the list. A tall
   // surface builds every row instead, which is what these assertions need.
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
@@ -290,16 +291,24 @@ final class _MovementFeedContents extends StatelessWidget {
         onChanged: onSelectSource,
       ),
       const SizedBox(height: 16),
-      if (page.items.isEmpty)
-        Text(
+      // §4.3's responsive contract. This is the one movement surface whose
+      // records are about *different* products, so the product is the record's
+      // second identifying line - §5.2's identity row admits "an address, a
+      // code, a category" - and opening its ledger is an action rather than a
+      // link on that line.
+      RecordList(
+        identityLabel: 'Movement',
+        items: <RecordItem>[
+          for (final movement in page.items) _record(context, movement),
+        ],
+        empty: Text(
           key: const ValueKey('stock-movements-feed-empty'),
           page.isSourceScoped
               ? 'No "${page.source!.label}" entry has been recorded for this '
                     'business.'
               : 'No stock movement has been recorded for this business.',
-        )
-      else
-        for (final movement in page.items) _entry(context, movement),
+        ),
+      ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -321,75 +330,42 @@ final class _MovementFeedContents extends StatelessWidget {
     ],
   );
 
+  /// One movement as §5.2's rows.
+  ///
   /// One movement ID is unique only below its own product - a sale of two items
   /// writes `sale_{saleId}` under each - so a row is identified by both.
-  Widget _entry(BuildContext context, TenantStockMovement movement) {
+  ///
+  /// **The product ID and the control that opens its ledger are now two things
+  /// with two keys**, where they used to be one widget that changed type. The
+  /// ID is the record's second identifying line and is stated whether or not
+  /// the route was injected; the ledger is a `RecordAction`, offered only when
+  /// it was. That is §5.2's "never bare text links" and its 48dp target in one
+  /// move - the control was an `AppButtonSize.sm` pill wearing the fact as its
+  /// label - and it is the same two-owners-of-one-prefix mistake the catalog
+  /// chunk found, made deliberately visible here rather than repeated.
+  ///
+  /// Opening the ledger from this row is the one entry point that survives the
+  /// product being deleted, which the catalog route cannot be: that one needs a
+  /// decoded product the catalog no longer lists.
+  RecordItem _record(BuildContext context, TenantStockMovement movement) {
     final rowKey = '${movement.productId}-${movement.id}';
-    return Card(
-      key: ValueKey('stock-movements-feed-entry-$rowKey'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  movement.increasesStock
-                      ? Icons.arrow_upward
-                      : Icons.arrow_downward,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    key: ValueKey('stock-movements-feed-delta-$rowKey'),
-                    '${movement.increasesStock ? '+' : ''}'
-                    '${movement.quantityDelta} • ${_sourceLabel(movement)}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // The row is the only place a product ID appears with nothing
-            // behind it. Opening the ledger from here is the one entry point
-            // that survives the product being deleted, which the catalog route
-            // cannot be: it needs a decoded product the catalog no longer
-            // lists.
-            if (productLedgerRoute == null)
-              Text(
-                key: ValueKey('stock-movements-feed-product-$rowKey'),
-                'Product ${movement.productId}',
-              )
-            else
-              Align(
-                alignment: Alignment.centerLeft,
-                child: AppButton(
-                  key: ValueKey('stock-movements-feed-product-$rowKey'),
-                  label: 'Product ${movement.productId}',
-                  tier: AppButtonTier.tertiary,
-                  size: AppButtonSize.sm,
-                  onPressed: () => _openLedger(context, movement.productId),
-                ),
-              ),
-            Text(
-              key: ValueKey('stock-movements-feed-figures-$rowKey'),
-              _figuresLabel(movement),
-            ),
-            if (_detailLabel(movement) case final detail?)
-              Text(
-                key: ValueKey('stock-movements-feed-detail-$rowKey'),
-                detail,
-              ),
-            Text(
-              key: ValueKey('stock-movements-feed-recorded-$rowKey'),
-              _recordedLabel(movement, _actorLabel(movement)),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
+    return stockMovementRecord(
+      movement,
+      keyPrefix: 'stock-movements-feed',
+      rowKey: rowKey,
+      names: view.names,
+      selfUid: selfUid,
+      subtitle: 'Product ${movement.productId}',
+      subtitleKey: ValueKey<String>('stock-movements-feed-product-$rowKey'),
+      actions: <RecordAction>[
+        if (productLedgerRoute != null)
+          RecordAction(
+            label: 'Open ledger',
+            actionKey: ValueKey<String>('stock-movements-feed-ledger-$rowKey'),
+            icon: Icons.receipt_long_outlined,
+            onPressed: () => _openLedger(context, movement.productId),
+          ),
+      ],
     );
   }
 
@@ -408,23 +384,4 @@ final class _MovementFeedContents extends StatelessWidget {
     );
   }
 
-  /// An unmodelled source is shown as itself: a server deploy adding one is not
-  /// evidence of anything wrong, and hiding the row would hide a real movement.
-  String _sourceLabel(TenantStockMovement movement) =>
-      stockMovementSourceLabel(movement);
-
-  String _figuresLabel(TenantStockMovement movement) =>
-      stockMovementFiguresLabel(movement);
-
-  String? _detailLabel(TenantStockMovement movement) =>
-      stockMovementDetailLabel(movement);
-
-  String _recordedLabel(TenantStockMovement movement, String actorLabel) =>
-      stockMovementRecordedLabel(movement, actorLabel);
-
-  String _actorLabel(TenantStockMovement movement) => stockMovementActorLabel(
-    movement,
-    names: view.names,
-    selfUid: selfUid,
-  );
 }

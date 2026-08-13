@@ -4,6 +4,7 @@ import '../ui/records.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
 import '../ui/status.dart';
@@ -17,6 +18,7 @@ import '../tenancy/tenant_staff_names.dart';
 import 'stock_actions.dart';
 import 'stock_adjustment.dart';
 import 'stock_adjustment_feed_panel.dart';
+import 'stock_movement_labels.dart';
 import 'stock_movements.dart';
 
 /// Read-and-correct stock route for one product in the selected tenant.
@@ -531,13 +533,28 @@ final class _ProductStockContents extends StatelessWidget {
         'time order; each entry states when it was recorded.',
       ),
       const SizedBox(height: 12),
-      if (page.items.isEmpty)
-        const Text(
+      // §4.3's responsive contract, in the same record vocabulary the two feeds
+      // beside it use. This screen used to describe the same document three
+      // ways - its own source label, its own figures sentence, its own
+      // attribution - which is precisely what `stock_movement_labels` exists to
+      // prevent and what it had never been folded into.
+      RecordList(
+        identityLabel: 'Movement',
+        items: <RecordItem>[
+          for (final movement in page.items)
+            stockMovementRecord(
+              movement,
+              keyPrefix: 'product-stock',
+              rowKey: movement.id,
+              names: view.names,
+              selfUid: selfUid,
+            ),
+        ],
+        empty: const Text(
           key: ValueKey('product-stock-empty'),
           'No stock movements have been recorded for this product.',
-        )
-      else
-        for (final movement in page.items) _entry(context, movement),
+        ),
+      ),
       const SizedBox(height: 16),
       Wrap(
         spacing: 12,
@@ -665,130 +682,6 @@ final class _ProductStockContents extends StatelessWidget {
     ),
   );
 
-  /// One ledger entry, in the record-card shape the rest of the app uses.
-  ///
-  /// The direction block leads, because a ledger is read by scanning for the
-  /// movement that went the wrong way rather than by reading every line. It
-  /// carries an arrow and a sign as well as its tint, so the direction is not
-  /// held by colour alone.
-  Widget _entry(BuildContext context, TenantStockMovement movement) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final tone = movement.increasesStock ? colors.primary : colors.error;
-    return Card(
-      key: ValueKey('product-stock-entry-${movement.id}'),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: tone.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    movement.increasesStock
-                        ? Icons.arrow_upward
-                        : Icons.arrow_downward,
-                    size: 20,
-                    color: tone,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        key: ValueKey('product-stock-delta-${movement.id}'),
-                        '${movement.increasesStock ? '+' : ''}'
-                        '${movement.quantityDelta} • ${_sourceLabel(movement)}',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: colors.onSurface,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        key: ValueKey('product-stock-figures-${movement.id}'),
-                        movement.previousQuantity == null
-                            ? 'The recorded before and after quantities are '
-                                  'not part of this entry.'
-                            : '${movement.previousQuantity} to '
-                                  '${movement.quantityAfter}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (movement.reason case final reason?) ...[
-              const SizedBox(height: 8),
-              Text(
-                key: ValueKey('product-stock-reason-${movement.id}'),
-                'Reason: $reason',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-            if (movement.sourceId case final sourceId?)
-              Text(
-                key: ValueKey('product-stock-source-${movement.id}'),
-                'Source: $sourceId',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-            Text(
-              key: ValueKey('product-stock-recorded-${movement.id}'),
-              _recordedLabel(movement, _actorLabel(movement)),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String? _actorLabel(TenantStockMovement movement) {
-    final actorUid = movement.actorUid;
-    if (actorUid == null) return null;
-    return tenantStaffLabel(actorUid, names: view.names, selfUid: selfUid);
-  }
-}
-
-String _sourceLabel(TenantStockMovement movement) => switch (movement.source) {
-  TenantStockMovementSource.sale => 'Sale',
-  TenantStockMovementSource.verifiedReturn => 'Verified return',
-  TenantStockMovementSource.manualAdjustment =>
-    'Adjustment: ${movement.adjustmentType ?? 'unspecified'}',
-  TenantStockMovementSource.other => movement.sourceType,
-};
-
-String _recordedLabel(TenantStockMovement movement, String? actorLabel) {
-  final recordedAt = movement.recordedAt ?? movement.occurredAt;
-  final when = recordedAt == null
-      ? 'Recorded instant unavailable'
-      : 'Recorded ${_instant(recordedAt)}';
-  return actorLabel == null ? when : '$when by $actorLabel';
-}
-
-String _instant(DateTime value) {
-  final utc = value.toUtc();
-  String pad(int part) => part.toString().padLeft(2, '0');
-  return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
-      '${pad(utc.hour)}:${pad(utc.minute)} UTC';
 }
 
 /// Chooses one typed adjustment and requires an explicit confirmation.

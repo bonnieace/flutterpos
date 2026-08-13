@@ -520,14 +520,23 @@ Map<String, Map<String, Object?>> seedStockAdjustments() =>
 /// The per-product ledger, keyed by full document path because a collection
 /// group is ordered by the whole path rather than by a leaf ID.
 Map<String, Map<String, Object?>> seedStockMovements() {
+  /// **`adjustmentType` and `sourceId` are optional, and that is what the
+  /// server actually writes.** `adjustStock` records a typed category and no
+  /// source; a reconciled sale records the sale it came from and no category.
+  /// This helper used to require the category on every movement, so the sale
+  /// below carried `adjustmentType: 'sale'` - which was invisible while a row
+  /// was four unlabelled lines and became a column reading "Adjustment type:
+  /// sale" the moment §4.3's table drew one. A fixture where every record fills
+  /// every column also proves nothing about the empty cell §4.3 promises.
   Map<String, Object?> movement({
     required String productId,
     required String movementId,
     required String sourceType,
-    required String adjustmentType,
     required int quantityDelta,
     required int previousQuantity,
     required String actorUid,
+    String? adjustmentType,
+    String? sourceId,
     String? reason,
     int daysAgo = 0,
     int hour = 9,
@@ -536,7 +545,8 @@ Map<String, Map<String, Object?>> seedStockMovements() {
     'tenantId': seedTenantId,
     'productId': productId,
     'sourceType': sourceType,
-    'adjustmentType': adjustmentType,
+    if (adjustmentType != null) 'adjustmentType': adjustmentType,
+    if (sourceId != null) 'sourceId': sourceId,
     'quantityDelta': quantityDelta,
     'previousQuantity': previousQuantity,
     'quantityAfter': previousQuantity + quantityDelta,
@@ -590,7 +600,7 @@ Map<String, Map<String, Object?>> seedStockMovements() {
           productId: 'pd-soda-300',
           movementId: 'mv_000004',
           sourceType: 'sale',
-          adjustmentType: 'sale',
+          sourceId: 'co-1',
           quantityDelta: -2,
           previousQuantity: 98,
           actorUid: cashierUid,

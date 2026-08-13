@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -114,13 +115,27 @@ void main() {
           .data,
       '10 to 7',
     );
+    // A reason and a typed category are labelled values now rather than
+    // sentences carrying their own key. The category used to be visible only on
+    // the stock route, which said `Adjustment: damage` in the record's title
+    // where this screen said `Manual adjustment` for the same document.
     expect(
       tester
           .widget<Text>(
-            find.byKey(const ValueKey('product-ledger-detail-sa_abc')),
+            find.byKey(const ValueKey('product-ledger-reason-sa_abc')),
           )
           .data,
-      'Reason: Broken in transit',
+      'Broken in transit',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('product-ledger-adjustment-type-sa_abc'),
+            ),
+          )
+          .data,
+      'damage',
     );
     expect(
       tester
@@ -130,14 +145,24 @@ void main() {
           .data,
       'Recorded 2026-08-01 09:00 UTC by You (Amina)',
     );
-    // A reconciled sale records neither an actor nor a before and after.
+    // A reconciled sale records neither an actor nor a before and after, and
+    // names the sale it came from where an adjustment names a reason. Both are
+    // columns rather than one line whose meaning changes per row.
     expect(
       tester
           .widget<Text>(
             find.byKey(const ValueKey('product-ledger-figures-sale_co-1')),
           )
           .data,
-      'Before and after were not recorded',
+      'Not recorded',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('product-ledger-source-sale_co-1')),
+          )
+          .data,
+      'co-1',
     );
     expect(
       tester
@@ -147,6 +172,69 @@ void main() {
           .data,
       'Recorded 2026-08-01 11:00 UTC by the server',
     );
+    // The columns are the union of what any record carries, so a sale that is
+    // silent about a reason gets an empty cell rather than a dash.
+    expect(
+      RecordList.columnsOf(
+        tester.widget<RecordList>(find.byType(RecordList)).items,
+      ).map((column) => column.label),
+      <String>[
+        stockBeforeAndAfterLabel,
+        stockAdjustmentTypeLabel,
+        stockReasonLabel,
+        stockSourceLabel,
+      ],
+    );
+  });
+
+  testWidgets('a ledger entry states the same facts on a phone', (
+    tester,
+  ) async {
+    // This route has only ever been laid out at 1400. §4.1's `compact` band is
+    // 411 and a record marks nothing out of the narrow form, so every fact
+    // survives the card.
+    final reader = _Reader(
+      product: _productData(),
+      movements: <String, Map<String, Object?>>{'sa_abc': _adjustmentData()},
+    );
+
+    await _pump(tester, _controller(), reader, width: 411);
+
+    expect(
+      RecordList.formFor(tester.view.physicalSize.width),
+      RecordForm.stackedCards,
+    );
+    for (final key in <String>[
+      'product-ledger-entry-sa_abc',
+      'product-ledger-delta-sa_abc',
+      'product-ledger-figures-sa_abc',
+      'product-ledger-adjustment-type-sa_abc',
+      'product-ledger-reason-sa_abc',
+      'product-ledger-recorded-sa_abc',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a movement carries no standing and nothing to do', (
+    tester,
+  ) async {
+    // §2.1's five each mean one thing and "stock moved" is not among them, so
+    // no row wears a badge. The direction is the sign on the delta, which is
+    // where it always was - the arrow beside it only ever repeated it.
+    final reader = _Reader(
+      product: _productData(),
+      movements: <String, Map<String, Object?>>{'sa_abc': _adjustmentData()},
+    );
+
+    await _pump(tester, _controller(), reader);
+
+    final list = tester.widget<RecordList>(find.byType(RecordList));
+    expect(list.identityLabel, 'Movement');
+    expect(list.items.single.status, isNull);
+    expect(list.items.single.actions, isEmpty);
+    expect(list.items.single.title, startsWith('-3 • '));
   });
 
   testWidgets('a product with an empty ledger says so', (tester) async {
@@ -267,8 +355,9 @@ Future<void> _pump(
   String productId = 'product-1',
   int pageSize = 20,
   bool settle = true,
+  double width = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.physicalSize = Size(width, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
