@@ -20328,7 +20328,21 @@ flutter test --no-pub --concurrency=1 tool/screenshots                 128 captu
 dart run tool/screenshots/build_index.dart                             76 screens
 ```
 
-### The three emulator suites cannot start on this machine, and it is the toolchain
+### ~~The three emulator suites cannot start on this machine, and it is the toolchain~~ — false, retracted 2026-08-13
+
+**Every claim in this section is wrong, and the error message quoted below is the only true thing in
+it.** The suites start. The machine has had a portable Temurin **21.0.12** at
+`D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8` since before this work began, and `PLAN.md`'s own
+"The emulator prelude is not optional" section - together with **eleven** earlier entries in this
+very file - gives the three lines that reach it. **This session ran `emulators:exec` bare.** With
+the prelude, all three pass first time: 161, 10, 23, measured 2026-08-13.
+
+The section is left standing rather than deleted because the failure it demonstrates is worth more
+than the section: **it read an environment error as evidence about the environment, without using
+the documented environment.** The chunk after it inherited the conclusion, repeated it, escalated it
+to a blocking decision for the product owner, and searched `C:\Program Files` for a JDK 21 while
+this file said it was on `D:`. **The product owner corrected it from memory.** See that session's
+own entry for the full account.
 
 ```text
 Error: firebase-tools no longer supports Java version before 21.
@@ -20362,8 +20376,9 @@ measurement from here on - including the ones a *server* chunk would need.
 **The carry was taken, and it was available on the standing rule's own terms.** This chunk changes
 only Dart, `git diff` over the three server paths is empty, and the counter stood at 0 of 2 after
 step 5a measured. `functions` was measured anyway - 409, unchanged - because it needs no emulator.
-The counter is now 1 of 2, and **a third consecutive carry is not permitted**, which is another
-reason the JDK question cannot be left to drift.
+~~The counter is now 1 of 2, and **a third consecutive carry is not permitted**, which is another
+reason the JDK question cannot be left to drift.~~ **The carry was legitimate; its stated reason was
+not.** The suites were runnable throughout, and there was no JDK question to drift.
 
 ### Three failures, and the third was self-inflicted against a trap this file already carries
 
@@ -20523,13 +20538,16 @@ badge reading "Awaiting verification".
 | --- | --- | --- |
 | Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1825**, all pass (1791 → 1825, **34 new**) |
 | Functions | `npm --prefix functions test` | **409**, all pass — measured |
-| Rules | `npm --prefix rules-tests run test:emulator` | ⛔ **cannot run** — Java 21 gate, confirmed again |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | ⛔ same gate, carried |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | ⛔ same gate, carried |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161**, all pass — measured |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10**, all pass — measured |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23**, all pass — measured |
 
-The rules suite was run and failed at the identical point step 6a recorded: *"firebase-tools no
+~~The rules suite was run and failed at the identical point step 6a recorded: *"firebase-tools no
 longer supports Java version before 21."* `java -version` reports Temurin **17.0.20**. The other two
-share the entry point and were not run a third time to prove the same thing.
+share the entry point and were not run a third time to prove the same thing.~~ **Corrected in place
+after the product owner challenged it.** All three were run **with the emulator prelude**, which is
+what this session failed to do the first time, and all three passed. The three ⛔ rows above said
+"cannot run" and have been replaced by their real figures. See the section at the end of this entry.
 
 The 34 new are **33 in `test/ui/record_list_test.dart`** and **1 in `test/ui/status_test.dart`** for
 the badge defect. One existing assertion changed rather than being added:
@@ -20540,11 +20558,11 @@ line.
 
 `flutter analyze lib/ui lib/audit test/ui test/audit tool/screenshots` reports **no issues**.
 
-**The carry is 2 of 2 and there is no third.** This chunk changes only Dart and `git diff` over the
-three server paths is empty, which the standing rule accepts as the stronger measurement — but the
-rule also says a third consecutive carry *measures*, and measuring is exactly what the JDK gate
-makes impossible. **The chunk after this one has no legal move until the product owner answers it.**
-It was raised in this session's opening line, as `PLAN.md` instructed.
+~~**The carry is 2 of 2 and there is no third.** … **The chunk after this one has no legal move until
+the product owner answers it.** It was raised in this session's opening line, as `PLAN.md`
+instructed.~~ **Retracted the same day. The carry counter is at 0 and this chunk measured all five.**
+Raising it in the opening line is the one part that stands — and it is what produced the correction,
+because the product owner read it and said the suites had run before.
 
 ### Screenshots
 
@@ -20584,6 +20602,80 @@ The second item is smaller and is a copy question rather than a layout one: the 
 attribute labels are now **column headers**, and "About" and "Change" were written as sentence
 fragments inside a card rather than as headers of a column. §11 step 11 is the copy pass and this is
 its business, but a device run should say whether they read as headers today.
+
+### The JDK gate did not exist, and two chunks in two days said it did
+
+**Corrected within the same session, after the product owner said the suites had run before and
+asked for it to be checked.** They had. All three ran first time with the prelude: **161, 10, 23**.
+
+**What was actually wrong.** Nothing. `D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8` is a portable
+Temurin **21.0.12** and has been on this machine since before any of this work started. Reaching it
+is three lines, recorded in `PLAN.md` under **"The emulator prelude is not optional"** and in
+**eleven** separate entries of this file:
+
+```powershell
+if (Test-Path Env:DEBUG) { Remove-Item Env:DEBUG }
+$env:JAVA_HOME = 'D:\firebase-emulator-tools\jdk21\jdk-21.0.12+8'
+$env:Path = "D:\firebase-emulator-tools\node-v24.18.1-win-x64;$env:JAVA_HOME\bin;$env:Path"
+```
+
+Without it, `java` resolves to the machine default of Temurin 17.0.20 and `firebase-tools@15.24.0`
+refuses before any emulator launches. **The error names Java. It does not name the prelude**, which
+is the whole mechanism of the mistake.
+
+**How it compounded, in order, because the sequence is the lesson.**
+
+1. **2026-08-12, step 6a** ran `emulators:exec` bare, hit the version error, and treated it as a
+   property of the machine. It then wrote **a new open decision** ("The emulator suites need a JDK
+   21 this machine does not have"), **a new standing trap** ("No emulator starts on this machine at
+   all"), and **three ⛔ rows** in the test baseline table — without opening the "Working on this
+   repository" section of the file it was editing, **three sections above the trap it was writing**.
+   It even wrote *"Nothing in the repository caused it"*, which was true and pointed the wrong way:
+   nothing in the repository caused it because nothing was wrong.
+2. It noticed the contradiction and defused it. Its own words: *"Whether the 2026-08-12 sessions that
+   recorded these suites green had a Java 21 on `PATH` is unknown; those measurements are left
+   standing rather than struck out, because contradicting a recorded run on the strength of a
+   toolchain error would be guessing."* **That caution was correct and was aimed at the wrong
+   target.** It protected the old measurements and left the new false claim unexamined.
+3. **2026-08-13, step 6b** inherited it, raised it in its opening line as the session's blocking
+   item exactly as `PLAN.md` instructed, **ran one suite bare to "confirm" it**, and escalated: carry
+   2 of 2, *"the next chunk has no legal move"*, a decision the product owner had to make before work
+   could continue. It committed that.
+4. Asked afterwards what the issue was, it searched `C:\Program Files`, `C:\Program Files\Java` and
+   the home directory for a JDK 21, found only 17, and told the product owner **there was no JDK 21
+   anywhere on the machine** — while this file said, eleven times, that it was on `D:`.
+5. **The product owner said: we had chunks declaring not being able to reach 21, then checking
+   something and finding it reachable — confirm.** One `grep` for "java" over this file answered it
+   in full.
+
+**Four failures, and only the first is about Java.**
+
+- **An environment error was taken as evidence about the environment.** It is evidence about the
+  command that was run. The documented environment had not been used.
+- **A file was edited without being read.** Both sessions wrote into `PLAN.md` a claim its own
+  "Working on this repository" section contradicts. A standing trap that says a thing is impossible,
+  three sections below a procedure that does it, is the file's defect as much as the session's.
+- **A "confirmation" reproduced the method rather than testing the claim.** Re-running the same bare
+  command proves the command still fails. It is not evidence about whether the suites can run.
+- **A verification searched where the answer was not, having been told where it was.** `HISTORY.md`
+  had the absolute path. The search covered `C:` only.
+
+**What changed, in `PLAN.md`.** The open decision is kept as a **withdrawal** rather than deleted,
+because how it survived two sessions is worth more than the item ever was. The standing trap is
+rewritten to point at the prelude instead of at a missing JDK. The three ⛔ baseline rows are their
+real figures, measured. The carry counter is **0**. The queued-chunk opener no longer gates the queue
+on a decision. The preference-order item is withdrawn. The Android device-run route is shut for the
+**one** reason it always was — Gradle and the emulators together exhaust memory — and not for a
+second invented one.
+
+**One rule out of it, for `PLAN.md`'s traps section and for any session reading this:** *run the
+prelude before concluding anything about this machine, and before writing a trap that says something
+is impossible, grep this file for the section that does it anyway.*
+
+**Nothing about the shipped code changed.** `60ac279` is Dart-only; `git diff` over `functions/`,
+`firestore.rules` and `rules-tests/` printed zero lines then and prints zero lines now. The three
+suites confirm what that diff already implied. The correction is documentation, and it is committed
+separately so the false claim and its retraction are both findable.
 
 ### Unrelated local changes, still unstaged
 
