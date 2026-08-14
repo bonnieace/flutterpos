@@ -115,7 +115,7 @@ final class _TenantReconciliationAnomalyPanelState
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  String? _notice;
+  AppNotice? _notice;
 
   /// The shift the current notice is about, when its corrections trail is worth
   /// offering beside it.
@@ -246,11 +246,12 @@ final class _TenantReconciliationAnomalyPanelState
       if (!_stillCurrent(capturedKey)) return;
       // The shift may well have been amended; only the answer was unusable.
       setState(() {
-        _notice =
-            'The server answer could not be trusted. The shift may have been '
-            'corrected; this list has been read again, so check whether the '
-            'difference is still listed - or this shift\'s corrections - before '
-            'trying once more.';
+        _notice = const AppNotice.unknown(
+          'The server answer could not be trusted. The shift may have been '
+          'corrected; this list has been read again, so check whether the '
+          'difference is still listed - or this shift\'s corrections - before '
+          'trying once more.',
+        );
         _noticeShiftId = shiftId;
       });
       _reload();
@@ -336,7 +337,10 @@ final class _TenantReconciliationAnomalyPanelState
 
 /// What one successful correction actually changed, stated from the server's own
 /// answer rather than from what was asked for.
-String _amendedNotice(TenantShiftAmendmentResult result) {
+AppNotice _amendedNotice(TenantShiftAmendmentResult result) =>
+    AppNotice.confirmed(_amendedMessage(result));
+
+String _amendedMessage(TenantShiftAmendmentResult result) {
   final from = _money(result.previousTotalSalesMinor);
   final to = _money(result.totalSalesMinor);
   final counts = result.previousTransactionCount == result.transactionCount
@@ -351,31 +355,47 @@ String _amendedNotice(TenantShiftAmendmentResult result) {
 }
 
 /// The notice shown for one refused correction.
-String _refusalNotice(TenantShiftAmendmentFailure failure) => switch (failure) {
-  TenantShiftAmendmentFailure.forbidden =>
-    'Only an owner or administrator can correct a shift. Nothing was changed.',
-  TenantShiftAmendmentFailure.invalidReason =>
-    'A reason of between 3 and 500 characters is required, and it cannot '
+///
+/// **Seven of the eight are `refused` and one is not**, on the same split the
+/// day page's request notices take: `ambiguous` is the only branch where the
+/// shift may actually have been corrected, and it is the only one whose sentence
+/// sends a person to look. Every other branch states, in its own words, that
+/// nothing changed.
+AppNotice _refusalNotice(TenantShiftAmendmentFailure failure) =>
+    switch (failure) {
+      TenantShiftAmendmentFailure.forbidden => const AppNotice.refused(
+        'Only an owner or administrator can correct a shift. Nothing was '
+        'changed.',
+      ),
+      TenantShiftAmendmentFailure.invalidReason => const AppNotice.refused(
+        'A reason of between 3 and 500 characters is required, and it cannot '
         'contain control characters. Nothing was sent.',
-  TenantShiftAmendmentFailure.notAmendable =>
-    'The server refused: this shift cannot be corrected. It is still open, it '
-        'already agrees with its sales, its difference has not been settled by '
-        'a completed check yet, or it recorded no readable totals at all. '
+      ),
+      TenantShiftAmendmentFailure.notAmendable => const AppNotice.refused(
+        'The server refused: this shift cannot be corrected. It is still open, '
+        'it already agrees with its sales, its difference has not been settled '
+        'by a completed check yet, or it recorded no readable totals at all. '
         'Nothing was changed.',
-  TenantShiftAmendmentFailure.shiftNotFound =>
-    'No such shift exists in this business, so nothing was changed.',
-  TenantShiftAmendmentFailure.duplicateRequest =>
-    'An earlier attempt already used this request. Nothing was changed a '
+      ),
+      TenantShiftAmendmentFailure.shiftNotFound => const AppNotice.refused(
+        'No such shift exists in this business, so nothing was changed.',
+      ),
+      TenantShiftAmendmentFailure.duplicateRequest => const AppNotice.refused(
+        'An earlier attempt already used this request. Nothing was changed a '
         'second time; try again to start a new one.',
-  TenantShiftAmendmentFailure.invalidRequest =>
-    'The server rejected this request as invalid, so nothing was changed.',
-  TenantShiftAmendmentFailure.refused =>
-    'The correction was refused and nothing was changed.',
-  TenantShiftAmendmentFailure.ambiguous =>
-    'The result is unknown. The shift may have been corrected; this list has '
-        'been read again, so check whether the difference is still listed '
+      ),
+      TenantShiftAmendmentFailure.invalidRequest => const AppNotice.refused(
+        'The server rejected this request as invalid, so nothing was changed.',
+      ),
+      TenantShiftAmendmentFailure.refused => const AppNotice.refused(
+        'The correction was refused and nothing was changed.',
+      ),
+      TenantShiftAmendmentFailure.ambiguous => const AppNotice.unknown(
+        'The result is unknown. The shift may have been corrected; this list '
+        'has been read again, so check whether the difference is still listed '
         'before trying once more.',
-};
+      ),
+    };
 
 String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
 
@@ -401,7 +421,7 @@ final class _AnomalyContents extends StatelessWidget {
   final TenantReconciliationAnomalyKind? selected;
   final int pageIndex;
   final bool busy;
-  final String? notice;
+  final AppNotice? notice;
 
   /// The shift the notice is about, when its trail is worth offering beside it.
   final String? noticeShiftId;
@@ -491,25 +511,28 @@ final class _AnomalyContents extends StatelessWidget {
             ],
           ),
         ),
-        if (notice case final message?) ...[
+        // What the correction did, as a status rather than a paragraph. **The
+        // trail button is the `Callout`'s own action** rather than a separate
+        // control under it: §5.1 gives `Callout` an action slot for exactly this
+        // — one control belonging to the notice — and the row this notice is
+        // about has been deleted from the list, or may have been, so without it
+        // the correction the sentence names is reachable only by opening the
+        // whole business's trail and reading down.
+        if (notice case final answer?) ...[
           SizedBox(height: tokens.spacing.s12),
-          Text(key: const ValueKey('reconciliation-amend-notice'), message),
-          // The row this notice is about has been deleted from the list, or may
-          // have been, so without this the correction it names would be
-          // reachable only by opening the whole business's trail and reading
-          // down.
-          if (noticeShiftId case final shiftId?) ...[
-            SizedBox(height: tokens.spacing.s8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: AppButton(
-                key: const ValueKey('reconciliation-amend-notice-trail'),
-                label: 'View this shift\'s corrections',
-                icon: Icons.history_edu_outlined,
-                onPressed: () => onOpenAmendments(shiftId),
-              ),
-            ),
-          ],
+          Callout(
+            key: const ValueKey('reconciliation-amend-notice'),
+            status: answer.status,
+            message: answer.message,
+            action: noticeShiftId == null
+                ? null
+                : AppButton(
+                    key: const ValueKey('reconciliation-amend-notice-trail'),
+                    label: 'View this shift\'s corrections',
+                    icon: Icons.history_edu_outlined,
+                    onPressed: () => onOpenAmendments(noticeShiftId!),
+                  ),
+          ),
         ],
         if (amendOffered && !canAmend && _listsShiftVariance) ...[
           SizedBox(height: tokens.spacing.s12),

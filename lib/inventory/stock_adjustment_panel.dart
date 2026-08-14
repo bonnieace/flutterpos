@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
@@ -135,7 +135,7 @@ final class _TenantProductStockPanelState
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  String? _notice;
+  AppNotice? _notice;
 
   /// Retained only across an ambiguous attempt, so a retry addresses the same
   /// idempotency record instead of moving the same stock twice.
@@ -284,9 +284,10 @@ final class _TenantProductStockPanelState
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
       setState(
-        () => _notice =
-            'Stock changed from ${result.previousQuantity} to '
-            '${result.quantity}.',
+        () => _notice = AppNotice.confirmed(
+          'Stock changed from ${result.previousQuantity} to '
+          '${result.quantity}.',
+        ),
       );
       _reload();
     } on TenantStockAdjustmentException catch (error) {
@@ -301,9 +302,10 @@ final class _TenantProductStockPanelState
       if (!_stillCurrent(capturedKey)) return;
       // The call may well have moved stock; only its answer was unusable.
       setState(
-        () => _notice =
-            'The adjustment response could not be trusted. Reload this page to '
-            'see what the server recorded.',
+        () => _notice = const AppNotice.unknown(
+          'The adjustment response could not be trusted. Reload this page to '
+          'see what the server recorded.',
+        ),
       );
       _reload();
     } finally {
@@ -384,34 +386,48 @@ String _resolutionNote(TenantReconciliationAnomaly anomaly) =>
             'the app can say.',
     };
 
-String _adjustmentNotice(TenantStockAdjustmentFailure failure) =>
+/// **Nine refusals and one unknown**, on the split every other surface in this
+/// family takes: `ambiguous` is the only branch where stock may actually have
+/// moved, and it is the only one that sends a person to look at the ledger.
+AppNotice _adjustmentNotice(TenantStockAdjustmentFailure failure) =>
     switch (failure) {
-      TenantStockAdjustmentFailure.forbidden =>
+      TenantStockAdjustmentFailure.forbidden => const AppNotice.refused(
         'Only an owner, administrator, or manager may adjust stock.',
-      TenantStockAdjustmentFailure.productMissing =>
+      ),
+      TenantStockAdjustmentFailure.productMissing => const AppNotice.refused(
         'This product no longer exists in this business, so nothing changed.',
-      TenantStockAdjustmentFailure.refusedDirection =>
+      ),
+      TenantStockAdjustmentFailure.refusedDirection => const AppNotice.refused(
         'That adjustment type cannot move stock in that direction. Nothing '
-            'changed.',
-      TenantStockAdjustmentFailure.invalidQuantity =>
+        'changed.',
+      ),
+      TenantStockAdjustmentFailure.invalidQuantity => const AppNotice.refused(
         'Enter a whole number of units between 1 and '
-            '$maximumStockAdjustmentQuantityDelta.',
-      TenantStockAdjustmentFailure.invalidReason =>
+        '$maximumStockAdjustmentQuantityDelta.',
+      ),
+      TenantStockAdjustmentFailure.invalidReason => const AppNotice.refused(
         'Record a reason of at least $minimumStockAdjustmentReasonLength '
-            'characters for this adjustment.',
-      TenantStockAdjustmentFailure.duplicateRequest =>
+        'characters for this adjustment.',
+      ),
+      TenantStockAdjustmentFailure.duplicateRequest => const AppNotice.refused(
         'An earlier attempt already used this correction. Nothing changed a '
-            'second time; start a new adjustment.',
-      TenantStockAdjustmentFailure.outOfRange =>
+        'second time; start a new adjustment.',
+      ),
+      TenantStockAdjustmentFailure.outOfRange => const AppNotice.refused(
         'The resulting quantity would be too large to record. Nothing changed.',
+      ),
       TenantStockAdjustmentFailure.invalidStoredQuantity =>
-        'This product\'s recorded quantity is not a whole number, so nothing '
-            'can be added to it. It needs reconciliation.',
-      TenantStockAdjustmentFailure.refused =>
+        const AppNotice.refused(
+          'This product\'s recorded quantity is not a whole number, so nothing '
+          'can be added to it. It needs reconciliation.',
+        ),
+      TenantStockAdjustmentFailure.refused => const AppNotice.refused(
         'The adjustment was refused and no stock changed.',
-      TenantStockAdjustmentFailure.ambiguous =>
+      ),
+      TenantStockAdjustmentFailure.ambiguous => const AppNotice.unknown(
         'The result is unknown. This page has been reloaded; check the stock '
-            'and the ledger below before trying again.',
+        'and the ledger below before trying again.',
+      ),
     };
 
 final class _ProductStockContents extends StatelessWidget {
@@ -432,7 +448,7 @@ final class _ProductStockContents extends StatelessWidget {
   final String selfUid;
   final int pageIndex;
   final bool busy;
-  final String? notice;
+  final AppNotice? notice;
   final bool canAdjust;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
@@ -506,9 +522,19 @@ final class _ProductStockContents extends StatelessWidget {
           'here afterwards.',
         ),
       ),
-      if (notice case final message?) ...[
+      // **This one sits directly above the "Reconciliation found" section**,
+      // which draws every recorded difference as a red `Callout`. A bare
+      // sentence saying "Stock changed from 10 to 7." immediately above a stack
+      // of red blocks reads as part of the problem rather than as the answer to
+      // it, which is the sharpest case in the family for a notice carrying its
+      // own status.
+      if (notice case final answer?) ...[
         const SizedBox(height: 12),
-        Text(key: const ValueKey('product-stock-notice'), message),
+        Callout(
+          key: const ValueKey('product-stock-notice'),
+          status: answer.status,
+          message: answer.message,
+        ),
       ],
       ..._differencesSection(context),
       const SizedBox(height: 24),

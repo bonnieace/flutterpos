@@ -1,9 +1,11 @@
-import 'package:cloud_functions/cloud_functions.dart';
+﻿import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/notices.dart';
 
 import '../support/buttons.dart';
 
@@ -151,9 +153,16 @@ void main() {
     // the request, before any row is read.
     expect(import.payloads, isEmpty);
     expect(
-      _text(tester, 'bulk-catalog-notice'),
+      noticeMessage(tester, 'bulk-catalog-notice'),
       startsWith('Only an owner or administrator may record what a product'),
     );
+    // Every value this notice can hold is a refusal raised before anything was
+    // sent - the one surface in the family with no success branch - and the
+    // type states that rather than leaving it to be traced.
+    expect(noticeStatus(tester, 'bulk-catalog-notice'), AppStatus.problem);
+    // Every value this notice can hold is a refusal raised before anything was
+    // sent, which the type now states rather than leaving to be traced.
+    expect(noticeStatus(tester, 'bulk-catalog-notice'), AppStatus.problem);
   });
 
   testWidgets('a repriced page states the before and the after of each row', (
@@ -219,7 +228,7 @@ void main() {
 
     expect(batch.payloads, isEmpty);
     expect(
-      _text(tester, 'bulk-catalog-notice'),
+      noticeMessage(tester, 'bulk-catalog-notice'),
       startsWith('The price must be a plain amount'),
     );
     expect(find.byKey(const ValueKey('bulk-catalog-summary')), findsNothing);
@@ -398,7 +407,7 @@ void main() {
 
     expect(import.payloads, isEmpty);
     expect(
-      _text(tester, 'bulk-catalog-notice'),
+      noticeMessage(tester, 'bulk-catalog-notice'),
       startsWith('"supplier" is not a column this import reads'),
     );
   });

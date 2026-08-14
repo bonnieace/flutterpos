@@ -129,6 +129,73 @@ void main() {
     });
   });
 
+  group('a notice carries which answer it is', () {
+    // Seven panels held a `String? _notice` and drew it as a bare `Text`, so the
+    // one thing a person needs first — did the thing I pressed happen — was
+    // carried entirely by reading the sentence. These four constructors are the
+    // four outcomes this app's write boundaries already model, mapped once here
+    // instead of at every call site.
+
+    test('the four outcomes map to the four §2.1 rows that mean them', () {
+      expect(const AppNotice.confirmed('a').status, AppStatus.ok);
+      expect(const AppNotice.refused('a').status, AppStatus.problem);
+      expect(const AppNotice.unknown('a').status, AppStatus.attention);
+      expect(const AppNotice.offline('a').status, AppStatus.info);
+    });
+
+    test('an unknown outcome is awaiting rather than failed', () {
+      // The distinction the sentences have always drawn and the colour never
+      // did: an ambiguous write may well have landed, and every one of those
+      // sentences tells a person to go and look. §2.1's `attention` is
+      // "unreconciled, pending, awaiting" in its own words.
+      expect(
+        const AppNotice.unknown('The result is unknown.').status,
+        isNot(AppStatus.problem),
+      );
+    });
+
+    test('no constructor produces neutral, which belongs to a record', () {
+      // §2.1 gives `neutral` "archived, retired, closed" — a standing a *record*
+      // has. A page reporting on a write it just attempted never has one, and
+      // the absence of that constructor is what stops a call site reaching for
+      // it. The bulk report's unchanged *row* is neutral; a page saying there
+      // was nothing to do is `info`, and one status meaning both at two scales
+      // is the failure §2.1 exists to end.
+      for (final notice in <AppNotice>[
+        const AppNotice.confirmed('a'),
+        const AppNotice.refused('a'),
+        const AppNotice.unknown('a'),
+        const AppNotice.offline('a'),
+      ]) {
+        expect(notice.status, isNot(AppStatus.neutral));
+      }
+    });
+
+    test('two notices saying the same thing the same way are equal', () {
+      // Value equality, so a test can assert a whole notice rather than picking
+      // it apart, and so a `setState` with an identical answer is not a change.
+      expect(
+        const AppNotice.confirmed('Published.'),
+        const AppNotice.confirmed('Published.'),
+      );
+      expect(
+        const AppNotice.confirmed('Published.'),
+        isNot(const AppNotice.refused('Published.')),
+      );
+      expect(
+        const AppNotice.confirmed('Published.').hashCode,
+        const AppNotice.confirmed('Published.').hashCode,
+      );
+    });
+
+    test('the general constructor still allows a status by name', () {
+      expect(
+        const AppNotice(message: 'a', status: AppStatus.neutral).status,
+        AppStatus.neutral,
+      );
+    });
+  });
+
   group('the badge is §5.2\'s badge', () {
     testWidgets('radius.sm, label.md, 24h, space.8 padding', (tester) async {
       await _pump(

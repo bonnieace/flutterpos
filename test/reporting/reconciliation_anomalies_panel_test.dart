@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -7,6 +7,8 @@ import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/notices.dart';
 
 void main() {
   testWidgets('states each difference and what it is about', (tester) async {
@@ -498,7 +500,7 @@ void main() {
       'requestId': 'amend-shift-abcdefgh',
     });
     expect(
-      _text(tester, 'reconciliation-amend-notice'),
+      noticeMessage(tester, 'reconciliation-amend-notice'),
       'Shift shift-a on 2026-07-31 now records 1350.25 instead of 1200.50, '
       'over 10 transactions rather than 9. The counted cash was not changed. '
       'Recorded as sm_abc.',
@@ -535,8 +537,16 @@ void main() {
     // The shift is exactly as it was, so the difference stays listed and the
     // page is not re-read to prove something that did not happen.
     expect(
-      _text(tester, 'reconciliation-amend-notice'),
+      noticeMessage(tester, 'reconciliation-amend-notice'),
       contains('this shift cannot be corrected'),
+    );
+    expect(
+      noticeStatus(tester, 'reconciliation-amend-notice'),
+      AppStatus.problem,
+    );
+    expect(
+      noticeStatus(tester, 'reconciliation-amend-notice'),
+      AppStatus.problem,
     );
     expect(reader.queries.length, 1);
     expect(
@@ -566,8 +576,15 @@ void main() {
     // The shift may or may not have been corrected, and only the server's own
     // record can settle it.
     expect(
-      _text(tester, 'reconciliation-amend-notice'),
+      noticeMessage(tester, 'reconciliation-amend-notice'),
       contains('The result is unknown'),
+    );
+    // **Not `problem`.** The shift may well have been corrected, and the
+    // sentence's own instruction is to go and look - which is what §2.1 gives
+    // `attention` rather than a failure.
+    expect(
+      noticeStatus(tester, 'reconciliation-amend-notice'),
+      AppStatus.attention,
     );
     expect(reader.queries.length, 2);
   });
@@ -590,7 +607,7 @@ void main() {
     await _amend(tester, 'shift_b', 'Late offline sale');
 
     expect(
-      _text(tester, 'reconciliation-amend-notice'),
+      noticeMessage(tester, 'reconciliation-amend-notice'),
       contains('could not be trusted'),
     );
     expect(find.textContaining('tenant-b'), findsNothing);

@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -84,7 +85,7 @@ final class _TenantCheckoutConfigurationPanelState
     extends State<TenantCheckoutConfigurationPanel> {
   int _generation = 0;
   bool _busy = false;
-  String? _notice;
+  AppNotice? _notice;
 
   /// Restarts the guarded read, so what is shown is the server's own document
   /// rather than the value that was just typed.
@@ -239,31 +240,45 @@ final class _TenantCheckoutConfigurationPanelState
   }
 }
 
-String _resultNotice(
+AppNotice _resultNotice(
   TenantCheckoutConfigurationWriteResult result,
 ) => switch (result.kind) {
-  TenantCheckoutConfigurationWriteKind.committed =>
+  TenantCheckoutConfigurationWriteKind.committed => const AppNotice.confirmed(
     'Published. This device re-reads it on its next sync, and every other '
-        'device picks it up when it syncs.',
-  TenantCheckoutConfigurationWriteKind.rejected =>
+    'device picks it up when it syncs.',
+  ),
+  TenantCheckoutConfigurationWriteKind.rejected => const AppNotice.refused(
     'The change was refused and nothing was published. Only an owner or '
-        'administrator may change this.',
-  TenantCheckoutConfigurationWriteKind.ambiguous =>
+    'administrator may change this.',
+  ),
+  TenantCheckoutConfigurationWriteKind.ambiguous => const AppNotice.unknown(
     'The result is unknown. This page has been re-read; publishing the same '
-        'code again is safe, because this change names one setting and one '
-        'value.',
-  TenantCheckoutConfigurationWriteKind.unavailable =>
+    'code again is safe, because this change names one setting and one '
+    'value.',
+  ),
+  TenantCheckoutConfigurationWriteKind.unavailable => const AppNotice.offline(
     'This device is offline, so nothing was published. The checkout '
-        'settings can only be changed while online.',
+    'settings can only be changed while online.',
+  ),
 };
 
-String _refusalNotice(String code) => switch (code) {
-  'invalid_currency' =>
+/// **`currency_unchanged` is not a refusal**, and this surface is the one where
+/// the difference matters most: the currency the operator wanted published *is*
+/// published, so the intent is satisfied. Every other branch is the client
+/// refusing before anything was sent.
+AppNotice _refusalNotice(String code) => switch (code) {
+  'invalid_currency' => const AppNotice.refused(
     'Enter a three-letter ISO 4217 currency code, such as KES or UGX.',
-  'currency_unchanged' => 'That is already the published currency.',
-  'configuration_forbidden' =>
+  ),
+  'currency_unchanged' => const AppNotice.offline(
+    'That is already the published currency.',
+  ),
+  'configuration_forbidden' => const AppNotice.refused(
     'Only an owner or administrator may change the checkout settings.',
-  _ => 'The checkout settings could not be changed.',
+  ),
+  _ => const AppNotice.refused(
+    'The checkout settings could not be changed.',
+  ),
 };
 
 /// What every state of this route says about selling.
@@ -283,7 +298,7 @@ final class _ConfigurationContents extends StatefulWidget {
 
   final TenantPublishedCheckoutConfiguration published;
   final bool busy;
-  final String? notice;
+  final AppNotice? notice;
   final bool canPublish;
   final void Function(String currency) onPublish;
 
@@ -364,9 +379,13 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
                 : null,
           ),
         ],
-        if (widget.notice case final notice?) ...[
+        if (widget.notice case final answer?) ...[
           const SizedBox(height: 16),
-          Text(key: const ValueKey('checkout-configuration-notice'), notice),
+          Callout(
+            key: const ValueKey('checkout-configuration-notice'),
+            status: answer.status,
+            message: answer.message,
+          ),
         ],
       ],
     );

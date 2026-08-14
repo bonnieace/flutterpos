@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -8,6 +8,8 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/notices.dart';
 
 void main() {
 
@@ -211,11 +213,13 @@ void main() {
       'requestId': 'adjust-stock-abcdefgh',
     });
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('product-stock-notice')))
-          .data,
+      noticeMessage(tester, 'product-stock-notice'),
       'Stock changed from 7 to 11.',
     );
+    // **This notice sits directly above the "Reconciliation found" section**,
+    // which draws every recorded difference as a red `Callout`. A bare sentence
+    // there read as part of the problem rather than as the answer to it.
+    expect(noticeStatus(tester, 'product-stock-notice'), AppStatus.ok);
     // The page is re-read, so what is shown is the server's evidence rather
     // than an optimistic local figure. Counted on the ledger's own queries: this
     // route reads the product's recorded differences on every load too.
@@ -275,9 +279,7 @@ void main() {
     await _submit(tester, units: '4', reason: 'Delivery received');
 
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('product-stock-notice')))
-          .data,
+      noticeMessage(tester, 'product-stock-notice'),
       startsWith('The result is unknown.'),
     );
     // The page is re-read after an unknown outcome, because only the server
@@ -320,11 +322,10 @@ void main() {
       'adjust-stock-second2',
     ]);
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('product-stock-notice')))
-          .data,
+      noticeMessage(tester, 'product-stock-notice'),
       startsWith('This product no longer exists'),
     );
+    expect(noticeStatus(tester, 'product-stock-notice'), AppStatus.problem);
   });
 
   testWidgets('a response that cannot be trusted is reported, not shown', (
@@ -339,9 +340,7 @@ void main() {
     await _submit(tester, units: '4', reason: 'Delivery received');
 
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('product-stock-notice')))
-          .data,
+      noticeMessage(tester, 'product-stock-notice'),
       startsWith('The adjustment response could not be trusted.'),
     );
   });

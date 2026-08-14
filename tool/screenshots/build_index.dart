@@ -69,6 +69,9 @@ const Map<String, String> captions = <String, String>{
   '18-manage-catalog':
       'Adding a category, adding a product, and the product list a correction '
       'starts from.',
+  '18b-catalog-notice':
+      'What a write did, in place. The first picture of a notice on any '
+          'screen: they appear only after a write, so no capture had one.',
   '19-correct-a-product':
       'Correcting one product: all five editable fields at once, with clearing '
       'a recorded cost as its own act.',

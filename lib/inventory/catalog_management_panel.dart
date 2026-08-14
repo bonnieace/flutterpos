@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../ui/buttons.dart';
@@ -130,7 +130,7 @@ final class _TenantCatalogManagementPanelState
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  String? _notice;
+  AppNotice? _notice;
 
   /// Retained only across an ambiguous attempt, so a retry addresses the same
   /// deterministic document instead of stocking the shelf twice.
@@ -470,9 +470,10 @@ final class _TenantCatalogManagementPanelState
       // this same correction answers off the server's record rather than
       // auditing it twice.
       setState(
-        () => _notice =
-            'The correction was sent and its answer could not be trusted. The '
-            'catalog below has been re-read; it states what the server holds.',
+        () => _notice = const AppNotice.unknown(
+          'The correction was sent and its answer could not be trusted. The '
+          'catalog below has been re-read; it states what the server holds.',
+        ),
       );
       _reload();
     } finally {
@@ -676,7 +677,7 @@ final class _CatalogManagementContents extends StatelessWidget {
 
   final _CatalogView view;
   final bool busy;
-  final String? notice;
+  final AppNotice? notice;
   final bool canWrite;
   final bool canRetire;
 
@@ -831,9 +832,19 @@ final class _CatalogManagementContents extends StatelessWidget {
             message: 'This build cannot change the catalog from here.',
           ),
         ],
-        if (notice case final notice?) ...[
+        // **What the last write did, as a status rather than a paragraph.**
+        // This screen writes six different things — a category, a product, a
+        // retirement, a correction — and every outcome of every one of them
+        // arrived here as the same black sentence in the same position, so
+        // "Product added" and "Only an owner may retire a product" looked
+        // identical until read. The `AppNotice` carries which it is.
+        if (notice case final answer?) ...[
           const SizedBox(height: 16),
-          Text(key: const ValueKey('catalog-management-notice'), notice),
+          Callout(
+            key: const ValueKey('catalog-management-notice'),
+            status: answer.status,
+            message: answer.message,
+          ),
         ],
         const SizedBox(height: 24),
         Text('Categories', style: text.titleMedium),
@@ -1101,58 +1112,71 @@ final class _CatalogManagementContents extends StatelessWidget {
   }
 }
 
-String _categoryNotice(
+AppNotice _categoryNotice(
   TenantCatalogWriteResult result,
 ) => switch (result.kind) {
-  TenantCatalogWriteKind.committed =>
+  TenantCatalogWriteKind.committed => const AppNotice.confirmed(
     'Category added. It can be chosen for a product straight away.',
-  TenantCatalogWriteKind.rejected =>
+  ),
+  TenantCatalogWriteKind.rejected => const AppNotice.refused(
     'The category was refused and nothing was written. Only an owner, '
-        'administrator, or manager may change the catalog.',
-  TenantCatalogWriteKind.ambiguous =>
+    'administrator, or manager may change the catalog.',
+  ),
+  TenantCatalogWriteKind.ambiguous => const AppNotice.unknown(
     'The result is unknown. The categories above have been re-read; if it is '
-        'not listed, add it again - the retry addresses the same document, so '
-        'it cannot be added twice.',
-  TenantCatalogWriteKind.unavailable =>
+    'not listed, add it again - the retry addresses the same document, so '
+    'it cannot be added twice.',
+  ),
+  TenantCatalogWriteKind.unavailable => const AppNotice.offline(
     'This device is offline, so nothing was written. The catalog can only be '
-        'changed while online.',
+    'changed while online.',
+  ),
 };
 
-String _productNotice(TenantCatalogWriteResult result) => switch (result.kind) {
-  TenantCatalogWriteKind.committed =>
-    'Product added, holding no stock. Record its opening quantity from the '
+AppNotice _productNotice(TenantCatalogWriteResult result) =>
+    switch (result.kind) {
+      TenantCatalogWriteKind.committed => const AppNotice.confirmed(
+        'Product added, holding no stock. Record its opening quantity from the '
         'product itself so the ledger says where those units came from. This '
         'device re-reads the catalog on its next sync, and every other device '
         'picks it up when it syncs.',
-  TenantCatalogWriteKind.rejected =>
-    'The product was refused and nothing was written. Only an owner, '
+      ),
+      TenantCatalogWriteKind.rejected => const AppNotice.refused(
+        'The product was refused and nothing was written. Only an owner, '
         'administrator, or manager may change the catalog, and an entry that '
         'already exists is never overwritten.',
-  TenantCatalogWriteKind.ambiguous =>
-    'The result is unknown. The catalog below has been re-read; if the product '
-        'is not listed, add it again - the retry addresses the same document, '
-        'so it cannot be stocked twice.',
-  TenantCatalogWriteKind.unavailable =>
-    'This device is offline, so nothing was written. The catalog can only be '
-        'changed while online.',
-};
+      ),
+      TenantCatalogWriteKind.ambiguous => const AppNotice.unknown(
+        'The result is unknown. The catalog below has been re-read; if the '
+        'product is not listed, add it again - the retry addresses the same '
+        'document, so it cannot be stocked twice.',
+      ),
+      TenantCatalogWriteKind.unavailable => const AppNotice.offline(
+        'This device is offline, so nothing was written. The catalog can only '
+        'be changed while online.',
+      ),
+    };
 
-String _retireNotice(
+AppNotice _retireNotice(
   TenantCatalogWriteResult result,
   TenantProductRetireIntent intent,
 ) => switch (result.kind) {
-  TenantCatalogWriteKind.committed =>
+  TenantCatalogWriteKind.committed => AppNotice.confirmed(
     '${intent.name} is retired. Its stock ledger and every sale that already '
-        'named it are untouched.',
-  TenantCatalogWriteKind.rejected =>
+    'named it are untouched.',
+  ),
+  TenantCatalogWriteKind.rejected => const AppNotice.refused(
     'Nothing was retired. Only an owner or administrator may retire a product.',
-  TenantCatalogWriteKind.ambiguous =>
+  ),
+  TenantCatalogWriteKind.ambiguous => const AppNotice.unknown(
     'The result is unknown. The catalog below has been re-read; if the product '
-        'is still listed, retire it again - retiring the same product twice '
-        'does nothing further.',
-  TenantCatalogWriteKind.unavailable =>
+    'is still listed, retire it again - retiring the same product twice '
+    'does nothing further.',
+  ),
+  TenantCatalogWriteKind.unavailable => const AppNotice.offline(
     'This device is offline, so nothing was retired. The catalog can only be '
-        'changed while online.',
+    'changed while online.',
+  ),
 };
 
 /// States every field that moves, and the consequence of each kind of move.
@@ -1200,7 +1224,10 @@ String _editConfirmation(TenantProductUpdateIntent intent) {
   return buffer.toString();
 }
 
-String _updateNotice(TenantProductUpdateResult result) {
+AppNotice _updateNotice(TenantProductUpdateResult result) =>
+    AppNotice.confirmed(_updateMessage(result));
+
+String _updateMessage(TenantProductUpdateResult result) {
   final fields = result.changedFields
       .map((field) => field.label.toLowerCase())
       .join(', ');
@@ -1219,50 +1246,79 @@ String _updateNotice(TenantProductUpdateResult result) {
       're-reads its own copy on the next sync.';
 }
 
-String _updateFailureNotice(TenantProductUpdateFailure failure) =>
+/// **Ten refusals, one unknown, and one that is neither.**
+/// `unchanged` is `info` rather than `problem`: the product already holds every
+/// value in the correction, so the operator's intent is satisfied and the
+/// sentence's own point is that there was nothing to do. It is deliberately not
+/// `neutral`, which the bulk report gives an *unchanged row* — a row that is out
+/// of play and a page that has nothing to report are two different claims, and
+/// one status meaning both at two scales is the failure §2.1 exists to end.
+AppNotice _updateFailureNotice(TenantProductUpdateFailure failure) =>
     switch (failure) {
-      TenantProductUpdateFailure.forbidden =>
+      TenantProductUpdateFailure.forbidden => const AppNotice.refused(
         'Only an owner, administrator, or manager may correct a product, and '
-            'nothing was changed.',
-      TenantProductUpdateFailure.priceForbidden =>
+        'nothing was changed.',
+      ),
+      TenantProductUpdateFailure.priceForbidden => const AppNotice.refused(
         'Only an owner or administrator may change a price. Nothing was '
-            'changed, including the fields that are not money.',
-      TenantProductUpdateFailure.costForbidden =>
+        'changed, including the fields that are not money.',
+      ),
+      TenantProductUpdateFailure.costForbidden => const AppNotice.refused(
         'Only an owner or administrator may change what a product costs. '
-            'Nothing was changed, including the fields that are not money.',
-      TenantProductUpdateFailure.productMissing =>
+        'Nothing was changed, including the fields that are not money.',
+      ),
+      TenantProductUpdateFailure.productMissing => const AppNotice.refused(
         'This product no longer exists in this business, so nothing was '
-            'changed.',
-      TenantProductUpdateFailure.categoryMissing =>
+        'changed.',
+      ),
+      TenantProductUpdateFailure.categoryMissing => const AppNotice.refused(
         'That category no longer exists in this business. Nothing was changed; '
-            'the categories above have been re-read.',
-      TenantProductUpdateFailure.unchanged =>
+        'the categories above have been re-read.',
+      ),
+      TenantProductUpdateFailure.unchanged => const AppNotice.offline(
         'The product already holds every value in this correction, so nothing '
-            'was changed. Somebody else may have made the same correction.',
-      TenantProductUpdateFailure.productUnreadable =>
+        'was changed. Somebody else may have made the same correction.',
+      ),
+      TenantProductUpdateFailure.productUnreadable => const AppNotice.refused(
         'This product holds a value no device can read, and a correction has '
-            'to repair every one of them at once. Nothing was changed. Correct '
-            'each field on this form together and save again.',
-      TenantProductUpdateFailure.needsOperator =>
+        'to repair every one of them at once. Nothing was changed. Correct '
+        'each field on this form together and save again.',
+      ),
+      TenantProductUpdateFailure.needsOperator => const AppNotice.refused(
         'This product is stored in a state no correction can repair - its '
-            'stock quantity or its image. Nothing was changed, and it needs an '
-            'operator.',
-      TenantProductUpdateFailure.duplicateRequest =>
+        'stock quantity or its image. Nothing was changed, and it needs an '
+        'operator.',
+      ),
+      TenantProductUpdateFailure.duplicateRequest => const AppNotice.refused(
         'An earlier attempt already used this correction. Nothing was changed '
-            'a second time; re-read the catalog below and start again.',
-      TenantProductUpdateFailure.invalidRequest =>
+        'a second time; re-read the catalog below and start again.',
+      ),
+      TenantProductUpdateFailure.invalidRequest => const AppNotice.refused(
         'The server refused this correction as malformed and nothing was '
-            'changed. This build and the server disagree about what a product '
-            'may hold.',
-      TenantProductUpdateFailure.refused =>
+        'changed. This build and the server disagree about what a product '
+        'may hold.',
+      ),
+      TenantProductUpdateFailure.refused => const AppNotice.refused(
         'The correction was refused and nothing was changed.',
-      TenantProductUpdateFailure.ambiguous =>
+      ),
+      TenantProductUpdateFailure.ambiguous => const AppNotice.unknown(
         'The result is unknown. The catalog below has been re-read; if the '
-            'correction is not there, save it again - repeating the same '
-            'correction cannot apply it twice.',
+        'correction is not there, save it again - repeating the same '
+        'correction cannot apply it twice.',
+      ),
     };
 
-String _refusalNotice(String code) => switch (code) {
+/// The client refusing before anything was sent — **with one exception, and it
+/// is the same exception the server's own `unchanged` is.**
+/// `product_unchanged` means the form holds nothing the product does not
+/// already hold, so there was nothing to correct: the operator's intent is
+/// satisfied and reporting it in red would claim a fault that does not exist.
+/// Every other code is a genuine refusal of a genuine change.
+AppNotice _refusalNotice(String code) => code == 'product_unchanged'
+    ? AppNotice.offline(_refusalMessage(code))
+    : AppNotice.refused(_refusalMessage(code));
+
+String _refusalMessage(String code) => switch (code) {
   'invalid_category_name' =>
     'Enter a category name of at most $maximumCatalogNameLength characters.',
   'invalid_product_name' =>

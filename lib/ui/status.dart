@@ -82,6 +82,67 @@ enum AppStatus {
       };
 }
 
+/// One sentence a surface says about the write it just attempted, carrying the
+/// kind of answer it is.
+///
+/// **This exists because seven panels invented the same half-model
+/// independently.** Each held a `String? _notice`, set it from a success branch
+/// or a refusal branch, and rendered it as a bare `Text` — so the *one thing a
+/// person needs first*, whether the thing they pressed happened, was carried
+/// entirely by reading the sentence. That is the §1 failure this file was
+/// written for, in the one place where it costs money: "Stock changed from 10 to
+/// 7." and "Only an owner may adjust stock." were the same black paragraph in
+/// the same position.
+///
+/// **The four named constructors are the four outcomes this app's gateways
+/// already model**, rather than four statuses chosen per call site.
+/// `TenantCatalogWriteKind` is literally `committed / rejected / ambiguous /
+/// unavailable`, and every other write boundary here answers in the same shape.
+/// Mapping them once means a call site names *what happened* and never picks a
+/// colour — which is the whole argument [AppStatus.defaultIcon] makes about
+/// glyphs, one level up.
+///
+/// A surface renders one as a [Callout]: §5.1 gives that component the row
+/// "permanent notice paragraphs", and a notice about the state of this page is
+/// exactly what the step-4 sweep ruled does *not* fold.
+final class AppNotice {
+  const AppNotice({required this.message, required this.status});
+
+  /// The write landed. §2.1's `ok` is *"reconciled, confirmed, in stock"*.
+  const AppNotice.confirmed(this.message) : status = AppStatus.ok;
+
+  /// The write was refused and nothing changed. §2.1's `problem`.
+  const AppNotice.refused(this.message) : status = AppStatus.problem;
+
+  /// The outcome is unknown and the page has been read again.
+  ///
+  /// §2.1's `attention` is *"unreconciled, pending, awaiting"*, and an ambiguous
+  /// write is precisely awaiting confirmation from the record itself. It is
+  /// deliberately **not** `problem`: nothing is known to have failed, and every
+  /// one of these sentences already says what to check.
+  const AppNotice.unknown(this.message) : status = AppStatus.attention;
+
+  /// Nothing was attempted because the device is offline, or nothing needed
+  /// doing. §2.1's `info` is *"offline, read-only, informational"* in its own
+  /// words.
+  const AppNotice.offline(this.message) : status = AppStatus.info;
+
+  final String message;
+  final AppStatus status;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppNotice &&
+      other.message == message &&
+      other.status == status;
+
+  @override
+  int get hashCode => Object.hash(message, status);
+
+  @override
+  String toString() => 'AppNotice(${status.name}: $message)';
+}
+
 /// A status, as a small bordered container with an icon and a word.
 ///
 /// §5.2: `radius.sm`, `label.md`, 24h, icon 14px leading, `space.8` padding,

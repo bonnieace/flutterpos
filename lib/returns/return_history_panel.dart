@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
@@ -111,7 +111,7 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  String? _notice;
+  AppNotice? _notice;
 
   /// Retained only across an ambiguous attempt, so a retry addresses the same
   /// deterministic document instead of recording the reversal twice.
@@ -321,11 +321,12 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       final result = await gateway.submit(gateway.createIntent());
       if (!_stillCurrent(capturedKey)) return;
       setState(
-        () => _notice =
-            'Restored ${result.restoredUnits} '
-            '${result.restoredUnits == 1 ? 'unit' : 'units'} across '
-            '${result.restoredProducts.length} '
-            '${result.restoredProducts.length == 1 ? 'product' : 'products'}.',
+        () => _notice = AppNotice.confirmed(
+          'Restored ${result.restoredUnits} '
+          '${result.restoredUnits == 1 ? 'unit' : 'units'} across '
+          '${result.restoredProducts.length} '
+          '${result.restoredProducts.length == 1 ? 'product' : 'products'}.',
+        ),
       );
       _reload();
     } on TenantReturnVerificationException catch (error) {
@@ -338,9 +339,10 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       if (!_stillCurrent(capturedKey)) return;
       // The call may well have restored stock; only its answer was unusable.
       setState(
-        () => _notice =
-            'The verification response could not be trusted. Reload this page '
-            'to see what the server recorded.',
+        () => _notice = const AppNotice.unknown(
+          'The verification response could not be trusted. Reload this page '
+          'to see what the server recorded.',
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -348,50 +350,76 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
   }
 }
 
-String _verificationNotice(TenantReturnVerificationFailure failure) =>
+/// **`alreadyVerified` is the one branch that is not a refusal**, and it is the
+/// clearest case in the app for this model. "This return had already been
+/// verified, so nothing was restored again" is not a failure — the stock the
+/// operator wanted restored *is* restored — and painting it the same red as
+/// "Only an owner may restore stock" would tell a manager something went wrong
+/// when nothing did.
+AppNotice _verificationNotice(TenantReturnVerificationFailure failure) =>
     switch (failure) {
-      TenantReturnVerificationFailure.forbidden =>
+      TenantReturnVerificationFailure.forbidden => const AppNotice.refused(
         'Only an owner, administrator, or manager may restore stock.',
-      TenantReturnVerificationFailure.notFound =>
+      ),
+      TenantReturnVerificationFailure.notFound => const AppNotice.refused(
         'This return no longer exists in this business.',
+      ),
       TenantReturnVerificationFailure.alreadyVerified =>
-        'This return had already been verified, so nothing was restored again.',
-      TenantReturnVerificationFailure.exceedsSale =>
+        const AppNotice.offline(
+          'This return had already been verified, so nothing was restored '
+          'again.',
+        ),
+      TenantReturnVerificationFailure.exceedsSale => const AppNotice.refused(
         'This return covers more than the original sale still allows. It '
-            'cannot be verified; record a corrected return instead.',
-      TenantReturnVerificationFailure.missingProduct =>
+        'cannot be verified; record a corrected return instead.',
+      ),
+      TenantReturnVerificationFailure.missingProduct => const AppNotice.refused(
         'A returned product no longer exists, so its stock cannot be restored.',
-      TenantReturnVerificationFailure.missingSale =>
+      ),
+      TenantReturnVerificationFailure.missingSale => const AppNotice.refused(
         'The original sale is missing, so nothing bounds this restoration.',
+      ),
       TenantReturnVerificationFailure.tooManyVerifications =>
-        'This sale has too many prior verifications for automatic '
-            'restoration. It needs manual stock adjustment.',
-      TenantReturnVerificationFailure.refused =>
+        const AppNotice.refused(
+          'This sale has too many prior verifications for automatic '
+          'restoration. It needs manual stock adjustment.',
+        ),
+      TenantReturnVerificationFailure.refused => const AppNotice.refused(
         'The return was refused and no stock was restored.',
-      TenantReturnVerificationFailure.ambiguous =>
+      ),
+      TenantReturnVerificationFailure.ambiguous => const AppNotice.unknown(
         'The result is unknown. This page has been reloaded; check whether the '
-            'return is now verified before trying again.',
-      TenantReturnVerificationFailure.unavailable =>
+        'return is now verified before trying again.',
+      ),
+      TenantReturnVerificationFailure.unavailable => const AppNotice.offline(
         'The server could not be reached, so no stock was restored.',
+      ),
     };
 
-String _resultNotice(TenantReturnWriteResult result) =>
-    switch (result.kind) {
-      TenantReturnWriteKind.committed =>
-        'Return recorded. No stock has been restored yet; a manager must '
-            'verify it first.',
-      TenantReturnWriteKind.rejected =>
-        'The return was refused and nothing was recorded. Check the '
-            'quantities and try again.',
-      TenantReturnWriteKind.ambiguous =>
-        'The result is unknown. Reload this page to see whether the return '
-            'was recorded, and do not record it again.',
-      TenantReturnWriteKind.unavailable =>
-        'This device is offline, so nothing was recorded. A return must be '
-            'recorded while online.',
-    };
+/// A recorded return is `ok` and **that is a claim worth being careful about**:
+/// nothing has been restored yet. The sentence says so, and the status means
+/// only that the record this screen was asked to write exists.
+AppNotice _resultNotice(TenantReturnWriteResult result) => switch (result.kind) {
+  TenantReturnWriteKind.committed => const AppNotice.confirmed(
+    'Return recorded. No stock has been restored yet; a manager must '
+    'verify it first.',
+  ),
+  TenantReturnWriteKind.rejected => const AppNotice.refused(
+    'The return was refused and nothing was recorded. Check the '
+    'quantities and try again.',
+  ),
+  TenantReturnWriteKind.ambiguous => const AppNotice.unknown(
+    'The result is unknown. Reload this page to see whether the return '
+    'was recorded, and do not record it again.',
+  ),
+  TenantReturnWriteKind.unavailable => const AppNotice.offline(
+    'This device is offline, so nothing was recorded. A return must be '
+    'recorded while online.',
+  ),
+};
 
-String _refusalNotice(String code) => switch (code) {
+/// Every one of these is the client refusing before anything was sent.
+AppNotice _refusalNotice(String code) => AppNotice.refused(switch (code) {
   'return_exceeds_sale' =>
     'That is more than this sale still has available to return.',
   'invalid_return_reason' =>
@@ -399,7 +427,7 @@ String _refusalNotice(String code) => switch (code) {
   'invalid_return_quantities' => 'Choose at least one unit to return.',
   'return_forbidden' => 'This role may not record a return.',
   _ => 'The return could not be recorded.',
-};
+});
 
 final class _SaleReturnsContents extends StatelessWidget {
   const _SaleReturnsContents({
@@ -422,7 +450,7 @@ final class _SaleReturnsContents extends StatelessWidget {
   final String selfUid;
   final int pageIndex;
   final bool busy;
-  final String? notice;
+  final AppNotice? notice;
   final bool canRecord;
 
   /// Whether this session may restore stock. The action is offered on a pending
@@ -449,9 +477,13 @@ final class _SaleReturnsContents extends StatelessWidget {
         'Stock is restored only when a return is verified. A pending return '
         'has changed no stock yet.',
       ),
-      if (notice case final message?) ...[
+      if (notice case final answer?) ...[
         const SizedBox(height: 12),
-        Text(key: const ValueKey('sale-returns-notice'), message),
+        Callout(
+          key: const ValueKey('sale-returns-notice'),
+          status: answer.status,
+          message: answer.message,
+        ),
       ],
       const SizedBox(height: 16),
       if (page.items.isNotEmpty) ...[

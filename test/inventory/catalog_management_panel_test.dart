@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +6,8 @@ import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/notices.dart';
 
 import '../support/buttons.dart';
 import '../support/fields.dart';
@@ -214,9 +216,13 @@ void main() {
     expect(writer.categories.single.path, startsWith('$_categoriesPath/'));
     expect(syncs, 1);
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('Category added.'),
     );
+    // **This screen writes six different things and reported every outcome of
+    // all six as the same black sentence in the same position.** The notice
+    // carries which it is now.
+    expect(noticeStatus(tester, 'catalog-management-notice'), AppStatus.ok);
     // Two reads of each collection: the first render, and the re-read a commit
     // asks for, so what is listed is the server's catalog and not the typing.
     expect(reader.pages.where((path) => path == _categoriesPath).length, 2);
@@ -293,7 +299,7 @@ void main() {
     );
     expect(writer.products, isEmpty);
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('Enter a price as a plain amount'),
     );
   });
@@ -333,7 +339,7 @@ void main() {
     await _confirmProduct(tester);
 
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('The result is unknown.'),
     );
     await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
@@ -548,7 +554,7 @@ void main() {
     expect(writer.retired.single.quantity, 40);
     expect(syncs, 1);
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('White bread loaf is retired.'),
     );
   });
@@ -570,8 +576,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('Nothing was retired.'),
+    );
+    expect(
+      noticeStatus(tester, 'catalog-management-notice'),
+      AppStatus.problem,
     );
     // A proven refusal changed nothing, so there is nothing to re-read.
     expect(reader.pages.where((path) => path == _productsPath).length, 1);
@@ -587,9 +597,12 @@ void main() {
     await _confirmProduct(tester);
 
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('This device is offline'),
     );
+    // §2.1 gives `info` the words "offline, read-only, informational", so an
+    // offline write is that row by name rather than by judgement.
+    expect(noticeStatus(tester, 'catalog-management-notice'), AppStatus.info);
   });
 
   testWidgets('a longer catalog pages, and retiring is reachable on page two', (
@@ -723,7 +736,7 @@ void main() {
       'price': 70.0,
     });
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('Corrected: unit price.'),
     );
     // The catalog is re-read and the till is asked to re-read its own copy,
@@ -914,9 +927,15 @@ void main() {
     expect(find.byKey(const ValueKey('catalog-management-confirm')), findsNothing);
     expect(callable.payloads, isEmpty);
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('Nothing on the form differs'),
     );
+    // **Not a refusal, even though the client refused to send it.** There was
+    // nothing to correct, so the operator's intent is already satisfied and
+    // nothing is wrong. It is deliberately not `neutral` either - the bulk
+    // report gives that to an unchanged *row*, and one status meaning two
+    // things at two scales is the failure §2.1 exists to end.
+    expect(noticeStatus(tester, 'catalog-management-notice'), AppStatus.info);
   });
 
   testWidgets('a refused correction changes nothing and says why', (
@@ -940,7 +959,7 @@ void main() {
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
 
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('That category no longer exists'),
     );
     // A proven refusal changed nothing, so there is nothing to re-read.
@@ -964,7 +983,7 @@ void main() {
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
 
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('The result is unknown.'),
     );
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
@@ -1064,7 +1083,7 @@ void main() {
     await _correct(tester, 'pd-1', name: 'Brown bread loaf');
 
     expect(
-      _text(tester, 'catalog-management-notice'),
+      noticeMessage(tester, 'catalog-management-notice'),
       startsWith('The correction was sent and its answer could not be trusted'),
     );
     expect(reader.pages.where((path) => path == _productsPath).length, 2);

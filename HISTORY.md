@@ -22558,3 +22558,176 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## A notice says which answer it is, and four of them were never refusals - 2026-08-15
+
+The notice-status model, queued by `PLAN.md` as four sites. **It was seven.** `lib/ui/status.dart`
+gains `AppNotice`, and the seven surfaces that report what a write has just done stopped carrying a
+`String?` whose meaning was in the sentence.
+
+```text
+27 reconciliation status   reconciliation-request-notice     queued
+28 unresolved differences  reconciliation-amend-notice       queued
+18 manage catalog          catalog-management-notice         queued
+20 bulk changes/import     bulk-catalog-notice               queued
+21 product stock           product-stock-notice              never listed
+34 returns on a sale       sale-returns-notice               never listed
+16 checkout settings       checkout-configuration-notice     never listed
+14 the till                checkout-code-notice              step 7, excluded
+```
+
+It changes `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either. **It
+changed no capability board row**: every capability these seven sit on — adding a category, correcting
+a product, adjusting stock, recording and verifying a return, publishing a currency, asking for
+reconciliation, correcting a shift — has been 🟢 throughout and does exactly what it did this morning.
+It moved the **Design system** track 88% to 90%.
+
+### Why this chunk, and why it stops where it does
+
+`PLAN.md` queued it, and the reason it was at the head is that step 8's second half had both
+reconciliation panels open earlier the same day and left both notices untouched for the second time.
+An item deferred twice while its file is open is on its way to being permanent.
+
+Checking it against the board first, as the instruction requires: every red row is blocked on a
+decision nobody has made (App Check, the printer interface) or sequenced after the first deployment
+(suspicious-return scoring). Nothing the app needs in order to function is missing and unqueued.
+
+It stops at the model and the seven call sites. `checkout_cart_panel.dart`'s eighth notice is the sale
+path and stays with step 7; the thirteen duplicate screen titles, the four `RecordList` column
+observations and `Pagination` were excluded going in and stayed excluded.
+
+### What was decided
+
+1. **Four named constructors, not a status argument, and that is the whole design.**
+   `AppNotice.confirmed / .refused / .unknown / .offline` are the four outcomes this app's write
+   boundaries already answer in — `TenantCatalogWriteKind` is literally `committed / rejected /
+   ambiguous / unavailable`, and every other gateway matches. Mapping them once, here, means a call
+   site names *what happened* and never picks a colour. An `AppNotice(message, status)` at seventy
+   call sites would have reproduced, in statuses, exactly the drift §1 describes in colours. The
+   general constructor exists and is used **once**, in a test.
+2. **There is deliberately no `neutral` constructor.** §2.1 gives `neutral` "archived, retired,
+   closed", which is a standing a *record* has. A page reporting on a write it just attempted never
+   has one, and its absence is what stops a call site reaching for it — the bulk report gives
+   `neutral` to an unchanged *row*, and one status meaning two things at two scales is the failure
+   §2.1 exists to end. A test asserts no constructor produces it.
+3. **Four branches across the seven were never refusals, and this is the finding.**
+   `TenantProductUpdateFailure.unchanged`, the catalog's `product_unchanged` code, checkout settings'
+   `currency_unchanged`, and `TenantReturnVerificationFailure.alreadyVerified` all say the same
+   thing: *what you asked for is already true*. Every one had been drawn in the same black paragraph,
+   in the same position, as "Only an owner or administrator may change this". They are `info` now.
+   The clearest is the return: a manager who verifies an already-verified return is told the stock is
+   restored, not that something failed.
+4. **Every `ambiguous` branch is `attention` rather than `problem`, and there are six.** Nothing is
+   known to have failed, the write may well have landed, and each of those sentences already says
+   where to look. Painting them red would report a failure the app has no evidence of — the same
+   argument the reconciliation vocabulary makes for an unmodelled run state being `info` rather than
+   "unreadable".
+5. **`bulk-catalog-notice` has no success branch at all and carries an `AppNotice` anyway.** It is set
+   from exactly one place, a refusal raised before anything is sent. The type states that invariant
+   where a `String?` left it to be traced through the assignments.
+6. **The amend notice's trail button became the `Callout`'s own action.** §5.1 gives that component an
+   action slot for one control belonging to the notice, which is precisely what "View this shift's
+   corrections" is — the row it names has been deleted from the list, or may have been.
+
+### Safety
+
+**No behaviour changed.** No repository call, no callable payload, no routing condition, no state
+shape, no new read. `AppNotice` replaces a `String?` field on seven `State` classes and a `String?`
+parameter on seven presentational widgets. Every branch that set a notice still sets one, with the
+same words: the only sentence that changed anywhere is a re-wrap.
+
+### Files changed
+
+```text
+lib/ui/status.dart                                  AppNotice and its four constructors
+lib/reporting/reconciliation_status_panel.dart      _requestNotice -> AppNotice; Callout
+lib/reporting/reconciliation_anomalies_panel.dart   _refusalNotice, _amendedNotice; Callout + action
+lib/inventory/catalog_management_panel.dart         five notice builders; Callout
+lib/inventory/bulk_catalog_panel.dart               the one refusal path; Callout
+lib/inventory/stock_adjustment_panel.dart           _adjustmentNotice; Callout
+lib/returns/return_history_panel.dart               three notice builders; Callout
+lib/checkout/checkout_configuration_panel.dart      two notice builders; Callout; status import
+test/support/notices.dart                           new: noticeAt / noticeMessage / noticeStatus
+test/ui/status_test.dart                            +5 for the model itself
+test/{reporting,inventory,returns,checkout}/*       47 reads rewritten, 15 status assertions added
+tool/screenshots/operations_screens_test.dart       18b-catalog-notice, the first driven notice
+tool/screenshots/build_index.dart                   its caption
+PLAN.md, HISTORY.md                                 this
+```
+
+`dart format` was not run, on any file, per the standing prohibition.
+
+### Tests
+
+**All five suites measured, none carried.** That is **ten** consecutive chunks measuring all five.
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1923 -> 1928  (+5)
+npm --prefix functions test                                                409  unchanged  ~29 s
+npm --prefix rules-tests run test:emulator                                 161  unchanged  ~68 s
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged  ~78 s
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged  ~131 s
+```
+
+The prelude was run before every emulator command and all four passed first time. The three emulator
+suites cost about **280 s** between them, the fastest run since 2026-08-13.
+
+The 5 new tests are all in `test/ui/status_test.dart`, for the model itself: the four outcomes map to
+the four §2.1 rows that mean them; an unknown outcome is awaiting rather than failed; no constructor
+produces `neutral`; two notices saying the same thing the same way are equal; the general constructor
+still takes a status by name. **Forty-seven existing reads were rewritten** from
+`tester.widget<Text>(…).data` to `noticeMessage(…)`, and **fifteen status assertions were added inside
+existing tests** — which is the assertion a `String?` could not carry, and the reason the rewrite is
+worth more than a mechanical rename. Without them a regression painting every outcome red would pass.
+
+`flutter analyze lib test tool` reports **475 issues**, unchanged, and every one is in the legacy
+island.
+
+**One failure worth recording, because it is the model catching something rather than the tests
+catching the model.** The catalog panel has two "nothing changed" paths, not one:
+`TenantProductUpdateFailure.unchanged` from the server and the `product_unchanged` code the client
+raises before sending. The first was mapped to `info` and the second was left in the blanket
+`refused` wrapper over the client codes, so "an untouched product is never sent" failed with
+`Expected: info / Actual: problem`. Both are the same claim and both are `info` now.
+
+### Screenshots
+
+**229 images from 170 captures: 4 added, 0 removed, 0 changed.**
+
+**Zero changed is the finding.** The chunk altered how seven surfaces report every write in the app,
+and every one of the 225 existing images was byte-identical — because a notice appears only *after* a
+write and **no capture case in the repository performed one**. No notice on any of the seven surfaces
+had ever been photographed. That is the "invisible in every capture" trap for the fifth time and the
+first time it is structural rather than a narrow fixture: reaching one needs a form driven, a
+confirmation tapped, and a fake write boundary.
+
+`18b-catalog-notice` is that, on the surface with the most notice branches in the app: it types a
+category name, taps Add, taps the confirmation, and scrolls back to the answer. It is one of only
+three driven captures in the repository, with `20b` and `20c`. The four statuses themselves are
+already covered by the `Callout` matrix; what no matrix can show is how one reads *in place*, above a
+page of forms.
+
+**The picture states one thing about itself that is the fixture rather than the screen**, and the
+capture case says so: `Frozen` is not in the chip strip, because `FakeCatalogWriter` answers
+`committed` without writing to the fake reader, so the re-read the panel correctly performs returns
+the same three seeded categories.
+
+### Excluded
+
+`checkout_cart_panel.dart`'s `checkout-code-notice` — the eighth of exactly this shape, and step 7's.
+The thirteen duplicate screen titles, which are the next chunk. The four carried `RecordList`
+column-arithmetic observations. `Pagination`, examined and declined for the sixth time. `inNarrowForm`.
+`pill_input.dart` and sign-in, step 9. Every server file and `firestore.rules`, by choice. Deployment.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -7,6 +7,8 @@ import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/notices.dart';
 
 void main() {
   testWidgets('a regenerated day states the verdict and its runs', (
@@ -700,8 +702,15 @@ void main() {
         'requestId': 'reconcile-fixed-1',
       });
       expect(
-        _text(tester, 'reconciliation-request-notice'),
+        noticeMessage(tester, 'reconciliation-request-notice'),
         startsWith('Queued as rj_abc.'),
+      );
+      // **The notice says which kind of answer it is**, which a bare sentence in
+      // this position never did: "Queued as rj_abc" and "Only an owner can ask
+      // for a check" were the same black paragraph until read.
+      expect(
+        noticeStatus(tester, 'reconciliation-request-notice'),
+        AppStatus.ok,
       );
       // The page is re-read so what is shown is the server's own record.
       expect(reader.queries.length, greaterThan(readsBefore));
@@ -747,10 +756,14 @@ void main() {
       await _tap(tester, 'reconciliation-request-confirm');
 
       expect(
-        _text(tester, 'reconciliation-request-notice'),
+        noticeMessage(tester, 'reconciliation-request-notice'),
         'A check of this kind was asked for too recently, so nothing was '
         'queued. The server allows one catch-up every 5 minutes and one full '
         'check every 24 hours.',
+      );
+      expect(
+        noticeStatus(tester, 'reconciliation-request-notice'),
+        AppStatus.problem,
       );
     });
 
@@ -783,8 +796,15 @@ void main() {
         'reconcile-first11',
       ]);
       expect(
-        _text(tester, 'reconciliation-request-notice'),
+        noticeMessage(tester, 'reconciliation-request-notice'),
         startsWith('The result is unknown.'),
+      );
+      // **Not `problem`.** A job may well have been queued and the sentence's own
+      // instruction is to go and look, which is what §2.1 gives `attention`.
+      // Painting it red would report a failure the app has no evidence of.
+      expect(
+        noticeStatus(tester, 'reconciliation-request-notice'),
+        AppStatus.attention,
       );
       expect(reader.queries.length, greaterThan(readsBefore));
     });
@@ -839,7 +859,7 @@ void main() {
       await _tap(tester, 'reconciliation-request-confirm');
 
       expect(
-        _text(tester, 'reconciliation-request-notice'),
+        noticeMessage(tester, 'reconciliation-request-notice'),
         startsWith('The server answer could not be trusted.'),
       );
       expect(reader.queries.length, greaterThan(readsBefore));
@@ -951,9 +971,6 @@ Future<void> _choose(WidgetTester tester, String label) async {
   await tester.pump();
   await tester.pump();
 }
-
-String _text(WidgetTester tester, String key) =>
-    tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
 Map<String, Object?> _queued({
   String mode = 'incremental',

@@ -11,6 +11,8 @@ import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/notices.dart';
+
 import '../support/buttons.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
@@ -346,9 +348,13 @@ void main() {
     expect(intent.lines.single.productId, 'product-1');
     expect(intent.lines.single.quantity, 2);
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-returns-notice'))).data,
+      noticeMessage(tester, 'sale-returns-notice'),
       startsWith('Return recorded. No stock has been restored yet'),
     );
+    // **`ok` is a claim about the record, not about the stock**, and the
+    // sentence beside it is what keeps that honest: the return exists, and
+    // nothing has moved until a manager verifies it.
+    expect(noticeStatus(tester, 'sale-returns-notice'), AppStatus.ok);
   });
 
   testWidgets('the quantity can never exceed what is available', (
@@ -399,7 +405,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-returns-notice'))).data,
+      noticeMessage(tester, 'sale-returns-notice'),
       startsWith('The result is unknown.'),
     );
 
@@ -468,7 +474,7 @@ void main() {
       'requestId': 'verify-return-abcdefgh',
     });
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-returns-notice'))).data,
+      noticeMessage(tester, 'sale-returns-notice'),
       'Restored 3 units across 2 products.',
     );
   });
@@ -539,17 +545,31 @@ void main() {
   });
 
   testWidgets('each refusal is reported as its own outcome', (tester) async {
-    final refusals = <List<String>, String>{
+    // **The status is part of the outcome now, and the first row is why.** A
+    // return that had already been verified is not a failure: the stock the
+    // manager wanted restored *is* restored, so the intent is satisfied and the
+    // sentence's own point is that nothing needed doing. Painting it the same
+    // red as "only an owner may restore stock" would report a fault where there
+    // is none, which is the §1 failure this model ends.
+    final refusals = <List<String>, (String, AppStatus)>{
       <String>['failed-precondition', 'This return has already been verified.']:
-          'This return had already been verified, so nothing was restored '
-              'again.',
+          (
+            'This return had already been verified, so nothing was restored '
+                'again.',
+            AppStatus.info,
+          ),
       <String>[
         'failed-precondition',
         'The return quantity for product product-1 exceeds the immutable sale.',
-      ]: 'This return covers more than the original sale still allows. It '
-          'cannot be verified; record a corrected return instead.',
-      <String>['permission-denied', 'Denied.']:
-          'Only an owner, administrator, or manager may restore stock.',
+      ]: (
+        'This return covers more than the original sale still allows. It '
+            'cannot be verified; record a corrected return instead.',
+        AppStatus.problem,
+      ),
+      <String>['permission-denied', 'Denied.']: (
+        'Only an owner, administrator, or manager may restore stock.',
+        AppStatus.problem,
+      ),
     };
 
     for (final entry in refusals.entries) {
@@ -578,10 +598,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('sale-returns-notice')))
-            .data,
-        entry.value,
+        noticeMessage(tester, 'sale-returns-notice'),
+        entry.value.$1,
+        reason: entry.key.first,
+      );
+      expect(
+        noticeStatus(tester, 'sale-returns-notice'),
+        entry.value.$2,
         reason: entry.key.first,
       );
     }
@@ -619,7 +642,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-returns-notice'))).data,
+      noticeMessage(tester, 'sale-returns-notice'),
       startsWith('The verification response could not be trusted.'),
     );
   });

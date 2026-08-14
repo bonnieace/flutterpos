@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -144,7 +144,7 @@ final class _TenantBulkCatalogPanelState
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  String? _notice;
+  AppNotice? _notice;
 
   @override
   void dispose() {
@@ -293,7 +293,9 @@ final class _TenantBulkCatalogPanelState
       setState(() => _report = report);
     } on TenantBulkCatalogException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
-      setState(() => _notice = bulkCatalogRefusalMessage(error));
+      setState(
+        () => _notice = AppNotice.refused(bulkCatalogRefusalMessage(error)),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -611,7 +613,7 @@ final class _BulkCatalogContents extends StatelessWidget {
   final _CatalogView view;
   final _BulkTask task;
   final bool busy;
-  final String? notice;
+  final AppNotice? notice;
   final TenantBulkCatalogReport? report;
   final bool canCorrect;
   final bool canImport;
@@ -737,9 +739,20 @@ final class _BulkCatalogContents extends StatelessWidget {
                 : 'This build cannot import products.',
           ),
         ],
-        if (notice case final notice?) ...[
+        // **Every value of this one is a refusal, and the type now says so.**
+        // It is set from exactly one place — a `TenantBulkCatalogException`
+        // raised before anything was sent — so unlike the other six notices in
+        // the family it has no success branch to distinguish. Carrying an
+        // `AppNotice` rather than a `String?` is what makes that an invariant
+        // a reader can see instead of one they have to trace the assignments
+        // to establish.
+        if (notice case final answer?) ...[
           const SizedBox(height: 16),
-          Text(key: const ValueKey('bulk-catalog-notice'), notice),
+          Callout(
+            key: const ValueKey('bulk-catalog-notice'),
+            status: answer.status,
+            message: answer.message,
+          ),
         ],
         const SizedBox(height: 24),
         if (task == _BulkTask.correct)

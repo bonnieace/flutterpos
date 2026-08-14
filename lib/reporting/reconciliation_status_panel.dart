@@ -96,7 +96,7 @@ final class _TenantReconciliationStatusPanelState
   int _pageIndex = 0;
   int _generation = 0;
   bool _busy = false;
-  String? _notice;
+  AppNotice? _notice;
   TenantReconciliationMode _mode = TenantReconciliationMode.incremental;
 
   /// Retained only across an ambiguous attempt, so a retry addresses the same
@@ -192,10 +192,11 @@ final class _TenantReconciliationStatusPanelState
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
       setState(
-        () => _notice =
-            'Queued as ${result.jobId}. The server works through outstanding '
-            'days oldest first, so this may regenerate another day before '
-            'this one.',
+        () => _notice = AppNotice.confirmed(
+          'Queued as ${result.jobId}. The server works through outstanding '
+          'days oldest first, so this may regenerate another day before '
+          'this one.',
+        ),
       );
       _reload();
     } on TenantReconciliationRequestException catch (error) {
@@ -210,9 +211,10 @@ final class _TenantReconciliationStatusPanelState
       if (!_stillCurrent(capturedKey)) return;
       // The request may well have been queued; only its answer was unusable.
       setState(
-        () => _notice =
-            'The server answer could not be trusted. A check may have been '
-            'queued; read this page again before asking for another.',
+        () => _notice = const AppNotice.unknown(
+          'The server answer could not be trusted. A check may have been '
+          'queued; read this page again before asking for another.',
+        ),
       );
       _reload();
     } finally {
@@ -298,26 +300,41 @@ final class _TenantReconciliationStatusPanelState
 }
 
 /// The notice shown for one refused request.
-String _requestNotice(TenantReconciliationRequestFailure failure) =>
+///
+/// **Five of the six are `refused` and one is not.** `ambiguous` is the only
+/// branch where something may actually have been queued, and it is the only one
+/// whose own sentence tells a person to go and look — so it carries `attention`
+/// rather than `problem`, which is the distinction the sentences have always
+/// drawn and the colour never did.
+AppNotice _requestNotice(TenantReconciliationRequestFailure failure) =>
     switch (failure) {
-      TenantReconciliationRequestFailure.forbidden =>
+      TenantReconciliationRequestFailure.forbidden => const AppNotice.refused(
         'Only an owner or administrator can ask for a check. Nothing was '
-            'queued.',
+        'queued.',
+      ),
       TenantReconciliationRequestFailure.requestedTooRecently =>
-        'A check of this kind was asked for too recently, so nothing was '
-            'queued. The server allows one catch-up every 5 minutes and one '
-            'full check every 24 hours.',
+        const AppNotice.refused(
+          'A check of this kind was asked for too recently, so nothing was '
+          'queued. The server allows one catch-up every 5 minutes and one '
+          'full check every 24 hours.',
+        ),
       TenantReconciliationRequestFailure.duplicateRequest =>
-        'An earlier attempt already used this request. Nothing was queued a '
-            'second time; ask again to start a new one.',
+        const AppNotice.refused(
+          'An earlier attempt already used this request. Nothing was queued a '
+          'second time; ask again to start a new one.',
+        ),
       TenantReconciliationRequestFailure.invalidRequest =>
-        'The server rejected this request as invalid, so nothing was queued.',
-      TenantReconciliationRequestFailure.refused =>
+        const AppNotice.refused(
+          'The server rejected this request as invalid, so nothing was queued.',
+        ),
+      TenantReconciliationRequestFailure.refused => const AppNotice.refused(
         'The request was refused and nothing was queued.',
-      TenantReconciliationRequestFailure.ambiguous =>
+      ),
+      TenantReconciliationRequestFailure.ambiguous => const AppNotice.unknown(
         'The result is unknown. A check may have been queued; this page has '
-            'been read again, so check the runs below before asking for '
-            'another.',
+        'been read again, so check the runs below before asking for '
+        'another.',
+      ),
     };
 
 final class _ReconciliationContents extends StatelessWidget {
@@ -341,7 +358,7 @@ final class _ReconciliationContents extends StatelessWidget {
   final String selfUid;
   final int pageIndex;
   final bool busy;
-  final String? notice;
+  final AppNotice? notice;
   final TenantReconciliationMode mode;
   final bool canRequest;
   final bool requestOffered;
@@ -506,9 +523,21 @@ final class _ReconciliationContents extends StatelessWidget {
             ),
           ),
         ),
-        if (notice case final message?) ...[
+        // **What happened is a status, not a paragraph a person has to parse.**
+        // This was a bare `Text` whose sentence was the only thing separating
+        // "Queued as rj_000123" from "Only an owner can ask for a check" — the
+        // §1 failure in the one place it decides whether somebody presses the
+        // button again. The `AppNotice` carries the answer and the `Callout`
+        // draws it; §5.1 gives that component "permanent notice paragraphs" and
+        // the step-4 sweep ruled that a notice about *this page, this write*
+        // does not fold.
+        if (notice case final answer?) ...[
           SizedBox(height: tokens.spacing.s12),
-          Text(key: const ValueKey('reconciliation-request-notice'), message),
+          Callout(
+            key: const ValueKey('reconciliation-request-notice'),
+            status: answer.status,
+            message: answer.message,
+          ),
         ],
         if (requestOffered) ...[
           SizedBox(height: tokens.spacing.s24),

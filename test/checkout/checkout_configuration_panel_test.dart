@@ -1,9 +1,12 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/notices.dart';
 
 const String _configurationPath = 'tenants/tenant-a/configuration/checkout';
 
@@ -104,11 +107,16 @@ void main() {
     // Without the signal this device keeps pricing from the catalog snapshot it
     // already holds, which carries no currency at all yet.
     expect(syncs, 1);
-    _expectText(
-      tester,
-      'checkout-configuration-notice',
+    expect(
+      noticeMessage(tester, 'checkout-configuration-notice'),
       'Published. This device re-reads it on its next sync, and every other '
-          'device picks it up when it syncs.',
+      'device picks it up when it syncs.',
+    );
+    // The notice carries what kind of answer it is, which is what a bare
+    // sentence in this position never did.
+    expect(
+      noticeStatus(tester, 'checkout-configuration-notice'),
+      AppStatus.ok,
     );
     // The document is what a till prices with, so the page re-reads rather than
     // showing the value that was typed.
@@ -171,10 +179,17 @@ void main() {
       find.byKey(const ValueKey('checkout-configuration-confirm')),
       findsNothing,
     );
-    _expectText(
-      tester,
-      'checkout-configuration-notice',
+    // **`info`, not `problem`, and this is the case the model was built for.**
+    // The currency the operator wanted published *is* published; nothing failed
+    // and nothing needs doing. Painting it the same red as a forbidden change
+    // would report a fault where the intent is already satisfied.
+    expect(
+      noticeMessage(tester, 'checkout-configuration-notice'),
       'That is already the published currency.',
+    );
+    expect(
+      noticeStatus(tester, 'checkout-configuration-notice'),
+      AppStatus.info,
     );
     expect(writer.published, isEmpty);
   });
@@ -196,10 +211,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    _expectText(
-      tester,
-      'checkout-configuration-notice',
+    expect(
+      noticeMessage(tester, 'checkout-configuration-notice'),
       'Enter a three-letter ISO 4217 currency code, such as KES or UGX.',
+    );
+    expect(
+      noticeStatus(tester, 'checkout-configuration-notice'),
+      AppStatus.problem,
     );
     expect(writer.published, isEmpty);
   });
@@ -223,7 +241,7 @@ void main() {
     await _publish(tester, 'KES');
 
     expect(
-      _text(tester, 'checkout-configuration-notice'),
+      noticeMessage(tester, 'checkout-configuration-notice'),
       startsWith('This device is offline'),
     );
     // Nothing was published, so nothing needs re-reading anywhere.
@@ -242,7 +260,7 @@ void main() {
     await _publish(tester, 'UGX');
 
     expect(
-      _text(tester, 'checkout-configuration-notice'),
+      noticeMessage(tester, 'checkout-configuration-notice'),
       startsWith('The change was refused'),
     );
     // A proved refusal wrote nothing, so there is nothing new to read.
@@ -270,7 +288,7 @@ void main() {
     // This write names one document and one value, so unlike a return or an
     // adjustment it carries no request ID and a retry converges.
     expect(
-      _text(tester, 'checkout-configuration-notice'),
+      noticeMessage(tester, 'checkout-configuration-notice'),
       contains('publishing the same code again is safe'),
     );
     expect(reader.requested.length, 2);

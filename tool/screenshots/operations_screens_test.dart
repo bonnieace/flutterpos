@@ -150,6 +150,62 @@ void main() {
     },
   );
 
+  // **No picture had ever shown a notice on any screen.** Seven surfaces report
+  // what a write did, and every one of those notices appears only *after* a
+  // write — so all 225 images showed the state before anybody pressed anything.
+  // It is the "a conditional section that is invisible in every capture is not
+  // covered" trap again, and structural rather than a fixture gap this time: a
+  // screen-level capture has to drive a form and a confirmation to reach one.
+  // This is that, on the surface with the most notice branches in the app. The
+  // other statuses are covered by the `Callout` matrix; what no matrix can show
+  // is how one reads *in place*, above a page of forms.
+  screenshotCase(
+    '18b-catalog-notice',
+    build: () {
+      final reader = FakeTenantReader.business();
+      return inSession(
+        TenantCatalogManagementScreen(
+          reader: reader,
+          writer: FakeCatalogWriter(),
+          updateCallable: FakeCallable(),
+        ),
+      );
+    },
+    afterPump: (tester) async {
+      final field = find.byKey(
+        const ValueKey('catalog-management-category-name'),
+      );
+      await tester.scrollUntilVisible(
+        field,
+        300,
+        scrollable: find.byType(Scrollable).first,
+        maxScrolls: 30,
+      );
+      // `scrollUntilVisible` stops when a widget is built rather than when it is
+      // on screen, which is the trap `19-correct-a-product` was quietly failing.
+      await tester.ensureVisible(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, 'Frozen');
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('catalog-management-add-category')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+      await tester.pumpAndSettle();
+      // The notice lands near the top of the route, above the forms, so the page
+      // is scrolled back to it rather than photographed where the tap left it.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('catalog-management-notice')),
+      );
+      // **`Frozen` is deliberately not in the chip strip in this picture.**
+      // `FakeCatalogWriter` answers `committed` without writing to the fake
+      // reader, so the re-read the panel correctly performs returns the same
+      // three seeded categories. That is the fixture rather than the screen, and
+      // it is said here so nobody reads the image as a defect.
+    },
+  );
+
   screenshotCase(
     '19-correct-a-product',
     build: () => inSession(
