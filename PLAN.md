@@ -4720,9 +4720,9 @@ finished.
   could have reached. Its own standing decision above records what it decided, including the one
   thing most likely to be argued with: columns are the union across the list rather than the first
   record's.
-- **~~The `RecordList` sweep: the remaining twelve screens~~ — seven of them are done 2026-08-13**,
-  and **four remain** (step 6's list is twelve screens, not thirteen; both figures were inherited
-  wrongly). The staff directory deleted the hand-rolled choice and retired `TenantRecordCard`,
+- **~~The `RecordList` sweep: the remaining twelve screens~~** — **done 2026-08-13, all twelve**
+  (step 6's list is twelve screens, not thirteen; both figures were inherited wrongly). It took four
+  chunks. The staff directory deleted the hand-rolled choice and retired `TenantRecordCard`,
   `TenantRecordTable`, `TenantTableColumn`, `TenantTableRow` and `TenantStatusChip`, and brought
   `RecordItem.details` with it. It cost **one** test file rather than five — a staff record can carry
   at most four actions, so only one moved behind the menu — and found a phone-width overflow in five
@@ -4731,8 +4731,11 @@ finished.
   predictions about itself and cost two test files. **The stock family, 21–24, went third** and found
   three screens wording one document three ways, which is the drift
   `lib/inventory/stock_movement_labels.dart` had been written to prevent and had never reached; it
-  cost four test files, +8 tests, 12 images and no board row. **The shift family, 30 and 32–34, is
-  next**, described in full above.
+  cost four test files, +8 tests, 12 images and no board row. **The shift family, 30 and 32–34, went
+  fourth and last**, and is where a record first turned out to have a §2.1 standing; it also found
+  three page-invariant paragraphs being repeated per record, and one of the three was settled by a
+  screenshot rather than by argument. It cost five test files, +8 tests, 11 moved images, 1 added,
+  and no board row.
 - **The design system, step 8: money surfaces** — after the sweep, not with it. `StatTile`, tabular
   figures and tables across the five reporting screens, which are `RecordList`s with figures in
   them and therefore genuinely downstream of the chunk above. **It wants §3's density answered**,
