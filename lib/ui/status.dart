@@ -315,6 +315,14 @@ final class Disclosure extends StatefulWidget {
 
   /// The one line shown when it is closed. §5.2: one line, and the copy rule is
   /// §8's - it says what is inside rather than "More information".
+  ///
+  /// **One line means about 32 characters at §4.1's `compact` band**, and that
+  /// figure is [summaryCharacterBudget] below rather than only a note here. This
+  /// widget will not wrap a summary - §5.2 says one line - so keeping it short is
+  /// the call site's responsibility, and a long one silently becomes
+  /// "What a run is, and what it does not pro...". Step 4 shipped exactly that
+  /// on the reconciliation day page and nobody saw it for two days, because no
+  /// capture had ever put a `Disclosure` on a phone.
   final String summary;
 
   /// The explanation. Usually a [Text]; anything is allowed, because some of
@@ -350,6 +358,23 @@ final class Disclosure extends StatefulWidget {
   /// third size being invented. Recorded in `PLAN.md` as a §5.2 gap alongside
   /// the field-hover one.
   static const double glyphSize = 18;
+
+  /// How many characters of [summary] survive one line at §4.1's `compact` band.
+  ///
+  /// **Measured in the screenshot harness rather than in a widget test, and the
+  /// distinction is the point.** A plain `flutter test` renders without the
+  /// Material fonts, so `RenderParagraph.didExceedMaxLines` there reports a
+  /// fallback font's advance widths - 406 logical pixels for a 25-character
+  /// summary that actually fits in 295. The harness loads the real fonts, so its
+  /// 411-wide captures are the only honest measurement, and this constant is what
+  /// they said on 2026-08-14: "What this page can and cannot do" fits with room
+  /// and "What a run is, and what it does not prove" ellipsises.
+  ///
+  /// It is deliberately not enforced by this widget. Truncating a summary is a
+  /// legitimate rendering at a width nobody planned for; what is not legitimate
+  /// is a call site that has never been laid out narrow, and a `length` assertion
+  /// beside the screen is what catches that without depending on font metrics.
+  static const int summaryCharacterBudget = 32;
 
   @override
   State<Disclosure> createState() => _DisclosureState();

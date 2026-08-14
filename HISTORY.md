@@ -21554,3 +21554,275 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+## The reconciliation family gets one vocabulary, and step 4's sweep begins - 2026-08-14
+
+`design.md` §11 **step 4's sweep** — the second half of step 4, the way the call-site sweep was the
+second half of `AppButton` — taken over the **four surfaces whose subject is reconciliation**.
+`PLAN.md` queued the sweep as "a class of thing rather than a screen list" and then named **two
+screen sections** it also owns, adding that "whichever chunk takes one should take both or say why
+not". Both are in this family, so the family is the chunk:
+
+```text
+27  reconciliation status      the day page - partly swept by step 4 itself
+29  one reconciliation run     and the run card the day page shares with it
+28  reconciliation differences the second named section
+21  product stock              the "Reconciliation found" exception report, the first named section
+```
+
+It changes `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either:
+`git diff` **and** `git status` over all three print zero lines.
+
+### Why this family, and not the class at large
+
+The sweep's own words are "every remaining permanent notice paragraph, every remaining multi-line
+explanation, and every remaining status rendered as a word or a coloured `Text`". Counted over the
+migrated tree that is 37 files. What makes these four a chunk rather than an arbitrary slice is that
+**step 4 already decided the hard question on one of them and never applied it to the other three**:
+the day page has carried two `Disclosure`s and a `Callout` since 2026-08-12, and the three surfaces
+it links to carried the same kinds of prose as loose `Text`. The rule was there to be read off an
+existing screen rather than invented.
+
+The rule, stated because it is now a family-wide convention: §5.1 splits the two components by what
+the prose is *for*. A permanent **helper** paragraph — always the same, read once, true of every
+record the screen will ever show — is a `Disclosure` and folds. A permanent **notice** — about the
+state of this page, this read, this role — is a `Callout` and does not.
+
+### What was decided
+
+1. **A recorded difference has no §2.1 standing, and that is the lookup rather than a habit.** §2.1
+   gives "difference found" to `problem`, and every record on any of these surfaces is a difference
+   the server found and could not resolve — so a badge on each would be the no-signal case the
+   `RecordList` sweep ruled out four times. What the status is *for* here is the container a notice
+   is drawn in, which is how the exception report on 21 renders §2.1 without a badge.
+2. **A run does have one, and a page of runs is why.** `completed` → `ok` ("reconciled"), `queued`
+   and `running` → `attention` ("pending, awaiting"), `failed` and `quarantined` → `problem`,
+   `other` → `info`. A run's state was a **word inside a `titleMedium` `Text`** —
+   `Completed • Nightly sweep` — which is the one rendering §2.1 forbids, on the card **both** the
+   day page and the run page mount.
+3. **`failed` and `quarantined` share a colour and never a word.** §2.1 has no row for "failed, but
+   a retry is scheduled". §2.1's own design is a container plus an icon plus a *word*, so two states
+   sharing a colour while differing in the word is the system working rather than a collision. What
+   separates them is a detail line, and **it is the enum's own label, shown only where it says more
+   than the badge's word** — four of the six labels *are* the word, so restating them beside the
+   badge would be the duplication the container exists to avoid. No copy was invented.
+4. **`other` is `info`, following the day page's own decision** rather than §2.1's "unreadable" row:
+   a server deploy that records a state this app does not model is not evidence of anything wrong.
+   The stored value is the detail line, so nothing is renamed or hidden.
+5. **An unreadable difference read on screen 21 is `info`, and the deciding word is "refused".** §2.1
+   does give "unreadable" to `problem` and that read like the obvious home for a read that failed —
+   but the panel's own doc comment says the same sentence covers a read that *"fails or is refused"*,
+   and a session permitted to read stock and not differences meets it. Calling a permission boundary
+   a fault would invent in colour an answer the code refuses to invent in words. It is also **not**
+   §5.1's `ErrorState`: that row replaces a *route's* "could not be read" prose, and this is one
+   degraded panel on a page whose stock figure and ledger both loaded.
+6. **Three page-invariant paragraphs left their records, which is the shift family's finding again.**
+   The differences list's "not in time order" caption sat *below* the records as loose `bodySmall` —
+   the least likely place to look for the reason the order surprised you — and is one of three
+   paragraphs behind one fold now. The run page's "a difference outlives the run that found it" was
+   stated *under the record* as though it were a fact about that run; the date half of that sentence
+   stays beside the record, the standing half joined the page's explanation.
+7. **The differences list's two overlapping role notices became one.** A manager saw both
+   `reconciliation-anomalies-writes` ("nothing on this page can") and, when the page listed a shift
+   difference, `reconciliation-amend-forbidden`. The second is almost word-for-word the `Callout` the
+   day page has carried since step 4, so it is the `Callout` here too, and the first stays a helper
+   paragraph behind the fold with the other two.
+8. **`reconciliation-request-notice` was excluded, and so was its twin, which `PLAN.md` did not know
+   about.** `PLAN.md` names the day page's outcome notice as the one sweep item that is "a small
+   model change rather than a restyle" — a `String?` the panel passes down, with nothing in it saying
+   whether the sentence is a success or a refusal. The differences list has **exactly the same item**
+   in `reconciliation-amend-notice`, arrived at the same way. Both stay plain `Text`. Widening the
+   field to carry a status is a two-line change and it is state shape, which `claude.md` hard rule 1
+   keeps out of a visual chunk; taking one and not the other would have left the two panels
+   inconsistent for no gain.
+9. **The exception report on 21 is a `Callout` per difference, which is `PLAN.md`'s own reading and it
+   holds up.** §5.2's record contract is an identity, key-value attributes, a status, a provenance
+   line and actions; a difference here is a kind and two to four sentences with nothing to press, and
+   a table column of four-sentence paragraphs is not what §4.3 is for. The kind is the `title`, and
+   the figures, the resolution sentence and the provenance are the `message`.
+10. **What a screen can *do* about a record stayed at the call site.** The stock route's "an
+    adjustment recorded below is how this is put right" names a form three inches down its own page,
+    so `_resolutionNote` is private to that panel while the figures, the subject, the kind and the
+    provenance are shared. What a difference *is* is the same everywhere; what to press about it is a
+    fact about one screen.
+11. **The differences list's cards were deliberately left as cards.** They are a `RecordList`
+    candidate, but screen 28 is **not one of the twelve screens `design.md` §11 step 6 names**, so
+    migrating it would be step 6 work outside step 6's list. What this chunk unified there is the
+    *wording*, which is what the sweep owns.
+12. **`Pagination` was examined and declined a fifth time.** All four surfaces carry a
+    `Previous page` / `Next page` pair — one of `DESIGN-AUDIT.md` §2.3's four idioms — and it is §5.1
+    priority 3. Nothing about it moved.
+
+### The divergence, which is a defect on one surface rather than a difference of taste
+
+`lib/reporting/reconciliation_labels.dart` exists for the reason
+`lib/inventory/stock_movement_labels.dart` does, and it found the same shape of problem the stock
+chunk did. Two surfaces render one `reconciliation_anomalies` document and they had written their own
+words for it:
+
+- **The differences list described all three stock kinds with the stock-variance sentence.** Its
+  `_detail` branched on `anomaly.isStockAnomaly`, which covers `stock_variance`,
+  `checkpoint_chain_invalid` and `invalid_stock_movement`. The model guarantees a `variance` on all
+  three and permits it to be **zero** on the two that are not variances — so a broken checkpoint
+  chain whose quantities happen to agree read as *"Its ledger expects 10, and the product records 10:
+  0 fewer than the ledger accounts for."* A record that exists because there is a difference, stating
+  that there is none. The stock route has had the right words for all three since it was written and
+  the list had never been given them.
+- **An unmodelled kind said nothing about itself on the list.** `_detail` returned null, so the
+  record was a kind and a subject. The stock route's sentence for that case now reaches both.
+- **The same instant was formatted two ways on pages that link to each other.** A difference carried
+  `toIso8601String()` — `2026-08-01T02:30:00.000Z` — and a run carried `2026-08-01 02:30 UTC`. One
+  format now, and the run page and the day page had two private copies of the formatter which are
+  one.
+- **The provenance sentence had two orderings**, run-first on the stock route and instant-first on
+  the list. §5.2's provenance shape is the instant then who, so the list's ordering won.
+
+**One defect in the new module was found by a test rather than by reasoning.** Composing the
+provenance from a capitalised leading fragment and lowercase followers made a record that carries only
+a run ID read `found by run rj_abc.` — a sentence with a lowercase first word. Every fragment is
+lowercase now and the sentence is capitalised once, at the end.
+
+### What the pictures decided, and it was step 4's own defect
+
+**`Disclosure`'s collapsed summary fits about 32 characters at §4.1's `compact` band, and nobody had
+ever measured it.** §5.2 gives the component one line and the widget does not wrap, so a long summary
+silently ellipsises. `mobile-full/21b-product-stock-differences` showed all three of this chunk's new
+summaries truncated — and `mobile-full/27-reconciliation-status` showed that **step 4 shipped one
+too**: `What a run is, and what it does not prove` has been rendering as
+`What a run is, and what it does not pro…` since 2026-08-12. Nobody saw it because **no capture had
+ever put a `Disclosure` on a phone**: step 4's own `93-disclosure-*` matrix is `web` only.
+
+Seven summaries were shortened, one of them step 4's. `Disclosure.summaryCharacterBudget` records the
+figure beside the field it constrains, and the guard is a `length` assertion on the route that has
+four of them.
+
+**The assertion is a character count and not a render measurement, and that distinction cost a
+cycle.** The first version asserted `RenderParagraph.didExceedMaxLines` at 411 and failed on a
+**25-character** summary. A plain `flutter test` renders without the Material fonts — the standing
+"render the screen before diagnosing the screen" trap, from the other direction — so the fallback
+font's advance widths made a summary needing 175 logical pixels report 406 against 295 available. The
+harness loads real fonts through `FontLoader`, so its 411-wide captures are the only honest
+measurement of what fits, and the budget came from them.
+
+### What the pictures show and this chunk did not fix
+
+**`AppSelect` renders its three adjustment-type labels as three white rectangles on screen 21**, on
+both the phone and the desktop capture. **It is not this chunk's** — the same rectangles are in the
+reverted-run capture of the same screen, so it is `AppSelect`'s at `HEAD` and has been since step 3.
+It was not diagnosed here: it is step 3's component, the fix is not a sweep item, and
+`web/92-appselect-open` is a second-order finding of its own — that capture is titled "AppSelect -
+menu open" and its viewport cuts off above the select, so the component's own state matrix has never
+photographed one. Both are recorded in `PLAN.md` rather than fixed.
+
+### Files changed
+
+```text
+lib/reporting/reconciliation_labels.dart          new - the family's record vocabulary
+lib/reporting/reconciliation_anomalies_panel.dart screen 28
+lib/reporting/reconciliation_run_panel.dart       screen 29, and the shared run card
+lib/reporting/reconciliation_status_panel.dart    screen 27
+lib/inventory/stock_adjustment_panel.dart         screen 21
+lib/reporting/reporting.dart                      one export
+lib/ui/status.dart                                Disclosure.summaryCharacterBudget and its doc
+tool/screenshots/operations_screens_test.dart     one capture case, 21b
+test/reporting/reconciliation_labels_test.dart    new
+test/reporting/reconciliation_anomalies_panel_test.dart
+test/reporting/reconciliation_run_panel_test.dart
+test/reporting/reconciliation_status_panel_test.dart
+test/inventory/stock_adjustment_panel_test.dart
+```
+
+13 files, **+775 / -297**. Nine private wording helpers are deleted — `_subject`, `_detail`,
+`_signed` and `_instants` from the differences list, `_differenceDetail`, `_foundLabel` and `_time`
+from the stock route, `_statusLabel` from the run panel, and `_instant` from both the run panel and
+the day page.
+
+**`dart format` was not run**, on any file. The standing prohibition holds and the check it names —
+the per-file line count — reconciles: no file reports more changed lines than the edits in it. Two
+lines this chunk wrote exceeded 80 columns and were wrapped by hand; the 81-to-83-column doc and
+comment lines it added are in the same range as the ones already in these files.
+
+### Tests
+
+**All five suites measured, none carried**, although a carry was legal: this chunk is Dart-only and
+`git diff` over the three server paths prints zero lines. That is six consecutive chunks measuring
+all five.
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1855 -> 1882  (+27)
+npm --prefix functions test                                                409  unchanged
+npm --prefix rules-tests run test:emulator                                 161  unchanged (~109 s)
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged (~150 s)
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged (~201 s)
+```
+
+The prelude was run before every emulator command. All four passed first time and no suite was
+retried.
+
+The 27 new tests, by file: **18** in `reconciliation_labels_test.dart`, **4** in
+`reconciliation_run_panel_test.dart`, **3** in `reconciliation_anomalies_panel_test.dart`, **2** in
+`stock_adjustment_panel_test.dart`, and **0** in `reconciliation_status_panel_test.dart` — the day
+page gained a `Callout` and a shorter summary and no new behaviour.
+
+**The vocabulary is unit-tested directly rather than through the panels, which is a departure from
+`stock_movement_labels.dart` and is deliberate.** It is the shared authority for eight difference
+kinds and six run states; asserting each of the fourteen through a widget pump would be fourteen
+pumps to check a string. What the panels assert is that they read *this*, which is the part a pump can
+see.
+
+Existing assertions changed rather than being added, every one a fact in its new rendering:
+`Completed • Nightly sweep` → `Nightly sweep` plus a badge (three files, because three surfaces mount
+the same card), `No time was recorded for this difference.` → `No run or time was recorded …`,
+`Found by run rj_abc, first recorded 2026-08-01T02:30:00.000Z.` → `First recorded 2026-08-01 02:30
+UTC, found by run rj_abc.`, three `_expectText` reads of the stock route's difference card → three
+reads of one `Callout`'s `title` and `message`, and four prose reads → a tap on a `Disclosure` first.
+
+**One fixture was wrong and the model caught it.** A quarantined run written without a `lastErrorCode`
+is refused by `TenantReconciliationRun.fromDocument` — the retry sweep always records why it gave up —
+so the first version of the quarantined-badge test found no badge at all rather than a wrong one.
+
+`flutter analyze --no-pub lib test tool` reports **475 issues**, unchanged, and none in
+`lib/reporting`, `lib/inventory`, `lib/ui`, `test/` or `tool/screenshots`.
+
+### Screenshots
+
+**200 images from 150 captures: 4 added, 0 removed, 14 changed, 182 byte-identical.**
+
+The baseline was the shift chunk's, generated the day before, so its raw diff was **46 changed** and
+32 of those are the date drift `fakes.dart` produces from `DateTime.now()`. **A second full
+regeneration with the four panels reverted to `HEAD` is what makes "14 changed" a measurement rather
+than an assertion**, which is the procedure `PLAN.md` requires of a chunk that cannot share a day with
+its baseline. Three regenerations in total: migrated, reverted, then migrated again after the summary
+fix.
+
+```text
+web/21-product-stock                web-full/21-product-stock
+mobile/21-product-stock             mobile-full/21-product-stock
+web/27-reconciliation-status        web-full/27-reconciliation-status
+mobile/27-reconciliation-status     mobile-full/27-reconciliation-status
+web/28-reconciliation-differences   web-full/28-reconciliation-differences
+mobile/28-reconciliation-differences mobile-full/28-reconciliation-differences
+web/29-one-reconciliation-run       mobile/29-one-reconciliation-run   (no -full: it fits)
+web/21b-product-stock-differences   web-full/21b-product-stock-differences      (new)
+mobile/21b-product-stock-differences mobile-full/21b-product-stock-differences  (new)
+```
+
+**`21b-product-stock-differences` is the addition and it is a fixture finding.** The seeded stock
+difference is filed against `pd-milk-500` and `21-product-stock` opens `pd-bread-white`, so **every
+screenshot of that route since it was written has photographed the branch where reconciliation found
+nothing** — precisely the "a fixture that hides the case the component exists for" trap the stock
+family recorded. The exception report is in a picture for the first time.
+
+**`mobile-full/21-product-stock` is the picture worth opening.** Two unfolded paragraphs — seven lines
+of a phone screen above the ledger — are two one-line disclosures.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

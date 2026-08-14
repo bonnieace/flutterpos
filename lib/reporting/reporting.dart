@@ -5,6 +5,7 @@ export 'profit_statement.dart';
 export 'reconciliation_actions.dart';
 export 'reconciliation_anomalies.dart';
 export 'reconciliation_anomalies_panel.dart';
+export 'reconciliation_labels.dart';
 export 'reconciliation_request.dart';
 export 'reconciliation_run_panel.dart';
 export 'reconciliation_status.dart';

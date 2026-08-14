@@ -9,6 +9,7 @@ import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
 import '../ui/status.dart';
 import '../reporting/reconciliation_anomalies.dart';
+import '../reporting/reconciliation_labels.dart';
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -352,60 +353,37 @@ final class _TenantProductStockPanelState
   }
 }
 
-/// The figures a recorded difference carries, stated and never recomputed.
+/// What an adjustment can and cannot do about one recorded difference.
 ///
+/// **This screen's own sentence, which is why it is here and not in
+/// `reconciliation_labels.dart` with the figures.** What a difference *is* is the
+/// same on every surface that shows it; what to press about it is a fact about
+/// this page, and this page is the only one with the form three inches below.
 /// Only one of the four kinds a product can hold is a quantity disagreement an
-/// adjustment resolves. The other three say the comparison itself could not be
-/// trusted, and each says so rather than inviting a correction that would not
-/// resolve it.
-String _differenceDetail(TenantReconciliationAnomaly anomaly) {
-  switch (anomaly.kind) {
-    case TenantReconciliationAnomalyKind.stockVariance:
-      // The same sentence the differences list uses for this record, so the two
-      // surfaces describe one figure the same way.
-      final variance = anomaly.quantityVariance!;
-      final direction = variance > 0 ? 'more' : 'fewer';
-      return 'Its ledger expects ${anomaly.expectedQuantity}, and the product '
-          'records ${anomaly.observedQuantity}: ${variance.abs()} $direction '
-          'than the ledger accounts for. An adjustment recorded below is how '
-          'this is put right.';
-    case TenantReconciliationAnomalyKind.invalidStockMovement:
-      return 'A movement in the ledger below could not be read, so the expected '
-          'quantity of ${anomaly.expectedQuantity} does not account for '
-          'everything that moved. An adjustment will not resolve this: the '
-          'ledger entry is what needs looking at.';
-    case TenantReconciliationAnomalyKind.checkpointChainInvalid:
-      return 'The tamper-evident chain of checks behind this product does not '
-          'join up, so the expected quantity of ${anomaly.expectedQuantity} '
-          'cannot be trusted as a starting point. This is not a quantity '
-          'disagreement and an adjustment will not resolve it.';
-    case TenantReconciliationAnomalyKind.invalidProductQuantity:
-      return 'This product\'s recorded quantity could not be read as a whole '
-          'number, so its stock was not verified at all. Nothing can be added '
-          'to it until that is repaired.';
-    case TenantReconciliationAnomalyKind.invalidSaleLines:
-    case TenantReconciliationAnomalyKind.invalidOrMissingShift:
-    case TenantReconciliationAnomalyKind.shiftVariance:
-    case TenantReconciliationAnomalyKind.other:
+/// adjustment resolves, and the other three say so rather than inviting a
+/// correction that would not resolve them.
+String _resolutionNote(TenantReconciliationAnomaly anomaly) =>
+    switch (anomaly.kind) {
+      TenantReconciliationAnomalyKind.stockVariance =>
+        'An adjustment recorded below is how this is put right.',
+      TenantReconciliationAnomalyKind.invalidStockMovement =>
+        'An adjustment will not resolve this: the ledger entry below is what '
+            'needs looking at.',
+      TenantReconciliationAnomalyKind.checkpointChainInvalid =>
+        'An adjustment will not resolve it.',
+      TenantReconciliationAnomalyKind.invalidProductQuantity =>
+        'Nothing can be added to it until that is repaired.',
       // Reachable only for a kind this build does not model, or one a server
-      // started filing against a product. Naming it plainly beats hiding a real
-      // difference, and beats describing it as something it may not be.
-      return 'The server recorded this against this product. What it means is '
-          'not something this version of the app can explain.';
-  }
-}
-
-String _foundLabel(TenantReconciliationAnomaly anomaly) {
-  final parts = <String>[
-    if (anomaly.jobId case final jobId?) 'Found by run $jobId',
-    if (anomaly.recordedAt case final at?) 'first recorded ${_time(at)}',
-    if (anomaly.updatedAt case final at?) 'last seen ${_time(at)}',
-  ];
-  if (parts.isEmpty) return 'No run or time was recorded for this difference.';
-  return '${parts.join(', ')}.';
-}
-
-String _time(DateTime value) => value.toIso8601String();
+      // started filing against a product. The figures above are the record's
+      // own; what an adjustment would do about it is not something this version
+      // can promise either way.
+      TenantReconciliationAnomalyKind.invalidSaleLines ||
+      TenantReconciliationAnomalyKind.invalidOrMissingShift ||
+      TenantReconciliationAnomalyKind.shiftVariance ||
+      TenantReconciliationAnomalyKind.other =>
+        'Whether an adjustment resolves this is not something this version of '
+            'the app can say.',
+    };
 
 String _adjustmentNotice(TenantStockAdjustmentFailure failure) =>
     switch (failure) {
@@ -510,13 +488,21 @@ final class _ProductStockContents extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 12),
-      Text(
-        'This is the quantity the server holds, not a figure derived on this '
-        'device. Stock may legitimately be negative: a sale is never blocked '
-        'by a stock count, so a product can be sold past zero and corrected '
-        'here afterwards.',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+      // The last unfolded permanent paragraph above the fold on this screen.
+      // Step 4 put the adjustment explanation behind a `Disclosure` further down
+      // and left this one and the ledger's own note as loose body text, so the
+      // screen has been carrying one folded explanation and two unfolded ones
+      // ever since. It also carried the only raw `colorScheme` read left on this
+      // route; `Disclosure` reads §2.2's own body role from the token layer.
+      const Disclosure(
+        key: ValueKey('product-stock-quantity-disclosure'),
+        summary: 'Why stock can be negative',
+        child: Text(
+          key: ValueKey('product-stock-quantity-scope'),
+          'This is the quantity the server holds, not a figure derived on this '
+          'device. Stock may legitimately be negative: a sale is never blocked '
+          'by a stock count, so a product can be sold past zero and corrected '
+          'here afterwards.',
         ),
       ),
       if (notice case final message?) ...[
@@ -527,10 +513,15 @@ final class _ProductStockContents extends StatelessWidget {
       const SizedBox(height: 24),
       Text('Stock ledger', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 4),
-      const Text(
-        'Every sale, verified return, and manual adjustment the server '
-        'recorded for this product. It is listed by record ID, which is not '
-        'time order; each entry states when it was recorded.',
+      const Disclosure(
+        key: ValueKey('product-stock-ledger-disclosure'),
+        summary: 'What the ledger holds',
+        child: Text(
+          key: ValueKey('product-stock-ledger-scope'),
+          'Every sale, verified return, and manual adjustment the server '
+          'recorded for this product. It is listed by record ID, which is not '
+          'time order; each entry states when it was recorded.',
+        ),
       ),
       const SizedBox(height: 12),
       // §4.3's responsive contract, in the same record vocabulary the two feeds
@@ -611,11 +602,23 @@ final class _ProductStockContents extends StatelessWidget {
     if (!differences.readable) {
       return <Widget>[
         const SizedBox(height: 12),
-        Text(
-          key: const ValueKey('product-stock-differences-unreadable'),
-          'Whether reconciliation recorded a difference for this product could '
-          'not be read. The stock and ledger below are unaffected.',
-          style: Theme.of(context).textTheme.bodySmall,
+        // **`info` rather than `problem`, and the deciding word is "refused".**
+        // §2.1 does give "unreadable" to `problem`, which reads like the obvious
+        // home for a read that failed - but this same sentence is what a session
+        // permitted to read stock and not differences is shown, and calling a
+        // permission boundary a fault would invent an answer the code refuses to
+        // invent in words. The same reading step 4 applied to an unrecognised
+        // day.
+        //
+        // Not §5.1's `ErrorState` either: that row replaces a *route's* "could
+        // not be read" prose, and this is one degraded panel on a page whose
+        // stock figure and ledger both loaded.
+        const Callout(
+          key: ValueKey('product-stock-differences-unreadable'),
+          status: AppStatus.info,
+          message:
+              'Whether reconciliation recorded a difference for this product '
+              'could not be read. The stock and ledger below are unaffected.',
         ),
       ];
     }
@@ -627,61 +630,67 @@ final class _ProductStockContents extends StatelessWidget {
         style: Theme.of(context).textTheme.titleMedium,
       ),
       const SizedBox(height: 4),
-      const Text(
-        key: ValueKey('product-stock-differences-scope'),
-        // The distinction that keeps this honest. A shift correction deletes the
-        // difference it resolved; nothing deletes one of these, so an old record
-        // may already have been dealt with and this list cannot tell you which.
-        'A record is kept for each run that found a difference here, and none is '
-        'ever removed: a later run that agrees simply records nothing new. So an '
-        'older entry may already have been put right. Each one names the run '
-        'that found it.',
-      ),
-      if (differences.hasMore)
-        Text(
-          key: const ValueKey('product-stock-differences-truncated'),
-          'More are recorded against this product than are shown here, and this '
-          'is not a list in time order, so these are not the most recent ones.',
-          style: Theme.of(context).textTheme.bodySmall,
+      // A permanent helper paragraph: it is true of every difference this screen
+      // will ever show, so it folds. The distinction it draws is what keeps the
+      // section honest - a shift correction deletes the difference it resolved;
+      // nothing deletes one of these, so an old record may already have been
+      // dealt with and this list cannot tell you which.
+      const Disclosure(
+        key: ValueKey('product-stock-differences-scope-disclosure'),
+        summary: 'Why old differences stay listed',
+        child: Text(
+          key: ValueKey('product-stock-differences-scope'),
+          'A record is kept for each run that found a difference here, and none '
+          'is ever removed: a later run that agrees simply records nothing new. '
+          'So an older entry may already have been put right. Each one names '
+          'the run that found it.',
         ),
+      ),
+      if (differences.hasMore) ...<Widget>[
+        const SizedBox(height: 12),
+        // A notice about this page rather than a standing explanation - it is
+        // here only because this particular product holds more than the page
+        // read - so it does not fold. `info`: the page is complete, it is the
+        // list that is bounded.
+        const Callout(
+          key: ValueKey('product-stock-differences-truncated'),
+          status: AppStatus.info,
+          message:
+              'More are recorded against this product than are shown here, and '
+              'this is not a list in time order, so these are not the most '
+              'recent ones.',
+        ),
+      ],
       const SizedBox(height: 12),
-      for (final anomaly in differences.items) _difference(context, anomaly),
+      for (final anomaly in differences.items) ...<Widget>[
+        _difference(anomaly),
+        const SizedBox(height: 12),
+      ],
     ];
   }
 
-  Widget _difference(
-    BuildContext context,
-    TenantReconciliationAnomaly anomaly,
-  ) => Card(
+  /// One recorded difference, as the notice it is.
+  ///
+  /// **A `Callout` rather than a record, which is `PLAN.md`'s own reading of
+  /// this section and holds up on contact.** §5.2's record contract is an
+  /// identity, key-value attributes, a status, a provenance line and actions; a
+  /// difference here is a kind and two to four sentences of explanation with
+  /// nothing to press, and a table column of four-sentence paragraphs is not
+  /// what §4.3 is for. The `Callout` container is also how §2.1's status gets
+  /// rendered here without a badge: every record in this section is a difference
+  /// found, so a badge on each would be a list with no signal in it.
+  ///
+  /// The figures come from the vocabulary the differences list shares with this
+  /// screen; only [_resolutionNote] is this page's own.
+  Widget _difference(TenantReconciliationAnomaly anomaly) => Callout(
     key: ValueKey('product-stock-difference-${anomaly.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            key: ValueKey('product-stock-difference-kind-${anomaly.id}'),
-            anomaly.kind == TenantReconciliationAnomalyKind.other
-                ? 'Unrecognised difference: ${anomaly.kindValue}'
-                : anomaly.kind.label,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            key: ValueKey('product-stock-difference-detail-${anomaly.id}'),
-            _differenceDetail(anomaly),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            key: ValueKey('product-stock-difference-found-${anomaly.id}'),
-            _foundLabel(anomaly),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    ),
+    status: reconciliationDifferenceStatus,
+    title: reconciliationDifferenceKindLabel(anomaly),
+    message:
+        '${reconciliationDifferenceFigures(anomaly)} '
+        '${_resolutionNote(anomaly)}\n'
+        '${reconciliationDifferenceProvenance(anomaly)}',
   );
-
 }
 
 /// Chooses one typed adjustment and requires an explicit confirmation.

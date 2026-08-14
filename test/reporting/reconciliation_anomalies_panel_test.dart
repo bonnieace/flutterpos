@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -59,11 +60,48 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
+    await _openScope(tester);
     expect(
       _text(tester, 'reconciliation-anomalies-scope'),
       contains('covers the whole business'),
     );
     expect(reader.queries.single.equalityFilters, isEmpty);
+  });
+
+  testWidgets('the three page-wide paragraphs are one fold, not three lines', (
+    tester,
+  ) async {
+    // §5.1: `Disclosure` replaces permanent helper paragraphs. All three are true
+    // of every record this route will ever list, and the ordering note used to
+    // sit *below* the records as a loose caption - the least likely place to look
+    // for the reason the order surprised you.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('sale_a', _saleAnomaly()),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomalies-scope')),
+      findsNothing,
+    );
+    expect(find.textContaining('not in time order'), findsNothing);
+
+    await _openScope(tester);
+
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomalies-scope')),
+      findsOne,
+    );
+    expect(
+      find.byKey(const ValueKey('reconciliation-anomalies-writes')),
+      findsOne,
+    );
+    expect(
+      _text(tester, 'reconciliation-anomalies-order'),
+      contains('not in time order'),
+    );
   });
 
   testWidgets('narrowing to one kind restarts the list', (tester) async {
@@ -164,7 +202,59 @@ void main() {
 
     expect(
       _text(tester, 'reconciliation-anomaly-instants-sale_a'),
-      'No time was recorded for this difference.',
+      'No run or time was recorded for this difference.',
+    );
+  });
+
+  testWidgets('a broken chain is not described as a quantity disagreement', (
+    tester,
+  ) async {
+    // **The divergence the shared vocabulary was written for.** This list used to
+    // describe all three stock kinds with the stock-variance sentence, so a
+    // broken checkpoint chain whose quantities happen to agree read as "0 fewer
+    // than the ledger accounts for" - a record that exists because there is a
+    // difference, stating that there is none. The stock route has had the right
+    // words for all three since it was written.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('chain_a', <String, Object?>{
+          'tenantId': 'tenant-a',
+          'productId': 'product-a',
+          'anomalyType': 'checkpoint_chain_invalid',
+          'expectedQuantity': 10,
+          'observedQuantity': 10,
+          'variance': 0,
+        }),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    final detail = _text(tester, 'reconciliation-anomaly-detail-chain_a');
+    expect(detail, contains('does not join up'));
+    expect(detail, contains('This is not a quantity disagreement.'));
+    expect(detail, isNot(contains('0 fewer')));
+  });
+
+  testWidgets('an unmodelled kind states plainly that it cannot be explained', (
+    tester,
+  ) async {
+    // It used to render the kind and the subject and then stop, so the record
+    // said nothing at all about itself. The stock route's own sentence for this
+    // case now reaches both surfaces.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('other_a', <String, Object?>{
+          'tenantId': 'tenant-a',
+          'anomalyType': 'price_drift',
+        }),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      _text(tester, 'reconciliation-anomaly-detail-other_a'),
+      'What this difference means is not something this version of the app can '
+      'explain.',
     );
   });
 
@@ -233,6 +323,7 @@ void main() {
     expect(_amendButton('shift_c'), findsNothing);
     expect(_amendButton('stock_c'), findsNothing);
     expect(_amendButton('sale_a'), findsNothing);
+    await _openScope(tester);
     expect(
       _text(tester, 'reconciliation-anomalies-writes'),
       contains('counted cash is never changed'),
@@ -254,6 +345,7 @@ void main() {
       find.byKey(const ValueKey('reconciliation-amend-forbidden')),
       findsNothing,
     );
+    await _openScope(tester);
     expect(
       _text(tester, 'reconciliation-anomalies-writes'),
       contains('nothing on this page can'),
@@ -278,10 +370,15 @@ void main() {
     // The server's roles are narrower than the roles that read this list, so a
     // manager is told about the one thing they cannot do.
     expect(_amendButton('shift_b'), findsNothing);
-    expect(
-      _text(tester, 'reconciliation-amend-forbidden'),
-      contains('owners and administrators'),
+    // The same notice the day page has carried behind the same component since
+    // step 4, at the same status: `info`, because nothing failed and nothing is
+    // hidden. It is a `Callout` and not a `Disclosure` because a person meets it
+    // as the answer to "why can I not press that".
+    final callout = tester.widget<Callout>(
+      find.byKey(const ValueKey('reconciliation-amend-forbidden')),
     );
+    expect(callout.status, AppStatus.info);
+    expect(callout.message, contains('owners and administrators'));
   });
 
   testWidgets('the explanation is absent when nothing on screen applies', (
@@ -725,10 +822,20 @@ void main() {
       contains('tenants/tenant-a/reconciliation_jobs/rj_abc'),
     );
     // Described by the same card the day page uses, so the two cannot disagree
-    // about what the run's state means.
+    // about what the run's state means - including its badge.
     expect(
       _text(tester, 'reconciliation-status-run-state-rj_abc'),
-      'Completed • Nightly sweep',
+      'Nightly sweep',
+    );
+    expect(
+      tester
+          .widget<StatusBadge>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-badge-rj_abc'),
+            ),
+          )
+          .label,
+      'Completed',
     );
     expect(
       _text(tester, 'reconciliation-status-run-variance-rj_abc'),
@@ -809,6 +916,16 @@ String _text(WidgetTester tester, String key) =>
 
 Finder _amendButton(String anomalyId) =>
     find.byKey(ValueKey('reconciliation-anomaly-amend-$anomalyId'));
+
+/// Opens the page's own explanation, whose three paragraphs are removed from the
+/// tree while it is closed so a screen reader does not read out prose nobody can
+/// see.
+Future<void> _openScope(WidgetTester tester) async {
+  await tester.tap(
+    find.text('What this list covers'),
+  );
+  await tester.pumpAndSettle();
+}
 
 /// Opens the correction dialog for one row, states a reason, and confirms.
 Future<void> _amend(

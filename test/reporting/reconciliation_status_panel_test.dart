@@ -86,6 +86,8 @@ void main() {
           .data,
       'Requested by Juma (owner-a)',
     );
+    // The state left this line for a `StatusBadge`, and the same shared card
+    // draws it on the one-run route.
     expect(
       tester
           .widget<Text>(
@@ -94,7 +96,17 @@ void main() {
             ),
           )
           .data,
-      'Completed • Requested by a person',
+      'Requested by a person',
+    );
+    expect(
+      tester
+          .widget<StatusBadge>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-badge-rj_abc'),
+            ),
+          )
+          .status,
+      AppStatus.ok,
     );
     expect(
       tester
@@ -588,8 +600,17 @@ void main() {
       // The handler files a manual job under today's business date and the
       // runners take the oldest outstanding day first, so promising this day
       // would be a promise the server never made.
+      //
+      // A `Callout` rather than a `Disclosure`, unlike the two helper paragraphs
+      // above it on the same page: this is the sentence that decides whether the
+      // button below does what the person thinks it does, and a sentence you
+      // have to open is a sentence nobody reads.
+      final callout = tester.widget<Callout>(
+        find.byKey(const ValueKey('reconciliation-request-scope')),
+      );
+      expect(callout.status, AppStatus.info);
       expect(
-        _text(tester, 'reconciliation-request-scope'),
+        callout.message,
         'A request covers the whole business, not the day above. The server '
         'files it under today and works through the outstanding days oldest '
         'first, so it may regenerate a different day before this one.',

@@ -11,6 +11,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'reconciliation_actions.dart';
 import 'reconciliation_anomalies_panel.dart';
+import 'reconciliation_labels.dart';
 import 'reconciliation_request.dart';
 import 'reconciliation_run_panel.dart';
 import 'reconciliation_status.dart';
@@ -469,7 +470,7 @@ final class _ReconciliationContents extends StatelessWidget {
       const SizedBox(height: 4),
       const Disclosure(
         key: ValueKey('reconciliation-status-runs-disclosure'),
-        summary: 'What a run is, and what it does not prove',
+        summary: 'What a run does not prove',
         child: Text(
           'A run is one unit of server work. Each one takes the oldest '
           'business day still waiting in the whole business, so a completed '
@@ -587,11 +588,22 @@ final class _RequestReconciliation extends StatelessWidget {
       // oldest outstanding day first, so it is not a way to reconcile the day
       // being read - and a run queued from here will not appear in the list
       // below unless that day is today.
-      const Text(
+      //
+      // **A `Callout` and deliberately not a `Disclosure`**, unlike the two
+      // helper paragraphs above it. §5.1 splits the two by what the prose is
+      // for: a permanent *helper* paragraph folds away, a permanent *notice*
+      // does not. This is the one sentence that decides whether pressing the
+      // button below does what the person thinks it does, and a sentence you
+      // have to open is a sentence nobody reads. `info` because nothing has
+      // failed - it is telling you what the action covers.
+      const Callout(
         key: ValueKey('reconciliation-request-scope'),
-        'A request covers the whole business, not the day above. The server '
-        'files it under today and works through the outstanding days oldest '
-        'first, so it may regenerate a different day before this one.',
+        status: AppStatus.info,
+        message:
+            'A request covers the whole business, not the day above. The '
+            'server files it under today and works through the outstanding '
+            'days oldest first, so it may regenerate a different day before '
+            'this one.',
       ),
       const SizedBox(height: 12),
       SegmentedButton<TenantReconciliationMode>(
@@ -693,16 +705,9 @@ String _instants(TenantReconciliationIntake intake) {
   return <String>[
     received == null
         ? 'No sale receipt instant recorded'
-        : 'Last sale received ${_instant(received)}',
+        : 'Last sale received ${reconciliationInstant(received)}',
     regenerated == null
         ? 'Never regenerated'
-        : 'Last regenerated ${_instant(regenerated)}',
+        : 'Last regenerated ${reconciliationInstant(regenerated)}',
   ].join(' • ');
-}
-
-String _instant(DateTime value) {
-  final utc = value.toUtc();
-  String pad(int part) => part.toString().padLeft(2, '0');
-  return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
-      '${pad(utc.hour)}:${pad(utc.minute)} UTC';
 }

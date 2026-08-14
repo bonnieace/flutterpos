@@ -4,6 +4,7 @@ import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -11,6 +12,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import 'reconciliation_actions.dart';
 import 'reconciliation_anomalies.dart';
+import 'reconciliation_labels.dart';
 import 'reconciliation_run_panel.dart';
 import 'shift_amendment.dart';
 import 'shift_amendment_feed_panel.dart';
@@ -437,24 +439,48 @@ final class _AnomalyContents extends StatelessWidget {
         style: Theme.of(context).textTheme.headlineSmall,
       ),
       const SizedBox(height: 4),
-      const Text(
-        key: ValueKey('reconciliation-anomalies-scope'),
-        'These are the differences the server found and could not resolve on '
-        'its own. They belong to a product, a shift, or a sale rather than to '
-        'one business day, so this list covers the whole business and is not '
-        'narrowed to the day you came from.',
-      ),
-      const SizedBox(height: 4),
-      Text(
-        key: const ValueKey('reconciliation-anomalies-writes'),
-        canAmend
-            ? 'A shift whose totals disagree with its sales can be corrected '
-                  'here, to the total those sales prove and nothing else. Its '
-                  'counted cash is never changed. Correct a stock figure from '
-                  'the product it belongs to.'
-            : 'Nothing here changed stock, a shift, or a sale, and nothing on '
-                  'this page can. Correct a stock figure from the product it '
-                  'belongs to.',
+      // Three permanent helper paragraphs behind one fold, which is §5.1's own
+      // description of what `Disclosure` replaces. All three are true of every
+      // record this route will ever list - what the list covers, what can be
+      // corrected from it, and why it is not in time order - and the third used
+      // to sit *below* the records as a loose caption, which is the least
+      // likely place for a person to look for the reason the order surprised
+      // them.
+      Disclosure(
+        key: const ValueKey('reconciliation-anomalies-scope-disclosure'),
+        summary: 'What this list covers',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Text(
+              key: ValueKey('reconciliation-anomalies-scope'),
+              'These are the differences the server found and could not resolve '
+              'on its own. They belong to a product, a shift, or a sale rather '
+              'than to one business day, so this list covers the whole business '
+              'and is not narrowed to the day you came from.',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              key: const ValueKey('reconciliation-anomalies-writes'),
+              canAmend
+                  ? 'A shift whose totals disagree with its sales can be '
+                        'corrected here, to the total those sales prove and '
+                        'nothing else. Its counted cash is never changed. '
+                        'Correct a stock figure from the product it belongs to.'
+                  : 'Nothing here changed stock, a shift, or a sale, and '
+                        'nothing on this page can. Correct a stock figure from '
+                        'the product it belongs to.',
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              key: ValueKey('reconciliation-anomalies-order'),
+              'This list is not in time order: a record is addressed by what '
+              'it is about, not by when it was found. Each one states its own '
+              'instants.',
+            ),
+          ],
+        ),
       ),
       if (notice case final message?) ...[
         const SizedBox(height: 12),
@@ -477,11 +503,17 @@ final class _AnomalyContents extends StatelessWidget {
       ],
       if (amendOffered && !canAmend && _listsShiftVariance) ...[
         const SizedBox(height: 12),
-        const Text(
+        // The same notice the day page has carried behind the same component
+        // since step 4, at the same status and for the same reason: `info`
+        // rather than `problem` because nothing has failed and nothing is
+        // hidden - the sentence says so itself.
+        const Callout(
           key: ValueKey('reconciliation-amend-forbidden'),
-          'Correcting a shift\'s totals is available to owners and '
-          'administrators. This list is readable by managers as well, so '
-          'nothing here is hidden from you except that one correction.',
+          status: AppStatus.info,
+          message:
+              'Correcting a shift\'s totals is available to owners and '
+              'administrators. This list is readable by managers as well, so '
+              'nothing here is hidden from you except that one correction.',
         ),
       ],
       const SizedBox(height: 16),
@@ -497,12 +529,6 @@ final class _AnomalyContents extends StatelessWidget {
         )
       else
         for (final anomaly in page.items) _anomaly(context, anomaly),
-      const SizedBox(height: 8),
-      Text(
-        'This list is not in time order: a record is addressed by what it is '
-        'about, not by when it was found. Each one states its own instants.',
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
       const SizedBox(height: 16),
       // A resolved difference is deleted from this list, so without this the
       // corrections made here would leave no visible trace. The trail is
@@ -557,25 +583,22 @@ final class _AnomalyContents extends StatelessWidget {
         children: [
           Text(
             key: ValueKey('reconciliation-anomaly-kind-${anomaly.id}'),
-            anomaly.kind == TenantReconciliationAnomalyKind.other
-                ? 'Unrecognised difference: ${anomaly.kindValue}'
-                : anomaly.kind.label,
+            reconciliationDifferenceKindLabel(anomaly),
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 4),
           Text(
             key: ValueKey('reconciliation-anomaly-subject-${anomaly.id}'),
-            _subject(anomaly),
+            reconciliationDifferenceSubject(anomaly),
           ),
-          if (_detail(anomaly) case final detail?)
-            Text(
-              key: ValueKey('reconciliation-anomaly-detail-${anomaly.id}'),
-              detail,
-            ),
+          Text(
+            key: ValueKey('reconciliation-anomaly-detail-${anomaly.id}'),
+            reconciliationDifferenceFigures(anomaly),
+          ),
           const SizedBox(height: 4),
           Text(
             key: ValueKey('reconciliation-anomaly-instants-${anomaly.id}'),
-            _instants(anomaly),
+            reconciliationDifferenceProvenance(anomaly),
             style: Theme.of(context).textTheme.bodySmall,
           ),
           if (_canAmendRow(anomaly) ||
@@ -706,59 +729,6 @@ final class _AmendShiftDialogState extends State<_AmendShiftDialog> {
     ],
   );
 }
-
-/// What the difference is about. The identity is the ID the rest of the app
-/// attributes by, so it is always shown rather than resolved to a name.
-String _subject(TenantReconciliationAnomaly anomaly) {
-  if (anomaly.productId case final productId?) return 'Product $productId';
-  if (anomaly.shiftId case final shiftId?) return 'Shift $shiftId';
-  if (anomaly.saleId case final saleId?) return 'Sale $saleId';
-  return 'This business';
-}
-
-/// The figures the record itself carries, stated and never recomputed.
-String? _detail(TenantReconciliationAnomaly anomaly) {
-  if (anomaly.invalidLineCount case final count?) {
-    return '$count sale ${count == 1 ? 'line' : 'lines'} could not be read, so '
-        'they moved no stock.';
-  }
-  if (anomaly.isStockAnomaly) {
-    final variance = anomaly.quantityVariance!;
-    final direction = variance > 0 ? 'more' : 'fewer';
-    return 'Its ledger expects ${anomaly.expectedQuantity}, and the product '
-        'records ${anomaly.observedQuantity}: ${variance.abs()} $direction '
-        'than the ledger accounts for.';
-  }
-  if (anomaly.kind == TenantReconciliationAnomalyKind.invalidOrMissingShift) {
-    return 'The shift is missing, or did not record the totals a comparison '
-        'needs, so no difference could be measured.';
-  }
-  if (anomaly.kind == TenantReconciliationAnomalyKind.shiftVariance) {
-    return 'Its sales total ${_signed(anomaly.salesVariance!)} and its '
-        'transaction count ${_signed(anomaly.transactionVariance!)} against '
-        'the sales recorded during it.';
-  }
-  return null;
-}
-
-String _signed(num value) {
-  if (value == 0) return 'agrees';
-  return value > 0 ? 'is $value over' : 'is ${value.abs()} short';
-}
-
-String _instants(TenantReconciliationAnomaly anomaly) {
-  final parts = <String>[
-    if (anomaly.recordedAt case final at?) 'First recorded ${_time(at)}',
-    if (anomaly.updatedAt case final at?) 'last seen ${_time(at)}',
-    if (anomaly.jobId case final jobId?) 'found by run $jobId',
-  ];
-  // A record with no recorded time still proves the difference was found, so it
-  // is named as such rather than hidden.
-  if (parts.isEmpty) return 'No time was recorded for this difference.';
-  return '${parts.join(', ')}.';
-}
-
-String _time(DateTime value) => value.toIso8601String();
 
 /// One chip per kind this client models, plus every kind.
 ///

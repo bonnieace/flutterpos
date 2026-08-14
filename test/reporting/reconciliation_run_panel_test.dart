@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -23,9 +24,11 @@ void main() {
     expect(reader.documentPaths, <String>[_jobPath]);
     expect(reader.queries, isEmpty);
     expect(_text(tester, 'reconciliation-run-title'), 'Run rj_abc');
+    // The state left the title line for a `StatusBadge`; what is left of the
+    // line is what the record is about.
     expect(
       _text(tester, 'reconciliation-status-run-state-rj_abc'),
-      'Completed • Nightly sweep',
+      'Nightly sweep',
     );
     expect(
       _text(tester, 'reconciliation-status-run-progress-rj_abc'),
@@ -47,10 +50,97 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
+    // What is left beside the record once the page-invariant half of this
+    // paragraph moved into the page's own explanation: a fact about this run.
     expect(
       _text(tester, 'reconciliation-run-day'),
-      startsWith('This run covered 2026-07-31.'),
+      'This run covered 2026-07-31.',
     );
+    expect(
+      find.textContaining('stays listed until it is resolved'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a completed run wears the reconciled badge and states no more', (
+    tester,
+  ) async {
+    // §2.1 gives "reconciled" to `ok`. Four of the six run states are the badge's
+    // own word, so restating them beside it would be the duplication the
+    // container exists to avoid.
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{_jobPath: _job()},
+    );
+
+    await _pump(tester, _controller(), reader);
+
+    final badge = tester.widget<StatusBadge>(
+      find.byKey(const ValueKey('reconciliation-status-run-badge-rj_abc')),
+    );
+    expect(badge.status, AppStatus.ok);
+    expect(badge.label, 'Completed');
+    expect(
+      find.byKey(
+        const ValueKey('reconciliation-status-run-state-detail-rj_abc'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a run the server gave up on is a problem, and says why', (
+    tester,
+  ) async {
+    // `failed` and `quarantined` are both `problem` - §2.1 has no row for
+    // "failed, but a retry is scheduled" - so the word and the detail line are
+    // what separate them, never the colour.
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{
+        _jobPath: _job(
+          overrides: <String, Object?>{
+            'status': 'quarantined',
+            'consecutiveFailureCount': 3,
+            // The retry sweep records why it gave up, and the model refuses a
+            // quarantined run that does not.
+            'lastErrorCode': 'repeated_failure',
+          },
+        ),
+      },
+    );
+
+    await _pump(tester, _controller(), reader);
+
+    final badge = tester.widget<StatusBadge>(
+      find.byKey(const ValueKey('reconciliation-status-run-badge-rj_abc')),
+    );
+    expect(badge.status, AppStatus.problem);
+    expect(badge.label, 'Stopped');
+    expect(
+      _text(tester, 'reconciliation-status-run-state-detail-rj_abc'),
+      'Stopped after repeated failures',
+    );
+  });
+
+  testWidgets('a queued run is awaiting rather than wrong', (tester) async {
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{
+        _jobPath: _job(
+          overrides: <String, Object?>{
+            'status': 'queued',
+            'phase': 'intake',
+            'attemptCount': 0,
+            'completedAt': null,
+          },
+        ),
+      },
+    );
+
+    await _pump(tester, _controller(), reader);
+
+    final badge = tester.widget<StatusBadge>(
+      find.byKey(const ValueKey('reconciliation-status-run-badge-rj_abc')),
+    );
+    expect(badge.status, AppStatus.attention);
+    expect(badge.label, 'Queued');
   });
 
   testWidgets('a scheduled run names the server and reads no staff record', (
@@ -254,10 +344,18 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(
-      _text(tester, 'reconciliation-status-run-state-rj_abc'),
-      'archived • webhook',
+    // The unmodelled state is `info` and the stored value is the detail line, so
+    // nothing about it is renamed or hidden.
+    final badge = tester.widget<StatusBadge>(
+      find.byKey(const ValueKey('reconciliation-status-run-badge-rj_abc')),
     );
+    expect(badge.status, AppStatus.info);
+    expect(badge.label, 'Unrecognised');
+    expect(
+      _text(tester, 'reconciliation-status-run-state-detail-rj_abc'),
+      'archived',
+    );
+    expect(_text(tester, 'reconciliation-status-run-state-rj_abc'), 'webhook');
     expect(
       _text(tester, 'reconciliation-status-run-progress-rj_abc'),
       'sampled • reached audit • 1 attempt',
@@ -296,8 +394,14 @@ void main() {
     // records still stands, so this page says so instead of failing.
     await _pump(tester, _controller(), _Reader());
 
+    // A notice rather than a folded explanation, and `info` rather than
+    // `problem`: the sentence's own point is that this is an ordinary answer.
+    final callout = tester.widget<Callout>(
+      find.byKey(const ValueKey('reconciliation-run-missing')),
+    );
+    expect(callout.status, AppStatus.info);
     expect(
-      _text(tester, 'reconciliation-run-missing'),
+      callout.message,
       startsWith('No run is recorded at this ID any more.'),
     );
     expect(
@@ -309,7 +413,40 @@ void main() {
       findsNothing,
     );
     // The page still says what it is and what it cannot do.
-    expect(find.byKey(const ValueKey('reconciliation-run-scope')), findsOne);
+    expect(
+      find.byKey(const ValueKey('reconciliation-run-scope-disclosure')),
+      findsOne,
+    );
+  });
+
+  testWidgets('the page explanation starts collapsed and opens on a tap', (
+    tester,
+  ) async {
+    // §5.2's argument for `Disclosure`: the writing is kept and the screen is
+    // returned. Both paragraphs are this app's own words, and the second used to
+    // be repeated under the record as though it were a fact about that run.
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{_jobPath: _job()},
+    );
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(const ValueKey('reconciliation-run-scope')),
+      findsNothing,
+    );
+    await tester.tap(
+      find.text('What this page cannot do'),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      _text(tester, 'reconciliation-run-scope'),
+      startsWith('The server does the work'),
+    );
+    expect(
+      _text(tester, 'reconciliation-run-outlives'),
+      contains('stays listed until it is resolved'),
+    );
   });
 
   testWidgets('a run that contradicts itself fails the page closed', (

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -45,7 +46,10 @@ void main() {
       '7',
     );
     // A sale is never blocked by a stock count, so the surface says so instead
-    // of presenting a negative quantity as an error.
+    // of presenting a negative quantity as an error - behind the fold now, with
+    // the two other permanent explanations on this route.
+    expect(find.textContaining('may legitimately be negative'), findsNothing);
+    await _openQuantityScope(tester);
     expect(find.textContaining('may legitimately be negative'), findsOne);
     // This route used to be the third description of one document: it said
     // `Adjustment: damage` where the two feeds beside it said `Manual
@@ -439,32 +443,116 @@ void main() {
     });
     expect(reader.anomalyQuery.limit, 6, reason: 'a bounded page of five');
 
-    _expectText(
-      tester,
-      'product-stock-difference-kind-stock_a',
-      'Stock does not match its ledger',
+    // §5.1's `Callout`, whose container is how §2.1's status is rendered here: a
+    // badge on every row of a list where every row is a difference found would be
+    // a list with no signal in it.
+    final callout = tester.widget<Callout>(
+      find.byKey(const ValueKey('product-stock-difference-stock_a')),
     );
-    // The same sentence the differences list uses for this record, and every
-    // figure is the server's own.
-    _expectText(
-      tester,
-      'product-stock-difference-detail-stock_a',
+    expect(callout.status, AppStatus.problem);
+    expect(callout.title, 'Stock does not match its ledger');
+    // The figures come from the vocabulary the differences list shares; the
+    // resolution sentence is this screen's own, because it names the form three
+    // inches below. The provenance is one instant format across the family now,
+    // where a difference used to carry an ISO string and a run a UTC minute.
+    expect(
+      callout.message,
       'Its ledger expects 10, and the product records 7: 3 fewer than the '
-          'ledger accounts for. An adjustment recorded below is how this is put '
-          'right.',
-    );
-    _expectText(
-      tester,
-      'product-stock-difference-found-stock_a',
-      'Found by run rj_abc, first recorded 2026-08-01T02:30:00.000Z.',
+      'ledger accounts for. An adjustment recorded below is how this is put '
+      'right.\n'
+      'First recorded 2026-08-01 02:30 UTC, found by run rj_abc.',
     );
     // Nothing deletes one of these, so the surface says so rather than letting
-    // an old record read as a live one.
+    // an old record read as a live one - now behind the fold, because it is true
+    // of every difference this screen will ever show.
+    expect(find.textContaining('may already have been put right'), findsNothing);
+    await _openDifferenceScope(tester);
     expect(find.textContaining('may already have been put right'), findsOne);
     expect(
       find.byKey(const ValueKey('product-stock-differences-truncated')),
       findsNothing,
     );
+  });
+
+  testWidgets('this route folds three explanations, not one of three', (
+    tester,
+  ) async {
+    // Step 4 put the adjustment explanation behind a `Disclosure` and left the
+    // other two as loose body text, so this screen has carried one folded
+    // explanation and two unfolded ones ever since. All three are permanent
+    // helper paragraphs by §5.1's own row, and the quantity note carried the last
+    // raw `colorScheme` read on this route.
+    final reader = _Reader()
+      ..respondMovements(<TenantQueryDocumentSnapshot>[_sale('mv-1')])
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[
+        _stockAnomaly('stock_a'),
+      ]);
+
+    await _pump(tester, _controller(), reader, callable: _Callable(_response()));
+
+    for (final key in <String>[
+      'product-stock-quantity-disclosure',
+      'product-stock-differences-scope-disclosure',
+      'product-stock-ledger-disclosure',
+      'product-stock-adjustment-disclosure',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
+    }
+    // Closed means gone from the tree rather than clipped to nothing.
+    for (final key in <String>[
+      'product-stock-quantity-scope',
+      'product-stock-differences-scope',
+      'product-stock-ledger-scope',
+    ]) {
+      expect(find.byKey(ValueKey<String>(key)), findsNothing, reason: key);
+    }
+    await _open(tester, 'What the ledger holds');
+    expect(
+      _text(tester, 'product-stock-ledger-scope'),
+      startsWith('Every sale, verified return, and manual adjustment'),
+    );
+  });
+
+  testWidgets('every explanation on this route fits its one line on a phone', (
+    tester,
+  ) async {
+    // **Found by a picture rather than by a test.** §5.2 gives `Disclosure` one
+    // collapsed line and the widget will not wrap it, so a long summary silently
+    // ellipsises - which is what step 4 shipped on the reconciliation day page,
+    // unseen for two days because no capture had ever put a `Disclosure` on a
+    // phone. This route has four of them, which makes it the right place for the
+    // guard.
+    //
+    // A character count and not a render measurement, deliberately: `flutter
+    // test` has no Material fonts, so `didExceedMaxLines` here reports a fallback
+    // font's advance widths and calls a 25-character summary too long. The budget
+    // was measured in the harness, where the fonts are real.
+    final reader = _Reader()
+      ..respondMovements(<TenantQueryDocumentSnapshot>[_sale('mv-1')])
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[
+        _stockAnomaly('stock_a'),
+      ]);
+
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      callable: _Callable(_response()),
+      width: 411,
+    );
+
+    final summaries = tester
+        .widgetList<Disclosure>(find.byType(Disclosure))
+        .map((disclosure) => disclosure.summary)
+        .toList();
+    expect(summaries, hasLength(4));
+    for (final summary in summaries) {
+      expect(
+        summary.length,
+        lessThanOrEqualTo(Disclosure.summaryCharacterBudget),
+        reason: summary,
+      );
+    }
   });
 
   testWidgets('a product with nothing recorded against it says nothing', (
@@ -479,7 +567,7 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      find.byKey(const ValueKey('product-stock-differences-scope')),
+      find.byKey(const ValueKey('product-stock-differences-scope-disclosure')),
       findsNothing,
     );
     expect(
@@ -523,22 +611,21 @@ void main() {
     // Three of the four kinds a product can hold are reports that the comparison
     // could not be trusted. Offering "correct this" for them would be wrong.
     expect(
-      _text(tester, 'product-stock-difference-detail-movement_a'),
+      _difference(tester, 'movement_a').message,
       contains('An adjustment will not resolve this'),
     );
     expect(
-      _text(tester, 'product-stock-difference-detail-chain_a'),
-      contains('an adjustment will not resolve it'),
+      _difference(tester, 'chain_a').message,
+      contains('An adjustment will not resolve it'),
     );
     expect(
-      _text(tester, 'product-stock-difference-detail-quantity_a'),
+      _difference(tester, 'quantity_a').message,
       contains('could not be read as a whole number'),
     );
     // And no time at all is a real answer rather than a blank.
-    _expectText(
-      tester,
-      'product-stock-difference-found-quantity_a',
-      'Found by run rj_abc.',
+    expect(
+      _difference(tester, 'quantity_a').message,
+      endsWith('\nFound by run rj_abc.'),
     );
   });
 
@@ -559,10 +646,14 @@ void main() {
       find.byKey(const ValueKey('product-stock-difference-stock_5')),
       findsNothing,
     );
-    expect(
-      _text(tester, 'product-stock-differences-truncated'),
-      contains('not a list in time order'),
+    // A notice about this page rather than a standing explanation - it is here
+    // only because this product holds more than the page read - so it does not
+    // fold.
+    final truncated = tester.widget<Callout>(
+      find.byKey(const ValueKey('product-stock-differences-truncated')),
     );
+    expect(truncated.status, AppStatus.info);
+    expect(truncated.message, contains('not a list in time order'));
   });
 
   testWidgets('an unreadable difference leaves the stock and ledger readable', (
@@ -575,11 +666,18 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    _expectText(
-      tester,
-      'product-stock-differences-unreadable',
+    // **`info` rather than `problem`, and the deciding word is "refused".** The
+    // same sentence covers a session permitted to read stock and not differences,
+    // so calling a permission boundary a fault would invent an answer the code
+    // refuses to invent in words.
+    final unreadable = tester.widget<Callout>(
+      find.byKey(const ValueKey('product-stock-differences-unreadable')),
+    );
+    expect(unreadable.status, AppStatus.info);
+    expect(
+      unreadable.message,
       'Whether reconciliation recorded a difference for this product could not '
-          'be read. The stock and ledger below are unaffected.',
+      'be read. The stock and ledger below are unaffected.',
     );
     expect(find.byKey(const ValueKey('product-stock-failure')), findsNothing);
     _expectText(tester, 'product-stock-quantity', '7');
@@ -732,6 +830,29 @@ String _text(WidgetTester tester, String key) =>
 void _expectText(WidgetTester tester, String key, String value) {
   expect(_text(tester, key), value);
 }
+
+/// Opens one of the three permanent explanations on this route, whose prose is
+/// removed from the tree while it is closed so a screen reader does not read out
+/// what nobody can see.
+/// The 4000-high test surface builds every row, so no scroll is needed - and
+/// `scrollUntilVisible` cannot be used on this route anyway: the adjustment form
+/// puts a second `Scrollable` on the page.
+Future<void> _open(WidgetTester tester, String summary) async {
+  await tester.tap(find.text(summary));
+  await tester.pumpAndSettle();
+}
+
+/// One recorded difference, as the notice §5.1 makes it.
+Callout _difference(WidgetTester tester, String anomalyId) =>
+    tester.widget<Callout>(
+      find.byKey(ValueKey('product-stock-difference-$anomalyId')),
+    );
+
+Future<void> _openDifferenceScope(WidgetTester tester) =>
+    _open(tester, 'Why old differences stay listed');
+
+Future<void> _openQuantityScope(WidgetTester tester) =>
+    _open(tester, 'Why stock can be negative');
 
 TenantProduct _product() => TenantProduct.fromDocument(
   path: 'tenants/tenant-a/products/product-1',

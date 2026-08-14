@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import 'reconciliation_labels.dart';
 import 'reconciliation_status.dart';
 
 /// Opens one run under the caller's own session scope, so a tenant switch
@@ -143,10 +145,34 @@ final class _TenantReconciliationRunPanelState
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 4),
-        const Text(
-          key: ValueKey('reconciliation-run-scope'),
-          'The server does the work; this is its own record of one piece of it. '
-          'Nothing on this page can start, stop, or repeat a run.',
+        // §5.1's own description of what `Disclosure` replaces: a permanent
+        // helper paragraph. Both sentences are page-invariant - they are true of
+        // every run this route will ever show - and the second used to be
+        // repeated *under the record* as though it were a fact about that run.
+        // The day page next door has said the same kind of thing behind the same
+        // component since step 4; this is that decision reaching the other three
+        // surfaces in the family.
+        const Disclosure(
+          key: ValueKey('reconciliation-run-scope-disclosure'),
+          summary: 'What this page cannot do',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                key: ValueKey('reconciliation-run-scope'),
+                'The server does the work; this is its own record of one piece '
+                'of it. Nothing on this page can start, stop, or repeat a run.',
+              ),
+              SizedBox(height: 8),
+              Text(
+                key: ValueKey('reconciliation-run-outlives'),
+                'A difference a run found is about a product or a shift rather '
+                'than a day, so it stays listed until it is resolved even '
+                'after the run itself is finished.',
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         if (view.run case final run?) ...[
@@ -156,19 +182,28 @@ final class _TenantReconciliationRunPanelState
             selfUid: session.uid,
           ),
           const SizedBox(height: 8),
+          // What is left of that paragraph once the page-invariant half of it
+          // moved: a fact about this run, which the card does not state because
+          // the day page mounts the same card under a heading that already
+          // names the date.
           Text(
             key: const ValueKey('reconciliation-run-day'),
-            'This run covered ${run.businessDate}. A difference it found is '
-            'about a product or a shift rather than a day, so it stays listed '
-            'until it is resolved even after the run itself is finished.',
+            'This run covered ${run.businessDate}.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ] else
-          const Text(
+          // A notice about the state of this page rather than a helper
+          // paragraph, so `Callout` rather than `Disclosure` - and `info`
+          // rather than `problem` because the sentence's own point is that
+          // this is an ordinary answer.
+          const Callout(
             key: ValueKey('reconciliation-run-missing'),
-            'No run is recorded at this ID any more. A difference outlives the '
-            'run that found it, so this is an ordinary answer rather than a '
-            'fault - what the difference itself records still stands.',
+            status: AppStatus.info,
+            message:
+                'No run is recorded at this ID any more. A difference outlives '
+                'the run that found it, so this is an ordinary answer rather '
+                'than a fault - what the difference itself records still '
+                'stands.',
           ),
       ],
     ),
@@ -204,11 +239,36 @@ final class TenantReconciliationRunCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // §5.1: a `StatusBadge` replaces inline coloured text, and §5.2 puts
+          // the status in the record's leading position. A run's state was a
+          // word in a title here, which is the one rendering §2.1 forbids - a
+          // page of runs mixes completed, queued and failed, so the badge is
+          // what makes that scannable without reading every card.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: StatusBadge(
+              key: ValueKey('reconciliation-status-run-badge-${run.id}'),
+              status: reconciliationRunStatus(run),
+              label: reconciliationRunStatusWord(run),
+              semanticLabel:
+                  'Run ${run.id}: ${reconciliationRunStatusWord(run)}',
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
             key: ValueKey('reconciliation-status-run-state-${run.id}'),
-            '${_statusLabel(run)} • ${_sourceLabel(run)}',
+            _sourceLabel(run),
             style: Theme.of(context).textTheme.titleMedium,
           ),
+          // Only where the enum's own label says more than the badge's word: a
+          // retry is scheduled, the server gave up after repeated failures, or
+          // the state is one this build does not model and the stored value is
+          // the only honest thing to show.
+          if (reconciliationRunStatusDetail(run) case final detail?)
+            Text(
+              key: ValueKey('reconciliation-status-run-state-detail-${run.id}'),
+              detail,
+            ),
           const SizedBox(height: 8),
           Text(
             key: ValueKey('reconciliation-status-run-progress-${run.id}'),
@@ -256,12 +316,8 @@ final class TenantReconciliationRunCard extends StatelessWidget {
 }
 
 /// An unmodelled value is shown as itself: hiding a real run, or renaming its
-/// state, would be worse than naming what the server actually recorded.
-String _statusLabel(TenantReconciliationRun run) =>
-    run.status == TenantReconciliationRunStatus.other
-    ? run.statusValue
-    : run.status.label;
-
+/// source, would be worse than naming what the server actually recorded. The
+/// same rule for a run's *state* is [reconciliationRunStatusDetail].
 String _sourceLabel(TenantReconciliationRun run) =>
     run.source == TenantReconciliationRunSource.other
     ? run.sourceValue
@@ -286,19 +342,15 @@ String _modeLabel(TenantReconciliationRun run) => switch (run.mode) {
 /// rather than left with a silent gap where a time belongs.
 String _instants(TenantReconciliationRun run) {
   final recorded = <String>[
-    if (run.completedAt case final at?) 'Completed ${_instant(at)}',
-    if (run.lastFailedAt case final at?) 'Last failed ${_instant(at)}',
-    if (run.updatedAt case final at?) 'Last updated ${_instant(at)}',
+    if (run.completedAt case final at?)
+      'Completed ${reconciliationInstant(at)}',
+    if (run.lastFailedAt case final at?)
+      'Last failed ${reconciliationInstant(at)}',
+    if (run.updatedAt case final at?)
+      'Last updated ${reconciliationInstant(at)}',
   ];
   if (recorded.isEmpty) return 'No instant was recorded for this run.';
   return recorded.join(' • ');
-}
-
-String _instant(DateTime value) {
-  final utc = value.toUtc();
-  String pad(int part) => part.toString().padLeft(2, '0');
-  return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
-      '${pad(utc.hour)}:${pad(utc.minute)} UTC';
 }
 
 String _progress(TenantReconciliationRun run) {

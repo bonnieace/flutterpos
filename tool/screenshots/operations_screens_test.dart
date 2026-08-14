@@ -181,6 +181,25 @@ void main() {
     ),
   );
 
+  // **The exception report on 21 has never been in a picture.** The seeded stock
+  // difference is filed against `pd-milk-500` and the capture above opens
+  // `pd-bread-white`, so every screenshot of that route since it was written has
+  // shown the branch where reconciliation found nothing - which is exactly the
+  // "a fixture that hides the case the component exists for" trap the stock
+  // family recorded. This is the same route on the one seeded product that has a
+  // difference recorded against it.
+  screenshotCase(
+    '21b-product-stock-differences',
+    build: () => inSession(
+      TenantProductStockScreen(
+        reader: FakeTenantReader.business(),
+        product: seedProduct('pd-milk-500'),
+        actions: TenantStockActions(adjustCallable: FakeCallable()),
+      ),
+      controller: seedSession(role: TenantRole.manager, uid: managerUid),
+    ),
+  );
+
   screenshotCase(
     '22-stock-corrections',
     build: () => inSession(
