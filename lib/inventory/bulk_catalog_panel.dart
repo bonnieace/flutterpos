@@ -8,6 +8,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'bulk_catalog.dart';
 import 'catalog_management.dart';
@@ -689,13 +690,24 @@ final class _BulkCatalogContents extends StatelessWidget {
       children: [
         Text('Many products at once', style: text.titleMedium),
         const SizedBox(height: 4),
-        const Text(
-          key: ValueKey('bulk-catalog-scope'),
-          'Nothing here happens until it has been shown to you first. Every '
-          'change is previewed row by row, writes nothing while it is being '
-          'previewed, and is then applied exactly as it was shown. Rows are '
-          'sent $maximumBulkCatalogRows at a time, so a large change is several '
-          'requests and the report says which of them landed.',
+        // A helper rather than a notice, and the call is worth stating because
+        // it could have gone the other way. §5.2 names this route's prose by
+        // name as `Disclosure` material, and this paragraph is true of every
+        // change either callable will ever make - it is read once. The
+        // reconciliation day page's request scope is a `Callout` instead
+        // because it corrects a misunderstanding about *what the button covers*;
+        // this one promises that the button is safe, which is a different job.
+        const Disclosure(
+          key: ValueKey('bulk-catalog-scope-disclosure'),
+          summary: 'How a bulk change is applied',
+          child: Text(
+            key: ValueKey('bulk-catalog-scope'),
+            'Nothing here happens until it has been shown to you first. Every '
+            'change is previewed row by row, writes nothing while it is being '
+            'previewed, and is then applied exactly as it was shown. Rows are '
+            'sent $maximumBulkCatalogRows at a time, so a large change is '
+            'several requests and the report says which of them landed.',
+          ),
         ),
         const SizedBox(height: 16),
         Wrap(
@@ -714,9 +726,13 @@ final class _BulkCatalogContents extends StatelessWidget {
         ),
         if (!_offered) ...[
           const SizedBox(height: 12),
-          Text(
+          // A notice about this build, so it does not fold. `info` is §2.1's
+          // own row for it: the half that is missing was never injected, which
+          // is not a failure and hides nothing.
+          Callout(
             key: const ValueKey('bulk-catalog-unavailable'),
-            task == _BulkTask.correct
+            status: AppStatus.info,
+            message: task == _BulkTask.correct
                 ? 'This build cannot correct products in bulk.'
                 : 'This build cannot import products.',
           ),
@@ -731,7 +747,17 @@ final class _BulkCatalogContents extends StatelessWidget {
         else
           ..._importForm(context),
         const SizedBox(height: 20),
-        Row(
+        // **A `Wrap` because this route had never been laid out narrow.** It was
+        // a `Row`, and the first test to drive it at §4.1's `compact` band
+        // overflowed by 73 pixels on a single button: "Preview, writing
+        // nothing" carries a leading icon and §5.2's `space.16` padding, and
+        // the discard beside it is another 48dp of control. A `Wrap` is
+        // identical wherever there is room and is the shape the difference list
+        // and every paginated surface in this app already uses for a row of
+        // controls.
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
           children: [
             // Preview is the primary here and commit is the primary further
             // down: they are different screen regions, and §2.1 permits one
@@ -745,7 +771,6 @@ final class _BulkCatalogContents extends StatelessWidget {
               tier: AppButtonTier.primary,
               onPressed: _canPreview ? onPreview : null,
             ),
-            const SizedBox(width: 12),
             if (report != null)
               AppButton(
                 key: const ValueKey('bulk-catalog-discard'),
@@ -824,12 +849,15 @@ final class _BulkCatalogContents extends StatelessWidget {
       ),
       if (!canChangeMoney) ...[
         const SizedBox(height: 8),
-        Text(
-          key: const ValueKey('bulk-catalog-money-hidden'),
-          'Only an owner or administrator may change a price or what a product '
-          'costs. One row naming either refuses every row in the same request, '
-          'so neither is offered here.',
-          style: text.bodySmall,
+        // A role notice at `info`, matching every other one in the catalog
+        // family: three of the four corrections are offered and one is not.
+        const Callout(
+          key: ValueKey('bulk-catalog-money-hidden'),
+          status: AppStatus.info,
+          message:
+              'Only an owner or administrator may change a price or what a '
+              'product costs. One row naming either refuses every row in the '
+              'same request, so neither is offered here.',
         ),
       ],
       const SizedBox(height: 12),
@@ -882,16 +910,24 @@ final class _BulkCatalogContents extends StatelessWidget {
           'than reporting the whole price as profit.',
         ),
       const SizedBox(height: 20),
-      Row(
+      // **The second `Row` on this route that had only ever been laid out
+      // wide**, and unlike the first this one is wrong in a picture rather than
+      // only in a widget test: at §4.1's `compact` band the count is squeezed
+      // to two lines by two controls that take almost the whole width, which
+      // the 411 harness capture shows. A `Wrap` keeps all three on one line
+      // wherever there is room and drops the controls to their own run where
+      // there is not.
+      Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Expanded(
-            child: Text(
-              key: const ValueKey('bulk-catalog-selection'),
-              selected.isEmpty
-                  ? 'No products chosen.'
-                  : '${selected.length} product${selected.length == 1 ? '' : 's'} '
-                        'chosen, across every page.',
-            ),
+          Text(
+            key: const ValueKey('bulk-catalog-selection'),
+            selected.isEmpty
+                ? 'No products chosen.'
+                : '${selected.length} product${selected.length == 1 ? '' : 's'} '
+                      'chosen, across every page.',
           ),
           AppButton(
             key: const ValueKey('bulk-catalog-select-page'),
@@ -961,19 +997,29 @@ final class _BulkCatalogContents extends StatelessWidget {
     return <Widget>[
       Text('Paste the rows', style: text.titleSmall),
       const SizedBox(height: 8),
-      const Text(
-        key: ValueKey('bulk-catalog-sheet-help'),
-        'Copy the rows out of the spreadsheet, header line included, and paste '
-        'them here. Columns may be separated by commas, tabs, or semicolons, '
-        'and a cell holding one of those can be wrapped in double quotes.\n\n'
-        'The header must name name, sku, and price. It may also name cost, '
-        'quantity, and either category — the category\'s own name, matched '
-        'against this business — or categoryId. A column this import does not '
-        'read is refused rather than ignored, so nothing you supplied is '
-        'dropped without being mentioned.\n\n'
-        'A category that does not already exist refuses its row: add it on '
-        '"Manage catalog" first. An opening quantity is recorded as an opening '
-        'balance in the stock ledger, so those units have a stated origin.',
+      // Three paragraphs of permanent helper prose behind one fold - §5.1's own
+      // description of what `Disclosure` replaces, and the tallest single block
+      // in the catalog family. It is true of every sheet this route will ever
+      // read, and a person who has pasted one sheet does not read it again.
+      const Disclosure(
+        key: ValueKey('bulk-catalog-sheet-help-disclosure'),
+        summary: 'What the sheet must look like',
+        child: Text(
+          key: ValueKey('bulk-catalog-sheet-help'),
+          'Copy the rows out of the spreadsheet, header line included, and '
+          'paste them here. Columns may be separated by commas, tabs, or '
+          'semicolons, and a cell holding one of those can be wrapped in '
+          'double quotes.\n\n'
+          'The header must name name, sku, and price. It may also name cost, '
+          'quantity, and either category — the category\'s own name, matched '
+          'against this business — or categoryId. A column this import does '
+          'not read is refused rather than ignored, so nothing you supplied is '
+          'dropped without being mentioned.\n\n'
+          'A category that does not already exist refuses its row: add it on '
+          '"Manage catalog" first. An opening quantity is recorded as an '
+          'opening balance in the stock ledger, so those units have a stated '
+          'origin.',
+        ),
       ),
       const SizedBox(height: 12),
       AppTextField(
@@ -988,12 +1034,13 @@ final class _BulkCatalogContents extends StatelessWidget {
       ),
       if (!canChangeMoney) ...[
         const SizedBox(height: 8),
-        Text(
-          key: const ValueKey('bulk-catalog-import-cost-hidden'),
-          'Only an owner or administrator may record what a product costs, so a '
-          'cost column is refused. A price is not: setting a first price is '
-          'creation, and the add-product form accepts one too.',
-          style: text.bodySmall,
+        const Callout(
+          key: ValueKey('bulk-catalog-import-cost-hidden'),
+          status: AppStatus.info,
+          message:
+              'Only an owner or administrator may record what a product costs, '
+              'so a cost column is refused. A price is not: setting a first '
+              'price is creation, and the add-product form accepts one too.',
         ),
       ],
     ];
@@ -1014,25 +1061,65 @@ final class _BulkCatalogContents extends StatelessWidget {
       ),
       if (report.failure case final failure?) ...[
         const SizedBox(height: 8),
-        Text(
+        // The one `problem` in the catalog family, and it is the only notice in
+        // it that reports a failure: a chain that stopped. Every value of
+        // [TenantBulkCatalogFailure] means the same thing at this scale - the
+        // rest of the request was not sent - so all eight take one status
+        // rather than one of them being separated out on a reading §2.1 does
+        // not support. `ambiguous` is the arguable one and it is deliberately
+        // here: an unknown outcome is not `attention`'s "awaiting", because
+        // nothing further is coming.
+        Callout(
           key: const ValueKey('bulk-catalog-report-failure'),
-          _failureNotice(failure, report),
+          status: AppStatus.problem,
+          message: _failureNotice(failure, report),
         ),
       ],
       const SizedBox(height: 12),
       // Every row, never a count. The server names every broken row at once, and
       // collapsing that into "12 rows failed" would throw away the reason both
       // callables report per row.
+      //
+      // **The status was a word in the title and is now §2.1's container.** A
+      // report genuinely mixes its four outcomes - that is what makes it worth
+      // reading row by row - so a badge here carries signal rather than being
+      // the every-row badge `RecordList`'s own rule rules out. The card is
+      // still a card: screen 20 is not one of the twelve screens step 6 names,
+      // and migrating it to `RecordList` would be step 6 work outside step 6's
+      // list, exactly as it would be on the differences list.
       for (final row in report.rows)
         Card(
-          child: ListTile(
-            key: ValueKey('bulk-catalog-row-${row.position}'),
-            dense: true,
-            title: Text('${row.status.label}: ${row.subject}'),
-            subtitle: Text(
-              key: ValueKey('bulk-catalog-row-detail-${row.position}'),
-              '${task == _BulkTask.correct ? 'Product' : 'Line'} '
-              '${row.position} • ${row.detail}',
+          key: ValueKey('bulk-catalog-row-${row.position}'),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // §5.2's "leading position", read as first in the record - the
+                // reading `RecordList` settled and the shape both catalog
+                // screens already draw.
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: StatusBadge(
+                    key: ValueKey('bulk-catalog-row-status-${row.position}'),
+                    status: _rowStatus(row.status, report.mode),
+                    label: row.status.label,
+                    semanticLabel:
+                        '${row.subject}: ${row.status.label.toLowerCase()}',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  key: ValueKey('bulk-catalog-row-subject-${row.position}'),
+                  row.subject,
+                  style: text.titleSmall,
+                ),
+                Text(
+                  key: ValueKey('bulk-catalog-row-detail-${row.position}'),
+                  '${task == _BulkTask.correct ? 'Product' : 'Line'} '
+                  '${row.position} • ${row.detail}',
+                ),
+              ],
             ),
           ),
         ),
@@ -1062,6 +1149,40 @@ final class _BulkCatalogContents extends StatelessWidget {
     ];
   }
 }
+
+/// One report row's outcome, as one of §2.1's five.
+///
+/// **Two of the four are the same in both modes and two are not, and reading the
+/// mode is what keeps the badge honest.** A refused row is refused whether or not
+/// anything was committed - the client or the server will not write it either
+/// way - so it is §2.1's `problem` in both. An unchanged row already holds the
+/// value in both. But a row a *preview* calls created or corrected has not been
+/// written and may never be, and §2.1 gives `ok` the meaning *"confirmed"*: a
+/// green badge over a report whose own first sentence is "Nothing has been
+/// written" would be this file stating the opposite of the sentence above it.
+/// §2.1's `attention` is *"unreconciled, pending, awaiting"*, and a previewed row
+/// is precisely awaiting the commit button below it.
+///
+/// `unchanged` takes `neutral` - *"archived, retired, closed"* - because the row
+/// is not in play. It is deliberately not `info`: `info` is what this route uses
+/// for a notice about the page, and one status meaning two things at two scales
+/// is the failure §2.1 exists to end.
+///
+/// **What the badge cannot fix is the word beside it.** The four labels are the
+/// enum's own and read as past tense - a previewed row says "Created" before
+/// anything exists - which is a copy question rather than a status one. It is
+/// recorded in `PLAN.md` rather than decided here.
+AppStatus _rowStatus(
+  TenantBulkCatalogRowStatus status,
+  TenantBulkCatalogMode mode,
+) => switch (status) {
+  TenantBulkCatalogRowStatus.created || TenantBulkCatalogRowStatus.updated =>
+    mode == TenantBulkCatalogMode.preview
+        ? AppStatus.attention
+        : AppStatus.ok,
+  TenantBulkCatalogRowStatus.unchanged => AppStatus.neutral,
+  TenantBulkCatalogRowStatus.failed => AppStatus.problem,
+};
 
 /// One sentence stating what the report is, before any row is read.
 String _summary(TenantBulkCatalogReport report, _BulkTask task) {

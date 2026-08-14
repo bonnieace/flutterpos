@@ -4,13 +4,18 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-14**, which took one chunk: **the first part of
-`design.md` §11 step 4's sweep**, over the four surfaces whose subject is reconciliation — the day
+Last verified against the code on **2026-08-14**, which took two chunks, both of `design.md` §11
+step 4's sweep. **The first** was over the four surfaces whose subject is reconciliation — the day
 page, the one-run page, the differences list, and screen 21's "Reconciliation found" exception report,
 which are the **two screen sections the sweep was told it owns by name**. It is where step 4's own
 `Disclosure` / `Callout` split became a family-wide rule instead of one screen's decision, where a
 recorded difference turned out to have **no** §2.1 standing while a run does, and where a picture
-found that step 4 had shipped a truncated `Disclosure` summary two days earlier.
+found that step 4 had shipped a truncated `Disclosure` summary two days earlier. **The second** was
+over the **four catalog surfaces** — the read-only catalog, manage catalog, the correction dialog and
+bulk changes/import. It is where a page's read-only standing stopped being a heading at the top and a
+paragraph at the bottom, where a bulk report's row outcomes became §2.1 badges whose lookup reads the
+report's **mode**, and where the first picture of that dialog on a phone found that
+`Disclosure`'s **page** budget is not a **dialog** budget.
 
 The day before that took five chunks: §4.3's `RecordList`
 contract, **the second and larger half of `design.md` §11 step 6**, as the component plus one
@@ -116,7 +121,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~80% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 5a and 6 are finished as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep began 2026-08-14 with the four reconciliation surfaces.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision - and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. `ConfirmDialog` left step 4 for step 7. Steps 5b and 7-12 remain. |
+| **Design system** | ~82% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 5a and 6 are finished as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision - and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. `ConfirmDialog` left step 4 for step 7. Steps 5b and 7-12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -156,6 +161,46 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The 2026-08-14 catalog-sweep chunk changed no board row at all — not a colour and not a word of one
+— and this sentence is here so that is stated rather than left silent.** It took the **second part of
+step 4's sweep**: the read-only catalog (17), manage catalog (18), the correction dialog (19) and bulk
+changes/import (20). "Add or retire a product", "Edit a product's price, name, code, cost, or
+category", "Change many products at once" and "Import a catalog from a spreadsheet" have all been 🟢
+throughout and a shop can do exactly what it could do this morning. It moved the **Design system**
+track 80% to 82%. It changed **no rollout step**, and it touched no rule and no `functions/` file —
+`git diff` *and* `git status` over `functions/`, `firestore.rules` and `rules-tests/` print zero
+lines. It added **9 tests**, added **8** screenshots and **2** capture cases, removed none, and moved
+**16**.
+
+**Its largest finding is the previous chunk's finding one level down: a budget measured in one
+container is a budget for that container.** `Disclosure.summaryCharacterBudget` is 32 and was measured
+on a **page**; `How a correction is checked` is 27 characters, shipped inside that budget, and
+truncated the first time anything photographed the correction dialog on a phone. An `AlertDialog` at
+`compact` insets itself from the window and then pads its own content, so a summary has roughly 200
+logical pixels where a page gives it about 250. `Disclosure.dialogSummaryCharacterBudget` is **24**,
+bracketed rather than invented — 27 truncates, 19 fits, the ellipsis sat about 25 characters in.
+
+**Two harness cases were photographing the wrong thing and both are fixed.**
+`mobile/19-correct-a-product` had **never shown the dialog it is named after**: `scrollUntilVisible`
+stops when a widget is built rather than when it is on screen, so at 411 the tap landed below the fold
+and missed without failing. And **no capture had ever put a bulk report on screen at all**, because
+`FakeCallable`'s empty map cannot survive `updateProducts`' strict decoder. `FakeBulkCatalogCallable`
+answers the way the server does with one row `unchanged` and one `failed`, and `20b`/`20c` are the
+same three rows either side of the commit.
+
+**Its own decision worth arguing with: a bulk report's row status reads the report's mode.**
+`created`/`updated` are `attention` in a preview and `ok` in a commit, because §2.1 gives `ok` the
+meaning *"confirmed"* and a green badge over a report whose first sentence is `Nothing has been
+written.` would state the opposite of the line above it. `unchanged` is `neutral` and `failed` is
+`problem` in both. **What the badge cannot fix is the word beside it** — the labels are the enum's
+own and read as past tense, so a previewed row says `Created` before anything exists, which is a copy
+question and is queued rather than decided.
+
+**Two pre-existing copy defects the new pictures found, both recorded and neither fixed**: the row
+detail's before/after arrow renders as tofu in the harness fonts (`bulk_catalog.dart:1590` — whether
+a device shows it is unknown), and `_summary` has no singular form, so a one-row report reads *"1
+were corrected, 1 already hold this value"*.
 
 **The 2026-08-14 reconciliation-sweep chunk changed no board row at all — not a colour and not a word
 of one — and this sentence is here so that is stated rather than left silent.** It took the **first
@@ -768,16 +813,17 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1882** |
-| Functions | `npm --prefix functions test` | **409** ✅ measured on 2026-08-14, five times on 2026-08-13, three times on 2026-08-12 |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured on 2026-08-14 (~109 s) and five times on 2026-08-13 (~64–78 s) |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured on 2026-08-14 (~150 s) and five times on 2026-08-13 (~60 s) |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured on 2026-08-14 (~201 s) and five times on 2026-08-13 (~75 s) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1891** |
+| Functions | `npm --prefix functions test` | **409** ✅ measured twice on 2026-08-14, five times on 2026-08-13, three times on 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured twice on 2026-08-14 (~109 s) and five times on 2026-08-13 (~64–78 s) |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured twice on 2026-08-14 (~150 s) and five times on 2026-08-13 (~60 s) |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured twice on 2026-08-14 (~201 s) and five times on 2026-08-13 (~75 s) |
 
-**2485 tests across five suites. All five were measured again on 2026-08-14 — six consecutive chunks
-measuring all five — and the carry counter is at 0.** The three emulator suites cost about **460 s**
-between them that run, noticeably slower than the ~200 s of 2026-08-13; nothing was retried and every
-suite passed first time, so the difference is host load rather than a suite.
+**2494 tests across five suites. All five were measured again by the catalog-sweep chunk on
+2026-08-14 — seven consecutive chunks measuring all five — and the carry counter is at 0.** The three
+emulator suites cost about **460 s** between them on the reconciliation chunk's run, noticeably slower
+than the ~200 s of 2026-08-13; nothing was retried and every suite passed first time in either run, so
+the difference is host load rather than a suite.
 
 **Earlier: all five measured five times on 2026-08-13, and the carry counter was at 0 then too.** All four sweep chunks were entitled to carry the four non-Flutter figures — every one of
 them is Dart-only and `git diff` over the three server paths prints zero lines — and all four
@@ -813,8 +859,19 @@ procedure three sections away is the file's own defect**, and the trap has been 
 the procedure instead of at a missing JDK.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **150 captures** writing **200**
-images, and it asserts nothing, which is why it is not counted here. **The reconciliation-sweep chunk
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **154 captures** writing **208**
+images, and it asserts nothing, which is why it is not counted here. **The catalog-sweep chunk moved
+both figures, and its two additions are a fixture finding of the same family as the last one's.**
+Nothing had ever put a **bulk report** on screen: `FakeCallable` answers with an empty map, and
+`updateProducts`' decoder reconciles the answer against the page it sent, so an empty map produces a
+refusal notice rather than a report. `FakeBulkCatalogCallable` answers the way the server does with
+one row `unchanged` and one `failed` — deliberately mixed, because a report that is all one outcome
+photographs the case a badge is least useful in — and `20b-bulk-report-previewed` /
+`20c-bulk-report-committed` are the same three rows either side of the commit, which is the only way
+to get `ok` into a picture. **It also repaired a capture rather than adding one**:
+`mobile/19-correct-a-product` had never shown the dialog it is named after, because
+`scrollUntilVisible` stops when a widget is built rather than when it is on screen and the tap landed
+below the fold. **It was 150 and 200 before that.** **The reconciliation-sweep chunk
 moved both figures, and the two captures it added are a fixture finding rather than a new state.** The
 seeded stock difference is filed against `pd-milk-500` and `21-product-stock` opens `pd-bread-white`,
 so **every screenshot of that route since it was written photographed the branch where reconciliation
@@ -3026,6 +3083,68 @@ rule 1 keeps out of a visual chunk.
 traps: `Disclosure`'s summary fits about 32 characters on a phone, step 4 shipped a 41-character one,
 and no capture had ever put a `Disclosure` on a phone because its `93-*` matrix is `web` only.
 
+### A page's standing is a status, and a report row's reads the mode it was written in
+
+`design.md` §11 **step 4's sweep**, second part, taken on 2026-08-14 over the four catalog surfaces:
+the read-only catalog (17), manage catalog (18), the correction dialog (19) and bulk changes and
+import (20). It changed `firestore.rules` not at all and nothing in `functions/` or `rules-tests/`
+either.
+
+**Screen 17 was stating one fact twice and rendering it as neither.** The route opened with a
+`headlineSmall` reading `Read-only catalog` and closed, a page below, with an uncontained paragraph
+naming what is unavailable. §2.1's rule is that a status is a container plus a glyph plus a **word**,
+and §2.1's own row for `info` is *"offline, read-only, informational"* — so the lookup is the
+document's, `Callout.title` supplies the word, and the paragraph is the message. The `headlineSmall`
+went with it: §2.2 has one screen-title role and step 5a put it in the `PageHeader`.
+
+**Six of the family's seven notices are `info` and the seventh is `problem`, and the split is what
+the sentences claim rather than how they feel.** The six say what *this build* or *this role* cannot
+do — no writer injected, no bulk callable injected, a manager who may stock the catalog and may not
+price it — and none of them reports a failure or hides anything, which is the reading the
+reconciliation day page made for its own forbidden notice. The seventh is a **stopped bulk chain**.
+All eight values of `TenantBulkCatalogFailure` mean the same thing at page scale, so they take one
+status; `ambiguous` is the arguable one and is deliberately included, because an unknown outcome is
+not `attention`'s "awaiting" — nothing further is coming.
+
+**A bulk report's row status reads the report's mode, and that is the decision most worth arguing
+with.** The status was a word inside the card title — `Corrected: Bar soap - blue` — which is the
+rendering §2.1 forbids, and a report genuinely mixes its four outcomes, so a badge here carries
+signal rather than being the every-row badge `RecordList`'s rule rules out. `unchanged` is `neutral`
+(*"archived, retired, closed"*: the row is not in play, and deliberately not `info`, which this route
+uses for page-scale notices), `failed` is `problem`, and `created`/`updated` are **`attention` in a
+preview and `ok` in a commit**: §2.1 gives `ok` the meaning *"confirmed"*, and a green badge over a
+report whose own first sentence is `Nothing has been written.` would state the opposite of the line
+above it. **What the badge cannot fix is the word beside it** — the four labels are the enum's own and
+read as past tense, so a previewed row says `Created` before anything exists. That is a copy question
+and it is queued, not decided.
+
+**Four helper paragraphs fold and no notice does, and one of the four could have gone either way.**
+`catalog-management-scope`, `catalog-management-edit-scope`, `bulk-catalog-scope` and
+`bulk-catalog-sheet-help` are all "always the same, true of every product this screen will ever hold,
+read once". `bulk-catalog-scope` is the argument: it is the promise that decides whether a person
+dares press Preview, which is exactly what made the day page's request scope a `Callout`. It goes the
+other way because that sentence *corrects a misunderstanding about what the button covers* while this
+one reassures about a flow §5.2 names by name as `Disclosure` material.
+
+**No pagination line became a `Callout`, and that is one rule applied in three places.** "More
+products are available.", "More categories are available." and "More categories exist than are shown
+here." are all about *this read*, which is one of the three things the sweep's rule sends to a
+`Callout`. They stay captions: they state a property of the pager rather than something a person can
+or cannot do, and the two on 18 sit directly under the list they qualify, which is §5.2's helper-text
+position.
+
+**Two items were deliberately not done and are named rather than left silent.** The report's cards
+are a `RecordList` candidate and stay cards, because 20 is not one of the twelve screens step 6 names
+— the same call the previous chunk made for 28. And **`bulk-catalog-notice` and
+`catalog-management-notice` were excluded**, which makes the queued notice-status model chunk **four**
+notices rather than two: both are the same `String?`-with-no-status shape as
+`reconciliation-request-notice` and `reconciliation-amend-notice`, and all four should move together.
+
+**The chunk's largest finding was made by a picture and it corrects itself.** See the new standing
+trap: a `Disclosure` summary inside a dialog has about 200 logical pixels where a page gives it 250,
+and a 27-character summary that is inside `Disclosure.summaryCharacterBudget` truncated the first time
+anything photographed that dialog on a phone.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -4067,6 +4186,24 @@ enormous expected-denial traces.
   page that nobody saw for two days, because **step 4's own `93-disclosure-*` matrix is `web` only**.
   The general form is the part to carry: a component state matrix photographed at one band is a matrix
   that has not been tested, and the states most likely to break are the ones a narrow screen creates.
+- **A one-line budget measured on a page is not a budget in a dialog.** Found 2026-08-14, the day
+  after the budget itself. `Disclosure.summaryCharacterBudget` is 32 and was measured at §4.1's
+  `compact` band on a full-width route; an `AlertDialog` there insets itself from the window and then
+  pads its own content, so a summary has roughly **200** logical pixels where a page gives it about
+  **250**. `How a correction is checked` is **27 characters — inside the page budget** — and it
+  shipped and truncated in the same chunk, caught only because that chunk was the first thing ever to
+  photograph the dialog on a phone. `Disclosure.dialogSummaryCharacterBudget` is 24. **The general
+  form is the part to carry**: a measurement is a measurement *of a container*, and a call site in a
+  narrower one owes its own.
+- **`scrollUntilVisible` stops when a widget is built, not when it is on screen — and a tap that
+  misses does not fail.** Found 2026-08-14, twice on one route in one chunk. In the screenshot
+  harness, `19-correct-a-product` had been tapping `Correct` at y≈912 in an 891-high viewport since it
+  was written, so **every mobile capture of that case was a picture of the product list rather than of
+  the dialog it is named after**, and nothing ever said so. In a widget test on the same route the
+  same miss surfaced only as a later `findsOne` failing on the dialog's own text. **Follow it with
+  `ensureVisible`** — and note that `scrollUntilVisible` drives one direction, so a capture case must
+  act top to bottom: reaching back up for a control a `ListView` has already disposed leaves no
+  `Scrollable` to drive and throws `Bad state: No element` from somewhere that names neither.
 - **A call-site count that does not exclude comment lines is wrong.** `lib/config.dart` is a
   **fully commented-out file** and contributed 8 phantom buttons to two consecutive estimates in
   this file. Strip lines whose trimmed form starts with `//` before counting anything, and check
@@ -4394,12 +4531,12 @@ start, check "The emulator prelude is not optional" before writing anything down
 
 ---
 
-**The queued chunk is the rest of the step-4 sweep**, and it is still the oldest debt in the redesign.
-Step 4 built `StatusBadge`, `Callout` and `Disclosure` on 2026-08-12 and put them on **four** screens;
-its sweep began on 2026-08-14 with the four reconciliation surfaces, which are **both** of the screen
-sections the sweep owned by name. Steps 1, 2, 3, 5a and 6 are finished — **step 6 in both halves,
-including its twelve-screen sweep, as of 2026-08-13** — so nothing in `design.md` §11 stands between
-this and step 8 except what is left of step 4's sweep.
+**The queued chunk is step 8, taken together with what is left of the step-4 sweep on its own five
+screens** — and that pairing is a decision the catalog chunk made and recorded rather than one this
+file inherited. Step 4 built `StatusBadge`, `Callout` and `Disclosure` on 2026-08-12 and put them on
+**four** screens; its sweep took two chunks on 2026-08-14, the four reconciliation surfaces (both of
+the screen sections it owned by name) and then the four catalog surfaces. Steps 1, 2, 3, 5a and 6 are
+finished — **step 6 in both halves, including its twelve-screen sweep, as of 2026-08-13**.
 
 ```text
 step 6's twelve, all done:                        step 4's sweep so far:
@@ -4407,20 +4544,29 @@ step 6's twelve, all done:                        step 4's sweep so far:
 17 read-only catalog 22 stock corrections         29 one reconciliation run - done 2026-08-14
 18 manage catalog    23 stock movements           28 unresolved differences - done 2026-08-14
 35 activity log      24 one product ledger        21 "Reconciliation found" - done 2026-08-14
-30 shift corrections 32 shift history
-33 shift sales       34 returns on a sale
+30 shift corrections 32 shift history             17 read-only catalog      - done 2026-08-14
+33 shift sales       34 returns on a sale         18 manage catalog         - done 2026-08-14
+                                                  19 correct a product      - done 2026-08-14
+                                                  20 bulk changes/import    - done 2026-08-14
 ```
 
-**What is left is a class of thing rather than a screen list, and both named sections are now
-closed**: every remaining permanent notice paragraph, every remaining multi-line explanation, and every
-remaining status rendered as a word or a coloured `Text`. **Where to look, counted rather than
-characterised**: `grep -c textTheme` over the migrated tree finds prose or a styled caption in **37
-files**, of which the four just done were the four densest. The next densest are
-`bulk_catalog_panel.dart` (4), `receipt_lookup_panel.dart` (3), `sales_totals_panel.dart` (3),
-`daily_metrics_panel.dart` (3) and `tenant_catalog.dart` (3). **The reporting four are also step 8's
-screens** — `StatTile` and tabular figures land on 25, 26 and the totals surfaces — so a session may
-reasonably take them with step 8 or before it, but should say which and not do both halves of one screen
-in two chunks.
+**What is left of the sweep is a class of thing rather than a screen list, and both named sections
+are closed**: every remaining permanent notice paragraph, every remaining multi-line explanation, and
+every remaining status rendered as a word or a coloured `Text`. **Where to look, counted rather than
+characterised**: `grep -c textTheme` over the migrated tree found prose or a styled caption in **37
+files**, of which the eight now done were the densest. What is left at the top is
+`receipt_lookup_panel.dart` (3), `sales_totals_panel.dart` (3), `daily_metrics_panel.dart` (3) and
+`reconciliation_anomalies_panel.dart` (3, already swept — the remaining reads are a `titleSmall`
+identity and two captions), and then a long tail of one- and two-`textTheme` files: the platform tabs,
+the staff gateways, `shift_panel.dart`, `sale_history_panel.dart`, `return_history_panel.dart`,
+`audit_log_panel.dart` and the stock feeds.
+
+**The catalog chunk said which side of the step-8 boundary the reporting screens fall, and this is it.**
+`design.md` §11 step 8 is 25, 26, 27, 28 and 29; three of those are already swept, and 25 and 26 plus
+the two sales-totals surfaces are the densest prose left. **Take them with step 8**, in one chunk per
+screen family, rather than sweeping their prose now and restyling their figures a week later. What is
+genuinely independent of step 8 is the long tail above, and it is small enough to be an ending rather
+than a chunk.
 
 **A rule this chunk established that the rest of the sweep should follow.** §5.1 splits the two
 components by what the prose is *for*: a permanent **helper** paragraph — always the same, true of every
@@ -4429,14 +4575,15 @@ of this page, this read, this role — is a `Callout` and does not. It was read 
 step 4 had already decided this way, rather than invented; see the standing decision for the one
 judgement call in applying it.
 
-**Two items in the sweep are not sweep items, and the second is new.**
-`reconciliation-request-notice` on screen 27 needs a status the model does not carry, and
-**`reconciliation-amend-notice` on screen 28 is exactly the same item** — this file only knew about the
-first. Both are a `String?` the panel passes down with nothing saying whether the sentence is a success
-or a refusal, and both were left as plain `Text` on 2026-08-14. **They should be taken together, as one
-small model chunk**, because taking one would leave two neighbouring panels inconsistent. The shape is
-a `(String, AppStatus)` pair where the field is a `String?`; both call sites already know which branch
-they are in.
+**Four items in the sweep are not sweep items, and they are one small model chunk together.**
+`reconciliation-request-notice` on screen 27, `reconciliation-amend-notice` on screen 28,
+`catalog-management-notice` on screen 18 and `bulk-catalog-notice` on screen 20 are all the same item,
+arrived at four times independently: a `String?` the panel passes down with nothing saying whether the
+sentence is a success or a refusal. All four were left as plain `Text` on 2026-08-14. **Take them
+together**, because taking any one would leave its neighbours inconsistent. The shape is a
+`(String, AppStatus)` pair where the field is a `String?`; every call site already knows which branch
+it is in. This file knew about one of the four two days ago, which is the argument for doing the grep
+before sizing it — `grep -n "notice," lib/**/*.dart` over the panels finds them.
 
 **Three things the sweep so far has learned.** First, a status rendered as a coloured `Text` on a
 migrated screen is a `RecordStatus` now rather than a loose `StatusBadge`, so read the record model
@@ -4448,10 +4595,23 @@ wording module is worth reaching for the moment two surfaces render one document
 chunks in a row where the real cost was reconciling vocabularies rather than restyling, and
 `stock_movement_labels.dart` and `reconciliation_labels.dart` are the two that exist.
 
-**One thing to check before the next `Disclosure` goes anywhere.** Its summary fits about **32
-characters** on a phone — `Disclosure.summaryCharacterBudget` — and the budget is a call-site
-responsibility because the widget will not wrap. Assert the length beside the screen; do **not** try to
-assert the rendering, for the reason the new standing trap gives.
+**One thing to check before the next `Disclosure` goes anywhere, and it is now two figures rather than
+one.** Its summary fits about **32 characters** on a phone on a full-width route —
+`Disclosure.summaryCharacterBudget` — and about **24** inside a dialog —
+`Disclosure.dialogSummaryCharacterBudget`. The budget is a call-site responsibility because the widget
+will not wrap, and **the second figure exists because the first one was trusted in the wrong
+container**: a 27-character summary, inside the page budget, shipped truncated in a dialog on
+2026-08-14. Assert the length beside the screen against the budget for the container it is in; do
+**not** try to assert the rendering, for the reason the standing trap gives.
+
+**Three lessons the catalog chunk adds, all cheap to reuse.** First, **a widget-test overflow at a
+narrow width is a reason to open the capture, never a measurement to design against** — two `Row`s on
+screen 20 reported 73 and 45 pixels of overflow at 411, and the 411 harness capture with real fonts
+showed the first fitting comfortably and the second genuinely cramped. Second, **`scrollUntilVisible`
+is not `ensureVisible`**, in the harness as well as in a test; see the new standing trap and the
+capture case it had been quietly breaking. Third, **check what a capture case's fake can actually
+answer**: `FakeCallable` returns an empty map, which no strict decoder in this app accepts, so any
+screen whose interesting state is behind a decoded server answer has never been photographed in it.
 
 **Cost it from what the sweep actually took rather than from what this file predicts.** This file
 over-predicted the same sweep twice and under-described it twice: the staff directory's "five
@@ -4541,9 +4701,11 @@ and both chunks declined it on the same ground. **The sweep is over and it is st
 the next session to meet one of those rows must say what it is doing rather than let a `Pagination`
 arrive with something else.
 
-**Step 8 comes after it**, and it is described below. **The four carried observations about
-`RecordList`'s column arithmetic are the other candidate**, and they are now a chunk rather than a
-list: they need all twelve screens in front of them, and all twelve exist.
+**Step 8 is the chunk**, and it is described below; it now carries the step-4 sweep of its own five
+screens with it. **The four carried observations about `RecordList`'s column arithmetic are the other
+candidate**, and they are now a chunk rather than a list: they need all twelve screens in front of
+them, and all twelve exist. **The four-notice model chunk is the third**, and it is the smallest of
+the three.
 
 **The batch is a deliberate relaxation of `claude.md` hard rule 4, granted by the product owner on
 2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** All four pieces of step 6's own half were taken
@@ -4555,8 +4717,9 @@ boundaries it names has cost the batch nothing four times running — **eight**,
 four chunks, which are step 6's own sweep rather than further boundaries. The rule stands everywhere
 else: step 7, step 9, step 10 and steps 11–12 are one number each, and **5b (the navigation model) is
 not in this exception** — it is a behaviour change and stays queued. **The exception has now bought
-what it was granted for**, since 4, 5a and 6 are all finished; what is left of it is step 8, which
-may be taken with the step-4 sweep or after it.
+what it was granted for**, since 4, 5a and 6 are all finished; what is left of it is step 8, and the
+catalog chunk of 2026-08-14 spent the last of it deliberately: **step 8 takes the step-4 sweep of its
+own five screens with it**, rather than those screens being swept now and restyled later.
 
 **The product owner chose the composition layer over the web callable-auth defect on 2026-08-12,
 and the step-4, step-5a, step-6a, step-6b and both sweep sessions all checked that choice rather than
@@ -4601,13 +4764,17 @@ padded 24 now pad `space.20` with everything else, so the question is a naming g
 inconsistency. Step 6a also found this file's own description of it wrong: there were **three**
 routes and the landing route was not one of them.
 
-**Explicitly excluded from it:** **step 8**, which the batch exception permits but which is
-downstream — `StatTile` and tabular figures land on screens that are `RecordList`s with figures in
-them; **the two notice-status model changes**, `reconciliation-request-notice` and
-`reconciliation-amend-notice`, which are one small chunk of their own and are described above;
-**`RecordList` for screen 28's difference cards**, because 28 is not one of the twelve screens step 6
-names and migrating it would be step 6 work outside step 6's list; **`AppSelect`'s rendering on screen
-21**, where the three adjustment-type labels draw as three white rectangles — it is present at `HEAD`
+**Explicitly excluded from it:** **the four notice-status model changes**,
+`reconciliation-request-notice`, `reconciliation-amend-notice`, `catalog-management-notice` and
+`bulk-catalog-notice`, which are one small chunk of their own and are described above;
+**`RecordList` for screen 28's difference cards and screen 20's report cards**, because neither is one
+of the twelve screens step 6 names and migrating either would be step 6 work outside step 6's list;
+**the two copy defects the bulk report's first picture found** — the before/after arrow that renders
+as tofu in the harness fonts (`bulk_catalog.dart:1590`; whether a device shows it is unknown) and
+`_summary`'s missing singular, *"1 were corrected, 1 already hold this value"* — both of which are §8
+and therefore step 11's; **the past-tense row labels** `Created` / `Corrected`, which a preview shows
+before anything exists and which are the same kind of copy question; **`AppSelect`'s rendering on
+screen 21**, where the three adjustment-type labels draw as three white rectangles — it is present at `HEAD`
 and therefore step 3's, not the sweep's, and `web/92-appselect-open` compounds it by cutting off above
 the select so that component's own matrix has never photographed one; **the four carried `RecordList`
 observations above**, unless taken deliberately as their own
@@ -4693,7 +4860,7 @@ preference order:
   which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
   that is not also serving the emulators.
 
-**The device-run debt is therefore now eighteen chunks deep**, and the last thirteen are the ones that
+**The device-run debt is therefore now nineteen chunks deep**, and the last fourteen are the ones that
 most need a device — between them they changed how nearly every screen in the app looks, how every
 button feels, how every screen is entered and left, how every box a person types into is drawn, how
 every explanation folds away, where the title of every screen sits, how wide every page
@@ -4704,15 +4871,28 @@ sign-in repair, the invitation repair, the category repair, commit
 `1b2b13b`, **the ripple kill**, **`AppButton`**, **`AppPageRoute`**, **`AppTextField`**,
 **`Disclosure`**, **`AppScaffold`**, **`AppLayout`**, **`RecordList`**, **the staff directory on
 it**, **either catalog screen on it**, **any of the four stock screens on it**, **any of the four
-shift screens on it**, or **any of the four reconciliation surfaces**. Between them that is 347 tests,
-200 screenshots, and no eyes.
+shift screens on it**, **any of the four reconciliation surfaces**, or **any of the four catalog
+surfaces**. Between them that is 356 tests, 208 screenshots, and no eyes.
 
 **One item on this list stopped being purely a matter of judgement on 2026-08-14, and it is the
 strongest argument yet for looking rather than asserting.** A `Disclosure` had shipped truncated on a
 phone for two days and 196 pictures did not show it, because the component's own matrix is `web` only.
 A screenshot at the right width caught it in one look. That is not a device finding — the harness found
 it — but it is the same lesson at one remove: **the states nobody photographs are the states nobody
-knows about.**
+knows about.** **The catalog chunk made the point twice more the same day**: the same class of defect
+recurred inside a *dialog*, where the budget is smaller again; and `mobile/19-correct-a-product` turned
+out never to have photographed the dialog it is named after, so a picture that existed was evidence
+about nothing.
+
+**The catalog chunk's own item for a shopkeeper is a wording judgement, and it is cheap to check
+because the pictures are now there.** `web-full/20b-bulk-report-previewed` and
+`web-full/20c-bulk-report-committed` are the same three rows either side of a commit. Two things in
+them are decisions rather than lookups. The first is that a **previewed** row wears an amber
+*awaiting* badge and reads `Created` — the badge is honest and the word is not, because the label is
+the enum's own and is past tense in both modes. The second is that a **stopped chain** paints one red
+notice while the rows underneath it keep their individual outcomes, which is either exactly right or
+one alarm too many. Open the pair and say whether the amber reads as "not yet" or as "something is
+wrong".
 
 **The shift family adds the item with the most money on it, and it needs a shopkeeper rather than a
 device.** Screen 32 now wears a badge on every closed shift: **`Cash matches`** in green,
@@ -4929,13 +5109,17 @@ finished.
   sizes, the `text.secondary` prose, the tolerance the reveal closes against, the two status
   mappings that are decisions rather than lookups, and `ConfirmDialog` leaving for step 7.
 - **The step-4 sweep: every remaining status, notice and permanent explanation** — the second half
-  of step 4, the way the call-site sweep was the second half of `AppButton`. **Begun 2026-08-14 with
-  the four reconciliation surfaces**, which are both of the screen sections it owned by name; the rest
-  is still queued as the chunk above. It established the `Disclosure` / `Callout` rule the remainder
-  should follow, added `lib/reporting/reconciliation_labels.dart`, and corrected step 4's own truncated
-  summary. **Two items in it are not restyles**: `reconciliation-request-notice` and
-  `reconciliation-amend-notice` both need a status the model does not carry, and they are one small
-  chunk together rather than two.
+  of step 4, the way the call-site sweep was the second half of `AppButton`. **Two chunks on
+  2026-08-14**: the four reconciliation surfaces, which are both of the screen sections it owned by
+  name, and then the four catalog surfaces. The first established the `Disclosure` / `Callout` rule the
+  remainder follows, added `lib/reporting/reconciliation_labels.dart`, and corrected step 4's own
+  truncated summary; the second added a page-standing `Callout`, the report-row badges whose lookup
+  reads the report's mode, `Disclosure.dialogSummaryCharacterBudget`, and two harness captures of a
+  state nothing had ever photographed. **What is left is the reporting prose, and it is queued with
+  step 8 rather than before it.** **Four items in it are not restyles**:
+  `reconciliation-request-notice`, `reconciliation-amend-notice`, `catalog-management-notice` and
+  `bulk-catalog-notice` all need a status the model does not carry, and they are one small chunk
+  together rather than four.
 - **~~The design system, step 5a: `AppScaffold` and `PageHeader`~~** — **done 2026-08-12.** The page
   frame at **25 call sites across 23 files**, §7's page pattern, §2.2's two screen-title roles, 28
   tests and 14 harness captures. It moved no board row and no rollout step, moved the **Design
@@ -4983,10 +5167,11 @@ finished.
   three page-invariant paragraphs being repeated per record, and one of the three was settled by a
   screenshot rather than by argument. It cost five test files, +8 tests, 11 moved images, 1 added,
   and no board row.
-- **The design system, step 8: money surfaces** — after the sweep, not with it. `StatTile`, tabular
-  figures and tables across the five reporting screens, which are `RecordList`s with figures in
-  them and therefore genuinely downstream of the chunk above. **It wants §3's density answered**,
-  and §3's density is now two constants away from being answerable.
+- **The design system, step 8: money surfaces** — now the queued chunk, and it **carries the step-4
+  sweep of its own five screens with it**, decided 2026-08-14 rather than left open. `StatTile`,
+  tabular figures and tables across the five reporting screens, which are `RecordList`s with figures
+  in them and therefore genuinely downstream of the `RecordList` sweep. **It wants §3's density
+  answered**, and §3's density is now two constants away from being answerable.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the

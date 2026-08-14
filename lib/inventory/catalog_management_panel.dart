@@ -795,27 +795,40 @@ final class _CatalogManagementContents extends StatelessWidget {
       children: [
         Text('Catalog', style: text.titleMedium),
         const SizedBox(height: 4),
-        Text(
-          key: const ValueKey('catalog-management-scope'),
-          canEdit
-              ? 'A product added here can be sold, counted, returned, and '
-                    'reported on immediately. Its name, code, price, and unit '
-                    'cost can be corrected afterwards, and every correction is '
-                    'recorded with what each field held before. What cannot be '
-                    'changed here is its stock, which belongs to the product '
-                    'itself, and retiring it does not undo anything already '
-                    'recorded.'
-              : 'A product added here can be sold, counted, returned, and '
-                    'reported on immediately. Its name, code, and price are '
-                    'permanent: nothing in this build can correct them '
-                    'afterwards, and retiring it does not undo anything '
-                    'already recorded.',
+        // A permanent **helper** paragraph in §5.1's sense - always the same,
+        // true of every product this route will ever hold, read once - so it
+        // folds. The words are unchanged in both branches; only the summary
+        // above them is new, and it is new because the component requires one.
+        Disclosure(
+          key: const ValueKey('catalog-management-scope-disclosure'),
+          summary: 'What adding a product does',
+          child: Text(
+            key: const ValueKey('catalog-management-scope'),
+            canEdit
+                ? 'A product added here can be sold, counted, returned, and '
+                      'reported on immediately. Its name, code, price, and unit '
+                      'cost can be corrected afterwards, and every correction is '
+                      'recorded with what each field held before. What cannot be '
+                      'changed here is its stock, which belongs to the product '
+                      'itself, and retiring it does not undo anything already '
+                      'recorded.'
+                : 'A product added here can be sold, counted, returned, and '
+                      'reported on immediately. Its name, code, and price are '
+                      'permanent: nothing in this build can correct them '
+                      'afterwards, and retiring it does not undo anything '
+                      'already recorded.',
+          ),
         ),
         if (!canWrite) ...[
           const SizedBox(height: 12),
-          const Text(
+          // A **notice** rather than a helper: it is about the state of this
+          // build, so it does not fold. §2.1 gives `info` the meaning
+          // "offline, read-only, informational" and this is the read-only case
+          // exactly - nothing has failed and nothing is hidden.
+          const Callout(
             key: ValueKey('catalog-management-read-only'),
-            'This build cannot change the catalog from here.',
+            status: AppStatus.info,
+            message: 'This build cannot change the catalog from here.',
           ),
         ],
         if (notice case final notice?) ...[
@@ -851,6 +864,11 @@ final class _CatalogManagementContents extends StatelessWidget {
                 ),
             ],
           ),
+        // A caption and deliberately not a `Callout`, for the reason the
+        // read-only route's two pagination lines are not: it states a property
+        // of a bounded read rather than something a person can or cannot do,
+        // and it sits directly under the list it qualifies, which is §5.2's
+        // helper-text position.
         if (view.categories.hasMore)
           const Padding(
             padding: EdgeInsets.only(top: 8),
@@ -883,9 +901,14 @@ final class _CatalogManagementContents extends StatelessWidget {
         Text('Add a product', style: text.titleMedium),
         const SizedBox(height: 8),
         if (!canWrite)
-          const Text(
+          // The second of this build's two read-only notices, and both are
+          // rendered because they answer different questions: the one above
+          // says the catalog cannot be changed at all, and this one stands
+          // where the form a person came here to fill in would be.
+          const Callout(
             key: ValueKey('catalog-management-product-read-only'),
-            'Products cannot be added from this build.',
+            status: AppStatus.info,
+            message: 'Products cannot be added from this build.',
           )
         else ...[
           AppTextField(
@@ -1037,9 +1060,14 @@ final class _CatalogManagementContents extends StatelessWidget {
         ),
         if (!canRetire) ...[
           const SizedBox(height: 8),
-          const Text(
+          // The same shape as the reconciliation day page's forbidden notice
+          // and at the same status, for the same reason: `info` rather than
+          // `problem` because nothing has failed and nothing is hidden - the
+          // whole list above is readable, and one action is not offered.
+          const Callout(
             key: ValueKey('catalog-management-retire-unavailable'),
-            'Only an owner or administrator may retire a product.',
+            status: AppStatus.info,
+            message: 'Only an owner or administrator may retire a product.',
           ),
         ],
         const SizedBox(height: 12),
@@ -1386,12 +1414,27 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              key: ValueKey('catalog-management-edit-scope'),
-              'Every field is filled in with what the product holds now. '
-              'Change the ones that are wrong and save them together: a '
-              'correction is checked against the whole product, so one that '
-              'leaves a different field unreadable is refused outright.',
+            // A permanent helper paragraph, true of every correction this
+            // dialog will ever make, so it folds. A dialog is the place where
+            // the height it costs is worth most: what a person came here to do
+            // is edit five fields, and the explanation of how they are checked
+            // is read once and then never again.
+            //
+            // **The summary is short because a dialog is not a page.** This
+            // shipped as `How a correction is checked` - 27 characters, inside
+            // `Disclosure.summaryCharacterBudget` - and truncated the first time
+            // anything photographed this dialog on a phone. See
+            // `Disclosure.dialogSummaryCharacterBudget`.
+            const Disclosure(
+              key: ValueKey('catalog-management-edit-scope-disclosure'),
+              summary: 'How this is checked',
+              child: Text(
+                key: ValueKey('catalog-management-edit-scope'),
+                'Every field is filled in with what the product holds now. '
+                'Change the ones that are wrong and save them together: a '
+                'correction is checked against the whole product, so one that '
+                'leaves a different field unreadable is refused outright.',
+              ),
             ),
             const SizedBox(height: 12),
             AppTextField(
@@ -1455,11 +1498,16 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                 ),
             ] else ...[
               const SizedBox(height: 12),
-              Text(
-                key: const ValueKey('catalog-management-edit-money-hidden'),
-                'Only an owner or administrator may change what this product '
-                'is priced at or what it costs, so neither is offered here.',
-                style: text.bodySmall,
+              // A role notice, at `info` for the reason every other one on this
+              // route is: two of the five fields are not offered, and the other
+              // three are - nothing has failed and nothing is hidden.
+              const Callout(
+                key: ValueKey('catalog-management-edit-money-hidden'),
+                status: AppStatus.info,
+                message:
+                    'Only an owner or administrator may change what this '
+                    'product is priced at or what it costs, so neither is '
+                    'offered here.',
               ),
             ],
             const SizedBox(height: 12),

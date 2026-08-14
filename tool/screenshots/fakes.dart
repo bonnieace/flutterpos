@@ -996,6 +996,99 @@ final class FakeCallable
   }
 }
 
+/// `updateProducts`, answering the way the server does, with a mixed report.
+///
+/// **[FakeCallable] cannot photograph a bulk report and that is why this
+/// exists.** The strict decoder reconciles the answer against the page it sent -
+/// same business, same mode, one outcome per row in order, every acted-on row
+/// coming back holding exactly the value requested - so an empty map produces a
+/// refusal notice rather than a report, and no capture had ever put a row
+/// outcome on screen.
+///
+/// It answers one row `unchanged` and one `failed` so a single picture carries
+/// three of §2.1's five statuses at once. That is the point of it: a report that
+/// is all one outcome would photograph the case the badge is least useful in.
+final class FakeBulkCatalogCallable implements UpdateProductsCallable {
+  FakeBulkCatalogCallable({this.unchangedAt = 1, this.failedAt = 2});
+
+  /// Which row (zero-based within a page) already holds the value.
+  final int unchangedAt;
+
+  /// Which row the server refuses.
+  final int failedAt;
+
+  final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(payload);
+    final mode = payload['mode']! as String;
+    final rows = (payload['rows']! as List).cast<Map<String, Object?>>();
+    var unchanged = 0;
+    var failed = 0;
+    final outcomes = <Map<String, Object?>>[];
+    for (var index = 0; index < rows.length; index++) {
+      if (index == failedAt) {
+        failed++;
+        outcomes.add(<String, Object?>{
+          'index': index,
+          'productId': rows[index]['productId'],
+          'status': 'failed',
+          'code': 'failed-precondition',
+          'message': 'This product was retired while the preview was open.',
+        });
+        continue;
+      }
+      if (index == unchangedAt) unchanged++;
+      outcomes.add(_outcome(rows[index], index, mode));
+    }
+    return <String, Object?>{
+      'batchId': 'pb_dev0001',
+      'tenantId': payload['tenantId'],
+      'mode': mode,
+      'rowCount': rows.length,
+      'updatedCount': rows.length - unchanged - failed,
+      'unchangedCount': unchanged,
+      'failedCount': failed,
+      'rows': outcomes,
+    };
+  }
+
+  /// One acted-on row, holding the seeded product's own facts with the corrected
+  /// field replaced - which is what the decoder checks rather than trusts.
+  Map<String, Object?> _outcome(
+    Map<String, Object?> row,
+    int index,
+    String mode,
+  ) {
+    final productId = row['productId']! as String;
+    final field = row.keys.firstWhere((key) => key != 'productId');
+    final value = row[field];
+    final seeded = seedProducts[productId]!;
+    final unchanged = index == unchangedAt;
+    final price = field == 'price' ? value! as num : seeded['price']! as num;
+    final num? cost = field == 'cost' ? value as num? : seeded['cost'] as num?;
+    return <String, Object?>{
+      'index': index,
+      'productId': productId,
+      'status': unchanged ? 'unchanged' : 'updated',
+      'changedFields': unchanged ? const <String>[] : <String>[field],
+      'updateId': mode == 'commit' && !unchanged ? 'pu_dev000$index' : null,
+      'code': null,
+      'message': null,
+      'product': <String, Object?>{
+        'name': seeded['name'],
+        'sku': seeded['SKU'],
+        'price': price.toDouble(),
+        'priceMinor': (price * 100).round(),
+        'cost': cost?.toDouble(),
+        'costMinor': cost == null ? null : (cost * 100).round(),
+        'categoryId': field == 'categoryId' ? value : seeded['categoryId'],
+      },
+    };
+  }
+}
+
 /// The catalog write boundary, accepting every change.
 ///
 /// It is supplied so the route draws its "add a product", "add a category", and

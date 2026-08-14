@@ -52,6 +52,61 @@ void main() {
     );
   });
 
+  testWidgets('every notice on this route is a status, and all of them read '
+      'informational', (tester) async {
+    // Three notices meet a person here and none of them reports a failure: two
+    // say what this build cannot do and one says what this role may not do. §2.1
+    // gives `info` "offline, read-only, informational", and calling any of them
+    // `problem` would invent in colour a fault the words are careful not to
+    // claim - the same reading the reconciliation day page made for its own
+    // forbidden notice.
+    await _pump(tester, _controller(role: TenantRole.manager), _Reader.seeded());
+
+    for (final key in const <String>[
+      'catalog-management-read-only',
+      'catalog-management-product-read-only',
+      'catalog-management-retire-unavailable',
+    ]) {
+      final finder = find.byKey(ValueKey(key));
+      await tester.ensureVisible(finder);
+      expect(tester.widget<Callout>(finder).status, AppStatus.info, reason: key);
+    }
+    expect(
+      _callout(tester, 'catalog-management-retire-unavailable'),
+      'Only an owner or administrator may retire a product.',
+    );
+  });
+
+  testWidgets('every explanation on this route fits its one line on a phone', (
+    tester,
+  ) async {
+    // A character count and not a render measurement: `flutter test` has no
+    // Material fonts, so an intrinsic-width read here is a fallback font's
+    // advance widths. The budget was measured in the harness, where they are
+    // real.
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      bulkRoute: (_) => const Scaffold(body: Text('Bulk open')),
+      width: 411,
+    );
+
+    final summaries = tester
+        .widgetList<Disclosure>(find.byType(Disclosure))
+        .map((disclosure) => disclosure.summary)
+        .toList();
+    expect(summaries, hasLength(2));
+    for (final summary in summaries) {
+      expect(
+        summary.length,
+        lessThanOrEqualTo(Disclosure.summaryCharacterBudget),
+        reason: summary,
+      );
+    }
+  });
+
   testWidgets('the bulk explanation is kept, and it starts out of the way', (
     tester,
   ) async {
@@ -436,9 +491,15 @@ void main() {
     }
     expect(tester.takeException(), isNull);
 
-    await tester.tap(
-      find.byKey(const ValueKey('catalog-management-retire-pd-1')),
-    );
+    // `scrollUntilVisible` stops when the widget is *built*, which on this route
+    // can leave it a few pixels below the fold - the page got shorter when its
+    // scope paragraph learned to fold, and the tap then landed at y=912 in an
+    // 891-high viewport. Scrolling it fully into view is what a person does and
+    // is what the assertion below is actually about.
+    final retire = find.byKey(const ValueKey('catalog-management-retire-pd-1'));
+    await tester.ensureVisible(retire);
+    await tester.pumpAndSettle();
+    await tester.tap(retire);
     await tester.pumpAndSettle();
     expect(find.textContaining('It still holds 40 in stock'), findsOne);
   });
@@ -601,6 +662,7 @@ void main() {
     await _pump(tester, _controller(), _Reader.seeded(), writer: _Writer());
 
     expect(find.byKey(const ValueKey('catalog-management-edit-pd-1')), findsNothing);
+    await _open(tester, 'catalog-management-scope-disclosure');
     expect(
       _text(tester, 'catalog-management-scope'),
       contains('are permanent'),
@@ -625,10 +687,14 @@ void main() {
 
     // The route stops claiming a product is permanent the moment it can correct
     // one, because that sentence is what a mistyped price is read against.
+    await _open(tester, 'catalog-management-scope-disclosure');
     expect(
       _text(tester, 'catalog-management-scope'),
       contains('can be corrected afterwards'),
     );
+    // Closed again, so the correction below is opened from the page a person
+    // actually meets rather than from one this test left expanded.
+    await _open(tester, 'catalog-management-scope-disclosure');
     await _openCorrection(tester, 'pd-1');
 
     // Every field is offered at once and prefilled with what the product holds:
@@ -685,9 +751,15 @@ void main() {
     // that the app guesses.
     expect(find.byKey(const ValueKey('catalog-management-edit-price')), findsNothing);
     expect(find.byKey(const ValueKey('catalog-management-edit-cost')), findsNothing);
+    // A role notice at `info` rather than a caption in `bodySmall`: three of
+    // the five fields are offered and two are not, which is not a failure.
     expect(
-      find.byKey(const ValueKey('catalog-management-edit-money-hidden')),
-      findsOne,
+      tester
+          .widget<Callout>(
+            find.byKey(const ValueKey('catalog-management-edit-money-hidden')),
+          )
+          .status,
+      AppStatus.info,
     );
     await tester.enterText(
       find.byKey(const ValueKey('catalog-management-edit-name')),
@@ -699,6 +771,48 @@ void main() {
 
     expect(callable.payloads.single.containsKey('price'), isFalse);
     expect(callable.payloads.single['name'], 'Brown bread loaf');
+  });
+
+  testWidgets('the correction dialog folds its explanation away too', (
+    tester,
+  ) async {
+    // The place a fold buys the most: what a person opened this dialog to do is
+    // edit five fields, and the paragraph explaining how a correction is checked
+    // is read once and then never again. Its summary is asserted against the
+    // same one-line budget the route's other one is.
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+    );
+    await _openCorrection(tester, 'pd-1');
+
+    expect(find.byKey(const ValueKey('catalog-management-edit-scope')), findsNothing);
+    final summary = tester
+        .widget<Disclosure>(
+          find.byKey(
+            const ValueKey('catalog-management-edit-scope-disclosure'),
+          ),
+        )
+        .summary;
+    // The **dialog** budget, not the page one: this shipped at 27 characters,
+    // inside the page budget, and truncated the first time a capture put the
+    // dialog on a phone.
+    expect(
+      summary.length,
+      lessThanOrEqualTo(Disclosure.dialogSummaryCharacterBudget),
+    );
+
+    await _open(tester, 'catalog-management-edit-scope-disclosure');
+    expect(
+      _text(tester, 'catalog-management-edit-scope'),
+      startsWith('Every field is filled in with what the product holds now.'),
+    );
+    // Opening an explanation reads nothing and writes nothing, and the fields
+    // it sits above are untouched by it.
+    expect(_field(tester, 'catalog-management-edit-name'), 'White bread loaf');
   });
 
   testWidgets('clearing a recorded cost is its own act, and sends null', (
@@ -999,8 +1113,9 @@ Future<void> _pump(
   WidgetBuilder? bulkRoute,
   VoidCallback? onChanged,
   int pageSize = 20,
+  double width = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1400, 3600);
+  tester.view.physicalSize = Size(width, 3600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -1099,6 +1214,22 @@ Future<void> _confirmProduct(WidgetTester tester) async {
 
 String _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+/// Opens one [Disclosure] by its own key and settles the spring behind it.
+///
+/// A closed disclosure is gone from the tree rather than clipped to nothing, so
+/// reading the prose inside one is opening it first - which is also what a
+/// person does.
+Future<void> _open(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+/// One [Callout]'s message, read off the component rather than off a `Text`.
+String _callout(WidgetTester tester, String key) =>
+    tester.widget<Callout>(find.byKey(ValueKey(key))).message;
 
 /// Every rendered string carrying the shape of a category document ID, over the
 /// whole tree rather than over one slot: the point of the assertion is that no

@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/buttons.dart';
@@ -122,7 +123,7 @@ void main() {
     );
     expect(find.byKey(const ValueKey('bulk-catalog-field-categoryId')), findsOne);
     expect(
-      _text(tester, 'bulk-catalog-money-hidden'),
+      _callout(tester, 'bulk-catalog-money-hidden'),
       contains('refuses every row'),
     );
   });
@@ -140,7 +141,7 @@ void main() {
     );
     await _choose(tester, 'bulk-catalog-task-import');
     expect(
-      _text(tester, 'bulk-catalog-import-cost-hidden'),
+      _callout(tester, 'bulk-catalog-import-cost-hidden'),
       contains('A price is not'),
     );
     await _paste(tester, 'name,sku,price,cost,category\nMandazi,M-1,20,9,Bakery');
@@ -280,7 +281,7 @@ void main() {
       endsWith('1 of 2 requests were previewed.'),
     );
     expect(
-      _text(tester, 'bulk-catalog-report-failure'),
+      _callout(tester, 'bulk-catalog-report-failure'),
       allOf(contains('already used'), contains('Only the rows listed above')),
     );
     // The first page's rows are reported, and a commit is not offered: a preview
@@ -418,9 +419,127 @@ void main() {
     // unknown rather than as a failure, and re-previewing is the way out.
     expect(batch.payloads, hasLength(2));
     expect(
-      _text(tester, 'bulk-catalog-report-failure'),
+      _callout(tester, 'bulk-catalog-report-failure'),
       allOf(contains('may or may not have been written'), contains('Nothing was written.')),
     );
+    // A stopped chain is the one `problem` on this route. Every other notice
+    // here is `info`, so the status is carrying the difference rather than the
+    // paragraph having to.
+    expect(_status(tester, 'bulk-catalog-report-failure'), AppStatus.problem);
+  });
+
+  testWidgets('both explanations fold, and the words survive the fold', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      batch: _BatchCallable(),
+      import: _ImportCallable(),
+    );
+
+    // Closed means gone from the tree rather than clipped to nothing, so a
+    // screen reader does not read out prose nobody can see.
+    expect(find.byKey(const ValueKey('bulk-catalog-scope')), findsNothing);
+    await _open(tester, 'bulk-catalog-scope-disclosure');
+    expect(
+      _text(tester, 'bulk-catalog-scope'),
+      startsWith('Nothing here happens until it has been shown to you first.'),
+    );
+
+    await _choose(tester, 'bulk-catalog-task-import');
+    expect(find.byKey(const ValueKey('bulk-catalog-sheet-help')), findsNothing);
+    await _open(tester, 'bulk-catalog-sheet-help-disclosure');
+    expect(
+      _text(tester, 'bulk-catalog-sheet-help'),
+      allOf(
+        contains('header line included'),
+        contains('The header must name name, sku, and price.'),
+        contains('An opening quantity is recorded as an opening balance'),
+      ),
+    );
+  });
+
+  testWidgets('every explanation on this route fits its one line on a phone', (
+    tester,
+  ) async {
+    // A character count and not a render measurement, deliberately: `flutter
+    // test` has no Material fonts, so an intrinsic-width read here reports a
+    // fallback font's advance widths. The budget was measured in the harness,
+    // where the fonts are real. Both of this route's summaries are asserted,
+    // and the import one only exists once the task is switched.
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      batch: _BatchCallable(),
+      import: _ImportCallable(),
+      width: 411,
+    );
+
+    expect(_summaries(tester), hasLength(1));
+    await _choose(tester, 'bulk-catalog-task-import');
+    expect(_summaries(tester), hasLength(2));
+    for (final summary in _summaries(tester)) {
+      expect(
+        summary.length,
+        lessThanOrEqualTo(Disclosure.summaryCharacterBudget),
+        reason: summary,
+      );
+    }
+  });
+
+  testWidgets('a report states each row\'s outcome as a status, not a word', (
+    tester,
+  ) async {
+    final import = _ImportCallable();
+
+    await _pump(tester, _controller(), _Reader.seeded(), import: import);
+    await _choose(tester, 'bulk-catalog-task-import');
+    await _paste(
+      tester,
+      'name,sku,price,category\n'
+      'Mandazi,M-1,20,Bakery\n'
+      ',S-1,25,Bakery\n',
+    );
+    await _tap(tester, 'bulk-catalog-preview');
+
+    // A report genuinely mixes its outcomes, which is what makes a badge here
+    // signal rather than the every-row badge the record rules rule out.
+    expect(_rowStatus(tester, 2), AppStatus.attention);
+    expect(_rowStatus(tester, 3), AppStatus.problem);
+    // The word is still the word - the container and the glyph are what is new.
+    expect(_rowLabel(tester, 2), 'Created');
+    expect(_rowLabel(tester, 3), 'Refused');
+    expect(_text(tester, 'bulk-catalog-row-subject-3'), isNotEmpty);
+  });
+
+  testWidgets('a previewed row is awaiting and a committed one is confirmed', (
+    tester,
+  ) async {
+    // The one mapping on this route that reads the report's mode. A green
+    // "confirmed" badge over a report whose own first sentence is "Nothing has
+    // been written" would state the opposite of the line above it.
+    final batch = _BatchCallable(unchangedAt: 1);
+
+    await _pump(tester, _controller(), _Reader.seeded(), batch: batch);
+    await _select(tester, 'pd-001');
+    await _select(tester, 'pd-002');
+    await _choose(tester, 'bulk-catalog-category-cat-drinks');
+    await _tap(tester, 'bulk-catalog-preview');
+
+    expect(_rowStatus(tester, 1), AppStatus.attention);
+    // A row that already holds the value is not in play in either mode, so it
+    // is `neutral` before and after the commit.
+    expect(_rowStatus(tester, 2), AppStatus.neutral);
+    expect(_rowLabel(tester, 2), 'Unchanged');
+
+    await _tap(tester, 'bulk-catalog-commit');
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    expect(_rowStatus(tester, 1), AppStatus.ok);
+    expect(_rowStatus(tester, 2), AppStatus.neutral);
   });
 }
 
@@ -432,8 +551,9 @@ Future<void> _pump(
   ImportProductsCallable? import,
   VoidCallback? onChanged,
   int pageSize = 20,
+  double width = 1400,
 }) async {
-  tester.view.physicalSize = const Size(1400, 8000);
+  tester.view.physicalSize = Size(width, 8000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -487,6 +607,40 @@ Future<void> _paste(WidgetTester tester, String sheet) =>
 
 String _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+/// One [Callout]'s message, read off the component rather than off a `Text`.
+String _callout(WidgetTester tester, String key) =>
+    tester.widget<Callout>(find.byKey(ValueKey(key))).message;
+
+/// One [Callout]'s status.
+AppStatus _status(WidgetTester tester, String key) =>
+    tester.widget<Callout>(find.byKey(ValueKey(key))).status;
+
+/// One report row's badge.
+StatusBadge _badge(WidgetTester tester, int position) =>
+    tester.widget<StatusBadge>(
+      find.byKey(ValueKey('bulk-catalog-row-status-$position')),
+    );
+
+AppStatus _rowStatus(WidgetTester tester, int position) =>
+    _badge(tester, position).status;
+
+String _rowLabel(WidgetTester tester, int position) =>
+    _badge(tester, position).label;
+
+/// Every [Disclosure] summary currently on the route.
+List<String> _summaries(WidgetTester tester) => tester
+    .widgetList<Disclosure>(find.byType(Disclosure))
+    .map((disclosure) => disclosure.summary)
+    .toList();
+
+/// Opens one [Disclosure] by its own key and settles the spring behind it.
+Future<void> _open(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
 
 /// Every rendered string carrying the shape of a category document ID, over the
 /// whole tree rather than over one slot. `cat-` is the seeded shape and `ct_` is
@@ -594,13 +748,19 @@ final class _Reader implements TenantDataReader {
 /// Answers `updateProducts` the way the server does: every row corrected to the
 /// value the request named, so the strict decoder has something to reconcile.
 final class _BatchCallable implements UpdateProductsCallable {
-  _BatchCallable({this.failAt, this.corruptAt, this.error});
+  _BatchCallable({this.failAt, this.corruptAt, this.error, this.unchangedAt});
 
   /// Which call (zero-based) throws [error] instead of answering.
   final int? failAt;
 
   /// Which call answers something the decoder must refuse.
   final int? corruptAt;
+
+  /// Which row (zero-based within a page) comes back `unchanged` rather than
+  /// corrected, which the server answers whenever a product already holds the
+  /// value the request names. Nothing else in this file produces one, and it is
+  /// the outcome §2.1 has to draw as "not in play".
+  final int? unchangedAt;
 
   final Object? error;
   final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
@@ -625,13 +785,14 @@ final class _BatchCallable implements UpdateProductsCallable {
         'rows': const <Object?>[],
       };
     }
+    final unchanged = unchangedAt != null && unchangedAt! < rows.length ? 1 : 0;
     return <String, Object?>{
       'batchId': 'pb_x',
       'tenantId': payload['tenantId'],
       'mode': mode,
       'rowCount': rows.length,
-      'updatedCount': rows.length,
-      'unchangedCount': 0,
+      'updatedCount': rows.length - unchanged,
+      'unchangedCount': unchanged,
       'failedCount': 0,
       'rows': <Object?>[
         for (var index = 0; index < rows.length; index++)
@@ -649,12 +810,13 @@ final class _BatchCallable implements UpdateProductsCallable {
     final value = row[field];
     final priced = field == 'price' ? value! as num : 65.0;
     final num? costed = field == 'cost' ? value as num? : 40.0;
+    final untouched = index == unchangedAt;
     return <String, Object?>{
       'index': index,
       'productId': row['productId'],
-      'status': 'updated',
-      'changedFields': <String>[field],
-      'updateId': mode == 'commit' ? 'pu_$index' : null,
+      'status': untouched ? 'unchanged' : 'updated',
+      'changedFields': untouched ? const <String>[] : <String>[field],
+      'updateId': mode == 'commit' && !untouched ? 'pu_$index' : null,
       'code': null,
       'message': null,
       'product': <String, Object?>{

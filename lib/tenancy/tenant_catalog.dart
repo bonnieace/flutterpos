@@ -409,11 +409,26 @@ final class _CatalogContents extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text(
-          'Read-only catalog',
-          style: Theme.of(context).textTheme.headlineSmall,
+        // **A status, not a heading, and it used to be both and neither.** This
+        // route's standing was a `headlineSmall` reading "Read-only catalog" at
+        // the top and an uncontained paragraph at the bottom saying which of the
+        // app's capabilities it does not carry - the same fact stated twice, a
+        // page apart, and neither of them rendered as §2.1 requires. §2.1 gives
+        // `info` the meaning *"offline, read-only, informational"*, so the
+        // lookup is the document's own, and `Callout.title` is what supplies
+        // the **word** the container and the glyph go with.
+        Callout(
+          key: const ValueKey('catalog-read-only'),
+          status: AppStatus.info,
+          title: 'Read-only catalog',
+          message: productStockRoute == null
+              ? 'Catalog changes, stock actions, checkout, returns, and '
+                    'reports are not available here.'
+              : 'Catalog changes, checkout, returns, and reports are not '
+                    'available here. Open a product to see and correct its '
+                    'stock.',
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 12),
         Text('Business: $tenantId'),
         if (adjustmentFeedRoute != null) ...[
           const SizedBox(height: 12),
@@ -468,19 +483,17 @@ final class _CatalogContents extends StatelessWidget {
           ],
           empty: const Text('No products found.'),
         ),
+        // **Deliberately still a caption and not a `Callout`.** The sweep's rule
+        // makes a notice about this page, this read or this role a `Callout`,
+        // and a bounded page is about this read - but this line states a
+        // property of the pager rather than something a person can or cannot
+        // do, and its answer is the pager itself. The same decision was taken
+        // for the two on the manage-catalog route.
         if (snapshot.products.hasMore)
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text('More products are available.'),
           ),
-        const SizedBox(height: 12),
-        Text(
-          productStockRoute == null
-              ? 'Catalog changes, stock actions, checkout, returns, and '
-                    'reports remain unavailable.'
-              : 'Catalog changes, checkout, returns, and reports remain '
-                    'unavailable. Open a product to see and correct its stock.',
-        ),
       ],
     );
   }

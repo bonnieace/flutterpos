@@ -75,6 +75,12 @@ const Map<String, String> captions = <String, String>{
   '20-bulk-changes-and-import':
       'One field across many products, or a whole catalog from pasted rows. '
       'Both preview before they write.',
+  '20b-bulk-report-previewed':
+      'The per-row report of a preview. A previewed row is awaiting rather than '
+      'confirmed, because nothing has been written yet.',
+  '20c-bulk-report-committed':
+      'The same three rows after the commit. Only the row that was actually '
+      'written changes status; unchanged and refused mean the same either way.',
   '21-product-stock':
       'One product’s recorded stock, its ledger, and the only path in the '
       'app that sets stock to an arbitrary figure.',

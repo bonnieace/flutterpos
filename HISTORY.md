@@ -21826,3 +21826,258 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## The catalog family folds its prose, and a bulk report gets its first picture - 2026-08-14
+
+`design.md` §11 **step 4's sweep**, second part, taken over the **four catalog surfaces**. The
+reconciliation family went first the same day because it held both of the screen sections the sweep
+owned by name; with those closed the sweep is "a class of thing rather than a screen list", and the
+catalog is the next family in it — `PLAN.md`'s own count put `bulk_catalog_panel.dart` at the head of
+the remaining files, and the other two reporting files it names are step 8's screens.
+
+```text
+17  read-only catalog     tenant_catalog.dart
+18  manage catalog        catalog_management_panel.dart
+19  correct a product     the same file's dialog
+20  bulk changes/import   bulk_catalog_panel.dart
+```
+
+It changes `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either:
+`git diff` **and** `git status` over all three print zero lines. **It changed no status board row**,
+and that is stated rather than left silent: "Add or retire a product", "Edit a product's price, name,
+code, cost, or category", "Change many products at once" and "Import a catalog from a spreadsheet"
+have all been 🟢 throughout and a shop can do exactly what it could do this morning.
+
+### Why this family
+
+The reporting four are also step 8's screens — `StatTile` and tabular figures land on 25, 26 and the
+totals surfaces — and `PLAN.md` says a session may take them with step 8 or before it but should say
+which and not do both halves of one screen in two chunks. **This chunk says: with step 8.** What is
+left after this one is the reporting and sales prose and the long tail of one- and two-`textTheme`
+files.
+
+### What was decided
+
+1. **A page's read-only standing is a status, and screen 17 was stating it twice as neither.** The
+   route opened with a `headlineSmall` reading `Read-only catalog` and closed, a page below, with an
+   uncontained paragraph naming what is unavailable. One fact, two places, and §2.1's rule is that a
+   status is a container plus a glyph plus a **word**. It is one `Callout` at `info` now — §2.1's own
+   row is *"offline, read-only, informational"* — with the word as `Callout.title` and the paragraph
+   as its message. The `headlineSmall` went with it, because §2.2 has one screen-title role and step
+   5a put it in the `PageHeader`.
+2. **Every notice in this family is `info`, and that is a finding rather than a default.** Six of the
+   seven say what *this build* or *this role* cannot do: no writer injected, no bulk callable
+   injected, a manager who may stock the catalog and may not price it. None of them reports a failure
+   and none of them hides anything, which is the reading the reconciliation day page made for its own
+   forbidden notice and this family inherits. The seventh is the exception below.
+3. **A stopped bulk chain is the family's one `problem`.** All eight values of
+   `TenantBulkCatalogFailure` mean the same thing at page scale — the rest of the request was not
+   sent — so they take one status rather than one of them being separated on a reading §2.1 does not
+   support. `ambiguous` is the arguable one and is deliberately included: an unknown outcome is not
+   `attention`'s "awaiting", because nothing further is coming.
+4. **A bulk report's rows are a status, and the report's *mode* is part of the lookup.** The row
+   status was a word inside the card title — `Corrected: Bar soap - blue` — which is the rendering
+   §2.1 forbids. A report genuinely mixes its four outcomes, so a badge here carries signal rather
+   than being the every-row badge `RecordList`'s rule rules out. `unchanged` → `neutral`
+   (*"archived, retired, closed"*: the row is not in play), `failed` → `problem`, and
+   `created`/`updated` → **`attention` in a preview and `ok` in a commit**. The last is the decision:
+   §2.1 gives `ok` the meaning *"confirmed"*, and a green badge over a report whose own first sentence
+   is `Nothing has been written.` would state the opposite of the line above it. §2.1's `attention` is
+   *"unreconciled, pending, awaiting"*, and a previewed row is precisely awaiting the commit button
+   below it. **What the badge cannot fix is the word beside it** — the four labels are the enum's own
+   and read as past tense, so a previewed row says `Created` before anything exists. That is a copy
+   question and it is recorded, not decided.
+5. **Four permanent helper paragraphs fold; none of the notices do.** §5.1's split, read off the day
+   page by the previous chunk and applied unchanged: `catalog-management-scope`,
+   `catalog-management-edit-scope`, `bulk-catalog-scope` and `bulk-catalog-sheet-help` are all
+   "always the same, true of every product this screen will ever hold, read once".
+   `bulk-catalog-scope` is the one worth arguing about — it is the promise that decides whether a
+   person dares press Preview, which is what made the day page's request scope a `Callout` — and it
+   goes the other way because that sentence *corrects a misunderstanding about what the button
+   covers* while this one reassures about a flow §5.2 names by name as `Disclosure` material.
+6. **No pagination line became a `Callout`, and it is one rule applied in three places.** "More
+   products are available.", "More categories are available." and "More categories exist than are
+   shown here." are all about *this read*, which is one of the three things the sweep's rule sends to
+   a `Callout`. They stay captions: they state a property of the pager rather than something a person
+   can or cannot do, and the two on 18 sit directly under the list they qualify, which is §5.2's
+   helper-text position.
+7. **`bulk-catalog-notice` and `catalog-management-notice` were excluded, which makes the queued model
+   chunk four notices rather than two.** `PLAN.md` names `reconciliation-request-notice` and
+   `reconciliation-amend-notice` as one small model chunk: a `String?` the panel passes down with
+   nothing saying whether the sentence is a success or a refusal. Both catalog routes have exactly the
+   same item, arrived at the same way. All four should move together; widening the field is state
+   shape, which `claude.md` hard rule 1 keeps out of a visual chunk.
+8. **The report's cards stayed cards.** They are a `RecordList` candidate and screen 20 is **not one
+   of the twelve screens step 6 names**, so migrating it would be step 6 work outside step 6's list —
+   the same call the previous chunk made for the differences list on 28.
+9. **The empty states and the two guarded `Center`s were left alone.** `EmptyState`, `ErrorState` and
+   `LoadingState` are §5.1 priority 2 with no component yet, and `catalog-management-denied` /
+   `catalog-management-failure` are the same shape as the three in `tenant_routing_shell.dart` that
+   `PLAN.md` already excludes.
+10. **`Pagination` was examined and declined a sixth time.** Screens 18 and 20 both carry a
+    `Previous` / `Page n` / `Next` row, which is one of `DESIGN-AUDIT.md` §2.3's four idioms, and it
+    is §5.1 priority 3. Nothing about it moved.
+
+### A dialog is not a page, and one picture proved it
+
+**`Disclosure.summaryCharacterBudget` is a *page* budget and the correction dialog is narrower.**
+`How a correction is checked` is 27 characters, comfortably inside the 32 the previous chunk
+measured — and it shipped in this chunk and rendered as `How a correction is check…` the first time
+anything photographed that dialog on a phone. An `AlertDialog` at `compact` insets itself from the
+window and then pads its own content, leaving a summary roughly 200 logical pixels where a page gives
+it about 250.
+
+`Disclosure.dialogSummaryCharacterBudget` is **24**, and it is bracketed rather than invented: 27
+truncates, 19 fits with room, and the ellipsis in that capture sat about 25 characters in. The
+dialog's summary is `How this is checked`, and its test asserts the dialog budget rather than the
+page one.
+
+**This is the previous chunk's finding one level down.** That chunk's lesson was that a component
+matrix photographed at one band is a matrix that has not been tested. This one adds: a *budget*
+measured in one container is a budget for that container.
+
+### Two harness cases that were photographing the wrong thing
+
+**`mobile/19-correct-a-product` had never shown the dialog it is named after.** The case scrolls to
+the `Correct` action and taps it, but `scrollUntilVisible` stops when a widget is **built**, not when
+it is on screen, so at 411 the tap landed below the fold and missed without failing. Every mobile
+capture of that case since it was written is a picture of the product list. The same defect, in the
+same route, failed a widget test in this chunk — `both actions are reachable on a phone` tapped at
+y=912 in an 891-high viewport — which is what sent me to look at the picture.
+
+**No capture had ever put a bulk report on screen at all.** `FakeCallable` answers with an empty map,
+and `updateProducts`' decoder reconciles the answer against the page it sent — same business, same
+mode, one outcome per row in order, every acted-on row coming back holding exactly the value
+requested — so an empty map produces a refusal notice rather than a report. `FakeBulkCatalogCallable`
+answers the way the server does, with **one row `unchanged` and one `failed`**, deliberately: a report
+that is all one outcome would photograph the case the badge is least useful in.
+`20b-bulk-report-previewed` and `20c-bulk-report-committed` are the same three rows either side of the
+commit, which is the only way to get `ok` into a picture.
+
+**A third thing the new cases taught, about the harness rather than the app.** `_press` drives one
+direction, so a capture case must act **top to bottom**: the first draft ticked three products and
+then reached back up for the category chip, and by then the `ListView` had disposed the chip strip and
+`scrollUntilVisible` had no `Scrollable` to drive. Choosing the value before ticking the rows is also
+what a person does.
+
+### What a widget test measured wrongly, and what the harness said instead
+
+**Two `Row`s on screen 20 overflowed at 411 in a widget test, and only one of them is real.** This is
+the standing "a widget test cannot measure text" trap in its second outing, and the procedure that
+settled it is worth more than either number.
+
+- The **preview button row** reported a 73-pixel overflow on a single button. The 411 harness capture,
+  with real fonts, shows `Preview, writing nothing` fitting comfortably. **The number was a fallback
+  font's advance widths.** It is a `Wrap` now anyway, because with a report on screen a `Discard this
+  report` sits beside it and that pair genuinely has no room — but it is a robustness change, not a
+  repair, and the 73 is not evidence of anything.
+- The **selection row** reported 45 pixels, and here the picture agrees that something is wrong: at
+  411 `No products chosen.` was squeezed to two lines by two controls taking almost the whole width. A
+  `Wrap` keeps all three on one line wherever there is room and drops the controls to their own run
+  where there is not. At 1440 the three now sit together on the left rather than the count being
+  marooned by an `Expanded`; that reads at least as well and is the one deliberate change to a wide
+  rendering in this chunk.
+
+**The rule this leaves behind:** a widget-test overflow at a narrow width is a *reason to open the
+capture*, never a measurement to design against.
+
+### Two pre-existing copy defects the new pictures found, and neither was fixed
+
+Both are in `web-full/20b-bulk-report-previewed`, and both predate this chunk:
+
+- **`Product 1 • Household ▯ Drinks`.** The row detail joins the before and after with an arrow
+  (`bulk_catalog.dart:1590`), and the harness's Material fonts have no glyph for it. Whether a real
+  device shows tofu is unknown — Roboto on Android has the arrow — so this needs a device before it
+  needs a decision, and replacing it is a copy change.
+- **`1 were corrected, 1 already hold this value`.** `_summary` has one verb per branch and no
+  singular form. §8 is step 11's copy pass; this is one line of it and is recorded rather than taken.
+
+### Files changed
+
+```text
+lib/tenancy/tenant_catalog.dart                   screen 17
+lib/inventory/catalog_management_panel.dart       screens 18 and 19
+lib/inventory/bulk_catalog_panel.dart             screen 20
+lib/ui/status.dart                                Disclosure.dialogSummaryCharacterBudget
+tool/screenshots/fakes.dart                       FakeBulkCatalogCallable
+tool/screenshots/operations_screens_test.dart     _press, the 19 fix, two new cases
+tool/screenshots/build_index.dart                 two case descriptions
+test/tenancy/tenant_catalog_test.dart
+test/inventory/catalog_management_panel_test.dart
+test/inventory/bulk_catalog_panel_test.dart
+```
+
+10 files, **+869 / -130**.
+
+**`dart format` was not run**, on any file. The standing prohibition holds and the check it names —
+the per-file line count — reconciles: `bulk_catalog_panel.dart` is the largest at 231 changed lines
+and every one of them is inside a block this chunk rewrote.
+
+### Tests
+
+**All five suites measured, none carried**, although a carry was legal: this chunk is Dart-only and
+`git diff` over the three server paths prints zero lines. That is **seven** consecutive chunks
+measuring all five.
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1882 -> 1891  (+9)
+npm --prefix functions test                                                409  unchanged
+npm --prefix rules-tests run test:emulator                                 161  unchanged
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged
+```
+
+The prelude was run before every emulator command. All four passed first time and no suite was
+retried.
+
+The 9 new tests: **4** in `bulk_catalog_panel_test.dart` (both explanations fold; every summary fits a
+phone; a report states each row's outcome as a status; a previewed row is awaiting and a committed one
+is confirmed), **3** in `catalog_management_panel_test.dart` (every notice is `info`; every summary
+fits a phone; the dialog folds its explanation), and **2** in `tenant_catalog_test.dart` (the route
+states its read-only standing once; the standing says less once a stock route is offered).
+
+Existing assertions changed rather than added, every one a fact in its new rendering: two `_text(...)`
+reads of prose now open a `Disclosure` first, four reads of a notice now read `Callout.message` off the
+component, and `both actions are reachable on a phone` gained an `ensureVisible` before its tap.
+`_BatchCallable` gained an `unchangedAt` so one row can come back `unchanged` — nothing in that file
+could produce the outcome §2.1 has to draw as "not in play".
+
+`flutter analyze --no-pub lib test tool` reports **475 issues**, unchanged, and none in
+`lib/inventory`, `lib/tenancy`, `lib/ui`, `test/` or `tool/screenshots`.
+
+### Screenshots
+
+**208 images from 154 captures: 8 added, 0 removed, 16 changed, 184 byte-identical.** The baseline was
+generated the same day, so there is no date drift and every moved image is attributable.
+
+```text
+web/17-read-only-catalog             web-full/17-read-only-catalog
+mobile/17-read-only-catalog          mobile-full/17-read-only-catalog
+web/18-manage-catalog                web-full/18-manage-catalog
+mobile/18-manage-catalog             mobile-full/18-manage-catalog
+web/19-correct-a-product             web-full/19-correct-a-product
+mobile/19-correct-a-product          mobile-full/19-correct-a-product
+web/20-bulk-changes-and-import       web-full/20-bulk-changes-and-import
+mobile/20-bulk-changes-and-import    mobile-full/20-bulk-changes-and-import
+web/20b-bulk-report-previewed        web-full/20b-bulk-report-previewed        (new)
+mobile/20b-bulk-report-previewed     mobile-full/20b-bulk-report-previewed     (new)
+web/20c-bulk-report-committed        web-full/20c-bulk-report-committed        (new)
+mobile/20c-bulk-report-committed     mobile-full/20c-bulk-report-committed     (new)
+```
+
+**`mobile/19-correct-a-product` is the picture worth opening**, because until this chunk it was not a
+picture of that dialog at all. **`web-full/20b` and `web-full/20c` are the pair**: three rows, amber
+then green on the row that was actually written, neutral and red unchanged either side of the commit.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

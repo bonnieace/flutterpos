@@ -498,6 +498,74 @@ void main() {
       expect(find.text('stock route product-a'), findsOneWidget);
     });
 
+    testWidgets('the route states its read-only standing once, as a status', (
+      tester,
+    ) async {
+      // It used to be a `headlineSmall` reading "Read-only catalog" at the top
+      // and an uncontained paragraph at the bottom naming what is unavailable -
+      // one fact, stated twice, a page apart, and neither of them rendered the
+      // way §2.1 requires a status to be.
+      final reader = _CatalogReader(
+        handler: (query) async => query.collectionPath.endsWith('/categories')
+            ? [_categorySnapshot('tenant-a', 'drinks')]
+            : [_productSnapshot('tenant-a', 'product-a')],
+      );
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(uid: 'user-a', membership: _membership('tenant-a')),
+          reader: reader,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final callout = tester.widget<Callout>(
+        find.byKey(const ValueKey('catalog-read-only')),
+      );
+      // §2.1 gives `info` the meaning "offline, read-only, informational", so
+      // this is the document's own lookup rather than a judgement.
+      expect(callout.status, AppStatus.info);
+      expect(callout.title, 'Read-only catalog');
+      expect(callout.message, contains('stock actions'));
+      expect(find.text('Read-only catalog'), findsOneWidget);
+    });
+
+    testWidgets('the standing says less once a stock route is offered', (
+      tester,
+    ) async {
+      final reader = _CatalogReader(
+        handler: (query) async => query.collectionPath.endsWith('/categories')
+            ? [_categorySnapshot('tenant-a', 'drinks')]
+            : [_productSnapshot('tenant-a', 'product-a')],
+      );
+      await tester.pumpWidget(
+        _catalogApp(
+          controller: TenantSessionController()
+            ..open(
+              uid: 'user-a',
+              membership: _membership('tenant-a', role: TenantRole.manager),
+            ),
+          reader: reader,
+          productStockRoute: (product) =>
+              Scaffold(body: Text('stock route ${product.id}')),
+          productStockRoles: const [TenantRole.manager],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final callout = tester.widget<Callout>(
+        find.byKey(const ValueKey('catalog-read-only')),
+      );
+      expect(callout.status, AppStatus.info);
+      // Stock is no longer among the things this route cannot reach, and the
+      // sentence that says so travelled with the status rather than staying
+      // behind at the bottom of the page.
+      expect(callout.message, isNot(contains('stock actions')));
+      expect(callout.message, contains('Open a product'));
+    });
+
     testWidgets('missing and wrong-role sessions never start a query', (
       tester,
     ) async {

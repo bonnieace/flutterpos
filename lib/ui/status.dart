@@ -376,6 +376,21 @@ final class Disclosure extends StatefulWidget {
   /// beside the screen is what catches that without depending on font metrics.
   static const int summaryCharacterBudget = 32;
 
+  /// The same figure for a [Disclosure] inside a dialog, which is narrower.
+  ///
+  /// **A page budget is not a dialog budget, and one look settled it.** An
+  /// `AlertDialog` at §4.1's `compact` band insets itself from the window and
+  /// then pads its own content, so a summary has roughly 200 logical pixels
+  /// rather than the ~250 a page gives it. The catalog's correction dialog
+  /// shipped `How a correction is checked` - **27 characters, inside the
+  /// page budget above** - and it rendered as `How a correction is check…` the
+  /// first time anything photographed that dialog on a phone, on 2026-08-14.
+  ///
+  /// Bracketed rather than invented: 27 truncates and 19 fits with room, and the
+  /// ellipsis in that capture sat about 25 characters in. A call site inside a
+  /// dialog asserts against this rather than against [summaryCharacterBudget].
+  static const int dialogSummaryCharacterBudget = 24;
+
   @override
   State<Disclosure> createState() => _DisclosureState();
 }

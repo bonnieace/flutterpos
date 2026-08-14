@@ -21,6 +21,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fakes.dart';
 import 'harness.dart';
 
+/// Scrolls one keyed control fully into view, presses it, and settles.
+///
+/// **`ensureVisible` and not only `scrollUntilVisible`**: the latter stops when
+/// the widget is *built*, which on a long `ListView` route can leave it below
+/// the fold, and a tap there misses without failing. That is how every
+/// `mobile/19-correct-a-product` capture came to photograph the list rather than
+/// the dialog the case exists for.
+Future<void> _press(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.scrollUntilVisible(
+    finder,
+    300,
+    scrollable: find.byType(Scrollable).first,
+    maxScrolls: 40,
+  );
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
 /// One canonical sale, decoded the way every sales surface decodes one.
 TenantSale _sale(String saleId) => TenantSale.fromDocument(
   path: 'tenants/$seedTenantId/sales/$saleId',
@@ -154,6 +175,15 @@ void main() {
         scrollable: find.byType(Scrollable).first,
         maxScrolls: 30,
       );
+      // **`scrollUntilVisible` stops when the widget is built, not when it is on
+      // screen**, so at 411 this tap was landing below the fold and missing:
+      // every `mobile/19-correct-a-product` capture ever taken photographed the
+      // list rather than the dialog the case exists for. Found 2026-08-14 by the
+      // catalog sweep, which hit the same thing in a widget test on the same
+      // route. The same class as the seeded-record trap - a capture case whose
+      // picture is not of the state it names.
+      await tester.ensureVisible(edit);
+      await tester.pumpAndSettle();
       await tester.tap(edit);
     },
   );
@@ -168,6 +198,47 @@ void main() {
       ),
     ),
   );
+
+  // **The report, which nothing had ever photographed.** Its rows carry §2.1
+  // statuses as of 2026-08-14 and a report genuinely mixes them, so one picture
+  // of an all-corrected report would show the case the badge is least useful in.
+  // `FakeBulkCatalogCallable` answers one row `unchanged` and one `failed`;
+  // `FakeCallable` cannot be used here at all, because the strict decoder
+  // reconciles the answer against the page it sent.
+  for (final committed in <bool>[false, true]) {
+    screenshotCase(
+      committed ? '20c-bulk-report-committed' : '20b-bulk-report-previewed',
+      build: () => inSession(
+        TenantBulkCatalogScreen(
+          reader: FakeTenantReader.business(),
+          batchCallable: FakeBulkCatalogCallable(),
+          importCallable: FakeCallable(),
+          requestIdFactory: () => 'pb-dev-0001',
+        ),
+      ),
+      afterPump: (tester) async {
+        // Top to bottom, which is both what a person does and the only order
+        // that works: `scrollUntilVisible` drives one direction, and a `ListView`
+        // has already disposed the category strip by the time three products
+        // have been ticked.
+        await _press(tester, 'bulk-catalog-category-cat-drinks');
+        for (final id in const <String>[
+          'pd-bar-soap-blue',
+          'pd-bread-white',
+          'pd-charcoal-2kg',
+        ]) {
+          await _press(tester, 'bulk-catalog-select-$id');
+        }
+        await _press(tester, 'bulk-catalog-preview');
+        if (!committed) return;
+        // The commit is the only way to photograph `ok`: a previewed row is
+        // `attention`, because nothing has been written and §2.1 gives `ok` the
+        // meaning "confirmed".
+        await _press(tester, 'bulk-catalog-commit');
+        await _press(tester, 'bulk-catalog-confirm');
+      },
+    );
+  }
 
   screenshotCase(
     '21-product-stock',
