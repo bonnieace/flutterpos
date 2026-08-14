@@ -22325,3 +22325,236 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## A difference states its figures, and step 8 is finished - 2026-08-15
+
+`design.md` §11 **step 8, second half**, which finishes step 8: the figures on the three
+reconciliation surfaces — the day page (27), the unresolved differences list (28) and the one-run
+page (29). All three had already been swept for step 4 on 2026-08-14, so this chunk inherited no
+prose work and is only what step 8 is about.
+
+```text
+27 reconciliation status   StatTile x2 on the day card, StatLines in every run card
+28 unresolved differences  StatLines per difference, and a second rendering of one document
+29 one reconciliation run  the shared run card's counts; no tile row, deliberately
+shared                     lib/reporting/reconciliation_labels.dart gains the figure model
+```
+
+It changes `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either:
+`git diff` **and** `git status` over all three print zero lines. **It changed no capability board
+row**, and that is stated rather than left silent: "Ask for reconciliation", "See why a day
+disagrees, and correct a shift" and "Adjust stock" have all been 🟢 throughout, and a shop can do
+exactly what it could do yesterday. It moved the **Design system** track 85% to 88%.
+
+### Why this chunk, and why it stops where it does
+
+`PLAN.md` queued it. Checking that against the board first, as the instruction requires: every red
+row is either blocked on a decision nobody has made (App Check for password reset, an external
+interface for the printed receipt) or deliberately sequenced after the first deployment
+(suspicious-return scoring), so nothing the app needs in order to function is missing and unqueued,
+and the queued chunk stands.
+
+It stops at the figures. The four notice-status model changes, the thirteen duplicate screen titles,
+the four carried `RecordList` column observations, `Pagination`, and `RecordList` for screen 28's
+difference cards were all excluded going in and all stayed excluded — see the exclusions below,
+where the two that were *hardest* to leave are named.
+
+### What was decided
+
+1. **Screen 29 gets no `StatTile` row, and `PLAN.md` predicted one.** The prediction was reasonable:
+   a run does have a small set of headline counts. It is wrong once the screen is open. Every one of
+   those counts is already stated by `TenantReconciliationRunCard`, which 29 shares with 27 precisely
+   so that two routes cannot describe one run differently, and a tile row above the card would print
+   `Stock differences 1` at 28px and `Stock differences 1` at 14px a centimetre below it. That is
+   step 8's own first-half finding — two adjacent things saying one figure — one level up. The
+   figures went into the shared card, where both routes get them.
+2. **One document is deliberately rendered two ways, and both live in one `switch`.** This is the
+   chunk's real cost and it came from a screen *outside* the chunk. Screen 21's "Reconciliation
+   found" section draws a difference as a `Callout`, and `Callout` takes a `message` string with no
+   slot for a widget; screen 28 draws the same record as a card that can hold a column of figures. So
+   the prose could not simply be replaced by figures. `reconciliation_labels.dart` now declares each
+   kind's reading once, as a private `_DifferenceReading` holding the sentence, the prose left once
+   the figures are pulled out, and the figures themselves — adjacent lines in one `switch` — and
+   `reconciliation_labels_test.dart` asserts that every figure's magnitude also appears in that
+   kind's sentence. **The obvious move was a second module**, and it would have re-created the exact
+   divergence this module was written to end.
+3. **A variance states its direction twice.** `Difference -3` with `fewer than the ledger accounts
+   for` on the line under the label. A sign is a one-glyph signal; §9's rule that a status is never
+   colour alone is the same rule. It also fixed something the sentence did badly: a shift variance of
+   zero used to read "its transaction count agrees", a *word* where the other half of the same
+   comparison was a number. It is `0` beside `agrees with the sales recorded` now.
+4. **A revision is not a figure.** "The published totals were generated from change 2; the day has
+   since reached change 3." stays prose. §2.2's numeric roles are for money and counts; a revision is
+   a generation marker, nothing about it is worth comparing by magnitude, and promoting it would be
+   applying the letter of step 8 against its own reason. It is the one number on these three screens
+   deliberately left in a sentence, and it has an entry in `PLAN.md` against it.
+5. **A figure label is a column heading and is never inflected.** `Unreadable sale lines: 1`. The
+   prose form still says "1 sale line could not be read", because there it is a clause. Same grammar
+   the daily summary deleted rather than guarded in step 8's first half.
+6. **The three panels moved onto the token layer while they were open.** They were the last reporting
+   surfaces reading `Theme.of(context).textTheme` and padding with bare integers — `claude.md` hard
+   rule 2 — where 25 and 26 have been on tokens since the first half. **One `Theme.of` read survives
+   in each file on purpose**: the in-body `headlineSmall` screen title, which is §7's queued
+   thirteen-panel defect, and all three sites now carry a comment saying so rather than being
+   silently left.
+
+### Safety
+
+**No behaviour changed.** No repository call, no callable payload, no routing condition, no state
+shape, no new document read. The one structural change in `lib/` is that
+`TenantReconciliationRunPanel`'s builder body became a private `_RunContents` widget so it could read
+the token set — same tree, same keys, same loads.
+
+**A capability was deliberately not added.** `TenantReconciliationRun` decodes `metricsProcessed`,
+`productsProcessed` and `shiftsProcessed` — literally "what the run read and what it wrote", which is
+what `PLAN.md` predicted these screens would want — and **no surface has ever displayed any of the
+three**. Showing them is new content on a screen rather than a new rendering of existing content, so
+it is recorded as an open decision rather than taken inside a visual chunk.
+
+**A §8 rule was found half-broken and left that way, which is worth stating plainly.** §8 rule 8 says
+money is always currency-coded. Screen 28 states a shift's sales variance as `-12.5` with no code,
+and has since it was written — the sentence it replaced said "is 12.5 short" and carried no code
+either. This chunk made it tabular and did not make it coded, because the code lives in
+`configuration/checkout` and reading it is a repository call, which hard rule 1 forbids here. It is
+an open decision in `PLAN.md` with three named resolutions, none of them a restyle.
+
+### Files changed
+
+```text
+lib/reporting/reconciliation_labels.dart            ReconciliationFigure, _DifferenceReading,
+                                                    reconciliationDifferenceExplanation,
+                                                    reconciliationDifferenceFigureLines;
+                                                    reconciliationDifferenceFigures unchanged in output
+lib/reporting/reconciliation_status_panel.dart      the day card's StatRow, the invalid-lines note,
+                                                    full token conversion
+lib/reporting/reconciliation_run_panel.dart         the shared card's StatLines, _progress -> _work,
+                                                    _RunContents, full token conversion
+lib/reporting/reconciliation_anomalies_panel.dart   the difference card's StatLines and explanation,
+                                                    full token conversion
+test/reporting/reconciliation_labels_test.dart      +7, including the anti-drift guard
+test/reporting/reconciliation_run_panel_test.dart   +1, and 4 assertions rewritten
+test/reporting/reconciliation_status_panel_test.dart   3 rewritten, 1 deleted, 3 added
+test/reporting/reconciliation_anomalies_panel_test.dart  +1, and 5 assertions rewritten
+tool/screenshots/fakes.dart                         seedReconciliationIntake gains invalidLineCount;
+                                                    a fourth seeded difference, chain_d4e5f6
+tool/screenshots/operations_screens_test.dart       27b-reconciliation-unusable-lines
+tool/screenshots/build_index.dart                   its caption
+design.md                                           §2.2's amendment retracted for 27, 28 and 29
+PLAN.md, HISTORY.md                                 this
+```
+
+`dart format` was not run, on any file, per the standing prohibition.
+
+### Tests
+
+**All five suites measured, none carried**, although a carry was legal: this chunk is Dart-only and
+`git diff` over the three server paths prints zero lines. That is **nine** consecutive chunks
+measuring all five.
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1914 -> 1923  (+9)
+npm --prefix functions test                                                409  unchanged  ~39 s
+npm --prefix rules-tests run test:emulator                                 161  unchanged  ~143 s
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged  ~95 s
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged  ~168 s
+```
+
+The prelude was run before every emulator command and all four passed first time. **Two runs were
+wasted and neither was a failure**, both worth recording because both will recur. The first was the
+Flutter suite in the foreground: it takes about **25 minutes** at `--concurrency=1` on this machine
+and was killed by a ten-minute command timeout, which reads exactly like a hang. Run it in the
+background. The second was the Rules suite, tailed with `Select-Object -Last 10`, which returned the
+emulator's shutdown lines and no counts — exit 0 is a pass but it is not a measurement, so it was run
+again filtering for the `tests / pass / fail` lines.
+
+The 9 new tests: **7** in `reconciliation_labels_test.dart` (every figure's magnitude appears in its
+own kind's sentence — the anti-drift guard; a stock variance is three figures and no prose; a
+variance the other way is signed the other way; a shift states both variances including the one that
+agrees; a broken chain keeps its paragraph and states one figure; the three kinds that report a
+refusal to read carry none; a label is a column heading and is never inflected), **1** in
+`reconciliation_run_panel_test.dart` (a run that never failed shows no failure count at all) and
+**1** in `reconciliation_anomalies_panel_test.dart` (a difference that is only a refusal to read
+carries no figure).
+
+Twelve existing assertions changed rather than being added: seven reads of a figure now read the
+figure rather than the sentence around it, three read prose that lost the number it used to carry,
+and two run-progress assertions lost the attempt count that is a line of its own now. **One
+assertion was deleted rather than rewritten** — the status panel's
+`reconciliation-status-run-variance-rj_abc` check, whose replacement (the two separate difference
+counts) was already asserted three lines above it.
+
+`flutter analyze` over `lib/reporting`, `test/reporting` and `tool/screenshots` reports **no issues**.
+The whole-tree figure is **475**, unchanged, and every one of them is in the legacy island —
+`lib/pos`, `lib/screens`, `lib/services`, `lib/widgets`.
+
+### Screenshots
+
+**225 images from 168 captures: 4 added, 0 removed, 14 changed, 207 byte-identical.**
+
+The counts are measured rather than reasoned about, and the method is worth reusing: the six changed
+source files were copied aside, reverted to `HEAD` in place with `git checkout HEAD --`, the harness
+re-run to produce a true 221-image baseline, the copies restored, the harness re-run again, and the
+two sets of MD5s compared. Reasoning about which captures *should* have moved would have missed
+nothing here, but it is not evidence.
+
+```text
+added:    web|web-full|mobile|mobile-full / 27b-reconciliation-unusable-lines
+changed:  web|web-full|mobile|mobile-full / 21b-product-stock-differences
+          web|web-full|mobile|mobile-full / 27-reconciliation-status
+          web|web-full|mobile|mobile-full / 28-reconciliation-differences
+          web|mobile                      / 29-one-reconciliation-run
+```
+
+**Both additions to the fixture are the same trap for the third and fourth time.**
+`seedReconciliationIntake` has always written `invalidLineCount: 0`, so the day card's second stat
+tile — and the sentence under the row saying those lines moved no stock and count towards no profit —
+had never appeared in any of the 221 images and existed only in a widget test. And the three seeded
+differences happened to include no kind that carries a long paragraph *and* a single figure, which is
+the mixed case step 8 creates on that screen; `chain_d4e5f6` is a broken checkpoint chain filed
+against the one product that already had a difference, so 28 and `21b` both photograph it. Four
+chunks running have now found the code right and the seed narrow.
+
+**`21b` is the one changed picture in which no wording changed at all.** Screen 21 still draws the
+sentence form; the image moved only because a fourth difference is listed. That is the two-rendering
+decision visible in a picture.
+
+**A defect the first picture found and no test could.** With the figures lifted out of the day card,
+the sentence saying what the unusable lines cost ran straight into the published-totals line under it
+and the two read as one paragraph about one thing. Nothing asserts a gap between two `Text`s and
+nothing ever will. Fixed by moving the note into a spread with a trailing `space.8`, and the reason
+is commented at the site.
+
+### Excluded, and the two that were hardest to leave
+
+The **four notice-status model changes** — `reconciliation-request-notice` on 27,
+`reconciliation-amend-notice` on 28, `catalog-management-notice` on 18, `bulk-catalog-notice` on 20 —
+were excluded, and two of the four were in files this chunk had open and edited around. They are one
+model chunk together and taking two of four would leave the other two inconsistent. **They are the
+queued chunk now**, for exactly that reason: an item left twice while its file is open is on its way
+to being permanent.
+
+The **thirteen duplicate screen titles** were excluded, and three of them are in these files.
+Examining them without fixing them was worth it: all three fall on the *not a duplicate* side of the
+honest test — `Reconciliation status` / `Reconciliation for 2026-08-15`, `Reconciliation run` /
+`Run rj_000001` — so at least two want `PageHeader.subtitle` populated, which is a component decision
+step 5a deferred. That makes the queued chunk smaller than thirteen deletions and more interesting
+than a sweep, and it is recorded in `PLAN.md`.
+
+Also excluded and unchanged: `RecordList` for screen 28's difference cards (not one of step 6's
+twelve); the four carried `RecordList` column-arithmetic observations; `Pagination`, whose
+`Previous page` / `Next page` pair sits on both of these screens for the fifth examine-and-decline;
+`inNarrowForm`; `checkout_cart_panel.dart` and the whole sale path (step 7); `pill_input.dart` and
+sign-in (step 9); every server file and `firestore.rules`, by choice; and deployment.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

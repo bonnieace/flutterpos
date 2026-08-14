@@ -22,6 +22,18 @@
 /// The stock route's "an adjustment recorded below is how this is put right"
 /// names a form three inches down its own page; that is the screen's sentence
 /// and it stays at the call site.
+///
+/// **A difference is stated in two forms, and both live in one `switch` so they
+/// cannot drift.** `design.md` §11 step 8 takes the figures out of the prose, so
+/// the differences list wants a column of labelled numbers at §2.2's
+/// `numeric.body` role; the stock route draws the same record as a [Callout],
+/// which takes a single `message` string and has no slot for a widget. Rather
+/// than let the two surfaces word one document two ways again - the exact
+/// divergence this module was written to end - each kind's reading is declared
+/// once, as [_DifferenceReading]: the sentence the notice needs, the prose left
+/// once the figures are pulled out of it, and the figures themselves. They sit
+/// on adjacent lines, and `reconciliation_labels_test.dart` asserts that every
+/// figure a record states also appears in its sentence.
 library;
 
 import '../ui/status.dart';
@@ -136,6 +148,67 @@ String reconciliationDifferenceSubject(TenantReconciliationAnomaly anomaly) {
   return 'This business';
 }
 
+/// One figure a record states, ready to be drawn as a `StatLine`.
+///
+/// `design.md` §2.2 makes tabular figures mandatory "anywhere numbers stack
+/// vertically" and §11 step 8 names 27, 28 and 29 as the screens still carrying
+/// the original complaint. A record that states an expected quantity against an
+/// observed one is exactly a column of numbers, so the module hands the screen
+/// the parts rather than a sentence with the parts embedded in it.
+final class ReconciliationFigure {
+  const ReconciliationFigure({
+    required this.slug,
+    required this.label,
+    required this.value,
+    this.detail,
+  });
+
+  /// A stable name for what this figure *is*, independent of the kind that
+  /// carries it, so a call site keys its own widget by meaning rather than by
+  /// position in a list.
+  final String slug;
+
+  /// The key. Sentence case, per §8 rule 7.
+  ///
+  /// **Deliberately not inflected for its own value.** A label beside a figure
+  /// is a column heading rather than a clause, so `Unreadable sale lines: 1`
+  /// needs no singular - which is the same grammar the daily summary lost when
+  /// its three counts stopped being a sentence.
+  final String label;
+
+  /// The figure, formatted. A variance carries its sign, because a column of
+  /// differences is unreadable without one.
+  final String value;
+
+  /// What the figure is against, or what it does not prove. **A direction is
+  /// stated here as a word as well as in [value]'s sign**, so the two agree and
+  /// neither carries the meaning alone.
+  final String? detail;
+}
+
+/// Everything one kind of difference says about itself.
+///
+/// Three renderings of one reading, declared together so they cannot drift:
+/// see the note at the top of this library for why both a sentence and a set of
+/// figures are needed at once.
+final class _DifferenceReading {
+  const _DifferenceReading({
+    required this.sentence,
+    this.explanation,
+    this.figures = const <ReconciliationFigure>[],
+  });
+
+  /// The whole record as one string, figures included, for a container that
+  /// takes prose and nothing else.
+  final String sentence;
+
+  /// What is left of [sentence] once the figures are pulled out of it, or null
+  /// where the figures were the whole of it.
+  final String? explanation;
+
+  final List<ReconciliationFigure> figures;
+}
+
 /// The figures the record itself carries, stated and never recomputed.
 ///
 /// **One sentence per kind, which is the whole point of this function.** The
@@ -143,33 +216,104 @@ String reconciliationDifferenceSubject(TenantReconciliationAnomaly anomaly) {
 /// stock kinds carry the expected quantity, the observed quantity and a variance
 /// that is exactly their difference - so every branch below reads figures the
 /// record is guaranteed to hold.
+///
+/// This is the prose form, for a surface whose container is a sentence. Screen
+/// 21's exception report is the one that needs it: a difference there is a
+/// [Callout], and a `Callout` has a `message` and no slot for a column.
 String reconciliationDifferenceFigures(TenantReconciliationAnomaly anomaly) =>
+    _reading(anomaly).sentence;
+
+/// What the record says once its figures are drawn separately, or null when the
+/// figures were the whole statement.
+///
+/// A stock variance returns null: `Expected 10 / Recorded 7 / Difference -3` is
+/// the entire content of "Its ledger expects 10, and the product records 7", and
+/// a screen that drew both would state one difference twice.
+String? reconciliationDifferenceExplanation(
+  TenantReconciliationAnomaly anomaly,
+) => _reading(anomaly).explanation;
+
+/// The figures this record carries, in reading order, possibly none.
+///
+/// Three of the eight kinds carry no figure at all - they report that something
+/// could not be read, which is a fact about the record rather than a
+/// measurement - and for those the explanation above is the whole of it.
+List<ReconciliationFigure> reconciliationDifferenceFigureLines(
+  TenantReconciliationAnomaly anomaly,
+) => _reading(anomaly).figures;
+
+_DifferenceReading _reading(TenantReconciliationAnomaly anomaly) =>
     switch (anomaly.kind) {
       TenantReconciliationAnomalyKind.invalidSaleLines => _saleLines(anomaly),
       TenantReconciliationAnomalyKind.invalidProductQuantity =>
-        'This product\'s recorded quantity could not be read as a whole '
-            'number, so its stock was not verified at all.',
+        const _DifferenceReading(
+          sentence:
+              'This product\'s recorded quantity could not be read as a whole '
+              'number, so its stock was not verified at all.',
+          explanation:
+              'This product\'s recorded quantity could not be read as a whole '
+              'number, so its stock was not verified at all.',
+        ),
       // Not the variance sentence. The chain is what makes the expected
       // quantity trustworthy, so a broken chain is a statement about the
       // starting point rather than about a disagreement - and the variance on
       // one of these records may legitimately be zero.
       TenantReconciliationAnomalyKind.checkpointChainInvalid =>
-        'The tamper-evident chain of checks behind this product does not join '
-            'up, so the expected quantity of ${anomaly.expectedQuantity} '
-            'cannot be trusted as a starting point. This is not a quantity '
-            'disagreement.',
+        _DifferenceReading(
+          sentence:
+              'The tamper-evident chain of checks behind this product does not '
+              'join up, so the expected quantity of ${anomaly.expectedQuantity} '
+              'cannot be trusted as a starting point. This is not a quantity '
+              'disagreement.',
+          explanation:
+              'The tamper-evident chain of checks behind this product does not '
+              'join up, so the expected quantity cannot be trusted as a '
+              'starting point. This is not a quantity disagreement.',
+          figures: <ReconciliationFigure>[
+            ReconciliationFigure(
+              slug: 'expected',
+              label: 'Expected by the ledger',
+              value: '${anomaly.expectedQuantity}',
+              detail: 'not trustworthy as a starting point',
+            ),
+          ],
+        ),
       TenantReconciliationAnomalyKind.invalidStockMovement =>
-        'A movement in this product\'s ledger could not be read, so the '
-            'expected quantity of ${anomaly.expectedQuantity} does not account '
-            'for everything that moved.',
+        _DifferenceReading(
+          sentence:
+              'A movement in this product\'s ledger could not be read, so the '
+              'expected quantity of ${anomaly.expectedQuantity} does not '
+              'account for everything that moved.',
+          explanation:
+              'A movement in this product\'s ledger could not be read.',
+          figures: <ReconciliationFigure>[
+            ReconciliationFigure(
+              slug: 'expected',
+              label: 'Expected by the ledger',
+              value: '${anomaly.expectedQuantity}',
+              detail: 'does not account for everything that moved',
+            ),
+          ],
+        ),
       TenantReconciliationAnomalyKind.stockVariance => _stockVariance(anomaly),
       TenantReconciliationAnomalyKind.invalidOrMissingShift =>
-        'The shift is missing, or did not record the totals a comparison '
-            'needs, so no difference could be measured.',
+        const _DifferenceReading(
+          sentence:
+              'The shift is missing, or did not record the totals a comparison '
+              'needs, so no difference could be measured.',
+          explanation:
+              'The shift is missing, or did not record the totals a comparison '
+              'needs, so no difference could be measured.',
+        ),
       TenantReconciliationAnomalyKind.shiftVariance => _shiftVariance(anomaly),
-      TenantReconciliationAnomalyKind.other =>
-        'What this difference means is not something this version of the app '
-            'can explain.',
+      TenantReconciliationAnomalyKind.other => const _DifferenceReading(
+        sentence:
+            'What this difference means is not something this version of the '
+            'app can explain.',
+        explanation:
+            'What this difference means is not something this version of the '
+            'app can explain.',
+      ),
     };
 
 /// When the difference was found, and by which run.
@@ -197,26 +341,99 @@ String reconciliationDifferenceProvenance(
   return '${sentence[0].toUpperCase()}${sentence.substring(1)}.';
 }
 
-String _saleLines(TenantReconciliationAnomaly anomaly) {
+_DifferenceReading _saleLines(TenantReconciliationAnomaly anomaly) {
   final count = anomaly.invalidLineCount;
-  return '$count sale ${count == 1 ? 'line' : 'lines'} could not be read, so '
-      'they moved no stock.';
+  return _DifferenceReading(
+    sentence:
+        '$count sale ${count == 1 ? 'line' : 'lines'} could not be read, so '
+        'they moved no stock.',
+    explanation: 'Those lines moved no stock.',
+    figures: <ReconciliationFigure>[
+      ReconciliationFigure(
+        slug: 'invalid-lines',
+        label: 'Unreadable sale lines',
+        value: '$count',
+        detail: 'on this sale',
+      ),
+    ],
+  );
 }
 
-String _stockVariance(TenantReconciliationAnomaly anomaly) {
+_DifferenceReading _stockVariance(TenantReconciliationAnomaly anomaly) {
   final variance = anomaly.quantityVariance!;
   final direction = variance > 0 ? 'more' : 'fewer';
-  return 'Its ledger expects ${anomaly.expectedQuantity}, and the product '
-      'records ${anomaly.observedQuantity}: ${variance.abs()} $direction than '
-      'the ledger accounts for.';
+  return _DifferenceReading(
+    sentence:
+        'Its ledger expects ${anomaly.expectedQuantity}, and the product '
+        'records ${anomaly.observedQuantity}: ${variance.abs()} $direction '
+        'than the ledger accounts for.',
+    // Nothing is left over. Three labelled figures state the whole of that
+    // sentence, and a screen drawing both would report one difference twice.
+    figures: <ReconciliationFigure>[
+      ReconciliationFigure(
+        slug: 'expected',
+        label: 'Expected by the ledger',
+        value: '${anomaly.expectedQuantity}',
+      ),
+      ReconciliationFigure(
+        slug: 'observed',
+        label: 'Recorded on the product',
+        value: '${anomaly.observedQuantity}',
+      ),
+      ReconciliationFigure(
+        slug: 'variance',
+        label: 'Difference',
+        value: _signedFigure(variance),
+        detail: '$direction than the ledger accounts for',
+      ),
+    ],
+  );
 }
 
-String _shiftVariance(TenantReconciliationAnomaly anomaly) =>
-    'Its sales total ${_signed(anomaly.salesVariance!)} and its transaction '
-    'count ${_signed(anomaly.transactionVariance!)} against the sales recorded '
-    'during it.';
+_DifferenceReading _shiftVariance(TenantReconciliationAnomaly anomaly) {
+  final sales = anomaly.salesVariance!;
+  final transactions = anomaly.transactionVariance!;
+  return _DifferenceReading(
+    sentence:
+        'Its sales total ${_signed(sales)} and its transaction count '
+        '${_signed(transactions)} against the sales recorded during it.',
+    explanation:
+        'Its closing totals disagree with the sales recorded during it.',
+    // **Neither figure carries a currency code, and §8 rule 8 says money always
+    // does.** The code lives in `configuration/checkout`, which this screen does
+    // not read and cannot be made to read inside a visual chunk; the sentence
+    // above has been unlabelled since it was written, so this is the same debt
+    // in a new rendering rather than a new one. `PLAN.md` carries it.
+    figures: <ReconciliationFigure>[
+      ReconciliationFigure(
+        slug: 'sales-variance',
+        label: 'Sales total',
+        value: _signedFigure(sales),
+        detail: _against(sales),
+      ),
+      ReconciliationFigure(
+        slug: 'transaction-variance',
+        label: 'Transactions',
+        value: _signedFigure(transactions),
+        detail: _against(transactions),
+      ),
+    ],
+  );
+}
 
 String _signed(num value) {
   if (value == 0) return 'agrees';
   return value > 0 ? 'is $value over' : 'is ${value.abs()} short';
 }
+
+/// A variance with its sign, because a column of differences that all read as
+/// bare magnitudes says nothing about which way any of them went.
+String _signedFigure(num value) => value > 0 ? '+$value' : '$value';
+
+/// The direction as a word, so the sign in the figure is never the only thing
+/// carrying it.
+String _against(num value) => switch (value) {
+  0 => 'agrees with the sales recorded',
+  < 0 => 'short of the sales recorded',
+  _ => 'over the sales recorded',
+};

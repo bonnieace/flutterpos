@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
@@ -135,16 +136,56 @@ final class _TenantReconciliationRunPanelState
       key: ValueKey('reconciliation-run-failure'),
       child: Text('This reconciliation run could not be loaded.'),
     ),
-    builder: (context, session, view) => ListView(
+    builder: (context, session, view) => _RunContents(
+      view: view,
+      jobId: widget.jobId,
+      selfUid: session.uid,
+    ),
+  );
+}
+
+/// The one run this route is about, and what a run page cannot do.
+///
+/// **Step 8 gives this page no `StatTile` row, and that is a decision rather
+/// than an omission.** `PLAN.md` predicted one here on the grounds that a run
+/// has a small set of headline counts - and it does, but every one of them is
+/// already stated by the card below, which this page shares with the day page so
+/// that two routes cannot describe one run differently. A row of tiles above the
+/// card would put `Stock differences 1` at `numeric.hero` and `Stock
+/// differences 1` at `numeric.body` a centimetre under it, which is the same
+/// defect step 8's own first half found on the period totals - two things saying
+/// one figure - one level up. The figures are in the card, at the role §2.2 gives
+/// counts in flow.
+final class _RunContents extends StatelessWidget {
+  const _RunContents({
+    required this.view,
+    required this.jobId,
+    required this.selfUid,
+  });
+
+  final _RunView view;
+  final String jobId;
+  final String selfUid;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
       key: const ValueKey('reconciliation-run'),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
+        // **§7's "Title appears once" is broken here and this is not the chunk
+        // that fixes it.** One of the thirteen panels `PLAN.md` queues as its
+        // own chunk - and this one is arguably not a duplicate at all, because
+        // the `AppScaffold` title is `Reconciliation run` and this names *which*
+        // run, which is the `PageHeader.subtitle` slot step 5a built and never
+        // filled.
         Text(
           key: const ValueKey('reconciliation-run-title'),
-          'Run ${widget.jobId}',
+          'Run $jobId',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         // §5.1's own description of what `Disclosure` replaces: a permanent
         // helper paragraph. Both sentences are page-invariant - they are true of
         // every run this route will ever show - and the second used to be
@@ -174,14 +215,14 @@ final class _TenantReconciliationRunPanelState
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         if (view.run case final run?) ...[
           TenantReconciliationRunCard(
             run: run,
             names: view.names,
-            selfUid: session.uid,
+            selfUid: selfUid,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           // What is left of that paragraph once the page-invariant half of it
           // moved: a fact about this run, which the card does not state because
           // the day page mounts the same card under a heading that already
@@ -189,7 +230,9 @@ final class _TenantReconciliationRunPanelState
           Text(
             key: const ValueKey('reconciliation-run-day'),
             'This run covered ${run.businessDate}.',
-            style: Theme.of(context).textTheme.bodySmall,
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
           ),
         ] else
           // A notice about the state of this page rather than a helper
@@ -206,8 +249,8 @@ final class _TenantReconciliationRunPanelState
                 'stands.',
           ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 /// One run, stated the same way wherever it is shown.
@@ -232,79 +275,144 @@ final class TenantReconciliationRunCard extends StatelessWidget {
   final String selfUid;
 
   @override
-  Widget build(BuildContext context) => Card(
-    key: ValueKey('reconciliation-status-run-${run.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // §5.1: a `StatusBadge` replaces inline coloured text, and §5.2 puts
-          // the status in the record's leading position. A run's state was a
-          // word in a title here, which is the one rendering §2.1 forbids - a
-          // page of runs mixes completed, queued and failed, so the badge is
-          // what makes that scannable without reading every card.
-          Align(
-            alignment: Alignment.centerLeft,
-            child: StatusBadge(
-              key: ValueKey('reconciliation-status-run-badge-${run.id}'),
-              status: reconciliationRunStatus(run),
-              label: reconciliationRunStatusWord(run),
-              semanticLabel:
-                  'Run ${run.id}: ${reconciliationRunStatusWord(run)}',
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Card(
+      key: ValueKey('reconciliation-status-run-${run.id}'),
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.s16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // §5.1: a `StatusBadge` replaces inline coloured text, and §5.2 puts
+            // the status in the record's leading position. A run's state was a
+            // word in a title here, which is the one rendering §2.1 forbids - a
+            // page of runs mixes completed, queued and failed, so the badge is
+            // what makes that scannable without reading every card.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: StatusBadge(
+                key: ValueKey('reconciliation-status-run-badge-${run.id}'),
+                status: reconciliationRunStatus(run),
+                label: reconciliationRunStatusWord(run),
+                semanticLabel:
+                    'Run ${run.id}: ${reconciliationRunStatusWord(run)}',
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            key: ValueKey('reconciliation-status-run-state-${run.id}'),
-            _sourceLabel(run),
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          // Only where the enum's own label says more than the badge's word: a
-          // retry is scheduled, the server gave up after repeated failures, or
-          // the state is one this build does not model and the stored value is
-          // the only honest thing to show.
-          if (reconciliationRunStatusDetail(run) case final detail?)
+            SizedBox(height: tokens.spacing.s8),
             Text(
-              key: ValueKey('reconciliation-status-run-state-detail-${run.id}'),
-              detail,
+              key: ValueKey('reconciliation-status-run-state-${run.id}'),
+              _sourceLabel(run),
+              style: tokens.typography.titleMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
             ),
-          const SizedBox(height: 8),
-          Text(
-            key: ValueKey('reconciliation-status-run-progress-${run.id}'),
-            _progress(run),
-          ),
-          if (run.lastErrorCode case final code?)
+            // Only where the enum's own label says more than the badge's word: a
+            // retry is scheduled, the server gave up after repeated failures, or
+            // the state is one this build does not model and the stored value is
+            // the only honest thing to show.
+            if (reconciliationRunStatusDetail(run) case final detail?)
+              Text(
+                key: ValueKey(
+                  'reconciliation-status-run-state-detail-${run.id}',
+                ),
+                detail,
+                style: tokens.typography.bodyMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+            SizedBox(height: tokens.spacing.s8),
+            // What kind of work this was, and how far it reached. **The counts
+            // that used to finish this sentence are figures below it now**: it
+            // read `Incremental • reached Finishing • 3 attempts, 2 in a row
+            // failed`, which put two numbers at the end of a clause on a page
+            // that lists one card per run, so nothing lined up between cards.
             Text(
-              key: ValueKey('reconciliation-status-run-error-${run.id}'),
-              'Server code: $code',
+              key: ValueKey('reconciliation-status-run-progress-${run.id}'),
+              _work(run),
+              style: tokens.typography.bodyMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
             ),
-          if (run.hasVariances)
+            // §2.2's `numeric.body` row, right-aligned to a shared edge. Every
+            // one of these is a count of something the server did, and a run is
+            // read by comparing them - which is exactly what a sentence made
+            // impossible.
+            StatLine(
+              label: 'Attempts',
+              value: '${run.attemptCount}',
+              valueKey: ValueKey(
+                'reconciliation-status-run-attempts-${run.id}',
+              ),
+            ),
+            // Shown only where there are any: a `0` on every run that has never
+            // failed is a column of zeroes saying nothing, which is the same
+            // argument the tender split makes for leaving out an empty bucket.
+            if (run.consecutiveFailureCount > 0)
+              StatLine(
+                label: 'Failed in a row',
+                value: '${run.consecutiveFailureCount}',
+                valueKey: ValueKey(
+                  'reconciliation-status-run-failures-${run.id}',
+                ),
+              ),
+            // Both or neither, and only when the run found something. Which of
+            // the two is zero is itself the answer to "where did it go wrong",
+            // so a run that found one kind still states the other.
+            if (run.hasVariances) ...[
+              StatLine(
+                label: 'Stock differences',
+                value: '${run.stockVarianceCount}',
+                valueKey: ValueKey(
+                  'reconciliation-status-run-stock-differences-${run.id}',
+                ),
+              ),
+              StatLine(
+                label: 'Shift differences',
+                value: '${run.shiftVarianceCount}',
+                valueKey: ValueKey(
+                  'reconciliation-status-run-shift-differences-${run.id}',
+                ),
+              ),
+            ],
+            if (run.lastErrorCode case final code?)
+              Text(
+                key: ValueKey('reconciliation-status-run-error-${run.id}'),
+                'Server code: $code',
+                style: tokens.typography.bodyMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+            if (run.rerunRequested)
+              Text(
+                key: ValueKey('reconciliation-status-run-rerun-${run.id}'),
+                'A change arrived while this run was working, so it will run '
+                'again.',
+                style: tokens.typography.bodyMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+            SizedBox(height: tokens.spacing.s4),
+            // §5.2's provenance rows: `caption` / `text.tertiary`.
             Text(
-              key: ValueKey('reconciliation-status-run-variance-${run.id}'),
-              '${run.stockVarianceCount} stock and ${run.shiftVarianceCount} '
-              'shift differences were recorded.',
+              key: ValueKey('reconciliation-status-run-requested-${run.id}'),
+              'Requested by ${_requestedByLabel(run)}',
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.tertiary,
+              ),
             ),
-          if (run.rerunRequested)
             Text(
-              key: ValueKey('reconciliation-status-run-rerun-${run.id}'),
-              'A change arrived while this run was working, so it will run '
-              'again.',
+              key: ValueKey('reconciliation-status-run-instants-${run.id}'),
+              _instants(run),
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.tertiary,
+              ),
             ),
-          Text(
-            key: ValueKey('reconciliation-status-run-requested-${run.id}'),
-            'Requested by ${_requestedByLabel(run)}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          Text(
-            key: ValueKey('reconciliation-status-run-instants-${run.id}'),
-            _instants(run),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   /// A member's UID resolves to a name; a `system:` actor names no member of the
   /// business and is shown as the server work it is.
@@ -353,13 +461,12 @@ String _instants(TenantReconciliationRun run) {
   return recorded.join(' • ');
 }
 
-String _progress(TenantReconciliationRun run) {
-  final attempts =
-      '${run.attemptCount} '
-      '${run.attemptCount == 1 ? 'attempt' : 'attempts'}';
-  final failures = run.consecutiveFailureCount == 0
-      ? ''
-      : ', ${run.consecutiveFailureCount} in a row failed';
-  return '${_modeLabel(run)} • reached ${_phaseLabel(run)} • '
-      '$attempts$failures';
-}
+/// What kind of work this run was, and how far it reached.
+///
+/// **The attempt counts left this sentence in step 8** and are [StatLine]s in
+/// the card above. What is left is the two facts a figure cannot state - which
+/// mode the server ran and which phase it got to - and with the numbers gone the
+/// singular this string used to need went with them, exactly as it did on the
+/// daily summary.
+String _work(TenantReconciliationRun run) =>
+    '${_modeLabel(run)} • reached ${_phaseLabel(run)}';

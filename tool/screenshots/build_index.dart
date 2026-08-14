@@ -97,6 +97,9 @@ const Map<String, String> captions = <String, String>{
   '27-reconciliation-status':
       'Whether one business day’s published totals are current, and the '
       'runs behind them.',
+  '27b-reconciliation-unusable-lines':
+      'The same day with sale lines the server could not use, which is the '
+          'only state that draws a second stat tile.',
   '28-reconciliation-differences':
       'The differences reconciliation found and could not resolve.',
   '29-one-reconciliation-run': 'One unit of server reconciliation work.',

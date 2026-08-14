@@ -355,6 +355,33 @@ void main() {
     ),
   );
 
+  // **The day page's second stat tile has never been in a picture.** The seeded
+  // intake has always recorded a clean day, so `hasInvalidSaleLines` was false
+  // in every capture and the tile that counts the lines the server could not use
+  // - plus the sentence under the row saying they moved no stock and count
+  // towards no profit - existed only in a widget test. This is the same route on
+  // a day that has some, which is also the only way to see a two-tile `StatRow`
+  // reflow on a phone.
+  screenshotCase(
+    '27b-reconciliation-unusable-lines',
+    build: () => inSession(
+      TenantReconciliationStatusScreen(
+        reader: FakeTenantReader.business(
+          extraDocuments: <String, Map<String, Object?>>{
+            'tenants/$seedTenantId/reconciliation_dirty_days/'
+                    '${seedBusinessDate()}':
+                seedReconciliationIntake(
+                  businessDate: seedBusinessDate(),
+                  invalidLineCount: 4,
+                ),
+          },
+        ),
+        businessDate: seedBusinessDate(),
+        actions: fakeReconciliationActions(),
+      ),
+    ),
+  );
+
   screenshotCase(
     '28-reconciliation-differences',
     build: () => inSession(

@@ -37,13 +37,23 @@ void main() {
           .data,
       'The published totals cover every sale the server holds for this day.',
     );
+    // **The count reads the figure, not the sentence around it.** It was `12
+    // sale receipts registered for this day.` at body size, needing its own
+    // singular; it is a `StatTile` at `numeric.hero` now, and the key addresses
+    // that tile's own figure.
     expect(
       tester
           .widget<Text>(
             find.byKey(const ValueKey('reconciliation-status-receipts')),
           )
           .data,
-      '12 sale receipts registered for this day.',
+      '12',
+    );
+    // A day with nothing wrong states no unusable-line figure at all, which is
+    // the same rule the run card's failure count follows.
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-invalid-lines')),
+      findsNothing,
     );
     expect(
       tester
@@ -116,7 +126,17 @@ void main() {
             ),
           )
           .data,
-      'Full check • reached Finishing • 1 attempt',
+      'Full check • reached Finishing',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-run-attempts-rj_abc'),
+            ),
+          )
+          .data,
+      '1',
     );
     // The page is ordered by document ID, and a run ID carries no time, so each
     // run states its own instants rather than implying one from its position.
@@ -203,14 +223,27 @@ void main() {
       'The published totals were generated from change 2; the day has since '
       'reached change 3.',
     );
+    // **The figure and its consequence are two things now.** The count is the
+    // second tile in the day's `StatRow`; what those lines mean stays a sentence
+    // under the row, because a tile caption that ellipsises on a phone is worse
+    // than a caption and a sentence.
     expect(
       tester
           .widget<Text>(
             find.byKey(const ValueKey('reconciliation-status-invalid-lines')),
           )
           .data,
-      '4 sale lines could not be used, so they moved no stock and count '
-      'towards no profit.',
+      '4',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey('reconciliation-status-invalid-lines-note'),
+            ),
+          )
+          .data,
+      'Those lines moved no stock and count towards no profit.',
     );
     // The server's code is shown as the server code it is, never rewritten
     // into a sentence this app would be inventing.
@@ -232,17 +265,43 @@ void main() {
             ),
           )
           .data,
-      'Incremental • reached Daily totals • 1 attempt, 3 in a row failed',
+      'Incremental • reached Daily totals',
     );
     expect(
       tester
           .widget<Text>(
             find.byKey(
-              const ValueKey('reconciliation-status-run-variance-rj_abc'),
+              const ValueKey('reconciliation-status-run-failures-rj_abc'),
             ),
           )
           .data,
-      '2 stock and 0 shift differences were recorded.',
+      '3',
+    );
+    // A run that found two stock differences and no shift one states both, so
+    // which of the two is zero is readable rather than inferred.
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey(
+                'reconciliation-status-run-stock-differences-rj_abc',
+              ),
+            ),
+          )
+          .data,
+      '2',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              const ValueKey(
+                'reconciliation-status-run-shift-differences-rj_abc',
+              ),
+            ),
+          )
+          .data,
+      '0',
     );
     expect(
       find.byKey(

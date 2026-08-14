@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/scaffold.dart';
+import '../ui/stats.dart';
 import '../ui/tokens.dart';
 import '../ui/status.dart';
 import '../tenancy/tenant_repository.dart';
@@ -353,170 +354,243 @@ final class _ReconciliationContents extends StatelessWidget {
   TenantReconciliationDay get day => view.day;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('reconciliation-status'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      Text(
-        'Reconciliation for ${day.businessDate}',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
-      const SizedBox(height: 4),
-      const Disclosure(
-        key: ValueKey('reconciliation-status-scope-disclosure'),
-        summary: 'What this page can and cannot do',
-        child: Text(
-          'The server regenerates each day\'s totals from the sales it holds. '
-          'This page explains where that work stands. Nothing here can retry, '
-          'cancel, or re-order a run.',
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('reconciliation-status'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // **§7's "Title appears once" is broken here and this is not the chunk
+        // that fixes it.** One of the thirteen panels `PLAN.md` queues as its
+        // own chunk; like the run page, this one names *which* day rather than
+        // repeating the `AppScaffold` title, so it is a `PageHeader.subtitle`
+        // question rather than a deletion.
+        Text(
+          'Reconciliation for ${day.businessDate}',
+          style: Theme.of(context).textTheme.headlineSmall,
         ),
-      ),
-      const SizedBox(height: 16),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // The badge and the sentence say the same thing at two lengths.
-              // The sentence stays because it names *why*, which no five-word
-              // status can; the badge is what makes the day's standing legible
-              // down a page without reading it.
-              Align(
-                alignment: Alignment.centerLeft,
-                child: StatusBadge(
-                  key: const ValueKey('reconciliation-status-badge'),
-                  status: _outcomeStatus(day.outcome),
-                  label: _outcomeLabel(day.outcome),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                key: const ValueKey('reconciliation-status-verdict'),
-                _verdict(day),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              if (day.intake case final intake?) ...[
-                const SizedBox(height: 8),
-                Text(
-                  key: const ValueKey('reconciliation-status-receipts'),
-                  '${intake.saleReceiptCount} sale '
-                  '${intake.saleReceiptCount == 1 ? 'receipt' : 'receipts'} '
-                  'registered for this day.',
-                ),
-                Text(
-                  key: const ValueKey('reconciliation-status-published'),
-                  _published(intake),
-                ),
-                if (intake.hasInvalidSaleLines)
-                  Text(
-                    key: const ValueKey('reconciliation-status-invalid-lines'),
-                    '${intake.invalidLineCount} sale lines could not be used, '
-                    'so they moved no stock and count towards no profit.',
+        SizedBox(height: tokens.spacing.s4),
+        const Disclosure(
+          key: ValueKey('reconciliation-status-scope-disclosure'),
+          summary: 'What this page can and cannot do',
+          child: Text(
+            'The server regenerates each day\'s totals from the sales it holds. '
+            'This page explains where that work stands. Nothing here can retry, '
+            'cancel, or re-order a run.',
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        Card(
+          child: Padding(
+            padding: EdgeInsets.all(tokens.spacing.s16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The badge and the sentence say the same thing at two lengths.
+                // The sentence stays because it names *why*, which no five-word
+                // status can; the badge is what makes the day's standing legible
+                // down a page without reading it.
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: StatusBadge(
+                    key: const ValueKey('reconciliation-status-badge'),
+                    status: _outcomeStatus(day.outcome),
+                    label: _outcomeLabel(day.outcome),
                   ),
-                if (intake.dirtyReason case final reason?)
-                  Text(
-                    key: const ValueKey('reconciliation-status-reason'),
-                    'Marked for regeneration by: $reason',
-                  ),
-                if (intake.lastErrorCode case final code?)
-                  Text(
-                    key: const ValueKey('reconciliation-status-error'),
-                    'Server code: $code',
-                  ),
-                const SizedBox(height: 8),
-                Text(
-                  key: const ValueKey('reconciliation-status-instants'),
-                  _instants(intake),
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
+                SizedBox(height: tokens.spacing.s8),
+                Text(
+                  key: const ValueKey('reconciliation-status-verdict'),
+                  _verdict(day),
+                  style: tokens.typography.titleMedium.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
+                ),
+                if (day.intake case final intake?) ...[
+                  SizedBox(height: tokens.spacing.s12),
+                  // **§5.1's `StatTile`, and this card is what it is for**: the
+                  // day is the subject of this route, and how many receipts the
+                  // server registered for it is the evidence the verdict above
+                  // rests on. It was `12 sale receipts registered for this day.`
+                  // - a figure inside a sentence, needing its own singular, at
+                  // body size, on the one screen that exists to state it.
+                  //
+                  // **The second tile appears only where there is something to
+                  // report**, and its own sentence stays underneath rather than
+                  // becoming the tile's detail line: the consequence - no stock
+                  // moved, no profit counted - is two clauses, and a caption
+                  // that ellipsises on a phone is worse than a caption and a
+                  // sentence.
+                  StatRow(
+                    tiles: [
+                      StatTile(
+                        label: 'Sale receipts',
+                        value: '${intake.saleReceiptCount}',
+                        icon: Icons.receipt_long_outlined,
+                        detail: 'registered for this day',
+                        valueKey: const ValueKey(
+                          'reconciliation-status-receipts',
+                        ),
+                      ),
+                      if (intake.hasInvalidSaleLines)
+                        StatTile(
+                          label: 'Unusable lines',
+                          value: '${intake.invalidLineCount}',
+                          icon: Icons.report_gmailerrorred_outlined,
+                          detail: 'of this day\'s sale lines',
+                          valueKey: const ValueKey(
+                            'reconciliation-status-invalid-lines',
+                          ),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: tokens.spacing.s12),
+                  // **The gap under this is not decoration.** The first picture
+                  // of a day with unusable lines ran this sentence straight
+                  // into the published-totals line below, and the two read as
+                  // one paragraph about one thing - which they are not.
+                  if (intake.hasInvalidSaleLines) ...[
+                    Text(
+                      key: const ValueKey(
+                        'reconciliation-status-invalid-lines-note',
+                      ),
+                      'Those lines moved no stock and count towards no profit.',
+                      style: tokens.typography.bodyMedium.copyWith(
+                        color: tokens.colors.text.primary,
+                      ),
+                    ),
+                    SizedBox(height: tokens.spacing.s8),
+                  ],
+                  // **Left as a sentence deliberately.** A revision is a
+                  // generation marker rather than a measurement - `change 2`
+                  // against `change 3` says which of two states of the day the
+                  // totals were built from, and nothing about it is worth
+                  // comparing by magnitude down a column. §2.2's numeric roles
+                  // are for money and counts; promoting a sequence number into
+                  // one would be applying the letter of step 8 against its own
+                  // reason.
+                  Text(
+                    key: const ValueKey('reconciliation-status-published'),
+                    _published(intake),
+                    style: tokens.typography.bodyMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
+                  ),
+                  if (intake.dirtyReason case final reason?)
+                    Text(
+                      key: const ValueKey('reconciliation-status-reason'),
+                      'Marked for regeneration by: $reason',
+                      style: tokens.typography.bodyMedium.copyWith(
+                        color: tokens.colors.text.primary,
+                      ),
+                    ),
+                  if (intake.lastErrorCode case final code?)
+                    Text(
+                      key: const ValueKey('reconciliation-status-error'),
+                      'Server code: $code',
+                      style: tokens.typography.bodyMedium.copyWith(
+                        color: tokens.colors.text.primary,
+                      ),
+                    ),
+                  SizedBox(height: tokens.spacing.s8),
+                  // §5.2's provenance row: `caption` / `text.tertiary`.
+                  Text(
+                    key: const ValueKey('reconciliation-status-instants'),
+                    _instants(intake),
+                    style: tokens.typography.caption.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-        ),
-      ),
-      if (notice case final message?) ...[
-        const SizedBox(height: 12),
-        Text(key: const ValueKey('reconciliation-request-notice'), message),
-      ],
-      if (requestOffered) ...[
-        const SizedBox(height: 24),
-        if (canRequest)
-          _RequestReconciliation(
-            key: const ValueKey('reconciliation-request-form'),
-            mode: mode,
-            busy: busy,
-            onChooseMode: onChooseMode,
-            onRequest: onRequest,
-          )
-        else
-          // A permanent notice paragraph, which is §5.1's own description of
-          // what `Callout` replaces. `info` rather than `problem`: nothing has
-          // failed and nothing is hidden - the sentence says so itself.
-          const Callout(
-            key: ValueKey('reconciliation-request-forbidden'),
-            status: AppStatus.info,
-            message:
-                'Only an owner or administrator can ask the server to '
-                'reconcile. This page is readable by managers as well, so '
-                'nothing here is hidden from you except that one request.',
-          ),
-      ],
-      const SizedBox(height: 24),
-      Text(
-        'Reconciliation runs',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      const SizedBox(height: 4),
-      const Disclosure(
-        key: ValueKey('reconciliation-status-runs-disclosure'),
-        summary: 'What a run does not prove',
-        child: Text(
-          'A run is one unit of server work. Each one takes the oldest '
-          'business day still waiting in the whole business, so a completed '
-          'run is not by itself proof that this day was regenerated - the '
-          'state above is.',
-        ),
-      ),
-      const SizedBox(height: 12),
-      if (day.runs.items.isEmpty)
-        const Text(
-          key: ValueKey('reconciliation-status-runs-empty'),
-          'No reconciliation run has been queued for this day.',
-        )
-      else
-        for (final run in day.runs.items) _run(context, run),
-      const SizedBox(height: 16),
-      // A run states how many differences it found and could not resolve. This
-      // is the only place that says which ones, so the count above is
-      // actionable rather than merely alarming.
-      AppButton(
-        key: const ValueKey('reconciliation-status-anomalies'),
-        label: 'View unresolved differences',
-        icon: Icons.report_gmailerrorred_outlined,
-        onPressed: onOpenAnomalies,
-      ),
-      const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('reconciliation-status-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
             ),
-          if (day.runs.hasMore)
-            AppButton(
-              key: const ValueKey('reconciliation-status-next'),
-              label: 'Next page',
-              tier: AppButtonTier.primary,
-              onPressed: onNextPage,
+          ),
+        ),
+        if (notice case final message?) ...[
+          SizedBox(height: tokens.spacing.s12),
+          Text(key: const ValueKey('reconciliation-request-notice'), message),
+        ],
+        if (requestOffered) ...[
+          SizedBox(height: tokens.spacing.s24),
+          if (canRequest)
+            _RequestReconciliation(
+              key: const ValueKey('reconciliation-request-form'),
+              mode: mode,
+              busy: busy,
+              onChooseMode: onChooseMode,
+              onRequest: onRequest,
+            )
+          else
+            // A permanent notice paragraph, which is §5.1's own description of
+            // what `Callout` replaces. `info` rather than `problem`: nothing has
+            // failed and nothing is hidden - the sentence says so itself.
+            const Callout(
+              key: ValueKey('reconciliation-request-forbidden'),
+              status: AppStatus.info,
+              message:
+                  'Only an owner or administrator can ask the server to '
+                  'reconcile. This page is readable by managers as well, so '
+                  'nothing here is hidden from you except that one request.',
             ),
         ],
-      ),
-    ],
-  );
+        SizedBox(height: tokens.spacing.s24),
+        Text(
+          'Reconciliation runs',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        const Disclosure(
+          key: ValueKey('reconciliation-status-runs-disclosure'),
+          summary: 'What a run does not prove',
+          child: Text(
+            'A run is one unit of server work. Each one takes the oldest '
+            'business day still waiting in the whole business, so a completed '
+            'run is not by itself proof that this day was regenerated - the '
+            'state above is.',
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        if (day.runs.items.isEmpty)
+          const Text(
+            key: ValueKey('reconciliation-status-runs-empty'),
+            'No reconciliation run has been queued for this day.',
+          )
+        else
+          for (final run in day.runs.items) _run(context, run),
+        SizedBox(height: tokens.spacing.s16),
+        // A run states how many differences it found and could not resolve. This
+        // is the only place that says which ones, so the count above is
+        // actionable rather than merely alarming.
+        AppButton(
+          key: const ValueKey('reconciliation-status-anomalies'),
+          label: 'View unresolved differences',
+          icon: Icons.report_gmailerrorred_outlined,
+          onPressed: onOpenAnomalies,
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        Wrap(
+          spacing: tokens.spacing.s12,
+          children: [
+            if (pageIndex > 0)
+              AppButton(
+                key: const ValueKey('reconciliation-status-previous'),
+                label: 'Previous page',
+                onPressed: onPreviousPage,
+              ),
+            if (day.runs.hasMore)
+              AppButton(
+                key: const ValueKey('reconciliation-status-next'),
+                label: 'Next page',
+                tier: AppButtonTier.primary,
+                onPressed: onNextPage,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
 
   Widget _run(BuildContext context, TenantReconciliationRun run) =>
       TenantReconciliationRunCard(
@@ -575,66 +649,73 @@ final class _RequestReconciliation extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        'Ask the server to reconcile',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      const SizedBox(height: 4),
-      // The single most important sentence on this surface. A request is filed
-      // for the business under today's business date and the runners take the
-      // oldest outstanding day first, so it is not a way to reconcile the day
-      // being read - and a run queued from here will not appear in the list
-      // below unless that day is today.
-      //
-      // **A `Callout` and deliberately not a `Disclosure`**, unlike the two
-      // helper paragraphs above it. §5.1 splits the two by what the prose is
-      // for: a permanent *helper* paragraph folds away, a permanent *notice*
-      // does not. This is the one sentence that decides whether pressing the
-      // button below does what the person thinks it does, and a sentence you
-      // have to open is a sentence nobody reads. `info` because nothing has
-      // failed - it is telling you what the action covers.
-      const Callout(
-        key: ValueKey('reconciliation-request-scope'),
-        status: AppStatus.info,
-        message:
-            'A request covers the whole business, not the day above. The '
-            'server files it under today and works through the outstanding '
-            'days oldest first, so it may regenerate a different day before '
-            'this one.',
-      ),
-      const SizedBox(height: 12),
-      SegmentedButton<TenantReconciliationMode>(
-        key: const ValueKey('reconciliation-request-mode'),
-        segments: [
-          for (final option in TenantReconciliationMode.values)
-            ButtonSegment<TenantReconciliationMode>(
-              value: option,
-              label: Text(option.label),
-            ),
-        ],
-        selected: <TenantReconciliationMode>{mode},
-        onSelectionChanged: busy
-            ? null
-            : (selection) => onChooseMode(selection.single),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        key: const ValueKey('reconciliation-request-mode-detail'),
-        mode.description,
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      const SizedBox(height: 12),
-      AppButton(
-        key: const ValueKey('reconciliation-request-submit'),
-        label: busy ? 'Asking...' : 'Ask for a check',
-        tier: AppButtonTier.primary,
-        onPressed: busy ? null : () => _confirm(context),
-      ),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Ask the server to reconcile',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        // The single most important sentence on this surface. A request is
+        // filed for the business under today's business date and the runners
+        // take the oldest outstanding day first, so it is not a way to
+        // reconcile the day being read - and a run queued from here will not
+        // appear in the list below unless that day is today.
+        //
+        // **A `Callout` and deliberately not a `Disclosure`**, unlike the two
+        // helper paragraphs above it. §5.1 splits the two by what the prose is
+        // for: a permanent *helper* paragraph folds away, a permanent *notice*
+        // does not. This is the one sentence that decides whether pressing the
+        // button below does what the person thinks it does, and a sentence you
+        // have to open is a sentence nobody reads. `info` because nothing has
+        // failed - it is telling you what the action covers.
+        const Callout(
+          key: ValueKey('reconciliation-request-scope'),
+          status: AppStatus.info,
+          message:
+              'A request covers the whole business, not the day above. The '
+              'server files it under today and works through the outstanding '
+              'days oldest first, so it may regenerate a different day before '
+              'this one.',
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        SegmentedButton<TenantReconciliationMode>(
+          key: const ValueKey('reconciliation-request-mode'),
+          segments: [
+            for (final option in TenantReconciliationMode.values)
+              ButtonSegment<TenantReconciliationMode>(
+                value: option,
+                label: Text(option.label),
+              ),
+          ],
+          selected: <TenantReconciliationMode>{mode},
+          onSelectionChanged: busy
+              ? null
+              : (selection) => onChooseMode(selection.single),
+        ),
+        SizedBox(height: tokens.spacing.s8),
+        Text(
+          key: const ValueKey('reconciliation-request-mode-detail'),
+          mode.description,
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        AppButton(
+          key: const ValueKey('reconciliation-request-submit'),
+          label: busy ? 'Asking...' : 'Ask for a check',
+          tier: AppButtonTier.primary,
+          onPressed: busy ? null : () => _confirm(context),
+        ),
+      ],
+    );
+  }
 }
 
 /// The day's standing, as one of `design.md` §2.1's five statuses.

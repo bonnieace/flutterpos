@@ -173,7 +173,15 @@ column whatever the numerals did. They are `StatLine`s and `StatTile`s in `lib/u
 the two roles below, right-aligned to a shared edge. **A row of stat tiles derives its own column
 count** from the widest figure it holds rather than from a fixed minimum width, because `numeric.hero`
 at 28/700 makes a currency-coded amount about 190 logical pixels wide and a fixed minimum set for
-two-digit counts truncates it on a phone. Screens 27, 28 and 29 still carry the original complaint.
+two-digit counts truncates it on a phone. ~~Screens 27, 28 and 29 still carry the original
+complaint.~~ **Done on all three, 2026-08-15**, in step 8's second half, and the complaint is now
+false of every screen §11 step 8 names. Those three state quantities as *evidence* rather than money
+as an answer — an expected quantity against a recorded one, a variance, a run's counts of what it
+found — so what they wanted was the `numeric.body` row and a shared right edge rather than a hero
+figure. The one hero tile added is the day page's count of sale receipts, which is the figure that
+route exists to justify. **A figure that carries a direction states it twice**: the value keeps its
+sign and a word beside it says *fewer* or *short of*, because §9's rule about never signalling by
+colour alone is the same rule about never signalling by a glyph alone.
 
 **Record identifiers are monospace.** SKUs, `rj_000001`, `pd-milk-500`, `shift-yesterday`.
 They are strings a person compares character by character, not prose.

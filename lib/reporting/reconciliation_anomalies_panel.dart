@@ -4,6 +4,7 @@ import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
@@ -430,137 +431,147 @@ final class _AnomalyContents extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('reconciliation-anomalies'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      Text(
-        'Unresolved differences',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
-      const SizedBox(height: 4),
-      // Three permanent helper paragraphs behind one fold, which is §5.1's own
-      // description of what `Disclosure` replaces. All three are true of every
-      // record this route will ever list - what the list covers, what can be
-      // corrected from it, and why it is not in time order - and the third used
-      // to sit *below* the records as a loose caption, which is the least
-      // likely place for a person to look for the reason the order surprised
-      // them.
-      Disclosure(
-        key: const ValueKey('reconciliation-anomalies-scope-disclosure'),
-        summary: 'What this list covers',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Text(
-              key: ValueKey('reconciliation-anomalies-scope'),
-              'These are the differences the server found and could not resolve '
-              'on its own. They belong to a product, a shift, or a sale rather '
-              'than to one business day, so this list covers the whole business '
-              'and is not narrowed to the day you came from.',
-            ),
-            const SizedBox(height: 8),
-            Text(
-              key: const ValueKey('reconciliation-anomalies-writes'),
-              canAmend
-                  ? 'A shift whose totals disagree with its sales can be '
-                        'corrected here, to the total those sales prove and '
-                        'nothing else. Its counted cash is never changed. '
-                        'Correct a stock figure from the product it belongs to.'
-                  : 'Nothing here changed stock, a shift, or a sale, and '
-                        'nothing on this page can. Correct a stock figure from '
-                        'the product it belongs to.',
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              key: ValueKey('reconciliation-anomalies-order'),
-              'This list is not in time order: a record is addressed by what '
-              'it is about, not by when it was found. Each one states its own '
-              'instants.',
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('reconciliation-anomalies'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // **§7's "Title appears once" is broken here and this is not the chunk
+        // that fixes it.** The `AppScaffold` above already carries this string
+        // in a `PageHeader`. It is one of the thirteen panels `PLAN.md` queues
+        // as its own small chunk, because whether each one is a duplicate or a
+        // section name is a per-screen judgement rather than a sweep.
+        Text(
+          'Unresolved differences',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        // Three permanent helper paragraphs behind one fold, which is §5.1's own
+        // description of what `Disclosure` replaces. All three are true of every
+        // record this route will ever list - what the list covers, what can be
+        // corrected from it, and why it is not in time order - and the third
+        // used to sit *below* the records as a loose caption, which is the least
+        // likely place for a person to look for the reason the order surprised
+        // them.
+        Disclosure(
+          key: const ValueKey('reconciliation-anomalies-scope-disclosure'),
+          summary: 'What this list covers',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Text(
+                key: ValueKey('reconciliation-anomalies-scope'),
+                'These are the differences the server found and could not '
+                'resolve on its own. They belong to a product, a shift, or a '
+                'sale rather than to one business day, so this list covers the '
+                'whole business and is not narrowed to the day you came from.',
+              ),
+              SizedBox(height: tokens.spacing.s8),
+              Text(
+                key: const ValueKey('reconciliation-anomalies-writes'),
+                canAmend
+                    ? 'A shift whose totals disagree with its sales can be '
+                          'corrected here, to the total those sales prove and '
+                          'nothing else. Its counted cash is never changed. '
+                          'Correct a stock figure from the product it belongs '
+                          'to.'
+                    : 'Nothing here changed stock, a shift, or a sale, and '
+                          'nothing on this page can. Correct a stock figure '
+                          'from the product it belongs to.',
+              ),
+              SizedBox(height: tokens.spacing.s8),
+              const Text(
+                key: ValueKey('reconciliation-anomalies-order'),
+                'This list is not in time order: a record is addressed by what '
+                'it is about, not by when it was found. Each one states its own '
+                'instants.',
+              ),
+            ],
+          ),
+        ),
+        if (notice case final message?) ...[
+          SizedBox(height: tokens.spacing.s12),
+          Text(key: const ValueKey('reconciliation-amend-notice'), message),
+          // The row this notice is about has been deleted from the list, or may
+          // have been, so without this the correction it names would be
+          // reachable only by opening the whole business's trail and reading
+          // down.
+          if (noticeShiftId case final shiftId?) ...[
+            SizedBox(height: tokens.spacing.s8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AppButton(
+                key: const ValueKey('reconciliation-amend-notice-trail'),
+                label: 'View this shift\'s corrections',
+                icon: Icons.history_edu_outlined,
+                onPressed: () => onOpenAmendments(shiftId),
+              ),
             ),
           ],
-        ),
-      ),
-      if (notice case final message?) ...[
-        const SizedBox(height: 12),
-        Text(key: const ValueKey('reconciliation-amend-notice'), message),
-        // The row this notice is about has been deleted from the list, or may
-        // have been, so without this the correction it names would be reachable
-        // only by opening the whole business's trail and reading down.
-        if (noticeShiftId case final shiftId?) ...[
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: AppButton(
-                     key: const ValueKey('reconciliation-amend-notice-trail'),
-                     label: 'View this shift\'s corrections',
-                     icon: Icons.history_edu_outlined,
-                     onPressed: () => onOpenAmendments(shiftId),
-                   ),
+        ],
+        if (amendOffered && !canAmend && _listsShiftVariance) ...[
+          SizedBox(height: tokens.spacing.s12),
+          // The same notice the day page has carried behind the same component
+          // since step 4, at the same status and for the same reason: `info`
+          // rather than `problem` because nothing has failed and nothing is
+          // hidden - the sentence says so itself.
+          const Callout(
+            key: ValueKey('reconciliation-amend-forbidden'),
+            status: AppStatus.info,
+            message:
+                'Correcting a shift\'s totals is available to owners and '
+                'administrators. This list is readable by managers as well, so '
+                'nothing here is hidden from you except that one correction.',
           ),
         ],
-      ],
-      if (amendOffered && !canAmend && _listsShiftVariance) ...[
-        const SizedBox(height: 12),
-        // The same notice the day page has carried behind the same component
-        // since step 4, at the same status and for the same reason: `info`
-        // rather than `problem` because nothing has failed and nothing is
-        // hidden - the sentence says so itself.
-        const Callout(
-          key: ValueKey('reconciliation-amend-forbidden'),
-          status: AppStatus.info,
-          message:
-              'Correcting a shift\'s totals is available to owners and '
-              'administrators. This list is readable by managers as well, so '
-              'nothing here is hidden from you except that one correction.',
+        SizedBox(height: tokens.spacing.s16),
+        _KindChips(selected: selected, onNarrow: onNarrow),
+        SizedBox(height: tokens.spacing.s16),
+        if (page.items.isEmpty)
+          Text(
+            key: const ValueKey('reconciliation-anomalies-empty'),
+            selected == null
+                ? 'The server has recorded no unresolved differences for this '
+                      'business.'
+                : 'No unresolved difference of this kind has been recorded.',
+          )
+        else
+          for (final anomaly in page.items) _anomaly(context, anomaly),
+        SizedBox(height: tokens.spacing.s16),
+        // A resolved difference is deleted from this list, so without this the
+        // corrections made here would leave no visible trace. The trail is
+        // readable by every role that reads this list, including the managers
+        // who may not make one.
+        AppButton(
+          key: const ValueKey('reconciliation-anomalies-amendments'),
+          label: 'View shift corrections already made',
+          icon: Icons.history_edu_outlined,
+          onPressed: () => onOpenAmendments(null),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        Wrap(
+          spacing: tokens.spacing.s12,
+          children: [
+            if (pageIndex > 0)
+              AppButton(
+                key: const ValueKey('reconciliation-anomalies-previous'),
+                label: 'Previous page',
+                onPressed: onPreviousPage,
+              ),
+            if (page.hasMore)
+              AppButton(
+                key: const ValueKey('reconciliation-anomalies-next'),
+                label: 'Next page',
+                tier: AppButtonTier.primary,
+                onPressed: onNextPage,
+              ),
+          ],
         ),
       ],
-      const SizedBox(height: 16),
-      _KindChips(selected: selected, onNarrow: onNarrow),
-      const SizedBox(height: 16),
-      if (page.items.isEmpty)
-        Text(
-          key: const ValueKey('reconciliation-anomalies-empty'),
-          selected == null
-              ? 'The server has recorded no unresolved differences for this '
-                    'business.'
-              : 'No unresolved difference of this kind has been recorded.',
-        )
-      else
-        for (final anomaly in page.items) _anomaly(context, anomaly),
-      const SizedBox(height: 16),
-      // A resolved difference is deleted from this list, so without this the
-      // corrections made here would leave no visible trace. The trail is
-      // readable by every role that reads this list, including the managers who
-      // may not make one.
-      AppButton(
-        key: const ValueKey('reconciliation-anomalies-amendments'),
-        label: 'View shift corrections already made',
-        icon: Icons.history_edu_outlined,
-        onPressed: () => onOpenAmendments(null),
-      ),
-      const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('reconciliation-anomalies-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('reconciliation-anomalies-next'),
-              label: 'Next page',
-              tier: AppButtonTier.primary,
-              onPressed: onNextPage,
-            ),
-        ],
-      ),
-    ],
-  );
+    );
+  }
 
   /// True only for the one kind the server can resolve, and only when this
   /// session may ask it to. A shift ID is required because the correction names
@@ -571,84 +582,123 @@ final class _AnomalyContents extends StatelessWidget {
       anomaly.kind == TenantReconciliationAnomalyKind.shiftVariance &&
       anomaly.shiftId != null;
 
-  Widget _anomaly(
-    BuildContext context,
-    TenantReconciliationAnomaly anomaly,
-  ) => Card(
-    key: ValueKey('reconciliation-anomaly-${anomaly.id}'),
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            key: ValueKey('reconciliation-anomaly-kind-${anomaly.id}'),
-            reconciliationDifferenceKindLabel(anomaly),
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            key: ValueKey('reconciliation-anomaly-subject-${anomaly.id}'),
-            reconciliationDifferenceSubject(anomaly),
-          ),
-          Text(
-            key: ValueKey('reconciliation-anomaly-detail-${anomaly.id}'),
-            reconciliationDifferenceFigures(anomaly),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            key: ValueKey('reconciliation-anomaly-instants-${anomaly.id}'),
-            reconciliationDifferenceProvenance(anomaly),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (_canAmendRow(anomaly) ||
-              anomaly.shiftId != null ||
-              anomaly.jobId != null) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                if (_canAmendRow(anomaly))
-                  AppButton(
-                    key: ValueKey('reconciliation-anomaly-amend-${anomaly.id}'),
-                    label: busy ? 'Correcting...' : 'Correct this shift\'s totals',
-                    icon: Icons.rule_outlined,
-                    onPressed: busy
-                        ? null
-                        : () => _confirmAmend(context, anomaly),
-                  ),
-                // Offered for every row that names a shift, not only the one
-                // kind that can be corrected. A shift already corrected at a
-                // later generation can still be listed under an earlier one,
-                // so "has this already been dealt with" is a real question
-                // here - and the answer, including "never", comes from the
-                // trail rather than from this list.
-                if (anomaly.shiftId case final shiftId?)
-                  AppButton(
-                    key: ValueKey(
-                      'reconciliation-anomaly-corrections-${anomaly.id}',
-                    ),
-                    label: 'View this shift\'s corrections',
-                    onPressed: () => onOpenAmendments(shiftId),
-                  ),
-                // The row already names the run above; this is the only way
-                // to ask anything about it. Whether that run finished, and
-                // what else it found, is what decides whether this difference
-                // is the whole of a problem or one symptom of it.
-                if (anomaly.jobId case final jobId?)
-                  AppButton(
-                    key: ValueKey('reconciliation-anomaly-run-${anomaly.id}'),
-                    label: 'About this run',
-                    onPressed: () => onOpenRun(jobId),
-                  ),
-              ],
+  /// One recorded difference: what it is about, what it says, and its figures.
+  ///
+  /// **`design.md` §11 step 8 on this screen is the figures leaving the
+  /// sentence.** A stock difference read "Its ledger expects 10, and the product
+  /// records 7: 3 fewer than the ledger accounts for", which is three numbers
+  /// inside one clause - so on a page of differences nothing lined up, nothing
+  /// could be compared down a column, and §2.2's rule about numbers stacking
+  /// vertically had nowhere to apply. Each figure is a [StatLine] now, at
+  /// `numeric.body` and right-aligned to a shared edge, and what is left of the
+  /// prose is whatever the figures do not already say. Three of the eight kinds
+  /// report that something could not be read rather than a measurement, and
+  /// those still carry prose and no figures at all.
+  Widget _anomaly(BuildContext context, TenantReconciliationAnomaly anomaly) {
+    final tokens = AppTokens.componentOf(context);
+    return Card(
+      key: ValueKey('reconciliation-anomaly-${anomaly.id}'),
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.s12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              key: ValueKey('reconciliation-anomaly-kind-${anomaly.id}'),
+              reconciliationDifferenceKindLabel(anomaly),
+              style: tokens.typography.titleMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
             ),
+            SizedBox(height: tokens.spacing.s4),
+            Text(
+              key: ValueKey('reconciliation-anomaly-subject-${anomaly.id}'),
+              reconciliationDifferenceSubject(anomaly),
+              style: tokens.typography.bodyMedium.copyWith(
+                color: tokens.colors.text.secondary,
+              ),
+            ),
+            if (reconciliationDifferenceExplanation(anomaly)
+                case final prose?) ...[
+              SizedBox(height: tokens.spacing.s4),
+              Text(
+                key: ValueKey('reconciliation-anomaly-detail-${anomaly.id}'),
+                prose,
+                style: tokens.typography.bodyMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+            ],
+            for (final figure in reconciliationDifferenceFigureLines(anomaly))
+              StatLine(
+                label: figure.label,
+                value: figure.value,
+                detail: figure.detail,
+                valueKey: ValueKey(
+                  'reconciliation-anomaly-figure-${figure.slug}-${anomaly.id}',
+                ),
+              ),
+            SizedBox(height: tokens.spacing.s4),
+            Text(
+              key: ValueKey('reconciliation-anomaly-instants-${anomaly.id}'),
+              reconciliationDifferenceProvenance(anomaly),
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.tertiary,
+              ),
+            ),
+            if (_canAmendRow(anomaly) ||
+                anomaly.shiftId != null ||
+                anomaly.jobId != null) ...[
+              SizedBox(height: tokens.spacing.s8),
+              Wrap(
+                spacing: tokens.spacing.s12,
+                runSpacing: tokens.spacing.s8,
+                children: [
+                  if (_canAmendRow(anomaly))
+                    AppButton(
+                      key: ValueKey(
+                        'reconciliation-anomaly-amend-${anomaly.id}',
+                      ),
+                      label: busy
+                          ? 'Correcting...'
+                          : 'Correct this shift\'s totals',
+                      icon: Icons.rule_outlined,
+                      onPressed: busy
+                          ? null
+                          : () => _confirmAmend(context, anomaly),
+                    ),
+                  // Offered for every row that names a shift, not only the one
+                  // kind that can be corrected. A shift already corrected at a
+                  // later generation can still be listed under an earlier one,
+                  // so "has this already been dealt with" is a real question
+                  // here - and the answer, including "never", comes from the
+                  // trail rather than from this list.
+                  if (anomaly.shiftId case final shiftId?)
+                    AppButton(
+                      key: ValueKey(
+                        'reconciliation-anomaly-corrections-${anomaly.id}',
+                      ),
+                      label: 'View this shift\'s corrections',
+                      onPressed: () => onOpenAmendments(shiftId),
+                    ),
+                  // The row already names the run above; this is the only way
+                  // to ask anything about it. Whether that run finished, and
+                  // what else it found, is what decides whether this difference
+                  // is the whole of a problem or one symptom of it.
+                  if (anomaly.jobId case final jobId?)
+                    AppButton(
+                      key: ValueKey('reconciliation-anomaly-run-${anomaly.id}'),
+                      label: 'About this run',
+                      onPressed: () => onOpenRun(jobId),
+                    ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   /// Requires a reason and an explicit confirmation.
   ///

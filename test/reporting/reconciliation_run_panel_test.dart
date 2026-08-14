@@ -30,15 +30,38 @@ void main() {
       _text(tester, 'reconciliation-status-run-state-rj_abc'),
       'Nightly sweep',
     );
+    // **The attempt count left this line in step 8** and is a figure of its own
+    // below. What is left is the two facts no figure can state - which mode ran,
+    // and how far it reached - and the singular the sentence needed went with
+    // the number, exactly as it did on the daily summary.
     expect(
       _text(tester, 'reconciliation-status-run-progress-rj_abc'),
-      'Incremental • reached ${TenantReconciliationRunPhase.finalize.label} • '
-      '1 attempt',
+      'Incremental • reached ${TenantReconciliationRunPhase.finalize.label}',
     );
+    expect(_text(tester, 'reconciliation-status-run-attempts-rj_abc'), '1');
     expect(
       _text(tester, 'reconciliation-status-run-instants-rj_abc'),
       'Completed 2026-08-01 02:31 UTC • Last updated 2026-08-01 02:31 UTC',
     );
+  });
+
+  testWidgets('a run that never failed shows no failure count at all', (
+    tester,
+  ) async {
+    // A `0` on every run that has never failed is a column of zeroes carrying no
+    // signal, which is the argument the tender split already makes for leaving
+    // out an empty bucket.
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{_jobPath: _job()},
+    );
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-failures-rj_abc')),
+      findsNothing,
+    );
+    expect(_text(tester, 'reconciliation-status-run-attempts-rj_abc'), '1');
   });
 
   testWidgets('the run states its day without claiming the difference is one', (
@@ -263,10 +286,10 @@ void main() {
       _text(tester, 'reconciliation-status-run-error-rj_abc'),
       'Server code: lease_lost',
     );
-    expect(
-      _text(tester, 'reconciliation-status-run-progress-rj_abc'),
-      endsWith('3 attempts, 2 in a row failed'),
-    );
+    // Both counts are figures now, so neither needs the other's grammar: `3
+    // attempts, 2 in a row failed` was two numbers at the end of one clause.
+    expect(_text(tester, 'reconciliation-status-run-attempts-rj_abc'), '3');
+    expect(_text(tester, 'reconciliation-status-run-failures-rj_abc'), '2');
     expect(
       _text(tester, 'reconciliation-status-run-instants-rj_abc'),
       'Last failed 2026-08-01 03:05 UTC • Last updated 2026-08-01 02:31 UTC',
@@ -275,7 +298,9 @@ void main() {
 
   testWidgets('the differences a run found are counted', (tester) async {
     // The count is why a difference opens its run at all: whether this one is
-    // the whole of a problem or one symptom of several.
+    // the whole of a problem or one symptom of several. **Both kinds are stated
+    // even where one of them is zero**, because which of the two is zero is
+    // itself the answer to where the run went wrong.
     final reader = _Reader(
       documents: <String, Map<String, Object?>>{_jobPath: _job()},
     );
@@ -283,8 +308,12 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      _text(tester, 'reconciliation-status-run-variance-rj_abc'),
-      '0 stock and 1 shift differences were recorded.',
+      _text(tester, 'reconciliation-status-run-stock-differences-rj_abc'),
+      '0',
+    );
+    expect(
+      _text(tester, 'reconciliation-status-run-shift-differences-rj_abc'),
+      '1',
     );
   });
 
@@ -298,7 +327,15 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      find.byKey(const ValueKey('reconciliation-status-run-variance-rj_abc')),
+      find.byKey(
+        const ValueKey('reconciliation-status-run-stock-differences-rj_abc'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        const ValueKey('reconciliation-status-run-shift-differences-rj_abc'),
+      ),
       findsNothing,
     );
     // The run itself still rendered, so the missing line is the absence of
@@ -358,8 +395,9 @@ void main() {
     expect(_text(tester, 'reconciliation-status-run-state-rj_abc'), 'webhook');
     expect(
       _text(tester, 'reconciliation-status-run-progress-rj_abc'),
-      'sampled • reached audit • 1 attempt',
+      'sampled • reached audit',
     );
+    expect(_text(tester, 'reconciliation-status-run-attempts-rj_abc'), '1');
   });
 
   testWidgets('a run with no recorded instant states that rather than a time', (

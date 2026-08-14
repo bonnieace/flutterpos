@@ -668,9 +668,18 @@ Map<String, Object?> seedDailyMetrics({
   'regeneratedAt': seedTimestamp(hour: 2, minute: 30),
 };
 
+/// One business day as the reconciliation intake records it.
+///
+/// [invalidLineCount] is a parameter because **the day page's unusable-lines
+/// branch had never been photographed**: the seeded day has always had a clean
+/// intake, so the second tile in its `StatRow` - and the sentence under the row
+/// saying what those lines cost - existed only in a widget test. It is the same
+/// "a fixture that hides the case the component exists for" trap the stock
+/// family recorded and the reconciliation sweep hit again.
 Map<String, Object?> seedReconciliationIntake({
   required String businessDate,
   String status = 'clean',
+  int invalidLineCount = 0,
 }) => <String, Object?>{
   'tenantId': seedTenantId,
   'businessDate': businessDate,
@@ -678,7 +687,7 @@ Map<String, Object?> seedReconciliationIntake({
   'revision': 3,
   'processedRevision': 3,
   'saleReceiptCount': 3,
-  'invalidLineCount': 0,
+  'invalidLineCount': invalidLineCount,
   'metricGeneration': 'gen-000418',
   'lastReceiptAt': seedTimestamp(hour: 13),
   'processedAt': seedTimestamp(hour: 2, minute: 30),
@@ -687,6 +696,24 @@ Map<String, Object?> seedReconciliationIntake({
 /// One of each difference reconciliation can find and not resolve.
 Map<String, Map<String, Object?>> seedReconciliationAnomalies() =>
     <String, Map<String, Object?>>{
+      // **A kind that carries prose *and* a figure**, which is the mixed case
+      // step 8 created on this screen and which nothing photographed: the three
+      // seeded differences were one pure-figure record, one figure-and-sentence
+      // record, and one of each. A broken chain states its expected quantity as
+      // the thing that cannot be trusted, and keeps a paragraph saying why that
+      // is not a quantity disagreement. It is filed against the one seeded
+      // product that already carries a difference, so `21b-product-stock-
+      // differences` photographs it too.
+      'chain_d4e5f6': <String, Object?>{
+        'tenantId': seedTenantId,
+        'productId': 'pd-milk-500',
+        'jobId': 'rj_000001',
+        'anomalyType': 'checkpoint_chain_invalid',
+        'expectedQuantity': 10,
+        'observedQuantity': 10,
+        'variance': 0,
+        'createdAt': seedTimestamp(hour: 2, minute: 30),
+      },
       'sale_a1b2c3': <String, Object?>{
         'tenantId': seedTenantId,
         'sourceType': 'sale',

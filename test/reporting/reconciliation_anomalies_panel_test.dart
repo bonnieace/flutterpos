@@ -27,18 +27,36 @@ void main() {
       _text(tester, 'reconciliation-anomaly-subject-sale_a'),
       'Sale checkout-a',
     );
+    // **The figures left the sentences in step 8.** What is left of the prose is
+    // whatever the figures do not already say - the consequence here, and
+    // nothing at all on a stock variance, where three labelled numbers are the
+    // whole of what the sentence used to state.
     expect(
       _text(tester, 'reconciliation-anomaly-detail-sale_a'),
-      '2 sale lines could not be read, so they moved no stock.',
+      'Those lines moved no stock.',
+    );
+    expect(
+      _text(tester, 'reconciliation-anomaly-figure-invalid-lines-sale_a'),
+      '2',
     );
     expect(
       _text(tester, 'reconciliation-anomaly-subject-stock_c'),
       'Product product-a',
     );
     expect(
-      _text(tester, 'reconciliation-anomaly-detail-stock_c'),
-      'Its ledger expects 10, and the product records 7: 3 fewer than the '
-      'ledger accounts for.',
+      find.byKey(const ValueKey('reconciliation-anomaly-detail-stock_c')),
+      findsNothing,
+    );
+    expect(
+      _text(tester, 'reconciliation-anomaly-figure-expected-stock_c'),
+      '10',
+    );
+    expect(_text(tester, 'reconciliation-anomaly-figure-observed-stock_c'), '7');
+    // **The sign is carried by the figure and the direction by a word beside
+    // it**, so neither states it alone - the same rule §9 applies to colour.
+    expect(
+      _text(tester, 'reconciliation-anomaly-figure-variance-stock_c'),
+      '-3',
     );
     expect(
       _text(tester, 'reconciliation-anomaly-subject-shift_b'),
@@ -46,8 +64,48 @@ void main() {
     );
     expect(
       _text(tester, 'reconciliation-anomaly-detail-shift_b'),
-      'Its sales total is 12.5 short and its transaction count is 2 over '
-      'against the sales recorded during it.',
+      'Its closing totals disagree with the sales recorded during it.',
+    );
+    expect(
+      _text(tester, 'reconciliation-anomaly-figure-sales-variance-shift_b'),
+      '-12.5',
+    );
+    expect(
+      _text(
+        tester,
+        'reconciliation-anomaly-figure-transaction-variance-shift_b',
+      ),
+      '+2',
+    );
+  });
+
+  testWidgets('a difference that is only a refusal to read carries no figure', (
+    tester,
+  ) async {
+    // Three of the eight kinds report that something could not be read rather
+    // than a measurement, and a `StatLine` with nothing to put in it would be a
+    // label beside an empty column.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _snapshot('quantity_a', <String, Object?>{
+          'tenantId': 'tenant-a',
+          'productId': 'product-a',
+          'anomalyType': 'invalid_product_quantity',
+        }),
+      ]);
+
+    await _pump(tester, _controller(), reader);
+
+    expect(
+      _text(tester, 'reconciliation-anomaly-detail-quantity_a'),
+      'This product\'s recorded quantity could not be read as a whole number, '
+      'so its stock was not verified at all.',
+    );
+    expect(
+      find.byKey(
+        const ValueKey('reconciliation-anomaly-figure-expected-quantity_a'),
+      ),
+      findsNothing,
     );
   });
 
@@ -233,6 +291,15 @@ void main() {
     expect(detail, contains('does not join up'));
     expect(detail, contains('This is not a quantity disagreement.'));
     expect(detail, isNot(contains('0 fewer')));
+    // The one figure it does carry is the expected quantity, and it is labelled
+    // as the thing that cannot be trusted rather than as a disagreement.
+    expect(_text(tester, 'reconciliation-anomaly-figure-expected-chain_a'), '10');
+    expect(
+      find.byKey(
+        const ValueKey('reconciliation-anomaly-figure-variance-chain_a'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('an unmodelled kind states plainly that it cannot be explained', (
@@ -838,8 +905,12 @@ void main() {
       'Completed',
     );
     expect(
-      _text(tester, 'reconciliation-status-run-variance-rj_abc'),
-      '0 stock and 1 shift differences were recorded.',
+      _text(tester, 'reconciliation-status-run-stock-differences-rj_abc'),
+      '0',
+    );
+    expect(
+      _text(tester, 'reconciliation-status-run-shift-differences-rj_abc'),
+      '1',
     );
   });
 

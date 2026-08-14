@@ -243,6 +243,193 @@ void main() {
     });
   });
 
+  group('one reading, two renderings', () {
+    // `design.md` §11 step 8 takes the figures out of the prose, and the two
+    // surfaces that draw a difference need different things: the differences
+    // list wants a column of labelled numbers, and screen 21's exception report
+    // draws a `Callout`, which has a `message` and no slot for a widget. Both
+    // forms are declared in one `switch` for exactly the reason this module
+    // exists; these are the tests that stop them drifting apart.
+
+    test('every figure a record states also appears in its sentence', () {
+      // The guard. A figure whose magnitude is nowhere in the prose form means
+      // the two renderings have started describing different records. Zero is
+      // excluded because the prose says "agrees" where a figure says `0`, which
+      // is the one place they are deliberately not the same string.
+      for (final anomaly in <TenantReconciliationAnomaly>[
+        _stockVariance(),
+        _anomaly(<String, Object?>{
+          'sourceId': 'checkout-a',
+          'anomalyType': 'invalid_sale_lines',
+          'invalidLineCount': 2,
+        }),
+        _anomaly(<String, Object?>{
+          'productId': 'product-a',
+          'anomalyType': 'checkpoint_chain_invalid',
+          'expectedQuantity': 10,
+          'observedQuantity': 10,
+          'variance': 0,
+        }),
+        _anomaly(<String, Object?>{
+          'productId': 'product-a',
+          'anomalyType': 'invalid_stock_movement',
+          'expectedQuantity': 10,
+          'observedQuantity': 7,
+          'variance': -3,
+        }),
+        _anomaly(<String, Object?>{
+          'shiftId': 'shift-a',
+          'anomalyType': 'shift_variance',
+          'salesVariance': -12.5,
+          'transactionVariance': 2,
+        }),
+      ]) {
+        final sentence = reconciliationDifferenceFigures(anomaly);
+        for (final figure in reconciliationDifferenceFigureLines(anomaly)) {
+          final magnitude = figure.value.replaceFirst(RegExp(r'^[+-]'), '');
+          if (magnitude == '0') continue;
+          expect(
+            sentence,
+            contains(magnitude),
+            reason:
+                '${anomaly.kindValue}: the ${figure.slug} figure is $magnitude '
+                'and the sentence does not state it',
+          );
+        }
+      }
+    });
+
+    test('a stock variance is three figures and no prose at all', () {
+      // Nothing is left over: "Its ledger expects 10, and the product records 7"
+      // *is* the three figures, and a screen drawing both would report one
+      // difference twice.
+      final figures = reconciliationDifferenceFigureLines(_stockVariance());
+
+      expect(reconciliationDifferenceExplanation(_stockVariance()), isNull);
+      expect(
+        figures.map((figure) => figure.slug),
+        <String>['expected', 'observed', 'variance'],
+      );
+      expect(figures[0].value, '10');
+      expect(figures[1].value, '7');
+      // The sign is on the figure and the direction is a word beside it, so
+      // neither carries the meaning on its own.
+      expect(figures[2].value, '-3');
+      expect(figures[2].detail, 'fewer than the ledger accounts for');
+    });
+
+    test('a variance the other way is signed the other way', () {
+      final over = _anomaly(<String, Object?>{
+        'productId': 'product-a',
+        'anomalyType': 'stock_variance',
+        'expectedQuantity': 7,
+        'observedQuantity': 10,
+        'variance': 3,
+      });
+
+      final variance = reconciliationDifferenceFigureLines(
+        over,
+      ).firstWhere((figure) => figure.slug == 'variance');
+      expect(variance.value, '+3');
+      expect(variance.detail, 'more than the ledger accounts for');
+    });
+
+    test('a shift states both variances, including the one that agrees', () {
+      // The prose said "its transaction count agrees", which is a word where the
+      // other half of the same comparison was a number. Both are figures now and
+      // the word moved to the line under the label.
+      final shift = _anomaly(<String, Object?>{
+        'shiftId': 'shift-a',
+        'anomalyType': 'shift_variance',
+        'salesVariance': -12.5,
+        'transactionVariance': 0,
+      });
+
+      final figures = reconciliationDifferenceFigureLines(shift);
+      expect(
+        figures.map((figure) => figure.value),
+        <String>['-12.5', '0'],
+      );
+      expect(figures[0].detail, 'short of the sales recorded');
+      expect(figures[1].detail, 'agrees with the sales recorded');
+      expect(
+        reconciliationDifferenceExplanation(shift),
+        'Its closing totals disagree with the sales recorded during it.',
+      );
+    });
+
+    test('a broken chain keeps its prose and states one figure', () {
+      // The expected quantity is the thing that cannot be trusted, so it is
+      // labelled as that rather than as half of a disagreement - and the
+      // observed quantity the record also carries is deliberately not shown,
+      // exactly as the sentence never mentioned it.
+      final chain = _anomaly(<String, Object?>{
+        'productId': 'product-a',
+        'anomalyType': 'checkpoint_chain_invalid',
+        'expectedQuantity': 10,
+        'observedQuantity': 10,
+        'variance': 0,
+      });
+
+      final figures = reconciliationDifferenceFigureLines(chain);
+      expect(figures.single.slug, 'expected');
+      expect(figures.single.value, '10');
+      expect(figures.single.detail, 'not trustworthy as a starting point');
+      expect(
+        reconciliationDifferenceExplanation(chain),
+        contains('This is not a quantity disagreement.'),
+      );
+      // The explanation drops the number the sentence carried, because the
+      // figure beside it now states it.
+      expect(
+        reconciliationDifferenceExplanation(chain),
+        isNot(contains('10')),
+      );
+    });
+
+    test('a kind that reports a refusal to read carries no figure', () {
+      // Three of the eight are reports that something could not be read rather
+      // than measurements, and for those the explanation is the whole sentence.
+      for (final anomaly in <TenantReconciliationAnomaly>[
+        _anomaly(<String, Object?>{
+          'productId': 'product-a',
+          'anomalyType': 'invalid_product_quantity',
+        }),
+        _anomaly(<String, Object?>{
+          'shiftId': 'shift-a',
+          'anomalyType': 'invalid_or_missing_shift',
+        }),
+        _anomaly(<String, Object?>{'anomalyType': 'price_drift'}),
+      ]) {
+        expect(reconciliationDifferenceFigureLines(anomaly), isEmpty);
+        expect(
+          reconciliationDifferenceExplanation(anomaly),
+          reconciliationDifferenceFigures(anomaly),
+        );
+      }
+    });
+
+    test('a label is a column heading and is never inflected', () {
+      // One unreadable line reads `Unreadable sale lines: 1`, which is the same
+      // grammar the daily summary lost when its three counts stopped being a
+      // sentence. The prose form still says "1 sale line", because there it is a
+      // clause.
+      final one = _anomaly(<String, Object?>{
+        'sourceId': 'checkout-a',
+        'anomalyType': 'invalid_sale_lines',
+        'invalidLineCount': 1,
+      });
+
+      final figure = reconciliationDifferenceFigureLines(one).single;
+      expect(figure.label, 'Unreadable sale lines');
+      expect(figure.value, '1');
+      expect(
+        reconciliationDifferenceFigures(one),
+        startsWith('1 sale line could not be read'),
+      );
+    });
+  });
+
   group('provenance', () {
     test('the instant leads and the run follows, per §5.2', () {
       final dated = _anomaly(<String, Object?>{
