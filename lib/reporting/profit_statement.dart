@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../ui/stats.dart';
+import '../ui/tokens.dart';
 import 'profit_report.dart';
 import 'reporting_currency.dart';
 
@@ -31,23 +33,51 @@ final class TenantProfitStatement extends StatelessWidget {
   /// not give two of them the same one.
   final String keyPrefix;
 
+  /// **The figure is a [StatLine] and the sentence around it is gone**, in
+  /// `design.md` §11 step 8. It read "Profit: KES 430.25, a margin of 34.4%.",
+  /// which put two figures inside one sentence at whatever weight the
+  /// surrounding body text happened to be - so a column of days had its money in
+  /// three different places on three lines, which is the raggedness §2.2 names
+  /// this app's daily summary for. The two facts are two figures now, both at
+  /// `numeric.body`, both aligned to the same right edge.
+  ///
+  /// **The note stays directly under them and is not folded.** It is the whole
+  /// point of this widget - no profit figure is rendered without, in the same
+  /// block, what is known about the cost data behind it - and a `Disclosure`
+  /// would make the qualification optional to read, which is the one thing it
+  /// may not be.
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (report.isShowable)
-        Text(key: ValueKey('$keyPrefix-profit'), _figure()),
-      Text(key: ValueKey('$keyPrefix-profit-note'), _note()),
-    ],
-  );
-
-  /// The figure, and the margin only when there is one to divide by.
-  String _figure() {
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final margin = report.marginPercent;
-    final amount = 'Profit: ${currency.format(report.profit)}';
-    return margin == null
-        ? '$amount.'
-        : '$amount, a margin of ${margin.toStringAsFixed(1)}%.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (report.isShowable) ...[
+          StatLine(
+            label: 'Profit',
+            value: currency.format(report.profit),
+            valueKey: ValueKey('$keyPrefix-profit'),
+          ),
+          if (margin != null)
+            StatLine(
+              label: 'Margin',
+              value: '${margin.toStringAsFixed(1)}%',
+              valueKey: ValueKey('$keyPrefix-margin'),
+            ),
+        ],
+        Padding(
+          padding: EdgeInsets.only(top: tokens.spacing.s4),
+          child: Text(
+            key: ValueKey('$keyPrefix-profit-note'),
+            _note(),
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   String _note() => switch (report.basis) {

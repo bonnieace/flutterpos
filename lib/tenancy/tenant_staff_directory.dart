@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/record_list.dart';
-import '../ui/records.dart';
 import '../ui/scaffold.dart';
+import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 
@@ -430,33 +430,39 @@ final class _StaffContentsState extends State<_StaffContents> {
         )
         .length;
     final page = widget.page.hasMore ? 'on this page, more to load' : 'on this page';
-    return TenantStatStrip(
-      cards: [
-        TenantStatCard(
+    return StatRow(
+      tiles: [
+        StatTile(
           key: const ValueKey('staff-stat-total'),
           label: 'Staff',
           value: '${items.length}',
           icon: Icons.people_outline,
           detail: page,
         ),
-        TenantStatCard(
+        StatTile(
           key: const ValueKey('staff-stat-active'),
           label: 'Active',
           value: '$active',
           icon: Icons.check_circle_outline,
           detail: 'can sign in and sell',
         ),
-        TenantStatCard(
+        StatTile(
           key: const ValueKey('staff-stat-pending'),
           label: 'Pending',
           value: '$pending',
           icon: Icons.hourglass_empty,
           detail: 'invited, not yet accepted',
-          emphasis: pending > 0
-              ? Theme.of(context).colorScheme.onSurfaceVariant
-              : null,
+          // **It used to dim the figure to `onSurfaceVariant` when the count was
+          // above zero, and it now says nothing.** That was a colour meaning
+          // "look here", which is §2.1's complaint exactly - but the honest
+          // replacement is not a badge either: every pending member in the list
+          // below already wears one, and a second `attention` on the count of
+          // them is the same signal twice. A count is a fact; the standing
+          // belongs to the records. The stock route's negative-quantity tile is
+          // the other way round and does carry one, because nothing else on
+          // that screen states it.
         ),
-        TenantStatCard(
+        StatTile(
           key: const ValueKey('staff-stat-privileged'),
           label: 'Owners & admins',
           value: '$privileged',

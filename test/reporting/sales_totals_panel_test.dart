@@ -4,9 +4,149 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/stats.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// The figure a keyed `StatTile` or `StatLine` is showing.
+String _figure(WidgetTester tester, String key) =>
+    tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+/// The message a keyed [Callout] carries.
+///
+/// The sentences this reads used to be loose `Text`; `design.md` §11 step 8 put
+/// each of them in the component §5.1 names for a permanent notice, so the fact
+/// is read off the notice rather than off a paragraph.
+String _notice(WidgetTester tester, String key) =>
+    tester.widget<Callout>(find.byKey(ValueKey(key))).message;
+
+/// Opens a [Disclosure] by its summary. Its child is out of the tree until then.
+///
+/// **`ensureVisible` and not `scrollUntilVisible`**, which is the trap
+/// `PLAN.md` records from 2026-08-14: the latter stops when a widget has been
+/// *built*, and a tap on something below the fold lands on nothing without
+/// failing. The tender folds sit under a card, a chooser and five figures, so on
+/// an 800 x 600 test surface they are past the bottom of the page.
+Future<void> _open(WidgetTester tester, String summary) async {
+  await tester.ensureVisible(find.text(summary));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(summary));
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  group('design.md §11 step 8: the money surface', () {
+    testWidgets('the screen\'s title is the header\'s and is not drawn twice', (
+      tester,
+    ) async {
+      // §7: "Title appears once." Step 5a put the title in a `PageHeader` and
+      // this panel kept drawing its own `headlineSmall` copy underneath, which
+      // is the exact defect §7 names. The panel now draws none - and this test
+      // pumps the panel *without* its screen, so a title found here is a second
+      // one by construction.
+      await _pump(tester, _controller(TenantRole.manager), _Callable(<Object?>[
+        _response(),
+      ]));
+
+      expect(find.text('Sales totals'), findsNothing);
+    });
+
+    testWidgets('every fold on the page fits one line on a phone', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _controller(TenantRole.owner),
+        _Callable(<Object?>[_response(byTender: _byTender())]),
+        width: 411,
+      );
+
+      final summaries = tester
+          .widgetList<Disclosure>(find.byType(Disclosure))
+          .map((disclosure) => disclosure.summary)
+          .toList();
+      // The page's own basis, and the two explanations the tender breakdown
+      // carries when it has an unrecorded and an unrecognised bucket.
+      expect(summaries, hasLength(3));
+      for (final summary in summaries) {
+        expect(
+          summary.length,
+          lessThanOrEqualTo(Disclosure.summaryCharacterBudget),
+          reason: summary,
+        );
+      }
+    });
+
+    testWidgets('the unpublished-currency notice is a §2.1 status', (
+      tester,
+    ) async {
+      await _pump(tester, _controller(TenantRole.manager), _Callable(<Object?>[
+        _response(),
+      ]));
+
+      final callout = tester.widget<Callout>(
+        find.byKey(const ValueKey('sales-totals-currency-unknown')),
+      );
+      // `info` is "offline, read-only, informational" in §2.1's own words:
+      // nothing failed and no figure is missing, only its label.
+      expect(callout.status, AppStatus.info);
+      expect(callout.message, contains('published no currency'));
+    });
+
+    testWidgets('the headline figures are not truncated on a phone', (
+      tester,
+    ) async {
+      // §4.1's `compact` band, which is where a fixed minimum tile width put
+      // two money tiles side by side and ellipsised both.
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Callable(<Object?>[_response()]),
+        reader: _Reader(currency: 'KES'),
+        width: 411,
+      );
+
+      final figure = tester.renderObject<RenderBox>(
+        find.byKey(const ValueKey('sales-totals-amount')),
+      );
+      final tile = tester.renderObject<RenderBox>(
+        find.ancestor(
+          of: find.byKey(const ValueKey('sales-totals-amount')),
+          matching: find.byType(StatTile),
+        ),
+      );
+      expect(figure.size.width, lessThanOrEqualTo(tile.size.width));
+      expect(_figure(tester, 'sales-totals-amount'), 'KES 4820.75');
+    });
+
+    testWidgets('a failed read is a problem notice with its retry inside it', (
+      tester,
+    ) async {
+      final callable = _Callable(<Object?>[
+        FirebaseFunctionsException(code: 'unavailable', message: 'no'),
+        _response(),
+      ]);
+
+      await _pump(tester, _controller(TenantRole.manager), callable);
+
+      final callout = tester.widget<Callout>(
+        find.byKey(const ValueKey('sales-totals-failure')),
+      );
+      // §2.1 gives `problem` the meaning "difference found, unreadable", and a
+      // read that produced no figure is unreadable. The action stays the
+      // caller's: `Callout` decides where it sits and nothing about what it
+      // does.
+      expect(callout.status, AppStatus.problem);
+      expect(find.byKey(const ValueKey('sales-totals-retry')), findsOne);
+
+      await tester.tap(find.byKey(const ValueKey('sales-totals-retry')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('sales-totals-failure')), findsNothing);
+    });
+  });
+
   testWidgets('today is totalled from what the server holds', (tester) async {
     final callable = _Callable(<Object?>[_response()]);
 
@@ -23,12 +163,11 @@ void main() {
           .data,
       '2026-07-31',
     );
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-amount')))
-          .data,
-      'Sales: KES 4820.75 over 37 sales',
-    );
+    // **Two figures where there was one sentence**, `design.md` §11 step 8:
+    // the takings and the count of sales they were taken over, each in its own
+    // `StatTile` at `numeric.hero`.
+    expect(_figure(tester, 'sales-totals-amount'), 'KES 4820.75');
+    expect(_figure(tester, 'sales-totals-transactions'), '37');
     expect(
       find.byKey(const ValueKey('sales-totals-currency-unknown')),
       findsNothing,
@@ -254,12 +393,7 @@ void main() {
       find.byKey(const ValueKey('sales-totals-currency-unknown')),
       findsOne,
     );
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-amount')))
-          .data,
-      'Sales: 4820.75 over 37 sales',
-    );
+    expect(_figure(tester, 'sales-totals-amount'), '4820.75');
   });
 
   testWidgets('the currency is read once, not once per filter', (tester) async {
@@ -315,9 +449,7 @@ void main() {
     );
 
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-failure')))
-          .data,
+      _notice(tester, 'sales-totals-failure'),
       contains('Choose a shorter period'),
     );
     // The whole point of that sentence is that a shorter period can be picked,
@@ -415,12 +547,8 @@ void main() {
       reader: _Reader(currency: 'KES'),
     );
 
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-profit')))
-          .data,
-      'Profit: KES 1205.25, a margin of 25.0%.',
-    );
+    expect(_figure(tester, 'sales-totals-profit'), 'KES 1205.25');
+    expect(_figure(tester, 'sales-totals-margin'), '25.0%');
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('sales-totals-profit-note')))
@@ -489,12 +617,8 @@ void main() {
     // The server sums the matching lines and counts only their costs, so the
     // figure is that category's margin and the basis sentence beside it says
     // what the takings themselves are.
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-profit')))
-          .data,
-      'Profit: KES 100.00, a margin of 25.0%.',
-    );
+    expect(_figure(tester, 'sales-totals-profit'), 'KES 100.00');
+    expect(_figure(tester, 'sales-totals-margin'), '25.0%');
     expect(
       find.byKey(const ValueKey('sales-totals-category-basis')),
       findsOne,
@@ -513,23 +637,36 @@ void main() {
       reader: _Reader(currency: 'KES'),
     );
 
-    String rowFor(String key) => tester
-        .widget<Text>(find.byKey(ValueKey('sales-totals-tender-$key')))
-        .data!;
+    // **Five sentences became five figures in a column**, `design.md` §11 step
+    // 8: the amount is the figure, its label names the method, and the count it
+    // is over sits under the label. Every fact the sentences carried survives.
+    String rowFor(String key) => _figure(tester, 'sales-totals-tender-$key');
 
-    expect(rowFor('cash'), 'Cash: KES 2000.25 over 20 sales');
-    expect(rowFor('mpesa'), 'M-Pesa: KES 1800.50 over 10 sales');
-    expect(rowFor('card'), 'Card: KES 900.00 over 5 sales');
-    expect(rowFor('unrecorded'), 'Not recorded: KES 100.00 over 1 sale');
-    expect(rowFor('other'), 'Unrecognised: KES 20.00 over 1 sale');
+    expect(rowFor('cash'), 'KES 2000.25');
+    expect(rowFor('mpesa'), 'KES 1800.50');
+    expect(rowFor('card'), 'KES 900.00');
+    expect(rowFor('unrecorded'), 'KES 100.00');
+    expect(rowFor('other'), 'KES 20.00');
+    for (final method in const <String>[
+      'Cash',
+      'M-Pesa',
+      'Card',
+      'Not recorded',
+      'Unrecognised',
+    ]) {
+      expect(find.text(method), findsOne, reason: method);
+    }
+    expect(find.text('20 sales'), findsOne);
+    // The one row of the five that has a single sale behind it still says so in
+    // the singular, which is the sentence's own rule kept.
+    expect(find.text('1 sale'), findsExactly(2));
     // Nothing here has confirmed any money arrived, and the surface says so in
-    // the one shared sentence every tender surface uses.
+    // the one shared sentence every tender surface uses. It is a `Callout` and
+    // deliberately not a `Disclosure`: `checkout_tender.dart` requires every
+    // surface showing a tender to carry it, and a fold is a sentence a person
+    // can finish the screen without reading.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sales-totals-tender-disclaimer')),
-          )
-          .data,
+      _notice(tester, 'sales-totals-tender-disclaimer'),
       'Recorded by the cashier at the till; the payment itself is not '
       'verified.',
     );
@@ -565,13 +702,16 @@ void main() {
       find.byKey(const ValueKey('sales-totals-tender-other')),
       findsNothing,
     );
-    // No unrecorded sales means no note about them either.
+    // No unrecorded sales means no note about them either - and the fold itself
+    // is absent, not merely its contents.
     expect(
-      find.byKey(const ValueKey('sales-totals-tender-unrecorded-note')),
+      find.byKey(
+        const ValueKey('sales-totals-tender-unrecorded-disclosure'),
+      ),
       findsNothing,
     );
     expect(
-      find.byKey(const ValueKey('sales-totals-tender-other-note')),
+      find.byKey(const ValueKey('sales-totals-tender-other-disclosure')),
       findsNothing,
     );
   });
@@ -599,6 +739,14 @@ void main() {
 
     await _pump(tester, _controller(TenantRole.owner), callable);
 
+    // The explanation is a `Disclosure` now, so it is out of the tree until it
+    // is opened - which is also the assertion that it is not permanently in the
+    // way of the figures it explains.
+    expect(
+      find.byKey(const ValueKey('sales-totals-tender-unrecorded-note')),
+      findsNothing,
+    );
+    await _open(tester, 'Why a sale names no method');
     expect(
       tester
           .widget<Text>(
@@ -626,6 +774,7 @@ void main() {
 
     await _pump(tester, _controller(TenantRole.owner), callable);
 
+    await _open(tester, 'An unrecognised method');
     expect(
       tester
           .widget<Text>(
@@ -650,12 +799,7 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('sales-totals-tender')), findsNothing);
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-amount')))
-          .data,
-      'Sales: KES 4820.75 over 37 sales',
-    );
+    expect(_figure(tester, 'sales-totals-amount'), 'KES 4820.75');
   });
 
   testWidgets('a split that does not add up costs the whole answer', (
@@ -671,9 +815,7 @@ void main() {
     await _pump(tester, _controller(TenantRole.owner), callable);
 
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-failure')))
-          .data,
+      _notice(tester, 'sales-totals-failure'),
       'The server answer could not be trusted, so no total is shown.',
     );
     expect(find.textContaining('4820.75'), findsNothing);
@@ -692,9 +834,7 @@ void main() {
     await _pump(tester, _controller(TenantRole.manager), callable);
 
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-failure')))
-          .data,
+      _notice(tester, 'sales-totals-failure'),
       'The server answer could not be trusted, so no total is shown.',
     );
     expect(find.textContaining('4820.75'), findsNothing);
@@ -735,11 +875,7 @@ void main() {
     );
     // A category figure sums matching lines only; saying so is the whole point.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sales-totals-category-basis')),
-          )
-          .data,
+      _notice(tester, 'sales-totals-category-basis'),
       'This adds up only the lines in this category, not the whole of each '
       'sale. 25 of the 37 sales read held nothing in it.',
     );
@@ -769,11 +905,7 @@ void main() {
     await tester.pump();
 
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sales-totals-category-basis')),
-          )
-          .data,
+      _notice(tester, 'sales-totals-category-basis'),
       'This adds up only the lines in this category, not the whole of each '
       'sale. 0 of the 1 sale read held nothing in it.',
     );
@@ -871,9 +1003,7 @@ void main() {
     // swallowed into the quiet degrade an unreadable list gets: the route
     // fails and no figure is shown at all.
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-failure')))
-          .data,
+      _notice(tester, 'sales-totals-failure'),
       'The totals could not be read.',
     );
     expect(find.byKey(const ValueKey('sales-totals-amount')), findsNothing);
@@ -972,7 +1102,14 @@ Future<void> _pump(
   TenantSalesPeriod period = TenantSalesPeriod.today,
   _Reader? reader,
   int staffPageSize = 25,
+  double? width,
 }) async {
+  if (width != null) {
+    tester.view.physicalSize = Size(width, 891);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
   await tester.pumpWidget(
     MaterialApp(
       home: TenantSessionScope(

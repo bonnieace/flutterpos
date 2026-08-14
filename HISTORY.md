@@ -22081,3 +22081,247 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## A figure becomes a component, and the money screens stop writing numbers into sentences - 2026-08-14
+
+`design.md` §11 **step 8, first half**: the money component, its existing call sites, and the two
+money screens — the daily summary (25) and the period totals (26) — including the step-4 sweep of
+their prose, which the catalog chunk decided the same day should travel *with* step 8 rather than
+ahead of it.
+
+```text
+the component      lib/ui/stats.dart        StatTile, StatRow, StatLine
+its old call sites 13 staff directory       TenantStatStrip -> StatRow
+                   21 product stock         TenantStatCard  -> StatTile
+step 8's screens   25 daily summary         figures, prose, and a day's standing
+                   26 sales totals          figures, prose, tender split
+still to come      27, 28, 29               already swept for step 4; their figures are next
+```
+
+It changes `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either:
+`git diff` **and** `git status` over all three print zero lines. **It changed no status board row**,
+and that is stated rather than left silent: "Read daily and period totals" and "See profit or
+margin" have both been 🟢 throughout, and a shop can read exactly what it could read this morning.
+
+### Why this chunk, and why it stops where it does
+
+`PLAN.md` queued step 8 and named the pairing. Checking it against the board first: every red row is
+either blocked on a decision nobody has made (App Check, the printer interface) or deliberately
+sequenced after the first deployment (suspicious-return scoring), so nothing the app needs in order
+to function is missing and unqueued, and the queued chunk stands.
+
+**Step 8 is three things — `StatTile`, tabular figures, tables — and the third is already built.**
+Tables are `RecordList`'s `RecordForm.table`, which step 6 shipped and which the reporting screens
+already reach. So what step 8 actually owes is the component and the figures, and this chunk takes
+the component plus the two screens that are *only* figures. 27, 28 and 29 keep their prose from the
+reconciliation sweep and want their figures restyled, which is the next chunk.
+
+### What was decided
+
+1. **The three widgets, and which of them §5.1 actually names.** `StatTile` is §5.1's own row,
+   replacing the "recorded stock" / "ledger entries" tiles by name. `StatRow` is the name §7 uses in
+   passing — "the checkout queue counts belong in a `StatRow`" — and has no row of its own.
+   **`StatLine` is in neither section**, and that is stated in its own doc comment rather than
+   smuggled, the way `RecordItem.details` was in step 6: it is one label and one figure on a line,
+   for money *in flow*, and it exists because two reporting surfaces render exactly that shape.
+2. **A stat tile is for the one figure a surface exists for; a list of days is not that.** §2.2 gives
+   `numeric.hero` exactly one use in the whole document — "the one figure a stat tile exists for" —
+   and `numeric.body` the row "money and counts in flow". So screen 26, which answers one question
+   with one pair of figures, gets tiles; screen 25, which lists seven days, gets `StatLine`s. The
+   alternative was three hero tiles per day, which on a phone is a summary two and a half times
+   taller than the sentences it replaces.
+3. **The minimum tile width is measured, not chosen.** `TenantStatStrip` carried `minimumWidth = 168`
+   — a number `design.md` does not contain, set when every figure in this app was two or three
+   digits. `numeric.hero` is 28px at weight 700, so `KES 3810.25` is about 190 logical pixels of
+   glyphs before the tile's own padding, and at 411 that strip would have put two money tiles side by
+   side and ellipsised both. `StatRow.minimumTileWidth` lays every figure out with a `TextPainter` at
+   `numeric.hero` and takes the widest plus the tile's own padding. **No constant, no caller knob, and
+   no figure truncated** — and it is font-independent, which is what makes it assertable in a plain
+   `flutter test` where the fallback face's advance widths are not Roboto's.
+4. **The caption stopped being uppercase, which closes the last one in `lib/`.** §2.2 permits
+   uppercase on `label.eyebrow` only, and permits `label.eyebrow` on "field group labels only" — both
+   halves point away from a stat caption, so it is `label.md` in the case the caller wrote.
+   `lib/ui/tokens.dart` named this component as the one uppercase surface left, and that note is now
+   retracted at the text. `label.eyebrow`'s only readers are the harness's own section headings.
+5. **An `emphasis` colour became a `StatusBadge`, and only where nothing else states the standing.**
+   `TenantStatCard.emphasis` painted the figure red for a negative stock count, which is §9's "out of
+   stock signalled by red text alone" in another place. Screen 21's tile carries `problem` / `Below
+   zero` now — a container, a glyph and a word. **The staff directory's `Pending` tile carries
+   nothing**, and that asymmetry is the decision: every pending member in the list below already
+   wears an `attention` badge, so a second one on the *count* of them is the same signal twice. A
+   count is a fact; the standing belongs to the records. Its old emphasis was `onSurfaceVariant`,
+   which was a dimming that meant "look here" — exactly §2.1's complaint — so it goes rather than
+   being converted.
+6. **A day's standing is a §2.1 lookup and it was a sentence.** "Not reconciled yet." is
+   `attention`'s stated meaning — *"unreconciled, pending, awaiting"* — and a reconciled day is
+   `ok`'s, *"reconciled, confirmed"*, word for word. Both are badges now, on the day's own header
+   row. It passes the every-row test: today is `attention` and the days behind it are `ok`, so the
+   badge carries signal down the list rather than decorating every card.
+7. **The profit statement's sentence became two figures, and its note did not fold.** "Profit: KES
+   430.25, a margin of 34.4%." put two figures inside one sentence at whatever weight the surrounding
+   body text happened to be. They are `StatLine`s now, both at `numeric.body`, both aligned to the
+   same right edge. **The note stays directly under them as visible caption text**: the whole point
+   of that widget is that no profit figure is rendered without, in the same block, what is known
+   about the cost data behind it, and a `Disclosure` would make the qualification optional to read.
+8. **The tender disclaimer is the family's one `Callout` among folds.** Every other permanent
+   explanation on screen 26 went behind a `Disclosure` — the page's own basis, and the two
+   explanations of the odd buckets, each true of its row every time that row appears. The disclaimer
+   may not, because `checkout_tender.dart` requires *every* surface showing a tender to say the
+   payment is unverified, and a sentence behind a chevron is one a person can finish the screen
+   without reading. §2.1's `info` is "informational" in its own words.
+9. **A failed read became a `problem` `Callout` with its retry inside it.** §2.1 gives `problem` the
+   meaning "difference found, unreadable", and a read that produced no figure is unreadable. The
+   action stays the caller's `AppButton` in `Callout.action`; the component decides where it sits and
+   nothing about what it does.
+10. **A row of tiles is rows, not a `Wrap`.** The first pictures showed a badge-carrying tile
+    standing taller than the plain one beside it, which reads as an unfinished layout rather than as
+    a difference that means anything. `IntrinsicHeight` per run is cheap at four tiles and is the
+    only honest way to say "as tall as the tallest of you".
+
+### §7 says "Title appears once", and thirteen more screens say it twice
+
+**Both money screens drew their own `headlineSmall` copy of the title under the `PageHeader` that
+already carries one.** That is the defect §7 names in its own words — "Today several screens render
+the title in the app bar *and* again as an `H1` directly beneath it" — and step 5a moved the title
+into the header without removing the copies underneath. Both are gone here, and the tests assert it
+by construction: they pump the panel *without* its screen, so a title found in the panel is a second
+one.
+
+**It is not two screens.** `grep -n headlineSmall lib` finds the same shape in thirteen more panels,
+including several the sweep has already been through: `audit_log_panel.dart`,
+`sale_history_panel.dart` (twice), `receipt_lookup_panel.dart`, `return_history_panel.dart`,
+`stock_product_ledger_panel.dart`, `shift_history_panel.dart`, `reconciliation_run_panel.dart`,
+`stock_movement_feed_panel.dart`, `reconciliation_anomalies_panel.dart`,
+`reconciliation_status_panel.dart`, `stock_adjustment_panel.dart`, `stock_adjustment_feed_panel.dart`
+and `shift_amendment_feed_panel.dart`. `web/21-product-stock` shows it plainly: **White bread loaf**
+in `display`, and **White bread loaf** again in `headlineSmall` directly under it. Not all thirteen
+are duplicates — some name a section rather than the screen — so this is a per-screen judgement
+rather than a sweep of thirteen `Text`s, and it is queued in `PLAN.md` as its own small chunk rather
+than folded in here.
+
+### The pictures found a copy defect the sentence had hidden
+
+**`web/26-sales-totals` came back with two adjacent tiles both captioned `Sales`** — one holding
+`KES 6420.50` and one holding `48`. The sentence they replaced said "Sales: KES 4820.75 over 37
+sales", where the second "sales" is unambiguous because it follows a number and a preposition. As two
+captions side by side it is simply wrong. The count tile is `Transactions` now, which is the daily
+summary's own word for the same figure, so the two money surfaces share one vocabulary — the lesson
+three chunks in a row have paid for.
+
+**The pluralisation went with it.** Screen 25's sentence carried two singular/plural switches ("1
+transactions in 2 shifts" was producible from one line, and the fix for it was a test); with each
+count under its own label there is no grammar left to get wrong. The cost sentence keeps its own
+singular and still has to be right, and still is.
+
+### Files changed
+
+```text
+lib/ui/stats.dart                            new: StatTile, StatRow, StatLine
+lib/ui/records.dart                          TenantStatCard and TenantStatStrip deleted
+lib/ui/tokens.dart                           label.eyebrow's note retracted at the text
+lib/reporting/daily_metrics_panel.dart       screen 25
+lib/reporting/sales_totals_panel.dart        screen 26
+lib/reporting/profit_statement.dart          the shared figure, on both screens
+lib/tenancy/tenant_staff_directory.dart      screen 13's strip
+lib/inventory/stock_adjustment_panel.dart    screen 21's strip
+tool/screenshots/stat_states_test.dart       new: the 97-* matrix, at all three bands
+test/ui/stats_test.dart                      new
+test/reporting/daily_metrics_panel_test.dart
+test/reporting/sales_totals_panel_test.dart
+test/reporting/profit_statement_test.dart
+design.md                                    §2.2's own example of raggedness, retracted
+```
+
+**`design.md` was amended rather than only implemented**, which is the same move step 6 made on §5.2.
+§2.2 names this app's daily summary as its example of proportional figures in a column of currency;
+that is now false of that screen and of the period totals, and the retraction says what was actually
+wrong with them — not the numerals but that the figures were *inside sentences*, so nothing could line
+up whatever the font feature did. **Screens 27, 28 and 29 still carry the original complaint**, and
+the amendment says so rather than claiming the section is closed.
+
+**`dart format` was not run**, on any file, per the standing prohibition.
+
+### Tests
+
+**All five suites measured, none carried**, although a carry was legal: this chunk is Dart-only and
+`git diff` over the three server paths prints zero lines. That is **eight** consecutive chunks
+measuring all five.
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1891 -> 1914  (+23)
+npm --prefix functions test                                                409  unchanged
+npm --prefix rules-tests run test:emulator                                 161  unchanged
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged
+```
+
+The prelude was run before every emulator command. All four passed first time and no suite was
+retried for a failure — **but the three emulator suites were run twice**, and the reason is a
+reporting mistake worth recording: the first run filtered its output through a
+`Select-String -Pattern '…|Error|…' | Select-Object -Last 12`, and the last twelve matching lines were
+the suite's own **expected** `PERMISSION_DENIED` traces, so the run proved exit code 0 and showed no
+counts at all. Exit 0 is a pass; it is not a measurement, and writing 161 down on the strength of it
+would have been a carried figure wearing a measurement's clothes. The second run took the tail of the
+raw output instead: `ℹ tests 161 / pass 161 / fail 0` in ~138 s, `10` in ~84 s, `23` in ~165 s.
+
+The 23 new tests: **13** in `test/ui/stats_test.dart` (the figure is `numeric.hero` and the caption
+`label.md`; the caption is drawn in the caller's case; a figure with something to say wears a badge
+rather than a colour; an ordinary one wears none; half a status triple is refused at the call site;
+the minimum width tracks the widest figure and the text scale; a row never takes fewer than one
+column; money on a phone is not truncated; an empty row draws nothing; a line's figure is
+`numeric.body`, tabular and right-aligned; two lines share a right edge; a total reads as the
+answer), **5** in `daily_metrics_panel_test.dart` (the title is not drawn twice; the page's
+explanation is one fold inside the phone budget; the currency notice is a §2.1 status; a day's
+standing is a badge and both ways round; a day states the same figures at 411) and **5** in
+`sales_totals_panel_test.dart` (the same first three, the headline tile at 411, and the failure
+notice carrying its own retry).
+
+Existing assertions changed rather than added, every one a fact in its new rendering: nine reads of a
+figure now read the figure rather than the sentence around it, five reads of a notice read
+`Callout.message` off the component, two explanations open their `Disclosure` first, and the daily
+summary's singular test became a three-figure test because the grammar it guarded no longer exists.
+
+`flutter analyze lib test tool --no-pub` reports **475 issues**, unchanged, and none in `lib/ui`,
+`lib/reporting`, `lib/tenancy`, `lib/inventory`, `test/` or `tool/screenshots`.
+
+### Screenshots
+
+**221 images from 166 captures: 13 added, 0 removed, 22 changed, 186 byte-identical.** The baseline
+was generated the same day, so there is no date drift and every moved image is attributable.
+
+```text
+web/25-daily-summary                 web-full/25-daily-summary
+mobile/25-daily-summary              mobile-full/25-daily-summary
+web/26-sales-totals                  web-full/26-sales-totals              (full-page: new)
+mobile/26-sales-totals               mobile-full/26-sales-totals
+web/13-staff-directory               web-full/13-staff-directory
+mobile/13-staff-directory            mobile-full/13-staff-directory
+web/13b-staff-directory-editing      web-full/13b-staff-directory-editing
+                                     mobile-full/13b-staff-directory-editing
+web/21-product-stock                 web-full/21-product-stock
+mobile/21-product-stock              mobile-full/21-product-stock
+web/21b-product-stock-differences    web-full/21b-product-stock-differences
+mobile/21b-product-stock-differences mobile-full/21b-product-stock-differences
+97-stat-counts  97-stat-money  97-stat-standing  97-stat-lines   (new, x3 bands)
+```
+
+**The `97-*` matrix is at all three bands deliberately**, which is the lesson `PLAN.md` recorded
+earlier the same day from step 4's `93-disclosure-*` being `web` only: a stat row's whole behaviour
+is how many tiles it puts across a width, so a picture of it at one width is a picture of none of it.
+It is the second matrix after `96-record-details` to use `everyBandViewports`.
+
+**`web-full/26-sales-totals` is new rather than changed**, because the page grew past 900 for the
+first time — the tender split now spends a line and a caption per method where it spent one sentence.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

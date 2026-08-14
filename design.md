@@ -163,8 +163,17 @@ One family — Roboto — with a real scale. Two additions matter more than the 
 
 **Tabular figures are mandatory** anywhere numbers stack vertically: prices, totals, stock
 counts, transaction counts, ledger deltas, percentages. `fontFeatures: [FontFeature.tabularFigures()]`.
-Today's daily summary has proportional figures in a column of currency, which is why the
-amounts look ragged.
+~~Today's daily summary has proportional figures in a column of currency, which is why the
+amounts look ragged.~~
+
+**Done on the daily summary and the period totals, 2026-08-14**, in §11 step 8's first half, and the
+complaint above is now false of both. It was not only the font feature: those figures were *inside
+sentences* — "Sales: KES 1250.50 over 12 transactions in 2 shifts" — so nothing could line up down a
+column whatever the numerals did. They are `StatLine`s and `StatTile`s in `lib/ui/stats.dart` now, at
+the two roles below, right-aligned to a shared edge. **A row of stat tiles derives its own column
+count** from the widest figure it holds rather than from a fixed minimum width, because `numeric.hero`
+at 28/700 makes a currency-coded amount about 190 logical pixels wide and a fixed minimum set for
+two-digit counts truncates it on a phone. Screens 27, 28 and 29 still carry the original complaint.
 
 **Record identifiers are monospace.** SKUs, `rj_000001`, `pd-milk-500`, `shift-yesterday`.
 They are strings a person compares character by character, not prose.

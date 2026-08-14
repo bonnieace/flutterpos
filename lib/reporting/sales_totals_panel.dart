@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/scaffold.dart';
+import '../ui/stats.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_repository.dart';
@@ -297,125 +299,180 @@ final class _SalesTotalsContents extends StatelessWidget {
   TenantReportingCurrency get _currency => sessionContext.currency;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('sales-totals'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      Text(
-        'Sales totals',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        'The server adds these up from the sales it holds right now, so a sale '
-        'still waiting on a device is not in them. They are not the reconciled '
-        'figures the daily summary reports.',
-      ),
-      if (!_currency.isKnown) ...[
-        const SizedBox(height: 8),
-        const Text(
-          key: ValueKey('sales-totals-currency-unknown'),
-          TenantReportingCurrency.unknownNotice,
-        ),
-      ],
-      const SizedBox(height: 16),
-      SalesTotalsChoosers(
-        period: period,
-        soldById: soldById,
-        selfUid: selfUid,
-        categoryId: categoryId,
-        sessionContext: sessionContext,
-        onChoosePeriod: onChoosePeriod,
-        onChooseMember: onChooseMember,
-        onChooseCategory: onChooseCategory,
-      ),
-      const SizedBox(height: 20),
-      if (totals case final answer?) ...[
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  key: const ValueKey('sales-totals-range'),
-                  _range(answer.query),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  key: const ValueKey('sales-totals-amount'),
-                  'Sales: ${_currency.format(answer.sales)} over '
-                  '${answer.transactions} '
-                  '${answer.transactions == 1 ? 'sale' : 'sales'}',
-                ),
-                // A category total is a different figure, not a smaller one of
-                // the same kind: the server sums the matching lines and leaves
-                // the rest of each sale out. Showing it under the same label as
-                // a whole-business total would be lying by omission.
-                if (answer.query.isCategoryFiltered) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    key: const ValueKey('sales-totals-category-basis'),
-                    'This adds up only the lines in this category, not the '
-                    'whole of each sale. '
-                    '${answer.scannedTransactions - answer.transactions} of '
-                    'the ${answer.scannedTransactions} '
-                    '${answer.scannedTransactions == 1 ? 'sale' : 'sales'} '
-                    'read held nothing in it.',
-                  ),
-                ],
-                // The whole statement about profit, or - for a session that may
-                // not be shown one - the cost-data fact on its own. Never both:
-                // the statement carries the same count inside it, and saying it
-                // twice reads as two different findings. The sentence is now
-                // word for word the daily summary's, because it is the same
-                // fact about the same sale lines over a different stretch.
-                if (showProfit) ...[
-                  const SizedBox(height: 8),
-                  TenantProfitStatement(
-                    report: answer.profitReport,
-                    currency: _currency,
-                    keyPrefix: 'sales-totals',
-                  ),
-                ] else if (!answer.hasCompleteCostData) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    key: const ValueKey('sales-totals-cost'),
-                    '${answer.incompleteCostLineCount} sale '
-                    '${answer.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
-                    'no cost recorded.',
-                  ),
-                ],
-                if (answer.tenderBreakdown case final breakdown?) ...[
-                  const SizedBox(height: 12),
-                  _TenderBreakdown(
-                    breakdown: breakdown,
-                    currency: _currency,
-                  ),
-                ],
-              ],
-            ),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('sales-totals'),
+      padding: const EdgeInsets.all(20),
+      children: [
+        // The screen's title is the `PageHeader`'s and is not drawn twice; see
+        // the same note on the daily summary. §7's order from here: optional
+        // `Callout`, filters, content.
+        if (!_currency.isKnown) ...[
+          const Callout(
+            key: ValueKey('sales-totals-currency-unknown'),
+            status: AppStatus.info,
+            message: TenantReportingCurrency.unknownNotice,
+          ),
+          SizedBox(height: tokens.spacing.s12),
+        ],
+        // Permanent, and true of every answer this route will ever give: what
+        // these figures are counted from, and which other screen's figures they
+        // are not.
+        const Disclosure(
+          key: ValueKey('sales-totals-basis-disclosure'),
+          summary: 'What these totals include',
+          child: Text(
+            key: ValueKey('sales-totals-basis'),
+            'The server adds these up from the sales it holds right now, so a '
+            'sale still waiting on a device is not in them. They are not the '
+            'reconciled figures the daily summary reports.',
           ),
         ),
-        const SizedBox(height: 12),
-        AppButton(
-          key: const ValueKey('sales-totals-refresh'),
-          label: 'Read again',
-          onPressed: onRetry,
+        SizedBox(height: tokens.spacing.s16),
+        SalesTotalsChoosers(
+          period: period,
+          soldById: soldById,
+          selfUid: selfUid,
+          categoryId: categoryId,
+          sessionContext: sessionContext,
+          onChoosePeriod: onChoosePeriod,
+          onChooseMember: onChooseMember,
+          onChooseCategory: onChooseCategory,
         ),
+        SizedBox(height: tokens.spacing.s20),
+        if (totals case final answer?) ...[
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(tokens.spacing.s16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    key: const ValueKey('sales-totals-range'),
+                    _range(answer.query),
+                    style: tokens.typography.titleMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
+                  ),
+                  SizedBox(height: tokens.spacing.s12),
+                  // **The one figure a stat tile exists for**, §2.2's own words
+                  // for `numeric.hero`, and the reason this screen rather than
+                  // the daily summary gets tiles: it answers one question with
+                  // one pair of figures, where a summary lists seven days and is
+                  // money in flow.
+                  StatRow(
+                    tiles: [
+                      StatTile(
+                        label: 'Sales',
+                        value: _currency.format(answer.sales),
+                        icon: Icons.payments_outlined,
+                        detail: _salesDetail(answer),
+                        valueKey: const ValueKey('sales-totals-amount'),
+                      ),
+                      // **`Transactions`, which is the daily summary's word for
+                      // the same count.** The sentence this replaces said
+                      // "over 37 sales", and two adjacent tiles both captioned
+                      // `Sales` - one money, one a count - is the first picture
+                      // of this screen finding a copy defect the sentence had
+                      // hidden. The two money surfaces now use one vocabulary,
+                      // which is the lesson three chunks in a row have paid for.
+                      StatTile(
+                        label: 'Transactions',
+                        value: '${answer.transactions}',
+                        icon: Icons.receipt_long_outlined,
+                        detail: 'counted in this total',
+                        valueKey: const ValueKey('sales-totals-transactions'),
+                      ),
+                    ],
+                  ),
+                  // A category total is a different figure, not a smaller one of
+                  // the same kind: the server sums the matching lines and leaves
+                  // the rest of each sale out. Showing it under the same label
+                  // as a whole-business total would be lying by omission - which
+                  // is a notice about *this* read, so it is a `Callout` and does
+                  // not fold.
+                  if (answer.query.isCategoryFiltered) ...[
+                    SizedBox(height: tokens.spacing.s12),
+                    Callout(
+                      key: const ValueKey('sales-totals-category-basis'),
+                      status: AppStatus.info,
+                      message:
+                          'This adds up only the lines in this category, not '
+                          'the whole of each sale. '
+                          '${answer.scannedTransactions - answer.transactions} '
+                          'of the ${answer.scannedTransactions} '
+                          '${answer.scannedTransactions == 1 ? 'sale' : 'sales'} '
+                          'read held nothing in it.',
+                    ),
+                  ],
+                  // The whole statement about profit, or - for a session that may
+                  // not be shown one - the cost-data fact on its own. Never both:
+                  // the statement carries the same count inside it, and saying it
+                  // twice reads as two different findings. The sentence is now
+                  // word for word the daily summary's, because it is the same
+                  // fact about the same sale lines over a different stretch.
+                  if (showProfit) ...[
+                    SizedBox(height: tokens.spacing.s8),
+                    TenantProfitStatement(
+                      report: answer.profitReport,
+                      currency: _currency,
+                      keyPrefix: 'sales-totals',
+                    ),
+                  ] else if (!answer.hasCompleteCostData) ...[
+                    SizedBox(height: tokens.spacing.s8),
+                    Text(
+                      key: const ValueKey('sales-totals-cost'),
+                      '${answer.incompleteCostLineCount} sale '
+                      '${answer.incompleteCostLineCount == 1 ? 'line has' : 'lines have'} '
+                      'no cost recorded.',
+                      style: tokens.typography.caption.copyWith(
+                        color: tokens.colors.text.tertiary,
+                      ),
+                    ),
+                  ],
+                  if (answer.tenderBreakdown case final breakdown?) ...[
+                    SizedBox(height: tokens.spacing.s12),
+                    _TenderBreakdown(
+                      breakdown: breakdown,
+                      currency: _currency,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          AppButton(
+            key: const ValueKey('sales-totals-refresh'),
+            label: 'Read again',
+            onPressed: onRetry,
+          ),
+        ],
+        if (failureMessage case final message?) ...[
+          Callout(
+            key: const ValueKey('sales-totals-failure'),
+            status: AppStatus.problem,
+            message: message,
+            action: AppButton(
+              key: const ValueKey('sales-totals-retry'),
+              label: 'Try again',
+              onPressed: onRetry,
+            ),
+          ),
+        ],
       ],
-      if (failureMessage case final message?) ...[
-        Text(key: const ValueKey('sales-totals-failure'), message),
-        const SizedBox(height: 12),
-        AppButton(
-          key: const ValueKey('sales-totals-retry'),
-          label: 'Try again',
-          onPressed: onRetry,
-        ),
-      ],
-    ],
-  );
+    );
+  }
+
+  /// What the headline figure is over, in the words the sentence used to carry.
+  ///
+  /// The count itself is the second tile; this line is what it is a count *of*,
+  /// which is the fact "over 37 sales" was really stating.
+  String _salesDetail(TenantSalesTotals answer) =>
+      answer.query.isCategoryFiltered
+      ? 'the lines in this category'
+      : 'taken over this period';
 
   /// Names the exact days, whose sales were counted, and which category, so a
   /// figure is never shown without the question it answers.
@@ -457,60 +514,98 @@ final class _TenderBreakdown extends StatelessWidget {
   final TenantReportingCurrency currency;
 
   @override
-  Widget build(BuildContext context) => Column(
-    key: const ValueKey('sales-totals-tender'),
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text('Paid by', style: Theme.of(context).textTheme.titleSmall),
-      const SizedBox(height: 4),
-      for (final entry in breakdown.recorded.entries)
-        if (!entry.value.isEmpty)
-          Text(
-            key: ValueKey('sales-totals-tender-${entry.key.wireValue}'),
-            _row(entry.key.label, entry.value),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      key: const ValueKey('sales-totals-tender'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Paid by',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
           ),
-      if (!breakdown.unrecorded.isEmpty)
-        Text(
-          key: const ValueKey('sales-totals-tender-unrecorded'),
-          _row('Not recorded', breakdown.unrecorded),
         ),
-      if (!breakdown.unrecognised.isEmpty)
-        Text(
-          key: const ValueKey('sales-totals-tender-other'),
-          _row('Unrecognised', breakdown.unrecognised),
-        ),
-      if (breakdown.hasRecordedTenders) ...[
-        const SizedBox(height: 8),
-        const Text(
-          key: ValueKey('sales-totals-tender-disclaimer'),
-          checkoutTenderDisclaimer,
-        ),
+        SizedBox(height: tokens.spacing.s4),
+        // **Five sentences became five figures in a column**, which is what §2.2
+        // makes mandatory "anywhere numbers stack vertically" and what
+        // `Cash: KES 2000.25 over 20 sales` could not do: the amounts started at
+        // a different column on every row, so nothing could be compared by eye.
+        // The count each amount is over is the line under its own label.
+        for (final entry in breakdown.recorded.entries)
+          if (!entry.value.isEmpty)
+            _line(
+              entry.key.label,
+              entry.value,
+              ValueKey('sales-totals-tender-${entry.key.wireValue}'),
+            ),
+        if (!breakdown.unrecorded.isEmpty)
+          _line(
+            'Not recorded',
+            breakdown.unrecorded,
+            const ValueKey('sales-totals-tender-unrecorded'),
+          ),
+        if (!breakdown.unrecognised.isEmpty)
+          _line(
+            'Unrecognised',
+            breakdown.unrecognised,
+            const ValueKey('sales-totals-tender-other'),
+          ),
+        // **A notice rather than a fold, and that is a decision.** Every other
+        // permanent explanation on this screen went behind a `Disclosure`; this
+        // one may not, because `checkout_tender.dart` requires that every
+        // surface showing a tender says the payment is unverified, and a
+        // sentence behind a chevron is one a person can finish reading the
+        // screen without. §2.1's `info` is "informational" in its own words.
+        if (breakdown.hasRecordedTenders) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Callout(
+            key: ValueKey('sales-totals-tender-disclaimer'),
+            status: AppStatus.info,
+            message: checkoutTenderDisclaimer,
+          ),
+        ],
+        // These two are helper paragraphs rather than notices: each explains
+        // what a row above it means and is true of that row every time it
+        // appears, which is §5.1's `Disclosure` and the rule the reconciliation
+        // sweep set. Deliberately a different sentence from the one a single
+        // sale carries: `checkoutTenderUnrecordedMessage` says "This sale",
+        // which is a claim about one record and would be wrong over a period.
+        if (!breakdown.unrecorded.isEmpty) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Disclosure(
+            key: ValueKey('sales-totals-tender-unrecorded-disclosure'),
+            summary: 'Why a sale names no method',
+            child: Text(
+              key: ValueKey('sales-totals-tender-unrecorded-note'),
+              'Sales recorded before payment methods were captured name none, '
+              'so they are listed separately rather than as unpaid.',
+            ),
+          ),
+        ],
+        if (!breakdown.unrecognised.isEmpty) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Disclosure(
+            key: ValueKey('sales-totals-tender-other-disclosure'),
+            summary: 'An unrecognised method',
+            child: Text(
+              key: ValueKey('sales-totals-tender-other-note'),
+              'Some sales name a payment method this app does not recognise. '
+              'Their takings are still inside the total above.',
+            ),
+          ),
+        ],
       ],
-      // Deliberately a different sentence from the one a single sale carries.
-      // `checkoutTenderUnrecordedMessage` says "This sale", which is a claim
-      // about one record and would be wrong over a period; the fact it states
-      // is the same one, so it is stated again rather than reused wrongly.
-      if (!breakdown.unrecorded.isEmpty) ...[
-        const SizedBox(height: 8),
-        const Text(
-          key: ValueKey('sales-totals-tender-unrecorded-note'),
-          'Sales recorded before payment methods were captured name none, so '
-          'they are listed separately rather than as unpaid.',
-        ),
-      ],
-      if (!breakdown.unrecognised.isEmpty) ...[
-        const SizedBox(height: 8),
-        const Text(
-          key: ValueKey('sales-totals-tender-other-note'),
-          'Some sales name a payment method this app does not recognise. Their '
-          'takings are still inside the total above.',
-        ),
-      ],
-    ],
-  );
+    );
+  }
 
-  String _row(String label, TenantSalesTenderTotals totals) =>
-      '$label: ${currency.format(totals.sales)} over '
-      '${totals.transactions} '
-      '${totals.transactions == 1 ? 'sale' : 'sales'}';
+  Widget _line(String label, TenantSalesTenderTotals totals, Key valueKey) =>
+      StatLine(
+        label: label,
+        detail:
+            '${totals.transactions} '
+            '${totals.transactions == 1 ? 'sale' : 'sales'}',
+        value: currency.format(totals.sales),
+        valueKey: valueKey,
+      );
 }

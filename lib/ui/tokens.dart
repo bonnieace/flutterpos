@@ -614,8 +614,14 @@ final class AppTypeRoles {
   /// string - which is why a surface that uppercases is a conformance item for
   /// the step that migrates it rather than for this one. There were two.
   /// `TenantRecordTable`'s headers closed on 2026-08-13, when `RecordList`
-  /// replaced it and drew them in [labelMedium]; `TenantStatCard`'s caption is
-  /// the one left, and it is step 8's.
+  /// replaced it and drew them in [labelMedium]; ~~`TenantStatCard`'s caption is
+  /// the one left, and it is step 8's.~~ **`TenantStatCard`'s caption closed on
+  /// 2026-08-14**, in step 8, when `StatTile` replaced it and drew the caption
+  /// in [labelMedium] in the case the caller wrote. **No surface in `lib/`
+  /// uppercases anything now**, and this role's only readers are the screenshot
+  /// harness's own section headings - which is the honest position for a role
+  /// §2.2 restricts to "field group labels only" in an app whose fields are
+  /// labelled by `AppTextField`.
   final TextStyle labelEyebrow;
 
   /// `caption` 12 / 16, 400. Timestamps, attribution.

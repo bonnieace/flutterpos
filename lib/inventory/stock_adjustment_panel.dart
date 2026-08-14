@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../ui/records.dart';
-
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
+import '../ui/stats.dart';
 import '../ui/tokens.dart';
 import '../ui/status.dart';
 import '../reporting/reconciliation_anomalies.dart';
@@ -464,21 +463,23 @@ final class _ProductStockContents extends StatelessWidget {
       // The headline figures. `product-stock-quantity` now keys the number
       // itself rather than a sentence containing it, because the caption is
       // the card's own label - the fact it states is unchanged.
-      TenantStatStrip(
-        cards: [
-          TenantStatCard(
+      StatRow(
+        tiles: [
+          StatTile(
             valueKey: const ValueKey('product-stock-quantity'),
             label: 'Recorded stock',
             value: '${product.quantity}',
             icon: Icons.inventory_2_outlined,
             detail: 'held by the server',
             // Negative is a real, permitted state rather than a fault, but it
-            // is the one a person needs to notice on sight.
-            emphasis: product.quantity < 0
-                ? Theme.of(context).colorScheme.error
-                : null,
+            // is the one a person needs to notice on sight. It used to be a red
+            // number, which is §9's "out of stock signalled by red text alone"
+            // in another place; §2.1 wants a container, a glyph and a word, and
+            // "difference found" is `problem`'s own meaning.
+            status: product.quantity < 0 ? AppStatus.problem : null,
+            statusLabel: product.quantity < 0 ? 'Below zero' : null,
           ),
-          TenantStatCard(
+          StatTile(
             key: const ValueKey('product-stock-stat-movements'),
             label: 'Ledger entries',
             value: '${page.items.length}',

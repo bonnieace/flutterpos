@@ -4,7 +4,15 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-14**, which took two chunks, both of `design.md` §11
+Last verified against the code on **2026-08-14**, which took three chunks: two of `design.md` §11
+step 4's sweep, and then **the first half of step 8**, which is `StatTile` / `StatRow` / `StatLine`
+in `lib/ui/stats.dart`, their two existing call sites, and the two money screens — the daily summary
+and the period totals — with the step-4 sweep of their prose travelling with them. It is where a
+figure stopped being a number inside a sentence, where the last uppercase caption in `lib/` went,
+where a stat row's column count became a measurement of its own figures rather than a constant from
+the days when every figure was two digits, and where the first picture of screen 26 found two
+adjacent tiles both captioned `Sales`. **It also found §7's "Title appears once" being broken by
+thirteen more panels than the two it fixed.** The first two chunks were of
 step 4's sweep. **The first** was over the four surfaces whose subject is reconciliation — the day
 page, the one-run page, the differences list, and screen 21's "Reconciliation found" exception report,
 which are the **two screen sections the sweep was told it owns by name**. It is where step 4's own
@@ -121,7 +129,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~82% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 5a and 6 are finished as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision - and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. `ConfirmDialog` left step 4 for step 7. Steps 5b and 7-12 remain. |
+| **Design system** | ~85% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 5a and 6 are finished as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. Step 8's first half landed the same day**: `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart`, on **four** screens (13, 21, 25, 26), with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted. **What is left of step 8 is the figures on 27, 28 and 29.** Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision; **13 panels that still draw the screen title a second time under the `PageHeader` that carries it**, which is §7's own named defect and is new to this list on 2026-08-14 - and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. `ConfirmDialog` left step 4 for step 7. Steps 5b and 7-12 remain. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -161,6 +169,41 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The 2026-08-14 step-8 chunk changed no board row at all — not a colour and not a word of one — and
+this sentence is here so that is stated rather than left silent.** It took **the first half of step
+8**: the money component in `lib/ui/stats.dart`, the two strips that were already in the app (13 and
+21), and the two money screens (25 and 26) with the step-4 sweep of their prose. "Read daily and
+period totals" and "See profit or margin" have both been 🟢 throughout and a shop can read exactly
+what it could read this morning. It moved the **Design system** track 82% to 85%. It changed **no
+rollout step**, and it touched no rule and no `functions/` file — `git diff` *and* `git status` over
+`functions/`, `firestore.rules` and `rules-tests/` print zero lines. It added **23 tests**, added
+**13** screenshots and **4** capture cases, removed none, and moved **22**.
+
+**Its largest finding is not in step 8 at all.** §7's page pattern says "Title appears once" and names
+the defect in its own words — "several screens render the title in the app bar *and* again as an `H1`
+directly beneath it". Step 5a moved every title into a `PageHeader` and **did not remove the copies
+underneath**: `grep -n headlineSmall lib` finds the shape in **15** panels, two of which this chunk
+fixed because they are its own screens. `web/21-product-stock` shows it plainly — *White bread loaf*
+in `display`, and *White bread loaf* again directly under it. Not all 13 remaining are duplicates
+(some name a section rather than the screen), so it is a per-screen judgement rather than a sweep of
+13 `Text`s, and it is queued below as its own small chunk.
+
+**Its own decision worth arguing with: a stat row measures its own figures.** `TenantStatStrip`'s
+`minimumWidth` was 168, which `design.md` does not contain and which was set when every figure in the
+app was two or three digits; at `numeric.hero`'s 28px/700, `KES 3810.25` is about 190 logical pixels
+before padding, so a phone would have put two money tiles side by side and ellipsised both.
+`StatRow.minimumTileWidth` lays the row's figures out with a `TextPainter` and takes the widest plus
+the tile's own padding. It is the "column shares derived from content" answer this file already calls
+honest for `RecordList`, reached first here because a stat row is four boxes rather than a
+twelve-screen contract — **and it is the one place in the component where a `TextPainter` runs on
+every build**, which is cheap at four tiles and would not be at a hundred.
+
+**Two more decisions, both about what a figure may say on its own.** A negative stock count used to be
+a red number, which is §9's "out of stock signalled by red text alone" in another place; it is a
+`problem` badge now. But the staff directory's `Pending` tile, whose old `emphasis` dimmed the figure,
+carries **nothing**: every pending member in the list below already wears an `attention` badge, and a
+second one on the *count* of them is the same signal twice.
 
 **The 2026-08-14 catalog-sweep chunk changed no board row at all — not a colour and not a word of one
 — and this sentence is here so that is stated rather than left silent.** It took the **second part of
@@ -813,14 +856,20 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1891** |
-| Functions | `npm --prefix functions test` | **409** ✅ measured twice on 2026-08-14, five times on 2026-08-13, three times on 2026-08-12 |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured twice on 2026-08-14 (~109 s) and five times on 2026-08-13 (~64–78 s) |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured twice on 2026-08-14 (~150 s) and five times on 2026-08-13 (~60 s) |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured twice on 2026-08-14 (~201 s) and five times on 2026-08-13 (~75 s) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1914** |
+| Functions | `npm --prefix functions test` | **409** ✅ measured three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
 
-**2494 tests across five suites. All five were measured again by the catalog-sweep chunk on
-2026-08-14 — seven consecutive chunks measuring all five — and the carry counter is at 0.** The three
+**2517 tests across five suites. All five were measured again by the step-8 chunk on 2026-08-14 —
+eight consecutive chunks measuring all five — and the carry counter is at 0.** The step-8 chunk took
+Flutter **1891 → 1914** (+23: **13** in the new `test/ui/stats_test.dart`, **5** in
+`daily_metrics_panel_test.dart` and **5** in `sales_totals_panel_test.dart`). Sixteen existing
+assertions changed rather than being added, every one a fact in its new rendering: nine reads of a
+figure read the figure rather than the sentence around it, five read `Callout.message` off the
+component, and the daily summary's singular test became a three-figure test **because the grammar it
+guarded no longer exists** — each count sits under its own label now. The three
 emulator suites cost about **460 s** between them on the reconciliation chunk's run, noticeably slower
 than the ~200 s of 2026-08-13; nothing was retried and every suite passed first time in either run, so
 the difference is host load rather than a suite.
@@ -859,8 +908,15 @@ procedure three sections away is the file's own defect**, and the trap has been 
 the procedure instead of at a missing JDK.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **154 captures** writing **208**
-images, and it asserts nothing, which is why it is not counted here. **The catalog-sweep chunk moved
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **166 captures** writing **221**
+images, and it asserts nothing, which is why it is not counted here. **The step-8 chunk added 4
+capture cases and 13 images**: the `97-stat-*` matrix at **all three bands**, which is the second
+matrix after `96-record-details` to ask for `everyBandViewports` and the first to do it because of
+the 2026-08-14 lesson rather than in spite of it — a stat row's whole behaviour is how many tiles it
+puts across a width, so a picture of it at one width is a picture of none of it. The thirteenth image
+is `web-full/26-sales-totals`, which is **new rather than changed** because that page crossed the fold
+at 1440 for the first time: the tender split spends a line and a caption per method where it spent one
+sentence. **It was 154 and 208 before that.** **The catalog-sweep chunk moved
 both figures, and its two additions are a fixture finding of the same family as the last one's.**
 Nothing had ever put a **bulk report** on screen: `FakeCallable` answers with an empty map, and
 `updateProducts`' decoder reconciles the answer against the page it sent, so an empty map produces a
@@ -3145,6 +3201,87 @@ trap: a `Disclosure` summary inside a dialog has about 200 logical pixels where 
 and a 27-character summary that is inside `Disclosure.summaryCharacterBudget` truncated the first time
 anything photographed that dialog on a phone.
 
+### A figure is a component, and a row of them measures what it holds
+
+`design.md` §11 step 8, first half, 2026-08-14. `lib/ui/stats.dart` holds `StatTile`, `StatRow` and
+`StatLine`; `TenantStatCard` and `TenantStatStrip` are deleted, and `lib/ui/records.dart` is down to
+`TenantInitialsAvatar`, which is the till's and therefore step 7's.
+
+**Only the first of the three is in §5.1's inventory, and that is stated rather than smuggled.**
+`StatTile` is §5.1's own row — it replaces the "recorded stock" / "ledger entries" tiles by name.
+`StatRow` is the name §7 uses in passing for the queue counts and has no row of its own. **`StatLine`
+is in neither section**: one label and one figure on a line, for money *in flow*, added because two
+reporting surfaces render exactly that shape and §2.2's `numeric.body` row is the specification for
+it. The precedent for admitting a widget the document does not name is `RecordItem.details`, which
+step 6 added the same way and labelled the same way.
+
+**What each one is built out of, all from named §2 rows**, because §5.2 covers five components and
+none of these is among them — the same position `Callout` was left in by step 4, and the same
+resolution: `radius.md` and `space.16` from §2.3; `surface.raised` with a `border.subtle` hairline
+from §2.1; `label.md` / `text.secondary` for the caption; `numeric.hero` / `text.primary` for the
+figure; `caption` / `text.tertiary` for the detail line; `space.12` between tiles and between a label
+and its figure. The glyph is 18, borrowed from §5.2's only named leading-icon size for the third time
+after `Callout` and `Disclosure` — which is now three components borrowing one number, and is the
+strongest form of the §5.2 gap this file already carries as a question for the product owner.
+
+**Six decisions, in the order they will be argued with.**
+
+1. **A stat tile is for "the one figure a stat tile exists for", and §2.2's own words are the test.**
+   `numeric.hero` has exactly one use in the document and `numeric.body` is "money and counts in
+   flow". Screen 26 answers one question with one pair of figures and gets tiles; screen 25 lists
+   seven days and gets `StatLine`s. Three hero tiles per day is a phone summary two and a half times
+   taller than the sentences it replaced, which is §5.2's catalog-form complaint in the other
+   direction.
+2. **The minimum tile width is measured rather than declared.** `StatRow.minimumTileWidth` lays every
+   figure in the row out with a `TextPainter` at `numeric.hero` and takes the widest plus the tile's
+   own horizontal padding, composed from the token rather than restated. No constant, no caller knob,
+   nothing invented, and no figure ellipsised. The 168 it replaces was a number `design.md` does not
+   contain, and at 28px/700 `KES 3810.25` is about 190 pixels of glyphs — so on a phone that strip
+   would have truncated both money tiles. It costs a `TextPainter` per build, which is nothing at four
+   tiles and would not be at a hundred; a row that large is not a stat row.
+3. **The caption is sentence case, which closes the last uppercase surface in `lib/`.** §2.2 permits
+   uppercase on `label.eyebrow` only and permits `label.eyebrow` on "field group labels only". Both
+   halves point the same way. `AppTypeRoles.labelEyebrow`'s note, which named this component as the
+   one left, is retracted at the text; the role's only readers now are the harness's section headings.
+4. **A figure with a standing wears a badge; a figure without one wears nothing, and both cases are in
+   the app.** `emphasis` was a raw `Color` a caller passed, which is a hardcoded value at the call site
+   *and* colour-alone signalling — §9 lists it as a known failure in another place. Screen 21's
+   negative stock is `problem` / `Below zero`. **The staff directory's `Pending` tile carries no status
+   at all**, because every pending member in the list under it already wears one and a badge on the
+   *count* of them is the same signal twice. A count is a fact; the standing belongs to the records.
+5. **A day's standing is §2.1's own vocabulary and it used to be a sentence.** "Not reconciled yet."
+   is `attention`'s stated meaning word for word, and a reconciled day is `ok`'s. Both are badges on
+   the day's header row, and the list genuinely differs by row — today is `attention`, the days behind
+   it are `ok` — so this passes the every-row test rather than failing it.
+6. **A run of tiles is a `Row` inside an `IntrinsicHeight`, not a `Wrap`.** A `Wrap` gives each child
+   its own height, so a tile carrying a badge stands taller than the one beside it, which reads as an
+   unfinished layout rather than as a difference that means anything. Found by the first picture.
+
+**The profit statement is shared by both money screens and changed once.** "Profit: KES 430.25, a
+margin of 34.4%." is two `StatLine`s now, and **the note under them did not fold**: the rule that
+widget exists to keep is that no profit figure is rendered without, in the same block, what is known
+about the cost data behind it, and a `Disclosure` would make the qualification optional to read.
+
+**What the sweep half decided on these two screens.** The page-invariant explanations fold — where
+these figures come from, what these totals include, why a sale names no method, an unrecognised
+method — and the notices do not: an unpublished currency and a failed read are `Callout`s at `info`
+and `problem`. **The tender disclaimer is the exception that proves the rule**: it is permanent and
+page-invariant, which would make it a `Disclosure`, and it stays a visible `Callout` because
+`checkout_tender.dart` requires *every* surface showing a tender to carry it and a fold is a sentence
+a person can finish the screen without reading.
+
+**No behaviour changed.** No repository call, no callable payload, no routing condition, no state
+shape. The one thing that moved beyond presentation is that screen 25's figures no longer need
+singular/plural switching, because each count sits under its own label — which deleted a defect class
+rather than guarding it.
+
+**`design.md` §2.2 was amended, on the model of step 6's amendment to §5.2.** That section names this
+app's daily summary as its example of "proportional figures in a column of currency, which is why the
+amounts look ragged". It is false of that screen and of the period totals now, and the retraction says
+what was actually wrong: not the numerals but that the figures were *inside sentences*, so nothing
+could line up whatever the font feature did. **Screens 27, 28 and 29 still carry the original
+complaint** and the amendment says so.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -4467,13 +4604,14 @@ rather than only here.** `fakes.dart` derives its business dates from `DateTime.
 re-running on a different day moves about **39 of the images** with nothing behind them;
 tracking the output would put those 39 into every future diff. The harness is tracked, the
 output is not, and a baseline is regenerated the same day it is compared against. The set is
-**200 images from 150 captures** since the 2026-08-14 reconciliation sweep added
+**221 images from 166 captures** since step 8's first half added the `97-stat-*` matrix at all three
+bands, plus `web-full/26-sales-totals`, which is new because that page crossed the 1440 fold for the
+first time. It was 208 from 154 after the catalog chunk added
+`20b`/`20c`, and 200 from 150 after the reconciliation sweep added
 `21b-product-stock-differences` at both screenshot viewports — the first picture of screen 21's
 exception report, which every earlier capture of that route had missed because it opens a product with
 no difference recorded against it. It was 196 from 148 after the shift chunk, and 195 from 148 after the
-staff-directory chunk added `96-record-details` at three bands and `13b-staff-directory-editing` at two;
-**the catalog chunk added none**, being the first
-sweep chunk whose screens had no unphotographed state.
+staff-directory chunk added `96-record-details` at three bands and `13b-staff-directory-editing` at two.
 ~~**The 39 was
 re-measured on 2026-08-12 and it is still 39**~~ — **it is 32 as of 2026-08-14**, and it was 42 on
 2026-08-13. The figure moves with which date-bearing screens happen to cross a fold at each viewport, so
@@ -4487,7 +4625,9 @@ chunk's set was generated twice and the two were identical across all 117 files 
 the day-to-day delta is the business date either way. **The two sweep chunks later on 2026-08-13
 needed none of it**: each shared a day with the baseline before it, so drift was **zero** both times
 and one regeneration settled each diff. The catalog chunk's was **0 added, 9 changed, 186
-identical**, and all nine are its own three captures.
+identical**, and all nine are its own three captures. **Step 8's first half shared a day with its
+baseline too**: 13 added, 0 removed, 22 changed, 186 identical, and every one of the 22 is a screen
+it edited — 25, 26, and the two strips at 13 and 21.
 
 **The field chunk is the proof the rule works, and step 5a is the proof it keeps working.** The
 field chunk's baseline was generated a few hours earlier the same day, so the drift was **zero** and
@@ -4531,12 +4671,13 @@ start, check "The emulator prelude is not optional" before writing anything down
 
 ---
 
-**The queued chunk is step 8, taken together with what is left of the step-4 sweep on its own five
-screens** — and that pairing is a decision the catalog chunk made and recorded rather than one this
-file inherited. Step 4 built `StatusBadge`, `Callout` and `Disclosure` on 2026-08-12 and put them on
-**four** screens; its sweep took two chunks on 2026-08-14, the four reconciliation surfaces (both of
-the screen sections it owned by name) and then the four catalog surfaces. Steps 1, 2, 3, 5a and 6 are
-finished — **step 6 in both halves, including its twelve-screen sweep, as of 2026-08-13**.
+**The queued chunk is step 8's second half: the figures on 27, 28 and 29.** Step 8's first half landed
+2026-08-14 — the component, its two existing call sites, and the two money screens with the step-4
+sweep of their prose. Those three screens were swept for step 4 earlier the same day, so what they
+want now is only what step 8 is about: figures at §2.2's `numeric` roles rather than inside sentences,
+and a `StatTile` wherever a surface has the one figure it exists for. Steps 1, 2, 3, 5a and 6 are
+finished — **step 6 in both halves, including its twelve-screen sweep, as of 2026-08-13** — and step
+4's sweep is a class of thing rather than a screen list.
 
 ```text
 step 6's twelve, all done:                        step 4's sweep so far:
@@ -4548,25 +4689,55 @@ step 6's twelve, all done:                        step 4's sweep so far:
 33 shift sales       34 returns on a sale         18 manage catalog         - done 2026-08-14
                                                   19 correct a product      - done 2026-08-14
                                                   20 bulk changes/import    - done 2026-08-14
+                                                  25 daily summary          - done 2026-08-14
+                                                  26 sales totals           - done 2026-08-14
+
+step 8's five:
+25 daily summary   - done 2026-08-14 (StatLine, and the day's standing)
+26 sales totals    - done 2026-08-14 (StatTile, StatLine, the tender split)
+27 reconciliation status  \
+28 unresolved differences  > queued: their figures, prose already swept
+29 one reconciliation run /
 ```
+
+**What to expect on those three, read off the screens rather than predicted.** They are the surfaces
+that state quantities and money as *evidence* — an expected total against a counted one, a variance,
+a run's counts of what it read and what it wrote — so the `StatLine` right-edge alignment is what
+most of the work will be, and screen 29 is the one candidate for a `StatTile` row because a run has a
+small set of headline counts. **Check the record models first**: 27 and 29 mount a run card that three
+surfaces share, and a figure changed in one of them changes all three, which is the trap the
+reconciliation sweep's own vocabulary module exists for.
 
 **What is left of the sweep is a class of thing rather than a screen list, and both named sections
 are closed**: every remaining permanent notice paragraph, every remaining multi-line explanation, and
 every remaining status rendered as a word or a coloured `Text`. **Where to look, counted rather than
 characterised**: `grep -c textTheme` over the migrated tree found prose or a styled caption in **37
-files**, of which the eight now done were the densest. What is left at the top is
-`receipt_lookup_panel.dart` (3), `sales_totals_panel.dart` (3), `daily_metrics_panel.dart` (3) and
-`reconciliation_anomalies_panel.dart` (3, already swept — the remaining reads are a `titleSmall`
-identity and two captions), and then a long tail of one- and two-`textTheme` files: the platform tabs,
-the staff gateways, `shift_panel.dart`, `sale_history_panel.dart`, `return_history_panel.dart`,
-`audit_log_panel.dart` and the stock feeds.
+files**, of which the ten now done were the densest. `sales_totals_panel.dart` and
+`daily_metrics_panel.dart` came off that list on 2026-08-14 with step 8's first half. What is left at
+the top is `receipt_lookup_panel.dart` (3) and `reconciliation_anomalies_panel.dart` (3, already
+swept — the remaining reads are a `titleSmall` identity and two captions), and then a long tail of
+one- and two-`textTheme` files: the platform tabs, the staff gateways, `shift_panel.dart`,
+`sale_history_panel.dart`, `return_history_panel.dart`, `audit_log_panel.dart` and the stock feeds.
 
-**The catalog chunk said which side of the step-8 boundary the reporting screens fall, and this is it.**
-`design.md` §11 step 8 is 25, 26, 27, 28 and 29; three of those are already swept, and 25 and 26 plus
-the two sales-totals surfaces are the densest prose left. **Take them with step 8**, in one chunk per
-screen family, rather than sweeping their prose now and restyling their figures a week later. What is
-genuinely independent of step 8 is the long tail above, and it is small enough to be an ending rather
-than a chunk.
+**The catalog chunk said which side of the step-8 boundary the reporting screens fall, and step 8's
+first half honoured it**: 25 and 26 were swept and restyled in one chunk rather than in two a week
+apart. What is genuinely independent of step 8 is the long tail above, and it is small enough to be an
+ending rather than a chunk.
+
+**A defect the step-8 chunk found and only half-fixed, which is a chunk of its own: §7's "Title
+appears once".** Step 5a moved every screen title into a `PageHeader` and left the in-body
+`headlineSmall` copies where they were, so a route draws its own name twice —
+`web/21-product-stock` reads *White bread loaf* in `display` and *White bread loaf* again directly
+under it. `grep -n headlineSmall lib` found **15** panels; step 8 removed the two on its own screens
+and **13 remain**: `audit_log_panel.dart`, `sale_history_panel.dart` (two), `receipt_lookup_panel.dart`,
+`return_history_panel.dart`, `stock_product_ledger_panel.dart`, `shift_history_panel.dart`,
+`reconciliation_run_panel.dart`, `stock_movement_feed_panel.dart`,
+`reconciliation_anomalies_panel.dart`, `reconciliation_status_panel.dart`,
+`stock_adjustment_panel.dart`, `stock_adjustment_feed_panel.dart` and
+`shift_amendment_feed_panel.dart`. **Not every one is a duplicate** — some name a section rather than
+the screen, and 21's arguably wants to be a `PageHeader.subtitle`, which is the slot step 5a built and
+never populated — so it is a per-screen judgement and the honest test is whether the string equals the
+`AppScaffold` title. **Small, mechanical, and it deletes a defect `design.md` names in its own words.**
 
 **A rule this chunk established that the rest of the sweep should follow.** §5.1 splits the two
 components by what the prose is *for*: a permanent **helper** paragraph — always the same, true of every
@@ -4622,7 +4793,10 @@ reconciling three screens that worded one document three ways; and the shift fam
 the standing question this file flagged — that took one lookup — but **three page-invariant
 paragraphs that had been repeated per record**, which nothing in the estimate mentioned. And the
 reconciliation sweep's cost was neither the components nor the prose but **one document worded two
-ways**, plus a defect a picture found in a step that had already shipped. Read what
+ways**, plus a defect a picture found in a step that had already shipped. **And step 8's first half
+cost neither the component nor the sweep but the arithmetic under the component** — a fixed minimum
+tile width that was fine for two-digit counts and would have truncated every money figure — plus a
+copy defect that only existed once the sentence was taken apart. Read what
 the screens *say* before assuming the work is shape rather than words.
 
 **Three classes of thing to expect, all drawn from what actually happened.** First, **a layout that
@@ -4646,7 +4820,15 @@ tests say — check which seeded record a capture case actually opens.
 phone, and a truncated summary shipped and survived two days. `claude.md` hard rule 5 says every state
 appears in the harness; it does not say at which width, and the states most likely to break are the ones
 a narrow screen creates. When a component gains a narrow-band behaviour, its matrix wants
-`everyBandViewports` the way `96-record-details` has it.
+`everyBandViewports` the way `96-record-details` has it. **Step 8 took that instruction the same day**:
+`97-stat-*` is at all three bands from its first commit, and the four pictures at 411 are what showed
+that a fixed minimum tile width would truncate money.
+
+**A fifth class, from step 8: a figure that only reads wrongly once it is beside its neighbour.**
+Screen 26's `Sales: KES 4820.75 over 37 sales` was unambiguous as a sentence and became two adjacent
+tiles both captioned `Sales`, one money and one a count. Nothing in a test could have caught it and
+nothing in the sentence predicted it; **the first render of the new form is the check**, which is an
+argument for taking the picture before writing the tests rather than after.
 
 **`inNarrowForm` has no consumer, the sweep is over, and that is now a finding rather than a
 prediction.** It was predicted for the catalog, which had five columns rather than six; the stock
@@ -4701,11 +4883,11 @@ and both chunks declined it on the same ground. **The sweep is over and it is st
 the next session to meet one of those rows must say what it is doing rather than let a `Pagination`
 arrive with something else.
 
-**Step 8 is the chunk**, and it is described below; it now carries the step-4 sweep of its own five
-screens with it. **The four carried observations about `RecordList`'s column arithmetic are the other
-candidate**, and they are now a chunk rather than a list: they need all twelve screens in front of
-them, and all twelve exist. **The four-notice model chunk is the third**, and it is the smallest of
-the three.
+**Step 8's second half is the chunk** — the figures on 27, 28 and 29, described above. **The four
+carried observations about `RecordList`'s column arithmetic are the other candidate**, and they are
+now a chunk rather than a list: they need all twelve screens in front of them, and all twelve exist.
+**The four-notice model chunk is the third**, and it is the smallest of the four. **The duplicate
+screen titles on 13 panels are the fourth**, new on 2026-08-14 and mechanical.
 
 **The batch is a deliberate relaxation of `claude.md` hard rule 4, granted by the product owner on
 2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** All four pieces of step 6's own half were taken
@@ -4713,13 +4895,17 @@ on their own, each because it fitted one session: step 4 first because `StatusBa
 used by 6 and 8, then 5a because 6 and 8 both sit inside the page frame, then 6a because the
 breakpoint rewiring is what §4.2 and §4.3 both stand on, then 6b because §4.3 is a model rather than
 a restyle. The exception is a permission to batch, not an instruction to, and splitting on the
-boundaries it names has cost the batch nothing four times running — **eight**, counting the sweep's
-four chunks, which are step 6's own sweep rather than further boundaries. The rule stands everywhere
+boundaries it names has cost the batch nothing four times running — **nine**, counting the sweep's
+four chunks and step 8's first half, which are one step's own sweep rather than further boundaries.
+The rule stands everywhere
 else: step 7, step 9, step 10 and steps 11–12 are one number each, and **5b (the navigation model) is
 not in this exception** — it is a behaviour change and stays queued. **The exception has now bought
 what it was granted for**, since 4, 5a and 6 are all finished; what is left of it is step 8, and the
 catalog chunk of 2026-08-14 spent the last of it deliberately: **step 8 takes the step-4 sweep of its
-own five screens with it**, rather than those screens being swept now and restyled later.
+own five screens with it**, rather than those screens being swept now and restyled later. **Its first
+half honoured that on 25 and 26 the same day**, and its second half inherits nothing to sweep — 27, 28
+and 29 were swept before it — so the exception is spent and step 8's remainder is one number on its
+own.
 
 **The product owner chose the composition layer over the web callable-auth defect on 2026-08-12,
 and the step-4, step-5a, step-6a, step-6b and both sweep sessions all checked that choice rather than
@@ -4766,7 +4952,13 @@ routes and the landing route was not one of them.
 
 **Explicitly excluded from it:** **the four notice-status model changes**,
 `reconciliation-request-notice`, `reconciliation-amend-notice`, `catalog-management-notice` and
-`bulk-catalog-notice`, which are one small chunk of their own and are described above;
+`bulk-catalog-notice`, which are one small chunk of their own and are described above — **step 8's
+first half met a fifth of the same shape and left it too**: `sales_totals_panel.dart`'s
+`failureMessage` is a `String?` whose status the panel infers from which branch built it, and it
+became a `problem` `Callout` only because *every* value of it is a failure, which is not true of the
+other four; **the 13 duplicate screen titles**, which are the small chunk described above and are §7's
+rather than step 8's; **`inNarrowForm` and `StatRow`'s own unused capacity** — neither is a knob any
+screen has asked for and deleting either is a specification change;
 **`RecordList` for screen 28's difference cards and screen 20's report cards**, because neither is one
 of the twelve screens step 6 names and migrating either would be step 6 work outside step 6's list;
 **the two copy defects the bulk report's first picture found** — the before/after arrow that renders
@@ -4860,19 +5052,21 @@ preference order:
   which the traps forbid. Either stop the held run deliberately first, or run Android on a machine
   that is not also serving the emulators.
 
-**The device-run debt is therefore now nineteen chunks deep**, and the last fourteen are the ones that
+**The device-run debt is therefore now twenty chunks deep**, and the last fifteen are the ones that
 most need a device — between them they changed how nearly every screen in the app looks, how every
 button feels, how every screen is entered and left, how every box a person types into is drawn, how
 every explanation folds away, where the title of every screen sits, how wide every page
-is, and now **what a list of records even is**, on **all twelve** of the screens `design.md` names, and
-**where every remaining explanation and status on the reconciliation surfaces sits**.
+is, **what a list of records even is**, on **all twelve** of the screens `design.md` names,
+**where every remaining explanation and status on the reconciliation surfaces sits**, and now **what
+a figure looks like** on the two screens a person reads money from.
 Nobody has looked at the
 sign-in repair, the invitation repair, the category repair, commit
 `1b2b13b`, **the ripple kill**, **`AppButton`**, **`AppPageRoute`**, **`AppTextField`**,
 **`Disclosure`**, **`AppScaffold`**, **`AppLayout`**, **`RecordList`**, **the staff directory on
 it**, **either catalog screen on it**, **any of the four stock screens on it**, **any of the four
-shift screens on it**, **any of the four reconciliation surfaces**, or **any of the four catalog
-surfaces**. Between them that is 356 tests, 208 screenshots, and no eyes.
+shift screens on it**, **any of the four reconciliation surfaces**, **any of the four catalog
+surfaces**, or **`StatTile` on any of its four**. Between them that is 379 tests, 221 screenshots, and
+no eyes.
 
 **One item on this list stopped being purely a matter of judgement on 2026-08-14, and it is the
 strongest argument yet for looking rather than asserting.** A `Disclosure` had shipped truncated on a
@@ -4883,6 +5077,25 @@ knows about.** **The catalog chunk made the point twice more the same day**: the
 recurred inside a *dialog*, where the budget is smaller again; and `mobile/19-correct-a-product` turned
 out never to have photographed the dialog it is named after, so a picture that existed was evidence
 about nothing.
+
+**Step 8's own item for a shopkeeper is the one on this list that a person will notice within a
+second of opening the app, and it needs a real screen rather than a picture.** `numeric.hero` is
+**28px at weight 700**, and a period total now reads `KES 6420.50` at that size on a card that fills
+a phone's width — where this morning the same figure sat inside a sentence at body size. Whether that
+reads as *the answer this screen exists for* or as shouting is exactly the judgement §2.2 wrote the
+role for and no screenshot settles, because the question is about proportion on a real screen held at
+arm's length. **Open screen 26 on a phone, and screen 25 under it**, where the same money is
+deliberately at `numeric.body` in a column of seven days. If the hero reads as too loud, the honest
+fixes are named rather than invented — a smaller role for money specifically, or a tile that is not
+full-width on a phone — and both are `design.md` amendments before they are code.
+
+**Its second item is a badge on every past day.** Screen 25 now wears **`Reconciled`** in green on
+every day the server has regenerated and **`Not reconciled yet`** in amber on today. That is §2.1's
+own vocabulary and it passes the every-row test in the seed data — but a shop that reads this screen
+every morning sees six greens and one amber, every morning, and a badge that is always the same on
+six rows out of seven is close to the every-row badge the rule exists to prevent. **Count the greens
+against real data.** If it reads as decoration, the honest fix is that only the exception wears one,
+and that is a `design.md` question about what a standing is for rather than a code change.
 
 **The catalog chunk's own item for a shopkeeper is a wording judgement, and it is cheap to check
 because the pictures are now there.** `web-full/20b-bulk-report-previewed` and
@@ -5109,14 +5322,17 @@ finished.
   sizes, the `text.secondary` prose, the tolerance the reveal closes against, the two status
   mappings that are decisions rather than lookups, and `ConfirmDialog` leaving for step 7.
 - **The step-4 sweep: every remaining status, notice and permanent explanation** — the second half
-  of step 4, the way the call-site sweep was the second half of `AppButton`. **Two chunks on
-  2026-08-14**: the four reconciliation surfaces, which are both of the screen sections it owned by
+  of step 4, the way the call-site sweep was the second half of `AppButton`. **Three chunks on
+  2026-08-14**, the third being the two money screens, which travelled with step 8's first half
+  exactly as the second chunk said they should. The first two: the four reconciliation surfaces, which are both of the screen sections it owned by
   name, and then the four catalog surfaces. The first established the `Disclosure` / `Callout` rule the
   remainder follows, added `lib/reporting/reconciliation_labels.dart`, and corrected step 4's own
   truncated summary; the second added a page-standing `Callout`, the report-row badges whose lookup
   reads the report's mode, `Disclosure.dialogSummaryCharacterBudget`, and two harness captures of a
-  state nothing had ever photographed. **What is left is the reporting prose, and it is queued with
-  step 8 rather than before it.** **Four items in it are not restyles**:
+  state nothing had ever photographed; the third folded the two money screens' prose, put their
+  currency notice and their failed read into `Callout`s, and made a day's reconciliation state a
+  badge. **What is left is the long tail of one- and two-`textTheme` files**, which is an ending
+  rather than a chunk. **Four items in it are not restyles**:
   `reconciliation-request-notice`, `reconciliation-amend-notice`, `catalog-management-notice` and
   `bulk-catalog-notice` all need a status the model does not carry, and they are one small chunk
   together rather than four.
@@ -5167,11 +5383,22 @@ finished.
   three page-invariant paragraphs being repeated per record, and one of the three was settled by a
   screenshot rather than by argument. It cost five test files, +8 tests, 11 moved images, 1 added,
   and no board row.
-- **The design system, step 8: money surfaces** — now the queued chunk, and it **carries the step-4
-  sweep of its own five screens with it**, decided 2026-08-14 rather than left open. `StatTile`,
-  tabular figures and tables across the five reporting screens, which are `RecordList`s with figures
-  in them and therefore genuinely downstream of the `RecordList` sweep. **It wants §3's density
-  answered**, and §3's density is now two constants away from being answerable.
+- **~~The design system, step 8, first half: the money component and the two money screens~~** —
+  **done 2026-08-14.** `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart`, on **four**
+  screens — 13 and 21, which already had a stat strip, and 25 and 26, which are step 8's own and took
+  the step-4 sweep of their prose with them. It moved no board row and no rollout step, moved the
+  **Design system** track 82% to 85%, added 23 tests and 13 screenshots, moved 22, and deleted
+  `TenantStatCard` and `TenantStatStrip`. Its own standing decision above records what it decided,
+  including the one most likely to be argued with: **a stat row measures its own figures** rather than
+  reading a minimum width somebody chose. **Tables, step 8's third word, needed nothing** — they are
+  `RecordList`'s and step 6 shipped them.
+- **The design system, step 8, second half: the figures on 27, 28 and 29** — the queued chunk. Their
+  prose was swept for step 4 earlier the same day, so this is only what step 8 is about. **It wants
+  §3's density answered**, and §3's density is still two constants away from being answerable.
+- **§7's "Title appears once", broken on 13 panels** — new 2026-08-14, found by step 8, which fixed
+  the two on its own screens. Step 5a moved every title into a `PageHeader` and left the in-body
+  `headlineSmall` copies behind it. Mechanical, per-screen (some of those strings name a section
+  rather than the screen), and it deletes a defect `design.md` names in its own words.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the

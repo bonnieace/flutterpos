@@ -17,7 +17,14 @@ void main() {
       currency: 'KES',
     );
 
-    expect(_text(tester, 'day-profit'), 'Profit: KES 430.25, a margin of 34.4%.');
+    // **Two figures, not one sentence, as of `design.md` §11 step 8.** The
+    // facts are the same and the margin is still only shown where there is one;
+    // what changed is that each is a `numeric.body` figure on its own line
+    // rather than two numbers inside a sentence.
+    expect(_text(tester, 'day-profit'), 'KES 430.25');
+    expect(_text(tester, 'day-margin'), '34.4%');
+    expect(find.text('Profit'), findsOne);
+    expect(find.text('Margin'), findsOne);
     // The positive form of the requirement. A reader cannot tell a complete
     // figure from an overstated one by looking at it, so it is stated.
     expect(
@@ -37,7 +44,8 @@ void main() {
       currency: 'KES',
     );
 
-    expect(_text(tester, 'day-profit'), 'Profit: KES -25.00, a margin of -25.0%.');
+    expect(_text(tester, 'day-profit'), 'KES -25.00');
+    expect(_text(tester, 'day-margin'), '-25.0%');
   });
 
   testWidgets('a period that took nothing carries no margin', (tester) async {
@@ -47,7 +55,11 @@ void main() {
       currency: 'KES',
     );
 
-    expect(_text(tester, 'day-profit'), 'Profit: KES 0.00.');
+    // The figure survives and the margin line is absent entirely, rather than
+    // being a percentage of nothing.
+    expect(_text(tester, 'day-profit'), 'KES 0.00');
+    expect(find.byKey(const ValueKey('day-margin')), findsNothing);
+    expect(find.text('Margin'), findsNothing);
   });
 
   testWidgets('an unpublished currency loses the label, not the figure', (
@@ -62,7 +74,8 @@ void main() {
       ),
     );
 
-    expect(_text(tester, 'day-profit'), 'Profit: 430.25, a margin of 34.4%.');
+    expect(_text(tester, 'day-profit'), '430.25');
+    expect(_text(tester, 'day-margin'), '34.4%');
   });
 
   testWidgets('uncosted lines withhold the figure and name the count', (
