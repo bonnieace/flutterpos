@@ -103,7 +103,61 @@ String signInInputDefectMessage(SignInInputDefect defect) => switch (defect) {
   SignInInputDefect.missingPassword => 'Enter the password for this account.',
 };
 
-/// Maps any sign-in failure to a sentence somebody wrote.
+/// What kind of answer a sign-in failure is.
+///
+/// **It exists because two of these are not the same thing and had been drawn
+/// identically.** Until §11 step 9 the screen held a `String?` and painted every
+/// one of them red, so *this device has no connection* and *that password is
+/// wrong* were one sentence in one colour — the same half-model the seven
+/// back-office surfaces held before `AppNotice`, on the one screen the notice
+/// sweep of 2026-08-15 did not reach, because sign-in names its state
+/// `login-error` rather than a notice.
+///
+/// **The kind is decided here rather than at the screen** for the reason
+/// [signInSafeError] gives about the message: the only thing that crosses this
+/// boundary is a code, so the only place that can read one is this file. What
+/// the screen does with the kind — which §2.1 status it becomes — is the
+/// screen's, and stays there.
+enum SignInFailureKind {
+  /// The attempt was answered and nobody was signed in.
+  ///
+  /// A wrong credential, a disabled account, a rate limit, a method that is not
+  /// enabled: all different sentences, all the same standing. It is also where
+  /// an unrecognised code lands, because a failure this app cannot name is
+  /// still a failure to sign in rather than an open question.
+  refused,
+
+  /// The identity provider was never reached, so nothing was refused.
+  ///
+  /// Nothing is wrong with the credential and nothing is wrong with the
+  /// account; the device could not get there. §2.1 gives that `info` and not
+  /// `problem`, and it is the whole reason this enum has two values.
+  unreachable,
+}
+
+/// A sign-in failure: what kind of answer it was, and the sentence for it.
+final class SignInFailure {
+  const SignInFailure({required this.kind, required this.message});
+
+  final SignInFailureKind kind;
+
+  /// The sentence a person reads. See [signInSafeError].
+  final String message;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SignInFailure &&
+      other.kind == kind &&
+      other.message == message;
+
+  @override
+  int get hashCode => Object.hash(kind, message);
+
+  @override
+  String toString() => 'SignInFailure(${kind.name}: $message)';
+}
+
+/// Maps any sign-in failure to a kind and a sentence somebody wrote.
 ///
 /// Three properties, and the first is the one that matters:
 ///
@@ -122,39 +176,79 @@ String signInInputDefectMessage(SignInInputDefect defect) => switch (defect) {
 /// 3. **The fallback names no cause.** It cannot: the failure may have nothing
 ///    to do with the credential, and telling somebody with a correct password to
 ///    check their password is how a real fault stays hidden.
-String signInSafeError(Object error) {
-  if (error is! SignInException) return _signInUnknownFailure;
+///
+/// **One switch, not two.** The kind and the sentence are decided together
+/// because a second switch over the same codes is how the two come to disagree
+/// about one failure — the drift the token layer exists to prevent, in prose.
+SignInFailure signInFailure(Object error) {
+  if (error is! SignInException) return _signInUnknown;
   return switch (error.code) {
-    'invalid-email' =>
-      'That is not a valid email address. Check it and try again.',
+    'invalid-email' => const SignInFailure(
+      kind: SignInFailureKind.refused,
+      message: 'That is not a valid email address. Check it and try again.',
+    ),
     // Structurally unreachable while `signInInputDefect` runs first, and worded
     // through it anyway so one fact cannot be worded two ways.
-    'missing-email' => 'Enter the email address for this account.',
-    'missing-password' => 'Enter the password for this account.',
-    'user-disabled' =>
-      'This account has been disabled. Contact your administrator.',
-    'too-many-requests' =>
-      'Too many sign-in attempts from this device. Wait a few minutes and try '
-          'again.',
-    'network-request-failed' =>
-      'This device could not reach the server. Check the connection and try '
-          'again.',
-    'operation-not-allowed' =>
-      'Signing in with an email address and password is not enabled for this '
-          'app. Contact support.',
+    'missing-email' => const SignInFailure(
+      kind: SignInFailureKind.refused,
+      message: 'Enter the email address for this account.',
+    ),
+    'missing-password' => const SignInFailure(
+      kind: SignInFailureKind.refused,
+      message: 'Enter the password for this account.',
+    ),
+    'user-disabled' => const SignInFailure(
+      kind: SignInFailureKind.refused,
+      message: 'This account has been disabled. Contact your administrator.',
+    ),
+    'too-many-requests' => const SignInFailure(
+      kind: SignInFailureKind.refused,
+      message:
+          'Too many sign-in attempts from this device. Wait a few minutes and '
+          'try again.',
+    ),
+    // **The one branch that is not a refusal.** Nothing answered, so nothing was
+    // refused: the credential may be perfect and the account may be in order.
+    'network-request-failed' => const SignInFailure(
+      kind: SignInFailureKind.unreachable,
+      message:
+          'This device could not reach the server. Check the connection and '
+          'try again.',
+    ),
+    'operation-not-allowed' => const SignInFailure(
+      kind: SignInFailureKind.refused,
+      message:
+          'Signing in with an email address and password is not enabled for '
+          'this app. Contact support.',
+    ),
     'wrong-password' ||
     'user-not-found' ||
     'invalid-credential' ||
     'invalid-login-credentials' ||
-    'INVALID_LOGIN_CREDENTIALS' => _signInCredentialMismatch,
-    _ => _signInUnknownFailure,
+    'INVALID_LOGIN_CREDENTIALS' => const SignInFailure(
+      kind: SignInFailureKind.refused,
+      message: _signInCredentialMismatch,
+    ),
+    _ => _signInUnknown,
   };
 }
+
+/// [signInFailure]'s sentence, for a caller that wants only the words.
+String signInSafeError(Object error) => signInFailure(error).message;
 
 const String _signInCredentialMismatch =
     'That email address and password do not match an account. Check both and '
     'try again.';
 
-const String _signInUnknownFailure =
-    'Sign-in could not be completed. Try again, and contact support if it keeps '
-    'happening.';
+/// The answer for a failure this app cannot name.
+///
+/// **Refused rather than unknown**, and that is a decision worth stating: the
+/// *cause* is unknown, which is why the sentence names none, but the *outcome*
+/// is not — the screen is still here and nobody is signed in. §2.1's `attention`
+/// means "awaiting", and nothing is awaiting.
+const SignInFailure _signInUnknown = SignInFailure(
+  kind: SignInFailureKind.refused,
+  message:
+      'Sign-in could not be completed. Try again, and contact support if it '
+      'keeps happening.',
+);

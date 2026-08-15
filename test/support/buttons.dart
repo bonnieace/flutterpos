@@ -9,6 +9,10 @@
 /// **This file is temporary and should be deleted with the last
 /// `ButtonStyleButton` in `lib/`.** It is not a permanent abstraction over two
 /// button systems - it is the seam that lets the sweep land screen by screen.
+///
+/// **`PillButton` left on 2026-08-15 with §11 step 9**, so the remaining
+/// non-`AppButton` controls in the migrated tree are all in
+/// `checkout_cart_panel.dart`, which is step 7's.
 library;
 
 import 'package:flutter/material.dart';

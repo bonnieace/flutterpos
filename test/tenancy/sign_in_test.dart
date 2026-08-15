@@ -220,6 +220,103 @@ void main() {
     });
   });
 
+  group('a failure also says what kind of answer it is', () {
+    // §11 step 9. The screen painted every one of these red, so "this device
+    // has no connection" and "that password is wrong" were the same sentence in
+    // the same colour on the first screen of the app.
+
+    test('the one that is not a refusal is the one that never arrived', () {
+      // The whole reason `SignInFailureKind` has two values. Nothing was
+      // refused, because nothing was answered.
+      expect(
+        signInFailure(const SignInException('network-request-failed')).kind,
+        SignInFailureKind.unreachable,
+      );
+    });
+
+    test('every other named code is a refusal', () {
+      const refusals = <String>[
+        'invalid-email',
+        'missing-email',
+        'missing-password',
+        'user-disabled',
+        'too-many-requests',
+        'operation-not-allowed',
+        'wrong-password',
+        'user-not-found',
+        'invalid-credential',
+        'invalid-login-credentials',
+        'INVALID_LOGIN_CREDENTIALS',
+      ];
+
+      for (final code in refusals) {
+        expect(
+          signInFailure(SignInException(code)).kind,
+          SignInFailureKind.refused,
+          reason: code,
+        );
+      }
+    });
+
+    test('a failure nobody can name is refused, not left open', () {
+      // The cause is unknown; the outcome is not. §2.1's `attention` means
+      // "awaiting", and nothing is awaiting - the screen is still here.
+      for (final error in <Object>[
+        _channelFailure(),
+        const SignInException('a-new-code'),
+        StateError(_signInChannel),
+        _signInChannel,
+      ]) {
+        expect(
+          signInFailure(error).kind,
+          SignInFailureKind.refused,
+          reason: '$error',
+        );
+      }
+    });
+
+    test('the sentence is the same one, from one switch rather than two', () {
+      // The property that makes the kind safe to add: there is no second table
+      // over the same codes for the two to disagree in.
+      const codes = <String>[
+        'invalid-email',
+        'missing-email',
+        'missing-password',
+        'user-disabled',
+        'too-many-requests',
+        'network-request-failed',
+        'operation-not-allowed',
+        'wrong-password',
+        'a-new-code',
+        '',
+      ];
+
+      for (final code in codes) {
+        final error = SignInException(code);
+        expect(signInFailure(error).message, signInSafeError(error), reason: code);
+      }
+      expect(
+        signInFailure(_channelFailure()).message,
+        signInSafeError(_channelFailure()),
+      );
+    });
+
+    test('two readings of one failure are equal', () {
+      expect(
+        signInFailure(const SignInException('user-disabled')),
+        signInFailure(const SignInException('user-disabled')),
+      );
+      expect(
+        signInFailure(const SignInException('user-disabled')).hashCode,
+        signInFailure(const SignInException('user-disabled')).hashCode,
+      );
+      expect(
+        signInFailure(const SignInException('network-request-failed')),
+        isNot(signInFailure(const SignInException('user-disabled'))),
+      );
+    });
+  });
+
   test('the boundary carries a code and nothing else', () {
     expect(
       const SignInException('wrong-password').toString(),

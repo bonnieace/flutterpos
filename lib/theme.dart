@@ -96,9 +96,14 @@ final class SpiritScrollBehavior extends MaterialScrollBehavior {
 /// this theme named four brand colours and wired none of them in, so every
 /// screen built after the multitenant split rendered Material's stock purple
 /// for buttons, icons, links, and spinners while the login screen - which
-/// styles itself through `PillInput` and `GlassCard` rather than through the
+/// styled itself through `PillInput` and `GlassCard` rather than through the
 /// theme - rendered [accentGreen]. One app, two palettes, and the branded half
-/// was the half that read from no theme at all.
+/// was the half that read from no theme at all. **The second palette is gone as
+/// of §11 step 9**: sign-in is an `AppTextField`, an `AppButton` and a
+/// `PageHeader` now, and the three widgets that carried it - `pill_input.dart`,
+/// `pill_button.dart` and `glass_card.dart` - have no importer left. They are
+/// still on disk only because the session that emptied them could not delete a
+/// file; see `PLAN.md`.
 ///
 /// The component themes below are the same argument continued: a `Card` or a
 /// `FilledButton` that takes Material defaults is stock Material wearing this
@@ -331,12 +336,26 @@ final ThemeData spiritTheme = ThemeData(
     behavior: SnackBarBehavior.floating,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   ),
+  // **Step 9 pointed all three of these at §2.1 and none of them moved much**,
+  // which is the point: a ticked box is the primary action tier's container with
+  // the primary tier's label on it, and an unticked one is an input, which §2.1
+  // gives `border.strong`. Before this the tick was `bgDark` - the *page*
+  // colour, the same divergence `onPrimary` carried until step 3 - and the
+  // outline was `border.subtle`, which is the hairline row.
+  //
+  // **What this does not fix is recorded rather than hidden.** `border.strong`
+  // is 1.97:1 on `surface.base`, and an unticked box's outline is the only thing
+  // saying there is a box - so under §9's own 2026-08-12 reading it carries
+  // meaning and owes 3:1. No §2.1 border role clears that, and `claude.md`
+  // forbids inventing one. It is an open decision in `PLAN.md`.
   checkboxTheme: CheckboxThemeData(
     fillColor: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.selected) ? accentGreen : null,
+      (states) => states.contains(WidgetState.selected)
+          ? _action.primary.container
+          : null,
     ),
-    checkColor: const WidgetStatePropertyAll(bgDark),
-    side: const BorderSide(color: mutedGreen, width: 2),
+    checkColor: WidgetStatePropertyAll(_action.primary.label),
+    side: BorderSide(color: _action.secondary.border!, width: 2),
   ),
   switchTheme: SwitchThemeData(
     thumbColor: WidgetStateProperty.resolveWith(

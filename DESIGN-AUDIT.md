@@ -236,19 +236,19 @@ about the whole tree and needs a whole-tree grep behind it, not two call sites a
    [:854](lib/inventory/catalog_management_panel.dart#L854),
    [:866](lib/inventory/catalog_management_panel.dart#L866),
    [:882](lib/inventory/catalog_management_panel.dart#L882), and again in the correction dialog at
-   [:1310-1360](lib/inventory/catalog_management_panel.dart#L1310-L1360)). Sign-in uses
-   [`PillInput`](lib/widgets/pill_input.dart), which draws its own 56h well at radius 32
-   ([:85-89](lib/widgets/pill_input.dart#L85-L89)), its own label
-   ([:63-70](lib/widgets/pill_input.dart#L63-L70)), its own focus indicator as a green glow
-   `BoxShadow` ([:94-102](lib/widgets/pill_input.dart#L94-L102)), and reads nothing from the theme
-   except two raw imported constants. **This is the clearest duplication in the repository.**
+   [:1310-1360](lib/inventory/catalog_management_panel.dart#L1310-L1360)). ~~Sign-in uses
+   `PillInput`, which draws its own 56h well at radius 32, its own label, its own focus indicator
+   as a green glow `BoxShadow`, and reads nothing from the theme except two raw imported
+   constants.~~ **This is the clearest duplication in the repository.**
+   **Closed 2026-08-15 by §11 step 9**: both sign-in fields are `AppTextField`s and
+   `pill_input.dart` is dead. The migrated tree's bare `TextField`s went in step 3; what is left
+   is the two on the sale path, which are step 7's.
 
-2. **Button — the same split.** [`PillButton`](lib/widgets/pill_button.dart) exists alongside the
-   four `ButtonTheme`s and is used by exactly one call site
-   ([login_screen.dart:212](lib/login_screen.dart#L212)). It hardcodes `Colors.black` for the label
-   in all four branches ([:47](lib/widgets/pill_button.dart#L47),
-   [:54](lib/widgets/pill_button.dart#L54), [:61](lib/widgets/pill_button.dart#L61)) whether the
-   button is filled or not.
+2. **Button — the same split.** ~~[`PillButton`](lib/widgets/pill_button.dart) exists alongside the
+   four `ButtonTheme`s and is used by exactly one call site. It hardcodes `Colors.black` for the
+   label in all four branches whether the button is filled or not.~~ **Closed 2026-08-15 by §11
+   step 9**: the one call site is an `AppButton` on §2.1's primary tier, whose label colour is
+   `action.primary.label` and is a token rather than `Colors.black`. `pill_button.dart` is dead.
 
 3. **Confirm dialog — four times.**
    [catalog `_confirmed`](lib/inventory/catalog_management_panel.dart#L335-L350) (which already
@@ -323,15 +323,20 @@ table header padding 14/14/14/10 ([:403](lib/ui/records.dart#L403)), and a 0.5px
 on *spacing and size*, and the reason is structural: there is no spacing token to read. Introduce
 one and most of the 531 become mechanical substitutions.
 
-**The colour literals that do exist are concentrated on the first screen a user sees.**
-[login_screen.dart:198](lib/login_screen.dart#L198) uses `Colors.green` (Material `#4CAF50`) for the
-Remember Me checkbox — a *different* green from `accentGreen` — and
-[:208](lib/login_screen.dart#L208) uses `Colors.red` (`#F44336`) for the error, not `_criticalRed`.
-`PillInput` uses `Colors.white70` ([:68](lib/widgets/pill_input.dart#L68)), `white54`
-([:106](lib/widgets/pill_input.dart#L106), [:141](lib/widgets/pill_input.dart#L141)) and `white38`
-([:120](lib/widgets/pill_input.dart#L120)) — three greys the palette does not name.
-`glass_card.dart:26` and `pos_keyboard.dart:47` add two more. That is the highest-value colour
-cleanup in the repository and it is roughly eight lines.
+~~**The colour literals that do exist are concentrated on the first screen a user sees.**
+`login_screen.dart` uses `Colors.green` (Material `#4CAF50`) for the Remember Me checkbox — a
+*different* green from `accentGreen` — and `Colors.red` (`#F44336`) for the error, not
+`_criticalRed`. `PillInput` uses `Colors.white70`, `white54` and `white38` — three greys the
+palette does not name. `glass_card.dart:26` and `pos_keyboard.dart:47` add two more. That is the
+highest-value colour cleanup in the repository and it is roughly eight lines.~~
+
+**Done 2026-08-15 by §11 step 9, and it was not eight lines — it was the screen.** Every literal
+above is gone: the checkbox reads §2.1's primary tier through the theme, the refusal is an
+`AppNotice` in a `Callout` on §2.1's `problem`, and the three widgets carrying the greys are
+deleted. **The estimate was wrong in the way this repository's estimates keep being wrong** —
+substituting a token for each literal would have left a radius-32 well, a green glow where §9 wants
+a ring, uppercase labels, and a button saying `UNLOCK REGISTER →`, none of which is a colour. The
+count of `Color(0x…)` and `Colors.*` outside `theme.dart` and the legacy island is now **zero**.
 
 ### Against the §2.3 spacing scale
 
@@ -439,13 +444,40 @@ The actual defects on that screen are different, and all three are real:
 
 - The labels are uppercase (`"EMAIL / USER ID"`, `"PASSWORD"`), which §2.2 restricts to
   `label.eyebrow`.
-- The well is radius 32 ([:89](lib/widgets/pill_input.dart#L89)) where §2.3 says `radius.sm` = 8.
-- The focus indicator is a green glow `BoxShadow`
-  ([:94-102](lib/widgets/pill_input.dart#L94-L102)), not the 2px ring with 2px offset that §9
+- The well is radius 32 where §2.3 says `radius.sm` = 8.
+- The focus indicator is a green glow `BoxShadow`, not the 2px ring with 2px offset that §9
   requires.
 
-The submit button is `"UNLOCK REGISTER →"` ([login_screen.dart:214](lib/login_screen.dart#L214)),
-which §2.2 correctly identifies as both the wrong case and the wrong words.
+The submit button is `"UNLOCK REGISTER →"`, which §2.2 correctly identifies as both the wrong case
+and the wrong words.
+
+**All of it went in §11 step 9 on 2026-08-15**, and this section under-counted the screen by four.
+The four it did not have:
+
+- **Every field drew two borders**, and had since commit `1b2b13b` on 2026-08-10 — three months
+  after this section was written and one day before it. `PillInput` set `border: InputBorder.none`,
+  which is correct and no longer sufficient: `InputDecorator` prefers `enabledBorder` and
+  `focusedBorder`, both were null on the widget, and `spiritTheme` gained all three plus
+  `filled: true` in `1b2b13b`. So a 14-radius filled outline was painted inside the pill's own
+  well, in `mobile/01-sign-in.png` and every capture since. `AppFieldWell` strips all six slots and
+  a test now asserts it against the real theme rather than a bare one.
+- **The refusal was a `String?` painted red**, so "this device could not reach the server" and
+  "that password is wrong" were the same sentence in the same colour. The notice sweep of
+  2026-08-15 missed this screen because it greps for `-notice'` and this one's key was
+  `login-error`. It is an `AppNotice` now, and the transport branch is §2.1's `info`.
+- **The on-screen keypad's keys were 24 logical pixels wide at §4.1's `medium` floor**, because the
+  screen asked §4.1 whether the window was 768 wide when the question it needed answered was
+  whether half the window can hold ten keys at §9's 48dp target. The keypad took four ninths of the
+  window and then spent 48 on the card's margin and 48 on its padding, so at 768 ten keys shared
+  245 pixels — 24 of slot each and 13 painted — and at 1023 they shared 359, which is 36 and 24.
+  `PosKeyboard.minimumWidth` answers that now and the boundary is 1264 rather than 768.
+- **The `Enter` key did nothing**, and had since the file was written — an empty branch with the
+  comment `// Optional submit action`. It is drawn disabled, which is what "no callback" looks
+  like; wiring it is a behaviour change and `claude.md` hard rule 1 keeps that out of a visual
+  step.
+
+The three widgets this section names — `pill_input.dart`, `pill_button.dart`, `glass_card.dart` —
+are dead as of that step and nothing imports them.
 
 ### 4.5 `PressSurface` cannot be a drop-in for `InkWell`, and step 2 is larger than §2.4 implies
 
@@ -676,7 +708,7 @@ mechanism and the second declaration of 768. What replaces all four is `AppLayou
 
 | Constant | Declared | Consumers |
 | --- | --- | --- |
-| ~~`tenantWideLayoutBreakpoint`~~ → `AppLayout.mediumFloor` | ~~[records.dart:26](lib/ui/records.dart#L26)~~ | ~~**Zero.**~~ **Three**: `PageHeader.placesActionBesideTitle`, `checkout_cart_panel.dart`'s till split, `login_screen.dart`'s `isMobile`. |
+| ~~`tenantWideLayoutBreakpoint`~~ → `AppLayout.mediumFloor` | ~~[records.dart:26](lib/ui/records.dart#L26)~~ | ~~**Zero.**~~ ~~**Three**: `PageHeader.placesActionBesideTitle`, `checkout_cart_panel.dart`'s till split, `login_screen.dart`'s `isMobile`.~~ **Two as of 2026-08-15**: step 9 took sign-in's, and it did not rename it — it *replaced* it. Whether the keypad fits is a measurement, not a band; see §4.4. |
 | ~~`tenantTableBreakpoint`~~ → `AppLayout.expandedFloor` | ~~[records.dart:36](lib/ui/records.dart#L36)~~ | ~~**One.**~~ **Three**: `PageHeader.showsDisplayTitle`, `AppPageRoute`'s transition row, the staff directory's card-to-table switch. |
 
 - ~~`tenantWideLayoutBreakpoint` has no consumers. The only other reference in `lib/` is its own doc
@@ -737,7 +769,18 @@ path was touched**, that being step 7's.
 `isMobile` from `MediaQuery.of(context).size.width` against a literal 768 with a comment. So §4.1's
 "so a screen consults one variable" had to unify three mechanisms across three files, not merely
 rename two constants — and it did: `isMobile` now asks `AppLayout` whether the width is
-§4.1's `compact` band. **Sign-in's visual design is still step 9's** and nothing else there moved.
+§4.1's `compact` band. ~~**Sign-in's visual design is still step 9's** and nothing else there
+moved.~~
+
+**Step 9 arrived on 2026-08-15 and deleted the consumer rather than keeping it**, which is the more
+interesting half of this entry. Unifying the declaration was right and the *question* was wrong:
+§4.1's bands say how much room a page has, and what this screen needed to know is whether half the
+window can hold ten keys at §9's 48dp tap target. It could not — at §4.1's `medium` floor each key
+had 24 pixels of slot and 13 painted, and had since the screen was written, under a boundary that
+looked correct because it named a declared constant. `LoginScreen.showsKeypad` asks
+`PosKeyboard.minimumWidth` now. **A screen
+consulting one variable is not the same as a screen asking the right question**, and this is the
+only place in the app where the two came apart.
 
 ### On the generated screenshot documentation
 

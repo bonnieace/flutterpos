@@ -4,9 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_application_1/login_screen.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/theme.dart';
+import 'package:flutter_application_1/ui/fields.dart';
+import 'package:flutter_application_1/ui/press.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_application_1/widgets/pos_keyboard.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/notices.dart';
 
 /// The channel the Firebase Auth plugin signs in over.
 ///
@@ -36,7 +43,10 @@ void main() {
     await _submit(tester);
 
     expect(signIn.attempts, isEmpty);
-    expect(_error(tester), 'Enter the password for this account.');
+    expect(
+      _fieldError(tester, 'login-password'),
+      'Enter the password for this account.',
+    );
   });
 
   testWidgets('an empty address is refused without being sent', (tester) async {
@@ -47,7 +57,10 @@ void main() {
     await _submit(tester);
 
     expect(signIn.attempts, isEmpty);
-    expect(_error(tester), 'Enter the email address for this account.');
+    expect(
+      _fieldError(tester, 'login-email'),
+      'Enter the email address for this account.',
+    );
   });
 
   testWidgets('an address of only spaces is refused', (tester) async {
@@ -59,7 +72,10 @@ void main() {
     await _submit(tester);
 
     expect(signIn.attempts, isEmpty);
-    expect(_error(tester), 'Enter the email address for this account.');
+    expect(
+      _fieldError(tester, 'login-email'),
+      'Enter the email address for this account.',
+    );
   });
 
   testWidgets('a refusal by this form leaves the button usable', (tester) async {
@@ -68,7 +84,7 @@ void main() {
 
     await tester.enterText(_field('login-email'), 'owner@example.com');
     await _submit(tester);
-    expect(_error(tester), isNotNull);
+    expect(_fieldError(tester, 'login-password'), isNotNull);
 
     // Nothing was sent, so nothing is in flight, and a second attempt after
     // typing a password must be possible without leaving the screen.
@@ -96,7 +112,7 @@ void main() {
       _renderedText(tester).where((text) => text.contains(_signInChannel)),
       isEmpty,
     );
-    expect(_error(tester), _unknownFailure);
+    expect(noticeMessage(tester, 'login-notice'), _unknownFailure);
   });
 
   testWidgets('an error of any other shape renders a sentence too', (
@@ -119,7 +135,11 @@ void main() {
         isEmpty,
         reason: '$failure',
       );
-      expect(_error(tester), _unknownFailure, reason: '$failure');
+      expect(
+        noticeMessage(tester, 'login-notice'),
+        _unknownFailure,
+        reason: '$failure',
+      );
     }
   });
 
@@ -130,10 +150,53 @@ void main() {
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
 
     expect(
-      _error(tester),
+      noticeMessage(tester, 'login-notice'),
       'That email address and password do not match an account. Check both and '
       'try again.',
     );
+  });
+
+  group('a notice says which kind of answer it is', () {
+    // §11 step 9's own finding, and the reason this screen was the eighth
+    // surface of the notice model rather than none of them: a `String?` painted
+    // red carried "your password is wrong" and "this device has no connection"
+    // identically, on the one screen where the second is not the person's
+    // fault.
+
+    testWidgets('a refusal is §2.1\'s problem', (tester) async {
+      await _pump(
+        tester,
+        _SignIn(failure: const SignInException('invalid-credential')),
+      );
+      await _signInAs(tester, 'owner@example.com', 'wrong horse');
+
+      expect(noticeStatus(tester, 'login-notice'), AppStatus.problem);
+    });
+
+    testWidgets('a device that never reached the server is §2.1\'s info', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _SignIn(failure: const SignInException('network-request-failed')),
+      );
+      await _signInAs(tester, 'owner@example.com', 'correct horse');
+
+      expect(noticeStatus(tester, 'login-notice'), AppStatus.info);
+      expect(
+        noticeMessage(tester, 'login-notice'),
+        'This device could not reach the server. Check the connection and try '
+        'again.',
+      );
+    });
+
+    testWidgets('a failure nobody can name is still a refusal', (tester) async {
+      // The cause is unknown; the outcome is not. Nobody is signed in.
+      await _pump(tester, _SignIn(failure: _channelFailure()));
+      await _signInAs(tester, 'owner@example.com', 'correct horse');
+
+      expect(noticeStatus(tester, 'login-notice'), AppStatus.problem);
+    });
   });
 
   testWidgets('a failure releases the button so it can be tried again', (
@@ -156,12 +219,12 @@ void main() {
     await _pump(tester, signIn);
 
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
-    expect(_error(tester), isNotNull);
+    expect(_notice(tester), isNotNull);
 
     await tester.enterText(_field('login-email'), 'owner@example.co');
     await tester.pump();
 
-    expect(_error(tester), isNull);
+    expect(_notice(tester), isNull);
   });
 
   testWidgets('editing the password clears the error it describes', (
@@ -171,12 +234,12 @@ void main() {
     await _pump(tester, signIn);
 
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
-    expect(_error(tester), isNotNull);
+    expect(_notice(tester), isNotNull);
 
     await tester.enterText(_field('login-password'), 'correct horse');
     await tester.pump();
 
-    expect(_error(tester), isNull);
+    expect(_notice(tester), isNull);
   });
 
   testWidgets('a refusal this form made is cleared by editing too', (
@@ -187,12 +250,15 @@ void main() {
 
     await tester.enterText(_field('login-email'), 'owner@example.com');
     await _submit(tester);
-    expect(_error(tester), 'Enter the password for this account.');
+    expect(
+      _fieldError(tester, 'login-password'),
+      'Enter the password for this account.',
+    );
 
     await tester.enterText(_field('login-password'), 'c');
     await tester.pump();
 
-    expect(_error(tester), isNull);
+    expect(_fieldError(tester, 'login-password'), isNull);
   });
 
   testWidgets('moving the cursor is not editing, and keeps the error', (
@@ -202,7 +268,7 @@ void main() {
     await _pump(tester, signIn);
 
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
-    expect(_error(tester), isNotNull);
+    expect(_notice(tester), isNotNull);
 
     // A TextEditingController notifies on a selection change as well as a text
     // change. Revealing the password moves the cursor and answers nothing the
@@ -212,11 +278,29 @@ void main() {
         .controller!
         .selection = const TextSelection(baseOffset: 0, extentOffset: 3);
     await tester.pump();
-    expect(_error(tester), isNotNull);
+    expect(_notice(tester), isNotNull);
 
     await tester.tap(find.byIcon(Icons.visibility_off));
     await tester.pump();
-    expect(_error(tester), isNotNull);
+    expect(_notice(tester), isNotNull);
+  });
+
+  testWidgets('the reveal toggle announces itself, and swaps when it fires', (
+    tester,
+  ) async {
+    // §9's icon-only row. `PillInput` drew this as a bare `GestureDetector`
+    // around an `Icon`: no label, and a target the size of the glyph.
+    final handle = tester.ensureSemantics();
+    await _pump(tester, _SignIn());
+
+    expect(find.bySemanticsLabel('Show the password'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.visibility_off));
+    await tester.pump();
+
+    expect(find.byIcon(Icons.visibility), findsOneWidget);
+    expect(find.bySemanticsLabel('Hide the password'), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('the address is trimmed and the password is not', (tester) async {
@@ -247,7 +331,7 @@ void main() {
 
     await _signInAs(tester, 'owner@example.com', 'correct horse');
     expect(signIn.attempts, hasLength(1));
-    expect(_error(tester), isNull);
+    expect(_notice(tester), isNull);
 
     await _submit(tester);
     expect(signIn.attempts, hasLength(1));
@@ -259,7 +343,7 @@ void main() {
     // Still busy, deliberately: the routing shell replaces this screen once the
     // session opens, and releasing the button first offers a second sign-in
     // against a session that is already being built.
-    expect(_error(tester), isNull);
+    expect(_notice(tester), isNull);
     expect(find.byType(CircularProgressIndicator), findsOne);
   });
 
@@ -269,52 +353,137 @@ void main() {
     await _pump(tester, null);
 
     expect(find.byKey(const ValueKey('login-submit')), findsOne);
-    expect(_error(tester), isNull);
+    expect(_notice(tester), isNull);
   });
 
-  group('the screen splits at §4.1\'s medium floor, and nowhere else', () {
-    // **Step 6's rewiring, from the outside.** `isMobile` was `width < 768`
-    // with a comment - the third of three declarations of that boundary, and
-    // the only one that was not even a named constant. It reads `AppLayout`
-    // now. These pin the behaviour to the declared floor rather than to 768,
-    // so a future move of §4.1's number moves this screen with it. **Nothing
-    // about sign-in's visual design is asserted here**: that is step 9's, and
-    // the on-screen keyboard is only the cheapest observable difference
-    // between the two branches.
+  testWidgets('the title appears once, in the header built for it', (
+    tester,
+  ) async {
+    // §7's page pattern. The screen drew "Welcome Back" as a hand-sized
+    // `TextStyle` and its subtitle as a loose `Text`; both are `PageHeader`'s
+    // slots now, so §2.2 decides the roles rather than a `fontSize` literal.
+    await _pump(tester, _SignIn());
 
-    testWidgets('one pixel below it, the desktop keyboard is absent', (
+    final header = tester.widget<PageHeader>(find.byType(PageHeader));
+    expect(header.title, 'Welcome back');
+    expect(header.subtitle, 'Sign in to your account.');
+    expect(find.text('Welcome back'), findsOneWidget);
+  });
+
+  testWidgets('the fields are one pattern with the rest of the app', (
+    tester,
+  ) async {
+    // The clearest duplication `DESIGN-AUDIT.md` §2.3 found, closed: sign-in's
+    // fields were the third field implementation in `lib/`.
+    await _pump(tester, _SignIn());
+
+    expect(find.byType(AppTextField), findsNWidgets(2));
+    expect(
+      tester.widget<AppTextField>(find.byKey(const ValueKey('login-email'))).label,
+      'Email / user ID',
+    );
+    // §5.2: a placeholder is an example, never a restatement of the label. The
+    // password field's said "Enter Password".
+    expect(
+      tester
+          .widget<AppTextField>(find.byKey(const ValueKey('login-password')))
+          .placeholder,
+      isNull,
+    );
+  });
+
+  testWidgets('a field draws one border, not two', (tester) async {
+    // The defect commit `1b2b13b` introduced on 2026-08-10 and this screen has
+    // carried ever since: `InputDecorator` prefers `enabledBorder` and
+    // `focusedBorder` over `border`, both were null on the widget, and both
+    // therefore came from the theme - so a 14-radius filled outline was painted
+    // inside the pill's own well. `AppFieldWell` strips all six slots; this
+    // asserts it against the real theme rather than against a bare one.
+    await _pump(tester, _SignIn(), theme: spiritTheme);
+
+    final decoration = tester
+        .widget<TextField>(_field('login-password'))
+        .decoration!;
+    expect(decoration.filled, isFalse);
+    for (final border in <InputBorder?>[
+      decoration.border,
+      decoration.enabledBorder,
+      decoration.focusedBorder,
+      decoration.disabledBorder,
+      decoration.errorBorder,
+      decoration.focusedErrorBorder,
+    ]) {
+      expect(border, InputBorder.none);
+    }
+  });
+
+  group('the keypad appears when there is room to draw it', () {
+    // **Step 9's rewiring, and it moves a boundary rather than renaming one.**
+    // The screen asked §4.1 whether the window was 768 wide; the question it
+    // needed answered is whether half the window can hold ten keys at §9's tap
+    // target, which is a measurement `PosKeyboard` takes. At §4.1's `medium`
+    // floor the old answer gave each of ten keys 24 pixels of slot and 13
+    // painted, against §9's 48.
+
+    testWidgets('one pixel below the measured floor, it is absent', (
       tester,
     ) async {
-      await _pumpAt(tester, AppLayout.contract.mediumFloor - 1);
+      await _pumpAt(tester, _keypadFloor - 1);
       expect(find.byType(PosKeyboard), findsNothing);
     });
 
-    testWidgets('at it, the desktop keyboard is drawn', (tester) async {
-      await _pumpAt(tester, AppLayout.contract.mediumFloor);
+    testWidgets('at it, it is drawn', (tester) async {
+      await _pumpAt(tester, _keypadFloor);
       expect(find.byType(PosKeyboard), findsOneWidget);
     });
 
-    testWidgets('the boundary is the one §4.1 declares, not a literal', (
+    testWidgets('and every key is at least §9\'s tap target wide', (
       tester,
     ) async {
-      // The claim the step actually makes. If `AppLayout.mediumFloor` moved and
-      // this screen kept its own 768, one of the two tests above would still
-      // pass and the app would have two boundaries again.
-      expect(AppLayout.contract.mediumFloor, 768);
+      // The claim `minimumWidth` makes, asserted against the rendering rather
+      // than against itself. This is the assertion the column-arithmetic chunk
+      // of 2026-08-15 argued for: where a component publishes a number about
+      // its own geometry, measure it.
+      await _pumpAt(tester, _keypadFloor);
+
+      final key = find.descendant(
+        of: find.byType(PosKeyboard),
+        matching: find.text('0'),
+      );
+      expect(key, findsOneWidget);
+      // The `PressSurface`, which is the tap target rather than the painted
+      // face: §9's row is about what answers a finger.
+      final target = find.ancestor(of: key, matching: find.byType(PressSurface));
       expect(
-        AppLayout.contract.breakpointOf(AppLayout.contract.mediumFloor - 1),
-        AppBreakpoint.compact,
+        tester.getSize(target.first).width,
+        greaterThanOrEqualTo(AppDensity.comfortable.minimumTapTarget.width),
       );
       expect(
-        AppLayout.contract.breakpointOf(AppLayout.contract.mediumFloor),
-        AppBreakpoint.medium,
+        tester.getSize(target.first).height,
+        greaterThanOrEqualTo(AppDensity.comfortable.minimumTapTarget.height),
       );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('§4.1\'s medium floor is not the boundary any more', (
+      tester,
+    ) async {
+      // What the old test asserted, kept as the thing that is now false: 768 is
+      // a page band and it was never a statement about a keyboard.
+      expect(_keypadFloor, greaterThan(AppLayout.contract.mediumFloor));
+      expect(_keypadFloor, greaterThan(AppLayout.contract.expandedFloor));
+      // 10 keys at 48, 9 gaps at 8, the card's inset and the pane's margin.
+      expect(PosKeyboard.minimumWidth(AppTokens.dark), 632);
+      expect(_keypadFloor, 1264);
     });
   });
 }
 
-/// Pumps sign-in at an exact width, for the two cases either side of §4.1's
-/// `medium` floor.
+/// The narrowest screen this app draws the keypad on.
+final double _keypadFloor = PosKeyboard.minimumWidth(AppTokens.dark) * 2;
+
+/// Pumps sign-in at an exact width, for the two cases either side of the
+/// keypad's measured floor.
 ///
 /// Tall enough that the desktop branch's two panes both lay out; the narrow
 /// branch is the one `_pump` above already covers for every other test here.
@@ -324,19 +493,27 @@ Future<void> _pumpAt(WidgetTester tester, double width) async {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(MaterialApp(home: LoginScreen(signIn: _SignIn())));
+  await tester.pumpWidget(
+    MaterialApp(theme: spiritTheme, home: LoginScreen(signIn: _SignIn())),
+  );
   await tester.pump();
 }
 
-Future<void> _pump(WidgetTester tester, EmailPasswordSignIn? signIn) async {
-  // Narrow enough for the screen's own mobile branch, tall enough that nothing
-  // needs scrolling into view before it can be tapped.
-  tester.view.physicalSize = const Size(500, 1000);
+Future<void> _pump(
+  WidgetTester tester,
+  EmailPasswordSignIn? signIn, {
+  ThemeData? theme,
+}) async {
+  // Narrow enough for the screen's own single-column branch, tall enough that
+  // nothing needs scrolling into view before it can be tapped.
+  tester.view.physicalSize = const Size(500, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(MaterialApp(home: LoginScreen(signIn: signIn)));
+  await tester.pumpWidget(
+    MaterialApp(theme: theme, home: LoginScreen(signIn: signIn)),
+  );
   await tester.pump();
 }
 
@@ -360,11 +537,18 @@ Future<void> _signInAs(
   await _submit(tester);
 }
 
-String? _error(WidgetTester tester) {
-  final finder = find.byKey(const ValueKey('login-error'));
+/// The notice the screen is showing, or null.
+AppNotice? _notice(WidgetTester tester) {
+  final finder = find.byKey(const ValueKey('login-notice'));
   if (finder.evaluate().isEmpty) return null;
-  return tester.widget<Text>(finder).data;
+  final callout = tester.widget<Callout>(finder);
+  return AppNotice(message: callout.message, status: callout.status);
 }
+
+/// The error line under one field, which is where a defect this screen found
+/// itself is reported.
+String? _fieldError(WidgetTester tester, String key) =>
+    tester.widget<AppTextField>(find.byKey(ValueKey(key))).error;
 
 Iterable<String> _renderedText(WidgetTester tester) => tester
     .widgetList<Text>(find.byType(Text))

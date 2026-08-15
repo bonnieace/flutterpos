@@ -201,8 +201,12 @@ They are strings a person compares character by character, not prose.
 | `numeric.body` | 14 / 20 | 500, tabular | money and counts in flow |
 | `mono` | 13 / 18 | 400, monospace | record IDs, SKUs |
 
-Uppercase is restricted to `label.eyebrow`. `UNLOCK REGISTER` on the sign-in screen is
-both the wrong case and the wrong words.
+Uppercase is restricted to `label.eyebrow`. ~~`UNLOCK REGISTER` on the sign-in screen is
+both the wrong case and the wrong words.~~ **Done 2026-08-15**, in §11 step 9. The button
+says `Sign in`, which is §8 rule 3's "a control names its effect" — rule 3 named *Unlock
+register* in its own list of what a control must never say. The two field labels went with
+it: `EMAIL / USER ID` and `PASSWORD` are sentence case now, which is a case change and not
+a copy one — what those fields should be *called* is step 11's.
 
 ### 2.3 Spacing, size, radius
 
@@ -469,8 +473,16 @@ mid-press.
 
 One pattern, everywhere: persistent label above the field (`label.md`, `text.secondary`),
 `surface.sunken` well, `border.strong` 1px, `radius.sm`, 48h at comfortable density.
-Placeholder is an *example*, never a restatement of the label — the sign-in screen
-currently uses the placeholder as the label on one field and a floating label on another.
+Placeholder is an *example*, never a restatement of the label — ~~the sign-in screen
+currently uses the placeholder as the label on one field and a floating label on another.~~
+
+**The sign-in clause was false when it was written and is now moot.** `DESIGN-AUDIT.md`
+§4.4 established in 2026-08-11 that both fields already carried a persistent label and a
+real example; the actual defects were an uppercase label, a radius-32 well, and a green
+glow where §9 wants a ring. **All of them went in §11 step 9 on 2026-08-15**, together with
+one this section did name correctly, one flight up: the password field's placeholder read
+`Enter Password`, which is the label again, and it now has none. **Every field in the
+migrated tree is an `AppTextField` except the two on the sale path**, which are step 7's.
 
 Helper text is `caption` / `text.tertiary`, one line. Anything longer becomes a
 `Disclosure`. Error replaces helper text, `status.problem.fg`, with the border switching
@@ -864,6 +876,15 @@ until the screenshots for the current one are clean.
 
 Step 1 changes no pixels if done correctly, and that is the point: it is the step that
 proves the roles map cleanly onto what exists before anything moves.
+
+**Step 9 was one screen rather than eight, and that is worth writing down before somebody
+re-opens it.** Done 2026-08-15. Screens 02 to 07 have been `AppScaffold` routes with
+`AppButton`s and `AppTextField`s since steps 3 and 5a — they are phases of the routing
+shell and were swept with everything else — so the only surface left unmigrated was **01**,
+which had its own field, its own button, its own card and its own on-screen keypad. Screen
+08 is deliberately **not** in it: it is one of the three full-page states §5.1 names
+`LoadingState` / `ErrorState` / `EmptyState`, none of which exists, and giving one of them
+a bespoke treatment now is how a fourth implementation of an empty state gets written.
 
 Step 2 comes second, and step 10 comes ninth, deliberately. The substrate is what makes
 the app feel expensive; the assets are decoration on top of it. Building the assets first

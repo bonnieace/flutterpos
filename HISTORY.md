@@ -23116,3 +23116,263 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## The front door stops having a palette of its own - 2026-08-15
+
+### Why this chunk, and why it stops where it does
+
+`design.md` §11 step **9**, sign-in. It was the queued chunk, it is the next numbered step that is
+neither excluded (7, the sale path) nor a behaviour change (5b, the navigation model), and
+everything ahead of it closed earlier the same day. Nothing red on the capability board is both
+required-to-function and unqueued: password reset is blocked on an App Check decision, printing on
+an external interface, subscription has no schema, and suspicious-return scoring is sequenced after
+the first deployment.
+
+**It was one screen rather than the eight §11 lists, and both of this repository's descriptions of
+it were partly wrong.** §11 says "01-08". `PLAN.md` said `login_screen.dart` plus four widgets.
+Neither had been checked against the code, and the check is one command:
+`grep -n "AppScaffold\|AppTextField\|AppButton" lib/tenancy/tenant_routing_shell.dart`. Screens 02
+to 07 are phases of the routing shell and have been `AppScaffold` routes with `AppButton`s and
+`AppTextField`s since steps 3 and 5a. Screen 08 is `_TenantBootstrapError`, one of the three
+full-page `Center` states §5.1 names `LoadingState` / `ErrorState` / `EmptyState`, none of which
+exists — giving one of them a bespoke treatment inside step 9 is how a fourth empty state gets
+written. So the surface was **01**, and 01 was the last place in the app with a palette of its own.
+
+**Every previous chunk this file mis-*counted*. This one it mis-*scoped*.** A session reading §11
+would have opened seven already-migrated screens and concluded the step was mostly done; a session
+reading `PLAN.md` would never have looked at them at all.
+
+### What was decided
+
+1. **It is a `Scaffold` carrying a `PageHeader`, not an `AppScaffold`.** `AppScaffold` is a toolbar,
+   a header and a §4.2-capped body spanning the page. Sign-in has nothing for a toolbar — no way
+   back from the app's front door and nothing to sign out of — so it would draw 56 logical pixels of
+   empty chrome above the title. The decisive half is the wide layout: this screen is two panes and
+   the title belongs to the **form**, not to a header spanning a form and a keypad. §7's page
+   pattern is kept; the frame it usually arrives in is not. The raw-`Scaffold` count stays at 7 with
+   this one's reason rewritten from "step 9" to a reason of its own.
+2. **Whether the keypad appears is a measurement, and it replaces a breakpoint.** The screen asked
+   §4.1 whether the window was 768 wide. §4.1's bands say how much room a *page* has; the question
+   this screen needed answered is whether half the window can hold ten keys at §9's 48dp target. It
+   could not, and the arithmetic is written out here because the first draft of this entry wrote
+   "38 pixels" from an estimate and the estimate was too kind: the old layout gave the keypad four
+   ninths of the window and then spent 48 on the card's margin and 48 on its padding, so at 768 that
+   is `768 × 4/9 − 96 = 245` for ten keys — **24 pixels of slot each and 13 painted** — and at 1023,
+   the top of the band, it is still only 36 and 24. It had been that way since the file was written,
+   under a boundary that looked correct because it named a declared constant.
+   `PosKeyboard.minimumWidth` answers it now: ten targets, nine `space.8` gaps, the card's inset and
+   the pane's margin, which is **632**, so the keypad appears at **1264** and above.
+   **A screen consulting one variable is not the same as a screen asking the right question**, and
+   this is the only place in the app where the two came apart.
+3. **A keypad key is not an `AppButton`, and §5.2's own arithmetic is the reason.** §5.2 gives
+   `AppButton` a minimum horizontal padding of `space.20` — 40 pixels before a glyph — and
+   `PressSurface` reserves 8 more for the ring gutter. At §9's 48-wide minimum that leaves nothing
+   for the character. A component cannot be used at a size its own specification forbids, so the key
+   draws itself from the same §2 rows `AppButton` reads: `action.secondary` for container, label and
+   border, `radius.pill` because §2.3 restricts the pill to buttons and a key is one, `label.lg`,
+   and `PressSurface` for press, hover, ring and target. Nothing invents a token.
+4. **The refusal is an `AppNotice`, and this screen was the ninth notice surface rather than none of
+   them.** It held a `String?` painted `Colors.red` — the exact half-model the seven back-office
+   surfaces shed hours earlier. It was missed because the grep that found those is
+   `grep -n "\-notice'" lib` and this screen's key was `login-error`. It is `login-notice` now, so
+   the next run of that grep finds it.
+5. **One of its branches was never a refusal.** `network-request-failed` — *"This device could not
+   reach the server"* — is §2.1's `info`: nothing was refused, because nothing was answered. It had
+   been drawn identically to a wrong password. `SignInFailureKind` carries the distinction, decided
+   in the one `switch` that already owned the words so a second table cannot disagree with it. An
+   unrecognised failure stays **refused** and not unknown: the *cause* is unknown, the *outcome* is
+   not, and §2.1's `attention` means "awaiting".
+6. **A defect this screen found itself sits on the field it is about; a provider answer sits in the
+   page notice.** §5.2 gives a field an error line that replaces its helper, and §9 asks that a form
+   error be associated with its input. "Enter the password for this account." is about one box;
+   "That email address and password do not match an account." is about the credential, and a
+   credential is not a box.
+7. **The double border is closed, and the repair brought a test the diagnosis did not have.** Since
+   commit `1b2b13b` on 2026-08-10 every login field painted two: `PillInput` set
+   `border: InputBorder.none`, which was correct and stopped being sufficient the day `spiritTheme`
+   gained `enabledBorder`, `focusedBorder` and `filled: true`, because `InputDecorator` prefers the
+   specific slots over `border`. `AppFieldWell` strips all six and sets `filled: false`.
+   `test/login_screen_test.dart` now pumps this screen **under `spiritTheme`** rather than a bare
+   `MaterialApp` and asserts every slot — the whole mechanism of this defect is a theme reaching
+   past a widget's own `border`, and a bare-theme test cannot see it.
+8. **`Enter` is drawn disabled because it does nothing.** Its handler has been an empty branch with
+   the comment `// Optional submit action` since the file was written. §2.1's disabled row is a
+   rendering rather than a flag, so a control with no callback looks like one. Wiring it to submit
+   is a behaviour change and `claude.md` hard rule 1 keeps that out of a visual step; dropping the
+   key is a product decision. It is the same move §7's title chunk made when the staff directory
+   stopped claiming to be read-only.
+9. **The theme's checkbox went to §2.1, and what it cannot fix is recorded rather than hidden.**
+   The tick was `Colors.green` at the call site over a theme painting `accentGreen` — two greens for
+   one control — and the check mark was `bgDark`, the *page* colour, which is the divergence
+   `onPrimary` carried until step 3. Both read `action.primary` now and the outline reads
+   `action.secondary.border`. **What is still wrong is a new open decision**: an unticked checkbox's
+   outline is the only thing saying the control exists, so it carries meaning under §9's own
+   2026-08-12 reading and owes 3:1 — and `border.strong` is 1.97 on `surface.base` while
+   `border.subtle` is 1.38. There is no third border role and `claude.md` forbids inventing one.
+10. **Three copy changes, and only one of them is a copy decision.** `UNLOCK REGISTER →` became
+    `Sign in`, which is §8 rule 3 naming *Unlock register* in its own list of what a control must
+    never say. `EMAIL / USER ID` and `PASSWORD` became sentence case, which is §2.2 and §8 rule 7 —
+    the *words* are unchanged, because what those fields should be called is step 11's. And the
+    password placeholder `Enter Password` was deleted, because §5.2 says a placeholder is an example
+    and never a restatement of the label.
+
+### Two things a rendering found that no review would have
+
+**The backspace key was a tofu box.** `⌫` is U+232B ERASE TO THE LEFT and Roboto does not carry it,
+so the first picture of the new keypad showed an empty rectangle where the key's entire face should
+be. It is the same defect `PLAN.md` already records against the bulk report's before/after arrow
+(`bulk_catalog.dart:1590`), one step worse — a missing mark inside a sentence is a blemish, and a
+control whose only face is a box cannot be named at all. It is `Icons.backspace_outlined` at
+`AppButton.iconSize` with a semantic label, which is §9's icon-only row, and the Material icon font
+*is* loaded beside Roboto in the harness.
+
+**The general form is now a standing trap**: a glyph outside the Latin ranges is an asset rather
+than a character, this repository's fonts have neither of the two it uses, and a string literal
+outside ASCII needs a picture before it ships.
+`grep -nP "[^\x00-\x7F]" lib --include=*.dart` finds the class; the harness finds the ones that fail.
+
+**The second was a defect in this chunk's own first draft.** The pane padded 20 *and* the card
+padded 20, so every key came out **44** wide against a component that had just promised 48 — and
+what caught it is the test asserting `minimumWidth` against the rendered `PressSurface` rather than
+against itself. The margin moved inside `PosKeyboard` so it is a term in the component's own sum,
+and the pane now adds nothing. That is the "assert a published number against the rendering" lesson
+the column-arithmetic chunk wrote, paying for itself the next day.
+
+### Safety
+
+No repository call, no state logic, no routing condition and no API shape changed. `_submit` sends
+the same three arguments to the same boundary in the same order, refuses the same two input defects
+before sending, and stays loading after a success for the same recorded reason. `git diff` and
+`git status` over `functions/`, `firestore.rules` and `rules-tests/` print zero lines.
+
+**Two behaviours did change and both are named rather than left to be noticed.**
+`enableInteractiveSelection: false`, which `PillInput` set with the comment *"Prevent
+selection/highlight"*, is gone: `AppTextField` offers no passthrough, and adding one to carry a
+sign-in quirk into "one pattern, everywhere" is the wrong trade — so a person can now select the
+text in these two fields as they can in every other field in the app. And **the keypad no longer
+appears between 768 and 1263**, which is decision 2: at those widths it was drawing keys below §9's
+floor.
+
+### Files changed
+
+```text
+lib/login_screen.dart                     rewritten: Scaffold + PageHeader + 2 AppTextField
+                                          + AppButton + Callout, tokens throughout
+lib/widgets/pos_keyboard.dart             rewritten: §2.1 secondary keys on PressSurface,
+                                          minimumWidth, the backspace icon, Enter disabled
+lib/tenancy/sign_in.dart                  SignInFailureKind, SignInFailure, signInFailure;
+                                          signInSafeError delegates to it
+lib/theme.dart                            checkboxTheme -> §2.1's primary tier and secondary
+                                          border; the PillInput doc note corrected
+test/login_screen_test.dart               rewritten around the new components; +8
+test/tenancy/sign_in_test.dart            +5, for the failure kind
+test/support/fields.dart                  doc: PillInput is gone, the sale path is what is left
+test/support/buttons.dart                 doc: PillButton is gone
+tool/screenshots/auth_screens_test.dart   3 driven capture cases and a failing sign-in fake
+design.md                                 §2.2, §5.2 and §11 retracted in place
+DESIGN-AUDIT.md                           §2.3, §3, §4.4 and §5 corrected in place
+PLAN.md                                   status board, standing decision, open decision,
+                                          standing trap, exclusions, next bounded chunk
+```
+
+**Three files should have been deleted and were not.** `lib/widgets/pill_input.dart`,
+`pill_button.dart` and `glass_card.dart` have no importer as of this chunk. Both `Remove-Item` and
+`git rm` were refused by this session's tool permissions, exactly as the five stale screenshots were
+refused earlier the same day. They are named in `PLAN.md` under two headings so a session that *can*
+delete a file takes them; `flutter analyze lib/widgets` reporting five issues in three files nothing
+reads is the tell. **They are dead, not excluded.**
+
+### Tests
+
+```text
+flutter analyze --no-pub <changed paths>                                  0 issues
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1963 pass  (1950 -> 1963)
+npm --prefix functions test                                              409 pass
+npm --prefix rules-tests run test:emulator                                161 pass   (112 s)
+npm --prefix rules-tests run test:emulator:reconciliation                 10 pass    (214 s)
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 ... run test:emulator:invitations       23 pass    (295 s)
+flutter test --no-pub --concurrency=1 tool/screenshots                    178 captures, 239 images
+```
+
+**+13: 8 in `login_screen_test.dart`, 5 in `test/tenancy/sign_in_test.dart`.** The eight are the
+assertions the old screen could not carry: that the notice says which *kind* of answer it is on all
+three branches; that the reveal toggle announces itself and swaps when it fires; that the title
+appears once, in the header built for it; that both fields are `AppTextField`s and the password has
+no placeholder; that a field draws **one** border and not two, under `spiritTheme` rather than a
+bare `MaterialApp`; and that a key is at least §9's tap target wide, measured on the rendered
+`PressSurface`. The five are the failure kind. **Three of the thirteen failed on their first run and
+all three were the code being wrong rather than the test** — the double-padded keypad above.
+
+All three emulator suites were run with the prelude and all three passed first time. They cost about
+**620 s** between them, the slowest run since 2026-08-14; nothing was retried and nothing flaked.
+The Flutter suite takes about 25 minutes at `--concurrency=1` and was run in the background, per the
+note this file added on 2026-08-15 after one wasted run.
+
+### Screenshots
+
+**18 moved, 6 added, 0 removed, against a baseline regenerated from `HEAD` forty minutes earlier the
+same day** — which is what the standing trap asks for, and what makes the attribution below a
+measurement rather than a guess.
+
+```text
+added   web|mobile / 01b-sign-in-refused-here     the field error, no boundary needed
+        web|mobile / 01c-sign-in-refused-there    the provider's refusal, status.problem
+        web|mobile / 01d-sign-in-unreachable      the branch that was never a refusal, status.info
+moved   web|mobile / 01-sign-in                   the screen itself
+        web|mobile|*-full / 19-correct-a-product  the checkbox theme, and nothing else
+        web|mobile|*-full / 20-bulk-changes-and-import, 20b, 20c   the same
+```
+
+**Sixteen of the eighteen are not sign-in**, and that is the whole of the theme change in decision
+9: screens 19 and 20 hold this app's only other checkboxes, both `CheckboxListTile`s, and their
+unticked outlines are visibly lighter for having moved from `border.subtle` to `border.strong`.
+Nothing else in 244 images moved.
+
+**The three driven captures are the second, third and fourth in the repository**, after
+`18b-catalog-notice` and the two bulk-report ones. They exist because of the rule the notice chunk
+wrote the day before: a chunk that changes what a screen says *in response to an action* has no
+harness coverage at all until it adds a driven capture, however many pictures exist of that screen.
+The first of the three needs no boundary — an empty form refuses itself — and the other two need a
+sign-in fake that throws, because the real one reaches `FirebaseAuth.instance`.
+
+**A run now writes 239 images across 178 captures.** The "229" the column-arithmetic entry above put
+against this figure is **wrong and 233 was right**: that entry recorded 238 files and five stale in
+the same paragraph, which is 233 by subtraction. Measured again before this chunk touched anything,
+by `LastWriteTime` against the run rather than a hash against a baseline: **233 written, 5 not**, and
+the five are the same five it named. That makes seven figures in a row this repository has had
+wrong, and the first that was wrong *inside a correction of another figure*.
+
+### Reported during this session
+
+Nothing new from the product owner. The one thing they had reported and deliberately deferred — the
+double border — is closed by this chunk, which is the step it was deferred to.
+
+### Excluded
+
+`checkout_cart_panel.dart` and the whole sale path (step 7), which now holds **every** remaining
+non-`AppButton` control and non-`AppTextField` field in the migrated tree. Step 10, the animated
+assets — the next number, and not takeable: two of its eight assets are external and need `design.md`
+§12's unanswered "is there a character" and "who builds the Rive files", the tier system has no named
+floor device by §12's own admission, and four of the six native assets have no host (asset 2 wants
+the shift banner, which is step 5b; assets 4 and 6 want `SyncIndicator` and `EmptyState`, which are
+§5.1 rows that do not exist). `Pagination`, §5.1 priority 3. `inNarrowForm`, still with no consumer.
+The ambient `letterSpacing`. The checkbox outline's 1.97:1, which needs a §2.1 role that does not
+exist. `RecordList` for screen 28's difference cards and screen 20's report cards. §3's density,
+which nothing here needed. The five stale `*-full` screenshots, still not deletable. Every server
+file and `firestore.rules`, by choice. Deployment.
+
+**The next bounded chunk is `design.md` §11 step 11, the copy pass against §8**, taken out of
+numerical order for the four reasons above, with the seven-item backlog four previous chunks left
+for it recorded in `PLAN.md`.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

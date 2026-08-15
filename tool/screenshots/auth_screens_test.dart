@@ -73,6 +73,47 @@ Widget _shell({
   );
 }
 
+/// A sign-in boundary that always refuses, so the screen's answer can be
+/// photographed.
+///
+/// **`FakeCallable`'s lesson one screen along**: a capture whose subject is what
+/// a screen says *after* an action needs a boundary that can answer, and the
+/// real one reaches `FirebaseAuth.instance`.
+final class _FailingSignIn implements EmailPasswordSignIn {
+  const _FailingSignIn(this.failure);
+
+  final Object failure;
+
+  @override
+  Future<void> call({
+    required String email,
+    required String password,
+    required bool remember,
+  }) async => throw failure;
+}
+
+/// Fills the form, submits it, and lets the refusal land.
+Future<void> _signInAndFail(WidgetTester tester) async {
+  await tester.enterText(
+    find.descendant(
+      of: find.byKey(const ValueKey('login-email')),
+      matching: find.byType(TextField),
+    ),
+    'owner@example.com',
+  );
+  await tester.enterText(
+    find.descendant(
+      of: find.byKey(const ValueKey('login-password')),
+      matching: find.byType(TextField),
+    ),
+    'wrong horse',
+  );
+  await tester.tap(find.byKey(const ValueKey('login-submit')));
+  // Two pumps: one to send, one for the `setState` the refusal lands in.
+  await tester.pump();
+  await tester.pump();
+}
+
 /// Two accessible businesses and one whose invitation is still open, which is
 /// what makes the selector show all three of its row states at once.
 List<TenantMembership> _selectorMemberships() => <TenantMembership>[
@@ -98,6 +139,48 @@ void main() {
     // The email field takes focus after the first frame and its caret blinks
     // forever, so there is no quiet frame to settle on.
     settle: false,
+  );
+
+  // **The three states of this screen that only exist after somebody presses
+  // something**, which is the class of thing `PLAN.md` records as having no
+  // harness coverage at all: the notice chunk of 2026-08-15 changed what seven
+  // surfaces say about every write in the app and moved zero images, because a
+  // notice appears only after a write and no capture performed one.
+  //
+  // The first needs no boundary: an empty form refuses itself, which is the
+  // §5.2 error line under the field it is about.
+  screenshotCase(
+    '01b-sign-in-refused-here',
+    settle: false,
+    build: () => const LoginScreen(),
+    afterPump: (tester) async {
+      await tester.tap(find.byKey(const ValueKey('login-submit')));
+      await tester.pump();
+    },
+  );
+
+  // The second is what the identity provider answered, which is the page notice
+  // rather than a field. `invalid-credential` is the branch a wrong password
+  // actually reaches.
+  screenshotCase(
+    '01c-sign-in-refused-there',
+    settle: false,
+    build: () => LoginScreen(
+      signIn: _FailingSignIn(const SignInException('invalid-credential')),
+    ),
+    afterPump: _signInAndFail,
+  );
+
+  // The third is the branch this chunk found: a device that never reached the
+  // server is `status.info`, not a refusal, and it had been drawn identically to
+  // a wrong password since the screen was written.
+  screenshotCase(
+    '01d-sign-in-unreachable',
+    settle: false,
+    build: () => LoginScreen(
+      signIn: _FailingSignIn(const SignInException('network-request-failed')),
+    ),
+    afterPump: _signInAndFail,
   );
 
   screenshotCase(

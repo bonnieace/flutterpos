@@ -4,7 +4,21 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-15**, which took four chunks.
+Last verified against the code on **2026-08-15**, which took five chunks.
+
+**The fifth is `design.md` §11 step 9, sign-in, and it finishes step 9.** It was **one screen rather
+than the eight §11 lists** — 02 to 07 have been `AppScaffold` routes since step 5a and 08 is an
+`ErrorState` that does not exist — and that one screen was the last place in the app with a second
+palette: its own field, its own button, its own card, its own keypad, and six `Colors.*` literals.
+It closes the **double border** every login field has painted since commit `1b2b13b` on 2026-08-10,
+which is the only defect in this repository a session was ever told to leave in place. Its three
+findings are that **this screen was the ninth notice surface and the sweep's grep could not see it**
+(`login-error`, not `-notice`); that **one of its branches was never a refusal** — a device that
+never reached the server is §2.1's `info`, and it had been drawn identically to a wrong password;
+and that **the keypad's keys were 24 pixels wide at §4.1's `medium` floor**, because the screen asked
+§4.1 whether the window was 768 when the question was whether half of it can hold ten keys at §9's
+48dp target. A rendering also found that **the backspace key was a tofu box** — `⌫` is U+232B and
+Roboto does not carry it.
 
 **The fourth took the four `RecordList` column-arithmetic observations this file had been carrying
 since step 6b**, which are one defect seen from four directions: a table row was divided by four
@@ -175,7 +189,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~93% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 5a, 6 and 8 are finished**: 1, 2, 3, 5a and 6 as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. **Step 8 finished on 2026-08-15 in two halves**: the first landed `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart` on screens 13, 21, 25 and 26, with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted; the second put the figures on **27, 28 and 29**, which state quantities as evidence and therefore took `numeric.body` and a shared right edge rather than a hero figure — **7 call sites across 6 files**, and §2.2's own complaint is now retracted for every screen §11 step 8 names. Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision; and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. **§7's "Title appears once" is closed as of 2026-08-15** — fourteen sites in fourteen files, of which nine were deletions, four became `PageHeader.subtitle`'s first readers and one became a §2.1 status that had been stating something false; the two `headlineSmall` uses left in the migrated tree are deliberate and commented. **`AppNotice` exists as of 2026-08-15** — the four write outcomes mapped once to §2.1, on **7 surfaces** that each held a `String?` whose meaning was in the sentence, and the eighth is step 7's. **`RecordList`'s table divides its row by measurement as of 2026-08-15** — `RecordTableColumns` in `lib/ui/record_list.dart`, with `StatusBadge.measureWidth`, `AppButton.measureWidth` and `measureTextWidth` under it; the four constants step 6b chose against a two-column activity log are ceilings now rather than answers, there is a `space.12` gutter, and **no call site changed**, which is the component owning its own form. `ConfirmDialog` left step 4 for step 7. **Steps 5b, 7, 9, 10, 11 and 12 remain**, and every one of them is one number on its own: the batching exception is spent. |
+| **Design system** | ~93% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 5a, 6 and 8 are finished**: 1, 2, 3, 5a and 6 as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. **Step 8 finished on 2026-08-15 in two halves**: the first landed `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart` on screens 13, 21, 25 and 26, with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted; the second put the figures on **27, 28 and 29**, which state quantities as evidence and therefore took `numeric.body` and a shared right edge rather than a hero figure — **7 call sites across 6 files**, and §2.2's own complaint is now retracted for every screen §11 step 8 names. Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (**150 call sites across 38 files**, four tiers, three sizes, six states — **re-measured 2026-08-15 and the 155 this file carried was wrong**, which is the sixth figure in a row; the command is `grep -c "AppButton(" over lib/ excluding pos/, screens/, config.dart, minus the one constructor declaration in lib/ui/buttons.dart`); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (**41 call sites across 18 files**, six states in the harness — step 9 added sign-in's two); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, ~~and 1 in `pill_input.dart`, which is step 9's sign-in~~ — **step 9 took `pill_input.dart`'s on 2026-08-15 and there were two of them, not one**, so the sale path is the whole of what is left; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision, and **sign-in's is now named for a reason of its own** — no toolbar content, and a title that belongs to the form pane rather than to a header spanning two panes — rather than as an unfinished step; and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. **§7's "Title appears once" is closed as of 2026-08-15** — fourteen sites in fourteen files, of which nine were deletions, four became `PageHeader.subtitle`'s first readers and one became a §2.1 status that had been stating something false; the two `headlineSmall` uses left in the migrated tree are deliberate and commented. **`AppNotice` exists as of 2026-08-15** — the four write outcomes mapped once to §2.1, on **7 surfaces** that each held a `String?` whose meaning was in the sentence, and the eighth is step 7's. **`RecordList`'s table divides its row by measurement as of 2026-08-15** — `RecordTableColumns` in `lib/ui/record_list.dart`, with `StatusBadge.measureWidth`, `AppButton.measureWidth` and `measureTextWidth` under it; the four constants step 6b chose against a two-column activity log are ceilings now rather than answers, there is a `space.12` gutter, and **no call site changed**, which is the component owning its own form. `ConfirmDialog` left step 4 for step 7. **Step 9 finished 2026-08-15** — sign-in was one screen, not the eight §11 lists, and it is now a `PageHeader` on a `Scaffold` with two `AppTextField`s, an `AppButton`, a `Callout` and a keypad drawn from §2.1's `secondary` tier; the **double border** since `1b2b13b` is closed, the last six `Colors.*` literals outside `theme.dart` and the legacy island are gone, `pill_input.dart` / `pill_button.dart` / `glass_card.dart` are dead, and whether the keypad appears is `PosKeyboard.minimumWidth` rather than §4.1's `medium` floor. **Steps 5b, 7, 10, 11 and 12 remain**, and every one of them is one number on its own: the batching exception is spent. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -186,7 +200,7 @@ callable exists, and not green if it is merely tested.
 
 | Capability | | Where it stands |
 | --- | --- | --- |
-| Sign in | 🟢 | `LoginScreen`. A failure renders **a sentence this app wrote**, never an exception: the screen signs in through `EmailPasswordSignIn` and the provider's `message` is dropped at that boundary, so nothing above it can display one. An empty address or password is refused by the form, and any refusal is cleared the moment the input it describes is edited |
+| Sign in | 🟢 | `LoginScreen`. A failure renders **a sentence this app wrote**, never an exception: the screen signs in through `EmailPasswordSignIn` and the provider's `message` is dropped at that boundary, so nothing above it can display one. An empty address or password is refused by the form — on the field it is about, since 2026-08-15 — and any refusal is cleared the moment the input it describes is edited. **A refusal now also says which kind of answer it is**: a device that could not reach the server is `info`, not a red refusal |
 | Verify an email address | 🟢 | Offered on the business selector to an unverified identity |
 | Recover a forgotten password | 🔴 | `requestPasswordReset` has no caller — blocked on App Check, see open decisions |
 | Request a new business | 🟢 | "Request business" on the selector |
@@ -215,6 +229,18 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The fifth 2026-08-15 chunk changed no row of the capability board, and it is the first chunk in
+this migration where that sentence needed a qualification.** Step 9 rewrote the screen "Sign in"
+names, and a person can do exactly what they could do this morning: type an address, type a
+password, tick remember, press the button. What changed is that the button says `Sign in`, the
+fields draw one border rather than two, an empty box is named under itself, and a device with no
+connection is told so in blue-grey rather than accused in red. **The row's own text was extended
+rather than its colour changed**, which is what a 🟢 row is supposed to do when the screen behind it
+is rebuilt. It moved the **Design system** track 93% to 95% and **no other track**, changed **no
+rollout step**, and touched no rule and no `functions/` file. **18 images moved and 6 were added, and
+16 of the 18 are not sign-in** — screens 19 and 20 are the app's only other `Checkbox`es, and the
+theme change in decision 9 is the whole of their delta.
 
 **The fourth 2026-08-15 chunk changed no row of the capability board either, and it changed no call
 site in `lib/` outside `lib/ui/`.** It took the **four `RecordList` column-arithmetic observations**.
@@ -963,14 +989,28 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1950** ✅ measured four times on 2026-08-15 |
-| Functions | `npm --prefix functions test` | **409** ✅ measured four times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured five times on 2026-08-15 (~68–143 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured four times on 2026-08-15 (~78–95 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured four times on 2026-08-15 (~131–168 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1963** ✅ measured five times on 2026-08-15 |
+| Functions | `npm --prefix functions test` | **409** ✅ measured five times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured six times on 2026-08-15 (~68–143 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured five times on 2026-08-15 (~78–214 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured five times on 2026-08-15 (~131–295 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
 
-**2553 tests across five suites. All five were measured by all four 2026-08-15 chunks — twelve
+**2566 tests across five suites. All five were measured by all five 2026-08-15 chunks — thirteen
 consecutive chunks measuring all five — and the carry counter is at 0.**
+
+**Step 9 took Flutter 1950 → 1963** (+13: **8** in `login_screen_test.dart` and **5** in
+`test/tenancy/sign_in_test.dart`). The eight are the assertions the old screen could not carry:
+that the notice says which *kind* of answer it is on all three branches; that the reveal toggle
+announces itself and swaps when it fires; that the title appears once, in the header built for it;
+that both fields are `AppTextField`s and the password has no placeholder; that **a field draws one
+border and not two**, asserted under `spiritTheme` rather than a bare `MaterialApp`; and that a key
+is at least §9's tap target wide, measured on the rendered `PressSurface`. The five are the failure
+kind, including that the one branch which never reached the server is not a refusal and that the
+kind and the sentence come out of one `switch`. **Three of the thirteen failed on their first run
+and all three were the code being wrong, not the test** — the keypad was double-padded and its keys
+came out 44 wide, which is the whole argument for asserting a published number against a rendering.
+**The three emulator suites cost about 620 s between them**, the slowest run since 2026-08-14;
+nothing was retried and nothing flaked.
 
 **The column-arithmetic chunk took Flutter 1932 → 1950** (+18: **14** in `record_list_test.dart` for
 the allocation itself, the gutter, the row height and the invariant that no column but the identity is
@@ -1054,8 +1094,17 @@ procedure three sections away is the file's own defect**, and the trap has been 
 the procedure instead of at a missing JDK.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **175 captures** writing **233**
-images, and it asserts nothing, which is why it is not counted here.
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **178 captures** writing **239**
+images, and it asserts nothing, which is why it is not counted here. Step 9 added three capture
+cases and six images.
+
+**The "229" the 2026-08-15 column-arithmetic entry in `HISTORY.md` put against this figure is
+wrong, and 233 was right.** That entry recorded 238 files on disk and five stale, which is 233 by
+subtraction, and then wrote 229 in the same paragraph. **Measured again on 2026-08-15 before step 9
+touched anything** — a run at `HEAD`, then `LastWriteTime` against the run rather than a hash
+against a baseline, which is what the standing trap asks for — the answer was **233 written, 5 not**,
+and the five are the same five that entry named. This is the seventh figure in a row this file has
+had wrong, and the first one that was wrong *inside a correction of another figure*.
 
 ~~172 captures writing 233 images.~~ **Both halves of that were measured on 2026-08-15 and one was
 wrong.** The captures are 175 now, three of them new. The **233** was counting files in the
@@ -2629,7 +2678,10 @@ changed `firestore.rules` not at all and nothing in `functions/` or `rules-tests
 
 **The three fields left in the migrated tree are named rather than counted as remaining work.**
 `checkout_cart_panel.dart` has two, and it is step 7's sale path in its entirety;
-`pill_input.dart` has one, and §4.4's uppercase labels, pill well and green glow are step 9's.
+~~`pill_input.dart` has one, and §4.4's uppercase labels, pill well and green glow are step 9's.~~
+**Step 9 took `pill_input.dart`'s two on 2026-08-15** — it was two fields, not one — so the count is
+**41 call sites across 18 files** and the only fields left in the migrated tree are the sale path's
+two.
 
 The decisions are settled:
 
@@ -2873,7 +2925,10 @@ The decisions are settled, not open:
    panel's primary action up into the frame crosses the screen/panel boundary that keeps these
    routes testable. Both slots are exercised by the harness and by `test/ui/scaffold_test.dart`.
 10. **Seven raw `Scaffold`s remain and every one is named.** `checkout_cart_panel.dart` (step 7),
-    `login_screen.dart` (step 9), the landing route in `tenant_routing_shell.dart` (step 5b, and
+    `login_screen.dart` (~~step 9~~ — **step 9 landed 2026-08-15 and left it a `Scaffold`
+    deliberately**: no toolbar content, and on a wide window the title belongs to the form pane
+    rather than to a header spanning a form and a keypad; it carries a `PageHeader` inside that
+    pane), the landing route in `tenant_routing_shell.dart` (step 5b, and
     see below), `_RoutingProgress`, `_TenantBootstrapError` and `PlatformRouteUnavailable` (three
     full-page states that are `LoadingState` / `ErrorState` / `EmptyState` in §5.1, none of which
     exists yet), and `pdf_preview_screen.dart`, which is legacy-adjacent and has no title at all.
@@ -3760,6 +3815,105 @@ meaning narrows from an allocation to a ceiling; `AppButton`'s leading icon `18`
 `AppButton.iconSize`, read by the widget that paints it and the formula that measures it. Nothing
 else in `lib/` was touched.
 
+### A boundary is a measurement, and the front door had a second palette
+
+`design.md` §11 step **9**, sign-in, taken 2026-08-15. **It finishes step 9 and it was one screen
+rather than the eight §11 lists.** Screens 02 to 07 have been `AppScaffold` routes with `AppButton`s
+and `AppTextField`s since steps 3 and 5a — they are phases of `tenant_routing_shell.dart` and were
+swept with everything else — and screen 08 is one of the three full-page `Center` states §5.1 names
+`LoadingState` / `ErrorState` / `EmptyState`, none of which exists. So the surface was **01**, which
+had its own field, its own button, its own card and its own on-screen keypad. It changed
+`firestore.rules` not at all and nothing in `functions/` or `rules-tests/`.
+
+**Three widget files are dead**: `pill_input.dart`, `pill_button.dart`, `glass_card.dart`. Nothing
+imports them. **Deleting them was refused by this session's tool permissions**, exactly as the
+five stale screenshots were on 2026-08-15, so they are named here and in the exclusions instead of
+being quietly left.
+
+The decisions are settled, not open:
+
+1. **It is a `Scaffold` with a `PageHeader`, not an `AppScaffold`, and that is the framing decision
+   worth arguing with.** `AppScaffold` is a toolbar, a header and a §4.2-capped body spanning the
+   page. Sign-in has nothing for a toolbar — no way back from the app's front door, nothing to sign
+   out of — so it would draw 56 logical pixels of empty chrome above the title. The decisive half is
+   the wide layout: this screen is two panes and **the title belongs to the form**, not to a header
+   spanning a form and a keypad. §7's page pattern is kept; the frame it usually arrives in is not.
+   The raw-`Scaffold` count therefore stays at **7** with this one's reason rewritten from "step 9"
+   to "no toolbar content, deliberately".
+2. **Whether the keypad appears is a measurement, and it replaces a breakpoint.** The screen asked
+   §4.1 whether the window was 768 wide. §4.1's bands say how much room a *page* has; what this
+   screen needed to know is whether half the window can hold ten keys at §9's 48dp target. It could
+   not, and the arithmetic is worth writing out because this file first wrote it down as an
+   estimate and the estimate was too kind: the old layout gave the keypad four ninths of the window
+   and then spent 48 on the card's margin and 48 on its padding, so at 768 that is
+   `768 × 4/9 − 96 = 245` for ten keys — **24 pixels of slot each and 13 painted** — and at 1023 it
+   is still only 36 and 24. It had been that way since the file was written, under
+   a boundary that looked right because it named a declared constant. `PosKeyboard.minimumWidth`
+   answers it now: ten targets, nine `space.8` gaps, the card's inset and the pane's margin, which is
+   **632**, so the screen shows the keypad at **1264** and above. **A screen consulting one variable
+   is not the same as a screen asking the right question**, and this is the only place in the app
+   where the two came apart.
+3. **A keypad key is not an `AppButton`, and §5.2's own arithmetic is why.** §5.2 gives `AppButton` a
+   minimum horizontal padding of `space.20` — 40 pixels before a glyph — and `PressSurface` reserves
+   8 more for the ring gutter. At §9's 48-wide minimum that leaves nothing for the character. A
+   component cannot be used at a size its own specification forbids, so the key draws itself out of
+   the same §2 rows `AppButton` reads — `action.secondary`, `radius.pill`, `label.lg`, `PressSurface`
+   for press, hover, ring and target. Nothing invents a token.
+4. **The refusal is an `AppNotice`, and this screen was the ninth surface rather than none of them.**
+   It held a `String?` painted `Colors.red`, which is the exact half-model the seven back-office
+   surfaces shed on 2026-08-15. It was missed because the grep that found those is
+   `grep -n "\-notice'" lib` and this screen's key was `login-error`. It is `login-notice` now, so
+   the next run of that grep finds it.
+5. **One of its branches was never a refusal**, which is the same finding the notice chunk made one
+   day earlier and one screen along. `network-request-failed` — *"This device could not reach the
+   server"* — is §2.1's `info`: nothing was refused, because nothing was answered. It had been drawn
+   identically to a wrong password. `SignInFailureKind` in `sign_in.dart` carries the distinction,
+   decided in the one `switch` that already owned the words so a second table cannot disagree with
+   it.
+6. **A defect this screen found itself sits on the field it is about; a provider answer sits in the
+   page notice.** §5.2 gives a field an error line that replaces its helper and §9 asks that a form
+   error be associated with its input. *"Enter the password for this account."* is about one box;
+   *"That email address and password do not match an account."* is about the credential, and a
+   credential is not a box.
+7. **The double border is closed, and the mechanism is worth keeping.** Since commit `1b2b13b` on
+   2026-08-10 every login field painted two: `PillInput` set `border: InputBorder.none`, which was
+   correct and stopped being sufficient the day `spiritTheme` gained `enabledBorder`, `focusedBorder`
+   and `filled: true` — `InputDecorator` prefers the specific slots over `border`. `AppFieldWell`
+   strips all six and sets `filled: false`, and a test now pumps this screen **under the real theme**
+   rather than a bare one and asserts every slot. That is the assertion that would have caught it.
+8. **`Enter` is drawn disabled because it does nothing.** Its handler has been an empty branch with
+   the comment `// Optional submit action` since the file was written. §2.1's disabled row is a
+   rendering rather than a flag, so a control with no callback looks like one; wiring it to submit is
+   a behaviour change and `claude.md` hard rule 1 keeps that out of a visual step. It is the same
+   move §7's title chunk made when the staff directory stopped claiming to be read-only.
+9. **The theme's checkbox went to §2.1 and one thing it cannot fix is recorded.** The tick was
+   `Colors.green` at the call site over a theme painting `accentGreen` — two greens for one control —
+   and the check mark was `bgDark`, the *page* colour, which is the divergence `onPrimary` carried
+   until step 3. Both read `action.primary` now and the outline reads `action.secondary.border`. See
+   the open decision for the part that is still wrong.
+10. **Three copy changes, and only one of them is a copy decision.** `UNLOCK REGISTER →` became
+    `Sign in`, which is §8 rule 3 naming *Unlock register* in its own list of what a control must
+    never say. `EMAIL / USER ID` and `PASSWORD` became sentence case, which is §2.2 and §8 rule 7 —
+    the *words* are unchanged, because what those fields should be called is step 11's. And the
+    password placeholder `Enter Password` was **deleted**, because §5.2 says a placeholder is an
+    example and never a restatement of the label.
+
+**What it found by rendering that no review would have: the backspace key was a tofu box.** `⌫` is
+U+232B and Roboto does not carry it, so the first picture of the new keypad showed an empty
+rectangle where the key's entire face should be. It is the same defect `PLAN.md` already records
+against the bulk report's before/after arrow, one step worse — a missing mark inside a sentence is a
+blemish, and a control whose only face is a box cannot be named at all. It is
+`Icons.backspace_outlined` at `AppButton.iconSize` with a semantic label, which is §9's icon-only
+row. **The general form is the part to carry: a glyph outside the Latin ranges is an asset, not a
+character, and it needs a picture before it ships.**
+
+**Two things deliberately not done.** `enableInteractiveSelection: false`, which `PillInput` set with
+the comment *"Prevent selection/highlight"*, is gone — `AppTextField` offers no passthrough and
+adding one to carry a sign-in quirk into "one pattern, everywhere" is the wrong trade; a person can
+now select the text in these two fields, which is what every other field in the app already allows.
+And the two leading icons inside the wells went, because §5.2 specifies no leading icon for a field
+and the persistent label is what names it.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -3955,6 +4109,30 @@ or the token layer sets `letterSpacing: 0` on every role it does not name one fo
 what it says; or §2.2 gains a sentence saying the ambient spacing is deliberate and the roles are
 deltas onto it. **Do not decide it inside a chunk**: the second and third are one line each and would
 move **every string in the app**, which is a diff no visual step should be carrying incidentally.
+
+### An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
+
+**Raised by step 9 on 2026-08-15, not decided inside it, and it is the first place §9's own
+2026-08-12 reading bites.** That reading says the 3:1 row applies to "a boundary that **carries
+meaning on its own** — not to every border that exists", and it clears the five status borders on
+the grounds that a status is container + icon + label, so no meaning rests on the edge.
+
+**An unticked checkbox is the counter-example.** There is no container, no icon and no label inside
+it: the outline is the *only* thing on screen saying there is a control there and that it is off.
+It carries meaning by that reading's own test, so it owes 3:1 — and `border.strong` `#2C5340` is
+**1.97** on `surface.base`, `border.subtle` `#1E3A2B` is **1.38**, and there is no third border role.
+The one boundary §2.1 gives a number to, the focus ring at `#45F28D`, clears it at 11.71 and is not
+a resting state.
+
+**Step 9 moved it from `border.subtle` to `border.strong`**, which is §2.1's own row for an input and
+is a real improvement — it is visibly lighter in `web/20-bulk-changes-and-import` — and it is still
+under 3. **Inventing a colour is what `claude.md` forbids**, so it is here rather than in the theme.
+Three honest resolutions: §2.1 gains a role for a control edge that must be perceived, at
+`text.tertiary`'s 5.9 or thereabouts; or §9 gains a sentence saying an unticked control is exempt
+because its label sits beside it and the pair is the control; or §5.1 gains a `Checkbox` row and
+§5.2 specifies it, which is the answer that also settles the tap-target and label-tap questions
+nobody has asked yet. **It affects three call sites** — sign-in's remember box and the two
+`CheckboxListTile`s on screens 19 and 20 — so it is cheap whenever it is decided.
 
 ### A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
 
@@ -4894,6 +5072,17 @@ enormous expected-denial traces.
   `ensureVisible`** — and note that `scrollUntilVisible` drives one direction, so a capture case must
   act top to bottom: reaching back up for a control a `ListView` has already disposed leaves no
   `Scrollable` to drive and throws `Bad state: No element` from somewhere that names neither.
+- **A glyph outside the Latin ranges is an asset, not a character, and this repository's fonts do
+  not have one.** Found 2026-08-14 in a sentence and 2026-08-15 in a *control*. The bulk report
+  writes a before/after arrow (`bulk_catalog.dart:1590`) and it renders as tofu in the harness's
+  Roboto; the sign-in keypad's backspace key was `⌫` — U+232B ERASE TO THE LEFT — and its **entire
+  face** was an empty rectangle in the first picture of it. Roboto's `material_fonts` cache carries
+  neither. The Material **icon** font is loaded beside it and does, which is why the repair is
+  `Icons.backspace_outlined` with a semantic label rather than a different character. **Whether a
+  device shows either is still unknown** and does not change the rule: a string literal outside
+  ASCII needs a picture before it ships, and a control whose only label is one needs an icon
+  instead. `grep -nP "[^\x00-\x7F]" lib --include=*.dart` finds the class; the harness finds the
+  ones that fail.
 - **A call-site count that does not exclude comment lines is wrong.** `lib/config.dart` is a
   **fully commented-out file** and contributed 8 phantom buttons to two consecutive estimates in
   this file. Strip lines whose trimmed form starts with `//` before counting anything, and check
@@ -5224,66 +5413,71 @@ start, check "The emulator prelude is not optional" before writing anything down
 
 ---
 
-**The queued chunk is `design.md` §11 step 9 — sign-in and onboarding.** It is the next *numbered*
-step that is neither excluded (7, the sale path) nor a behaviour change (5b, the navigation model),
-and everything ahead of it in the queue is now done: §7's title defect, the notice model, and the
-four `RecordList` column-arithmetic observations all closed on 2026-08-15.
+~~**The queued chunk is `design.md` §11 step 9 — sign-in and onboarding.**~~ **Done 2026-08-15, and
+it was one screen rather than the eight §11 lists.** Screens 02 to 07 have been `AppScaffold` routes
+since step 5a and screen 08 is one of the three full-page `Center` states §5.1 names
+`LoadingState` / `ErrorState` / `EmptyState`, so the whole of the step was **01**. The six defects
+this file listed were all real and all closed, including the **double border** the product owner
+reported — the one defect in this repository a session was ever told to leave in place. See the
+standing decision for the ten decisions, and for the three things it found that were not on any
+list: this screen was the **ninth notice surface** and the sweep's own grep could not see it, one
+of its branches **was never a refusal**, and its keypad's keys were **24 pixels wide** at §4.1's
+`medium` floor under a boundary that named a declared constant.
 
-**What step 9 is, from `DESIGN-AUDIT.md` §4.4 rather than from memory.** `login_screen.dart` and the
-four widgets it imports — `pill_input`, `pos_keyboard`, `glass_card`, `pill_button` — are the last
-unmigrated surface the app's root actually reaches. Named defects: labels in **uppercase** where §2.2
-permits it only on `label.eyebrow`; a **radius-32 well** where §2.3 says 8; a **green glow
-`BoxShadow`** where §9 requires a 2px focus ring; `Colors.green` for the Remember Me checkbox, a
-*different* green from the accent; `Colors.red` for the error rather than the palette's critical red;
-and `"UNLOCK REGISTER →"`, which §8 rule 3 and §2.2 both reach — wrong case and wrong words. **Size it
-by running the grep rather than by trusting this paragraph**, which is the counting habit this file
-has now been burned by five times:
-`grep -n "TextField\|ButtonStyleButton\|ElevatedButton\|TextButton\|OutlinedButton" lib/login_screen.dart lib/widgets/pill_*.dart`.
+**Its estimate was wrong in a new direction, and that is worth recording next to the five
+mis-counts.** Every previous chunk this file over- or under-*counted*. This one it **mis-scoped**:
+it described step 9 as `login_screen.dart` plus four widgets, which was right, while §11 says
+"01–08" — so a session reading §11 rather than this file would have opened seven screens that were
+already migrated and concluded the step was mostly done. **Both readings were partly wrong and
+neither was checked against the code**, which is one command:
+`grep -n "AppScaffold\|AppTextField\|AppButton" lib/tenancy/tenant_routing_shell.dart`.
 
-**A sixth defect, reported by the product owner on 2026-08-15 and not in `DESIGN-AUDIT.md` §4.4:
-every login field draws two borders, and it is a regression rather than the original styling.**
-`PillInput` draws the pill itself — a 32-radius `mutedGreen` container with a 2px accent border only
-when focused — and sets `border: InputBorder.none` on the `TextField` inside it
-(`lib/widgets/pill_input.dart:117`). **That is no longer sufficient**, and the reason is a Flutter
-resolution order rather than a mistake in the widget: `InputDecorator` prefers `enabledBorder` and
-`focusedBorder` over `border`, both are null on the widget, and both are therefore taken from the
-theme. Commit **`1b2b13b`** (2026-08-10) gave `spiritTheme` an `inputDecorationTheme` carrying
-`enabledBorder`, `focusedBorder`, `errorBorder` **and `filled: true`** (`lib/theme.dart:273`), so
-since that day every login field has painted a 14-radius filled outline **inside** its own pill.
-`git log -S enabledBorder -- lib/theme.dart` returns that one commit, and `pill_input.dart` predates
-it by months. It is visible in `mobile/01-sign-in.png` and has been in every capture since.
+**The queued chunk is `design.md` §11 step 11 — the copy pass against §8 — and taking it out of
+numerical order is a decision this file is making rather than inheriting.** Step 10 is the next
+number and it cannot be started honestly. Four things block it, all nameable:
 
-**The repair is already written, one component along.** `AppTextField` strips all six border slots and
-sets `filled: false`, with a comment naming this exact trap — *"A `TextField` with a decoration inside
-a well is two wells"* (`lib/ui/fields.dart:268`). `PillInput` predates that lesson. **Do not fix it at
-the theme**: `inputDecorationTheme` is what the till's two unmigrated Material fields correctly draw
-their single outline from, so changing it there is a §2.3 decision with a blast radius rather than a
-repair.
+- **Two of its eight assets are external and need product decisions nobody has made.** §12 asks *"Is
+  there a character?"* and *"Who builds the Rive files?"*, and asset 7 is "business approval
+  celebration, **character permitted**". Building it means answering the first by drawing something.
+- **The tier system has no floor device.** §6.6 degrades motion by tier and §12 says outright:
+  *"The tier system needs a named handset to test against. Everything in §6.6 is unverifiable until
+  that exists."*
+- **Four of the six native assets have no host.** Asset 2 lives on the shift banner, which is §4.4's
+  navigation model and therefore step **5b**, excluded. Asset 4 is `SyncIndicator` and asset 6 is
+  `EmptyState`, both §5.1 rows that do not exist. Building an asset into a component that has not
+  been specified is how a fourth empty state gets written.
+- **Its two remaining assets are on screens that are done.** Assets 3 and 5 — the cash-count and
+  reconciliation state machines — are the honest half of step 10, and they are two assets, which is
+  not a chunk.
 
-**It was left for step 9 deliberately, by the product owner, on the day it was reported** — step 9
-rewrites this screen and may delete `PillInput` outright, so a six-line repair to a widget about to be
-replaced buys one screenshot. **The thing step 9 must not do is inherit the cause without the
-lesson**: whatever replaces `PillInput` has to strip all six slots, or it will draw the same two
-borders in a new shape.
+**Step 11 needs nothing that does not exist, and it already has a backlog this file has been
+accumulating for four days.** Every item below was found by a chunk that could not fix it because
+copy was not its number:
 
-**It is the chunk that makes two files deletable.** `test/support/buttons.dart` and
-`test/support/fields.dart` exist only because `lib/` holds more than one button and field system;
-step 7 takes the last `ButtonStyleButton` and two of the last three `TextField`s, step 9 takes the
-third. **`test/support/notices.dart` is not one of them** — it reads `Callout`, which is the
-destination rather than a stop on the way to one.
+```text
+bulk_catalog.dart:1590   the before/after arrow renders as tofu in the harness fonts
+_summary                 "1 were corrected, 1 already hold this value" - no singular form
+bulk report row labels   `Created` / `Corrected` shown by a preview, before anything exists
+13c-staff-directory      badges read `active` and `pending` - the enum's own wire values
+login-email placeholder  `example@spiritpos.com` - the product is Chilltent
+login-email label        `Email / user ID` - step 9 fixed the case and left the words
+screen 28's variances    a signed number is a bookkeeper's idiom, §8 rules 6 and 10
+```
 
-**One thing checked rather than assumed, because this file has said the opposite in the past.**
-`claude.md` hard rule 3 makes `lib/pos/**` and `lib/screens/**` read-only, and **none of step 9's
-files are in either**: the screen is `lib/login_screen.dart` and the four widgets are
-`lib/widgets/pill_input.dart`, `pill_button.dart`, `glass_card.dart` and `pos_keyboard.dart`. There is
-no scope conflict and no permission to ask for. What step 9 *does* need settling on is smaller: those
-four widgets are shared with nothing else the migrated tree reaches, so a rewrite may replace them
-outright rather than restyling them, and whether `pos_keyboard` survives at all is a product question
-about whether an on-screen keypad belongs on sign-in.
+**The arrow and the backspace glyph are the same defect and step 11 owns both**, which is the
+generalisation step 9 earned: **a glyph outside the Latin ranges is an asset rather than a
+character**, and this repository's fonts carry neither U+2192 nor U+232B. Step 9 replaced its own
+with `Icons.backspace_outlined`; `bulk_catalog.dart:1590` still has one. **Grep for the class rather
+than the two known instances**, and take a picture before believing any of them:
+`grep -nP "[^\x00-\x7F]" lib --include=*.dart`.
 
-**Step 8 is finished as of 2026-08-15, in both halves, and the notice model with it.** Steps 1, 2, 3,
-5a, 6 and 8 are all done, step 4's sweep is a class of thing rather than a screen list, and
-`AppNotice` closed the seven-surface item that had been queued as four.
+**Size step 11 by running §8's ten rules over the app rather than by trusting the list above**,
+which is seven items and is certainly not all of them — that is the counting habit this file has now
+been burned by six times.
+
+**Steps 1, 2, 3, 4, 5a, 6, 8 and 9 are all done.** Step 4's sweep is a class of thing rather than a
+screen list, `AppNotice` closed the seven-surface item that had been queued as four, and step 9
+closed the last surface with a palette of its own.
 
 ```text
 step 6's twelve, all done:                        step 4's sweep so far:
@@ -5579,10 +5773,11 @@ arrive with something else.
 
 ~~**The four carried observations about `RecordList`'s column arithmetic are the chunk**~~ — **done
 2026-08-15, and they were one chunk exactly as predicted**, for the reason predicted: they need all
-twelve screens in front of them. **`design.md` §11 step 9, sign-in and onboarding, is now the queued
-chunk** and is described at the top of this section.
+twelve screens in front of them. ~~**`design.md` §11 step 9, sign-in and onboarding, is now the queued
+chunk**~~ — **also done 2026-08-15. `design.md` §11 step 11, the copy pass, is now the queued chunk**
+and is described at the top of this section, together with why step 10 is not.
 
-**Four things are genuinely finished and should not be re-queued.** `design.md` §11 step 8: all five
+**Five things are genuinely finished and should not be re-queued.** `design.md` §11 step 8: all five
 of its screens are done, §2.2's own complaint is retracted for every one of them, and the only figure
 on those screens deliberately left in prose is a revision number, which has a standing decision against
 it. **The notice-status model**, which was queued as four items and turned out to be seven; the eighth
@@ -5591,6 +5786,10 @@ queued as thirteen panels and turned out to be fourteen sites; the two `headline
 migrated tree are both deliberate and both commented at the site. And **the four `RecordList`
 column-arithmetic observations**, closed as one chunk — with observation 1 improved rather than closed
 and the reason recorded against it, so that a later session does not re-queue it as an oversight.
+And **step 9**, which is one screen and is done: `DESIGN-AUDIT.md` §4.4's three defects, §2.2's
+`UNLOCK REGISTER`, the two `Colors.*` literals, the double border, the notice model and the keypad's
+tap targets. **Screens 02–08 are not an unfinished remainder of it** — 02 to 07 were migrated in
+steps 3 and 5a, and 08 is an `ErrorState`, which is a component question rather than a screen one.
 
 **The batch is a deliberate relaxation of `claude.md` hard rule 4, granted by the product owner on
 2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** All four pieces of step 6's own half were taken
@@ -5601,15 +5800,16 @@ a restyle. The exception is a permission to batch, not an instruction to, and sp
 boundaries it names has cost the batch nothing four times running — **nine**, counting the sweep's
 four chunks and step 8's first half, which are one step's own sweep rather than further boundaries.
 The rule stands everywhere
-else: step 7, step 9, step 10 and steps 11–12 are one number each, and **5b (the navigation model) is
+else: step 7, step 10 and steps 11–12 are one number each — **step 9 was taken on its own under it on
+2026-08-15 and cost nothing by being** — and **5b (the navigation model) is
 not in this exception** — it is a behaviour change and stays queued. **The exception is now fully
 spent and should not be invoked again**: steps 4, 5a, 6 and 8 — every step it named — are finished as
 of 2026-08-15. Its last act was the catalog chunk's ruling that **step 8 takes the step-4 sweep of its
 own five screens with it** rather than those screens being swept now and restyled later; the first
 half honoured that on 25 and 26, and the second half inherited nothing to sweep, because 27, 28 and 29
 had been swept the day before. **Ten chunks were taken under it and every one of them split on a
-boundary the exception permitted it not to.** Everything left — 5b, 7, 9, 10, 11, 12 — is one number
-on its own under the unrelaxed rule.
+boundary the exception permitted it not to.** Everything left — 5b, 7, 10, 11, 12 — is one number
+on its own under the unrelaxed rule, and step 9 was the first to be taken that way.
 
 **The product owner chose the composition layer over the web callable-auth defect on 2026-08-12,
 and the step-4, step-5a, step-6a, step-6b and both sweep sessions all checked that choice rather than
@@ -5655,14 +5855,28 @@ padded 24 now pad `space.20` with everything else, so the question is a naming g
 inconsistency. Step 6a also found this file's own description of it wrong: there were **three**
 routes and the landing route was not one of them.
 
-**Explicitly excluded from the queued step-9 chunk.** Sign-in is the last unmigrated surface the
-app's root reaches, which makes it the chunk most likely to acquire neighbours; everything below is a
-neighbour. **New to this list on 2026-08-15**, and the first two are this chunk's own leavings:
-**observation 1's remaining wrap** — a four-action record on a five-column row at 1128 still takes two
-runs, the arithmetic for why is recorded above, and the only remaining fixes are §4.3 or §5.2
-amendments; **the ambient `letterSpacing` the theme merges under every token role**, which has its own
-open decision and would move every string in the app; and **the five stale `*-full` screenshots**,
-which are generated files this session was not permitted to delete.
+**Explicitly excluded from the queued step-11 chunk.** A copy pass reaches every string in the app,
+which makes it the chunk most likely to become a rewrite of whatever it is reading; everything below
+is a neighbour. **New to this list on 2026-08-15**, and the first three are step 9's own leavings:
+
+- **`pill_input.dart`, `pill_button.dart` and `glass_card.dart`**, which nothing imports and which
+  should be **deleted**. Step 9 tried and its tool permissions refused, exactly as they refused the
+  five stale screenshots. They are dead rather than excluded — a session that can delete a file
+  should take these three with whatever it is doing, and `flutter analyze lib/widgets` reporting
+  five issues in three files nothing reads is the tell.
+- **`enableInteractiveSelection`**, which `PillInput` set to false and `AppTextField` does not
+  offer. A person can now select the text in the two sign-in fields, as they can in every other
+  field in the app. If that turns out to be wrong on a till it is a component change and not a copy
+  one.
+- **The `Enter` key on the sign-in keypad**, which is drawn disabled because it does nothing.
+  Wiring it to submit is a behaviour change; dropping the key is a product decision. Neither is
+  step 11's.
+- **Observation 1's remaining wrap** — a four-action record on a five-column row at 1128 still takes
+  two runs, the arithmetic for why is recorded above, and the only remaining fixes are §4.3 or §5.2
+  amendments; **the ambient `letterSpacing` the theme merges under every token role**, which has its
+  own open decision and would move every string in the app; **the checkbox outline's 1.97:1**, which
+  has an open decision of its own and needs a §2.1 role that does not exist; and **the five stale
+  `*-full` screenshots**, still not deleted for the same reason.
 
 **Inherited, and still excluded:** **`inNarrowForm` and `StatRow`'s own unused
 capacity** — neither is a knob any
@@ -5675,12 +5889,12 @@ capability chunk, not a restyle — both are new to this list on 2026-08-15 and 
 **`RecordList` for screen 28's difference cards and screen 20's report cards**, because neither is one
 of the twelve screens step 6 names and migrating either would be step 6 work outside step 6's list —
 **and note that both would now inherit the measured column arithmetic for free**, which is a reason to
-do it one day rather than a reason to do it inside step 9;
-**the two copy defects the bulk report's first picture found** — the before/after arrow that renders
-as tofu in the harness fonts (`bulk_catalog.dart:1590`; whether a device shows it is unknown) and
-`_summary`'s missing singular, *"1 were corrected, 1 already hold this value"* — both of which are §8
-and therefore step 11's; **the past-tense row labels** `Created` / `Corrected`, which a preview shows
-before anything exists and which are the same kind of copy question; **`AppSelect`'s rendering on
+do it one day rather than a reason to do it inside another step;
+~~**the two copy defects the bulk report's first picture found** … both of which are §8 and therefore
+step 11's; **the past-tense row labels** `Created` / `Corrected` …~~ **These three stop being
+exclusions the moment step 11 is the chunk, and they are now listed under it above** — the tofu
+arrow at `bulk_catalog.dart:1590`, `_summary`'s missing singular, and the past-tense row labels a
+preview shows before anything exists. **`AppSelect`'s rendering on
 screen 21**, where the three adjustment-type labels draw as three white rectangles — it is present at `HEAD`
 and therefore step 3's, not the sweep's, and `web/92-appselect-open` compounds it by cutting off above
 the select so that component's own matrix has never photographed one; **the four carried `RecordList`
@@ -5691,9 +5905,10 @@ a status sweep should not be carrying that diff;
 and the whole sale path, step 7 — **note that step 6a touched one expression in that file**, the
 till's breakpoint, which §4.1 named as its own and which is not a licence to touch anything else
 there; `ConfirmDialog`, which left step 4 for step 7 on 2026-08-12;
-`pill_input.dart` and sign-in's visual design, step 9 — **same note**, step 6a rewired `isMobile`
-and nothing else; **`Pagination`**, §5.1 priority 3, whose four idioms sit on the very screens the
-sweep touches and which is the thing a sweeping session will be most tempted to fold in;
+~~`pill_input.dart` and sign-in's visual design, step 9~~ — **done 2026-08-15**, and the note that
+went with it is now history: step 6a rewired `isMobile` and nothing else, and step 9 deleted
+`isMobile` outright; **`Pagination`**, §5.1 priority 3, whose four idioms sit on the very screens the
+sweep touched and which is the thing a sweeping session will be most tempted to fold in;
 the remaining `IconButton` call sites, which have
 no component yet — **the count is 6, and the 8 this file carried was wrong in the exact way its own
 standing trap describes.** `lib/config.dart` is a fully commented-out file and contributed the other
@@ -5726,27 +5941,39 @@ re-measure, and re-measuring is a matter of running the prelude first.
 
 **Two things to delete when their moment comes, so they are not inherited silently.**
 `test/support/buttons.dart` and `test/support/fields.dart` exist only because `lib/` holds more
-than one button and field system. Step 7 takes the last `ButtonStyleButton` and two of the last
-three `TextField`s; step 9 takes the third. When both are done, both files should be deleted and
-their callers pointed at `AppButton` and `AppTextField` directly.
+than one button and field system. ~~Step 7 takes the last `ButtonStyleButton` and two of the last
+three `TextField`s; step 9 takes the third.~~ **Step 9 took its half on 2026-08-15**, so the only
+thing keeping either file alive is `checkout_cart_panel.dart` — 7 buttons and 2 fields, step 7's.
+When that lands, both files should be deleted and their callers pointed at `AppButton` and
+`AppTextField` directly.
+
+**Three files in `lib/widgets/` are dead and should go with them, sooner.** `pill_input.dart`,
+`pill_button.dart` and `glass_card.dart` have no importer as of 2026-08-15. They are not a step 7
+dependency and nothing is waiting on them; the only reason they are still on disk is that step 9's
+tool permissions refused both `Remove-Item` and `git rm`.
 
 **`test/support/notices.dart` is not one of them and should not be swept up with them.** It was added
 2026-08-15 and reads `Callout`, which is the destination rather than a stop on the way to one; its
 own doc comment says so, because a later reader deleting "the `test/support` seams" would take it too.
 
-**App Check was passed over a seventh time**, on the same fresh instruction the sixth was: the
+**App Check was passed over an eighth time**, on the same fresh instruction the sixth was: the
 product owner asked on 2026-08-12 for the redesign to be run through to the end of its visual steps
 without stopping, and named 5b and 7 as the two that stay out. App Check is still **the only queued
 item that would move a red row**, and it is still at the head of the preference order below. It
-should be taken the moment the redesign's visual steps are done.
+should be taken the moment the redesign's visual steps are done — **and that moment is closer than
+it has been**: with 9 finished and 10 blocked on three §12 decisions, what is left of the redesign
+is one copy pass and one accessibility audit.
 
-**One defect is queued against step 9 rather than fixed, and the choice was the product owner's.**
-Every login field has drawn **two borders** since commit `1b2b13b` on 2026-08-10 — the pill's own and
-the theme's, because `InputDecorator` prefers `enabledBorder` over the `border: InputBorder.none` the
-widget sets. It is six lines to repair and it was deliberately left to the step that rewrites the
-screen; the full mechanism, the evidence, and the reason not to fix it at the theme are under the
-queued chunk above. **It is the only known defect in this repository that a session was told to leave
-in place**, which is why it is named twice.
+~~**One defect is queued against step 9 rather than fixed, and the choice was the product owner's.**
+Every login field has drawn **two borders** since commit `1b2b13b` on 2026-08-10 …
+**It is the only known defect in this repository that a session was told to leave in place**, which
+is why it is named twice.~~ **Fixed 2026-08-15 by the step that was told to fix it.** `PillInput` is
+gone; both fields are `AppTextField`s over an `AppFieldWell` that strips all six border slots and
+sets `filled: false`. **What the repair added that the original diagnosis did not have is a test
+that would have caught it**: `test/login_screen_test.dart` now pumps this screen under `spiritTheme`
+rather than a bare `MaterialApp` and asserts every slot, because the whole mechanism of this defect
+is a theme reaching past a widget's own `border`. **No other screen in the app was ever affected** —
+the till's two unmigrated fields sit in no well and take the theme's single outline correctly.
 
 **A question for the product owner, from step 3 rather than step 4.** §5.2 specifies a field's
 rest, focus and error treatments and **says nothing about hover**. `AppTextField` therefore has no
@@ -5830,7 +6057,21 @@ row reads as an exception or as a defect is a judgement about how often a shop s
 invitation, and if it reads as a defect the fix is §4.3's `expanded` cell saying something other than
 "all inline", which is a `design.md` amendment before it is code.
 
-**The device-run debt is therefore now twenty-four chunks deep**, and the last nineteen are the ones that
+**Step 9 adds the item a person meets before anything else in this app, and it is the one on this
+list that needs a device least and a *pair of eyes* most.** Sign-in is rebuilt: `Welcome back` at
+§2.2's title roles instead of a hand-sized 40px, one border per field instead of two, a 2px focus
+ring instead of a green glow, `Sign in` instead of `UNLOCK REGISTER →`, and a keypad that only
+appears above 1264. **Chrome is enough for the form** — it is the one screen a run reaches without
+signing in, which is the whole reason the web callable-auth defect has never blocked looking at it.
+Three things to judge. First, **whether the form reads as centred or as adrift**: it sits in the
+middle of the window with a lot of ground above the title, which is what it did before and is more
+visible now the title is smaller. Second, **whether losing the keypad below 1264 is right** — the
+arithmetic says a key below 48 fails §9, but a till at 1280 that used to have a keyboard now does
+not, and only somebody who has used one can say whether that is a loss. Third, **the disabled
+`Enter` key**: it does nothing and now looks like it does nothing, and whether that reads as honest
+or as broken decides whether it gets wired or dropped.
+
+**The device-run debt is therefore now twenty-five chunks deep**, and the last twenty are the ones that
 most need a device — between them they changed how nearly every screen in the app looks, how every
 button feels, how every screen is entered and left, how every box a person types into is drawn, how
 every explanation folds away, where the title of every screen sits, how wide every page
@@ -5846,8 +6087,9 @@ it**, **either catalog screen on it**, **any of the four stock screens on it**, 
 shift screens on it**, **any of the four reconciliation surfaces**, **any of the four catalog
 surfaces**, **`StatTile` on any of its five**, **`StatLine` on a difference or a run**, **any of the
 seven notices that now answer in colour**, **any of the fourteen routes that stopped saying their
-own name twice**, or **any of the twelve tables whose columns are now measured rather than shared
-out**. Between them that is 409 tests, 233 screenshots, and no eyes.
+own name twice**, **any of the twelve tables whose columns are now measured rather than shared
+out**, or **the screen a person sees before any of the others**. Between them that is 409 tests,
+239 screenshots, and no eyes.
 
 **One item on this list stopped being purely a matter of judgement on 2026-08-14, and it is the
 strongest argument yet for looking rather than asserting.** A `Disclosure` had shipped truncated on a
@@ -6188,10 +6430,16 @@ finished.
   `web/` or `web-full/`** — and changed **no call site**. Its own standing decision above records what
   it decided, including the one most likely to be argued with: the actions column is **not** sized to
   the widest set in the list.
-- **~~The design system, step 9: sign-in and onboarding~~** — the queued chunk, described at the top
-  of "Next bounded chunk". Its files are `lib/login_screen.dart` and the four widgets in
-  `lib/widgets/` that only it imports; **none of them is under `claude.md` hard rule 3**, which was
-  checked rather than assumed.
+- **~~The design system, step 9: sign-in and onboarding~~** — **done 2026-08-15**, and it was one
+  screen rather than the eight §11 lists. It moved no board row and no rollout step, moved the
+  **Design system** track 93% to 95%, added 12 tests, added 6 screenshots and moved 18 — **16 of the
+  18 are not sign-in**, they are the two `CheckboxListTile` screens the theme change reaches. Its own
+  standing decision above records the ten decisions, including the two most likely to be argued
+  with: it is a `Scaffold` with a `PageHeader` rather than an `AppScaffold`, and a keypad key is
+  **not** an `AppButton` because §5.2's padding rule cannot be honoured at §9's minimum key width.
+- **The design system, step 11: the copy pass against §8** — the queued chunk, described at the top
+  of "Next bounded chunk", together with the four reasons step 10 is not takeable and the seven-item
+  backlog four previous chunks left for it.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the
@@ -6307,7 +6555,11 @@ step that removed all three, and it did: `AppLayout` is the only declaration of 
 *read* both `records.dart` constants without declaring anything.
 **The eight animated assets and the device-tier system** — step 10, ninth in
 the order deliberately, because building assets before the substrate produces a slow app with nice
-animations in it. And **`lib/pos/**` and `lib/screens/**` throughout, which `claude.md` hard rule 3
+animations in it. **As of 2026-08-15 that queue position is no longer the whole reason**: with steps
+1 to 9 done, step 10 is the next number and it is blocked on three of `design.md` §12's own open
+questions plus two §5.1 components that do not exist. The four blockers are itemised under "Next
+bounded chunk", and they are why step 11 was taken out of order rather than step 10 being started
+half-built. And **`lib/pos/**` and `lib/screens/**` throughout, which `claude.md` hard rule 3
 makes read-only.
 
 **Seven other surfaces that say "Please try again." are new to this list**, and they are named
@@ -6337,8 +6589,12 @@ named because §8 rule 3 and §2.2 both reach it: wrong case and wrong words.
 `pill_button`. The app's root reaches all four. See the analyzer-issues entry below, which carried
 the same error.
 
-Nothing of it is excluded now; it is queued as step 9 of the redesign, which is far enough down that
-the queue position is doing the work the exclusion used to.
+~~Nothing of it is excluded now; it is queued as step 9 of the redesign, which is far enough down
+that the queue position is doing the work the exclusion used to.~~ **Done 2026-08-15**, and every
+defect this entry lists is closed — plus four it did not have, of which the largest is that the
+keypad's keys were 24 pixels wide at §4.1's `medium` floor. See the standing decision. **The screen
+takes 12 tests, 6 pictures and two of the app's 244 images**, which is worth stating against the two
+sentences this entry spent arguing about whether it was excluded.
 
 **That entry was narrowed on 2026-08-08 and the narrowing is the point.** It used to read
 "password reset" flat, which made a whole area look closed when only one half of it was. The
