@@ -137,7 +137,7 @@ void main() {
         find.text('Accept invitation to Business tenant-a?'),
         findsOneWidget,
       );
-      expect(find.text('Invited role: cashier'), findsOneWidget);
+      expect(find.text('Invited role: Cashier'), findsOneWidget);
 
       await tester.tap(
         find.byKey(const ValueKey('accept-visible-invitation-confirm')),

@@ -23571,3 +23571,216 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## A record says its standing in words, and §8 rule 1's own example was still on screen - 2026-08-15
+
+### Why this chunk
+
+**`design.md` §11 step 11, the copy pass against §8**, taken out of numerical order by the decision
+the previous chunk recorded: step 10 is the next number and is blocked on three of §12's own open
+questions plus two §5.1 components that do not exist. Nothing was gating step 11.
+
+**The product owner asked ten scoping questions first, and answering them is half of what this
+session produced.** They were about the main screen, the invitation email, the selector and platform
+screens at large widths, the staff directory's actions, reusing the legacy cards, the sale path's
+drawer, filter chips, the sales and returns screens, and whether a tutorial is planned. Seven were
+answered by `design.md` or by the code. **Three were gaps neither document names**, and they are now
+open decisions in `PLAN.md` rather than answers in a chat: six list screens with no responsive owner,
+`AppSheet` unspecified while step 7 needs it, and no teaching layer as a concept. **A fourth was
+recorded with them**: the staff invitation email is one `<p>` that does not name the business.
+
+### What was decided
+
+**The plan listed ten items and the sweep found twelve.** `PLAN.md` warned that its own seven-item
+backlog was "certainly not all of them" and to size the step by running §8's ten rules rather than by
+trusting the list. That was right in both directions - all seven were real, and five more were not on
+it. **The two largest were among the five.**
+
+1. **§8 rule 1's own worked example was still live on the landing route.** The rule quotes
+   *"Operational screens remain locked until their data access is migrated to tenant-scoped
+   repositories"* as "a commit message on a production screen" and states what it should read
+   instead. `tenant_branding.dart:66` was drawing that exact sentence. The replacement is the
+   specification's own words rather than this chunk's. **Its container is not fixed**: §5.1 sends a
+   permanent notice to a `Callout`, which is step 4's remainder on a route that is step 5b's, and the
+   code says so where it sits.
+2. **The wire values were ten sites across eight files, not four on one screen.** The plan said the
+   staff directory. The grep said the directory, the business selector, the branding panel, the
+   invited person's own acceptance screen, and **both** role choosers. `tenant_membership_labels.dart`
+   is the shared vocabulary, on the rule the stock and reconciliation sweeps established. **Nothing in
+   it is invented**: `Administrator` is the word this app's refusal sentences already use, and
+   `Deactivated` is the past tense of the button on the same row, which is §8 rule 4.
+3. **`Email / user ID` was not wordy, it was false.** Sign-in calls `signInWithEmailAndPassword` and
+   nothing in this app has ever accepted a user ID, so half of that label named a credential that does
+   not exist - the same class of defect as the heading that told every reader the staff directory was
+   read-only. It is `Email address` now.
+4. **The placeholder names no domain rather than a different one.** `example@spiritpos.com` is not
+   this product; the obvious repair was a Chilltent address, and that would have been a domain
+   invented to fill a slot. `name@example.com` uses RFC 2606's reserved domain, which cannot ever be a
+   real business's address.
+5. **A previewed row stopped claiming a product was created.** `_rowLabel` reads the report's mode on
+   exactly the two outcomes `_rowStatus` already read it on, and for the same reason: `Unchanged` and
+   `Refused` are true in both modes, `Created` and `Corrected` are not. The applied word stays the
+   enum's own, so the function adds a tense rather than a second vocabulary.
+6. **A summary agrees with its own counts.** `1 were corrected, 1 already hold this value` was the
+   commonest sentence this screen draws, because one mistyped price is the reason the route exists.
+   Zero takes the plural, so the test is `== 1` rather than `> 1`.
+7. **`Edit` became `Correct`** - §8 rule 10 - on the same icon and the same key the catalog's own row
+   already uses. **`Continue` became `Continue without this invitation`** - §8 rule 3 - and the
+   sentence above it now names what will actually work, which is the shape the invitation refusal took
+   in August.
+8. **A confirm dialog stopped printing `a opening_balance`**, which was §8 rule 1 and a broken article
+   in one clause. The type is a trailing clause now, so one wording is grammatical for all six; an
+   `a`/`an` test would have fixed half of it.
+9. **The last raw ISO instant in the migrated tree is gone.** Screen 30 said
+   `recorded 2026-08-04T15:30:00.000Z` where every other surface in its own family says
+   `2026-08-04 15:30 UTC`, and `reconciliation_labels.dart` records fixing that same defect on the
+   pages that link to this one.
+10. **The tofu arrow is a word.** `bulk_catalog.dart:1590`'s U+2192 drew as a box on every device that
+    ever saw that report. `from Household to Drinks` costs nothing and says more.
+
+**Two judgement calls, both recorded rather than buried.** Screen 28's `+12.5` **keeps its sign**:
+`_against` already states the direction in words beside it, so the sign is redundant rather than a
+bookkeeper's idiom, and a column of bare magnitudes says nothing about which way any of them went.
+And the **eleven "Please try again." surfaces stay excluded**, because that exclusion is released by a
+device run finding one misdirecting, not by a copy pass.
+
+**One defect this chunk introduced and a picture caught.** Renaming the badge to `Invited` left the
+tile counting those same rows saying `Pending` - one screen spelling one standing two ways, which is
+what a stat row makes obvious. Fixed in the same chunk, and it is why 11 of the 47 images moved twice.
+
+**One suspicion the pictures cleared.** `PLAN.md` flagged five `•` sites alongside the arrow and said
+to take a picture before believing any of them. The bullets render correctly in
+`web-full/20b-bulk-report-previewed`; only U+2192 was ever tofu. **The instruction was right and the
+list was half wrong**, which is the argument for the instruction.
+
+### Safety
+
+No repository call, no state logic, no routing condition and no API shape. Every change is a string,
+plus two additive helpers - a new labels library and one enum getter. No public signature moved and no
+call site changed shape. `firestore.rules` and every `functions/` file are untouched, and `git diff`
+over both prints zero lines.
+
+### Files changed
+
+```text
+lib/tenancy/tenant_membership_labels.dart   NEW, 72 lines: role, membership standing, invitation
+                                            progress, and the badge's semantic sentence
+lib/tenancy/tenant_staff_directory.dart     badge, semantic label, role and invitation attributes;
+                                            Edit -> Correct; the Pending tile -> Invited
+lib/tenancy/tenant_branding.dart            §8 rule 1's own example; the role line
+lib/tenancy/tenant_routing_shell.dart       the selector's role; the invalid-link sentence and its
+                                            button
+lib/tenancy/tenant_staff_invitation.dart    the role chooser's labels
+lib/tenancy/tenant_staff_update.dart        the role chooser's labels
+lib/tenancy/tenant_visible_invitation_acceptance.dart   "Invited role:"
+lib/inventory/bulk_catalog.dart             the tofu arrow
+lib/inventory/bulk_catalog_panel.dart       _rowLabel reads the mode; _summary agrees with its counts
+lib/inventory/stock_adjustment.dart         sentenceLabel, for the type inside a sentence
+lib/inventory/stock_adjustment_panel.dart   the confirm dialog's wording
+lib/login_screen.dart                       the field label and the placeholder
+lib/reporting/shift_amendment_feed_panel.dart   the raw ISO instant
+9 test files                                the assertions on every string above, +1 new test
+PLAN.md                                     four new open decisions, and the StatTile finding
+```
+
+### Tests
+
+```text
+flutter analyze --no-pub lib/tenancy lib/inventory lib/reporting lib/login_screen.dart   0 issues
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1979 pass  (1978 -> 1979)
+npm --prefix functions test                                               409 pass
+npm --prefix rules-tests run test:emulator                                161 pass
+npm --prefix rules-tests run test:emulator:reconciliation                 10 pass
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 ... run test:emulator:invitations        23 pass
+flutter test --no-pub --concurrency=1 tool/screenshots                    182 captures, 241 images
+```
+
+**+1, and thirteen existing assertions changed with none loosened.** The one addition is a bulk
+summary over counts of one, which is the sentence the chunk was fixing. The thirteen are every test
+naming a string the copy pass moved, across nine files: the arrow, the sign-in label, two ISO
+instants, `Signed in as admin`, seven role and standing words, and the badge's semantic sentence.
+**All thirteen failed on the first run and all thirteen were the tests being right about the old
+app** — the cheapest failure this file records, because a suite that would have caught the change had
+it been unintended is the suite working.
+
+**Getting these six figures cost three runs and the reason is worth keeping.** The first piped every
+suite through `tail`, which cut the counts off. The second matched `passing|failing` — mocha's format
+— when all five suites are `node --test` and print `ℹ tests N`. The third logged everything and
+grepped afterward, which is the only one of the three that could not have been wrong about the format.
+**Put the output in a file and grep the file**; a pattern chosen before the format is known is a guess
+with a ten-minute cost.
+
+**And a trap this file already half-records, in a worse form than it records it.** The standing trap
+says a held emulator run "does not block a suite; it silently shifts two of its ports". On this
+machine it did not shift — the reconciliation suite hit `Port 8280 is not open`, printed
+`Error: Could not start Firestore Emulator, port taken`, and **never ran a test**. The wrapper around
+it still **exited 0**, so a caller reading the exit code alone would have recorded a suite that did
+not execute as a suite that passed. The port was held by an orphaned `java.exe` left behind when a
+background runner was stopped: killing the npm wrapper does not kill the emulator it spawned.
+**Check `netstat` for the port before believing an emulator result, and grep the log for a count
+rather than trusting an exit code.**
+
+### Screenshots
+
+**182 captures writing 241 images; 47 moved, 0 added, 0 removed. 245 files sit on disk and 4 of them
+are stale**, which is the figure this file has been wrong about three times, so it was measured by
+`find screenshots -name '*.png' -not -mmin -40` rather than by counting the directory.
+
+```text
+moved   web 16 · mobile 16 · mobile-full 9 · web-full 7
+        sign-in and its three refusals, the caps-locked keypad, choose-business, verify-email,
+        request-a-business, the invalid invitation link, both business homes, shift-open,
+        the three staff-directory captures, both bulk reports, shift corrections
+unmoved 194 of the 241 written
+stale   mobile-full/30-shift-corrections   web-full/23-stock-movements
+        web-full/96-record-list            web-full/96-record-list-narrow-loss
+```
+
+**The stale set changed and one half of the change is probably this chunk's.**
+`web-full/13-staff-directory` was on the stale list this file recorded before step 9 and is written
+again; `mobile-full/30-shift-corrections` was not on it and is now. A `-full` capture is written only
+when a route overflows its viewport, and this chunk **shortened** screen 30's provenance line — an ISO
+instant is longer than `2026-08-04 15:30 UTC` — so the page no longer overflowing is the obvious
+reading. **It is a reading rather than a measurement**: several chunks have run since that list was
+taken, and nothing hashed the two captures across the boundary. Whoever cares should hash them rather
+than trust this paragraph.
+
+**A coverage finding, and it is the same shape as the `Disclosure` one from 2026-08-14.** The
+`tablet` band holds **10** images and every one of them is a component matrix - `96-*` and `97-*`.
+**No screen is captured at `medium` at all**, so nothing this chunk changed has been seen between 768
+and 1023, and neither has anything any previous chunk changed. §4.1 names three bands and the harness
+photographs two.
+
+### Reported during this session
+
+The product owner's ten questions, answered above. **And a question about whether "done" was too
+strong, which it was**: this chunk found twelve §8 defects by running the seven rules that can be
+grepped - system vocabulary, vague errors, sentence case, money, timestamps, mutation verbs, control
+labels. **Rules 2, 4 and 6 cannot be grepped** - *state what is true*, *the verb persists*, *say what
+is still true* - and instances of all three were walked into rather than audited for. So step 11 is
+implemented, not proved complete, and §8 is not clean across the app.
+
+### Excluded
+
+**§8 rule 8, knowingly, on eight surfaces.** A bare `_money(int minorUnits)` is copy-pasted into six
+files and two more format a price directly; only the two money screens and the profit statement read
+`TenantReportingCurrency`. Every repair is a `configuration/checkout` read, which `claude.md` hard
+rule 1 forbids in a visual chunk. **This enlarges the open decision rather than answering it**: that
+entry described screen 28's variance, and the defect is app-wide.
+
+**The `StatTile` truncation**, recorded under "Found by using the app" as a ninth entry and
+deliberately not fixed - it is §4.3's `StatRow` scroll form, which is step 8's leftover. **The chip
+radius.** The sale path. §3's density. The ambient letter spacing. The checkbox outline. The `Callout`
+measurements. Every server file and `firestore.rules`, by choice. Deployment.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

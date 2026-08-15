@@ -335,13 +335,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 // `label.eyebrow` and §8 rule 7 asks for sentence case
                 // everywhere else; *what* this field should be called is a copy
                 // question and §11 step 11 is the copy pass.
-                label: 'Email / user ID',
+                // **It was not merely wordy, it was false.** This screen signs
+                // in through `signInWithEmailAndPassword` and nothing anywhere
+                // accepts a user ID, so half the label named a credential this
+                // app has never had - the same class of defect as the heading
+                // that told every reader the staff directory was read-only.
+                label: 'Email address',
                 // §5.2's leading icon, back where the original had it. These two
                 // are the clearest case the section describes: an envelope and a
                 // padlock say which of the two boxes is which before the labels
                 // are read, which is what a person signing in twice a day wants.
                 leading: Icons.email_outlined,
-                placeholder: 'example@spiritpos.com',
+                // `spiritpos.com` is not this product and never was - it is
+                // Chilltent. The replacement names no domain at all rather than
+                // swapping one for another: `example.com` is reserved by
+                // RFC 2606, so it cannot ever be a real business's address, and
+                // §5.2 asks a placeholder to be an example rather than a claim.
+                placeholder: 'name@example.com',
                 controller: emailController,
                 focusNode: emailFocus,
                 keyboardType: TextInputType.emailAddress,

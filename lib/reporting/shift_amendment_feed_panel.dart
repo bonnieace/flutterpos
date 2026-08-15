@@ -9,6 +9,7 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import 'reconciliation_labels.dart';
 import 'shift_amendment_feed.dart';
 
 /// Opens the trail under the caller's own session scope, so a tenant switch
@@ -387,9 +388,15 @@ final class _AmendmentContents extends StatelessWidget {
       selfUid: selfUid,
     );
     final at = record.recordedAt;
+    // **§8 rule 9 - a timestamp states its zone - and this was the one surface
+    // still printing a raw ISO instant.** `2026-08-01T02:30:00.000Z` is the wire
+    // format; every other screen in this family says `2026-08-01 02:30 UTC`, and
+    // `reconciliation_labels.dart` records fixing exactly this defect on the
+    // pages that link to this one. The seconds and milliseconds were noise on a
+    // record whose own ordering is by the minute.
     final when = at == null
         ? 'no time was recorded'
-        : 'recorded ${at.toIso8601String()}';
+        : 'recorded ${reconciliationInstant(at)}';
     return 'Corrected by $actor, $when.';
   }
 

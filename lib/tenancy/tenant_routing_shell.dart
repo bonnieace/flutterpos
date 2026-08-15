@@ -18,6 +18,7 @@ import 'tenant_catalog.dart';
 import 'tenant_default_tenant.dart';
 import 'tenant_invitation_acceptance.dart';
 import 'tenant_membership.dart';
+import 'tenant_membership_labels.dart';
 import 'tenant_repository.dart';
 import 'tenant_request.dart';
 import 'tenant_session_controller.dart';
@@ -862,10 +863,20 @@ final class _InvalidTenantInvitationScreen extends StatelessWidget {
           children: [
             const Icon(Icons.link_off_outlined, size: 48),
             const SizedBox(height: 16),
-            const Text('This invitation link is invalid or incomplete.'),
+            // §8 rule 6 - say what is still true - and it is the shape the
+            // invitation refusal already took: name what will actually work
+            // rather than leave a person on a dead end with one button.
+            const Text(
+              'This invitation link is invalid or incomplete. Ask whoever '
+              'invited you to send it again.',
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
             AppButton(
-              label: 'Continue',
+              // §8 rule 3: a control names its effect. This one discards the
+              // link and goes on to whatever this identity can already reach,
+              // which `Continue` named not at all.
+              label: 'Continue without this invitation',
               tier: AppButtonTier.primary,
               onPressed: onContinue,
             ),
@@ -1077,7 +1088,7 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
                             ListTile(
                               title: Text(membership.tenantName),
                               subtitle: Text(
-                                '${membership.role.wireValue} - ${status.label}',
+                                '${tenantRoleLabel(membership.role)} - ${status.label}',
                               ),
                               trailing: membership.canAccess()
                                   ? const Icon(Icons.chevron_right)

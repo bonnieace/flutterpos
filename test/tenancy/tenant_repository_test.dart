@@ -79,7 +79,7 @@ void main() {
 
     expect(find.text('Tenant A Bar'), findsOneWidget);
     expect(find.text('Cold drinks, warm welcome'), findsOneWidget);
-    expect(find.text('Signed in as admin'), findsOneWidget);
+    expect(find.text('Signed in as Administrator'), findsOneWidget);
   });
 
   group('bounded collection filters', () {

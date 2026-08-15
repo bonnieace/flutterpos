@@ -78,7 +78,7 @@ void main() {
     expect(find.byKey(const ValueKey('bulk-catalog-row-2')), findsOne);
     expect(
       _text(tester, 'bulk-catalog-row-detail-1'),
-      'Product 1 • Bakery → Drinks',
+      'Product 1 • from Bakery to Drinks',
     );
 
     await _tap(tester, 'bulk-catalog-commit');
@@ -178,7 +178,7 @@ void main() {
 
     expect(
       _text(tester, 'bulk-catalog-row-detail-1'),
-      'Product 1 • 65.00 → 19.99',
+      'Product 1 • from 65.00 to 19.99',
     );
     await _tap(tester, 'bulk-catalog-commit');
     expect(find.textContaining('no figure already reported moves'), findsOne);
@@ -210,7 +210,7 @@ void main() {
 
     expect(
       _text(tester, 'bulk-catalog-row-detail-1'),
-      'Product 1 • $unlistedTenantCategoryLabel → Drinks',
+      'Product 1 • from $unlistedTenantCategoryLabel to Drinks',
     );
     expect(_documentIdsOnScreen(tester), isEmpty);
   });
@@ -287,7 +287,9 @@ void main() {
     expect(batch.payloads, hasLength(2));
     expect(
       _text(tester, 'bulk-catalog-summary'),
-      endsWith('1 of 2 requests were previewed.'),
+      // "One of two requests" is a singular subject, so the noun agrees with
+      // the total and the verb with the count answered.
+      endsWith('1 of 2 requests was previewed.'),
     );
     expect(
       _callout(tester, 'bulk-catalog-report-failure'),
@@ -518,8 +520,10 @@ void main() {
     // signal rather than the every-row badge the record rules rule out.
     expect(_rowStatus(tester, 2), AppStatus.attention);
     expect(_rowStatus(tester, 3), AppStatus.problem);
-    // The word is still the word - the container and the glyph are what is new.
-    expect(_rowLabel(tester, 2), 'Created');
+    // §8 rule 2, step 11: a preview writes nothing, so the word is conditional
+    // wherever the outcome is. `Refused` is not conditional - the server will
+    // not write that row in either mode.
+    expect(_rowLabel(tester, 2), 'Would be created');
     expect(_rowLabel(tester, 3), 'Refused');
     expect(_text(tester, 'bulk-catalog-row-subject-3'), isNotEmpty);
   });
@@ -543,12 +547,39 @@ void main() {
     // is `neutral` before and after the commit.
     expect(_rowStatus(tester, 2), AppStatus.neutral);
     expect(_rowLabel(tester, 2), 'Unchanged');
+    // The word reads the mode on exactly the outcomes the container does.
+    expect(_rowLabel(tester, 1), 'Would be corrected');
 
     await _tap(tester, 'bulk-catalog-commit');
     await _tap(tester, 'bulk-catalog-confirm');
 
     expect(_rowStatus(tester, 1), AppStatus.ok);
     expect(_rowStatus(tester, 2), AppStatus.neutral);
+    // A row was only ever going to be corrected until the commit landed.
+    expect(_rowLabel(tester, 1), 'Corrected');
+    expect(_rowLabel(tester, 2), 'Unchanged');
+  });
+
+  testWidgets('a summary agrees with its own counts when they are one', (
+    tester,
+  ) async {
+    // The commonest shape this screen draws, and the one it read worst: a
+    // person correcting a single mistyped price is the reason the route exists,
+    // and the sentence said "1 were corrected, 1 already hold this value".
+    final batch = _BatchCallable(unchangedAt: 1);
+
+    await _pump(tester, _controller(), _Reader.seeded(), batch: batch);
+    await _select(tester, 'pd-001');
+    await _select(tester, 'pd-002');
+    await _choose(tester, 'bulk-catalog-category-cat-drinks');
+    await _tap(tester, 'bulk-catalog-preview');
+    await _tap(tester, 'bulk-catalog-commit');
+    await _tap(tester, 'bulk-catalog-confirm');
+
+    expect(
+      _text(tester, 'bulk-catalog-summary'),
+      '1 was corrected, 1 already holds this value, and 0 cannot be.',
+    );
   });
 }
 

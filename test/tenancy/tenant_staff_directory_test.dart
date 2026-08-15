@@ -198,8 +198,8 @@ void main() {
         find.byKey(const ValueKey('staff-status-owner-a')),
         findsOneWidget,
       );
-      expect(find.text('owner'), findsWidgets);
-      expect(find.text('active'), findsWidgets);
+      expect(find.text('Owner'), findsWidgets);
+      expect(find.text('Active'), findsWidgets);
       expect(find.text('Invite staff'), findsOneWidget);
       // Role is a labelled key-value line rather than a badge, because it is
       // not one of §2.1's five statuses and a list where two things wear a
@@ -212,9 +212,11 @@ void main() {
         find.byKey(const ValueKey('staff-status-owner-a')),
       );
       expect(standing.status, AppStatus.ok);
-      // The badge announces a sentence and shows a word, because "active" on
+      // The badge announces a sentence and shows a word, because "Active" on
       // its own is not what a screen reader should read out of a staff row.
-      expect(standing.semanticLabel, 'Membership active');
+      // Step 11: the word is the shopkeeper's rather than the wire's, and the
+      // announcement names the record it is a standing of.
+      expect(standing.semanticLabel, 'Membership: Active');
       // Step 6: one key addresses the record whichever of §4.3's three forms
       // the band resolved to, where this screen used to key a card and a table
       // row separately.
@@ -254,7 +256,7 @@ void main() {
         find.byKey(const ValueKey('staff-invitation-staff-a')),
         findsOneWidget,
       );
-      expect(find.text('sent'), findsOneWidget);
+      expect(find.text('Sent'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('staff-invitation-owner-a')),
         findsNothing,

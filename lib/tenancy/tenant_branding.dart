@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'tenant_membership_labels.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_route_guard.dart';
@@ -61,11 +62,19 @@ final class TenantBrandingPanel extends StatelessWidget {
             Text(branding!.slogan!, textAlign: TextAlign.center),
           ],
           const SizedBox(height: 8),
-          Text('Signed in as ${session.role.wireValue}'),
+          Text('Signed in as ${tenantRoleLabel(session.role)}'),
           const SizedBox(height: 16),
+          // **§8 rule 1's own worked example, still live on the landing route.**
+          // The rule quotes this exact sentence as "a commit message on a
+          // production screen" and states what it should read instead, so the
+          // replacement is the specification's rather than this chunk's.
+          //
+          // The container is the part step 11 does not own: §5.1 sends a
+          // permanent notice paragraph to a `Callout`, and this is one. It stays
+          // a `Text` because the landing route is step 5b's and the notice sweep
+          // is step 4's remainder; `PLAN.md` carries both.
           const Text(
-            'Operational screens remain locked until their data access is '
-            'migrated to tenant-scoped repositories.',
+            "Some screens aren't available yet.",
             textAlign: TextAlign.center,
           ),
         ],

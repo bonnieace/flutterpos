@@ -154,7 +154,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('edit-staff-owner-a')));
       await tester.pump();
-      expect(find.text('owner'), findsWidgets);
+      expect(find.text('Owner'), findsWidgets);
       await tester.enterText(
         find.byKey(const ValueKey('update-staff-name')),
         ' Updated Owner ',
@@ -186,7 +186,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('edit-staff-staff-a')));
       await tester.pump();
       await _tapVisible(tester, 'update-staff-role');
-      await tester.tap(find.text('manager').last);
+      await tester.tap(find.text('Manager').last);
       await tester.pumpAndSettle();
       await _tapVisible(tester, 'update-staff-submit');
 

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import 'tenant_id.dart';
+import 'tenant_membership_labels.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_types.dart';
@@ -373,7 +374,7 @@ final class _TenantStaffInvitationFormState
                   .map(
                     (role) => AppSelectItem<TenantRole>(
                       value: role,
-                      label: role.wireValue,
+                      label: tenantRoleLabel(role),
                     ),
                   )
                   .toList(),

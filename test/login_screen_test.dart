@@ -380,7 +380,7 @@ void main() {
     expect(find.byType(AppTextField), findsNWidgets(2));
     expect(
       tester.widget<AppTextField>(find.byKey(const ValueKey('login-email'))).label,
-      'Email / user ID',
+      'Email address',
     );
     // §5.2: a placeholder is an example, never a restatement of the label. The
     // password field's said "Enter Password".

@@ -169,7 +169,7 @@ void main() {
     await _pumpRouting(tester);
 
     expect(find.text('Choose a business'), findsOneWidget);
-    expect(find.text('admin - Accessible'), findsNWidgets(2));
+    expect(find.text('Administrator - Accessible'), findsNWidgets(2));
 
     await tester.tap(find.text('Business tenant-b'));
     await _pumpRouting(tester);
@@ -501,7 +501,7 @@ void main() {
       expect(fixture.gateway.rootCalls, 2);
       expect(fixture.gateway.listCalls, 2);
       expect(find.text('Business tenant-requested'), findsOneWidget);
-      expect(find.text('admin - Pending'), findsOneWidget);
+      expect(find.text('Administrator - Pending'), findsOneWidget);
       expect(fixture.openedController, isNull);
       await fixture.dispose(tester);
     },
@@ -626,11 +626,11 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
-    expect(find.text('admin - Pending'), findsOneWidget);
-    expect(find.text('admin - Inactive'), findsOneWidget);
-    expect(find.text('admin - Rejected'), findsOneWidget);
-    expect(find.text('admin - Suspended'), findsOneWidget);
-    expect(find.text('admin - Archived'), findsOneWidget);
+    expect(find.text('Administrator - Pending'), findsOneWidget);
+    expect(find.text('Administrator - Inactive'), findsOneWidget);
+    expect(find.text('Administrator - Rejected'), findsOneWidget);
+    expect(find.text('Administrator - Suspended'), findsOneWidget);
+    expect(find.text('Administrator - Archived'), findsOneWidget);
     expect(find.byIcon(Icons.lock_outline), findsNWidgets(5));
     await fixture.dispose(tester);
   });

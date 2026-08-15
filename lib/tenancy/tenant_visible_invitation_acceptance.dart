@@ -8,6 +8,7 @@ import '../ui/buttons.dart';
 import 'invitation_acceptance_failure.dart';
 import 'tenant_id.dart';
 import 'tenant_membership.dart';
+import 'tenant_membership_labels.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_types.dart';
 
@@ -398,7 +399,7 @@ final class _TenantVisibleInvitationAcceptanceFormState
         style: Theme.of(context).textTheme.titleMedium,
       ),
       const SizedBox(height: 8),
-      Text('Invited role: ${widget.membership.role.wireValue}'),
+      Text('Invited role: ${tenantRoleLabel(widget.membership.role)}'),
       if (_safeError != null) ...[
         const SizedBox(height: 12),
         Text(

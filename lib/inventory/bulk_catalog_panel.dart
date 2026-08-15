@@ -1116,9 +1116,10 @@ final class _BulkCatalogContents extends StatelessWidget {
                   child: StatusBadge(
                     key: ValueKey('bulk-catalog-row-status-${row.position}'),
                     status: _rowStatus(row.status, report.mode),
-                    label: row.status.label,
+                    label: _rowLabel(row.status, report.mode),
                     semanticLabel:
-                        '${row.subject}: ${row.status.label.toLowerCase()}',
+                        '${row.subject}: '
+                        '${_rowLabel(row.status, report.mode).toLowerCase()}',
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1181,10 +1182,9 @@ final class _BulkCatalogContents extends StatelessWidget {
 /// for a notice about the page, and one status meaning two things at two scales
 /// is the failure §2.1 exists to end.
 ///
-/// **What the badge cannot fix is the word beside it.** The four labels are the
-/// enum's own and read as past tense - a previewed row says "Created" before
-/// anything exists - which is a copy question rather than a status one. It is
-/// recorded in `PLAN.md` rather than decided here.
+/// ~~**What the badge cannot fix is the word beside it.**~~ **Fixed by step 11 on
+/// 2026-08-15** - see [_rowLabel], which reads the mode on exactly the two
+/// outcomes this function does, and for the same reason.
 AppStatus _rowStatus(
   TenantBulkCatalogRowStatus status,
   TenantBulkCatalogMode mode,
@@ -1197,36 +1197,84 @@ AppStatus _rowStatus(
   TenantBulkCatalogRowStatus.failed => AppStatus.problem,
 };
 
+/// One report row's outcome in words, in the tense the mode has earned.
+///
+/// **§8 rule 2 - state what is true - and it divides the four exactly where
+/// [_rowStatus] divides them.** `Unchanged` and `Refused` are true in both modes:
+/// a row that already holds the value holds it whether or not anything was
+/// committed, and a row the server will not write is refused either way. But
+/// `Created` and `Corrected` are past tense, and a preview writes nothing - so a
+/// previewed row claimed a product existed on a report whose own first sentence
+/// is "Nothing has been written."
+///
+/// The conditional wording is `_summary`'s own, one flight up, rather than a
+/// second phrasing of one idea: that sentence has said *would be created* and
+/// *would be corrected* since it was written, and §8 rule 4 is that the verb
+/// persists across a page.
+String _rowLabel(
+  TenantBulkCatalogRowStatus status,
+  TenantBulkCatalogMode mode,
+) {
+  final preview = mode == TenantBulkCatalogMode.preview;
+  // The applied word stays the enum's own, so this function adds a tense rather
+  // than a second vocabulary - two places spelling one outcome is the drift the
+  // shared wording modules exist to end.
+  return switch (status) {
+    TenantBulkCatalogRowStatus.created =>
+      preview ? 'Would be created' : status.label,
+    TenantBulkCatalogRowStatus.updated =>
+      preview ? 'Would be corrected' : status.label,
+    TenantBulkCatalogRowStatus.unchanged ||
+    TenantBulkCatalogRowStatus.failed => status.label,
+  };
+}
+
 /// One sentence stating what the report is, before any row is read.
+///
+/// **Every count here agrees with its verb as of step 11, 2026-08-15.** A report
+/// over one product read "1 were corrected, 1 already hold this value" - which is
+/// the commonest shape this screen has, because a person correcting a single
+/// mistyped price is the reason the route exists. Zero takes the plural, so the
+/// test is `== 1` rather than `> 1`.
 String _summary(TenantBulkCatalogReport report, _BulkTask task) {
   final buffer = StringBuffer();
-  if (report.mode == TenantBulkCatalogMode.preview) {
+  final preview = report.mode == TenantBulkCatalogMode.preview;
+  if (preview) {
     buffer.write('Nothing has been written. ');
   }
   if (task == _BulkTask.correct) {
-    final verb = report.mode == TenantBulkCatalogMode.preview
+    final verb = preview
         ? 'would be corrected'
-        : 'were corrected';
+        : _agrees(report.updatedCount, 'corrected');
     buffer.write(
-      '${report.updatedCount} $verb, ${report.unchangedCount} already hold '
+      '${report.updatedCount} $verb, ${report.unchangedCount} '
+      '${report.unchangedCount == 1 ? 'already holds' : 'already hold'} '
       'this value, and ${report.failedCount} cannot be.',
     );
   } else {
-    final verb = report.mode == TenantBulkCatalogMode.preview
+    final verb = preview
         ? 'would be created'
-        : 'were created';
+        : _agrees(report.createdCount, 'created');
     buffer.write(
       '${report.createdCount} $verb and ${report.failedCount} cannot be.',
     );
   }
   if (report.pageCount > 1) {
+    // The subject is "one of three requests", which is singular - the noun
+    // agrees with the total and the verb with the count answered.
+    final answered = preview
+        ? _agrees(report.pagesAnswered, 'previewed')
+        : 'landed';
     buffer.write(
-      ' ${report.pagesAnswered} of ${report.pageCount} requests '
-      '${report.mode == TenantBulkCatalogMode.preview ? 'were previewed' : 'landed'}.',
+      ' ${report.pagesAnswered} of ${report.pageCount} requests $answered.',
     );
   }
   return buffer.toString();
 }
+
+/// `was` or `were` before a past participle, agreeing with [count].
+String _agrees(int count, String participle) =>
+    '${count == 1 ? 'was' : 'were'} $participle';
 
 String _failureNotice(
   TenantBulkCatalogFailure failure,

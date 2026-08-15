@@ -202,7 +202,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~95% | `design.md` **v0.4** is the specification — the product owner amended it on 2026-08-15, moving the input well to `surface.field`, the input radius to `radius.pill`, and adding §5.2's leading icon and focus glow; see the standing decision — and `DESIGN-AUDIT.md` audits it against the code, corrected in place where v0.4 overtook it. **Steps 1, 2, 3, 5a, 6 and 8 are finished**: 1, 2, 3, 5a and 6 as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. **Step 8 finished on 2026-08-15 in two halves**: the first landed `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart` on screens 13, 21, 25 and 26, with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted; the second put the figures on **27, 28 and 29**, which state quantities as evidence and therefore took `numeric.body` and a shared right edge rather than a hero figure — **7 call sites across 6 files**, and §2.2's own complaint is now retracted for every screen §11 step 8 names. Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (**150 call sites across 38 files**, four tiers, three sizes, six states — **re-measured 2026-08-15 and the 155 this file carried was wrong**, which is the sixth figure in a row; the command is `grep -c "AppButton(" over lib/ excluding pos/, screens/, config.dart, minus the one constructor declaration in lib/ui/buttons.dart`); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (**41 call sites across 18 files**, six states in the harness — step 9 added sign-in's two); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, ~~and 1 in `pill_input.dart`, which is step 9's sign-in~~ — **step 9 took `pill_input.dart`'s on 2026-08-15 and there were two of them, not one**, so the sale path is the whole of what is left; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision, and **sign-in's is now named for a reason of its own** — no toolbar content, and a title that belongs to the form pane rather than to a header spanning two panes — rather than as an unfinished step; and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. **§7's "Title appears once" is closed as of 2026-08-15** — fourteen sites in fourteen files, of which nine were deletions, four became `PageHeader.subtitle`'s first readers and one became a §2.1 status that had been stating something false; the two `headlineSmall` uses left in the migrated tree are deliberate and commented. **`AppNotice` exists as of 2026-08-15** — the four write outcomes mapped once to §2.1, on **7 surfaces** that each held a `String?` whose meaning was in the sentence, and the eighth is step 7's. **`RecordList`'s table divides its row by measurement as of 2026-08-15** — `RecordTableColumns` in `lib/ui/record_list.dart`, with `StatusBadge.measureWidth`, `AppButton.measureWidth` and `measureTextWidth` under it; the four constants step 6b chose against a two-column activity log are ceilings now rather than answers, there is a `space.12` gutter, and **no call site changed**, which is the component owning its own form. `ConfirmDialog` left step 4 for step 7. **Every field in the app is a raised pill as of `design.md` v0.4**, 2026-08-15 — `surface.field` at `radius.pill`, 17 of the 41 with a leading icon, the focus glow behind §9's ring, and the placeholder at `text.secondary` because `text.tertiary` is 4.29:1 on the new well; `inputDecorationTheme` moved with it so the sale path's two unmigrated fields are not the only rectangles left. **The keypad has a caps lock**, which is also the fix for a keypad that could not type a lower-case password. **Step 9 finished 2026-08-15** — sign-in was one screen, not the eight §11 lists, and it is now a `PageHeader` on a `Scaffold` with two `AppTextField`s, an `AppButton`, a `Callout` and a keypad drawn from §2.1's `secondary` tier; the **double border** since `1b2b13b` is closed, the last six `Colors.*` literals outside `theme.dart` and the legacy island are gone, `pill_input.dart` / `pill_button.dart` / `glass_card.dart` are dead, and whether the keypad appears is `PosKeyboard.minimumWidth` rather than §4.1's `medium` floor. **Steps 5b, 7, 10, 11 and 12 remain**, and every one of them is one number on its own: the batching exception is spent. |
+| **Design system** | ~95% | `design.md` **v0.4** is the specification — the product owner amended it on 2026-08-15, moving the input well to `surface.field`, the input radius to `radius.pill`, and adding §5.2's leading icon and focus glow; see the standing decision — and `DESIGN-AUDIT.md` audits it against the code, corrected in place where v0.4 overtook it. **Steps 1, 2, 3, 5a, 6 and 8 are finished**: 1, 2, 3, 5a and 6 as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. **Step 8 finished on 2026-08-15 in two halves**: the first landed `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart` on screens 13, 21, 25 and 26, with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted; the second put the figures on **27, 28 and 29**, which state quantities as evidence and therefore took `numeric.body` and a shared right edge rather than a hero figure — **7 call sites across 6 files**, and §2.2's own complaint is now retracted for every screen §11 step 8 names. Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (**150 call sites across 38 files**, four tiers, three sizes, six states — **re-measured 2026-08-15 and the 155 this file carried was wrong**, which is the sixth figure in a row; the command is `grep -c "AppButton(" over lib/ excluding pos/, screens/, config.dart, minus the one constructor declaration in lib/ui/buttons.dart`); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (**41 call sites across 18 files**, six states in the harness — step 9 added sign-in's two); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, ~~and 1 in `pill_input.dart`, which is step 9's sign-in~~ — **step 9 took `pill_input.dart`'s on 2026-08-15 and there were two of them, not one**, so the sale path is the whole of what is left; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision, and **sign-in's is now named for a reason of its own** — no toolbar content, and a title that belongs to the form pane rather than to a header spanning two panes — rather than as an unfinished step; and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. **§7's "Title appears once" is closed as of 2026-08-15** — fourteen sites in fourteen files, of which nine were deletions, four became `PageHeader.subtitle`'s first readers and one became a §2.1 status that had been stating something false; the two `headlineSmall` uses left in the migrated tree are deliberate and commented. **`AppNotice` exists as of 2026-08-15** — the four write outcomes mapped once to §2.1, on **7 surfaces** that each held a `String?` whose meaning was in the sentence, and the eighth is step 7's. **`RecordList`'s table divides its row by measurement as of 2026-08-15** — `RecordTableColumns` in `lib/ui/record_list.dart`, with `StatusBadge.measureWidth`, `AppButton.measureWidth` and `measureTextWidth` under it; the four constants step 6b chose against a two-column activity log are ceilings now rather than answers, there is a `space.12` gutter, and **no call site changed**, which is the component owning its own form. `ConfirmDialog` left step 4 for step 7. **Every field in the app is a raised pill as of `design.md` v0.4**, 2026-08-15 — `surface.field` at `radius.pill`, 17 of the 41 with a leading icon, the focus glow behind §9's ring, and the placeholder at `text.secondary` because `text.tertiary` is 4.29:1 on the new well; `inputDecorationTheme` moved with it so the sale path's two unmigrated fields are not the only rectangles left. **The keypad has a caps lock**, which is also the fix for a keypad that could not type a lower-case password. **Step 9 finished 2026-08-15** — sign-in was one screen, not the eight §11 lists, and it is now a `PageHeader` on a `Scaffold` with two `AppTextField`s, an `AppButton`, a `Callout` and a keypad drawn from §2.1's `secondary` tier; the **double border** since `1b2b13b` is closed, the last six `Colors.*` literals outside `theme.dart` and the legacy island are gone, `pill_input.dart` / `pill_button.dart` / `glass_card.dart` are dead, and whether the keypad appears is `PosKeyboard.minimumWidth` rather than §4.1's `medium` floor. **Step 11 finished 2026-08-15** — the copy pass against §8, twelve defects against a list of seven, including **§8 rule 1's own worked example still being drawn on the landing route** and the role and standing **wire values on ten sites across eight files**, now one `tenant_membership_labels.dart`; it is implemented rather than proved complete, because rules 2, 4 and 6 cannot be grepped and rule 8 is knowingly still broken on eight surfaces. **Steps 5b, 7, 10 and 12 remain**, and every one of them is one number on its own: the batching exception is spent. **All four are now gated on the product owner rather than on work** — 5b is a behaviour change, 7 needs `AppSheet` specified, 10 is blocked on three §12 questions, and 12 is blocked on six open decisions. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -795,6 +795,26 @@ step 3's rather than the sweep's — and `web/92-appselect-open` cannot corrobor
 capture's viewport cuts off above the select, so `AppSelect`'s own state matrix has never photographed
 one.
 
+**A ninth was found the same way on 2026-08-15, by step 11, and it is deliberately not fixed.**
+`StatTile` truncates its **label** on a phone: `mobile/13-staff-directory` renders the four tiles as
+`St…`, `Ac…`, `In…` and `O…`, so the staff directory's whole stat row is unreadable at `compact` and
+has been since step 8's first half landed on 2026-08-14. The figure and the detail line are fine; it
+is the one-word heading that goes.
+
+**It is not step 11's, and the arithmetic is what says so.** The chunk that found it had just renamed
+that tile `Pending` → `Invited` — *identical* at seven characters — and `Staff` truncates at **five**,
+which is shorter than anything a rename could have caused. The chunk also *shortened* the line beneath
+it, from `invited, not yet accepted` to `not yet accepted`. So the defect predates the rename and
+survives it unchanged.
+
+**Two things make it worth an entry rather than a fix.** It is a component question — four tiles in a
+`Row` with no wrap, no scroll and no `medium` form, where §4.3 gives `StatRow` "horizontal scroll" at
+`compact` and the component does not do it — so the honest repair is §4.3's row being implemented,
+which is step 8's leftover rather than a copy change. And **it cannot be proved from the images**:
+`screenshots/` is `.gitignore`d, so the pre-rename capture was overwritten with no history to diff
+against, and the character count above is the whole of the evidence. **Whoever takes it should hash
+the tile row before and after rather than trust this paragraph.**
+
 1. ~~**The login screen prints a raw platform-channel name when the password is empty.**~~
    **Closed 2026-08-08.** Verbatim, as reported:
    `"dev.flutter.pigeon.firebase_auth_platform_interface.FirebaseAuthHostApi.signInWithEmailAndPassword".`
@@ -1002,14 +1022,22 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1978** ✅ measured six times on 2026-08-15 |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1979** ✅ measured seven times on 2026-08-15 (step 11 took it 1978 → 1979) |
 | Functions | `npm --prefix functions test` | **409** ✅ measured six times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured seven times on 2026-08-15 (~68–186 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured six times on 2026-08-15 (~78–214 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured six times on 2026-08-15 (~131–295 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
 
-**2581 tests across five suites. All five were measured by all six 2026-08-15 chunks — fourteen
+**2582 tests across five suites. All five were measured by all seven 2026-08-15 chunks — fifteen
 consecutive chunks measuring all five — and the carry counter is at 0.**
+
+**Step 11 took Flutter 1978 → 1979** (+1: a bulk summary over counts of one, which is the sentence
+the chunk was fixing). **Thirteen existing assertions changed and none was loosened** — every one was
+a test naming a string the copy pass moved, across nine files: the arrow, the sign-in label, two ISO
+instants, `Signed in as admin`, seven role and standing words, and the badge's semantic sentence.
+**Thirteen failed on the first run and all thirteen were the tests being right about the old app**,
+which is the cheapest kind of failure this file records: no diagnosis, no ambiguity, and a suite that
+would have caught the change had it been unintended.
 
 **`design.md` v0.4 took Flutter 1963 → 1978** (+15: **7** in `login_screen_test.dart` for the caps
 lock and the measured `columns`, **5** in `test/ui/fields_test.dart` for the new well, the
@@ -1118,10 +1146,19 @@ procedure three sections away is the file's own defect**, and the trap has been 
 the procedure instead of at a missing JDK.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **182 captures** writing **240**
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **182 captures** writing **241**
 images, and it asserts nothing, which is why it is not counted here. Step 9 added three capture
 cases and six images; `design.md` v0.4 added one of each — `01e-sign-in-caps-locked`, `web` only,
 because the keypad does not appear below 1264 and a phone capture would be the form again.
+
+**Re-measured after step 11 on 2026-08-15: 241 written, 245 on disk, 4 stale** — by
+`find screenshots -name '*.png' -not -mmin -40` against the run, which is what the standing trap asks
+for. The written figure moved 240 → 241 and the stale set is now
+`mobile-full/30-shift-corrections`, `web-full/23-stock-movements`, `web-full/96-record-list` and
+`web-full/96-record-list-narrow-loss`. **`web-full/13-staff-directory` has left that list and
+`mobile-full/30-shift-corrections` has joined it**, which is a `-full` capture appearing and another
+ceasing to — see step 11's `HISTORY.md` entry for the likely reason and for why it is a reading rather
+than a measurement.
 
 **The "229" the 2026-08-15 column-arithmetic entry in `HISTORY.md` put against this figure is
 wrong, and 233 was right.** That entry recorded 238 files on disk and five stale, which is 233 by
@@ -4341,6 +4378,99 @@ specification names. What has changed is that it is now applied consistently, so
 one edit in one place. **Not a blocking question**; it becomes one only if §4 is to be called
 complete in step 12 without stating a value.
 
+### Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
+
+**Raised by the product owner on 2026-08-15, asking whether the platform screenshots were final, and
+answered by a grep rather than from memory.** They are final by omission rather than by intent.
+
+§4.3's contract — stacked cards, two-column cards, data table, resolved from the screen width — is
+`RecordList`, and step 6 put twelve screens on it. **Six list-bearing surfaces were never on step 6's
+list and are therefore still hand-built `ListView` + `Card` at every band**: the four platform tabs
+(`platform_tenant_review.dart:857`, `platform_tenant_lifecycle.dart:837`,
+`platform_tenant_archival.dart:712`, `platform_global_user_status.dart:1094`), the business selector's
+list in `tenant_routing_shell.dart`, and the invitation list beside it. So a platform administrator on
+a 1920px window reads a single column of cards on a screen whose whole job is comparing businesses —
+which is the complaint §4.2 was written about, arriving on the screens §4.2 never reached.
+
+**Two of them are worse than the other four**: the selector and the platform tabs at least sit in an
+`AppScaffold` with `AppContentWidth.records`, so they are centred at 1200 rather than stretched.
+
+**This is the largest remaining hole in §4.3's coverage and it is nobody's number.** §11 names screens
+by their §11 numbers and none of these six has one. Three honest resolutions: §11 gains a step 6c for
+the platform and tenancy surfaces, which is the faithful one and is about the size of step 6's second
+half; or §4.3 gains a sentence saying the contract covers *business* records and the platform console
+is exempt, which is a real argument — an operator is not a shopkeeper and §8 rule 1 does not reach
+them; or it is left, in which case step 12 cannot call §4.3 complete and should say why. **Do not
+decide it inside a chunk.**
+
+### `AppSheet` has no specification, and step 7 opens a sheet
+
+**Raised by the product owner on 2026-08-15, asking whether the sale path's drawer behaviour was
+handled.** It is not, and the reason is a gap rather than a queue position.
+
+§5.1 gives `AppSheet` a row — it replaces "ad-hoc `showModalBottomSheet`" at priority 2 — and §5.2
+specifies only the load-bearing five, which it is not among. **So there is no specified height, no
+drag behaviour, no dismissal rule, no scrim, and nothing about what closing one does to the work
+inside it.** §4.3's `Sale` row says compact and medium are "products + cart sheet", so step 7 cannot
+be built without answering all of that, and `lib/ui/record_list.dart:321` already records working
+around the absence with a `PopupMenuButton`.
+
+**There is exactly one `showModalBottomSheet` left in the migrated tree** —
+`checkout_cart_panel.dart:614`, the cart itself — so the component has one caller and the caller is
+step 7's. That makes this cheap to settle and impossible to skip: **it blocks step 7 the way the
+`Callout` question blocks §5's inventory**, except that this one blocks building rather than blocks
+calling something complete. Either §5.2 gains an `AppSheet` paragraph, or step 7 specifies it and §5.2
+gains a sentence saying so.
+
+**The dismissal rule is the part to think hardest about**, because §6's own hard rule reaches it:
+nothing on the sale path may sit between an input and its record. A sheet that animates closed before
+the cart is written would be exactly that.
+
+### The app teaches by folding prose, and nobody has decided whether folding is teaching
+
+**Raised by the product owner on 2026-08-15**, asking whether a tutorial or onboarding flow was
+planned so that screens like the shift corrections stop carrying paragraphs.
+
+**Neither document contains one.** `design.md` and this file were both grepped for tutorial,
+walkthrough, onboarding, coach marks and first-run: §11 step 9's "onboarding" is the sign-in and
+business-selection *phases*, and §6.4's asset 7 is a one-shot celebration. There is no teaching layer
+as a concept anywhere.
+
+**What exists instead is structural and is working.** §7's long-copy rule sends policy prose into a
+`Disclosure`; §5.2 calls it "the single highest-value component here" precisely so the writing
+survives while the screen shrinks; and the 2026-08-15 rule splits a permanent *helper* (folds) from a
+permanent *notice* (does not). There are **17 `Disclosure`s across 9 files** today and the coverage is
+uneven — `catalog_management_panel.dart` carries 13 long strings against 3 of them.
+
+**The question is whether folding is the whole answer.** Folding makes a screen shorter; it does not
+make a person who has never closed a shift understand what a correction is. Three honest
+resolutions: finish the fold and declare it sufficient, which costs nothing beyond the sweep already
+queued; add a teaching layer, which is new product scope in neither document and needs §5.1 rows that
+do not exist; or accept that some screens teach by being read and write them accordingly. **A
+question for the product owner, not a chunk**, and unlike the other two here it blocks nothing.
+
+### The invitation email names no business, and no step reaches an email
+
+**Raised by the product owner on 2026-08-15**, asking whether an invited person sees a list of
+businesses in the email. **They see neither a list nor a name.**
+
+`functions/src/staff/invitationDelivery.ts` sends one sentence — *"You have been invited to a business
+workspace."* — and the body is a single `<p>`. It does not name the business, the inviter, the role, or
+what to do next beyond the link. **Three facts compound it and none was recorded before:**
+
+- **`design.md` governs the app and stops at its edge.** §11's twelve steps contain no email step, so
+  the one surface a person meets *before* they can open the app is the one surface with no
+  specification at all. §8's ten content rules have never been read over it.
+- **It has never been seen.** Staff invitation email cannot be delivered against the emulators —
+  rollout step 12 records it — so nothing here is evidence about what actually arrives.
+- **It is not a copy fix.** Naming the business means the delivery worker reading one, which is a
+  payload change to a callable and a `functions/` chunk, not a wording pass.
+
+**Whether it should list businesses at all is the part only the product owner can answer**, and it is
+a different question from naming one: an invitation is issued against a single business by
+`functions/src/staff/issuance.ts`, so a *list* implies something the model does not currently
+describe. If a screenshot exists showing one, it is describing a capability rather than a restyle.
+
 ### ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
 
 **This decision should never have been opened, and it is kept rather than deleted because the way it
@@ -5043,8 +5173,21 @@ enormous expected-denial traces.
   and Cloud Tasks** emulators default to 9299 and 9499, which is precisely what the held run's
   Auth on 9099 reserves, and firebase-tools moved them to 9300 and 9500 by itself. So a held
   run does not block a suite; it silently shifts two of its ports.
+- ⛔ **Refined again 2026-08-15 by step 11, and the refinement is worse than the trap.** The
+  shifting above is what happens to the *eventarc and Cloud Tasks* ports. **Firestore does not
+  shift.** The reconciliation suite hit `Port 8280 is not open on localhost`, printed
+  `Error: Could not start Firestore Emulator, port taken`, and **ran no test at all** — and the shell
+  wrapping it still **exited 0**, because the last command in the pipeline succeeded. A caller reading
+  the exit code would have recorded a suite that never executed as a suite that passed.
+  **Grep the log for `ℹ pass N` rather than trusting an exit code**, and check `netstat -ano | rg
+  ":8280"` first if a previous run was interrupted.
+- ⛔ **Stopping a background test runner orphans the emulator it spawned.** The port above was held by
+  a `java.exe` still listening after its npm parent was killed. Killing the wrapper does not kill the
+  JVM, and the next run fails with a message about a port rather than about a process.
 - **Never free a port by killing an emulator you did not start** — a held run may be
-  holding seeded data. Read its command line; `--hold` is the tell.
+  holding seeded data. Read its command line; `--hold` is the tell. **The exception is an orphan you
+  created yourself**, which is what the entry above describes; check the PID against a run you
+  started before killing anything.
 - **Do not run Gradle and the emulators together**: 2–3 GB free, and the Firestore
   JVM dies with a native `OutOfMemoryError`.
 - **Use Flutter's own `adb`** at
@@ -5554,9 +5697,28 @@ migration step and re-queueing it as one would be wrong. **What it leaves for wh
 in the exclusions below: the chip radius, which §2.3 now guards alone; and the two §5.2 questions it
 did not answer, hover and the `Callout` measurements, both still open.
 
-**The queued chunk is `design.md` §11 step 11 — the copy pass against §8 — and taking it out of
-numerical order is a decision this file is making rather than inheriting.** Step 10 is the next
-number and it cannot be started honestly. Four things block it, all nameable:
+~~**The queued chunk is `design.md` §11 step 11 — the copy pass against §8.**~~ **Done 2026-08-15,
+and it found twelve defects against a list of seven.** All seven below were real; five more were not
+on any list, and the two largest were among the five — **§8 rule 1's own worked example was still
+being drawn on the landing route**, and the wire values were **ten sites across eight files** rather
+than four on one screen. See the standing decision for the twelve, for the two judgement calls, for
+the one defect the chunk introduced and a picture caught, and for the `•` suspicion the pictures
+cleared.
+
+**It is implemented rather than proved complete, and that distinction is the entry's own.** Seven of
+§8's ten rules can be grepped and were; rules **2, 4 and 6** — *state what is true*, *the verb
+persists*, *say what is still true* — cannot be, and instances of all three were walked into rather
+than audited for. **§8 rule 8 is knowingly still broken on eight surfaces** and is a capability chunk,
+not a copy one. So step 11 should not be called finished in step 12 without a pass that reads prose
+rather than greps it.
+
+**The next chunk is not obvious and this file is not choosing one.** What is left of §11 is step 5b
+(a behaviour change), step 7 (the sale path, which now needs `AppSheet` specified first — a new open
+decision), step 10 (still blocked on §12) and step 12 (blocked on six open decisions of its own). The
+honest reading is that **the redesign is now gated on the product owner rather than on work**, which
+is a different state from any this file has recorded before.
+
+**What the step-10 blockers were, kept because they are still true:**
 
 - **Two of its eight assets are external and need product decisions nobody has made.** §12 asks *"Is
   there a character?"* and *"Who builds the Rive files?"*, and asset 7 is "business approval

@@ -8,6 +8,7 @@ import '../ui/status.dart';
 import '../ui/tokens.dart';
 
 import 'tenant_id.dart';
+import 'tenant_membership_labels.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_route_guard.dart';
@@ -478,10 +479,14 @@ final class _StaffContentsState extends State<_StaffContents> {
         ),
         StatTile(
           key: const ValueKey('staff-stat-pending'),
-          label: 'Pending',
+          // §8 rule 4, the verb persists: the badge on every row this tile
+          // counts says `Invited`, so the tile counting them cannot say
+          // `Pending`. Step 11 moved the badge and this followed it - one screen
+          // spelling one standing two ways is what a tile row makes obvious.
+          label: 'Invited',
           value: '$pending',
           icon: Icons.hourglass_empty,
-          detail: 'invited, not yet accepted',
+          detail: 'not yet accepted',
           // **It used to dim the figure to `onSurfaceVariant` when the count was
           // above zero, and it now says nothing.** That was a colour meaning
           // "look here", which is §2.1's complaint exactly - but the honest
@@ -538,7 +543,7 @@ final class _StaffContentsState extends State<_StaffContents> {
     // green doing several jobs that §1 is about.
     status: RecordStatus(
       badgeKey: ValueKey('staff-status-${staff.uid}'),
-      label: staff.status.wireValue,
+      label: membershipStatusLabel(staff.status),
       status: switch (staff.status) {
         MembershipStatus.active => AppStatus.ok,
         MembershipStatus.pending => AppStatus.attention,
@@ -547,18 +552,18 @@ final class _StaffContentsState extends State<_StaffContents> {
         // not a difference found, and §2.1 gives "closed" to neutral.
         MembershipStatus.inactive => AppStatus.neutral,
       },
-      semanticLabel: 'Membership ${staff.status.wireValue}',
+      semanticLabel: membershipStatusSemanticLabel(staff.status),
     ),
     attributes: <RecordAttribute>[
       RecordAttribute(
         label: 'Role',
-        value: staff.role.wireValue,
+        value: tenantRoleLabel(staff.role),
         valueKey: ValueKey('staff-role-${staff.uid}'),
       ),
       if (staff.status == MembershipStatus.pending)
         RecordAttribute(
           label: 'Invitation',
-          value: staff.invitationStatus.wireValue,
+          value: staffInvitationStatusLabel(staff.invitationStatus),
           valueKey: ValueKey('staff-invitation-${staff.uid}'),
         ),
     ],
@@ -656,7 +661,12 @@ final class _StaffContentsState extends State<_StaffContents> {
     }
     return <RecordAction>[
       RecordAction(
-        label: 'Edit',
+        // §8 rule 10: never imply mutation. `Correct` is the word the catalog's
+        // own row already uses for the same shape of action, on the same icon
+        // and with the same key - the key is a test contract rather than copy,
+        // so it stays `edit-staff-...` exactly as the catalog's stays
+        // `catalog-management-edit-...`.
+        label: 'Correct',
         actionKey: ValueKey('edit-staff-${staff.uid}'),
         icon: Icons.edit_outlined,
         onPressed: () => _open(

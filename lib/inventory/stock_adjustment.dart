@@ -73,6 +73,23 @@ enum TenantStockAdjustmentType {
     damage => 'Damage (removes stock)',
     waste => 'Waste (removes stock)',
   };
+
+  /// The same type inside a sentence, where [label]'s parenthesis does not fit.
+  ///
+  /// **Added by `design.md` §11 step 11 on 2026-08-15**, because the confirm
+  /// dialog was interpolating [wireValue] - so a person about to move stock read
+  /// "This records a opening_balance of +5 units", which is §8 rule 1 and a
+  /// broken article in one clause. The direction is dropped here rather than
+  /// carried: the sentence states the before and after two lines later, which
+  /// says it in figures rather than in a parenthesis.
+  String get sentenceLabel => switch (this) {
+    restock => 'restock',
+    openingBalance => 'opening balance',
+    inventoryCount => 'inventory count',
+    correction => 'correction',
+    damage => 'damage',
+    waste => 'waste',
+  };
 }
 
 /// Why an adjustment did not change any stock.

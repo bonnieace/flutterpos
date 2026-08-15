@@ -801,8 +801,12 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
       builder: (context) => AlertDialog(
         title: const Text('Adjust this stock?'),
         content: Text(
-          'This records a ${_type.wireValue} of '
-          '${quantityDelta > 0 ? '+' : ''}$quantityDelta units. From the '
+          // The type is a trailing clause rather than the sentence's object, so
+          // one wording is grammatical for all six - "a opening_balance" was
+          // wrong twice over, and an `a`/`an` test would only have fixed half.
+          'This records an adjustment of '
+          '${quantityDelta > 0 ? '+' : ''}$quantityDelta units, typed as '
+          '${_type.sentenceLabel}. From the '
           'quantity recorded now, that is ${widget.quantity} to '
           '${widget.quantity + quantityDelta}. The server re-reads the '
           'product, so the final figure is whatever it holds at that moment. '

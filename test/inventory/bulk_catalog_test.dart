@@ -952,7 +952,7 @@ void main() {
 
       expect(rows.map((row) => row.position), <int>[51, 52]);
       expect(rows.first.subject, 'Product pd-51');
-      expect(rows.first.detail, '65.00 → 19.99');
+      expect(rows.first.detail, 'from 65.00 to 19.99');
       expect(rows[1].detail, 'Already 19.99. Nothing was written for this row.');
     });
 

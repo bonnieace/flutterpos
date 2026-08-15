@@ -52,7 +52,7 @@ void main() {
     // repeating their own UID back at them.
     expect(
       _text(tester, 'shift-amendment-actor-amend_abc'),
-      'Corrected by You, recorded 2026-08-04T15:30:00.000Z.',
+      'Corrected by You, recorded 2026-08-04 15:30 UTC.',
     );
     expect(
       _text(tester, 'shift-amendment-evidence-amend_abc'),
@@ -96,7 +96,7 @@ void main() {
 
     expect(
       _text(tester, 'shift-amendment-actor-amend_abc'),
-      'Corrected by admin-b, recorded 2026-08-04T15:30:00.000Z.',
+      'Corrected by admin-b, recorded 2026-08-04 15:30 UTC.',
     );
   });
 

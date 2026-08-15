@@ -8,6 +8,7 @@ import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
+import 'tenant_membership_labels.dart';
 import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_staff_directory.dart';
@@ -375,7 +376,7 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
                   .map(
                     (role) => AppSelectItem<TenantRole>(
                       value: role,
-                      label: role.wireValue,
+                      label: tenantRoleLabel(role),
                     ),
                   )
                   .toList(),

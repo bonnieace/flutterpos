@@ -1587,7 +1587,14 @@ List<TenantBulkCatalogRowReport> describeBatchOutcomes(
         TenantBulkCatalogRowStatus.failed => outcome.message ?? 'Refused.',
         TenantBulkCatalogRowStatus.unchanged =>
           'Already ${page.valueLabel}. Nothing was written for this row.',
-        _ => '${page.rows[outcome.index].previous} → ${page.valueLabel}',
+        // **A glyph outside the Latin ranges is an asset rather than a
+        // character**, which is the generalisation step 9 earned when its
+        // keypad's U+232B rendered as tofu. This repository bundles no font and
+        // carries no U+2192, so the arrow drew as a box on every device that
+        // ever showed this report. A word costs nothing and says more: the two
+        // values were never obviously ordered by an arrow alone.
+        _ =>
+          'from ${page.rows[outcome.index].previous} to ${page.valueLabel}',
       },
     ),
 ];
