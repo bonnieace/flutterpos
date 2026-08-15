@@ -23376,3 +23376,198 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## An input is a pill again, and a keypad learns lower case - 2026-08-15
+
+### Why this chunk, and why it is not a step
+
+**The product owner asked for it, having looked at what §11 step 9 landed an hour earlier.** In
+their words: they do not like the black input fields, they prefer how the fields looked on the
+original sign-in screen — with leading and, for the password, trailing icons, and that style — and
+they want a caps button on the on-screen keyboard. "All the input fields", not sign-in's.
+
+**Two of the three things they asked for contradicted `design.md` outright**, which is what made
+this a chunk rather than a patch:
+
+- §5.2 specified a **`surface.sunken`** well. That is the near-black they disliked.
+- §2.3 restricted **`radius.pill`** to buttons, in as many words, with an argument attached: "when
+  *everything* is a pill — buttons, chips, filters, cards, inputs — the shape stops signifying."
+
+`design.md` is the product owner's specification and amending it is theirs to do; `design.md` §0's
+own order of operations is *change this document, change the token file, change the widgets,
+regenerate the screenshots*. **So the specification moved first and the code followed**, and the
+version went to **v0.4** because four of the amendments are breaking.
+
+**Four decisions were put to the product owner before any code was written**, because each changes
+every field in the app and getting one wrong means redoing a 72-image diff. They took all four
+recommendations: a new `surface.field` role at `#1E3A2B`; `radius.pill`; leading icons on the fields
+where the glyph is unambiguous rather than on all 41; and §9's ring **plus** the original glow.
+
+### What was decided
+
+1. **§2.1 gains `surface.field` `#1E3A2B`, and `surface.sunken` loses the input well.** It keeps the
+   table header and the code block, which are the two uses that genuinely are recessed. **No new
+   hex**: `#1E3A2B` is `green.700`, already a primitive, so v0.4 added a *role* — which is precisely
+   what §2.1 tells a widget to do when it needs a colour that has none. It collides with
+   `border.subtle` by value, deliberately and named in §2.1: they never meet, because a field well
+   is bounded by `border.strong`.
+2. **A field is now the lightest surface in the set.** The ordering runs `sunken` → `base` →
+   `raised` → `overlay` → `field`, so a well is not recessed; it sits *on* the page as a pill. That
+   reads as backwards until you look at it, which is why `tokens_test.dart` walks the five in order
+   rather than the document merely asserting it.
+3. **§2.3's pill stops being buttons-only, and the argument is kept rather than deleted.** It now
+   does its work on chips, filters, badges and cards. **What it costs is written into §2.3 rather
+   than discovered**: a button and a field share an outline, and what keeps them apart is the action
+   tier's fill, the field's persistent label, and the field's left-aligned content. If those stop
+   being enough, the honest fix is to take the amendment back rather than add a fourth distinction.
+4. **§5.2 gains an optional leading icon at 18 — `AppButton`'s size, one of the two §5.2 names — and
+   it is optional in the strong sense.** **17 of 41 fields carry one and 24 decline it**: address,
+   password, phone, money, code, quantity, receipt and filter get a glyph; "Reason for this
+   adjustment", "Business name" and "Note" do not. The alternative was offered to the product owner
+   and declined, and the reason is worth keeping: 24 of the glyphs would have been chosen to fill a
+   slot rather than to say anything.
+5. **The focus glow is back and §9's ring is still in front of it.** The original drew a glow
+   *instead* of a ring, which is the §9 failure `DESIGN-AUDIT.md` §4.4 named. v0.4 draws both, and
+   the test asserts the *pairing* rather than the glow: `accentGreen` at 30%, blurred 8, spread 1,
+   behind the 2px ring at a 2px offset. §2.1 gains the one shadow it permits, on the grounds that a
+   focus glow is an interaction state and not depth.
+6. **The placeholder moved from `text.tertiary` to `text.secondary`, and that one is arithmetic
+   rather than taste.** `text.tertiary` measures **4.29:1** on `surface.field` against §9's 4.5
+   floor, where it measures 5.9 on the page. It was computed by hand before the change was proposed,
+   flagged to the product owner as a risk in the same breath as the recommendation, and confirmed to
+   the second decimal by `tokens_test.dart` afterwards. It is asserted **at the figure** rather than
+   at a floor, so a later session that "restores" `text.tertiary` fails a test that explains itself.
+   **Helper text is untouched** — it sits outside the well, on `surface.base`.
+7. **The 1px `border.strong` stays, and the reason is functional.** §5.2 switches the border to
+   `status.problem.border` on error. A well with no border has no error border — and the original
+   `PillInput`, which drew none at rest, had no error state at all.
+8. **`inputDecorationTheme` moved with it**, which is the half `AppFieldWell` cannot reach. Every
+   field in the migrated tree strips that theme; what still reads it is the sale path's two
+   unmigrated `TextField`s and the legacy island. Leaving it on `bgMid` at radius 14 would have left
+   the one screen a cashier uses most with two dark rectangles while every other field in the app
+   became a pill — and the request was *all* the input fields. **Its `hintStyle` had to move or it
+   would have disappeared**: it was `mutedGreen`, which is `#1E3A2B`, which is now the fill.
+9. **The keypad has a caps lock, and it fixes something as well as adding something.** Every letter
+   key used to insert its upper-case identifier, so this keypad typed `OWNER@EXAMPLE.COM` and could
+   **not type a lower-case password at all**. Off is now the default — an address is conventionally
+   lower case and a password is case-sensitive — and `Caps` latches. **The key faces change with
+   it**, so a person sees which case they will get rather than finding out by typing.
+10. **`Caps` is one flex unit and an icon, and arithmetic forced both.** A labelled `Caps` needs two
+    units, which would make the `Z` row 11 units and narrow every key in the keypad below §9's 48.
+    So `PosKeyboard.columns` is now **measured over `rows`** rather than hardcoded to 10: the next
+    key added widens the pane the keypad asks for instead of silently shrinking every key. That is
+    the constant this repository has been burned by, caught one edit before it would have been
+    wrong.
+11. **A latched key is §2.1's `primary` tier**, the one tier that fills its container, so `Caps` is
+    filled and mint among bordered ones. §9's "never hue alone" is satisfied by the fill, the glyph
+    and the announcement together — a screen reader hears `Caps, on`.
+
+### Safety
+
+No repository call, no state logic, no routing condition and no API shape changed. `git diff` and
+`git status` over `functions/`, `firestore.rules` and `rules-tests/` print zero lines.
+
+**One behaviour changed and it is the one that was asked for**: the keypad types lower case by
+default where it always typed upper case. Nothing else about what any field does moved — the same
+controllers, formatters, validators, keyboard types and submit handlers, because the change is
+entirely inside `AppFieldWell`'s chrome and `AppTextField` passes everything through as it did.
+
+### Files changed
+
+```text
+design.md                                 v0.4: §2.1 gains surface.field and the one permitted
+                                          shadow; §2.3's pill covers inputs; §5.2 gains the
+                                          leading icon, the padding figure, the glow and the
+                                          placeholder correction; status line and changelog
+lib/ui/tokens.dart                        AppSurfaceRoles.field, with lerp and the dark set
+lib/ui/fields.dart                        AppFieldWell: surface.field, radius.pill, space.20,
+                                          the leading slot, the focus glow; AppTextField.leading
+                                          and AppSelect.leading; the placeholder colour
+lib/theme.dart                            inputDecorationTheme -> surface.field at radius.pill,
+                                          hintStyle rescued from the new fill
+lib/widgets/pos_keyboard.dart             the Caps key, the case model, columns measured over
+                                          rows, the latched-key tier
+17 call sites in 11 files                 leading icons: login (2), catalog management (5),
+                                          checkout configuration (1), stock adjustment (1),
+                                          receipt lookup (1), shift (1), staff invitation (2),
+                                          email replacement (1), audit log (1), stock feed (1)
+test/ui/tokens_test.dart                  +3: the role, the surface ordering, the 4.29 finding
+test/ui/fields_test.dart                  +5, 2 changed: the well, the placeholder, the icon,
+                                          the glow's pairing with the ring, the disabled case
+test/login_screen_test.dart               +7: the caps lock, and columns measured not written
+tool/screenshots/field_states_test.dart   a leading-icon row in the matrix
+tool/screenshots/auth_screens_test.dart   01e-sign-in-caps-locked
+DESIGN-AUDIT.md                           §1.2, §1.7 and §6 corrected in place
+PLAN.md                                   status board, a standing decision, a new open
+                                          decision, exclusions, baselines, the device-run item
+```
+
+### Tests
+
+```text
+flutter analyze --no-pub lib                                              475, the baseline
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1978 pass  (1963 -> 1978)
+npm --prefix functions test                                              409 pass
+npm --prefix rules-tests run test:emulator                                161 pass   (186 s)
+npm --prefix rules-tests run test:emulator:reconciliation                 10 pass    (204 s)
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 ... run test:emulator:invitations       23 pass    (171 s)
+flutter test --no-pub --concurrency=1 tool/screenshots                    182 captures, 240 images
+```
+
+**+15, and only two existing assertions changed** — the well's colour and radius, once in the text
+field's test and once in the select's. That pair is the whole of the churn that changing every field
+in the app caused in a 1978-test suite, which is `AppFieldWell` earning its keep: 41 call sites draw
+themselves through one widget, so 41 renderings moved and two assertions did.
+
+**Nothing failed on a first run**, which is the first time in three days that is true here. The
+arithmetic that would normally have caught something out — the 4.29:1 contrast, and whether ten keys
+still fit once `Caps` was added — was computed by hand before the code was written and confirmed by
+tests afterwards, rather than the other way round.
+
+### Screenshots
+
+**72 moved, 1 added, 0 removed, against the rendering committed in `7d9e8f4` an hour earlier.**
+
+```text
+added   web / 01e-sign-in-caps-locked     the keypad latched: every face upper, the key filled
+moved   every screen with a field or a select on it - sign-in, the till, checkout settings,
+        both catalog screens and the correction dialog, bulk changes, stock adjustment,
+        receipt lookup, the shift panel, returns, reconciliation amendment, the staff
+        gateways, the platform tabs, tenant request, and the 92-appfield-* matrix
+unmoved 172, and that is the check: every one is a screen with no field on it
+```
+
+**The 172 is the attribution.** A change to `AppFieldWell` should reach exactly the screens that draw
+a field and no others, and it did — the record lists, the stat matrices, the disclosure matrix, the
+page-frame matrix, the button matrix and the route transitions all hashed identical.
+
+### Reported during this session
+
+The product owner's request itself, recorded at the top. Nothing was reported and left unfixed.
+
+### Excluded
+
+**The chip radius**, which is now the only row §2.3's pill argument still guards and which the theme
+already contradicts — `chipTheme` is `StadiumBorder` where §2.3 says `radius.sm`, and has been since
+before the migration. It has its own open decision now; closing it is step 4's leftover and moves the
+catalog and checkout images. **The sale path's two fields**, which now *look* right — they read the
+amended `inputDecorationTheme` — while still being Material fields with none of §5.2's label, helper,
+counter or error behaviour; step 7's, and this change makes that easier to forget rather than harder.
+**The 24 fields that declined a leading icon**, which is a judgement per field. `Pagination`.
+`inNarrowForm`. The ambient `letterSpacing`. The checkbox outline's 1.97:1. §3's density. The three
+dead widget files, still not deletable. Every server file and `firestore.rules`, by choice.
+Deployment.
+
+**The next bounded chunk is unchanged: `design.md` §11 step 11, the copy pass against §8.**
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

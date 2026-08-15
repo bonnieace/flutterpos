@@ -225,6 +225,7 @@ final class _ShiftContents extends StatelessWidget {
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           label: 'Counted cash (minor units)',
+          leading: Icons.payments_outlined,
         ),
         const SizedBox(height: 8),
       ],

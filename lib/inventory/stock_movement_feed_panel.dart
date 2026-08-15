@@ -271,6 +271,7 @@ final class _MovementFeedContents extends StatelessWidget {
         key: const ValueKey('stock-movements-feed-filter'),
         value: page.source,
         label: 'Show',
+        leading: Icons.filter_list,
         items: <AppSelectItem<TenantStockMovementSource?>>[
           const AppSelectItem<TenantStockMovementSource?>(
             value: null,

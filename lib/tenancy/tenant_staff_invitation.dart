@@ -320,6 +320,7 @@ final class _TenantStaffInvitationFormState
           enabled: !_submitting,
           keyboardType: TextInputType.emailAddress,
           label: 'Email',
+          leading: Icons.email_outlined,
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {
@@ -351,6 +352,7 @@ final class _TenantStaffInvitationFormState
           enabled: !_submitting,
           keyboardType: TextInputType.phone,
           label: 'Phone (optional)',
+          leading: Icons.phone_outlined,
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {

@@ -54,6 +54,21 @@ WidgetStateProperty<Color?> _pressOverlay(AppActionRole role) =>
 /// Dart rule about the expression and not about the value.
 final AppActionRoles _action = AppTokens.dark.colors.action;
 
+/// The surface roles, read once for the same reason [_action] is.
+final AppSurfaceRoles _surface = AppTokens.dark.colors.surface;
+
+/// One slot of the field outline every unmigrated `TextField` still reads.
+///
+/// `design.md` §2.3 v0.4: an input is a pill. `AppFieldWell` draws its own and
+/// strips all six of these slots, so what this reaches is the sale path's two
+/// fields and the legacy island - and they should not be the only rectangles
+/// left in the app.
+OutlineInputBorder _fieldBorder(Color colour, {double width = 1}) =>
+    OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppTokens.dark.radius.pill),
+      borderSide: BorderSide(color: colour, width: width),
+    );
+
 /// Bouncing everywhere, on both platforms, and no Material overscroll glow -
 /// `design.md` §2.4's last two motion rules.
 ///
@@ -119,12 +134,19 @@ final class SpiritScrollBehavior extends MaterialScrollBehavior {
 /// overlays step 2 wired. Step 1 defined the layer additively and wired
 /// nothing; step 2 took the overlays; step 3 took the colours under them. What
 /// is still on the old values below is named rather than left to be
-/// discovered: the input well is `bgMid` where §2.1 wants `surface.sunken`, the
-/// card radius is 16 where §2.3 wants 12, the input radius is 14 where it wants
-/// 8, and chips are stadium where §2.3 restricts the pill to buttons. Those are
-/// steps 4 and 5, where each image diff has exactly one cause, and
+/// discovered: ~~the input well is `bgMid` where §2.1 wants `surface.sunken`,~~
+/// the card radius is 16 where §2.3 wants 12, ~~the input radius is 14 where it
+/// wants 8,~~ and chips are stadium where §2.3 restricts the pill to buttons.
+/// Those are steps 4 and 5, where each image diff has exactly one cause, and
 /// `test/ui/tokens_test.dart` asserts every one of them as a divergence so the
 /// step that closes one fails a test rather than passing quietly.
+///
+/// **The two input rows closed on 2026-08-15 and not by conforming to what they
+/// said.** `design.md` v0.4 moved the well to `surface.field` `#1E3A2B` and the
+/// radius to `radius.pill`, so the specification came to the theme rather than
+/// the other way around. The remaining readers of `inputDecorationTheme` are the
+/// sale path's two fields and the legacy island; every field in the migrated
+/// tree goes through `AppFieldWell`, which strips this theme entirely.
 ///
 /// **Step 2 is the ripple kill, and it is theme-level on purpose.** §2.4 says
 /// to replace `InkWell` with an opacity-and-scale overlay, but there is exactly
@@ -275,27 +297,29 @@ final ThemeData spiritTheme = ThemeData(
       foregroundColor: _action.tertiary.label,
     ).copyWith(overlayColor: _pressOverlay(_action.tertiary)),
   ),
+  // **`design.md` v0.4, and this is the half `AppTextField` cannot reach.**
+  // Every field in the migrated tree draws itself through `AppFieldWell`, which
+  // strips this theme entirely; what still reads it is the sale path's two
+  // unmigrated `TextField`s and the legacy island. Leaving it on `bgMid` at
+  // radius 14 would have meant the one screen a cashier uses most keeping two
+  // dark rectangles while every other field in the app became a pill - which is
+  // the divergence the token layer exists to prevent, and the product owner
+  // asked for *all* the input fields.
+  //
+  // **`hintStyle` had to move or it would have disappeared.** It was
+  // `mutedGreen`, which is `#1E3A2B`, which is now the fill.
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
-    fillColor: bgMid,
-    hintStyle: const TextStyle(color: mutedGreen),
+    fillColor: _surface.field,
+    hintStyle: const TextStyle(color: _bodyGreen),
     labelStyle: const TextStyle(color: _bodyGreen),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: mutedGreen),
+    border: _fieldBorder(_surface.borderStrong),
+    enabledBorder: _fieldBorder(_surface.borderStrong),
+    focusedBorder: _fieldBorder(
+      _action.focusRing.color,
+      width: _action.focusRing.width,
     ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: mutedGreen),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: accentGreen, width: 2),
-    ),
-    errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _criticalRed),
-    ),
+    errorBorder: _fieldBorder(_criticalRed),
   ),
   chipTheme: ChipThemeData(
     backgroundColor: bgMid,

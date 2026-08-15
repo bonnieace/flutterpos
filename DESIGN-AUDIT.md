@@ -54,8 +54,16 @@ they are the primary button's pressed and hover states.
 
 **New:** `surface.sunken`, `surface.overlay`, `surface.scrim`, `border.strong`.
 
-The input well is `bgMid` today ([theme.dart:140](lib/theme.dart#L140)) where §2.1 wants
-`surface.sunken` `#08140E`. That is a visible change on every form in the app.
+~~The input well is `bgMid` today ([theme.dart:140](lib/theme.dart#L140)) where §2.1 wants
+`surface.sunken` `#08140E`. That is a visible change on every form in the app.~~
+
+**It was, on 2026-08-15 with §11 step 9 — and it was taken back the same day.** §2.1 v0.4 gives
+the input well a role of its own, **`surface.field` `#1E3A2B`**, and leaves `surface.sunken` the
+table header and the code block. The product owner looked at the near-black well on a real screen
+and did not want it; `#1E3A2B` is what this app's original sign-in always drew, and it is
+`green.700`, already a primitive — so v0.4 added a role and no colour. **This audit's prediction
+was right about the size and wrong about the direction**: it was a visible change on every form in
+the app, twice.
 
 ### 1.3 Text roles
 
@@ -138,7 +146,7 @@ Current radii against §2.3:
 | Surface | Today | §2.3 |
 | --- | --- | --- |
 | Card | 16 [theme.dart:99](lib/theme.dart#L99) | 12 |
-| Input | 14 [theme.dart:144](lib/theme.dart#L144), and three more | 8 |
+| Input | 14 [theme.dart:144](lib/theme.dart#L144), and three more | ~~8~~ **pill**, since v0.4 |
 | Chip | `StadiumBorder` [theme.dart:167](lib/theme.dart#L167) | 8 |
 | Bottom sheet | 24 [theme.dart:180](lib/theme.dart#L180) | 20 |
 | Snackbar | 12 [theme.dart:197](lib/theme.dart#L197) | unspecified |
@@ -147,6 +155,15 @@ Current radii against §2.3:
 
 The dialog is the only match. Buttons are already stadium everywhere, so §2.3's "Pill buttons are
 the signature and should stay" costs nothing.
+
+**The input row moved on 2026-08-15, in `design.md` v0.4, and the direction is worth recording.**
+§2.3 restricted the pill to buttons on the argument that "when *everything* is a pill the shape
+stops signifying". The product owner's ruling is that the argument holds for chips, filters, badges
+and cards and does not hold for the field: the sign-in pill is what anyone who has used this app
+remembers, and the fields are the second half of it. So `radius.sm` keeps the chip and the badge,
+and the field is a pill. **What a reviewer should watch for is the thing the original argument
+predicted** — a button and a field now share an outline, and what keeps them apart is the action
+tier's fill, the field's persistent label, and the field's left-aligned content.
 
 ### 1.8 Motion
 
@@ -558,8 +575,8 @@ That is not achievable as specified. Conforming the token layer changes, at mini
 | `outlinedButtonTheme.foregroundColor` mint → `#B8D6C5` | [theme.dart:126](lib/theme.dart#L126) | ~40 call sites, most of the landing screen |
 | `bodySmall` white → `text.tertiary` | [theme.dart:75-86](lib/theme.dart#L75-L86) | every caption in the app |
 | Card radius 16 → 12 | [theme.dart:99](lib/theme.dart#L99) | every card |
-| Input radius 14 → 8 | [theme.dart:144](lib/theme.dart#L144)–[:157](lib/theme.dart#L157) | every form |
-| Input fill `bgMid` → `surface.sunken` | [theme.dart:140](lib/theme.dart#L140) | every form |
+| Input radius 14 → ~~8~~ **pill** | [theme.dart:144](lib/theme.dart#L144)–[:157](lib/theme.dart#L157) | every form |
+| Input fill `bgMid` → ~~`surface.sunken`~~ **`surface.field`** | [theme.dart:140](lib/theme.dart#L140) | every form |
 | Chip `StadiumBorder` → 8 | [theme.dart:167](lib/theme.dart#L167) | catalog, checkout tender |
 | Bottom sheet 24 → 20 | [theme.dart:180](lib/theme.dart#L180) | cart sheet |
 

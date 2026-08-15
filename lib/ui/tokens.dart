@@ -90,6 +90,7 @@ final class AppSurfaceRoles {
     required this.base,
     required this.raised,
     required this.sunken,
+    required this.field,
     required this.overlay,
     required this.scrim,
     required this.borderSubtle,
@@ -102,8 +103,21 @@ final class AppSurfaceRoles {
   /// Cards, rows, sheets.
   final Color raised;
 
-  /// Input wells, table headers, code.
+  /// Table headers and code. **Not input wells** - see [field].
   final Color sunken;
+
+  /// Input wells. §2.1, new in `design.md` v0.4.
+  ///
+  /// **The lightest surface in the set, deliberately.** The ordering runs
+  /// [sunken] → [base] → [raised] → [overlay] → [field], so a field is not
+  /// recessed: it sits *on* the page as a raised pill. That is the product
+  /// owner's direction of 2026-08-15, and the shape this app's original sign-in
+  /// always had. [sunken] keeps the two uses that genuinely are recessed.
+  ///
+  /// **It is `green.700`, the same primitive as [borderSubtle].** One primitive,
+  /// two roles, and they never meet: a field well is bounded by [borderStrong]
+  /// and never by a hairline.
+  final Color field;
 
   /// Dialogs, menus, bottom sheets.
   final Color overlay;
@@ -121,6 +135,7 @@ final class AppSurfaceRoles {
     base: _Primitive.green900,
     raised: _Primitive.green850,
     sunken: _Primitive.green950,
+    field: _Primitive.green700,
     overlay: _Primitive.green800,
     scrim: Color.fromRGBO(0, 0, 0, 0.6),
     borderSubtle: _Primitive.green700,
@@ -132,6 +147,7 @@ final class AppSurfaceRoles {
         base: Color.lerp(a.base, b.base, t)!,
         raised: Color.lerp(a.raised, b.raised, t)!,
         sunken: Color.lerp(a.sunken, b.sunken, t)!,
+        field: Color.lerp(a.field, b.field, t)!,
         overlay: Color.lerp(a.overlay, b.overlay, t)!,
         scrim: Color.lerp(a.scrim, b.scrim, t)!,
         borderSubtle: Color.lerp(a.borderSubtle, b.borderSubtle, t)!,

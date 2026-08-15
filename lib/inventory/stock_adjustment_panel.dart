@@ -886,6 +886,7 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
         keyboardType: TextInputType.number,
         onChanged: (_) => setState(() {}),
         label: 'Units',
+        leading: Icons.numbers,
       ),
       const SizedBox(height: 12),
       AppTextField(

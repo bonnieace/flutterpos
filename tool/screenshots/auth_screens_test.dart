@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/login_screen.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/widgets/pos_keyboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -181,6 +182,26 @@ void main() {
       signIn: _FailingSignIn(const SignInException('network-request-failed')),
     ),
     afterPump: _signInAndFail,
+  );
+
+  // **The keypad with its caps lock on**, which is the only state of this screen
+  // that a picture of the resting screen cannot show: every letter face changes,
+  // and the key itself moves to §2.1's `primary` tier. `web` only - the keypad
+  // does not appear below 1264, so a phone capture would be the form again.
+  screenshotCase(
+    '01e-sign-in-caps-locked',
+    settle: false,
+    viewports: const <ScreenshotViewport>[webViewport],
+    build: () => const LoginScreen(),
+    afterPump: (tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(PosKeyboard),
+          matching: find.byIcon(Icons.keyboard_capslock),
+        ),
+      );
+      await tester.pump();
+    },
   );
 
   screenshotCase(

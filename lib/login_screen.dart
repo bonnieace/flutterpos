@@ -336,6 +336,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 // everywhere else; *what* this field should be called is a copy
                 // question and §11 step 11 is the copy pass.
                 label: 'Email / user ID',
+                // §5.2's leading icon, back where the original had it. These two
+                // are the clearest case the section describes: an envelope and a
+                // padlock say which of the two boxes is which before the labels
+                // are read, which is what a person signing in twice a day wants.
+                leading: Icons.email_outlined,
                 placeholder: 'example@spiritpos.com',
                 controller: emailController,
                 focusNode: emailFocus,
@@ -349,6 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
               AppTextField(
                 key: const ValueKey('login-password'),
                 label: 'Password',
+                leading: Icons.lock_outline,
                 // No placeholder, deliberately. It said "Enter Password", and
                 // §5.2 is explicit that a placeholder is an *example* and never
                 // a restatement of the label.

@@ -443,6 +443,7 @@ final class _TenantStaffInvitationEmailReplacementFormState
           enabled: !_submitting,
           keyboardType: TextInputType.emailAddress,
           label: 'Corrected email',
+          leading: Icons.email_outlined,
           onChanged: (_) => _markIntentChanged(),
           validator: (value) {
             try {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
+import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,12 +50,18 @@ TextStyle _styleOf(WidgetTester tester, String text) =>
 
 void main() {
   group('the well is §5.2\'s well', () {
-    testWidgets('surface.sunken, border.strong at 1px, radius.sm', (
+    testWidgets('surface.field, border.strong at 1px, radius.pill', (
       tester,
     ) async {
+      // **`design.md` v0.4, 2026-08-15, at the product owner's direction.** The
+      // well was `surface.sunken` at `radius.sm` - a near-black rectangle - and
+      // is the raised pill this app's original sign-in drew. The border did not
+      // move, and that is not inertia: §5.2 switches it to
+      // `status.problem.border` on error, so a well with no border has no error
+      // state to switch.
       await _pump(tester, const AppTextField(label: 'Product name'));
       final decoration = _wellDecoration(tester);
-      expect(decoration.color, _tokens.colors.surface.sunken);
+      expect(decoration.color, _tokens.colors.surface.field);
       expect(
         (decoration.border! as Border).top.color,
         _tokens.colors.surface.borderStrong,
@@ -62,8 +69,41 @@ void main() {
       expect((decoration.border! as Border).top.width, 1);
       expect(
         (decoration.borderRadius! as BorderRadius).topLeft.x,
-        _tokens.radius.sm,
+        _tokens.radius.pill,
       );
+    });
+
+    testWidgets('the placeholder is text.secondary, and the reason is §9', (
+      tester,
+    ) async {
+      // `text.tertiary` measures 4.29:1 on `surface.field` against §9's 4.5,
+      // where it measured 5.9 on the page. `test/ui/tokens_test.dart` asserts
+      // the figure; this asserts the widget acted on it.
+      await _pump(
+        tester,
+        const AppTextField(label: 'Receipt number', placeholder: 'CT-A7F-0042'),
+      );
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(
+        field.decoration!.hintStyle!.color,
+        _tokens.colors.text.secondary,
+      );
+    });
+
+    testWidgets('an optional leading icon, at §5.2\'s named 18', (
+      tester,
+    ) async {
+      await _pump(tester, const AppTextField(label: 'Password'));
+      expect(find.byType(Icon), findsNothing);
+
+      await _pump(
+        tester,
+        const AppTextField(label: 'Password', leading: Icons.lock_outline),
+      );
+      final icon = tester.widget<Icon>(find.byType(Icon));
+      expect(icon.icon, Icons.lock_outline);
+      expect(icon.size, AppButton.iconSize);
+      expect(icon.color, _tokens.colors.text.tertiary);
     });
 
     testWidgets('the label is persistent, label.md, text.secondary', (
@@ -406,6 +446,39 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.getRect(find.byType(TextField)), before);
     });
+
+    testWidgets('focus-visible: the glow is behind the ring, never instead', (
+      tester,
+    ) async {
+      // **v0.4's one shadow.** §2.1 says depth is a surface step and never a
+      // drop shadow; a focus glow is an interaction state rather than depth,
+      // and §2.1 names it as the single exception. The assertion that matters
+      // is the second one: the glow arrives *with* §9's ring and cannot replace
+      // it, which is what the original sign-in's glow-only focus got wrong.
+      await _pump(tester, const AppTextField(label: 'Product name'));
+      expect(_wellDecoration(tester).boxShadow, anyOf(isNull, isEmpty));
+
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+
+      final glow = _wellDecoration(tester).boxShadow!.single;
+      expect(glow.color.r, _tokens.colors.action.focusRing.color.r);
+      expect(glow.color.g, _tokens.colors.action.focusRing.color.g);
+      expect(glow.color.b, _tokens.colors.action.focusRing.color.b);
+      expect(glow.color.a, closeTo(0.3, 0.005));
+      expect(glow.blurRadius, 8);
+      expect(glow.spreadRadius, 1);
+    });
+
+    testWidgets('a disabled field is not focusable, so it never glows', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const AppTextField(label: 'Unit cost', enabled: false),
+      );
+      expect(_wellDecoration(tester).boxShadow, anyOf(isNull, isEmpty));
+    });
   });
 
   group('the editing behaviour a call site already relies on', () {
@@ -501,14 +574,14 @@ void main() {
         ),
       );
       final decoration = _wellDecoration(tester);
-      expect(decoration.color, _tokens.colors.surface.sunken);
+      expect(decoration.color, _tokens.colors.surface.field);
       expect(
         (decoration.border! as Border).top.color,
         _tokens.colors.surface.borderStrong,
       );
       expect(
         (decoration.borderRadius! as BorderRadius).topLeft.x,
-        _tokens.radius.sm,
+        _tokens.radius.pill,
       );
       expect(
         _styleOf(tester, 'Role').color,

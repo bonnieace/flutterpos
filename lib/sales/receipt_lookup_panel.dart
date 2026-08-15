@@ -141,6 +141,7 @@ final class _TenantReceiptLookupPanelState
         textCapitalization: TextCapitalization.characters,
         onSubmitted: (_) => _submit(),
         label: 'Receipt number',
+        leading: Icons.receipt_long_outlined,
         placeholder: 'CT-A7F-20260731-0042',
       ),
       const SizedBox(height: 12),

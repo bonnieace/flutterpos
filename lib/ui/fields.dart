@@ -28,11 +28,26 @@
 /// height, helper and error. That is the reading "one pattern, everywhere"
 /// forces, and inventing a second field shape for it would contradict the
 /// section it comes from.
+///
+/// **The well changed shape and colour on 2026-08-15, in `design.md` v0.4, at
+/// the product owner's direction.** It was `surface.sunken` at `radius.sm` - a
+/// near-black rectangle - and it is `surface.field` at `radius.pill`: the raised
+/// pill this app's original sign-in drew, returned to every field in the app at
+/// once because they all come through [AppFieldWell]. Three things arrived with
+/// it: an optional [AppTextField.leading] icon, the focus glow behind §9's ring,
+/// and a placeholder in `text.secondary` rather than `text.tertiary`.
+///
+/// **That last one is the only part of the change that is arithmetic rather than
+/// taste, and it is worth knowing before someone "restores" it.**
+/// `text.tertiary` measures **4.29:1** on the new well against §9's 4.5 floor,
+/// where it measured 5.9 on the page. Helper text is untouched - it sits outside
+/// the well, on `surface.base`.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'buttons.dart';
 import 'tokens.dart';
 
 /// A single-line text input, drawn to `design.md` §5.2.
@@ -65,9 +80,14 @@ final class AppTextField extends StatefulWidget {
     this.onSubmitted,
     this.focusNode,
     this.autofocus = false,
+    this.leading,
     this.trailing,
     this.validator,
   });
+
+  /// §5.2's optional leading icon. See [AppFieldWell.leading] for when a field
+  /// should have one and when the label is doing the work already.
+  final IconData? leading;
 
   /// The persistent label above the field. §5.2 makes it `label.md` in
   /// `text.secondary`, and it is required because a field without one is what
@@ -224,6 +244,7 @@ class _AppTextFieldState extends State<AppTextField> {
       enabled: widget.enabled,
       focused: _focused,
       counter: _counterFor(tokens),
+      leading: widget.leading,
       child: Row(
         children: <Widget>[
           Expanded(
@@ -277,9 +298,15 @@ class _AppTextFieldState extends State<AppTextField> {
                 contentPadding: EdgeInsets.zero,
                 isCollapsed: true,
                 hintText: widget.placeholder,
+                // **`text.secondary`, not `text.tertiary`**, and it is
+                // arithmetic rather than taste: `text.tertiary` measures
+                // **4.29:1** on `surface.field` where it measures 5.9 on the
+                // page, and §9's floor for body text is 4.5. §5.2 records the
+                // figure. It is still visibly dimmer than a typed value, which
+                // is `text.primary` at 12.4 on the same well.
                 hintStyle: tokens.density
                     .body(tokens.typography)
-                    .copyWith(color: tokens.colors.text.tertiary),
+                    .copyWith(color: tokens.colors.text.secondary),
               ),
             ),
           ),
@@ -321,8 +348,13 @@ final class AppSelect<T> extends StatefulWidget {
     required this.onChanged,
     this.helper,
     this.error,
+    this.leading,
     this.enabled = true,
   });
+
+  /// See [AppFieldWell.leading]. Offered here so the two controls cannot drift
+  /// apart, which is what "one pattern, everywhere" means at this level.
+  final IconData? leading;
 
   final String label;
   final T value;
@@ -366,6 +398,7 @@ class _AppSelectState<T> extends State<AppSelect<T>> {
       error: widget.error,
       enabled: enabled,
       focused: _focused,
+      leading: widget.leading,
       child: DropdownButtonHideUnderline(
         child: Focus(
           onFocusChange: (focused) {
@@ -423,9 +456,21 @@ final class AppFieldWell extends StatelessWidget {
     this.helper,
     this.error,
     this.counter,
+    this.leading,
     this.enabled = true,
     this.focused = false,
   });
+
+  /// §5.2's focus glow, new in `design.md` v0.4.
+  ///
+  /// The original sign-in's figures - `accentGreen` at 30%, blurred 8, spread 1
+  /// - carried across rather than re-chosen, because "the glow that was there
+  /// before" is what was asked for. They are three numbers §2 does not name and
+  /// they are here rather than in the token layer for that reason: a glow is one
+  /// component's interaction state, not a role anything else reads.
+  static const double _focusGlowOpacity = 0.3;
+  static const double _focusGlowBlur = 8;
+  static const double _focusGlowSpread = 1;
 
   final String label;
   final Widget child;
@@ -443,6 +488,14 @@ final class AppFieldWell extends StatelessWidget {
   /// is *where the keys go* - and on a form with several of them, not saying
   /// which one is receiving the typing is the failure §9 is about.
   final bool focused;
+
+  /// A glyph at the leading edge of the well, inside the border.
+  ///
+  /// §5.2's optional leading icon, at [AppButton.iconSize]. **Optional in the
+  /// strong sense**: the section says a glyph that does not narrow what the
+  /// field is for is noise in a form of six, so most fields carry none and the
+  /// label above the well is what names them.
+  final IconData? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -462,20 +515,59 @@ final class AppFieldWell extends StatelessWidget {
     // declared twice - and a compact back-office field is 32 for the same
     // reason its rows are.
     final height = tokens.density.minimumTapTarget.height;
-    final radius = BorderRadius.circular(tokens.radius.sm);
+    // §2.3 as amended in v0.4: an input is a pill. The shape is the product
+    // owner's, and the reason it is not simply `AppButton`'s row is that §2.3
+    // still restricts the pill to buttons *and inputs* - a chip does not get it.
+    final radius = BorderRadius.circular(tokens.radius.pill);
     final gutter = ring.width + ring.offset;
 
     Widget well = DecoratedBox(
       decoration: BoxDecoration(
-        color: colors.surface.sunken,
+        // §2.1's `surface.field`, new in v0.4. A well is a raised pill sitting
+        // on the page rather than a hole punched in it; `surface.sunken` keeps
+        // the table header and the code block, which genuinely are recessed.
+        color: colors.surface.field,
         borderRadius: radius,
         border: Border.all(color: borderColor, width: 1),
+        // §2.1 permits exactly one shadow and this is it: the focus glow the
+        // original sign-in drew, kept *behind* §9's ring rather than instead of
+        // it. A glow is an interaction state and not depth, which is why it does
+        // not contradict "depth is a surface step, never a drop shadow".
+        boxShadow: focused && enabled
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: ring.color.withValues(alpha: _focusGlowOpacity),
+                  blurRadius: _focusGlowBlur,
+                  spreadRadius: _focusGlowSpread,
+                ),
+              ]
+            : null,
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: height),
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s12),
-          child: Center(heightFactor: 1, child: child),
+          // §5.2 names `space.20` for a pill: content off the curve, and it is
+          // `AppButton`'s figure for the same shape. It was `space.12` while the
+          // well was a rectangle at `radius.sm`.
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s20),
+          child: Center(
+            heightFactor: 1,
+            child: leading == null
+                ? child
+                : Row(
+                    children: <Widget>[
+                      Icon(
+                        leading,
+                        size: AppButton.iconSize,
+                        color: enabled
+                            ? colors.text.tertiary
+                            : colors.action.disabledLabel,
+                      ),
+                      SizedBox(width: tokens.spacing.s12),
+                      Expanded(child: child),
+                    ],
+                  ),
+          ),
         ),
       ),
     );

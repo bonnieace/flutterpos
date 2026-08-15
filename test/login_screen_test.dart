@@ -472,11 +472,155 @@ void main() {
       // a page band and it was never a statement about a keyboard.
       expect(_keypadFloor, greaterThan(AppLayout.contract.mediumFloor));
       expect(_keypadFloor, greaterThan(AppLayout.contract.expandedFloor));
-      // 10 keys at 48, 9 gaps at 8, the card's inset and the pane's margin.
+      // 10 units at 48, 9 gaps at 8, the card's inset and the pane's margin.
+      expect(PosKeyboard.columns, 10);
       expect(PosKeyboard.minimumWidth(AppTokens.dark), 632);
       expect(_keypadFloor, 1264);
     });
+
+    testWidgets('the widest row is measured, not written down', (tester) async {
+      // `columns` was a hardcoded 10 until the `Caps` key arrived, at which
+      // point it was one edit away from being wrong. It reads `rows` now, so a
+      // key added to the busiest row widens the pane the keypad asks for rather
+      // than silently shrinking every key below §9's target.
+      final widest = PosKeyboard.rows
+          .map(
+            (row) => row.fold<int>(
+              0,
+              (total, key) => total + switch (key) {
+                PosKeyboard.space => 4,
+                PosKeyboard.enter => 2,
+                PosKeyboard.backspace => 2,
+                _ => 1,
+              },
+            ),
+          )
+          .reduce((a, b) => a > b ? a : b);
+      expect(PosKeyboard.columns, widest);
+    });
   });
+
+  group('the keypad has a caps lock', () {
+    // Asked for by the product owner on 2026-08-15. It adds a capability and
+    // fixes a defect in the same key: before it, every letter key inserted its
+    // upper-case identifier, so this keypad could not type a lower-case
+    // password at all.
+
+    testWidgets('letters are lower case until Caps is pressed', (tester) async {
+      await _pumpAt(tester, _keypadFloor);
+
+      expect(_keyFace(tester, 'q'), findsOneWidget);
+      expect(_keyFace(tester, 'Q'), findsNothing);
+
+      await tester.tap(_capsKey());
+      await tester.pumpAndSettle();
+
+      expect(_keyFace(tester, 'Q'), findsOneWidget);
+      expect(_keyFace(tester, 'q'), findsNothing);
+    });
+
+    testWidgets('and it types the case it is showing', (tester) async {
+      await _pumpAt(tester, _keypadFloor);
+      // The email field takes the focus on the first frame, so the keypad is
+      // already pointed at it.
+      await tester.tap(_keyFace(tester, 'q'));
+      await tester.pumpAndSettle();
+      expect(_field('login-email').evaluate(), isNotEmpty);
+      expect(
+        tester.widget<TextField>(_field('login-email')).controller!.text,
+        'q',
+      );
+
+      await tester.tap(_capsKey());
+      await tester.pumpAndSettle();
+      await tester.tap(_keyFace(tester, 'Q'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<TextField>(_field('login-email')).controller!.text,
+        'qQ',
+      );
+    });
+
+    testWidgets('pressing it again unlocks, so it is a lock and not a shift', (
+      tester,
+    ) async {
+      await _pumpAt(tester, _keypadFloor);
+      await tester.tap(_capsKey());
+      await tester.pumpAndSettle();
+      await tester.tap(_keyFace(tester, 'Q'));
+      await tester.pumpAndSettle();
+      // A shift would clear here. A lock does not.
+      expect(_keyFace(tester, 'Q'), findsOneWidget);
+
+      await tester.tap(_capsKey());
+      await tester.pumpAndSettle();
+      expect(_keyFace(tester, 'q'), findsOneWidget);
+    });
+
+    testWidgets('digits and punctuation have no case to change', (
+      tester,
+    ) async {
+      await _pumpAt(tester, _keypadFloor);
+      expect(_keyFace(tester, '1'), findsOneWidget);
+      expect(_keyFace(tester, '.com'), findsOneWidget);
+
+      await tester.tap(_capsKey());
+      await tester.pumpAndSettle();
+
+      expect(_keyFace(tester, '1'), findsOneWidget);
+      expect(_keyFace(tester, '.com'), findsOneWidget);
+    });
+
+    testWidgets('it announces itself, and says when it is on', (tester) async {
+      // §9's icon-only row, plus the half that matters for a latch: a person
+      // using a screen reader is told the state, not just the name.
+      final handle = tester.ensureSemantics();
+      await _pumpAt(tester, _keypadFloor);
+
+      expect(find.bySemanticsLabel('Caps'), findsOneWidget);
+
+      await tester.tap(_capsKey());
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('Caps, on'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('and it is not signalled by hue alone', (tester) async {
+      // §9: never hue alone. A locked Caps changes tier - §2.1's `primary` is
+      // the one tier that fills its container - so the key is filled as well as
+      // mint, and its announcement carries the state in words.
+      await _pumpAt(tester, _keypadFloor);
+      expect(_capsFill(tester), Colors.transparent);
+
+      await tester.tap(_capsKey());
+      await tester.pumpAndSettle();
+
+      expect(_capsFill(tester), AppTokens.dark.colors.action.primary.container);
+    });
+  });
+}
+
+/// The key whose face reads [face], inside the keypad.
+Finder _keyFace(WidgetTester tester, String face) => find.descendant(
+  of: find.byType(PosKeyboard),
+  matching: find.text(face),
+);
+
+Finder _capsKey() => find.descendant(
+  of: find.byType(PosKeyboard),
+  matching: find.byIcon(Icons.keyboard_capslock),
+);
+
+/// The container colour of the Caps key.
+Color? _capsFill(WidgetTester tester) {
+  final box = tester.widget<DecoratedBox>(
+    find
+        .ancestor(of: _capsKey(), matching: find.byType(DecoratedBox))
+        .first,
+  );
+  return (box.decoration as BoxDecoration).color;
 }
 
 /// The narrowest screen this app draws the keypad on.

@@ -367,6 +367,7 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
             textCapitalization: TextCapitalization.characters,
             onChanged: (_) => setState(() {}),
             label: 'ISO 4217 currency code',
+            leading: Icons.payments_outlined,
             helper: 'Three letters, such as KES, UGX, or TZS.',
           ),
           const SizedBox(height: 12),

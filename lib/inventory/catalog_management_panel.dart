@@ -938,6 +938,7 @@ final class _CatalogManagementContents extends StatelessWidget {
             maxLength: maximumCatalogSkuLength,
             onChanged: (_) => onFormChanged(),
             label: 'Code (SKU or barcode)',
+            leading: Icons.tag,
             helper: 'What the till matches a scan against. No spaces.',
           ),
           const SizedBox(height: 8),
@@ -948,6 +949,7 @@ final class _CatalogManagementContents extends StatelessWidget {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onChanged: (_) => onFormChanged(),
             label: 'Unit price',
+            leading: Icons.payments_outlined,
             helper:
                 'At most two decimal places, in the currency this business '
                 'publishes. A price this app cannot record exactly is '
@@ -964,6 +966,7 @@ final class _CatalogManagementContents extends StatelessWidget {
               ),
               onChanged: (_) => onFormChanged(),
               label: 'Unit cost (optional)',
+              leading: Icons.payments_outlined,
               helper:
                   'What one unit costs this business. Every sale records the '
                   'cost as it stands at that moment, so correcting this later '
@@ -1505,6 +1508,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
               controller: _sku,
               maxLength: maximumCatalogSkuLength,
               label: 'Code (SKU or barcode)',
+              leading: Icons.tag,
               helper:
                   'What the till matches a scan against. No spaces. The old '
                   'code stops finding this product.',
@@ -1518,6 +1522,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                   decimal: true,
                 ),
                 label: 'Unit price',
+                leading: Icons.payments_outlined,
                 helper:
                     'Applies to the next sale. Sales already recorded keep '
                     'the price they were sold at.',
@@ -1531,6 +1536,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                   decimal: true,
                 ),
                 label: 'Unit cost',
+                leading: Icons.payments_outlined,
                 helper: widget.product.cost == null
                     ? 'No unit cost is recorded. Enter one to start recording '
                           'it; leave it blank to keep reporting no profit for '

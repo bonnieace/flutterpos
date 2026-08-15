@@ -40,9 +40,42 @@ void main() {
       expect(surface.base, const Color(0xFF0D1F16));
       expect(surface.raised, const Color(0xFF132A1F));
       expect(surface.sunken, const Color(0xFF08140E));
+      expect(surface.field, const Color(0xFF1E3A2B));
       expect(surface.overlay, const Color(0xFF1C3328));
       expect(surface.borderSubtle, const Color(0xFF1E3A2B));
       expect(surface.borderStrong, const Color(0xFF2C5340));
+    });
+
+    test('surface.field is green.700, so v0.4 added a role and not a hex', () {
+      // §2.1: "If you find yourself writing a hex value in a widget, the role
+      // you need doesn't exist yet - add it here first." The product owner's
+      // 2026-08-15 change wanted the original sign-in pill's colour, and that
+      // colour was already a primitive. The collision with `border.subtle` is
+      // deliberate and named in §2.1: they never meet, because a field well is
+      // bounded by `border.strong`.
+      expect(surface.field, surface.borderSubtle);
+    });
+
+    test('a field is the lightest surface, so a well is raised not recessed', () {
+      // §2.1's ordering, which v0.4 states outright: sunken -> base -> raised ->
+      // overlay -> field. A well sits *on* the page. `surface.sunken` keeps the
+      // two uses that genuinely are recessed, a table header and a code block.
+      double lightness(Color colour) =>
+          HSLColor.fromColor(colour).lightness;
+      final ordered = <Color>[
+        surface.sunken,
+        surface.base,
+        surface.raised,
+        surface.overlay,
+        surface.field,
+      ];
+      for (var i = 1; i < ordered.length; i++) {
+        expect(
+          lightness(ordered[i]),
+          greaterThan(lightness(ordered[i - 1])),
+          reason: 'surface step $i is not lighter than the one below it',
+        );
+      }
     });
 
     test('the scrim is black at 60%', () {
@@ -59,9 +92,10 @@ void main() {
         surface.base,
         surface.raised,
         surface.sunken,
+        surface.field,
         surface.overlay,
       };
-      expect(distinct, hasLength(4));
+      expect(distinct, hasLength(5));
     });
 
     test('every readable text role clears AA on all four surfaces', () {
@@ -121,6 +155,44 @@ void main() {
       );
       expect(
         contrastRatio(colors.text.tertiary, surface.overlay),
+        greaterThanOrEqualTo(bodyTextContrast),
+      );
+    });
+
+    test('text.tertiary does not clear AA on surface.field, and §5.2 knows', () {
+      // **The one place `text.tertiary` is not the floor**, found when v0.4
+      // moved the input well off `surface.sunken` on 2026-08-15. It measures
+      // 5.9 on the page and 4.29 on the new well, against §9's 4.5 - so a
+      // placeholder inside a well is `text.secondary`, and §5.2 records the
+      // figure rather than leaving the next person to rediscover it.
+      //
+      // Asserted as a *fact about the palette* rather than folded into the
+      // all-surfaces sweep above, because hiding it there would mean either a
+      // silent failure or a quietly widened tolerance.
+      expect(
+        contrastRatio(colors.text.tertiary, surface.field),
+        closeTo(4.29, 0.05),
+      );
+      expect(
+        contrastRatio(colors.text.tertiary, surface.field),
+        lessThan(bodyTextContrast),
+      );
+      // What §5.2 uses instead, and what a typed value is, both clear it.
+      expect(
+        contrastRatio(colors.text.secondary, surface.field),
+        greaterThanOrEqualTo(bodyTextContrast),
+      );
+      expect(
+        contrastRatio(colors.text.primary, surface.field),
+        greaterThanOrEqualTo(bodyTextContrast),
+      );
+    });
+
+    test('helper text is unaffected, because it sits outside the well', () {
+      // §5.2 puts the helper and the counter under the field, on the page. The
+      // placeholder is the only text v0.4 moved onto a new ground.
+      expect(
+        contrastRatio(colors.text.tertiary, surface.base),
         greaterThanOrEqualTo(bodyTextContrast),
       );
     });

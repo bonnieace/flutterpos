@@ -39,6 +39,8 @@
 /// `PLAN.md`.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../keyboard_controller.dart';
@@ -49,21 +51,35 @@ import '../ui/tokens.dart';
 
 /// A QWERTY keypad that types into whichever field the [KeyboardScope]'s
 /// controller is attached to.
-final class PosKeyboard extends StatelessWidget {
+final class PosKeyboard extends StatefulWidget {
   const PosKeyboard({super.key});
 
   /// The keys, in the order they are drawn.
   ///
-  /// Unchanged from the widget this replaces: the layout is what a person
-  /// already using this till knows, and rearranging it inside a restyling step
-  /// would be a change nobody asked for.
+  /// The letter rows are held in upper case because that is the *identifier*;
+  /// which case a key draws and types is [_PosKeyboardState._caps]'s to decide.
+  ///
+  /// **[caps] is new on 2026-08-15, at the product owner's request, and it fixes
+  /// something as well as adding something.** Before it this keypad had no case
+  /// at all: every letter key inserted the upper-case character it was labelled
+  /// with, so a till typed `OWNER@EXAMPLE.COM` and could not type a lower-case
+  /// password at all. It sits where a real keyboard puts it, at the head of the
+  /// `Z` row.
   static const List<List<String>> rows = <List<String>>[
     <String>['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
     <String>['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
     <String>['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-    <String>['Z', 'X', 'C', 'V', 'B', 'N', 'M', backspace],
+    <String>[caps, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', backspace],
     <String>['@', '.com', space, enter],
   ];
+
+  /// The key that locks the letter keys into upper case.
+  ///
+  /// **Caps lock rather than shift**: it is sticky, it stays on until it is
+  /// pressed again, and a person watching the keys can see which case they are
+  /// about to get because the faces change with it. A one-shot shift would need
+  /// the same faces plus a rule about when it clears.
+  static const String caps = 'Caps';
 
   /// The key that removes a character.
   ///
@@ -81,12 +97,21 @@ final class PosKeyboard extends StatelessWidget {
 
   static const String enter = 'Enter';
 
-  /// The widest row's key count, which is what a pane has to fit.
+  /// The widest row's flex total, which is what a pane has to fit.
   ///
-  /// The other rows carry fewer keys and therefore wider ones, because each row
-  /// divides the width it is given by its own flex total. This row is the one
-  /// that decides whether the keypad fits at all.
-  static const int columns = 10;
+  /// **Measured over [rows] rather than written down**, since the `Caps` key
+  /// arrived: each row divides the width it is given by its own flex total, so
+  /// the row with the most units has the narrowest keys and is the one that
+  /// decides whether the keypad fits at all. A hardcoded 10 was right until a
+  /// key was added, which is exactly the kind of constant this repository has
+  /// been burned by.
+  ///
+  /// It is 10 today. `Caps` at one unit was chosen over a wider labelled key
+  /// for that reason: at two units the `Z` row would be 11 and every key in the
+  /// keypad would shrink.
+  static int get columns => rows
+      .map((row) => row.fold<int>(0, (total, key) => total + _flexOf(key)))
+      .reduce(math.max);
 
   /// The keypad's own inset inside its card, and the gap between keys.
   ///
@@ -125,7 +150,11 @@ final class PosKeyboard extends StatelessWidget {
       _inset(tokens) * 2 +
       _margin(tokens) * 2;
 
-  /// How many columns a key claims. Everything is one but the two words.
+  /// How many columns a key claims.
+  ///
+  /// Everything is one but the space bar and the two keys wide enough to be
+  /// comfortable at the end of a row. **[caps] is deliberately not among them**
+  /// — see [columns].
   static int _flexOf(String key) => switch (key) {
     space => 4,
     enter => 2,
@@ -139,22 +168,46 @@ final class PosKeyboard extends StatelessWidget {
   /// §5.2 names. A key has no §5.2 row of its own, so a size is borrowed from a
   /// named one rather than invented — the same move `Callout.glyphSize` and
   /// `Disclosure.glyphSize` make, and the same gap in §5.2 they record.
-  static IconData? _faceOf(String key) =>
-      key == backspace ? Icons.backspace_outlined : null;
+  static IconData? _faceOf(String key) => switch (key) {
+    backspace => Icons.backspace_outlined,
+    // An icon rather than the word, for the reason [columns] gives: a labelled
+    // `Caps` needs two units and would narrow every key in the keypad.
+    caps => Icons.keyboard_capslock,
+    _ => null,
+  };
 
-  /// What a screen reader says. §9's icon-only row, for the one key whose face
-  /// is not its own name.
-  static String? _announcement(String key) => key == backspace ? key : null;
+  /// What a screen reader says. §9's icon-only row, for the two keys whose face
+  /// is not their own name.
+  static String? _announcement(String key) =>
+      _faceOf(key) == null ? null : key;
+
+  /// Whether [key] is a letter, and therefore has a case at all.
+  static bool _hasCase(String key) =>
+      key.length == 1 && key.toLowerCase() != key.toUpperCase();
+
+  @override
+  State<PosKeyboard> createState() => _PosKeyboardState();
+}
+
+class _PosKeyboardState extends State<PosKeyboard> {
+  /// Whether the letter keys are locked into upper case.
+  ///
+  /// **Off by default, which is a change to what this keypad types.** Every
+  /// letter key used to insert its upper-case identifier, so a till could type
+  /// `OWNER@EXAMPLE.COM` and could not type a lower-case password at all. An
+  /// address is conventionally lower case and a password is case-sensitive, so
+  /// off is the honest default and `Caps` is how a person asks for the other.
+  bool _caps = false;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final colors = tokens.colors;
     final keyboard = KeyboardScope.of(context);
-    final gap = _gap(tokens);
+    final gap = PosKeyboard._gap(tokens);
 
     return Padding(
-      padding: EdgeInsets.all(_margin(tokens)),
+      padding: EdgeInsets.all(PosKeyboard._margin(tokens)),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: colors.surface.raised,
@@ -162,24 +215,32 @@ final class PosKeyboard extends StatelessWidget {
           border: Border.all(color: colors.surface.borderSubtle),
         ),
         child: Padding(
-          padding: EdgeInsets.all(_inset(tokens)),
+          padding: EdgeInsets.all(PosKeyboard._inset(tokens)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              for (final (index, row) in rows.indexed) ...<Widget>[
+              for (final (index, row) in PosKeyboard.rows.indexed) ...<Widget>[
                 if (index > 0) SizedBox(height: gap),
                 Row(
                   children: <Widget>[
                     for (final (position, key) in row.indexed) ...<Widget>[
                       if (position > 0) SizedBox(width: gap),
                       Expanded(
-                        flex: _flexOf(key),
+                        flex: PosKeyboard._flexOf(key),
                         child: _Key(
-                          label: key,
-                          face: _faceOf(key),
-                          announcement: _announcement(key),
+                          // The face shows the case the key will type, so a
+                          // person can see what `Caps` did rather than find out
+                          // by typing.
+                          label: _faceOf(key),
+                          face: PosKeyboard._faceOf(key),
+                          announcement: PosKeyboard._announcement(key),
+                          // §2.1's primary tier is what "on" looks like in this
+                          // system, so a locked `Caps` is a mint key among
+                          // bordered ones. No new token, and it is legible
+                          // without reading the glyph.
+                          on: key == PosKeyboard.caps && _caps,
                           // `Enter` submits nothing, so it offers nothing.
-                          onPressed: key == enter
+                          onPressed: key == PosKeyboard.enter
                               ? null
                               : () => _press(keyboard, key),
                         ),
@@ -195,12 +256,21 @@ final class PosKeyboard extends StatelessWidget {
     );
   }
 
-  static void _press(KeyboardController keyboard, String key) {
-    if (key == backspace) {
-      keyboard.backspace();
-      return;
+  /// The face [key] wears right now, which for a letter is its current case.
+  String _faceOf(String key) =>
+      PosKeyboard._hasCase(key) && !_caps ? key.toLowerCase() : key;
+
+  void _press(KeyboardController keyboard, String key) {
+    switch (key) {
+      case PosKeyboard.backspace:
+        keyboard.backspace();
+      case PosKeyboard.caps:
+        setState(() => _caps = !_caps);
+      case PosKeyboard.space:
+        keyboard.insert(' ');
+      default:
+        keyboard.insert(_faceOf(key));
     }
-    keyboard.insert(key == space ? ' ' : key);
   }
 }
 
@@ -217,6 +287,7 @@ final class _Key extends StatelessWidget {
     required this.onPressed,
     this.face,
     this.announcement,
+    this.on = false,
   });
 
   final String label;
@@ -228,14 +299,24 @@ final class _Key extends StatelessWidget {
   /// See [PosKeyboard._announcement].
   final String? announcement;
 
+  /// Whether this key is a latched toggle that is currently on.
+  ///
+  /// Drawn as §2.1's `primary` tier, which is the one tier in the system that
+  /// fills its container. A latched key is therefore mint among bordered ones,
+  /// which is legible before the glyph is read — §9's "never hue alone" is
+  /// satisfied by the fill *and* the glyph together, and by the announcement.
+  final bool on;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final actions = tokens.colors.action;
-    final role = actions.secondary;
+    final role = on ? actions.primary : actions.secondary;
     final disabled = onPressed == null;
     final labelColor = disabled ? actions.disabledLabel : role.label;
-    final borderColor = disabled ? actions.disabledBorder : role.border!;
+    final borderColor = role.border == null
+        ? null
+        : (disabled ? actions.disabledBorder : role.border);
     final radius = BorderRadius.circular(tokens.radius.pill);
 
     return PressSurface(
@@ -243,7 +324,7 @@ final class _Key extends StatelessWidget {
       onPressed: onPressed,
       hoverOverlay: role.hoverFill(),
       pressedOverlay: role.pressedFill(),
-      semanticLabel: announcement ?? label,
+      semanticLabel: on ? '$announcement, on' : (announcement ?? label),
       // A key fills the column it was given; without this the tap-target box
       // shrink-wraps and ten keys sit in a huddle on the left of the row.
       fillWidth: true,
@@ -251,7 +332,9 @@ final class _Key extends StatelessWidget {
         decoration: BoxDecoration(
           color: role.container,
           borderRadius: radius,
-          border: Border.all(color: borderColor),
+          border: borderColor == null
+              ? null
+              : Border.all(color: borderColor),
         ),
         child: ConstrainedBox(
           // §9's target is the height as well as the width, and a key has no

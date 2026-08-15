@@ -232,6 +232,7 @@ final class _AuditLogContents extends StatelessWidget {
         key: const ValueKey('audit-log-filter'),
         value: page.eventType,
         label: 'Show',
+        leading: Icons.filter_list,
         items: <AppSelectItem<TenantAuditEventType?>>[
           const AppSelectItem<TenantAuditEventType?>(
             value: null,

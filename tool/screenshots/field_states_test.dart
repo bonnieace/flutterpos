@@ -121,6 +121,19 @@ class _FieldMatrix extends StatelessWidget {
                   helper: 'What the till matches a scan against. No spaces.',
                 ),
               ),
+              const _Row(
+                // `design.md` v0.4's addition. A glyph that does not narrow what
+                // the field is for is noise in a form of six, so most fields
+                // carry none - this row is here so a reviewer can see what
+                // "optional" looks like when it is taken.
+                state: 'with a leading icon - optional, and mostly declined',
+                child: AppTextField(
+                  key: ValueKey('field-leading'),
+                  label: 'Email',
+                  leading: Icons.email_outlined,
+                  placeholder: 'grace@westlands-mart.example',
+                ),
+              ),
               _Row(
                 state: 'error - it replaces the helper and says what to do',
                 child: AppTextField(

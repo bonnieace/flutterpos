@@ -1,6 +1,7 @@
 # Design system
 
-**Status:** v0.1 — proposed. Not yet implemented.
+**Status:** v0.4 — in implementation. §11 steps 1–9 are done; see each section's own
+"Done" note for what is true of the code.
 **Scope:** every screen the tenant app can reach. Excludes `lib/pos/**` and `lib/screens/**` (legacy, read-only).
 
 ---
@@ -87,14 +88,30 @@ cannot.
 | --- | --- | --- |
 | `surface.base` | `#0D1F16` | page background |
 | `surface.raised` | `#132A1F` | cards, rows, sheets |
-| `surface.sunken` | `#08140E` | input wells, table header, code |
+| `surface.sunken` | `#08140E` | table header, code |
+| `surface.field` | `#1E3A2B` | input wells |
 | `surface.overlay` | `#1C3328` | dialogs, menus, bottom sheets |
 | `surface.scrim` | `#000000` @ 60% | behind overlays |
 | `border.subtle` | `#1E3A2B` | hairlines, card edges |
 | `border.strong` | `#2C5340` | inputs, secondary buttons, focus targets |
 
+**`surface.field` is new in v0.4 and it moves the input well off `surface.sunken`**, at the
+product owner's direction on 2026-08-15. A near-black well reads as a hole punched in the
+page; this app's original sign-in drew a raised pill instead, and that is the look being
+returned to. It is `green.700`, which is already a primitive — this adds a **role**, not a
+colour, which is what the paragraph above this table asks for. Note the deliberate
+collision with `border.subtle`: one primitive, two roles. They never meet, because a field
+well is bounded by `border.strong` and never by a hairline.
+
+**It is the lightest surface in the set, and that is the point rather than an oversight.**
+The ordering runs `sunken` → `base` → `raised` → `overlay` → `field`, so a field is not
+recessed; it sits *on* the page. `surface.sunken` keeps the two uses that genuinely are
+recessed — a table header and a block of code.
+
 Depth is expressed by surface step, never by drop shadow. On a near-black background a
-shadow is invisible and only costs raster time.
+shadow is invisible and only costs raster time. **One exception, added in v0.4: the focus
+glow in §5.2.** It is not depth — it is an interaction state that happens to be drawn as a
+shadow — and it is the only shadow this system permits.
 
 #### Text roles
 
@@ -222,15 +239,30 @@ section gap than the comfortable one, and `space.24` is not on the scale at all.
 
 | Radius | Value | Applies to |
 | --- | --- | --- |
-| `radius.sm` | 8 | chips, badges, inputs |
+| `radius.sm` | 8 | chips, badges |
 | `radius.md` | 12 | cards, rows, sheets |
 | `radius.lg` | 20 | dialogs, bottom sheets |
-| `radius.pill` | 999 | buttons only |
+| `radius.pill` | 999 | buttons and inputs |
 
-Pill buttons are the signature and should stay. But when *everything* is a pill —
+~~Pill buttons are the signature and should stay. But when *everything* is a pill —
 buttons, chips, filters, cards, inputs — the shape stops signifying. Restrict `pill` to
 buttons; chips and inputs drop to `radius.sm`. This alone will make the home screen
-legible.
+legible.~~
+
+**Amended in v0.4, at the product owner's direction on 2026-08-15: an input is a pill
+again.** Pill buttons are the signature and stay. The argument above is still the reason
+`radius.pill` is not simply the default — when *everything* is a pill the shape stops
+signifying, and that is why **chips, filters, badges and cards do not get it**. What the
+original reading got wrong is which shape carries this product's identity: the sign-in
+pill is the thing anyone who has used this app remembers, and the fields are the second
+half of it.
+
+**What this costs is stated rather than discovered.** A button and a field now share an
+outline. Three other things keep them apart and all three are load-bearing: a button
+carries a filled or bordered §2.1 action tier and a field carries `surface.field`; a field
+has a persistent label above it and a button never does; and a field is 48 high with its
+content left-aligned where a button centres. If those stop being enough, the honest fix is
+to take this amendment back rather than to add a fourth distinction.
 
 ### 2.4 Motion
 
@@ -472,9 +504,28 @@ mid-press.
 #### `AppTextField`
 
 One pattern, everywhere: persistent label above the field (`label.md`, `text.secondary`),
-`surface.sunken` well, `border.strong` 1px, `radius.sm`, 48h at comfortable density.
+~~`surface.sunken` well~~ **`surface.field` well**, `border.strong` 1px, ~~`radius.sm`~~
+**`radius.pill`**, 48h at comfortable density, `space.20` of horizontal padding inside the
+well — a pill needs its content off the curve, and it is `AppButton`'s figure for the same
+shape.
+
+**Optional leading icon, 18px**, which is `AppButton`'s leading-icon size and one of the
+two §5.2 names. It is *optional* in the strong sense: a glyph that does not narrow what
+the field is for is noise in a form of six, so a field carries one only where the icon
+says something the label cannot say faster. **Optional trailing control** — a reveal
+toggle, a unit suffix — inside the well at the trailing edge, and it owes §9's 48 × 48
+target and a semantic label if it is icon-only.
+
+**Focus is a 2px `#45F28D` ring at a 2px offset, plus `#45F28D` at 30% blurred 8 behind
+it.** The ring is §9 and is not negotiable; the glow is the original sign-in's and is the
+one shadow §2.1 permits.
+
 Placeholder is an *example*, never a restatement of the label — ~~the sign-in screen
 currently uses the placeholder as the label on one field and a floating label on another.~~
+It is `text.secondary` **and not `text.tertiary`**, which is a v0.4 correction with an
+arithmetic behind it: `text.tertiary` measures **4.29:1** on `surface.field` against §9's
+4.5 floor, where it measures 5.9 on the page. Helper text is unaffected — it sits *outside*
+the well, on `surface.base`.
 
 **The sign-in clause was false when it was written and is now moot.** `DESIGN-AUDIT.md`
 §4.4 established in 2026-08-11 that both fields already carried a persistent label and a
@@ -920,6 +971,23 @@ Recorded here rather than settled, because each needs a call you haven't made ye
 ---
 
 ## Changelog
+
+**v0.4** — The input field. Directed by the product owner on 2026-08-15 after seeing §11
+step 9 land: the near-black well was the thing they disliked, and the original sign-in's
+raised pill is the thing they wanted back. Four amendments, all in one direction and all
+breaking, hence the minor bump.
+
+- §2.1 gains **`surface.field`** `#1E3A2B`, and `surface.sunken` loses the input well —
+  it keeps the table header and code, which are the two uses that are genuinely recessed.
+  No new hex: `#1E3A2B` is `green.700`, already a primitive.
+- §2.3 moves the input from `radius.sm` to **`radius.pill`**. The "when everything is a
+  pill the shape stops signifying" argument is kept and now applies to chips, filters,
+  badges and cards, which is where it was always doing the work.
+- §5.2 gains an **optional leading icon** at 18 and states the trailing control's §9
+  obligations; its horizontal padding is named as `space.20` for the first time.
+- §5.2's placeholder moves from `text.tertiary` to **`text.secondary`**, because
+  `text.tertiary` measures **4.29:1** on the new well against §9's 4.5 floor. §2.1 gains
+  the one shadow it permits, the focus glow.
 
 **v0.3** — Animated assets default to native Flutter rather than external files, on
 maintenance grounds as much as cost: an authored asset bakes its colours in and cannot
