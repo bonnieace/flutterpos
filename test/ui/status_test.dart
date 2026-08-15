@@ -227,6 +227,37 @@ void main() {
       );
     });
 
+    testWidgets('it can say how wide it will be before it is built', (
+      tester,
+    ) async {
+      // `RecordList`'s table sizes its status column to the widest badge in the
+      // list rather than to a share of the row, which it can only do if this
+      // figure is the one the badge then occupies. Measured against the
+      // rendering for the same reason `AppButton`'s twin is: a formula that
+      // agrees with §5.2 and disagrees with the widget is worse than none.
+      for (final label in <String>[
+        'Active',
+        'Out of stock',
+        'Awaiting verification',
+      ]) {
+        await _pump(tester, StatusBadge(status: AppStatus.ok, label: label));
+        expect(
+          tester.getSize(find.byType(StatusBadge)).width,
+          closeTo(
+            StatusBadge.measureWidth(
+              _tokens,
+              label,
+              ambient: DefaultTextStyle.of(
+                tester.element(find.byType(StatusBadge)),
+              ).style,
+            ),
+            0.01,
+          ),
+          reason: label,
+        );
+      }
+    });
+
     testWidgets('it does not uppercase its own label', (tester) async {
       // §2.2 permits uppercase on `label.eyebrow` and nowhere else, and a
       // widget that cased its own label would put it somewhere §2.2 forbids

@@ -382,6 +382,18 @@ directory** as its second, later the same day — then the two **catalog** scree
 133 call sites were. `ActionSet` is built with it, `StatRow` is step 8's, and `FilterChips`, `Form`
 and `Sale` are unclaimed.
 
+**How the table divides its row is the component's, and it measures rather than guesses — settled
+2026-08-15.** This section specifies what a list *becomes* and says nothing about column widths, so
+step 6b shipped four constants chosen against a two-column activity log: identity 3, status 2,
+actions 3, an attribute 1. The twelve screens that followed carry two to six columns, and the four
+defects that produced are recorded in `PLAN.md`. The rule now is that **a column asks for what its
+own widest content needs — the widest badge, the widest set of actions, the longest value, its own
+header — and may claim up to its old share; what a column does not claim is offered to the columns
+that asked for more, shallowest need first, and anything still spare goes to the identity.** The four
+constants survive as ceilings rather than as answers, so a table where every column wants at least
+its share lays out exactly as it did before. There is `space.12` between adjacent cells, which this
+document did not previously ask for and which §2.3's scale supplies.
+
 The staff directory is the screen this row was written about: it was the only one that made §4.3's
 choice itself, with two separate builders under a breakpoint test that showed the two bands
 *different information*. It also needed one thing this document does not specify — somewhere to put

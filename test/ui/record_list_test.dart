@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/measure.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
@@ -902,6 +903,500 @@ void main() {
       );
       expect(first.height, _tokens.density.minimumRowHeight);
       expect(second.height, first.height);
+    });
+  });
+
+  group('a table divides its row by measuring what it holds', () {
+    // The four observations `PLAN.md` carried against step 6b's three
+    // constants, one group. Every test here names the one it is about, because
+    // the arithmetic is one mechanism and the evidence for it is four separate
+    // screens.
+    //
+    // **The strings here are shorter than the ones on the screens they are
+    // about, and that is the test font rather than a softened case.** A widget
+    // test paints in `FlutterTest`, whose every glyph is one font-size wide, so
+    // a 58-character provenance line measures 696 pixels here against roughly
+    // 300 in Roboto - wide enough that a fixture copied from a real screen
+    // leaves no slack to allocate and every one of these tests would be
+    // asserting the over-subscribed case. What is under test is the arithmetic;
+    // what the columns come out at on a real screen is what the harness
+    // photographs.
+
+    /// The width [RecordTableColumns.resolve] is given on a full-width table at
+    /// §4.2's maximum, inside the row's own `space.16` padding.
+    const available = 1200.0 - 32;
+
+    RecordTableColumns resolve(
+      List<RecordItem> items, {
+      double width = available,
+      String identityLabel = 'Product',
+      TextScaler textScaler = TextScaler.noScaling,
+    }) => RecordTableColumns.resolve(
+      tokens: _tokens,
+      identityLabel: identityLabel,
+      columns: RecordList.columnsOf(items),
+      items: items,
+      available: width,
+      textScaler: textScaler,
+    );
+
+    double total(RecordTableColumns widths) =>
+        (widths.statusWidth ?? 0) +
+        widths.identityWidth +
+        widths.attributeWidths.fold<double>(0, (sum, w) => sum + w) +
+        (widths.actionsWidth ?? 0);
+
+    int cellCount(RecordTableColumns widths) =>
+        (widths.statusWidth == null ? 0 : 1) +
+        1 +
+        widths.attributeWidths.length +
+        (widths.actionsWidth == null ? 0 : 1);
+
+    test('the columns and their gutters fill the row exactly', () {
+      // The property that makes this safe to put on twelve screens at once:
+      // the allocation cannot overflow, at any width, however many columns.
+      for (final width in <double>[320, 640, 992, 1168, 2400]) {
+        final widths = resolve(<RecordItem>[
+          _item(
+            id: 'a',
+            subtitle: 'Dairy and chilled',
+            status: const RecordStatus(status: AppStatus.ok, label: 'In stock'),
+            attributes: const <RecordAttribute>[
+              RecordAttribute(label: 'Price', value: 'KES 65.00'),
+              RecordAttribute(label: 'Code', value: 'MLK-500'),
+              RecordAttribute(
+                label: 'Reason',
+                value: 'Counted short at the close of the Friday shift',
+                flex: 2,
+              ),
+            ],
+            provenance: 'Recorded 2026-08-10 08:30 UTC by Grace Wanjiru',
+            actions: _actions(4),
+          ),
+        ], width: width);
+        expect(
+          total(widths) + widths.gap * (cellCount(widths) - 1),
+          closeTo(width, 0.01),
+          reason: 'at $width',
+        );
+      }
+    });
+
+    test('a status column is as wide as its widest badge, not a share', () {
+      // Observation 2: `web-full/18-manage-catalog` has a standing on two rows
+      // of seven, and the column took two shares of the row on all seven - so a
+      // catalog read as a wide left margin.
+      final items = <RecordItem>[
+        _item(
+          id: 'a',
+          status: const RecordStatus(status: AppStatus.ok, label: 'In stock'),
+          attributes: const <RecordAttribute>[
+            RecordAttribute(label: 'Price', value: 'KES 65.00'),
+          ],
+        ),
+        _item(id: 'b', title: 'Sugar 1kg'),
+      ];
+      final widths = resolve(items);
+      expect(
+        widths.statusWidth,
+        closeTo(StatusBadge.measureWidth(_tokens, 'In stock'), 0.01),
+      );
+      // And it is smaller than the share it used to be given, which is the
+      // observation itself rather than a restatement of the line above.
+      final share =
+          (available - widths.gap * 2) *
+          RecordTableColumns.statusShare /
+          (RecordTableColumns.statusShare +
+              RecordTableColumns.identityShare +
+              1);
+      expect(widths.statusWidth, lessThan(share));
+    });
+
+    test('no column but the identity is given more than it asked for', () {
+      // The invariant that makes the whole thing readable: a column of
+      // two-character quantities is two characters wide however much room the
+      // table has, and the width that would have padded it out goes to the one
+      // column that can use it.
+      final items = <RecordItem>[
+        _item(
+          id: 'a',
+          title: 'Milk',
+          status: const RecordStatus(status: AppStatus.ok, label: 'In stock'),
+          attributes: const <RecordAttribute>[
+            RecordAttribute(label: 'Qty', value: '18'),
+          ],
+          actions: _actions(1),
+        ),
+      ];
+      final widths = resolve(items);
+      final body = _tokens.density.body(_tokens.typography);
+      expect(
+        widths.statusWidth,
+        closeTo(StatusBadge.measureWidth(_tokens, 'In stock'), 0.01),
+      );
+      expect(
+        widths.attributeWidths.single,
+        closeTo(
+          measureTextWidth('Qty', _tokens.typography.labelMedium),
+          0.01,
+        ),
+        reason: 'the header is wider than 18, so the header is the demand',
+      );
+      expect(
+        widths.actionsWidth,
+        closeTo(
+          RecordActionSet.measureWidth(
+            _tokens,
+            _actions(1),
+            RecordForm.table,
+          ),
+          0.01,
+        ),
+      );
+      expect(
+        measureTextWidth('18', body),
+        lessThan(widths.attributeWidths.single),
+      );
+    });
+
+    test('a header too long for its own values keeps the column', () {
+      // `Before and after` over `10 to 7` is the stock family's, and a column
+      // measured from its values alone would ellipsise its own heading.
+      final items = <RecordItem>[
+        _item(
+          id: 'a',
+          attributes: const <RecordAttribute>[
+            RecordAttribute(label: 'Before and after', value: '10 to 7'),
+          ],
+        ),
+      ];
+      final widths = resolve(items);
+      expect(
+        widths.attributeWidths.single,
+        greaterThanOrEqualTo(
+          measureTextWidth('Before and after', _tokens.typography.labelMedium),
+        ),
+      );
+    });
+
+    test('what nobody claimed goes to the identity', () {
+      // Something has to absorb the difference, and §5.2's "never truncated
+      // below two lines" row is the one column where more room is always worth
+      // having.
+      final items = <RecordItem>[
+        _item(
+          id: 'a',
+          attributes: const <RecordAttribute>[
+            RecordAttribute(label: 'On hand', value: '18'),
+          ],
+        ),
+      ];
+      final widths = resolve(items);
+      final share =
+          (available - widths.gap) *
+          RecordTableColumns.identityShare /
+          (RecordTableColumns.identityShare + 1);
+      expect(widths.identityWidth, greaterThan(share));
+    });
+
+    test('an identity wide enough for its provenance line', () {
+      // Observation 3: `Recorded 2026-08-10 08:30 UTC by Grace Wanjiru
+      // (owner-dev)` wrapped to two lines on every row of
+      // `web/23-stock-movements`, because the identity had three shares of a
+      // row with four attribute columns and an actions column in it.
+      const provenance = 'Recorded 2026-08-10 by Grace';
+      final items = <RecordItem>[
+        for (var index = 0; index < 3; index++)
+          _item(
+            id: 'r$index',
+            provenance: provenance,
+            attributes: const <RecordAttribute>[
+              RecordAttribute(label: 'Type', value: 'Sale'),
+              RecordAttribute(label: 'Source', value: 'adj-119'),
+            ],
+          ),
+      ];
+      expect(
+        resolve(items, identityLabel: 'Movement').identityWidth,
+        greaterThanOrEqualTo(
+          measureTextWidth(provenance, _tokens.typography.caption),
+        ),
+      );
+    });
+
+    test('an action set that fits on one line gets the width to do it', () {
+      // Observation 1, as arithmetic. The rendering half is below.
+      final actions = _actions(4);
+      final items = <RecordItem>[
+        _item(
+          id: 'a',
+          title: 'Faith Njeri',
+          attributes: const <RecordAttribute>[
+            RecordAttribute(label: 'Role', value: 'cashier'),
+          ],
+          actions: actions,
+        ),
+        _item(id: 'b', title: 'Brian Kimani', actions: _actions(2)),
+      ];
+      final needed = RecordActionSet.measureWidth(
+        _tokens,
+        actions,
+        RecordForm.table,
+      );
+      final widths = resolve(items, identityLabel: 'Member');
+      expect(widths.actionsWidth, greaterThanOrEqualTo(needed));
+      // It took more than its own share to get there, which is the half of the
+      // repair a constant could not do: three shares of a five-share row is
+      // where the four-action record wrapped.
+      final share =
+          (available - widths.gap * 2) *
+          RecordTableColumns.actionsShare /
+          (RecordTableColumns.actionsShare +
+              RecordTableColumns.identityShare +
+              1);
+      expect(widths.actionsWidth, greaterThan(share));
+    });
+
+    test('the pool fills the shallowest need first', () {
+      // The decision most worth arguing with. A column forty pixels short and a
+      // column nine hundred short are not two claims of the same kind:
+      // satisfying the first removes a wrapped line, and part-satisfying the
+      // second removes nothing. Under a share of the pool proportional to what
+      // each asked for, `Code` would get a fifteenth of what it needs and
+      // `MLK-500` would still wrap after four characters.
+      final items = <RecordItem>[
+        _item(
+          id: 'a',
+          title: 'Sugar 1kg',
+          attributes: const <RecordAttribute>[
+            RecordAttribute(label: 'Qty', value: '18'),
+            RecordAttribute(label: 'Code', value: 'MLK-500'),
+            RecordAttribute(
+              label: 'Reason',
+              value:
+                  'Counted short at the close of the Friday shift, and '
+                  'corrected against the till roll the following morning',
+            ),
+          ],
+        ),
+      ];
+      final widths = resolve(items, width: 436);
+      expect(
+        widths.attributeWidths[1],
+        greaterThanOrEqualTo(
+          measureTextWidth('MLK-500', _tokens.density.body(_tokens.typography)),
+        ),
+        reason: 'a short claim is satisfied before a long one is topped up',
+      );
+      // And the deep one still got everything that was left, rather than the
+      // pool being held back.
+      expect(
+        widths.attributeWidths[2],
+        greaterThan(widths.attributeWidths[1]),
+      );
+    });
+
+    test('a caller\'s flex is a ceiling on a column that wants more', () {
+      // `RecordAttribute.flex` keeps working and keeps meaning what its call
+      // sites set it for: two columns of prose, one twice the other.
+      const long =
+          'Counted short at the close of the Friday shift, and corrected '
+          'against the till roll the following morning by the duty manager';
+      final items = <RecordItem>[
+        _item(
+          id: 'a',
+          attributes: const <RecordAttribute>[
+            RecordAttribute(label: 'Reason', value: long, flex: 2),
+            RecordAttribute(label: 'Evidence', value: long),
+          ],
+        ),
+      ];
+      final widths = resolve(items, width: 400);
+      expect(widths.attributeWidths[0], greaterThan(widths.attributeWidths[1]));
+    });
+
+    test('a column measured at 200% text is wider than at 100%', () {
+      // §9 reaches this: a person reading at twice the size has strings twice
+      // as wide, and a column measured at one scale ellipsises at the other.
+      final items = <RecordItem>[
+        _item(
+          id: 'a',
+          status: const RecordStatus(status: AppStatus.ok, label: 'In stock'),
+        ),
+      ];
+      expect(
+        resolve(items, textScaler: const TextScaler.linear(2))
+            .statusWidth,
+        greaterThan(resolve(items).statusWidth!),
+      );
+    });
+
+    testWidgets('a record with four actions is as tall as its neighbours', (
+      tester,
+    ) async {
+      // Observation 1, rendered. `web-full/13-staff-directory` had one row
+      // three times the height of the three above it, because four actions in
+      // a third of the width they need is three runs of 48.
+      await _pumpAt(
+        tester,
+        _expanded,
+        RecordList(
+          identityLabel: 'Member',
+          items: <RecordItem>[
+            _item(
+              id: 'a',
+              title: 'Peter Otieno',
+              subtitle: 'peter@devcorner.test',
+              attributes: const <RecordAttribute>[
+                RecordAttribute(label: 'Role', value: 'admin'),
+              ],
+              actions: _actions(2),
+            ),
+            _item(
+              id: 'b',
+              title: 'Faith Njeri',
+              subtitle: 'newhire@devcorner.test',
+              attributes: const <RecordAttribute>[
+                RecordAttribute(label: 'Role', value: 'cashier'),
+              ],
+              actions: _actions(4),
+            ),
+          ],
+        ),
+      );
+      final two = tester.getRect(find.byKey(const ValueKey<String>('record-a')));
+      final four = tester.getRect(
+        find.byKey(const ValueKey<String>('record-b')),
+      );
+      // One run, not three, which is the whole of observation 1: the height of
+      // a row is the height of its tallest cell, and a wrapped action set makes
+      // that cell three buttons deep.
+      expect(four.height, two.height);
+    });
+
+    testWidgets('two values never meet: there is a gutter between cells', (
+      tester,
+    ) async {
+      // Observation 4. `web/30-shift-corrections` read `A late sale arrived
+      // after|Corrected from expectation` across the `Reason` / `Evidence`
+      // boundary, and `web/23-stock-movements` did the same in its header row.
+      await _pumpAt(
+        tester,
+        _expanded,
+        RecordList(
+          identityLabel: 'Correction',
+          items: <RecordItem>[
+            _item(
+              id: 'a',
+              attributes: const <RecordAttribute>[
+                RecordAttribute(
+                  label: 'Reason',
+                  value: 'A late sale arrived after the shift was closed',
+                  valueKey: ValueKey<String>('reason'),
+                ),
+                RecordAttribute(
+                  label: 'Evidence',
+                  value: 'Corrected from expectation, three sales',
+                  valueKey: ValueKey<String>('evidence'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      final reason = tester.getRect(find.byKey(const ValueKey<String>('reason')));
+      final evidence = tester.getRect(
+        find.byKey(const ValueKey<String>('evidence')),
+      );
+      expect(
+        evidence.left - reason.right,
+        greaterThanOrEqualTo(_tokens.spacing.s12),
+      );
+      // The headers too, which is where the stock family's ran together.
+      expect(
+        tester.getRect(find.text('Evidence')).left -
+            tester.getRect(find.text('Reason')).right,
+        greaterThanOrEqualTo(_tokens.spacing.s12),
+      );
+    });
+
+    testWidgets('the header and the rows agree on where a column is', (
+      tester,
+    ) async {
+      // One resolution for the whole table, which is what makes it a table.
+      await _pumpAt(
+        tester,
+        _expanded,
+        RecordList(
+          identityLabel: 'Product',
+          items: <RecordItem>[
+            _item(
+              id: 'a',
+              attributes: const <RecordAttribute>[
+                RecordAttribute(
+                  label: 'Price',
+                  value: 'KES 65.00',
+                  valueKey: ValueKey<String>('price-a'),
+                ),
+              ],
+              actions: _actions(2),
+            ),
+            _item(
+              id: 'b',
+              title: 'Sugar 1kg',
+              attributes: const <RecordAttribute>[
+                RecordAttribute(
+                  label: 'Price',
+                  value: 'KES 180.00',
+                  valueKey: ValueKey<String>('price-b'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      final header = tester.getRect(find.text('Price')).left;
+      expect(tester.getRect(find.byKey(const ValueKey<String>('price-a'))).left, header);
+      expect(tester.getRect(find.byKey(const ValueKey<String>('price-b'))).left, header);
+    });
+
+    testWidgets('a six-column table at the narrowest expanded width fits', (
+      tester,
+    ) async {
+      // The width the arithmetic is most likely to fail at: §4.1's
+      // `expanded` floor, six columns, a standing and an action set.
+      await _pumpAt(
+        tester,
+        const Size(1024, 900),
+        RecordList(
+          identityLabel: 'Movement',
+          items: <RecordItem>[
+            _item(
+              id: 'a',
+              subtitle: 'Dairy and chilled',
+              status: const RecordStatus(
+                status: AppStatus.attention,
+                label: 'Difference found',
+              ),
+              provenance:
+                  'Recorded 2026-08-10 08:30 UTC by Grace Wanjiru (owner-dev)',
+              attributes: const <RecordAttribute>[
+                RecordAttribute(label: 'Before and after', value: '24 to 18'),
+                RecordAttribute(label: 'Adjustment type', value: 'Sale'),
+                RecordAttribute(
+                  label: 'Reason',
+                  value: 'Sold on receipt R-000482',
+                  flex: 2,
+                ),
+                RecordAttribute(label: 'Source', value: 'sale-000482'),
+                RecordAttribute(label: 'On hand', value: '18'),
+              ],
+              actions: _actions(2),
+            ),
+          ],
+        ),
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 

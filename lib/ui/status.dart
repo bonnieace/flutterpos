@@ -29,6 +29,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'measure.dart';
 import 'press.dart';
 import 'spring.dart';
 import 'tokens.dart';
@@ -184,6 +185,32 @@ final class StatusBadge extends StatelessWidget {
 
   /// §5.2's icon size.
   static const double iconSize = 14;
+
+  /// How wide this badge wants to be, with [label] on one line.
+  ///
+  /// **The component answers for its own geometry, rather than a caller adding
+  /// up padding it read off this file.** `RecordList`'s table gives the status
+  /// column the width of the widest badge in the list, and the alternative -
+  /// reassembling `space.8 + 14 + space.4 + a string` at the call site - is a
+  /// second copy of §5.2's row that goes stale the first time this one changes.
+  ///
+  /// The container's border is painted by a [DecoratedBox] over the child rather
+  /// than laid out around it, so it costs no width and is not in this sum.
+  static double measureWidth(
+    AppTokens tokens,
+    String label, {
+    TextScaler textScaler = TextScaler.noScaling,
+    TextStyle? ambient,
+  }) =>
+      tokens.spacing.s8 * 2 +
+      iconSize +
+      tokens.spacing.s4 +
+      measureTextWidth(
+        label,
+        tokens.typography.labelMedium,
+        textScaler: textScaler,
+        ambient: ambient,
+      );
 
   @override
   Widget build(BuildContext context) {

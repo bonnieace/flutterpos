@@ -26,8 +26,11 @@
 /// §10 and `claude.md` hard rule 5.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import 'measure.dart';
 import 'press.dart';
 import 'tokens.dart';
 
@@ -136,6 +139,51 @@ final class AppButton extends StatelessWidget {
 
   final bool autofocus;
 
+  /// §5.2's leading icon size. One figure, read by the widget that paints it
+  /// and by [measureWidth], so a button cannot be measured at a size it is not
+  /// drawn at.
+  static const double iconSize = 18;
+
+  /// How wide this button wants to be, with its label on one line.
+  ///
+  /// **The component answers for its own geometry**, for the reason
+  /// `StatusBadge.measureWidth` gives: `RecordList`'s table sizes its action
+  /// column to the widest set of buttons in the list, and a call site that
+  /// reassembled §5.2's padding rule itself would be a second copy of it.
+  ///
+  /// **Two things that are not §5.2's and are in the sum anyway**, both of them
+  /// [PressSurface]'s and both found by a set of four that wrapped after being
+  /// given exactly the width its labels needed. The focus ring is drawn in a
+  /// gutter reserved whether it is visible or not, so it costs every button
+  /// `width + offset` on each side; and §9's tap target is a minimum width as
+  /// well as a minimum height, so a two-letter button is 48 wide however short
+  /// its label is. The label is `label.lg` in every size - §5.2 names one role,
+  /// not three - and the border is painted rather than laid out, so that one
+  /// costs nothing.
+  static double measureWidth(
+    AppTokens tokens,
+    String label, {
+    AppButtonSize size = AppButtonSize.lg,
+    bool hasIcon = false,
+    TextScaler textScaler = TextScaler.noScaling,
+    TextStyle? ambient,
+  }) {
+    final ring = tokens.colors.action.focusRing;
+    final painted =
+        size.horizontalPadding(tokens.spacing, hasIcon: hasIcon) * 2 +
+        (hasIcon ? iconSize + tokens.spacing.s8 : 0) +
+        measureTextWidth(
+          label,
+          tokens.typography.labelLarge,
+          textScaler: textScaler,
+          ambient: ambient,
+        );
+    return math.max(
+      painted + (ring.width + ring.offset) * 2,
+      tokens.density.minimumTapTarget.width,
+    );
+  }
+
   /// Whether this button can be pressed. Loading is not disabled - it is a
   /// press that has already been accepted - but it must not be pressed twice.
   bool get _enabled => onPressed != null && !loading;
@@ -197,7 +245,7 @@ final class AppButton extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
         if (hasIcon) ...<Widget>[
-          Icon(icon, size: 18, color: labelColor),
+          Icon(icon, size: iconSize, color: labelColor),
           SizedBox(width: tokens.spacing.s8),
         ],
         Flexible(child: text),

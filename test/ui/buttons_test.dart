@@ -365,6 +365,92 @@ void main() {
     });
   });
 
+  group('it can say how wide it will be before it is built', () {
+    // `RecordList`'s table sizes its action column to the widest set of buttons
+    // in the list, which it can only do if this figure is the one the button
+    // then occupies. **Every assertion here is measurement against rendering**,
+    // because the first draft of the formula was §5.2's padding plus a label
+    // and was short by the focus-ring gutter on both sides - which is exactly
+    // enough to wrap a set of four that had just been given the room to fit.
+    //
+    // The ambient style is read out of the tree rather than assumed, because
+    // that is the second thing the formula was short by: a `Text` is painted in
+    // the enclosing `DefaultTextStyle` merged with its own, and this app's
+    // theme carries Material's `letterSpacing: 0.25` on every role the token
+    // layer does not set one for.
+    TextStyle ambient(WidgetTester tester) =>
+        DefaultTextStyle.of(tester.element(find.byType(AppButton))).style;
+
+    testWidgets('it matches the width it lays out at', (tester) async {
+      for (final (label, icon) in <(String, IconData?)>[
+        ('Correct', null),
+        ('Cancel invitation', null),
+        ('Adjust stock', Icons.tune_outlined),
+        ('View this shift\'s corrections', Icons.receipt_long_outlined),
+      ]) {
+        await tester.pumpWidget(
+          _app(AppButton(label: label, icon: icon, onPressed: () {})),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.getSize(find.byType(AppButton)).width,
+          closeTo(
+            AppButton.measureWidth(
+              _tokens,
+              label,
+              hasIcon: icon != null,
+              ambient: ambient(tester),
+            ),
+            0.01,
+          ),
+          reason: label,
+        );
+      }
+    });
+
+    testWidgets('a two-letter label is measured at §9\'s target, not its own '
+        'width', (tester) async {
+      await tester.pumpWidget(_app(AppButton(label: 'Go', onPressed: () {})));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(AppButton)).width,
+        closeTo(
+          AppButton.measureWidth(_tokens, 'Go', ambient: ambient(tester)),
+          0.01,
+        ),
+      );
+      expect(
+        AppButton.measureWidth(_tokens, 'Go'),
+        greaterThanOrEqualTo(_tokens.density.minimumTapTarget.width),
+      );
+    });
+
+    testWidgets('at 200% text it is measured at 200% text', (tester) async {
+      const scaler = TextScaler.linear(2);
+      await tester.pumpWidget(
+        _app(
+          MediaQuery(
+            data: const MediaQueryData(textScaler: scaler),
+            child: AppButton(label: 'Resend invitation', onPressed: () {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(AppButton)).width,
+        closeTo(
+          AppButton.measureWidth(
+            _tokens,
+            'Resend invitation',
+            textScaler: scaler,
+            ambient: ambient(tester),
+          ),
+          0.01,
+        ),
+      );
+    });
+  });
+
   group('layout', () {
     testWidgets('it shrink-wraps by default, so a Wrap is not one button wide', (
       tester,

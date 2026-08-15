@@ -27,6 +27,14 @@
 ///   exposed a `Row` in five staff forms that could not fit half a page, and it
 ///   is where a form's buttons wrap to a second line.
 ///
+/// - **`96-record-columns`** - the column arithmetic, added 2026-08-15 with
+///   [RecordTableColumns]. It is the one case built to be *hard*: six columns, a
+///   standing on one record of four, a provenance line long enough to wrap, one
+///   record with four actions where its neighbours have two, and one column of
+///   prose. All four of the observations `PLAN.md` carried about the old
+///   constants are visible in the `web` picture of it, and the `mobile` and
+///   `tablet` ones are the control - a card stacks, so none of this reaches it.
+///
 /// **A record's states are not §5's nine.** A record is not a control: it has
 /// no hover, no focus-visible, no pressed and no loading, because the only
 /// things on it that can be pressed are its actions, and those are `AppButton`s
@@ -248,6 +256,114 @@ final class _StandInFormState extends State<_StandInForm> {
   }
 }
 
+/// A six-column ledger, which is the widest shape any of step 6's twelve
+/// screens reaches, with every one of the four column-arithmetic observations in
+/// it at once.
+///
+/// The numbers it is built from are the ones the observations were made against:
+/// `web/30-shift-corrections` has six columns and ran two values together;
+/// `web/23-stock-movements` wrapped a 55-character provenance line on every row;
+/// `web-full/13-staff-directory` has one record with four actions and three with
+/// two; and `web-full/18-manage-catalog` has a status on two rows of seven.
+List<RecordItem> _ledger() => <RecordItem>[
+  _movement(
+    id: 'mv1',
+    product: 'Fresh whole milk 500ml',
+    figures: '24 to 18',
+    type: 'Sale',
+    reason: 'Sold on receipt R-000482',
+    source: 'sale-000482',
+    counted: '18',
+    standing: null,
+    actions: 2,
+  ),
+  _movement(
+    id: 'mv2',
+    product: 'White bread, sliced',
+    figures: '11 to 40',
+    type: 'Delivery',
+    reason: 'Weekly delivery from Njoro Bakers, checked in by the till',
+    source: 'adj-000119',
+    counted: '40',
+    standing: null,
+    actions: 2,
+  ),
+  _movement(
+    id: 'mv3',
+    product: 'Cooking oil 1L',
+    figures: 'Not recorded',
+    type: 'Reconciled sale',
+    reason: 'Written by nightly reconciliation',
+    source: 'rj-000007',
+    counted: '0',
+    standing: const RecordStatus(
+      status: AppStatus.attention,
+      label: 'Difference found',
+    ),
+    actions: 4,
+  ),
+  _movement(
+    id: 'mv4',
+    product: 'Maize flour 2kg, sifted',
+    figures: '18 to 17',
+    type: 'Correction',
+    reason: 'Counted short at close',
+    source: 'adj-000121',
+    counted: '17',
+    standing: null,
+    actions: 2,
+  ),
+];
+
+RecordItem _movement({
+  required String id,
+  required String product,
+  required String figures,
+  required String type,
+  required String reason,
+  required String source,
+  required String counted,
+  required RecordStatus? standing,
+  required int actions,
+}) => RecordItem(
+  id: id,
+  title: product,
+  subtitle: 'Dairy and chilled',
+  status: standing,
+  attributes: <RecordAttribute>[
+    RecordAttribute(label: 'Before and after', value: figures),
+    RecordAttribute(label: 'Adjustment type', value: type),
+    RecordAttribute(label: 'Reason', value: reason, flex: 2),
+    RecordAttribute(label: 'Source', value: source),
+    RecordAttribute(label: 'On hand', value: counted),
+  ],
+  provenance: 'Recorded 2026-08-10 08:30 UTC by Grace Wanjiru (owner-dev)',
+  actions: <RecordAction>[
+    RecordAction(
+      label: 'Open the product',
+      icon: Icons.inventory_2_outlined,
+      onPressed: () {},
+    ),
+    if (actions > 2) ...<RecordAction>[
+      RecordAction(
+        label: 'Ask for a re-run',
+        icon: Icons.refresh_outlined,
+        onPressed: () {},
+      ),
+      RecordAction(
+        label: 'Find the receipt',
+        icon: Icons.receipt_long_outlined,
+        onPressed: () {},
+      ),
+    ],
+    RecordAction(
+      label: 'Adjust stock',
+      icon: Icons.tune_outlined,
+      onPressed: () {},
+    ),
+  ],
+);
+
 class _Page extends StatelessWidget {
   const _Page({required this.title, required this.list});
 
@@ -310,6 +426,15 @@ void main() {
     build: () => _Page(
       title: 'Staff directory',
       list: RecordList(identityLabel: 'Member', items: _withDetailsOpen()),
+    ),
+  );
+
+  screenshotCase(
+    '96-record-columns',
+    viewports: everyBandViewports,
+    build: () => _Page(
+      title: 'Stock movements',
+      list: RecordList(identityLabel: 'Movement', items: _ledger()),
     ),
   );
 

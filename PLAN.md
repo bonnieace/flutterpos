@@ -4,7 +4,20 @@ Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.m
 verbatim and in order — go there for why a decision was made, what a chunk
 deliberately left out, and which failures cost a debugging cycle.
 
-Last verified against the code on **2026-08-15**, which took three chunks.
+Last verified against the code on **2026-08-15**, which took four chunks.
+
+**The fourth took the four `RecordList` column-arithmetic observations this file had been carrying
+since step 6b**, which are one defect seen from four directions: a table row was divided by four
+constants measured against a **two-column activity log**, and the twelve screens that followed carry
+**two to six** columns. It is now divided by measuring — each column asks for what its own widest
+content needs, may claim up to its old share, and what nobody claims fills the shallowest unmet need
+first. **Two of the four are closed, one is closed on the screen it was observed on, and one is
+improved rather than closed** — four actions with real labels need 630 pixels that a five-column row
+does not have, which is a limit rather than a tuning, and the picture that shows it is new. It found
+two things by rendering that no review would have: **a button is 8 pixels wider than §5.2 says**,
+because `PressSurface` reserves the focus ring whether it is visible or not, and **every string in
+this app is painted a quarter of a pixel per character wider than its token style**, because the
+theme merges Material's own `letterSpacing` under every role §2.2 leaves silent.
 
 **The third closed §7's "Title appears once"**, the defect `design.md` names in its own words: step 5a
 moved every screen title into a `PageHeader` and left the in-body copies behind, so fourteen routes
@@ -162,7 +175,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~92% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 5a, 6 and 8 are finished**: 1, 2, 3, 5a and 6 as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. **Step 8 finished on 2026-08-15 in two halves**: the first landed `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart` on screens 13, 21, 25 and 26, with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted; the second put the figures on **27, 28 and 29**, which state quantities as evidence and therefore took `numeric.body` and a shared right edge rather than a hero figure — **7 call sites across 6 files**, and §2.2's own complaint is now retracted for every screen §11 step 8 names. Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision; and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. **§7's "Title appears once" is closed as of 2026-08-15** — fourteen sites in fourteen files, of which nine were deletions, four became `PageHeader.subtitle`'s first readers and one became a §2.1 status that had been stating something false; the two `headlineSmall` uses left in the migrated tree are deliberate and commented. **`AppNotice` exists as of 2026-08-15** — the four write outcomes mapped once to §2.1, on **7 surfaces** that each held a `String?` whose meaning was in the sentence, and the eighth is step 7's. `ConfirmDialog` left step 4 for step 7. **Steps 5b, 7, 9, 10, 11 and 12 remain**, and every one of them is one number on its own: the batching exception is spent. |
+| **Design system** | ~93% | `design.md` v0.3 is the specification and `DESIGN-AUDIT.md` audits it against the code. **Steps 1, 2, 3, 5a, 6 and 8 are finished**: 1, 2, 3, 5a and 6 as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. **Step 8 finished on 2026-08-15 in two halves**: the first landed `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart` on screens 13, 21, 25 and 26, with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted; the second put the figures on **27, 28 and 29**, which state quantities as evidence and therefore took `numeric.body` and a shared right edge rather than a hero figure — **7 call sites across 6 files**, and §2.2's own complaint is now retracted for every screen §11 step 8 names. Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (155 call sites, four tiers, three sizes, six states); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (39 call sites across 17 files, six states in the harness); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, and 1 in `pill_input.dart`, which is step 9's sign-in; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision; and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. **§7's "Title appears once" is closed as of 2026-08-15** — fourteen sites in fourteen files, of which nine were deletions, four became `PageHeader.subtitle`'s first readers and one became a §2.1 status that had been stating something false; the two `headlineSmall` uses left in the migrated tree are deliberate and commented. **`AppNotice` exists as of 2026-08-15** — the four write outcomes mapped once to §2.1, on **7 surfaces** that each held a `String?` whose meaning was in the sentence, and the eighth is step 7's. **`RecordList`'s table divides its row by measurement as of 2026-08-15** — `RecordTableColumns` in `lib/ui/record_list.dart`, with `StatusBadge.measureWidth`, `AppButton.measureWidth` and `measureTextWidth` under it; the four constants step 6b chose against a two-column activity log are ceilings now rather than answers, there is a `space.12` gutter, and **no call site changed**, which is the component owning its own form. `ConfirmDialog` left step 4 for step 7. **Steps 5b, 7, 9, 10, 11 and 12 remain**, and every one of them is one number on its own: the batching exception is spent. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -202,6 +215,23 @@ callable exists, and not green if it is merely tested.
 | Platform: review, approve, suspend, archive a business | 🟢 | Platform tabs |
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
+
+**The fourth 2026-08-15 chunk changed no row of the capability board either, and it changed no call
+site in `lib/` outside `lib/ui/`.** It took the **four `RecordList` column-arithmetic observations**.
+Every capability that reads a list of records — the staff directory, both catalog screens, all four
+stock screens, all four shift screens, the activity log — has been 🟢 throughout and does exactly what
+it did before; what changed is how wide the columns are on a desktop window. It moved the **Design
+system** track 92% to 93% and **no other track**, changed **no rollout step**, and touched no rule and
+no `functions/` file. **26 images moved and 5 were added, every one of them `web/` or `web-full/`** —
+the table is the `expanded` rendering, so a phone picture that had changed would have been a defect.
+
+**Its findings are two things a review would never have caught and a rendering did.** A button is
+**8 pixels wider than §5.2's arithmetic** — `PressSurface` reserves the focus ring's gutter whether it
+is visible or not, and §9's tap target is a minimum *width* too — and every `Text` in this app is
+painted **0.25 pixels per character wider than its token style**, because a style with
+`inherit: true` is merged onto the enclosing `DefaultTextStyle` and this app's `ThemeData` carries
+Material's `letterSpacing: 0.25` on every role §2.2 leaves silent. The second is a finding rather than
+a repair; see the open decision.
 
 **The third 2026-08-15 chunk changed no row of the capability board either.** It took **§7's "Title
 appears once"** — the fourteen panels that drew their screen title a second time under the
@@ -933,14 +963,26 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1932** ✅ measured three times on 2026-08-15 |
-| Functions | `npm --prefix functions test` | **409** ✅ measured three times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured four times on 2026-08-15 (~68–143 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured three times on 2026-08-15 (~78–95 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured three times on 2026-08-15 (~131–168 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1950** ✅ measured four times on 2026-08-15 |
+| Functions | `npm --prefix functions test` | **409** ✅ measured four times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured five times on 2026-08-15 (~68–143 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured four times on 2026-08-15 (~78–95 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured four times on 2026-08-15 (~131–168 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
 
-**2535 tests across five suites. All five were measured by all three 2026-08-15 chunks — eleven
-consecutive chunks measuring all five — and the carry counter is at 0.** §7's title chunk took Flutter
+**2553 tests across five suites. All five were measured by all four 2026-08-15 chunks — twelve
+consecutive chunks measuring all five — and the carry counter is at 0.**
+
+**The column-arithmetic chunk took Flutter 1932 → 1950** (+18: **14** in `record_list_test.dart` for
+the allocation itself, the gutter, the row height and the invariant that no column but the identity is
+ever given more than it asked for; **3** in `buttons_test.dart` and **1** in `status_test.dart`, all
+four of them one assertion — *the width a component says it will take is the width it takes*, which is
+what found the focus-ring gutter and the theme's letter spacing). **Four of the eighteen failed on
+their first run and every one was the test being wrong**: three carried fixtures copied from real
+screens, which in a widget test's one-glyph-per-font-size face leave no slack at all to allocate, and
+the fourth expected a row with an action in it to be `minimumRowHeight` when a 48-high button plus its
+ring gutter plus the row's own padding is 80.
+
+**Earlier the same day, §7's title chunk took Flutter
 **1928 → 1932** (+4: two screen-level tests asserting a `PageHeader`'s own `title` and `subtitle`,
 where the panel-level pumps they replace could not see a header at all; and two on the staff
 directory's standing, one per side of it). **Seven existing assertions were rewritten**, six of them
@@ -1012,8 +1054,29 @@ procedure three sections away is the file's own defect**, and the trap has been 
 the procedure instead of at a missing JDK.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **172 captures** writing **233**
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **175 captures** writing **233**
 images, and it asserts nothing, which is why it is not counted here.
+
+~~172 captures writing 233 images.~~ **Both halves of that were measured on 2026-08-15 and one was
+wrong.** The captures are 175 now, three of them new. The **233** was counting files in the
+directory rather than files a run writes: **`HEAD` before this chunk wrote 229**, and the directory
+held four `*-full` images that no run had written for a day or two. **The harness never deletes**, so
+a route that stops overflowing its viewport leaves its last full-page rendering on disk forever —
+see the new standing trap. There are **five** such files as of 2026-08-15
+(`web-full/13-staff-directory`, `web-full/23-stock-movements`, `web-full/96-record-list`,
+`web-full/96-record-list-narrow-loss`, `mobile-full/30-shift-corrections`), the directory holds 238
+files, and a run writes 233. **Deleting them was attempted this session and refused by the tool
+permissions**, so they are named here instead; delete them when convenient and rebuild the index.
+
+**The column-arithmetic chunk moved 26 and added 5**, and the shape of that diff is the check rather
+than an aside: **every one of the 26 is `web/` or `web-full/`**. The table is §4.3's `expanded`
+rendering and this chunk touched nothing else, so a `mobile/` or `tablet/` picture that had moved
+would have been a defect. The added case is `96-record-columns` at all three bands — six columns, a
+standing on one record of four, a long provenance line, and one record with four actions where its
+neighbours have two. It is the picture of the **limit**: at that density the table is fully
+subscribed and the allocation falls back to the ceilings, which is what it is for. The repair is
+visible on the real screens instead — `web-full/18-manage-catalog`, `web/23-stock-movements`,
+`web/30-shift-corrections`.
 
 **§7's title chunk moved 52 of them on 2026-08-15 and added 1 case (4 images)**, which is the widest
 diff since step 6b. The added case is `13c-staff-directory-read-only`: `13-staff-directory` is
@@ -3629,6 +3692,74 @@ that route at a band where its badges are legible, and they read **`active`** an
 lowercase — the membership enum's own wire values, where §8 rule 7 is sentence case everywhere but
 `label.eyebrow`. Pre-existing, unrelated to titles, and step 11's.
 
+### A column asks for what it holds, and a share is a guess about content
+
+The **four `RecordList` column-arithmetic observations**, taken 2026-08-15 as one chunk because they
+are one defect seen from four directions. It changed `firestore.rules` not at all, nothing in
+`functions/` or `rules-tests/`, and **no call site anywhere in `lib/` outside `lib/ui/`**.
+
+Step 6b divided a table row with four constants — identity 3, status 2, actions 3, an attribute 1 —
+measured at 1200 against a **two-column activity log**, because that was the only consumer that
+existed on the day. The twelve screens that followed carry **two to six** columns, and each of the
+four observations is what those constants do to a shape they were not measured against. The
+mechanism is `RecordTableColumns` in `lib/ui/record_list.dart`:
+
+1. **Every column states a demand**: the widest badge in the list, the widest set of actions laid out
+   inline, the longest value, and in every case at least its own header. A column narrower than its
+   heading would ellipsise the heading, which is why the header is in the sum.
+2. **A demand is capped at the column's old share**, so the first pass always fits and nothing can
+   overflow at any width — the property that made this safe to apply to twelve screens at once. The
+   four constants are ceilings now, not answers, and a table where every column wants at least its
+   share lays out exactly as it did before.
+3. **What nobody claimed fills the shallowest unmet need first.** Proportion is the obvious rule and
+   is the wrong one: a column 6 pixels short and a column 400 short are not two claims of the same
+   kind, because satisfying the small one removes a wrapped line and part-satisfying the large one
+   removes nothing.
+4. **The identity takes what is left over**, and it is the only column ever given more than it asked
+   for. Something has to absorb the difference, and §5.2's "never truncated below two lines" row is
+   the one column where more room is always worth having.
+5. **A title asks for half its width**, because §5.2 gives it two lines; the subtitle and the
+   provenance line are `maxLines: 1` and ask for all of theirs.
+6. **A component answers for its own geometry.** `StatusBadge.measureWidth` and
+   `AppButton.measureWidth` are new statics beside `StatusBadge.height`, and the table asks them
+   rather than reassembling §5.2's padding rules — which would be a second copy of the specification.
+7. **`space.12` between adjacent cells**, from §2.3's scale. `design.md` asked for no gutter and now
+   records one.
+
+**Two of the four are closed, one is closed where it was observed, and one is improved rather than
+closed.** The status column is the widest badge in the list and nothing more; the gutter is
+everywhere; `web/23-stock-movements` fits its 58-character provenance line on one line where it used
+to wrap on every row, though `web/30-shift-corrections` at six columns still does not. **Observation 1
+— four actions wrapping to three runs — went to two runs on the staff directory and cannot go to
+one**, and the arithmetic is the argument: four actions with real labels need about 630 pixels, the
+other four columns of that screen need about 700, and the row is 1128. What changed is where the
+spare width goes, not how much there is.
+
+**The decision most worth arguing with is that the actions column is *not* sized to the widest set.**
+That is the obvious "intrinsic column" answer and the first picture killed it: four of the staff
+directory's five rows carry two actions, so a column sized for the fifth would be 380 pixels of
+nothing on 80% of the table. A tall row on one record is a smaller cost than an empty column on all
+of them.
+
+**It found two things about this app that no review would have, and both came from asserting a
+measurement against a rendering.**
+
+- **A button is 8 pixels wider than §5.2's arithmetic.** `PressSurface` reserves the focus ring's
+  `width + offset` on every side whether the ring is visible or not, and §9's tap target is a minimum
+  *width* as well as a minimum height. The first formula agreed with §5.2, disagreed with the widget,
+  and wrapped the set of four it had just made room for.
+- **Every `Text` in this app is painted 0.25 pixels per character wider than its token style says.**
+  A style with `inherit: true` — every style in the token layer — is merged onto the enclosing
+  `DefaultTextStyle`, and this app's `ThemeData` carries Material's `letterSpacing: 0.25` on every
+  role §2.2 leaves silent. Four pixels on `Cancel invitation`; the difference between one line and
+  two on a set of four. Every measurement here takes the ambient style as an argument. **The theme
+  half is a finding and not a repair** — see the open decision.
+
+**No behaviour changed.** `RecordAttribute.flex` keeps its name and its eight call sites while its
+meaning narrows from an allocation to a ceiling; `AppButton`'s leading icon `18` became
+`AppButton.iconSize`, read by the widget that paints it and the formula that measures it. Nothing
+else in `lib/` was touched.
+
 ### Built, tested, and still unreachable
 
 | Capability | State |
@@ -3803,6 +3934,27 @@ borrowed rows are the specification.** Both are fine; what is not fine is leavin
 because a later reader cannot tell a borrowed row from a specified one by looking at the code.
 **It blocks calling §5's inventory complete in step 12**, the same way the field-hover question
 blocks §9's audit.
+
+### Every string is painted 0.25px per character wider than its token style says
+
+**Found by the column-arithmetic chunk on 2026-08-15, by asserting a measurement against a
+rendering.** A `TextStyle` with `inherit: true` — and every style in `AppTypeRoles` is one, because
+none of them sets `inherit: false` — is merged onto the enclosing `DefaultTextStyle` before it is
+painted. This app's `ThemeData` carries Material's own **`letterSpacing: 0.25`** on the roles §2.2
+does not name a spacing for, which is all of them except `label.eyebrow`. So the type this app draws
+is not quite the type the token layer declares.
+
+**It is small and it is not nothing.** A quarter of a pixel per character is 4.25 pixels on
+`Cancel invitation`, and on a row of four buttons it was the difference between one line and two —
+which is how it was found rather than reasoned about. `measureTextWidth` takes the ambient style as
+an argument for exactly this reason, so nothing measured here is wrong; what is unstated is which of
+the two is the specification.
+
+**Three honest resolutions.** §2.2 gains a letter-spacing column and the theme is made to match it;
+or the token layer sets `letterSpacing: 0` on every role it does not name one for, so a role means
+what it says; or §2.2 gains a sentence saying the ambient spacing is deliberate and the roles are
+deltas onto it. **Do not decide it inside a chunk**: the second and third are one line each and would
+move **every string in the app**, which is a diff no visual step should be carrying incidentally.
 
 ### A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
 
@@ -4569,6 +4721,14 @@ enormous expected-denial traces.
   said the suites had run before.** They had; with the prelude all three pass first time. **This
   trap contradicted a procedure in its own file, and that is the second lesson: before writing a
   trap that says something is impossible, grep this file for the section that does it anyway.**
+- ⛔ **The harness never deletes, so a `*-full` image can outlive the layout it shows.** A full-page
+  capture is written **only when something is below the fold**, and a chunk that makes a route
+  shorter can stop one being written — the file stays on disk showing the old rendering forever, and
+  a hash comparison reports it as *unchanged*. The column-arithmetic chunk of 2026-08-15 shortened
+  `13-staff-directory` past 900 pixels and left `web-full/13-staff-directory` behind; four others were
+  already stale, one of them by two days. **Check `LastWriteTime` against the run, not the hash
+  against the baseline**, and delete what the run did not write before quoting an image count. It is
+  also why the "233 images" this file carried was four too high — see "Test baselines".
 - ⛔ **A screenshot baseline is only comparable on the same side of midnight UTC.**
   `seedBusinessDate()` in `tool/screenshots/fakes.dart` derives from `DateTime.now().toUtc()`, so
   every seeded date on every screen advances when the UTC date rolls. On 2026-08-15 a chunk that
@@ -5064,19 +5224,36 @@ start, check "The emulator prelude is not optional" before writing anything down
 
 ---
 
-**The queued chunk is §7's "Title appears once" — the thirteen panels that draw their screen title a
-second time**, described in full below. It is the last small mechanical thing left before the numbered
-steps resume, and 2026-08-15 found it more interesting than "thirteen deletions": of the three
-examined that day, all three were *not* duplicates, so **the thing to settle first is whether
-`PageHeader.subtitle` gets populated** — the slot step 5a built and never filled. That is one
-component decision, and then the thirteen are a per-screen judgement against it rather than thirteen
-independent ones.
+**The queued chunk is `design.md` §11 step 9 — sign-in and onboarding.** It is the next *numbered*
+step that is neither excluded (7, the sale path) nor a behaviour change (5b, the navigation model),
+and everything ahead of it in the queue is now done: §7's title defect, the notice model, and the
+four `RecordList` column-arithmetic observations all closed on 2026-08-15.
 
-**After it, in order: the four carried `RecordList` column-arithmetic observations, then `design.md`
-§11 step 9.** Step 9 is the next *numbered* step that is neither excluded (7, the sale path) nor a
-behaviour change (5b, the navigation model), and it is where the last `ButtonStyleButton` and the last
-stray `TextField` outside the till die — which makes `test/support/buttons.dart` and
-`test/support/fields.dart` deletable, as this file has been promising since step 3.
+**What step 9 is, from `DESIGN-AUDIT.md` §4.4 rather than from memory.** `login_screen.dart` and the
+four widgets it imports — `pill_input`, `pos_keyboard`, `glass_card`, `pill_button` — are the last
+unmigrated surface the app's root actually reaches. Named defects: labels in **uppercase** where §2.2
+permits it only on `label.eyebrow`; a **radius-32 well** where §2.3 says 8; a **green glow
+`BoxShadow`** where §9 requires a 2px focus ring; `Colors.green` for the Remember Me checkbox, a
+*different* green from the accent; `Colors.red` for the error rather than the palette's critical red;
+and `"UNLOCK REGISTER →"`, which §8 rule 3 and §2.2 both reach — wrong case and wrong words. **Size it
+by running the grep rather than by trusting this paragraph**, which is the counting habit this file
+has now been burned by five times:
+`grep -n "TextField\|ButtonStyleButton\|ElevatedButton\|TextButton\|OutlinedButton" lib/login_screen.dart lib/widgets/pill_*.dart`.
+
+**It is the chunk that makes two files deletable.** `test/support/buttons.dart` and
+`test/support/fields.dart` exist only because `lib/` holds more than one button and field system;
+step 7 takes the last `ButtonStyleButton` and two of the last three `TextField`s, step 9 takes the
+third. **`test/support/notices.dart` is not one of them** — it reads `Callout`, which is the
+destination rather than a stop on the way to one.
+
+**One thing checked rather than assumed, because this file has said the opposite in the past.**
+`claude.md` hard rule 3 makes `lib/pos/**` and `lib/screens/**` read-only, and **none of step 9's
+files are in either**: the screen is `lib/login_screen.dart` and the four widgets are
+`lib/widgets/pill_input.dart`, `pill_button.dart`, `glass_card.dart` and `pos_keyboard.dart`. There is
+no scope conflict and no permission to ask for. What step 9 *does* need settling on is smaller: those
+four widgets are shared with nothing else the migrated tree reaches, so a rewrite may replace them
+outright rather than restyling them, and whether `pos_keyboard` survives at all is a product question
+about whether an on-screen keypad belongs on sign-in.
 
 **Step 8 is finished as of 2026-08-15, in both halves, and the notice model with it.** Steps 1, 2, 3,
 5a, 6 and 8 are all done, step 4's sweep is a class of thing rather than a screen list, and
@@ -5189,13 +5366,26 @@ happened; an `AppNotice(message, status)` at every call site would have reproduc
 exactly the drift §1 describes in colours. The general constructor exists and is used **once**, in a
 test.
 
-**A sixth, and it is a counting habit rather than a design one.** This file has now under-counted
-**four** queued lists in a row from memory — 8 `IconButton`s that were 6, 4 notices that were 7,
-13 title panels that were 14 sites in 14 files, and 15 `headlineSmall` uses of which the remainder was
-never re-grepped. **Size a queued item by running its grep at the moment you write it down**, and put
-the grep in the entry so the next session runs the same one. The notice entry carried a grep matching
-the *parameter* rather than the key and would have found four of seven; the title entry carried a file
-list rather than a grep and missed a file entirely.
+**A sixth, and it is a counting habit rather than a design one.** This file has now mis-counted
+**five** figures in a row from memory — 8 `IconButton`s that were 6, 4 notices that were 7,
+13 title panels that were 14 sites in 14 files, 15 `headlineSmall` uses of which the remainder was
+never re-grepped, and **233 screenshots that were 229**, because the count was taken over the
+directory rather than over what a run writes and the harness never deletes. **Size a figure by
+running its command at the moment you write it down**, and put the command in the entry so the next
+session runs the same one. The notice entry carried a grep matching the *parameter* rather than the
+key and would have found four of seven; the title entry carried a file list rather than a grep and
+missed a file entirely; the image count had no command against it at all.
+
+**A seventh, from the column-arithmetic chunk, and it is the strongest argument in this file for a
+test that compares a claim to a rendering.** Two facts about this app were wrong in every head and
+every document until a test asserted `measureWidth == getSize().width`: a button is **8 pixels wider
+than §5.2's arithmetic**, because `PressSurface` reserves the focus ring whether it is visible or
+not and §9's target is a minimum *width* too; and every string is painted **0.25px per character
+wider than its token style**, because the theme merges Material's letter spacing underneath. Neither
+is visible in a screenshot, neither is findable by reading, and both would have shipped as a
+component that wraps when it was told there was room. **Where a component publishes a number about
+itself, assert it against the rendering** — it is two lines and it is the only instrument that
+answers.
 
 **A fourth, from the step-8 chunk of 2026-08-15, and it is the one to carry forward.** A shared wording module stops two
 surfaces wording one document differently; it does **not** stop them needing different *containers*.
@@ -5302,10 +5492,13 @@ as an unused parameter with this note against it, or take the concession back ou
 the flag. **Do not delete it inside another chunk** — it is a documented concession in `design.md`
 and removing it is a specification change.
 
-**Four observations about the same arithmetic are carried, and the chunk that settles them now has
-all twelve screens in front of it.** They were all held back for one reason: tuning a component
-constant from one screenshot of one screen is how a component acquires a value that fits the last
-screen somebody looked at.
+~~**Four observations about the same arithmetic are carried, and the chunk that settles them now has
+all twelve screens in front of it.**~~ **Done 2026-08-15, and the reason they were held back is the
+reason the answer is not a retuned constant**: tuning a component constant from one screenshot of one
+screen is how a component acquires a value that fits the last screen somebody looked at, so the
+column asks the list instead. See the standing decision. **Two of the four are closed, one is closed
+on the screen it was observed on, and observation 1 is improved rather than closed** — the outcome
+per item is recorded against each below.
 
 1. **`_actionsFlex = 3`.** At `expanded`, a record with four inline actions wraps its action column
    to three runs and makes that row three times taller than its neighbours —
@@ -5313,17 +5506,27 @@ screen somebody looked at.
    `web/32-shift-history`. Step 6b set the constant against the two-short-action case, which was the
    only case it had. Honest fixes: the actions column earns a caller knob the way
    `RecordAttribute.flex` has one, or §4.3's `expanded` cell says something other than "all inline".
+   **Improved rather than closed, 2026-08-15**, and neither of those was the fix. Three runs became
+   two on the staff directory and one wherever the row has slack. It cannot become one *there*: four
+   actions with real labels need ~630px, the other four columns need ~700, and the row is 1128.
+   **Sizing the column to the widest set was tried on paper and rejected on the picture** — four of
+   the five rows carry two actions, so that column would be 380px of nothing on 80% of the table.
 2. **`_statusFlex = 2`.** The `Status` column is empty on five of screen 18's seven rows, so on a
    catalog it reads as a wide left margin — `web-full/18-manage-catalog`. Honest fixes: derive the
    share from the widest label the list actually carries, or read §5.2's "leading position" as
-   leading *within* the identity rather than as a column.
+   leading *within* the identity rather than as a column. **Closed 2026-08-15 by the first of those**;
+   §5.2's reading was not reopened, because it is written into the document and changing it is a
+   specification change.
 3. **`_identityFlex = 3`.** With four attribute columns and an actions column it leaves the identity
    roughly a quarter of 1200, and `Recorded 2026-08-10 08:30 UTC by Grace Wanjiru (owner-dev)` wraps
    to two lines on every row of `web/23-stock-movements`. **Not a §5.2 failure** — "never truncated
    below two lines" governs the identity and nothing is truncated — which is why it is an
    observation. Honest fixes: a caller knob, or the provenance line takes a column of its own, which
    step 6b refused on the grounds that a column of near-identical timestamps is width spent on
-   nothing.
+   nothing. **Closed 2026-08-15 on the screen it was observed on** — the identity asks for its
+   provenance line's full width and `web/23-stock-movements` now fits it on one line on every row —
+   and **still open on `web/30-shift-corrections`**, which is six columns and out of room. Neither
+   named fix was used.
 4. **`_RecordTable` puts no gap between its cells at all**, which the shift family surfaced and which
    is the same family as the other three. At six columns a value ends where the next begins:
    `web/30-shift-corrections` reads `A late sale arrived after|Corrected from expectation` across the
@@ -5332,10 +5535,12 @@ screen somebody looked at.
    has since the stock chunk. Honest fixes: a `space.12` gap between cells, or column shares derived
    from content. It is carried with the other three rather than fixed because a gutter changes every
    column's effective width on all twelve screens, which is precisely the arithmetic the other three
-   are about.
+   are about. **Closed 2026-08-15 by doing both**, which is why they were one chunk: the gutter costs
+   width the derived shares had to find.
 
-**All four are one chunk's work now**, and the five constants were all measured against a two-column
-activity log while the twelve screens carry two to six.
+~~**All four are one chunk's work now**~~ — **and they were, on 2026-08-15.** The constants were all
+measured against a two-column activity log while the twelve screens carry two to six, which is the
+sentence the whole chunk turned out to be about.
 
 **`Pagination` has now been examined and declined four times, and the reasons differ.** The staff
 directory's pagination is one sentence — not one of `DESIGN-AUDIT.md` §2.3's four idioms. **Screen
@@ -5346,20 +5551,20 @@ and both chunks declined it on the same ground. **The sweep is over and it is st
 the next session to meet one of those rows must say what it is doing rather than let a `Pagination`
 arrive with something else.
 
-**The four carried observations about `RecordList`'s column arithmetic are the chunk**, and they are a
-chunk rather than a list: they need all twelve screens in front of them, and all twelve exist.
-**`design.md` §11 step 9, sign-in and onboarding, is the second**, and it is the next numbered step
-that is neither excluded (7, the sale path) nor a behaviour change (5b, the navigation model). It is
-where the last `ButtonStyleButton` and the last stray `TextField` outside the till die, and where
-`test/support/buttons.dart` and `test/support/fields.dart` become deletable.
+~~**The four carried observations about `RecordList`'s column arithmetic are the chunk**~~ — **done
+2026-08-15, and they were one chunk exactly as predicted**, for the reason predicted: they need all
+twelve screens in front of them. **`design.md` §11 step 9, sign-in and onboarding, is now the queued
+chunk** and is described at the top of this section.
 
-**Three things are genuinely finished and should not be re-queued.** `design.md` §11 step 8: all five
+**Four things are genuinely finished and should not be re-queued.** `design.md` §11 step 8: all five
 of its screens are done, §2.2's own complaint is retracted for every one of them, and the only figure
 on those screens deliberately left in prose is a revision number, which has a standing decision against
 it. **The notice-status model**, which was queued as four items and turned out to be seven; the eighth
-is `checkout_cart_panel.dart`'s and belongs to step 7. And **§7's "Title appears once"**, which was
+is `checkout_cart_panel.dart`'s and belongs to step 7. **§7's "Title appears once"**, which was
 queued as thirteen panels and turned out to be fourteen sites; the two `headlineSmall` uses left in the
-migrated tree are both deliberate and both commented at the site.
+migrated tree are both deliberate and both commented at the site. And **the four `RecordList`
+column-arithmetic observations**, closed as one chunk — with observation 1 improved rather than closed
+and the reason recorded against it, so that a later session does not re-queue it as an oversight.
 
 **The batch is a deliberate relaxation of `claude.md` hard rule 4, granted by the product owner on
 2026-08-12 and scoped to steps 4, 5a, 6 and 8 only.** All four pieces of step 6's own half were taken
@@ -5424,9 +5629,16 @@ padded 24 now pad `space.20` with everything else, so the question is a naming g
 inconsistency. Step 6a also found this file's own description of it wrong: there were **three**
 routes and the landing route was not one of them.
 
-**Explicitly excluded from the queued four-notice chunk** — and note that the four notices themselves
-are no longer on this list, because they *are* the chunk now: **the 13 duplicate screen titles**,
-which are their own chunk described above and are §7's; **`inNarrowForm` and `StatRow`'s own unused
+**Explicitly excluded from the queued step-9 chunk.** Sign-in is the last unmigrated surface the
+app's root reaches, which makes it the chunk most likely to acquire neighbours; everything below is a
+neighbour. **New to this list on 2026-08-15**, and the first two are this chunk's own leavings:
+**observation 1's remaining wrap** — a four-action record on a five-column row at 1128 still takes two
+runs, the arithmetic for why is recorded above, and the only remaining fixes are §4.3 or §5.2
+amendments; **the ambient `letterSpacing` the theme merges under every token role**, which has its own
+open decision and would move every string in the app; and **the five stale `*-full` screenshots**,
+which are generated files this session was not permitted to delete.
+
+**Inherited, and still excluded:** **`inNarrowForm` and `StatRow`'s own unused
 capacity** — neither is a knob any
 screen has asked for and deleting either is a specification change;
 **the three run counts nothing displays** (`metricsProcessed`, `productsProcessed`,
@@ -5435,7 +5647,9 @@ screen has asked for and deleting either is a specification change;
 capability chunk, not a restyle — both are new to this list on 2026-08-15 and both have entries under
 "Open decisions";
 **`RecordList` for screen 28's difference cards and screen 20's report cards**, because neither is one
-of the twelve screens step 6 names and migrating either would be step 6 work outside step 6's list;
+of the twelve screens step 6 names and migrating either would be step 6 work outside step 6's list —
+**and note that both would now inherit the measured column arithmetic for free**, which is a reason to
+do it one day rather than a reason to do it inside step 9;
 **the two copy defects the bulk report's first picture found** — the before/after arrow that renders
 as tofu in the harness fonts (`bulk_catalog.dart:1590`; whether a device shows it is unknown) and
 `_summary`'s missing singular, *"1 were corrected, 1 already hold this value"* — both of which are §8
@@ -5570,7 +5784,19 @@ work — which loses column comparability and is a `design.md` question before i
 figure also carries no currency code**, which §8 rule 8 forbids outright; that one is an open decision
 with a named fix rather than a judgement.
 
-**The device-run debt is therefore now twenty-three chunks deep**, and the last eighteen are the ones that
+**The column-arithmetic chunk adds the item that most needs a wide screen and least needs a device.**
+Every table in the back office was re-divided: the status column shrank to its badge, the identity
+grew, and the actions column takes the spare width. **Chrome is enough** — open the staff directory,
+manage catalog, and stock movements at a full window and at 1024. Two things to judge. First,
+**whether a column that is exactly as wide as its content reads as tidy or as ragged**: the columns no
+longer line up on a grid, they line up on what they hold, and a table whose `On hand` column is 60
+pixels wide next to a `Reason` column of 400 is either legible or lopsided. Second, **the staff
+directory's four-action row still wraps to two lines** and the arithmetic says it must; whether that
+row reads as an exception or as a defect is a judgement about how often a shop sees a pending
+invitation, and if it reads as a defect the fix is §4.3's `expanded` cell saying something other than
+"all inline", which is a `design.md` amendment before it is code.
+
+**The device-run debt is therefore now twenty-four chunks deep**, and the last nineteen are the ones that
 most need a device — between them they changed how nearly every screen in the app looks, how every
 button feels, how every screen is entered and left, how every box a person types into is drawn, how
 every explanation folds away, where the title of every screen sits, how wide every page
@@ -5585,8 +5811,9 @@ sign-in repair, the invitation repair, the category repair, commit
 it**, **either catalog screen on it**, **any of the four stock screens on it**, **any of the four
 shift screens on it**, **any of the four reconciliation surfaces**, **any of the four catalog
 surfaces**, **`StatTile` on any of its five**, **`StatLine` on a difference or a run**, **any of the
-seven notices that now answer in colour**, or **any of the fourteen routes that stopped saying their
-own name twice**. Between them that is 409 tests, 229 screenshots, and no eyes.
+seven notices that now answer in colour**, **any of the fourteen routes that stopped saying their
+own name twice**, or **any of the twelve tables whose columns are now measured rather than shared
+out**. Between them that is 409 tests, 233 screenshots, and no eyes.
 
 **One item on this list stopped being purely a matter of judgement on 2026-08-14, and it is the
 strongest argument yet for looking rather than asserting.** A `Disclosure` had shipped truncated on a
@@ -5915,10 +6142,22 @@ finished.
 - **The design system, step 8, second half: the figures on 27, 28 and 29** — the queued chunk. Their
   prose was swept for step 4 earlier the same day, so this is only what step 8 is about. **It wants
   §3's density answered**, and §3's density is still two constants away from being answerable.
-- **§7's "Title appears once", broken on 13 panels** — new 2026-08-14, found by step 8, which fixed
-  the two on its own screens. Step 5a moved every title into a `PageHeader` and left the in-body
-  `headlineSmall` copies behind it. Mechanical, per-screen (some of those strings name a section
-  rather than the screen), and it deletes a defect `design.md` names in its own words.
+- **~~§7's "Title appears once", broken on 13 panels~~** — **done 2026-08-15**, and it was fourteen
+  sites in fourteen files. Step 5a moved every title into a `PageHeader` and left the in-body
+  `headlineSmall` copies behind it; nine were deletions, four became `PageHeader.subtitle`'s first
+  readers, and one was a heading telling every role a page was read-only when it was not. 52 images.
+- **~~The four `RecordList` column-arithmetic observations~~** — **done 2026-08-15**, as one chunk,
+  for the reason they were queued as one: a changed column share moves all twelve migrated screens.
+  `RecordTableColumns` measures what the list holds instead of dividing the row by four constants
+  chosen against a two-column activity log. It moved no board row and no rollout step, moved the
+  **Design system** track 92% to 93%, added 18 tests and 5 screenshots, moved 26 — **every one of them
+  `web/` or `web-full/`** — and changed **no call site**. Its own standing decision above records what
+  it decided, including the one most likely to be argued with: the actions column is **not** sized to
+  the widest set in the list.
+- **~~The design system, step 9: sign-in and onboarding~~** — the queued chunk, described at the top
+  of "Next bounded chunk". Its files are `lib/login_screen.dart` and the four widgets in
+  `lib/widgets/` that only it imports; **none of them is under `claude.md` hard rule 3**, which was
+  checked rather than assumed.
 - **~~The Flutter surface that edits a product~~** — **done 2026-08-08.** It was
   promoted out of this list into the current chunk on 2026-08-07 once the flake in front
   of it was fixed, and it is now the board's twenty-first green row. What it found on the

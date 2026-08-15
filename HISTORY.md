@@ -22901,3 +22901,198 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+## A table stops guessing how wide its columns are - 2026-08-15
+
+The four observations `PLAN.md` had been carrying against `RecordList`'s table since step 6b, taken
+as one chunk because they are one defect seen from four directions. Step 6b divided a table row with
+four constants - identity 3, status 2, actions 3, an attribute 1 - measured against a **two-column
+activity log**, and the twelve screens that followed carry **two to six** columns. A share is a guess
+about content, and the content is in the list.
+
+It changes `firestore.rules` not at all and nothing in `functions/` or `rules-tests/`. **It changed
+no capability board row**, and it moved the **Design system** track 92% to 93%.
+
+### Why this chunk, and why it stops where it does
+
+`PLAN.md` queued it, and queued it as a chunk rather than as four items for a reason it stated: a
+changed column share moves every one of the twelve migrated screens, so it needs all twelve in front
+of it, and all twelve exist. Checking against the board first, as the instruction requires: every red
+row is blocked on a decision nobody has made, a schema that does not exist, or a sequencing choice
+after the first deployment, so nothing the app needs in order to function is missing and unqueued.
+
+### What was decided
+
+1. **Measure, do not retune.** The alternative `PLAN.md` named for three of the four was a caller
+   knob - `RecordList(actionsFlex: …)` beside `RecordAttribute.flex`. It was declined because it
+   answers the question twelve times: every screen would have to be looked at, tuned, and looked at
+   again whenever its data changed, and the number a caller would type is a number it cannot know,
+   since it depends on the other columns. `RecordTableColumns` asks each column what its own widest
+   content needs and divides the row by the answers.
+2. **The old constants survive as ceilings, and that is what makes this safe on twelve screens at
+   once.** A column may claim up to its share and never more, so no column can starve its neighbours
+   with one long value, and a table where every column wants at least its share lays out exactly as
+   it did before. The first pass therefore always fits; the two passes after it hand out only what
+   the first pass left over. **The allocation cannot overflow at any width**, which is asserted at
+   five widths from 320 to 2400.
+3. **The pool is levelled, not shared in proportion — the decision most worth arguing with.**
+   Proportion is the obvious rule and it is wrong here: a column 6 pixels short and a column 400
+   short are not two claims of the same kind, because satisfying the small one removes a wrapped line
+   and part-satisfying the large one removes nothing. So the pool rises like water - every unmet
+   column takes the same amount until it is satisfied and drops out, deepest need served last. The
+   staff directory is exactly that shape, and it is what let `Role`, `Invitation` and the identity all
+   be satisfied before the actions took the remainder.
+4. **A title asks for half its width and everything else asks for all of its own.** §5.2 gives the
+   identity two lines before it ellipsises, so a title demanding its one-line width would ask for
+   twice what it is entitled to. The subtitle and the provenance line are `maxLines: 1` and ask for
+   all of theirs, which is what closes observation 3.
+5. **The leftover goes to the identity**, because something has to absorb it and §5.2's "never
+   truncated below two lines" row is the one column where more room is always worth having. It is
+   the only column that is ever given more than it asked for, and there is a test saying so.
+6. **A component answers for its own geometry.** `StatusBadge.measureWidth` and
+   `AppButton.measureWidth` are new, and the table asks them rather than reassembling §5.2's padding
+   rules at the call site - which would have been a second copy of the specification, going stale on
+   the first change to the first. Both are asserted against the width the widget actually lays out
+   at, which is how the two corrections below were found.
+7. **`space.12` between adjacent cells**, from §2.3's scale. `design.md` did not ask for a gutter and
+   does now; it is the cheapest of the four repairs and the only one that costs width rather than
+   saving it.
+
+### Two corrections the measurement made to itself, both found by rendering rather than by review
+
+**A button is wider than §5.2 says it is, twice over.** `PressSurface` reserves the focus ring's
+`width + offset` on every side whether it is visible or not, and §9's tap target is a **minimum
+width** as well as a minimum height. A formula that agreed with §5.2 and disagreed with the widget by
+8 pixels a button is exactly enough to wrap the set of four it had just made room for.
+
+**Every `Text` in this app is painted 0.25 pixels per character wider than the token style says.** A
+style with `inherit: true` - every style in the token layer - is merged onto the enclosing
+`DefaultTextStyle`, and this app's `ThemeData` carries Material's own `letterSpacing: 0.25` on the
+roles §2.2 does not set one for. On a word it is nothing; on `Cancel invitation` it is 4.25 pixels,
+and on a four-button set it is the difference between one line and two. Every measurement here takes
+the ambient style as an argument. **The theme half of that is a finding rather than a repair** - see
+`PLAN.md`, because correcting it would move every string in the app and is a §2.2 question.
+
+### What the four observations actually cost, against what `PLAN.md` predicted
+
+| | Observation | Outcome |
+| --- | --- | --- |
+| 1 | four actions wrap to three runs | **Improved, not closed.** Three runs to two on the staff directory at 1440; one run wherever the row has slack, which the tests assert and `96-record-columns` shows it does not always have |
+| 2 | the status column is a wide left margin | **Closed.** It is the widest badge in the list and nothing more |
+| 3 | the identity wraps its provenance line | **Closed on `23-stock-movements`**, which is the screen it was observed on; still wrapped on `30-shift-corrections`, which is six columns and out of room |
+| 4 | no gap between cells | **Closed everywhere** |
+
+**Observation 1 is the one to argue with, and the arithmetic says it cannot be closed by arithmetic.**
+Four actions with real labels need about 630 pixels. The staff directory's other four columns need
+about 700 between them, and the row is 1128. Something has to wrap, and what this chunk changed is
+*how much*: the pool now goes to the actions column after the small claims are met, rather than to
+whichever column had the larger constant. Sizing the column to the widest set instead - the obvious
+"intrinsic" answer - was rejected on the picture: four of the five rows have two actions, so the
+column would be 380 pixels of nothing on 80% of the table.
+
+### Safety
+
+**No behaviour changed.** No repository call, no callable payload, no routing condition, no new read,
+no state. `RecordList`'s public API is unchanged except for additions: `RecordTableColumns` is new and
+exposed for tests, `RecordActionSet.measureWidth`, `AppButton.measureWidth`, `AppButton.iconSize` and
+`StatusBadge.measureWidth` are new statics, and `RecordAttribute.flex` keeps its name and its call
+sites while its meaning narrows from an allocation to a ceiling. **No call site changed at all**: the
+twelve migrated screens are untouched, which is the point of the component owning its own form.
+
+`AppButton` gained one line of behaviour-free tidying: the leading icon's `18` is now
+`AppButton.iconSize`, read by the widget that paints it and by the formula that measures it, so the
+two cannot disagree.
+
+### Files changed
+
+```text
+lib/ui/measure.dart          new - one function, how wide a string is when this app draws it
+lib/ui/buttons.dart          AppButton.iconSize, AppButton.measureWidth
+lib/ui/status.dart           StatusBadge.measureWidth
+lib/ui/record_list.dart      RecordTableColumns; RecordActionSet.measureWidth; the table and its
+                             rows lay out against measured widths with a space.12 gutter
+test/ui/record_list_test.dart  +14 (the arithmetic, the gutter, the row height, the invariant)
+test/ui/buttons_test.dart      +3  (measurement against rendering, §9's floor, 200% text)
+test/ui/status_test.dart       +1  (measurement against rendering)
+tool/screenshots/record_list_test.dart  96-record-columns, at all three bands
+design.md                    §4.3 records the rule; it specified no column widths at all
+PLAN.md, HISTORY.md          this
+```
+
+`dart format` was not run, on any file, per the standing prohibition.
+
+### Tests
+
+**All five suites measured, none carried.** Twelve consecutive chunks measuring all five.
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1932 -> 1950  (+18)
+npm --prefix functions test                                                409  unchanged
+npm --prefix rules-tests run test:emulator                                 161  unchanged
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged
+```
+
+**Four of the new tests failed on their first run and every one of them was the test being wrong
+rather than the code.** Three were fixtures copied from real screens: a widget test paints in
+`FlutterTest`, whose every glyph is one font-size wide, so a 58-character provenance line measures 696
+pixels in a test against roughly 300 in Roboto - wide enough that a fixture taken from a real screen
+leaves no slack at all and every one of those tests was asserting the over-subscribed case. The
+fourth asserted a four-action row would be `density.minimumRowHeight`; a row with any action in it is
+80, because a 48-high button carries the focus-ring gutter and the row carries its own padding. The
+claim that matters - that the four-action row is **the same height as its two-action neighbour** -
+is what is asserted now.
+
+`flutter analyze lib test tool` reports **475 issues**, unchanged, all in the legacy island.
+
+### Screenshots
+
+**175 captures wrote 233 images: 5 added, 26 changed, 1 no longer written.**
+
+**Every one of the 26 is `web/` or `web-full/`**, which is the check rather than an aside: the table
+is the `expanded` rendering and nothing else in the component moved, so a phone or tablet picture
+that had changed would have been a defect. The 26 are the twelve migrated screens' table renderings
+plus the four `96-*` component captures.
+
+The measurement used the standing procedure: the changed files were copied aside, `git checkout HEAD
+--`ed, the harness run, the files restored, and the harness run again - two baselines minutes apart on
+the same side of midnight UTC.
+
+**`96-record-columns` is the added case and it is deliberately the hardest shape any of the twelve
+reaches**: six columns, a standing on one record of four, a provenance line long enough to wrap, one
+record with four actions where its neighbours have two, and one column of prose. It is the picture of
+the *limit* rather than of the repair - at that density the table is fully subscribed and the
+allocation degrades to the ceilings, which is what it is supposed to do. The repair is visible on the
+real screens: `web-full/18-manage-catalog`, `web/23-stock-movements`, `web/30-shift-corrections`.
+
+**The one image no longer written is `web-full/13-staff-directory`, and that is the repair rather
+than a loss**: the four-action row lost a run, the route now fits inside a 1440x900 window, and the
+harness writes a full-page image only when something is below the fold.
+
+**Which surfaced a counting error in this file's own screenshot figure.** The harness never deletes,
+so a `*-full` that stops overflowing leaves its last rendering on disk forever. There are **five** such
+files now - `web-full/13-staff-directory` from today, and `web-full/23-stock-movements`,
+`web-full/96-record-list`, `web-full/96-record-list-narrow-loss` and `mobile-full/30-shift-corrections`
+which no run has written for one to two days. So the directory holds 238 images and **a run at `HEAD`
+writes 229, not the 233 this file has been carrying**. Deleting the five was attempted and refused by
+this session's tool permissions; they are named here instead, and the count is corrected in `PLAN.md`.
+
+### Excluded
+
+`checkout_cart_panel.dart` and the whole sale path (step 7). `pill_input.dart` and sign-in (step 9).
+`Pagination`, §5.1 priority 3, on every one of the screens this chunk's diff touches. `inNarrowForm`,
+still with no consumer. The ambient `letterSpacing` the theme merges into every token style, which is
+§2.2's and would move every string in the app. `RecordList` for screen 28's difference cards and
+screen 20's report cards. §3's density, which nothing here needed. Every server file and
+`firestore.rules`, by choice. Deployment.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

@@ -51,6 +51,15 @@
 /// stricter setting on every dimension §9 measures. `PLAN.md` carries it as a
 /// question for the product owner rather than a gap.
 ///
+/// **A table divides its row by measuring what the list holds**, which is
+/// [RecordTableColumns] and is the one part of this component §4.3 does not
+/// specify at all. It shipped in step 6b as three constants - identity 3, status
+/// 2, actions 3, attributes 1 each - measured against a two-column activity log,
+/// and the twelve screens that followed carry two to six columns. Every one of
+/// the four observations `PLAN.md` collected about those constants was the same
+/// defect from a different direction, and the answer is in that class rather
+/// than in a retuned number.
+///
 /// **One slot is this component's own rather than §5.2's**: [RecordItem.details],
 /// somewhere to put a form a record opens. It was deliberately absent in step
 /// 6b, which shipped `RecordList` against a read-only list, and it arrived on
@@ -61,9 +70,12 @@
 /// do something and the two widgets this component replaces both had one.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'buttons.dart';
+import 'measure.dart';
 import 'status.dart';
 import 'tokens.dart';
 
@@ -116,8 +128,13 @@ final class RecordAttribute {
   /// bands.
   final bool inNarrowForm;
 
-  /// This attribute's share of a table row. Ignored by both card forms, which
-  /// stack.
+  /// The most of a table row this attribute may claim, relative to its
+  /// neighbours. Ignored by both card forms, which stack.
+  ///
+  /// **A ceiling rather than an allocation, since 2026-08-15.** The width a
+  /// column actually gets is the smaller of this share and what its own longest
+  /// value needs - see [RecordTableColumns] - so raising it lets a column of
+  /// prose take more room and never forces a column of short values to keep it.
   final int flex;
 }
 
@@ -340,6 +357,47 @@ final class RecordActionSet extends StatelessWidget {
       RecordForm.twoColumnCards => inlineLimit,
       RecordForm.table => actionCount,
     };
+  }
+
+  /// How wide this set wants to be, laid out on one line in [form].
+  ///
+  /// **The number that decides whether §4.3's "all inline" is true or only
+  /// nominally true.** This set is a [Wrap], so a column narrower than this
+  /// keeps every action visible and pays for it in *height*: four actions in a
+  /// third of the width they ask for is three runs, and a run is 48 high, so one
+  /// record makes its row three times as tall as its neighbours. That is what
+  /// [RecordTableColumns] uses this for - the actions column asks for what it
+  /// needs, instead of taking a share somebody chose.
+  ///
+  /// The overflow control is counted as one tap target where there is one. In
+  /// [RecordForm.table] there never is, because that form draws every action
+  /// inline.
+  static double measureWidth(
+    AppTokens tokens,
+    List<RecordAction> actions,
+    RecordForm form, {
+    TextScaler textScaler = TextScaler.noScaling,
+    TextStyle? ambient,
+  }) {
+    if (actions.isEmpty) return 0;
+    final inline = inlineCountFor(form, actions.length);
+    var width = 0.0;
+    var pieces = 0;
+    for (final action in actions.take(inline)) {
+      width += AppButton.measureWidth(
+        tokens,
+        action.label,
+        hasIcon: action.icon != null,
+        textScaler: textScaler,
+        ambient: ambient,
+      );
+      pieces++;
+    }
+    if (inline < actions.length) {
+      width += tokens.density.minimumTapTarget.width;
+      pieces++;
+    }
+    return width + tokens.spacing.s8 * (pieces - 1);
   }
 
   @override
@@ -702,6 +760,323 @@ final class _CardAttribute extends StatelessWidget {
   }
 }
 
+/// How wide each column of one [RecordForm.table] is, measured from what the
+/// list actually holds.
+///
+/// **This replaces three constants, and the reason is that a constant cannot
+/// know how many columns it is sharing a row with.** Until 2026-08-15 the table
+/// gave the identity three shares, the status two, the actions three and every
+/// attribute one, and divided the row by the total. `PLAN.md` carried four
+/// observations against that arithmetic, all four from real screens rather than
+/// from review:
+///
+/// 1. A record with four actions wrapped its column to three runs and made that
+///    row three times taller than its neighbours, while
+/// 2. the status column - two shares whatever the badge says - read as a wide
+///    left margin on a catalog where five of seven rows have no standing, and
+/// 3. the identity, at three shares of a row with four attributes and an actions
+///    column, kept about a quarter of 1200 and wrapped its provenance line on
+///    every row, while
+/// 4. no two cells had any gap between them at all, so at six columns a value
+///    ended where the next began.
+///
+/// Every one of those is the same defect: **a share is a guess about content,
+/// and the content is right there to be measured.** So each column states what
+/// it needs - the widest badge, the widest action set, the longest value, the
+/// header - and the row is divided by that instead.
+///
+/// **The old shares survive as ceilings rather than as answers**, which is what
+/// makes this safe to apply to twelve screens at once. A column may claim up to
+/// its share, never more, so no column can starve its neighbours by carrying one
+/// long value; what changes is that a column claiming *less* than its share
+/// releases the rest, and the release is offered to the columns that asked for
+/// more than theirs. A table where every column wants at least its share lays
+/// out exactly as it did before this class existed.
+@immutable
+final class RecordTableColumns {
+  const RecordTableColumns._({
+    required this.statusWidth,
+    required this.identityWidth,
+    required this.attributeWidths,
+    required this.actionsWidth,
+    required this.gap,
+  });
+
+  /// Null where no record in the list has a standing, which is the same
+  /// condition under which the column is not drawn at all.
+  final double? statusWidth;
+
+  final double identityWidth;
+
+  /// One per column of [RecordList.columnsOf], in that order.
+  final List<double> attributeWidths;
+
+  /// Null where no record in the list has an action.
+  final double? actionsWidth;
+
+  /// §2.3's `space.12`, between every pair of adjacent cells.
+  ///
+  /// **A table with no gutter is not a dense table, it is an unreadable one.**
+  /// At six columns `web/30-shift-corrections` ran `A late sale arrived
+  /// after|Corrected from expectation` together across the `Reason` / `Evidence`
+  /// boundary, and `web/23-stock-movements` did the same in its header row. It
+  /// costs the row five gaps at six columns, which is 60 of 1200, and it is the
+  /// cheapest of the four repairs by a distance.
+  final double gap;
+
+  /// The header the status column draws, and the string its own width has to
+  /// allow for.
+  static const String statusHeader = 'Status';
+
+  /// The identity's ceiling: three times an attribute's, because it carries a
+  /// title, a subtitle and a provenance line where an attribute carries one
+  /// value.
+  ///
+  /// **It is also where the table's leftover width goes.** Something has to
+  /// absorb the difference when every column is satisfied, and the identity is
+  /// §5.2's "never truncated below two lines" row - the one column where more
+  /// room is always worth having and where a person's eye lands first.
+  static const int identityShare = 3;
+
+  /// The actions column's ceiling. An action is a 48-high pill with a verb
+  /// phrase on it, and two side by side is the ordinary case.
+  static const int actionsShare = 3;
+
+  /// The status column's ceiling. A badge is an icon, a gap and a word inside a
+  /// container, and §2.1's statuses attract phrases - "Awaiting verification" -
+  /// rather than words.
+  ///
+  /// **It is a ceiling that is almost never reached**, which is the point of
+  /// observation 2: the ceiling was right about the widest badge and wrong about
+  /// every list whose badges are shorter than that.
+  static const int statusShare = 2;
+
+  /// Divides [available] - the row's width inside its own padding - between the
+  /// columns this list needs.
+  ///
+  /// Exposed so a caller's test can assert the arithmetic without reading
+  /// pixels off a rendering, the same reason [RecordList.columnsOf] and
+  /// [RecordList.formFor] are.
+  static RecordTableColumns resolve({
+    required AppTokens tokens,
+    required String identityLabel,
+    required List<RecordAttribute> columns,
+    required List<RecordItem> items,
+    required double available,
+    TextScaler textScaler = TextScaler.noScaling,
+    TextStyle? ambient,
+  }) {
+    final hasStatus = items.any((item) => item.status != null);
+    final hasActions = items.any((item) => item.actions.isNotEmpty);
+    final headerStyle = tokens.typography.labelMedium;
+    final body = tokens.density.body(tokens.typography);
+    final demands = <double>[];
+    final shares = <int>[];
+
+    double text(String value, TextStyle style) => measureTextWidth(
+      value,
+      style,
+      textScaler: textScaler,
+      ambient: ambient,
+    );
+
+    if (hasStatus) {
+      var demand = text(statusHeader, headerStyle);
+      for (final item in items) {
+        if (item.status case final standing?) {
+          demand = math.max(
+            demand,
+            StatusBadge.measureWidth(
+              tokens,
+              standing.label,
+              textScaler: textScaler,
+              ambient: ambient,
+            ),
+          );
+        }
+      }
+      demands.add(demand);
+      shares.add(statusShare);
+    }
+
+    final identityIndex = demands.length;
+    var identity = text(identityLabel, headerStyle);
+    for (final item in items) {
+      // **Halved, and it is the one place a demand is not the string's own
+      // width.** §5.2 gives the identity two lines before it ellipsises, so a
+      // title asking for the width it would need on one line would ask for
+      // twice what it is entitled to and take it from a column with no second
+      // line to fall back on. The subtitle and the provenance line are
+      // `maxLines: 1` and ask for all of theirs.
+      identity = math.max(
+        identity,
+        text(item.title, tokens.typography.titleMedium) / 2,
+      );
+      if (item.subtitle case final line?) {
+        identity = math.max(identity, text(line, body));
+      }
+      if (item.provenance case final line?) {
+        identity = math.max(
+          identity,
+          text(line, tokens.typography.caption),
+        );
+      }
+    }
+    demands.add(identity);
+    shares.add(identityShare);
+
+    for (final column in columns) {
+      var demand = text(column.label, headerStyle);
+      for (final item in items) {
+        for (final attribute in item.attributes) {
+          if (attribute.label != column.label) continue;
+          demand = math.max(demand, text(attribute.value, body));
+        }
+      }
+      demands.add(demand);
+      shares.add(column.flex);
+    }
+
+    if (hasActions) {
+      var demand = 0.0;
+      for (final item in items) {
+        demand = math.max(
+          demand,
+          RecordActionSet.measureWidth(
+            tokens,
+            item.actions,
+            RecordForm.table,
+            textScaler: textScaler,
+            ambient: ambient,
+          ),
+        );
+      }
+      demands.add(demand);
+      shares.add(actionsShare);
+    }
+
+    final gap = tokens.spacing.s12;
+    final cells = available.isFinite
+        ? math.max(0.0, available - gap * (demands.length - 1))
+        : double.infinity;
+    final widths = _allocate(
+      demands: demands,
+      shares: shares,
+      cells: cells,
+      identityIndex: identityIndex,
+    );
+    return RecordTableColumns._(
+      statusWidth: hasStatus ? widths.first : null,
+      identityWidth: widths[identityIndex],
+      attributeWidths: widths.sublist(
+        identityIndex + 1,
+        identityIndex + 1 + columns.length,
+      ),
+      actionsWidth: hasActions ? widths.last : null,
+      gap: gap,
+    );
+  }
+
+  /// Every column takes the smaller of what it needs and what it may claim;
+  /// what nobody claimed fills the shallowest remaining need first.
+  ///
+  /// **It cannot overflow.** Each width starts capped at a share of [cells] and
+  /// the shares sum to [cells], so the first pass always fits; the two passes
+  /// after it only ever hand out width that the first pass left over. That is
+  /// the property that makes this safe on a 1024 window with six columns, where
+  /// a demand-first allocation would have needed a cap somebody chose.
+  ///
+  /// **The pool is levelled rather than shared out in proportion, and that is a
+  /// decision worth arguing with.** Proportion is the obvious rule and it is the
+  /// wrong one here: a column that asked for 400 more and a column that asked
+  /// for 6 more are not two claims of the same kind, because **satisfying the
+  /// small one removes a wrapped line and part-satisfying the large one removes
+  /// nothing**. A six-column ledger beside a four-action record is exactly that
+  /// shape - the actions can never have what they want, and under proportion
+  /// their unreachable claim takes the width that would have stopped `Source`
+  /// wrapping `sale-000482` after nine characters. So the pool rises like water:
+  /// every unmet column takes the same amount until it is satisfied and drops
+  /// out, and the deepest need is served last with whatever is left.
+  static List<double> _allocate({
+    required List<double> demands,
+    required List<int> shares,
+    required double cells,
+    required int identityIndex,
+  }) {
+    // An unbounded row - a table laid out inside something that measures its
+    // intrinsic width - has nothing to divide, so every column takes what it
+    // asked for.
+    if (!cells.isFinite) return List<double>.of(demands);
+    final totalShare = shares.fold<int>(0, (sum, share) => sum + share);
+    final widths = <double>[];
+    var taken = 0.0;
+    for (var index = 0; index < demands.length; index++) {
+      final ceiling = totalShare == 0
+          ? cells
+          : cells * shares[index] / totalShare;
+      final width = math.min(demands[index], ceiling);
+      widths.add(width);
+      taken += width;
+    }
+    var pool = cells - taken;
+
+    final wanting = <int>[
+      for (var index = 0; index < widths.length; index++)
+        if (demands[index] - widths[index] > 0) index,
+    ]..sort((a, b) {
+      final left = demands[a] - widths[a];
+      final right = demands[b] - widths[b];
+      return left.compareTo(right);
+    });
+    for (var served = 0; pool > 0 && served < wanting.length; served++) {
+      final level = pool / (wanting.length - served);
+      final index = wanting[served];
+      final wanted = demands[index] - widths[index];
+      final given = math.min(wanted, level);
+      widths[index] += given;
+      pool -= given;
+    }
+
+    if (pool > 0) widths[identityIndex] += pool;
+    return widths;
+  }
+
+  /// One row's cells, each in its column's width, with [gap] between them.
+  ///
+  /// **The header and every row go through this**, which is what makes them line
+  /// up: a table whose header computed its own widths would be a table with two
+  /// answers to the same question.
+  List<Widget> lay({
+    Widget? status,
+    required Widget identity,
+    required List<Widget> attributes,
+    Widget? actions,
+  }) {
+    assert(
+      attributes.length == attributeWidths.length,
+      'A row was laid out with ${attributes.length} attribute cells against '
+      '${attributeWidths.length} columns.',
+    );
+    final cells = <Widget>[];
+    void add(double width, Widget child) {
+      if (cells.isNotEmpty) cells.add(SizedBox(width: gap));
+      cells.add(SizedBox(width: width, child: child));
+    }
+
+    if (statusWidth case final width?) {
+      add(width, status ?? const SizedBox.shrink());
+    }
+    add(identityWidth, identity);
+    for (final (index, width) in attributeWidths.indexed) {
+      add(width, attributes[index]);
+    }
+    if (actionsWidth case final width?) {
+      add(width, actions ?? const SizedBox.shrink());
+    }
+    return cells;
+  }
+}
+
 /// §4.3's `expanded` cell: a data table.
 ///
 /// **The header is sentence case in `label.md`.** §2.2 gives that role "chips,
@@ -720,33 +1095,6 @@ final class _RecordTable extends StatelessWidget {
   final List<RecordAttribute> columns;
   final List<RecordItem> items;
 
-  /// The identity column carries a title, a subtitle and a provenance line, so
-  /// it is given three times an attribute's share rather than an equal one.
-  static const int _identityFlex = 3;
-
-  /// The actions column takes the same share as the identity, and the reason is
-  /// arithmetic rather than symmetry.
-  ///
-  /// An action is a 48-high pill with a verb phrase on it - §5.2's own
-  /// requirement - and two of them side by side is the ordinary case. At any
-  /// smaller share the set wraps to a second line, which does not shorten the
-  /// column: it makes **every row in the table** as tall as its actions instead
-  /// of as tall as its identity. Measured at 1200, which is §4.2's maximum for
-  /// this surface and therefore the widest a table ever gets.
-  static const int _actionsFlex = 3;
-
-  /// The status column takes twice an attribute's share.
-  ///
-  /// A badge is an icon, a gap and a word inside a bordered container, so it is
-  /// wider than the value of an ordinary attribute at the same word length -
-  /// and the words §2.1's statuses attract are phrases: "Out of stock",
-  /// "Awaiting verification". At an equal share those ellipsise, and a status
-  /// abbreviated to "Out of st…" fails the one thing §5.2 says a badge is for.
-  static const int _statusFlex = 2;
-
-  bool get _hasStatus => items.any((item) => item.status != null);
-  bool get _hasActions => items.any((item) => item.actions.isNotEmpty);
-
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -757,51 +1105,65 @@ final class _RecordTable extends StatelessWidget {
       horizontal: tokens.spacing.s16,
       vertical: tokens.spacing.s12,
     );
+    final textScaler = MediaQuery.textScalerOf(context);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: tokens.colors.surface.raised,
         border: Border.all(color: tokens.colors.surface.borderSubtle),
         borderRadius: BorderRadius.circular(tokens.radius.md),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Padding(
-            padding: inset,
-            child: Row(
-              children: <Widget>[
-                if (_hasStatus)
-                  Expanded(
-                    flex: _statusFlex,
-                    child: Text('Status', style: headerStyle),
+      // **The table's own box, not the screen's**, which is the distinction
+      // `RecordList.formFor` is careful about in the other direction. A band is
+      // resolved from the screen width, because §4.1 describes the surface a
+      // person is looking at; a *column* is divided out of the width the table
+      // was handed, because that is the width the columns have to fit in.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final widths = RecordTableColumns.resolve(
+            tokens: tokens,
+            identityLabel: identityLabel,
+            columns: columns,
+            items: items,
+            available: constraints.hasBoundedWidth
+                ? constraints.maxWidth - inset.horizontal
+                : double.infinity,
+            textScaler: textScaler,
+            // The style every `Text` in this table will be merged onto. See
+            // `measureTextWidth`: without it the measurement is short by
+            // Material's own letter spacing, which is a quarter of a pixel per
+            // character and enough to wrap the set of actions it just made room
+            // for.
+            ambient: DefaultTextStyle.of(context).style,
+          );
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Padding(
+                padding: inset,
+                child: Row(
+                  children: widths.lay(
+                    status: Text(
+                      RecordTableColumns.statusHeader,
+                      style: headerStyle,
+                    ),
+                    identity: Text(identityLabel, style: headerStyle),
+                    attributes: <Widget>[
+                      for (final column in columns)
+                        Text(column.label, style: headerStyle),
+                    ],
                   ),
-                Expanded(
-                  flex: _identityFlex,
-                  child: Text(identityLabel, style: headerStyle),
                 ),
-                for (final column in columns)
-                  Expanded(
-                    flex: column.flex,
-                    child: Text(column.label, style: headerStyle),
-                  ),
-                if (_hasActions)
-                  const Expanded(
-                    flex: _RecordTable._actionsFlex,
-                    child: SizedBox.shrink(),
-                  ),
-              ],
-            ),
-          ),
-          for (final item in items)
-            _RecordTableRow(
-              item: item,
-              columns: columns,
-              identityFlex: _identityFlex,
-              hasStatus: _hasStatus,
-              hasActions: _hasActions,
-              inset: inset,
-            ),
-        ],
+              ),
+              for (final item in items)
+                _RecordTableRow(
+                  item: item,
+                  columns: columns,
+                  widths: widths,
+                  inset: inset,
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -811,17 +1173,17 @@ final class _RecordTableRow extends StatelessWidget {
   const _RecordTableRow({
     required this.item,
     required this.columns,
-    required this.identityFlex,
-    required this.hasStatus,
-    required this.hasActions,
+    required this.widths,
     required this.inset,
   });
 
   final RecordItem item;
   final List<RecordAttribute> columns;
-  final int identityFlex;
-  final bool hasStatus;
-  final bool hasActions;
+
+  /// Resolved once for the whole table and handed to every row, which is what
+  /// makes the columns line up.
+  final RecordTableColumns widths;
+
   final EdgeInsets inset;
 
   @override
@@ -841,61 +1203,53 @@ final class _RecordTableRow extends StatelessWidget {
     final body = tokens.density.body(tokens.typography);
     final cellRow = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
-      children: <Widget>[
-        if (hasStatus)
-          Expanded(
-            flex: _RecordTable._statusFlex,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: item.status?._badge() ?? const SizedBox.shrink(),
+      children: widths.lay(
+        status: Align(
+          alignment: Alignment.centerLeft,
+          child: item.status?._badge() ?? const SizedBox.shrink(),
+        ),
+        identity: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              item.title,
+              key: item.titleKey,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: tokens.typography.titleMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
             ),
-          ),
-        Expanded(
-          flex: identityFlex,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
+            if (item.subtitle case final line?)
               Text(
-                item.title,
-                key: item.titleKey,
-                maxLines: 2,
+                line,
+                key: item.subtitleKey,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: tokens.typography.titleMedium.copyWith(
-                  color: tokens.colors.text.primary,
+                style: body.copyWith(color: tokens.colors.text.secondary),
+              ),
+            // Provenance rides under the identity rather than taking a
+            // column of its own: it is the same sentence on every row, and
+            // a column of near-identical timestamps is width spent on
+            // nothing.
+            if (item.provenance case final line?)
+              Text(
+                line,
+                key: item.provenanceKey,
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.tertiary,
                 ),
               ),
-              if (item.subtitle case final line?)
-                Text(
-                  line,
-                  key: item.subtitleKey,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: body.copyWith(color: tokens.colors.text.secondary),
-                ),
-              // Provenance rides under the identity rather than taking a
-              // column of its own: it is the same sentence on every row, and
-              // a column of near-identical timestamps is width spent on
-              // nothing.
-              if (item.provenance case final line?)
-                Text(
-                  line,
-                  key: item.provenanceKey,
-                  style: tokens.typography.caption.copyWith(
-                    color: tokens.colors.text.tertiary,
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
-        for (final column in columns)
-          Expanded(
-            flex: column.flex,
+        attributes: <Widget>[
+          for (final column in columns)
             // A record silent about this column gets an empty cell rather
             // than a dash: a dash is a value, and "no status change was
             // recorded" is not the same claim as "the status changed to
             // nothing".
-            child: switch (cells[column.label]) {
+            switch (cells[column.label]) {
               final attribute? => Text(
                 attribute.value,
                 key: attribute.valueKey,
@@ -903,17 +1257,13 @@ final class _RecordTableRow extends StatelessWidget {
               ),
               null => const SizedBox.shrink(),
             },
-          ),
-        if (hasActions)
-          Expanded(
-            flex: _RecordTable._actionsFlex,
-            child: RecordActionSet(
-              actions: item.actions,
-              form: RecordForm.table,
-              alignment: WrapAlignment.end,
-            ),
-          ),
-      ],
+        ],
+        actions: RecordActionSet(
+          actions: item.actions,
+          form: RecordForm.table,
+          alignment: WrapAlignment.end,
+        ),
+      ),
     );
     return Container(
       key: item.recordKey ?? ValueKey<String>('record-${item.id}'),
