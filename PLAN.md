@@ -5240,6 +5240,32 @@ by running the grep rather than by trusting this paragraph**, which is the count
 has now been burned by five times:
 `grep -n "TextField\|ButtonStyleButton\|ElevatedButton\|TextButton\|OutlinedButton" lib/login_screen.dart lib/widgets/pill_*.dart`.
 
+**A sixth defect, reported by the product owner on 2026-08-15 and not in `DESIGN-AUDIT.md` §4.4:
+every login field draws two borders, and it is a regression rather than the original styling.**
+`PillInput` draws the pill itself — a 32-radius `mutedGreen` container with a 2px accent border only
+when focused — and sets `border: InputBorder.none` on the `TextField` inside it
+(`lib/widgets/pill_input.dart:117`). **That is no longer sufficient**, and the reason is a Flutter
+resolution order rather than a mistake in the widget: `InputDecorator` prefers `enabledBorder` and
+`focusedBorder` over `border`, both are null on the widget, and both are therefore taken from the
+theme. Commit **`1b2b13b`** (2026-08-10) gave `spiritTheme` an `inputDecorationTheme` carrying
+`enabledBorder`, `focusedBorder`, `errorBorder` **and `filled: true`** (`lib/theme.dart:273`), so
+since that day every login field has painted a 14-radius filled outline **inside** its own pill.
+`git log -S enabledBorder -- lib/theme.dart` returns that one commit, and `pill_input.dart` predates
+it by months. It is visible in `mobile/01-sign-in.png` and has been in every capture since.
+
+**The repair is already written, one component along.** `AppTextField` strips all six border slots and
+sets `filled: false`, with a comment naming this exact trap — *"A `TextField` with a decoration inside
+a well is two wells"* (`lib/ui/fields.dart:268`). `PillInput` predates that lesson. **Do not fix it at
+the theme**: `inputDecorationTheme` is what the till's two unmigrated Material fields correctly draw
+their single outline from, so changing it there is a §2.3 decision with a blast radius rather than a
+repair.
+
+**It was left for step 9 deliberately, by the product owner, on the day it was reported** — step 9
+rewrites this screen and may delete `PillInput` outright, so a six-line repair to a widget about to be
+replaced buys one screenshot. **The thing step 9 must not do is inherit the cause without the
+lesson**: whatever replaces `PillInput` has to strip all six slots, or it will draw the same two
+borders in a new shape.
+
 **It is the chunk that makes two files deletable.** `test/support/buttons.dart` and
 `test/support/fields.dart` exist only because `lib/` holds more than one button and field system;
 step 7 takes the last `ButtonStyleButton` and two of the last three `TextField`s, step 9 takes the
@@ -5713,6 +5739,14 @@ product owner asked on 2026-08-12 for the redesign to be run through to the end 
 without stopping, and named 5b and 7 as the two that stay out. App Check is still **the only queued
 item that would move a red row**, and it is still at the head of the preference order below. It
 should be taken the moment the redesign's visual steps are done.
+
+**One defect is queued against step 9 rather than fixed, and the choice was the product owner's.**
+Every login field has drawn **two borders** since commit `1b2b13b` on 2026-08-10 — the pill's own and
+the theme's, because `InputDecorator` prefers `enabledBorder` over the `border: InputBorder.none` the
+widget sets. It is six lines to repair and it was deliberately left to the step that rewrites the
+screen; the full mechanism, the evidence, and the reason not to fix it at the theme are under the
+queued chunk above. **It is the only known defect in this repository that a session was told to leave
+in place**, which is why it is named twice.
 
 **A question for the product owner, from step 3 rather than step 4.** §5.2 specifies a field's
 rest, focus and error treatments and **says nothing about hover**. `AppTextField` therefore has no

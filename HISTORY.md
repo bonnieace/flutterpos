@@ -23078,9 +23078,29 @@ which no run has written for one to two days. So the directory holds 238 images 
 writes 229, not the 233 this file has been carrying**. Deleting the five was attempted and refused by
 this session's tool permissions; they are named here instead, and the count is corrected in `PLAN.md`.
 
+### Reported during this session, and left in place on purpose
+
+**The product owner pointed out that the login fields draw two borders and the original app's did
+not.** Both halves are true and it is a regression, not inherited styling. `PillInput` draws the pill
+and sets `border: InputBorder.none` on the `TextField` inside it; `InputDecorator` prefers
+`enabledBorder` and `focusedBorder` over `border`, both are null on the widget, and commit `1b2b13b`
+(2026-08-10) gave the theme all three plus `filled: true`. So the theme paints a 14-radius filled
+outline inside the pill, and has since that commit. `git log -S enabledBorder -- lib/theme.dart`
+returns that one commit; `mobile/01-sign-in.png` shows both outlines.
+
+**It is one file.** `AppTextField` already strips all six border slots with a comment naming this
+trap — *"A `TextField` with a decoration inside a well is two wells"* — and the till's two unmigrated
+fields sit in no well, so they take the theme's single outline correctly.
+
+**The product owner chose to leave it to step 9**, which rewrites sign-in and may delete `PillInput`
+outright. Recorded here because a defect that is seen, understood, and deliberately not fixed looks
+identical in a log to one nobody noticed, and only one of those is a decision. Fixing it at the theme
+was offered and is the wrong repair: `inputDecorationTheme` is what the till's fields correctly read.
+
 ### Excluded
 
-`checkout_cart_panel.dart` and the whole sale path (step 7). `pill_input.dart` and sign-in (step 9).
+`checkout_cart_panel.dart` and the whole sale path (step 7). `pill_input.dart` and sign-in (step 9) —
+**including the double border above, deliberately**.
 `Pagination`, §5.1 priority 3, on every one of the screens this chunk's diff touches. `inNarrowForm`,
 still with no consumer. The ambient `letterSpacing` the theme merges into every token style, which is
 §2.2's and would move every string in the app. `RecordList` for screen 28's difference cards and
