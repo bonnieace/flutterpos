@@ -194,6 +194,17 @@ final class _LedgerContents extends StatelessWidget {
     key: const ValueKey('product-ledger'),
     padding: const EdgeInsets.all(20),
     children: [
+      // **The one of the fourteen §7 sites that stays, and it is not a
+      // duplicate.** The `AppScaffold` title is `Product stock ledger` and this
+      // is the product's name, so the two say different things — it is a
+      // `PageHeader.subtitle` candidate rather than a deletion. It cannot move
+      // there: the subtitle is built by `TenantProductLedgerScreen`, which is
+      // constructed with a `productId` and nothing else, and the name only
+      // exists after the guarded load inside this panel. Reaching it means
+      // either an optional decoded product on the screen — which its callers,
+      // the movement feed included, do not all hold — or hoisting the load out
+      // of the guard. Both are structure rather than a title fix. Recorded in
+      // `PLAN.md`.
       Text(
         ledger.product?.name ?? 'Deleted product',
         key: const ValueKey('product-ledger-title'),

@@ -54,6 +54,7 @@ final class TenantSaleReturnsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Returns',
+    subtitle: request.receiptNumber,
     contentWidth: AppContentWidth.records,
     body: TenantSaleReturnsPanel(
       reader: reader,
@@ -468,10 +469,10 @@ final class _SaleReturnsContents extends StatelessWidget {
     key: const ValueKey('sale-returns'),
     padding: const EdgeInsets.all(20),
     children: [
-      Text(
-        'Returns against ${request.receiptNumber}',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
+      // §7's "Title appears once". This named *which* sale rather than
+      // repeating the title, so the receipt number moved to
+      // `PageHeader.subtitle`; the header reads `Returns` over the receipt
+      // where the page used to say `Returns` and then `Returns against …`.
       const SizedBox(height: 4),
       const Text(
         'Stock is restored only when a return is verified. A pending return '

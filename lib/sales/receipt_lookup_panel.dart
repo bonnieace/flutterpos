@@ -127,11 +127,8 @@ final class _TenantReceiptLookupPanelState
     key: const ValueKey('receipt-lookup'),
     padding: const EdgeInsets.all(20),
     children: [
-      Text(
-        'Find a receipt',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
-      const SizedBox(height: 4),
+      // §7's "Title appears once": the `AppScaffold` above carries this exact
+      // string in its `PageHeader`, and this drew it again directly under it.
       const Text(
         'Enter the receipt printed for the customer to open the sale it '
         'describes.',

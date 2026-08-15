@@ -9,6 +9,7 @@ import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -247,7 +248,15 @@ void main() {
     await tester.pump();
 
     expect(find.text('Returns'), findsOne);
-    expect(find.text('Returns against ${_receipt(1)}'), findsOne);
+    // §7's "Title appears once": the receipt moved from a second heading
+    // inside the page into the `PageHeader` that already names the route.
+    expect(
+      find.descendant(
+        of: find.byType(PageHeader),
+        matching: find.text(_receipt(1)),
+      ),
+      findsOne,
+    );
   });
 
   testWidgets('without a writer the route stays read-only', (tester) async {

@@ -57,6 +57,9 @@ const Map<String, String> captions = <String, String>{
   '13b-staff-directory-editing':
       'The same directory with one member’s form open, which is the state '
           '`RecordItem.details` exists for.',
+  '13c-staff-directory-read-only':
+      'The same directory as a manager, who may read it and change nothing. '
+          'The only session its standing is true of.',
   '14-new-sale':
       'The till. On a desktop the cart is a second pane; on a phone it is a '
       'sheet reached from a badge.',

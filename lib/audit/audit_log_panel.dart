@@ -209,10 +209,8 @@ final class _AuditLogContents extends StatelessWidget {
     key: const ValueKey('audit-log'),
     padding: const EdgeInsets.all(20),
     children: [
-      Text(
-        'Business activity log',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
+      // §7's "Title appears once": the `AppScaffold` above says `Activity log`,
+      // and this said the same thing at greater length directly under it.
       const SizedBox(height: 4),
       Text(
         key: const ValueKey('audit-log-scope'),

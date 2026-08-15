@@ -21,6 +21,17 @@ sealed class TenantSaleHistoryRequest {
 
   String get title;
 
+  /// Which slice of [title] this page is showing, where it is showing one.
+  ///
+  /// **`PageHeader.subtitle`'s first reader, and it writes no new copy.** The
+  /// slot has existed since step 5a and was populated at no call site, because
+  /// "rewriting a title into a title-and-subtitle pair is a copy decision".
+  /// This is not that: the shift branch already drew `Shift 2026-08-14` as a
+  /// second heading inside the page, which is §7's "Title appears once" defect,
+  /// and the value moves into the slot built for it rather than a new string
+  /// being invented. The title says what the page is; this says which one.
+  String? get subtitle => null;
+
   /// A stable identity for the guard key, so a new request restarts the load.
   String get key;
 }
@@ -44,6 +55,9 @@ final class TenantShiftSaleHistoryRequest extends TenantSaleHistoryRequest {
 
   @override
   String get title => 'Shift sales';
+
+  @override
+  String get subtitle => shift.businessDate;
 
   @override
   String get key => 'shift:${shift.shiftId}';
@@ -79,6 +93,7 @@ final class TenantSaleHistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: request.title,
+    subtitle: request.subtitle,
     contentWidth: AppContentWidth.records,
     body: TenantSaleHistoryPanel(
       reader: reader,
@@ -239,12 +254,13 @@ final class _SaleHistoryContents extends StatelessWidget {
     key: const ValueKey('sale-history'),
     padding: const EdgeInsets.all(20),
     children: [
+      // **§7's "Title appears once".** Both branches drew this route's name a
+      // second time under the `PageHeader` that carries it — `Recent sales`
+      // beneath `My recent sales`, and `Shift 2026-08-14` beneath `Shift sales`.
+      // The first was a duplicate and is gone; the second named *which* shift,
+      // which is what `PageHeader.subtitle` is for, and the screen supplies it
+      // from the same request this panel reads.
       if (request case final TenantShiftSaleHistoryRequest shift) ...[
-        Text(
-          'Shift ${shift.shift.businessDate}',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 8),
         Text(
           key: const ValueKey('sale-history-recorded'),
           _recordedLabel(shift),
@@ -255,11 +271,7 @@ final class _SaleHistoryContents extends StatelessWidget {
           'through the sales to inspect them; this screen calculates no '
           'replacement total.',
         ),
-      ] else
-        Text(
-          'Recent sales',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
+      ],
       const SizedBox(height: 16),
       // §4.3's responsive contract.
       RecordList(

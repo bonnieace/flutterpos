@@ -472,7 +472,10 @@ final class _ProductStockContents extends StatelessWidget {
     key: const ValueKey('product-stock'),
     padding: const EdgeInsets.all(20),
     children: [
-      Text(product.name, style: Theme.of(context).textTheme.headlineSmall),
+      // §7's "Title appears once", and this was the example `design.md` names
+      // in its own words: `web/21-product-stock` read *White bread loaf* in
+      // `display` and *White bread loaf* again directly under it. The
+      // `AppScaffold` title is this same `product.name`.
       const SizedBox(height: 4),
       Text('SKU ${product.sku}'),
       const SizedBox(height: 16),

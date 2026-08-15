@@ -39,6 +39,7 @@ final class TenantReconciliationStatusScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Reconciliation status',
+    subtitle: businessDate,
     contentWidth: AppContentWidth.records,
     body: TenantReconciliationStatusPanel(
       reader: reader,
@@ -377,16 +378,13 @@ final class _ReconciliationContents extends StatelessWidget {
       key: const ValueKey('reconciliation-status'),
       padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
-        // **§7's "Title appears once" is broken here and this is not the chunk
-        // that fixes it.** One of the thirteen panels `PLAN.md` queues as its
-        // own chunk; like the run page, this one names *which* day rather than
-        // repeating the `AppScaffold` title, so it is a `PageHeader.subtitle`
-        // question rather than a deletion.
-        Text(
-          'Reconciliation for ${day.businessDate}',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        SizedBox(height: tokens.spacing.s4),
+        // §7's "Title appears once". This one named *which* day rather than
+        // repeating the title, so the date moved to `PageHeader.subtitle` — the
+        // slot step 5a built for exactly "which slice of something this is" and
+        // left empty. The screen supplies it from the business date it is
+        // already constructed with, so nothing new is read and no new copy is
+        // written: the header reads `Reconciliation status` over `2026-08-15`
+        // where the page used to say both at once, twice.
         const Disclosure(
           key: ValueKey('reconciliation-status-scope-disclosure'),
           summary: 'What this page can and cannot do',

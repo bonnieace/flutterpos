@@ -1,10 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -230,7 +231,8 @@ void main() {
     expect(reader.queries.single.equalityFilters, <String, Object?>{
       'shiftId': 'shift-1',
     });
-    expect(find.text('Corrections to shift shift-1'), findsOne);
+    // The scope claim moved to `PageHeader.subtitle`, which this panel-level
+    // pump does not build; the screen-level test below asserts it.
     expect(find.byKey(const ValueKey('shift-amendment-amend_abc')), findsOne);
 
     // Widening the page starts the list again rather than resuming from a cursor
@@ -240,6 +242,65 @@ void main() {
     await tester.pump();
     expect(reader.queries.last.equalityFilters, isEmpty);
     expect(reader.queries.last.startAfterDocumentId, isNull);
+  });
+
+  testWidgets('the route names which shift it is scoped to, in the header', (
+    tester,
+  ) async {
+    // **§7's "Title appears once".** This route drew `Corrections to shift
+    // shift-1` as a heading inside a page whose `AppScaffold` was already
+    // titled `Shift corrections`. The claim survives as the header's subtitle,
+    // which is the slot step 5a built for "which slice of something this is"
+    // and left empty at every call site until now.
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_amendment('amend_abc')]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TenantSessionScope(
+          controller: _controller(),
+          child: TenantShiftAmendmentScreen(reader: reader, shiftId: 'shift-1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(PageHeader),
+        matching: find.text('Shift corrections'),
+      ),
+      findsOne,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(PageHeader),
+        matching: find.text('shift-1'),
+      ),
+      findsOne,
+    );
+  });
+
+  testWidgets('the unscoped trail carries no subtitle at all', (tester) async {
+    // A page showing the whole business is not a slice of anything, so the slot
+    // stays empty rather than being filled with a word meaning "everything".
+    final reader = _Reader()
+      ..respond(<TenantQueryDocumentSnapshot>[_amendment('amend_abc')]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TenantSessionScope(
+          controller: _controller(),
+          child: TenantShiftAmendmentScreen(reader: reader),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<PageHeader>(find.byType(PageHeader)).subtitle,
+      isNull,
+    );
   });
 
   testWidgets('an empty scoped trail says it is about one shift', (

@@ -292,6 +292,48 @@ void main() {
       expect(find.text('Owner Person'), findsOneWidget);
       expect(find.byKey(const ValueKey('edit-staff-owner-a')), findsNothing);
       expect(find.byTooltip('More actions'), findsNothing);
+      // **And the page says so, which it did not before.** The heading read
+      // `Read-only staff directory` for every role, including the owner it then
+      // offered `Invite staff` to. A page's standing is §2.1's, and a manager
+      // who can change nothing here is the case it is true of.
+      final notice = tester.widget<Callout>(
+        find.byKey(const ValueKey('staff-directory-read-only')),
+      );
+      expect(notice.status, AppStatus.info);
+      expect(notice.title, 'Read-only staff directory');
+    });
+
+    testWidgets('a session that can change something is told nothing', (
+      tester,
+    ) async {
+      // The other half, and the defect this replaced: an owner was told the
+      // directory was read-only and then offered an invitation form two lines
+      // under it. A standing that is true of every session is not a standing.
+      final controller = TenantSessionController()
+        ..open(
+          uid: 'owner-a',
+          membership: _membership('tenant-a', role: TenantRole.owner),
+        );
+      final reader = _StaffReader(
+        queryHandler: (_) async => [
+          _staffSnapshot(
+            'tenant-a',
+            'owner-a',
+            role: TenantRole.owner,
+            name: 'Owner Person',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _staffApp(controller: controller, reader: reader),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('staff-directory-read-only')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('invite-staff-open')), findsOne);
     });
 
     testWidgets('a cashier is denied without starting any reads', (

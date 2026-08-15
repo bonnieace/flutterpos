@@ -1,10 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -23,7 +24,8 @@ void main() {
 
     expect(reader.documentPaths, <String>[_jobPath]);
     expect(reader.queries, isEmpty);
-    expect(_text(tester, 'reconciliation-run-title'), 'Run rj_abc');
+    // The job ID moved into `PageHeader.subtitle`; this pump builds the panel
+    // alone, so the screen-level test below is where that is asserted.
     // The state left the title line for a `StatusBadge`; what is left of the
     // line is what the record is about.
     expect(
@@ -43,6 +45,34 @@ void main() {
       _text(tester, 'reconciliation-status-run-instants-rj_abc'),
       'Completed 2026-08-01 02:31 UTC • Last updated 2026-08-01 02:31 UTC',
     );
+  });
+
+  testWidgets('the route names which run it is showing, in the header', (
+    tester,
+  ) async {
+    // **§7's "Title appears once".** The page drew `Run rj_abc` as a heading
+    // under an `AppScaffold` already titled `Reconciliation run`. The ID is the
+    // header's subtitle now, and the word `Run` went with the heading: repeating
+    // the noun directly above its own value is the same duplication one line
+    // smaller.
+    final reader = _Reader(
+      documents: <String, Map<String, Object?>>{_jobPath: _job()},
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TenantSessionScope(
+          controller: _controller(),
+          child: TenantReconciliationRunScreen(reader: reader, jobId: 'rj_abc'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final header = tester.widget<PageHeader>(find.byType(PageHeader));
+    expect(header.title, 'Reconciliation run');
+    expect(header.subtitle, 'rj_abc');
+    expect(find.text('Run rj_abc'), findsNothing);
   });
 
   testWidgets('a run that never failed shows no failure count at all', (

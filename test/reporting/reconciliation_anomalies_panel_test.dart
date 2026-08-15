@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -703,7 +704,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Corrections to shift shift-a'), findsOne);
+    // **The claim survives and its rendering moved.** The trail used to say
+    // which shift it was showing in a second heading inside the page, under an
+    // `AppScaffold` already titled `Shift corrections`. It is the
+    // `PageHeader.subtitle` now — §7's "Title appears once", and the slot step
+    // 5a built for exactly this.
+    expect(
+      find.descendant(
+        of: find.byType(PageHeader),
+        matching: find.text('shift-a'),
+      ),
+      findsOne,
+    );
     expect(
       reader.queries.last.collectionPath,
       'tenants/tenant-a/shift_amendments',

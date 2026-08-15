@@ -238,10 +238,8 @@ final class _ShiftHistoryContents extends StatelessWidget {
     key: const ValueKey('shift-history'),
     padding: const EdgeInsets.all(20),
     children: [
-      Text(
-        'Closed shifts',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
+      // §7's "Title appears once": the `AppScaffold` above says `Shift
+      // history`, and this named the same list in different words under it.
       const SizedBox(height: 4),
       const Text(
         key: ValueKey('shift-history-scope-note'),

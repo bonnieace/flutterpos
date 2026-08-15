@@ -457,16 +457,8 @@ final class _AnomalyContents extends StatelessWidget {
       key: const ValueKey('reconciliation-anomalies'),
       padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
-        // **§7's "Title appears once" is broken here and this is not the chunk
-        // that fixes it.** The `AppScaffold` above already carries this string
-        // in a `PageHeader`. It is one of the thirteen panels `PLAN.md` queues
-        // as its own small chunk, because whether each one is a duplicate or a
-        // section name is a per-screen judgement rather than a sweep.
-        Text(
-          'Unresolved differences',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        SizedBox(height: tokens.spacing.s4),
+        // §7's "Title appears once": the `AppScaffold` above carries this exact
+        // string in its `PageHeader`. The only literal repeat of the fourteen.
         // Three permanent helper paragraphs behind one fold, which is §5.1's own
         // description of what `Disclosure` replaces. All three are true of every
         // record this route will ever list - what the list covers, what can be

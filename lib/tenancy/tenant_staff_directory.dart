@@ -340,15 +340,45 @@ final class _StaffContentsState extends State<_StaffContents> {
   TenantStaffSummary? _resendingInvitation;
   TenantStaffSummary? _statusChangingStaff;
 
+  /// Whether this session can change anything on this page at all.
+  ///
+  /// The two capabilities the route offers are inviting somebody and editing an
+  /// existing member; a session holding neither is reading. Both conditions are
+  /// the ones the affordances below already ask, so this states what the page
+  /// is rather than deciding it.
+  bool get _readOnly =>
+      !widget.session.canAccess(
+        allowedRoles: TenantStaffInvitationGateway.allowedRoles,
+      ) &&
+      !widget.session.canAccess(
+        allowedRoles: TenantStaffUpdateGateway.allowedRoles,
+      );
+
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(20),
     children: [
-      Text(
-        'Read-only staff directory',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
-      const SizedBox(height: 4),
+      // **§7's "Title appears once", and the survey found this one was also
+      // saying something false.** The heading read `Read-only staff directory`
+      // *unconditionally*, under an `AppScaffold` titled `Staff directory` — so
+      // an owner was told the page was read-only and then offered `Invite
+      // staff` two lines below it. A page's standing is §2.1's, not a heading's,
+      // and `info` is "offline, read-only, informational" in the document's own
+      // words. This is the same repair the read-only catalog already carries,
+      // reached from the other direction: there the fact was true and stated
+      // twice; here it was stated once and true only sometimes.
+      if (_readOnly) ...[
+        const Callout(
+          key: ValueKey('staff-directory-read-only'),
+          status: AppStatus.info,
+          title: 'Read-only staff directory',
+          message:
+              'Inviting somebody, correcting a member, and deactivating one '
+              'are available to owners and administrators. Nothing here is '
+              'hidden from you except those.',
+        ),
+        const SizedBox(height: 12),
+      ],
       Text('Business: ${widget.session.tenantId}'),
       const SizedBox(height: 20),
       _staffStrip(context),

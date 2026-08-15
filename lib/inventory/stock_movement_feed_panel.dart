@@ -248,10 +248,8 @@ final class _MovementFeedContents extends StatelessWidget {
     key: const ValueKey('stock-movements-feed'),
     padding: const EdgeInsets.all(20),
     children: [
-      Text(
-        'Recorded stock movements',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
+      // §7's "Title appears once": the `AppScaffold` above says `Stock
+      // movements`, and this said the same thing at greater length under it.
       const SizedBox(height: 4),
       Text(
         key: const ValueKey('stock-movements-feed-scope'),

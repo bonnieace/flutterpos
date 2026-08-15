@@ -22731,3 +22731,173 @@ pubspec.lock               modified locally, not by any chunk here
 prompt.md                  the session instruction, the product owner's own file
 screenshots/               generated, ignored
 ```
+
+---
+
+## A title appears once, and one page was telling everybody it was read-only - 2026-08-15
+
+§7's "Title appears once", the defect `design.md` names in its own words: *"several screens render the
+title in the app bar **and** again as an `H1` directly beneath it"*. Step 5a moved every screen title
+into a `PageHeader` and left the in-body copies where they were. `grep -n headlineSmall lib` over the
+migrated tree returns **two** live uses now, both deliberate and both commented at the site.
+
+**`PLAN.md` queued thirteen panels. It was fourteen sites in fourteen files**:
+`tenant_staff_directory.dart` was never on the list, and `sale_history_panel.dart` held two. That is
+the fourth queued list this file has under-counted from memory in three days, and the entry now
+carries the grep rather than the number.
+
+It changes `firestore.rules` not at all and nothing in `functions/` or `rules-tests/`. **It changed no
+capability board row.** It moved the **Design system** track 90% to 92%.
+
+### Why this chunk, and why it stops where it does
+
+`PLAN.md` queued it, and named the thing to settle first: whether `PageHeader.subtitle` gets
+populated. Checking against the board first, as the instruction requires: every red row is blocked on
+a decision nobody has made or sequenced after the first deployment, so nothing the app needs in order
+to function is missing and unqueued.
+
+### What was decided
+
+1. **The rule was in `PageHeader.subtitle`'s own doc comment all along.** The slot exists for "where
+   the screen needs to say which slice of something it is showing - a date, a product, a period", and
+   was populated at no call site because step 5a ruled that *rewriting* a title into a
+   title-and-subtitle pair is a copy decision for step 11. **Moving a string the screen already draws
+   is not that.** So: a heading that says what the `AppScaffold` title says is deleted; a heading that
+   names *which* record the route is showing becomes the subtitle.
+2. **The noun goes with it.** `Reconciliation run` over `rj_000001` is what the header already says;
+   `Run rj_000001` underneath repeats the noun directly above its own value, which is the same
+   duplication one line smaller. Same for `Returns` over the receipt number and `Shift corrections`
+   over the shift ID.
+3. **The staff directory's heading was also stating something false, and nothing had ever asserted
+   it.** `Read-only staff directory` was drawn **unconditionally**, under an `AppScaffold` titled
+   `Staff directory`, on a page that then offered an owner `Invite staff` two lines below. A page's
+   standing is §2.1's rather than a heading's. It is an `info` `Callout` now, shown only when the
+   session can neither invite nor edit - both conditions the page's own affordances already ask. This
+   is the repair the read-only catalog already carries, reached from the other direction: there the
+   fact was true and stated twice; here it was stated once and true only sometimes.
+4. **Screen 24's heading stays, and it is not a duplicate.** `Product stock ledger` and `White bread
+   loaf` say different things, so it is a subtitle candidate rather than a deletion - and it cannot
+   become one. `TenantProductLedgerScreen` is constructed with a `productId`; the *name* only exists
+   after the guarded load inside the panel. Reaching it means an optional decoded product on the
+   screen, which its callers - the movement feed included - do not all hold, or hoisting the load out
+   of the guard. Both are structure rather than a title fix.
+5. **The unscoped shift-corrections route carries no subtitle at all.** A page showing the whole
+   business is not a slice of anything, so the slot stays empty rather than being filled with a word
+   meaning "everything". A test asserts it is null.
+
+```text
+deleted, said what the title said       moved to PageHeader.subtitle
+21 product stock       (identical)      27 reconciliation status  -> the business date
+31 find a receipt      (identical)      29 one reconciliation run -> the job ID
+28 unresolved differences (identical)   34 returns on a sale      -> the receipt number
+35 activity log                         33 shift sales            -> the shift's business date
+23 stock movements                      30 shift corrections      -> the shift ID, when scoped
+22 stock adjustments
+32 shift history                        left, and not a duplicate
+33 recent sales (the unscoped branch)   24 one product ledger
+30 shift corrections (unscoped)
+13 staff directory  -> became a §2.1 status
+```
+
+### Safety
+
+**No behaviour changed.** Fourteen `Text` widgets deleted or moved; five `AppScaffold`s gained a
+`subtitle` argument from a value they were already constructed with; one heading became a conditional
+`Callout` from a condition the same widget already computed; and `TenantSaleHistoryRequest` gained a
+`subtitle` getter beside the `title` it has always had. No repository call, no callable payload, no
+routing condition, no new read.
+
+### Files changed
+
+```text
+lib/audit/audit_log_panel.dart                      heading deleted
+lib/sales/receipt_lookup_panel.dart                 heading deleted
+lib/sales/sale_history_panel.dart                   both headings; request gains subtitle
+lib/reporting/reconciliation_anomalies_panel.dart   heading deleted
+lib/reporting/reconciliation_status_panel.dart      heading -> subtitle (business date)
+lib/reporting/reconciliation_run_panel.dart         heading -> subtitle (job ID)
+lib/reporting/shift_amendment_feed_panel.dart       heading -> subtitle (shift ID, when scoped)
+lib/returns/return_history_panel.dart               heading -> subtitle (receipt number)
+lib/inventory/stock_movement_feed_panel.dart        heading deleted
+lib/inventory/stock_adjustment_feed_panel.dart      heading deleted
+lib/inventory/stock_adjustment_panel.dart           heading deleted
+lib/inventory/stock_product_ledger_panel.dart       heading kept, and why
+lib/shift/shift_history_panel.dart                  heading deleted
+lib/tenancy/tenant_staff_directory.dart             heading -> conditional info Callout
+test/**                                             7 assertions rewritten, 4 tests added
+PLAN.md, HISTORY.md                                 this
+```
+
+`dart format` was not run, on any file, per the standing prohibition.
+
+### Tests
+
+**All five suites measured, none carried.** Eleven consecutive chunks measuring all five.
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only            1928 -> 1932  (+4)
+npm --prefix functions test                                                409  unchanged  ~33 s
+npm --prefix rules-tests run test:emulator                                 161  unchanged  ~71 s
+npm --prefix rules-tests run test:emulator:reconciliation                   10  unchanged  ~84 s
+FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations
+                                                                            23  unchanged  ~138 s
+```
+
+**One failure was not an assertion about a title, and it is the standing trap met for the third
+time.** `shift_history_panel_test.dart`'s paging test scrolled to the `Next page` button with
+`scrollUntilVisible` and tapped it. Removing the duplicate heading shifted every offset on that page
+by a heading's height, the button went from on-screen to built-but-below-the-fold, the tap missed
+without failing, and the assertion read the *first* query instead of the second.
+**`scrollUntilVisible` stops when a widget is built, not when it is on screen**; an `ensureVisible`
+after it is the fix, exactly as `19-correct-a-product` needed on 2026-08-14.
+
+Two panel-level tests asserted a claim that has moved to the header, which a panel-level pump does not
+build. Both were replaced with screen-level tests that assert the `PageHeader`'s own `title` and
+`subtitle`, which is a stronger assertion than the string search they replaced.
+
+`flutter analyze lib test tool` reports **475 issues**, unchanged, all in the legacy island.
+
+### Screenshots
+
+**233 images from 172 captures: 4 added, 0 removed, 52 changed** - the widest diff since step 6b, and
+every back-office screen in the app.
+
+**The figure took a second baseline, and the reason is now a standing trap.** A naive comparison
+against hashes taken forty minutes earlier reported **58**, six of which were
+`24-one-product-ledger` and `25-daily-summary` - two screens this chunk never opened.
+`seedBusinessDate()` derives from `DateTime.now().toUtc()`, the UTC date rolled between the two runs,
+and every seeded date advanced by a day. The honest method is the one step 8 used: copy the changed
+files aside, `git checkout HEAD --` them, run the harness, restore, run again, compare. Two extra
+runs, and the difference between a measurement and a number.
+
+**The new heading was invisible in every capture, which is the trap for the sixth time.**
+`13-staff-directory` is photographed as an **administrator**, so the read-only `Callout` - which is
+shown only to a session that can change nothing - appears in no picture at all.
+`13c-staff-directory-read-only` is the same route as a manager, and it is the only session the
+standing is true of. Same shape as the notice chunk's finding: a conditional whose condition no
+capture case satisfies.
+
+**Two observations the pictures give and this chunk did not act on.** First, a subtitle carrying a
+record ID - `rj_000001` on screen 29 - is drawn at the density's body role, and §2.2 says record
+identifiers are `mono`. Teaching `PageHeader` to detect an identifier would be inventing a rule; the
+honest fixes are §2.2 gaining a sentence about the header, or the slot taking a role argument.
+Second, the new manager capture is the first legible picture of that route's badges, and they read
+`active` and `pending` in lowercase - the membership enum's own wire values, where §8 rule 7 is
+sentence case. Pre-existing, unrelated to titles, and step 11's.
+
+### Excluded
+
+`checkout_cart_panel.dart` and the whole sale path (step 7). `tenant_branding.dart`'s `headlineSmall`,
+which is a business name on a card rather than a page title, and belongs to the landing route step 5a
+left alone. The four carried `RecordList` column-arithmetic observations. `Pagination`. `inNarrowForm`.
+`pill_input.dart` and sign-in (step 9). Every server file and `firestore.rules`, by choice. Deployment.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```

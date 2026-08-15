@@ -57,6 +57,7 @@ final class TenantReconciliationRunScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Reconciliation run',
+    subtitle: jobId,
     contentWidth: AppContentWidth.reading,
     body: TenantReconciliationRunPanel(reader: reader, jobId: jobId),
   );
@@ -174,18 +175,11 @@ final class _RunContents extends StatelessWidget {
       key: const ValueKey('reconciliation-run'),
       padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
-        // **§7's "Title appears once" is broken here and this is not the chunk
-        // that fixes it.** One of the thirteen panels `PLAN.md` queues as its
-        // own chunk - and this one is arguably not a duplicate at all, because
-        // the `AppScaffold` title is `Reconciliation run` and this names *which*
-        // run, which is the `PageHeader.subtitle` slot step 5a built and never
-        // filled.
-        Text(
-          key: const ValueKey('reconciliation-run-title'),
-          'Run $jobId',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        SizedBox(height: tokens.spacing.s4),
+        // §7's "Title appears once". This named *which* run rather than
+        // repeating the title, so the job ID moved to `PageHeader.subtitle`.
+        // The word `Run` went with it: the header already says
+        // `Reconciliation run`, and repeating the noun above its own value is
+        // the same duplication one line smaller.
         // §5.1's own description of what `Disclosure` replaces: a permanent
         // helper paragraph. Both sentences are page-invariant - they are true of
         // every run this route will ever show - and the second used to be

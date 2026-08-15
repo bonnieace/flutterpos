@@ -140,6 +140,22 @@ void main() {
 
   screenshotCase('13-staff-directory', build: staffDirectory);
 
+  /// The same route as a manager, which is the only session it says anything to.
+  ///
+  /// **The heading this replaced was drawn for every role**, including the
+  /// administrator above who is then offered `Invite staff` two lines under it,
+  /// and no capture or test had ever looked at it. A page's standing is §2.1's,
+  /// so it is an `info` `Callout` shown only to a session that can neither
+  /// invite nor edit — and this is the picture of that session, which the
+  /// admin-role case above cannot be.
+  screenshotCase(
+    '13c-staff-directory-read-only',
+    build: () => inSession(
+      TenantStaffDirectoryScreen(reader: FakeTenantReader.business()),
+      controller: seedSession(role: TenantRole.manager, uid: managerUid),
+    ),
+  );
+
   /// The same route with one member's form open - the state `RecordItem.details`
   /// exists for, and the state nothing had ever photographed.
   ///

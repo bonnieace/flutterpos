@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +6,7 @@ import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
@@ -248,6 +249,16 @@ void main() {
       find.byKey(const ValueKey('shift-history-next')),
       200,
     );
+    // **`scrollUntilVisible` stops when a widget is built, not when it is on
+    // screen.** This sequence worked while the page carried a duplicate title
+    // above the list; removing it in the §7 chunk shifted every offset by a
+    // heading's height and the tap started landing off screen, so the page
+    // never advanced and the assertion below read the *first* query. The
+    // standing trap, met for the third time.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('shift-history-next')),
+    );
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('shift-history-next')));
     await tester.pump();
     await tester.pump();
@@ -384,7 +395,13 @@ void main() {
 
     // The trail opens narrowed to this exact shift, and says which one it is
     // showing rather than implying it is the whole business's record.
-    expect(find.text('Corrections to shift shift-a'), findsOne);
+    expect(
+      find.descendant(
+        of: find.byType(PageHeader),
+        matching: find.text('shift-a'),
+      ),
+      findsOne,
+    );
     expect(
       reader.queries.last.collectionPath,
       'tenants/tenant-a/shift_amendments',

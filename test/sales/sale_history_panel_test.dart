@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +7,7 @@ import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
@@ -469,7 +470,13 @@ void main() {
     await tester.pumpAndSettle();
 
     // The returns route derives its own page from the sale it was opened from.
-    expect(find.text('Returns against ${_receipt(1)}'), findsOne);
+    expect(
+      find.descendant(
+        of: find.byType(PageHeader),
+        matching: find.text(_receipt(1)),
+      ),
+      findsOne,
+    );
     expect(reader.queries.last.collectionPath, 'tenants/tenant-a/returns');
     expect(reader.queries.last.equalityFilters, <String, Object?>{
       'saleId': 'co-1',

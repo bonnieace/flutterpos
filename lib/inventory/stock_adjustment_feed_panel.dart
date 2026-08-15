@@ -187,10 +187,11 @@ final class _AdjustmentFeedContents extends StatelessWidget {
     key: const ValueKey('stock-adjustments'),
     padding: const EdgeInsets.all(20),
     children: [
-      Text(
-        'Recorded stock adjustments',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
+      // §7's "Title appears once": the `AppScaffold` above says `Stock
+      // adjustments`, or names the product when the feed is narrowed to one,
+      // and this said the unnarrowed version again directly under it — so on a
+      // product-scoped feed the page read `Adjustments: Milk 500ml` over
+      // `Recorded stock adjustments`, which is the defect at its worst.
       const SizedBox(height: 4),
       Text(
         key: const ValueKey('stock-adjustments-scope'),

@@ -46,6 +46,7 @@ final class TenantShiftAmendmentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Shift corrections',
+    subtitle: shiftId,
     contentWidth: AppContentWidth.records,
     body: TenantShiftAmendmentPanel(reader: reader, shiftId: shiftId),
   );
@@ -197,13 +198,12 @@ final class _AmendmentContents extends StatelessWidget {
     key: const ValueKey('shift-amendments'),
     padding: const EdgeInsets.all(20),
     children: [
-      Text(
-        page.isShiftScoped
-            ? 'Corrections to shift ${page.shiftId}'
-            : 'Shift corrections',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
-      const SizedBox(height: 4),
+      // §7's "Title appears once", in both of this route's two forms: unscoped
+      // it repeated the `AppScaffold` title exactly, and scoped it named
+      // *which* shift, which is `PageHeader.subtitle`'s row. The screen has the
+      // shift ID as a constructor argument, so it supplies the subtitle
+      // directly rather than this panel waiting for the page to load to say
+      // which shift it is showing.
       const Text(
         key: ValueKey('shift-amendments-scope'),
         'A closed shift can be corrected to the total its own sales prove, when '
