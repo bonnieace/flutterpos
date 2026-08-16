@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -41,7 +44,7 @@ void main() {
       _text(tester, 'checkout-line-amount-product-a'),
       '2 x KES 120.50 = KES 241.00',
     );
-    expect(_text(tester, 'checkout-total'), 'Total: KES 248.00');
+    expect(_text(tester, 'checkout-total'), 'KES 248.00');
   });
 
   testWidgets('refuses to save until a payment method is chosen', (
@@ -83,7 +86,7 @@ void main() {
     expect(
       find.byKey(const ValueKey('checkout-refusal')),
       findsNothing,
-      reason: _optionalText(tester, 'checkout-refusal'),
+      reason: _optionalNotice(tester, 'checkout-refusal'),
     );
     expect(drafts.requests, hasLength(1));
     expect(drafts.requests.single.tender, CheckoutTender.cash);
@@ -92,7 +95,7 @@ void main() {
     // The discount has no control, so a saved sale can never carry one.
     expect(drafts.requests.single.discountMinor, 0);
 
-    expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+    expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
     // The cart resets so the next customer cannot inherit these lines, and the
     // tender resets with it so it is never carried over unobserved.
     expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
@@ -112,7 +115,7 @@ void main() {
     await _tap(tester, 'checkout-tender-card');
     await _tap(tester, 'checkout-save');
 
-    expect(_text(tester, 'checkout-refusal'), 'Open a shift before selling.');
+    expect(_notice(tester, 'checkout-refusal'), 'Open a shift before selling.');
     // The cashier does not have to ring the sale up again.
     expect(find.byKey(const ValueKey('checkout-line-product-a')), findsOne);
     expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
@@ -127,7 +130,7 @@ void main() {
     await _tap(tester, 'checkout-save');
 
     expect(
-      _text(tester, 'checkout-refusal'),
+      _notice(tester, 'checkout-refusal'),
       startsWith('The receipt counter on this device is damaged.'),
     );
     expect(find.byKey(const ValueKey('checkout-refusal-needs-help')), findsOne);
@@ -161,7 +164,7 @@ void main() {
     await _tap(tester, 'checkout-save');
 
     expect(
-      _text(tester, 'checkout-refusal'),
+      _notice(tester, 'checkout-refusal'),
       startsWith('This sale could not be saved on this device.'),
     );
   });
@@ -207,7 +210,7 @@ void main() {
     await _tap(tester, 'checkout-product-product-16');
 
     expect(
-      _text(tester, 'checkout-refusal'),
+      _notice(tester, 'checkout-refusal'),
       'A sale needs between 1 and 16 items.',
     );
     expect(find.byKey(const ValueKey('checkout-line-product-16')), findsNothing);
@@ -228,7 +231,7 @@ void main() {
     await _tap(tester, 'checkout-line-remove-product-a');
 
     expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-    expect(_text(tester, 'checkout-total'), 'Total: KES 0.00');
+    expect(_text(tester, 'checkout-total'), 'KES 0.00');
   });
 
   testWidgets('a device with no catalog for this business cannot sell', (
@@ -282,7 +285,7 @@ void main() {
 
     await _tap(tester, 'checkout-product-product-a');
 
-    expect(_text(tester, 'checkout-total'), 'Total: KES 120.50');
+    expect(_text(tester, 'checkout-total'), 'KES 120.50');
     expect(find.byKey(const ValueKey('checkout-unavailable')), findsOne);
     expect(find.byKey(const ValueKey('checkout-save')), findsNothing);
   });
@@ -493,7 +496,7 @@ void main() {
       await _submit(tester, 'checkout-search', 'sku-nothing');
 
       expect(
-        _text(tester, 'checkout-code-notice'),
+        _notice(tester, 'checkout-code-notice'),
         'Nothing on this device matches that. Check the code and try again.',
       );
       expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
@@ -517,7 +520,7 @@ void main() {
       await _submit(tester, 'checkout-search', 'SHARED');
 
       expect(
-        _text(tester, 'checkout-code-notice'),
+        _notice(tester, 'checkout-code-notice'),
         'More than one product on this device carries that code, so nothing '
         'was added. Pick the right one from the list.',
       );
@@ -544,7 +547,7 @@ void main() {
       await _submit(tester, 'checkout-search', 'name');
 
       expect(
-        _text(tester, 'checkout-code-notice'),
+        _notice(tester, 'checkout-code-notice'),
         'That matches more than one product, so nothing was added. Pick one '
         'from the list, or enter its exact code.',
       );
@@ -698,7 +701,7 @@ void main() {
       await _tap(tester, 'checkout-clear-confirm');
 
       // The receipt describes a different, finished sale.
-      expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+      expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
     });
   });
 
@@ -874,6 +877,10 @@ void main() {
     const phone = Size(411, 900);
     const tillScreen = Size(1400, 900);
 
+    /// A tablet, which is `design.md` §4.1's `medium` band: at or above 768 and
+    /// below 1024. It used to get the two-pane till and §4.3 gives it a sheet.
+    const tablet = Size(900, 1000);
+
     testWidgets('puts the cart beside the products on a wide screen', (
       tester,
     ) async {
@@ -885,6 +892,41 @@ void main() {
       expect(find.byKey(const ValueKey('checkout-product-product-a')), findsOne);
       expect(find.byKey(const ValueKey('checkout-cart-pane')), findsOne);
       expect(find.byKey(const ValueKey('checkout-open-cart')), findsNothing);
+    });
+
+    testWidgets('gives the medium band a sheet, not two panes', (tester) async {
+      // **§4.3's `Sale` row: "products + cart sheet" at `compact` *and*
+      // `medium`, two panes only at `expanded`.** This band used to get the
+      // two-pane layout, because the split was this app's own inherited 768
+      // rather than anything §4.3 says.
+      await _pumpAt(tester, sessions, catalog, drafts, tablet);
+
+      expect(find.byKey(const ValueKey('checkout-compact')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-wide')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-open-cart')), findsOne);
+    });
+
+    testWidgets('asks the same question about a width that the widget does', (
+      tester,
+    ) async {
+      // The boundary is §4.1's `expanded` floor and not a figure this file
+      // repeats. 1023 is the last width that is not `expanded`.
+      expect(TenantCheckoutPanel.showsTwoPanes(1024), isTrue);
+      expect(TenantCheckoutPanel.showsTwoPanes(1023), isFalse);
+      expect(TenantCheckoutPanel.showsTwoPanes(768), isFalse);
+    });
+
+    testWidgets('gives the cart pane the width §4.2 states for it', (
+      tester,
+    ) async {
+      await _pumpAt(tester, sessions, catalog, drafts, tillScreen);
+
+      // §4.2's third row is "products flex, cart pane **fixed 420**", declared
+      // as `AppLayout.salePane` in step 6a and read by nothing until step 7.
+      final pane = tester.getSize(
+        find.byKey(const ValueKey('checkout-cart-pane')),
+      );
+      expect(pane.width, AppLayout.contract.salePane);
     });
 
     testWidgets('puts the cart behind a bar on a phone', (tester) async {
@@ -938,14 +980,128 @@ void main() {
 
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-open-cart');
-      expect(_text(tester, 'checkout-total'), 'Total: KES 7.00');
+      expect(_text(tester, 'checkout-total'), 'KES 7.00');
 
       // The sheet is its own route, so it does not rebuild when the panel
       // behind it does. Removing the only line has to empty it anyway.
       await _tap(tester, 'checkout-line-remove-product-b');
 
       expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-      expect(_text(tester, 'checkout-total'), 'Total: KES 0.00');
+      expect(_text(tester, 'checkout-total'), 'KES 0.00');
+    });
+  });
+
+  group('the till draws the design system rather than Material', () {
+    testWidgets('gives the save the primary tier and the clear the destructive '
+        'one', (tester) async {
+      // **`design.md` §2.1's own worked example, and it was still on screen.**
+      // "Clear this sale is `destructive`, Save sale is `primary`. Today the
+      // destructive action is the more prominent of the two." It was an
+      // `OutlinedButton` above a `FilledButton`, so the two read as equals and
+      // the destructive one came first.
+      await _pump(tester, sessions, catalog, drafts);
+      await _tap(tester, 'checkout-product-product-a');
+
+      expect(_save(tester).tier, AppButtonTier.primary);
+      expect(
+        _button(tester, 'checkout-clear-sale').tier,
+        AppButtonTier.destructive,
+      );
+    });
+
+    testWidgets('replaces the save label with a spinner rather than a word', (
+      tester,
+    ) async {
+      // §2.1's loading row: the container is held, the label is replaced by a
+      // spinner, and the width is frozen. It used to swap the label to
+      // "Saving...", which is the resize that row exists to forbid.
+      final gate = Completer<void>();
+      drafts.gate = gate.future;
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await tester.tap(find.byKey(const ValueKey('checkout-save')));
+      await tester.pump();
+
+      expect(_save(tester).loading, isTrue);
+      expect(_save(tester).label, 'Save sale');
+      expect(find.text('Saving...'), findsNothing);
+
+      gate.complete();
+      await _settle(tester);
+      expect(_save(tester).loading, isFalse);
+    });
+
+    testWidgets('says which kind of answer each of its notices is', (
+      tester,
+    ) async {
+      // Four surfaces on this screen held a `String?` whose meaning was in the
+      // sentence. `AppNotice` maps the outcome once, and the two that matter
+      // most here are the pair a cashier must tell apart at a glance: a sale
+      // that was saved and one that was refused.
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _submit(tester, 'checkout-search', 'nothing-carries-this');
+      expect(_status(tester, 'checkout-code-notice'), AppStatus.problem);
+
+      // The search is still narrowing the list, and clearing it is what a
+      // cashier does next rather than something this assertion needs.
+      await _enter(tester, 'checkout-search', '');
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+      expect(_status(tester, 'checkout-saved'), AppStatus.ok);
+    });
+
+    testWidgets('a sale saved with no receipt number is awaiting, not wrong', (
+      tester,
+    ) async {
+      // §2.1's `attention` is "unreconciled, pending, **awaiting**", and what
+      // is awaited is the number: the sale is durable and syncs either way.
+      // Drawn identically to a confirmed one before this, in the same black
+      // paragraph in the same position.
+      drafts.omitReceiptNumber = true;
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(_status(tester, 'checkout-saved'), AppStatus.attention);
+    });
+
+    testWidgets('a till that cannot save says so as information', (
+      tester,
+    ) async {
+      // §2.1's `info` is "offline, **read-only**, informational". Nothing was
+      // attempted, so nothing was refused.
+      await _pump(tester, sessions, catalog, null);
+
+      expect(_status(tester, 'checkout-unavailable'), AppStatus.info);
+    });
+
+    testWidgets('folds the submission policy rather than printing it', (
+      tester,
+    ) async {
+      // §7's "Long copy": policy folds, current state does not. What happens to
+      // a saved sale afterwards was permanent body text at the foot of every
+      // cart.
+      await _pump(tester, sessions, catalog, drafts);
+
+      final disclosure = tester.widget<Disclosure>(
+        find.byKey(const ValueKey('checkout-submission-disclosure')),
+      );
+      expect(
+        disclosure.summary.length,
+        lessThanOrEqualTo(Disclosure.summaryCharacterBudget),
+      );
+      // Closed means gone from the tree, so a screen reader is not read prose
+      // nobody can see.
+      expect(
+        find.byKey(const ValueKey('checkout-submission-policy')),
+        findsNothing,
+      );
     });
   });
 
@@ -1094,13 +1250,13 @@ void main() {
       await _tap(tester, 'checkout-product-product-a');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
-      expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+      expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
 
       // The cashier starts serving the next customer straight away. The number
       // describes a sale that is already finished, so it must not vanish.
       await _tap(tester, 'checkout-product-product-b');
 
-      expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+      expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
 
       await _tap(tester, 'checkout-dismiss-receipt');
 
@@ -1147,9 +1303,9 @@ void main() {
       await _tap(tester, 'checkout-tender-mpesa');
       await _tap(tester, 'checkout-save');
 
-      expect(_text(tester, 'checkout-saved'), contains('CT-A7F-20260731-0002'));
+      expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0002'));
       expect(
-        _text(tester, 'checkout-saved'),
+        _notice(tester, 'checkout-saved'),
         isNot(contains('CT-A7F-20260731-0001')),
       );
     });
@@ -1170,7 +1326,7 @@ void main() {
 
       // An older number beside a refusal reads as if the refused sale saved.
       expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
-      expect(_text(tester, 'checkout-refusal'), 'Open a shift before selling.');
+      expect(_notice(tester, 'checkout-refusal'), 'Open a shift before selling.');
     });
 
     testWidgets('a save with no receipt number still says the sale is kept', (
@@ -1185,7 +1341,7 @@ void main() {
 
       // Silence here would have the cashier ring the same sale up again.
       expect(
-        _text(tester, 'checkout-saved'),
+        _notice(tester, 'checkout-saved'),
         startsWith('Saved on this device, but it could not state a receipt'),
       );
       expect(
@@ -1219,7 +1375,7 @@ void main() {
     expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
     expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
     expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
-    expect(_text(tester, 'checkout-total'), 'Total: KES 0.00');
+    expect(_text(tester, 'checkout-total'), 'KES 0.00');
   });
 
   testWidgets('a business switch during a save never labels the new session', (
@@ -1332,6 +1488,20 @@ Future<void> _submit(WidgetTester tester, String key, String value) async {
 String _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
+/// The sentence a [Callout] at [key] states.
+///
+/// **The till's four notice surfaces are `Callout`s as of §11 step 7**, which
+/// is how every other panel in this app renders an `AppNotice`: the status is a
+/// container, an icon and a word rather than a colour on the sentence, so the
+/// thing being asserted is the component's own `message` and not a `Text` that
+/// happens to be underneath it. `_status` below asserts the other half.
+String _notice(WidgetTester tester, String key) =>
+    tester.widget<Callout>(find.byKey(ValueKey(key))).message;
+
+/// Which of §2.1's five a notice at [key] carries.
+AppStatus _status(WidgetTester tester, String key) =>
+    tester.widget<Callout>(find.byKey(ValueKey(key))).status;
+
 /// The single [TextField] at or under [key].
 TextField _field(WidgetTester tester, String key) => tester.widget<TextField>(
   find.descendant(
@@ -1341,15 +1511,17 @@ TextField _field(WidgetTester tester, String key) => tester.widget<TextField>(
   ),
 );
 
-/// The text at [key], or a note that it is absent. Used only in failure
+/// The notice at [key], or a note that it is absent. Used only in failure
 /// reasons, so a missing widget explains itself rather than throwing.
-String _optionalText(WidgetTester tester, String key) {
+String _optionalNotice(WidgetTester tester, String key) {
   final finder = find.byKey(ValueKey(key));
-  return finder.evaluate().isEmpty ? '($key absent)' : _text(tester, key);
+  return finder.evaluate().isEmpty ? '($key absent)' : _notice(tester, key);
 }
 
-FilledButton _save(WidgetTester tester) =>
-    tester.widget<FilledButton>(find.byKey(const ValueKey('checkout-save')));
+AppButton _button(WidgetTester tester, String key) =>
+    tester.widget<AppButton>(find.byKey(ValueKey(key)));
+
+AppButton _save(WidgetTester tester) => _button(tester, 'checkout-save');
 
 /// An in-memory stand-in for the encrypted offline catalog.
 final class _Catalog implements CheckoutCatalogSource {
