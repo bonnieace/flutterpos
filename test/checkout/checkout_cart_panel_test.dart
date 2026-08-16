@@ -6,6 +6,7 @@ import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/stepper.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -223,7 +224,7 @@ void main() {
 
     await _tap(tester, 'checkout-product-product-a');
     await _tap(tester, 'checkout-product-product-a');
-    await _tap(tester, 'checkout-line-less-product-a');
+    await _decrement(tester, 'product-a');
 
     expect(
       _text(tester, 'checkout-line-amount-product-a'),
@@ -764,12 +765,7 @@ void main() {
         'Enter a whole quantity between 1 and 1,000,000 for every item.',
       );
       expect(_save(tester).onPressed, isNull);
-      expect(
-        find.byKey(
-          const ValueKey('checkout-line-quantity-invalid-product-b'),
-        ),
-        findsOne,
-      );
+      expect(_quantityError(tester, 'product-b'), isNotNull);
       // The rejected entry is left on screen to be corrected rather than
       // silently replaced by a number the cashier did not type.
       expect(
@@ -793,12 +789,7 @@ void main() {
 
       // Exactly the bound is a legal sale, so nothing blocks it except the
       // money bound the next test covers.
-      expect(
-        find.byKey(
-          const ValueKey('checkout-line-quantity-invalid-product-b'),
-        ),
-        findsNothing,
-      );
+      expect(_quantityError(tester, 'product-b'), isNull);
     });
 
     testWidgets('a line beyond the recordable amount is refused legibly', (
@@ -1630,3 +1621,29 @@ TenantMembership _membership(String tenantId) => TenantMembership(
   canonicalTenantExists: true,
   canonicalMembershipExists: true,
 );
+
+/// Presses the stepper's minus on one cart line.
+///
+/// The minus is `QuantityStepper`'s as of §11 step 7, so it is addressed
+/// through the line's own key rather than by a key of its own - which is what
+/// keeps a screen's tests pointed at the screen rather than at the component.
+Future<void> _decrement(WidgetTester tester, String productId) async {
+  await tester.tap(
+    find.descendant(
+      of: find.byKey(ValueKey('checkout-line-quantity-$productId')),
+      matching: find.byKey(const ValueKey('quantity-stepper-decrement')),
+    ),
+  );
+  await _settle(tester);
+}
+
+/// The error the stepper is showing for one line, or null.
+///
+/// §5.2 gives a field one slot that holds either the helper line or the error,
+/// so what used to be a keyed paragraph beside the row is now a property of the
+/// control it is about.
+String? _quantityError(WidgetTester tester, String productId) => tester
+    .widget<QuantityStepper>(
+      find.byKey(ValueKey('checkout-line-quantity-$productId')),
+    )
+    .error;

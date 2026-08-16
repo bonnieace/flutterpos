@@ -63,6 +63,7 @@ final class AppTextField extends StatefulWidget {
     this.placeholder,
     this.helper,
     this.error,
+    this.showsErrorText = true,
     this.enabled = true,
     this.readOnly = false,
     this.maxLength,
@@ -112,6 +113,11 @@ final class AppTextField extends StatefulWidget {
   /// that the message is real text a screen reader reads, rather than a red
   /// border and nothing else.
   final String? error;
+
+  /// Whether [error]'s words are printed under the well. See
+  /// [AppFieldWell.showsErrorText]; the red outline and the announcement stay
+  /// either way.
+  final bool showsErrorText;
 
   final bool enabled;
 
@@ -241,6 +247,7 @@ class _AppTextFieldState extends State<AppTextField> {
       label: widget.label,
       helper: widget.helper,
       error: error,
+      showsErrorText: widget.showsErrorText,
       enabled: widget.enabled,
       focused: _focused,
       counter: _counterFor(tokens),
@@ -455,6 +462,7 @@ final class AppFieldWell extends StatelessWidget {
     required this.child,
     this.helper,
     this.error,
+    this.showsErrorText = true,
     this.counter,
     this.leading,
     this.enabled = true,
@@ -476,6 +484,12 @@ final class AppFieldWell extends StatelessWidget {
   final Widget child;
   final String? helper;
   final String? error;
+
+  /// Whether [error]'s words are printed under the well.
+  ///
+  /// False keeps the red outline and the announcement and prints nothing. The
+  /// only caller is `QuantityStepper`; see the note beside `footnote`.
+  final bool showsErrorText;
   final String? counter;
   final bool enabled;
 
@@ -612,13 +626,27 @@ final class AppFieldWell extends StatelessWidget {
       ],
     );
 
-    final footnote = error ?? helper;
+    // **A caller may own the message and still want the border.** §5.2 gives a
+    // field one slot holding either the helper or the error, and that is right
+    // for a field the width of its own form. `QuantityStepper` puts a 76-pixel
+    // well between two buttons, where the same message wraps to six lines and
+    // shoves the controls out of line - so it draws the sentence itself, under
+    // the whole control, and asks this to keep the red outline and the
+    // semantics without repeating the words.
+    final footnote = showsErrorText ? (error ?? helper) : helper;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Padding(
+        // **An empty label draws no row at all**, which is the one hole §5.2's
+        // "persistent label above the field" leaves and is not a loophole in
+        // it. §5.1 lists `QuantityStepper` as its own component rather than a
+        // field variant, and a minus, a number and a plus is a shape that names
+        // itself - so that one caller labels the whole control and passes none
+        // here. An empty string that still reserved sixteen pixels put its two
+        // buttons above the number they change; the picture is what caught it.
+        if (label.isNotEmpty) Padding(
           // The label sits over the well's own gutter, so the gap a person sees
           // between the two is `space.4` plus the ring's 4 rather than a
           // second, larger one.

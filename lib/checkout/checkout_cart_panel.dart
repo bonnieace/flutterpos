@@ -55,6 +55,7 @@ import '../ui/records.dart';
 import '../ui/scaffold.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
+import '../ui/stepper.dart';
 import '../ui/tokens.dart';
 import 'checkout_catalog_cache.dart';
 import 'checkout_draft.dart';
@@ -1094,6 +1095,10 @@ final class _CartEditorState extends State<_CartEditor> {
             quantityUnusable: _unusableQuantities.contains(entry.key),
             currency: currency,
             onQuantityChanged: (raw) => _setQuantity(entry.key, raw),
+            onIncrement: () {
+              final product = _snapshot.productById(entry.key);
+              if (product != null) _add(product);
+            },
             onDecrement: () => _decrement(entry.key),
             onRemove: () => _remove(entry.key),
           ),
@@ -1578,6 +1583,7 @@ final class _CartLine extends StatelessWidget {
     required this.quantityUnusable,
     required this.currency,
     required this.onQuantityChanged,
+    required this.onIncrement,
     required this.onDecrement,
     required this.onRemove,
   });
@@ -1593,6 +1599,11 @@ final class _CartLine extends StatelessWidget {
 
   final String currency;
   final ValueChanged<String> onQuantityChanged;
+
+  /// Adds one more of this line's product. **Not a new operation** - it is what
+  /// pressing the product's tile in the grid already does, through the same
+  /// callback, surfaced where a person is already looking.
+  final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final VoidCallback onRemove;
 
@@ -1652,22 +1663,42 @@ final class _CartLine extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: tokens.spacing.s8),
-                  _QuantityField(
+                  // **§5.1's priority 1, and the plus is the whole of it.** That
+                  // row's "Replaces" column reads "minus + delete, no plus", so
+                  // a cashier who rang up one loaf and needed two had to leave
+                  // the cart, find the tile in the grid and press it again.
+                  //
+                  // **The minus still does exactly what it did**, including
+                  // removing the line at one: that is state logic and
+                  // `claude.md` hard rule 1 keeps it out of a visual change.
+                  // Whether a stepper should *disable* at one instead is a
+                  // behaviour question and is in `PLAN.md`, not decided here.
+                  QuantityStepper(
                     key: ValueKey('checkout-line-quantity-$productId'),
+                    // **No visible label, and that is the component's own
+                    // note.** Sixteen lines each saying *Quantity* over a minus,
+                    // a number and a plus is the word repeated at a control that
+                    // names itself - and it cost enough height to push the save
+                    // off a phone. A screen reader still hears it.
                     quantity: quantity,
+                    maximum: maximumCheckoutLineQuantity,
                     onChanged: onQuantityChanged,
+                    // Null where the cached catalog no longer holds the
+                    // product: there is nothing to add another of.
+                    onIncrement: product == null ? null : onIncrement,
+                    onDecrement: onDecrement,
+                    error: quantityUnusable
+                        ? 'Not a quantity this till can sell. This line still '
+                              'has $quantity.'
+                        : null,
                   ),
-                  // **Still `IconButton`s, and that is `QuantityStepper`'s to
-                  // fix.** §5.1 gives it priority 1 and describes the defect as
-                  // "minus + delete, no plus"; a component that decides what a
-                  // stepper is cannot be guessed at inside a restyling chunk,
-                  // and painting these two would settle its shape by accident.
-                  IconButton(
-                    key: ValueKey('checkout-line-less-$productId'),
-                    onPressed: onDecrement,
-                    icon: const Icon(Icons.remove),
-                    tooltip: 'One fewer',
-                  ),
+                  SizedBox(width: tokens.spacing.s8),
+                  // **The bin leaves the stepper and stays on the row.** §5.1's
+                  // complaint names "delete" as part of the defect, and what is
+                  // wrong with it is that it sat *inside* the count control -
+                  // one press away from a decrement, doing something a
+                  // decrement cannot be undone from. Removing a line is a
+                  // record action, so it sits with the record.
                   IconButton(
                     key: ValueKey('checkout-line-remove-$productId'),
                     onPressed: onRemove,
@@ -1676,13 +1707,6 @@ final class _CartLine extends StatelessWidget {
                   ),
                 ],
               ),
-              if (quantityUnusable)
-                Text(
-                  key: ValueKey('checkout-line-quantity-invalid-$productId'),
-                  'That is not a quantity this till can sell. This line still '
-                  'has $quantity.',
-                  style: note.copyWith(color: tokens.colors.status.problem.fg),
-                ),
               // Stated, never enforced: the cached figure is what this device
               // last saw, and the server permits stock to go negative.
               if (resolved != null && quantity > resolved.quantity)
@@ -1699,71 +1723,6 @@ final class _CartLine extends StatelessWidget {
     );
   }
 }
-
-/// Direct quantity entry for one cart line.
-///
-/// The field belongs to the cashier, not to the cart: it is overwritten only
-/// when the cart itself moved the number - a plus or minus tap - and never
-/// while an entry is merely unusable. Snapping a rejected entry back to the
-/// last good value would leave a valid number on screen beside a message
-/// saying the quantity is wrong, with nothing to correct.
-final class _QuantityField extends StatefulWidget {
-  const _QuantityField({
-    super.key,
-    required this.quantity,
-    required this.onChanged,
-  });
-
-  final int quantity;
-  final ValueChanged<String> onChanged;
-
-  @override
-  State<_QuantityField> createState() => _QuantityFieldState();
-}
-
-final class _QuantityFieldState extends State<_QuantityField> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.quantity.toString(),
-  );
-
-  @override
-  void didUpdateWidget(covariant _QuantityField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.quantity != widget.quantity &&
-        int.tryParse(_controller.text.trim()) != widget.quantity) {
-      _controller.text = widget.quantity.toString();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    // **Wider than the 104 it was, and the reason is measurable.** §5.2 gives a
-    // field `space.20` of horizontal padding inside a pill on each side, which
-    // is 40 before a digit is drawn; a 104-wide well left about 60 for the
-    // number and its caret. This is the second of step 3's two remaining call
-    // sites and the only one whose width is fixed by its own row.
-    width: _quantityFieldWidth,
-    child: AppTextField(
-      label: 'Quantity',
-      controller: _controller,
-      keyboardType: TextInputType.number,
-      onChanged: widget.onChanged,
-    ),
-  );
-}
-
-/// How wide the cart line's quantity well is drawn.
-///
-/// Named rather than tokenised, for the reason [_productTileExtent] gives: a
-/// field's *width* is not one of §2.3's rows, and §5.2 fixes a field's height
-/// and padding and says nothing about how wide a numeric one should be.
-const double _quantityFieldWidth = 132;
 
 String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
 
