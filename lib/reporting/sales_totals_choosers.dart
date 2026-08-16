@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/chips.dart';
 import 'sales_totals.dart';
 import 'sales_totals_session_context.dart';
 
@@ -48,52 +49,53 @@ final class SalesTotalsChoosers extends StatelessWidget {
         // Chips rather than a segmented button: four periods do not fit across
         // a phone, and a chooser that overflows is a chooser that cannot be
         // used.
-        Wrap(
+        FilterChipBar<TenantSalesPeriod>(
           key: const ValueKey('sales-totals-period'),
-          spacing: 8,
-          runSpacing: 8,
-          children: [
+          semanticLabel: 'Choose the period',
+          selected: period,
+          // The period is never null - there is no "no period" reading of a
+          // totals page - so a null answer is impossible and is refused rather
+          // than silently mapped onto a default.
+          onSelected: (value) => onChoosePeriod(value!),
+          options: <FilterChipOption<TenantSalesPeriod>>[
             for (final option in TenantSalesPeriod.values)
-              ChoiceChip(
+              FilterChipOption<TenantSalesPeriod>(
                 key: ValueKey('sales-totals-period-${option.name}'),
-                label: Text(option.label),
-                selected: option == period,
-                onSelected: (_) => onChoosePeriod(option),
+                value: option,
+                label: option.label,
               ),
           ],
         ),
         const SizedBox(height: 12),
-        Wrap(
+        FilterChipBar<String>(
           key: const ValueKey('sales-totals-member'),
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              key: const ValueKey('sales-totals-member-all'),
-              label: const Text('Whole business'),
-              selected: soldById == null,
-              onSelected: (_) => onChooseMember(null),
+          semanticLabel: 'Narrow the totals to one member',
+          selected: soldById,
+          onSelected: onChooseMember,
+          options: <FilterChipOption<String>>[
+            const FilterChipOption<String>(
+              key: ValueKey('sales-totals-member-all'),
+              value: null,
+              label: 'Whole business',
             ),
             // The signed-in member is always offered, directory or not: its UID
             // comes from the session, which no read can make unavailable.
             if (selfUid case final uid?)
-              ChoiceChip(
+              FilterChipOption<String>(
                 key: const ValueKey('sales-totals-member-self'),
-                label: Text(
-                  tenantStaffLabel(uid, names: staff.names, selfUid: uid),
-                ),
-                selected: soldById == uid,
-                onSelected: (_) => onChooseMember(uid),
+                value: uid,
+                label: tenantStaffLabel(uid, names: staff.names, selfUid: uid),
               ),
             for (final uid in staff.uids)
               if (uid != selfUid)
-                ChoiceChip(
+                FilterChipOption<String>(
                   key: ValueKey('sales-totals-member-$uid'),
-                  label: Text(
-                    tenantStaffLabel(uid, names: staff.names, selfUid: selfUid),
+                  value: uid,
+                  label: tenantStaffLabel(
+                    uid,
+                    names: staff.names,
+                    selfUid: selfUid,
                   ),
-                  selected: soldById == uid,
-                  onSelected: (_) => onChooseMember(uid),
                 ),
           ],
         ),
@@ -120,23 +122,22 @@ final class SalesTotalsChoosers extends StatelessWidget {
           ),
         ] else if (categories.items.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Wrap(
+          FilterChipBar<String>(
             key: const ValueKey('sales-totals-category'),
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ChoiceChip(
-                key: const ValueKey('sales-totals-category-all'),
-                label: const Text('All categories'),
-                selected: categoryId == null,
-                onSelected: (_) => onChooseCategory(null),
+            semanticLabel: 'Narrow the totals to one category',
+            selected: categoryId,
+            onSelected: onChooseCategory,
+            options: <FilterChipOption<String>>[
+              const FilterChipOption<String>(
+                key: ValueKey('sales-totals-category-all'),
+                value: null,
+                label: 'All categories',
               ),
               for (final category in categories.items)
-                ChoiceChip(
+                FilterChipOption<String>(
                   key: ValueKey('sales-totals-category-${category.id}'),
-                  label: Text(category.name),
-                  selected: category.id == categoryId,
-                  onSelected: (_) => onChooseCategory(category.id),
+                  value: category.id,
+                  label: category.name,
                 ),
             ],
           ),

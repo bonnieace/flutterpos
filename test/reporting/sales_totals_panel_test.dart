@@ -254,14 +254,10 @@ void main() {
       '2026-07-31 • Otieno (cashier-b)',
     );
     // The signed-in member reads as itself, not as a UID among colleagues.
-    expect(
-      tester
-          .widget<ChoiceChip>(
-            find.byKey(const ValueKey('sales-totals-member-self')),
-          )
-          .label,
-      isA<Text>().having((text) => text.data, 'label', 'You (The Manager)'),
-    );
+    // **Read off the rendering rather than off the widget**: the chips are a
+    // `FilterChipBar` as of §11 step 7, whose chip is private, and what this
+    // test is about is the word a person sees either way.
+    expect(_chipLabel(tester, 'sales-totals-member-self'), 'You (The Manager)');
     expect(
       find.byKey(const ValueKey('sales-totals-member-user-a')),
       findsNothing,
@@ -284,14 +280,7 @@ void main() {
 
     // A staff record also carries an email and a phone number, and a report
     // label is not the place to disclose either.
-    expect(
-      tester
-          .widget<ChoiceChip>(
-            find.byKey(const ValueKey('sales-totals-member-cashier-b')),
-          )
-          .label,
-      isA<Text>().having((text) => text.data, 'label', 'cashier-b'),
-    );
+    expect(_chipLabel(tester, 'sales-totals-member-cashier-b'), 'cashier-b');
     expect(find.textContaining('@example.test'), findsNothing);
   });
 
@@ -1373,3 +1362,10 @@ final class _Callable implements SalesTotalsCallable {
         : Future<Object?>.value(outcome);
   }
 }
+
+/// The word a filter chip is drawing, addressed by the key its screen gave it.
+String _chipLabel(WidgetTester tester, String key) => tester
+    .widget<Text>(
+      find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)),
+    )
+    .data!;

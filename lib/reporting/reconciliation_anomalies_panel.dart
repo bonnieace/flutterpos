@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
+import '../ui/chips.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
-import '../tenancy/tenant_repository.dart';
-import '../tenancy/tenant_route_guard.dart';
-import '../tenancy/tenant_session.dart';
-import '../tenancy/tenant_session_controller.dart';
 import 'reconciliation_actions.dart';
 import 'reconciliation_anomalies.dart';
 import 'reconciliation_labels.dart';
@@ -807,24 +808,26 @@ final class _KindChips extends StatelessWidget {
   final ValueChanged<TenantReconciliationAnomalyKind?> onNarrow;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      ChoiceChip(
-        key: const ValueKey('reconciliation-anomaly-kind-all'),
-        label: const Text('Every kind'),
-        selected: selected == null,
-        onSelected: (_) => onNarrow(null),
-      ),
-      for (final kind in TenantReconciliationAnomalyKind.values)
-        if (kind != TenantReconciliationAnomalyKind.other)
-          ChoiceChip(
-            key: ValueKey('reconciliation-anomaly-kind-${kind.wireValue}'),
-            label: Text(kind.label),
-            selected: selected == kind,
-            onSelected: (_) => onNarrow(kind),
+  Widget build(BuildContext context) =>
+      FilterChipBar<TenantReconciliationAnomalyKind>(
+        semanticLabel: 'Narrow the differences by kind',
+        selected: selected,
+        onSelected: onNarrow,
+        options: <FilterChipOption<TenantReconciliationAnomalyKind>>[
+          const FilterChipOption<TenantReconciliationAnomalyKind>(
+            key: ValueKey('reconciliation-anomaly-kind-all'),
+            value: null,
+            label: 'Every kind',
           ),
-    ],
-  );
+          for (final kind in TenantReconciliationAnomalyKind.values)
+            if (kind != TenantReconciliationAnomalyKind.other)
+              FilterChipOption<TenantReconciliationAnomalyKind>(
+                key: ValueKey(
+                  'reconciliation-anomaly-kind-${kind.wireValue}',
+                ),
+                value: kind,
+                label: kind.label,
+              ),
+        ],
+      );
 }

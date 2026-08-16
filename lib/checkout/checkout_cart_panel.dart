@@ -47,6 +47,7 @@ import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
+import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/press.dart';
@@ -84,6 +85,19 @@ const double _productTileHeight = 116;
 /// The side of the square a product's picture, or its stand-in, is drawn in.
 /// Named for the same reason as the two figures above, and unchanged at 52.
 const double _thumbnailSize = 52;
+
+/// The value the category bar carries for "products whose category this device
+/// does not hold".
+///
+/// **A sentinel at the one call site that needs one, rather than a mode in the
+/// component.** `_uncachedCategoriesOnly` is tracked separately from
+/// `_categoryId` precisely because a real category could legitimately be named
+/// anything, so the panel maps that flag onto this value on the way in and back
+/// off it on the way out. `FilterChipBar` stays a plain single selection.
+///
+/// It is a category *ID*, and Firestore document IDs cannot contain a slash, so
+/// no real category can collide with it.
+const String _uncachedSentinel = 'uncached/only';
 
 /// A till that can price a sale and cannot save one.
 ///
@@ -938,29 +952,35 @@ final class _CartEditorState extends State<_CartEditor> {
       ],
       if (_snapshot.categories.isNotEmpty || _hasUncachedCategories) ...[
         SizedBox(height: tokens.spacing.s8),
-        Wrap(
-          spacing: tokens.spacing.s8,
-          runSpacing: tokens.spacing.s8,
-          children: [
-            ChoiceChip(
-              key: const ValueKey('checkout-category-all'),
-              label: const Text('All'),
-              selected: _categoryId == null && !_uncachedCategoriesOnly,
-              onSelected: (_) => _selectCategory(),
+        // **The one bar whose selection is not simply a value**, because
+        // "Other" is a *mode* - products naming a category this device does not
+        // hold - and is tracked separately from `_categoryId` rather than as a
+        // sentinel ID, since a real category could legitimately be named
+        // anything. The sentinel lives here, at the one call site that has the
+        // problem, instead of in the component.
+        FilterChipBar<String>(
+          semanticLabel: 'Narrow the products by category',
+          selected: _uncachedCategoriesOnly ? _uncachedSentinel : _categoryId,
+          onSelected: (value) => value == _uncachedSentinel
+              ? _selectCategory(uncachedOnly: true)
+              : _selectCategory(categoryId: value),
+          options: <FilterChipOption<String>>[
+            const FilterChipOption<String>(
+              key: ValueKey('checkout-category-all'),
+              value: null,
+              label: 'All',
             ),
             for (final category in _snapshot.categories)
-              ChoiceChip(
+              FilterChipOption<String>(
                 key: ValueKey('checkout-category-${category.id}'),
-                label: Text(category.name),
-                selected: _categoryId == category.id,
-                onSelected: (_) => _selectCategory(categoryId: category.id),
+                value: category.id,
+                label: category.name,
               ),
             if (_hasUncachedCategories)
-              ChoiceChip(
-                key: const ValueKey('checkout-category-other'),
-                label: const Text('Other'),
-                selected: _uncachedCategoriesOnly,
-                onSelected: (_) => _selectCategory(uncachedOnly: true),
+              const FilterChipOption<String>(
+                key: ValueKey('checkout-category-other'),
+                value: _uncachedSentinel,
+                label: 'Other',
               ),
           ],
         ),
@@ -1175,16 +1195,22 @@ final class _CartEditorState extends State<_CartEditor> {
           ),
         ),
         SizedBox(height: tokens.spacing.s8),
-        Wrap(
-          spacing: tokens.spacing.s8,
-          runSpacing: tokens.spacing.s8,
-          children: [
+        // **No "any" option, and the null it starts in is load-bearing.** A
+        // filter's null means "no filter"; this one means *nothing has been
+        // observed yet*, which is this panel's own scope decision - "a
+        // pre-selected payment method would be indistinguishable from an
+        // observed one". So there is no chip to represent it and no glyph until
+        // a cashier picks, which is why `_blocker` can still refuse the save.
+        FilterChipBar<CheckoutTender>(
+          semanticLabel: 'How the customer paid',
+          selected: _tender,
+          onSelected: (value) => value == null ? null : _chooseTender(value),
+          options: <FilterChipOption<CheckoutTender>>[
             for (final option in CheckoutTender.values)
-              ChoiceChip(
+              FilterChipOption<CheckoutTender>(
                 key: ValueKey('checkout-tender-${option.wireValue}'),
-                label: Text(option.label),
-                selected: _tender == option,
-                onSelected: (_) => _chooseTender(option),
+                value: option,
+                label: option.label,
               ),
           ],
         ),

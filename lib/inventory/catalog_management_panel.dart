@@ -6,6 +6,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
+import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/record_list.dart';
@@ -981,18 +982,18 @@ final class _CatalogManagementContents extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
+            FilterChipBar<String>(
+              semanticLabel: 'The category the new product is filed under',
+              selected: _selected,
+              onSelected: (value) =>
+                  value == null ? null : onCategorySelected(value),
+              options: <FilterChipOption<String>>[
                 for (final category in view.categories.items)
-                  ChoiceChip(
+                  FilterChipOption<String>(
                     key: ValueKey('catalog-management-category-${category.id}'),
-                    label: Text(category.name),
-                    selected: category.id == _selected,
-                    onSelected: busy
-                        ? null
-                        : (_) => onCategorySelected(category.id),
+                    value: category.id,
+                    label: category.name,
+                    enabled: !busy,
                   ),
               ],
             ),
@@ -1573,19 +1574,19 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
             color: tokens.colors.text.primary,
           )),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
+            FilterChipBar<String>(
+              semanticLabel: 'The category this product is filed under',
+              selected: _categoryId,
+              onSelected: (value) =>
+                  setState(() => _categoryId = value ?? _categoryId),
+              options: <FilterChipOption<String>>[
                 for (final category in widget.categories)
-                  ChoiceChip(
+                  FilterChipOption<String>(
                     key: ValueKey(
                       'catalog-management-edit-category-${category.id}',
                     ),
-                    label: Text(category.name),
-                    selected: category.id == _categoryId,
-                    onSelected: (_) =>
-                        setState(() => _categoryId = category.id),
+                    value: category.id,
+                    label: category.name,
                   ),
               ],
             ),

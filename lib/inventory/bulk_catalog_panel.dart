@@ -6,6 +6,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
+import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
@@ -703,17 +704,19 @@ final class _BulkCatalogContents extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          children: [
+        FilterChipBar<_BulkTask>(
+          semanticLabel: 'Which bulk change this is',
+          selected: task,
+          onSelected: (value) => value == null ? null : onTaskChanged(value),
+          options: <FilterChipOption<_BulkTask>>[
             for (final option in _BulkTask.values)
-              ChoiceChip(
+              FilterChipOption<_BulkTask>(
                 key: ValueKey(
                   'bulk-catalog-task-${option == _BulkTask.correct ? 'correct' : 'import'}',
                 ),
-                label: Text(option.label),
-                selected: option == task,
-                onSelected: busy ? null : (_) => onTaskChanged(option),
+                value: option,
+                label: option.label,
+                enabled: !busy,
               ),
           ],
         ),
@@ -797,60 +800,31 @@ final class _BulkCatalogContents extends StatelessWidget {
             color: tokens.colors.text.primary,
           )),
       const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          ChoiceChip(
-            key: const ValueKey('bulk-catalog-field-categoryId'),
-            label: const Text('Category'),
-            selected: field == TenantProductField.categoryId,
-            onSelected: busy
-                ? null
-                : (_) => onFieldChanged(
-                    TenantProductField.categoryId,
-                    clearsCost: false,
-                  ),
-          ),
-          // A price and a cost are money, and the server decides permission over
-          // the union of every row's fields: one row naming either refuses the
-          // whole request. So they are not offered at all rather than offered and
-          // refused, which would teach a manager only that the app guesses.
-          if (canChangeMoney) ...[
-            ChoiceChip(
-              key: const ValueKey('bulk-catalog-field-price'),
-              label: const Text('Unit price'),
-              selected: field == TenantProductField.price,
-              onSelected: busy
-                  ? null
-                  : (_) => onFieldChanged(
-                      TenantProductField.price,
-                      clearsCost: false,
-                    ),
-            ),
-            ChoiceChip(
-              key: const ValueKey('bulk-catalog-field-cost'),
-              label: const Text('Unit cost'),
-              selected: field == TenantProductField.cost && !clearCost,
-              onSelected: busy
-                  ? null
-                  : (_) => onFieldChanged(
-                      TenantProductField.cost,
-                      clearsCost: false,
-                    ),
-            ),
-            ChoiceChip(
-              key: const ValueKey('bulk-catalog-field-clear-cost'),
-              label: const Text('Remove the unit cost'),
-              selected: field == TenantProductField.cost && clearCost,
-              onSelected: busy
-                  ? null
-                  : (_) => onFieldChanged(
-                      TenantProductField.cost,
-                      clearsCost: true,
-                    ),
-            ),
-          ],
+      // **The one bar whose selection is a pair rather than a value.** Which
+      // field moves and whether a cost is being *removed* are two variables in
+      // this panel, and three of the four chips answer both at once - so the
+      // pair is flattened into `_BulkFieldChoice` here, at the call site that
+      // has the problem, and `FilterChipBar` stays a plain single selection.
+      //
+      // A price and a cost are money, and the server decides permission over
+      // the union of every row's fields: one row naming either refuses the
+      // whole request. So they are not offered at all rather than offered and
+      // refused, which would teach a manager only that the app guesses.
+      FilterChipBar<_BulkFieldChoice>(
+        semanticLabel: 'Which field this change moves',
+        selected: _BulkFieldChoice.of(field, clearCost: clearCost),
+        onSelected: (value) => value == null
+            ? null
+            : onFieldChanged(value.field, clearsCost: value.clearsCost),
+        options: <FilterChipOption<_BulkFieldChoice>>[
+          for (final choice in _BulkFieldChoice.values)
+            if (choice == _BulkFieldChoice.category || canChangeMoney)
+              FilterChipOption<_BulkFieldChoice>(
+                key: ValueKey('bulk-catalog-field-${choice.slug}'),
+                value: choice,
+                label: choice.label,
+                enabled: !busy,
+              ),
         ],
       ),
       if (!canChangeMoney) ...[
@@ -875,18 +849,18 @@ final class _BulkCatalogContents extends StatelessWidget {
             'these products under.',
           )
         else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
+          FilterChipBar<String>(
+            semanticLabel: 'The category these products move to',
+            selected: valueCategoryId,
+            onSelected: (value) =>
+                value == null ? null : onCategoryChosen(value),
+            options: <FilterChipOption<String>>[
               for (final category in view.categories.items)
-                ChoiceChip(
+                FilterChipOption<String>(
                   key: ValueKey('bulk-catalog-category-${category.id}'),
-                  label: Text(category.name),
-                  selected: category.id == valueCategoryId,
-                  onSelected: busy
-                      ? null
-                      : (_) => onCategoryChosen(category.id),
+                  value: category.id,
+                  label: category.name,
+                  enabled: !busy,
                 ),
             ],
           ),
@@ -1161,6 +1135,48 @@ final class _BulkCatalogContents extends StatelessWidget {
         ),
     ];
   }
+}
+
+/// Which field a bulk correction moves, with "remove the unit cost" flattened
+/// into the same list.
+///
+/// **A pair, made into a value, because `FilterChipBar` selects one thing.**
+/// The panel holds a `TenantProductField` *and* a `clearCost` flag, and three
+/// of the four chips set both - `cost` with the flag off and `cost` with it on
+/// are different chips answering the same field. Modelling that as a mode
+/// inside the component would put a two-variable selection into every other
+/// filter bar in the app to serve one screen.
+enum _BulkFieldChoice {
+  category(TenantProductField.categoryId, false, 'categoryId', 'Category'),
+  price(TenantProductField.price, false, 'price', 'Unit price'),
+  cost(TenantProductField.cost, false, 'cost', 'Unit cost'),
+  clearCost(TenantProductField.cost, true, 'clear-cost', 'Remove the unit cost');
+
+  const _BulkFieldChoice(this.field, this.clearsCost, this.slug, this.label);
+
+  final TenantProductField field;
+  final bool clearsCost;
+
+  /// The key fragment each chip already carried, kept so the screen's tests
+  /// keep addressing the control they were written about.
+  final String slug;
+  final String label;
+
+  static _BulkFieldChoice of(
+    TenantProductField field, {
+    required bool clearCost,
+  }) => switch (field) {
+    TenantProductField.price => _BulkFieldChoice.price,
+    TenantProductField.cost =>
+      clearCost ? _BulkFieldChoice.clearCost : _BulkFieldChoice.cost,
+    // `categoryId` and `name`. **`name` has no chip and is not reachable
+    // here** - a bulk change never moves a product's name, which is why the
+    // four chips above are four rather than five - so it falls in with the
+    // category rather than being a case that asserts. A wildcard is the honest
+    // shape: this maps the *offered* fields and the compiler is telling the
+    // truth that the enum is wider than the offer.
+    _ => _BulkFieldChoice.category,
+  };
 }
 
 /// One report row's outcome, as one of §2.1's five.
