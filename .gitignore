@@ -59,3 +59,10 @@ screenshots.zip
 
 # Scratch captures from an earlier session, kept locally rather than shared.
 .codex-*.png
+
+# Claude Code's permission rules. `.claude/settings.json` is tracked and shared -
+# it is what stops every `flutter test` and `git diff` asking for approval. The
+# `.local.json` beside it is per-machine, is written by the tool whenever an
+# individual command is approved, and accumulates verbatim one-off entries that
+# mean nothing on anyone else's machine.
+/.claude/settings.local.json
