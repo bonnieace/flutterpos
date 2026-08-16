@@ -141,6 +141,15 @@ flutter:
           weight: 700
         - asset: fonts/roboto-italic.ttf
           style: italic
+    # **One face, and that is the whole of what §2.2 asks for.** The `mono` row
+    # is 13 / 18 at weight 400 and names no other weight, so declaring the
+    # fifteen other faces that ship in the Google Fonts download would bundle
+    # about 1.3MB to serve a role that uses one of them. The rest are left in
+    # `fonts/` unreferenced rather than deleted - they are the product owner's
+    # download, and an undeclared file is not in the app.
+    - family: Roboto Mono
+      fonts:
+        - asset: fonts/RobotoMono-Regular.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

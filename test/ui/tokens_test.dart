@@ -487,22 +487,22 @@ void main() {
       }
     });
 
-    test('no type role names a family, including mono', () {
-      // `lib/theme.dart` names none either, and the note there says why: this
-      // app asked for Inter for years and no Inter was ever bundled.
+    test('only mono names a family, and it names Roboto Mono', () {
+      // **This assertion was written to fail on the day the family was
+      // settled, and it did.** It used to read "no type role names a family,
+      // including mono", because §2.2's opening line says "One family - Roboto"
+      // while its last row says "monospace", the app bundled no font at all,
+      // and a monospace family here would have been a value nobody chose.
       //
-      // **`mono` is the open question, not an oversight.** §2.2's opening line
-      // says "One family - Roboto" and its last row says "monospace", and the
-      // app bundles no font at all, so a monospace family here would be a
-      // value nobody chose. Until that is decided, `mono` carries the metrics
-      // and renders proportionally - which means it is not yet fit for the job
-      // §2.2 gives it. When the family is settled this assertion is the one
-      // that fails, deliberately.
+      // `design.md` v0.7 chose it on 2026-08-16: Roboto and Roboto Mono, the
+      // same type design at two widths, both bundled. The eleven other roles
+      // still name nothing and inherit `lib/theme.dart`'s `fontFamily`, which
+      // is how "one family" stays true of them.
       for (final entry in type.all.entries) {
         expect(
           entry.value.fontFamily,
-          isNull,
-          reason: '${entry.key} names a family',
+          entry.key == 'mono' ? 'Roboto Mono' : isNull,
+          reason: '${entry.key} names the wrong family',
         );
       }
     });

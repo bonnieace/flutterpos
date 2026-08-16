@@ -653,14 +653,20 @@ final class AppTypeRoles {
   /// `mono` 13 / 18, 400, monospace. Record IDs and SKUs - strings a person
   /// compares character by character, not prose.
   ///
-  /// **The metrics are the document's; the family is not decided anywhere.**
-  /// §2.2 says "One family - Roboto" in its opening line and "monospace" in
-  /// this row, and the app bundles no font at all. So this role carries its
-  /// size, height and weight and names no family, exactly like the eleven above
-  /// it, and the question is recorded in `PLAN.md` rather than answered here
-  /// with a family nobody chose. Until it is answered, this role renders in the
-  /// platform's proportional default and is not yet fit for the job §2.2 gives
-  /// it.
+  /// ~~**The metrics are the document's; the family is not decided anywhere.**~~
+  /// **Answered by `design.md` v0.7 on 2026-08-16: the family is Roboto Mono,
+  /// and it is bundled.** The note this replaces was true and was the oldest
+  /// hole in the token layer - §2.2 said "One family - Roboto" in its opening
+  /// line and "monospace" in this row, the app bundled no font at all, and so
+  /// the one role whose entire job is character-by-character comparison
+  /// rendered in the platform's proportional default.
+  ///
+  /// **Two files, one type design**, which is the reading of "one family" that
+  /// survives contact with this row: Roboto and Roboto Mono are the same design
+  /// at two widths, so `rj_000001` sits beside body copy without looking
+  /// borrowed, and `rj_00OOO1` stops being ambiguous. This is the only role in
+  /// the twelve that names a family, and it names one because it is the only
+  /// one whose family is load-bearing rather than inherited.
   final TextStyle mono;
 
   static const List<FontFeature> _tabular = <FontFeature>[
@@ -731,6 +737,8 @@ final class AppTypeRoles {
       fontSize: 13,
       height: 18 / 13,
       fontWeight: FontWeight.w400,
+      // The one family named in this file. See the field's own note.
+      fontFamily: 'Roboto Mono',
     ),
   );
 

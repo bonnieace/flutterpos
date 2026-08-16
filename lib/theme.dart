@@ -182,10 +182,16 @@ final class SpiritScrollBehavior extends MaterialScrollBehavior {
 /// makes the app match its own pictures rather than the other way round, and is
 /// why this change moves almost no image.
 ///
-/// **`mono` is still not delivered**, and that is the half left: §2.2's `mono`
-/// role wants Roboto Mono, which the Flutter SDK does not cache, so the file has
-/// to be fetched. Until it is, `AppTypeRoles.mono` carries its metrics and names
-/// no family, and a SKU renders proportionally. See `PLAN.md`.
+/// **`mono` names Roboto Mono as of the same day**, and the file is bundled -
+/// so `AppTypeRoles.mono` is the one role in the twelve that names a family,
+/// and it is the only one whose family is load-bearing rather than inherited.
+///
+/// **What is still not delivered is a *reader*.** `AppTypeRoles.mono` has zero
+/// call sites: the role is defined, has metrics, now has a face, and no screen
+/// applies it - so §2.2's "record identifiers are monospace" is still true of
+/// nothing. Bundling the font made the role possible rather than applied.
+/// Recorded in `PLAN.md`; the sweep is a chunk of its own, because which
+/// strings are identifiers is a judgement per screen rather than a grep.
 final ThemeData spiritTheme = ThemeData(
   brightness: Brightness.dark,
   // §2.2's "one family". See the note above for why this was absent for so long
