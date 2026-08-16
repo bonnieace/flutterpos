@@ -13,110 +13,115 @@ model as this one.
 Every section of this file, with the line it starts on. Read the one you need.
 
 - **9** — Index
-  - **265** — Published status board
-- **318** — Status board
-  - **320** — Tracks
-  - **341** — Can a shop do this yet?
-  - **378** — Where the last chunk left it
-  - **407** — Chunk index
-  - **484** — Found by using the app
-  - **616** — Rollout position
-  - **638** — Test baselines
-- **1254** — Corrections made in the 2026-08-07 PLAN/HISTORY split
-- **1285** — Standing decisions and unreachable capabilities
-  - **1293** — A sale records how it was paid for, chosen manually
-  - **1311** — A business publishes its own currency, and it converts nothing
-  - **1329** — A shop stocks itself, and a retired product keeps its history
-  - **1352** — A price is corrected on the server, and never a quantity
-  - **1385** — A product records what it cost, and a sale freezes it
-  - **1410** — A profit figure is complete or it is not shown
-  - **1433** — Bulk catalog work is a rewrite, and the old code is not the starting point
-  - **1463** — A spreadsheet becomes products, and its stock has an origin
-  - **1503** — One screen reaches both bulk callables, and it previews before it writes
-  - **1532** — A suspicious return is scored on the server, after the first deployment
-  - **1556** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
-  - **1575** — A refused invitation names what will work, and only a transient failure invites a retry
-  - **1602** — The token layer is additive, and a density is a nested `Theme`
-  - **1638** — The ripple dies at the theme, and the press arrives with the button
-  - **1665** — A button is a component, and a spring is the substrate under it
-  - **1690** — Every button is an `AppButton`, and the tier is a decision per site
-  - **1712** — Five statuses, and three components two of which have no specification
-  - **1744** — One field, everywhere - and an audit finding that was false
-  - **1771** — A route arrives on a spring, and one parallax is deliberately missing
-  - **1803** — A category is named, and a document ID is not a name
-  - **1825** — A screen title is content, and the toolbar keeps only the way back
-  - **1860** — One boundary, one variable, and a maximum width on every page
-  - **1888** — One record model, three renderings, and the loss the caller owns
-  - **1917** — The staff directory stops choosing its own form, and a record gets a form slot
-  - **1940** — A product states its facts as facts, and only one that cannot be sold has a standing
-  - **1966** — One ledger entry, one vocabulary, and a screen that had three
-  - **1995** — A shift has a standing, and two paragraphs were never about a record
-  - **2023** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
-  - **2054** — A page's standing is a status, and a report row's reads the mode it was written in
-  - **2081** — A figure is a component, and a row of them measures what it holds
-  - **2117** — A figure is evidence on these three, and one document is read two ways on purpose
-  - **2140** — A notice says which answer it is, and four of them were never refusals
-  - **2168** — A title appears once, and the page that said it was read-only was not
-  - **2193** — A column asks for what it holds, and a share is a guess about content
-  - **2226** — A boundary is a measurement, and the front door had a second palette
-  - **2264** — An input is a pill again, and the specification moved first
-  - **2303** — The till draws the token layer, and a status is never a colour on its own
-  - **2336** — Thirteen components exist, and what is left of §5.1 is one that does and one that should not
-  - **2390** — A read has three answers, a dialog may hold a form, and a page bar does not move
-  - **2431** — Built, tested, and still unreachable
-  - **2471** — The home is cards below 1024 and a side menu above it, and the till is pushed
-- **2528** — Open decisions
-  - **2530** — §5.1 gives `LedgerEntry` a row and §4.3 took every screen it names
-  - **2546** — A form dialog cannot be escaped by its scrim, and two dialogs changed behaviour
-  - **2562** — `AppDialog` is 720 wide because §4.3's `Form` row is, and no section states a dialog's maximum
-  - **2579** — ~~§7 wants a filled destructive confirm~~ — resolved 2026-08-16: §7 gave up the word
-  - **2599** — ~~§2.2 gives a section head `title.lg`~~ — resolved 2026-08-16: it gives it `title.md`
-  - **2624** — §4.4's home top bar needs two facts the home is not given, and fetching them is not a restyle
-  - **2661** — §4.4 wants the side menu on every route, and every route reaches it by a push
-  - **2697** — Public password reset needs App Check, which this app has none of
-  - **2804** — `Callout` has no specification, and three glyph sizes were borrowed
-  - **2828** — Every string is painted 0.25px per character wider than its token style says
-  - **2849** — ~~A chip is the only thing §2.3's pill argument still guards~~ — resolved 2026-08-16: the chip is a pill
-  - **2877** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
-  - **2901** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
-  - **2922** — Three run counts are decoded on every read and displayed by nothing
-  - **2939** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
-  - **2974** — `design.md` states no page padding, and `AppScaffold` had to pick one
-  - **2993** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
-  - **3018** — `AppSheet` has no specification, and step 7 opens a sheet
-  - **3041** — The app teaches by folding prose, and nobody has decided whether folding is teaching
-  - **3064** — The invitation email names no business, and no step reaches an email
-  - **3086** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
-  - **3125** — Three design-system questions the redesign has refused to answer
-  - **3169** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
-  - **3180** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
-  - **3250** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
-- **3316** — Identity, Tenancy, and Public Interfaces
-  - **3318** — Environments
-  - **3325** — Root model
-  - **3357** — Tenant path contract
-  - **3367** — Tenant routing and limits
-  - **3384** — Shared authorization
-  - **3401** — Public callable interfaces
-  - **3435** — Full export surface
-- **3465** — Platform, Ownership, and Membership Integrity
-- **3521** — Invitations and Email
-- **3585** — Offline Operations, Stock, and Receipts
-- **3634** — Reconciliation, Rules, and Testing
-  - **3636** — Reconciliation
-  - **3700** — Rules
-  - **3726** — Required tests
-- **3744** — Working on this repository
-  - **3746** — The emulator prelude is not optional
-  - **3761** — Standing traps
-  - **4158** — Repository state
-- **4333** — Next bounded chunk
-  - **4477** — What it builds, in the order that section prescribes
-  - **4496** — The one decision this chunk must have answered before item 3
-  - **4504** — What it must not do
-  - **4521** — What this chunk owes on top of the work
-  - **4528** — Behind it
-  - **4536** — ~~The reskin tail's own five items, its exclusions and its size estimate~~ — retired 2026-08-16
+  - **270** — Published status board
+- **323** — Status board
+  - **325** — Tracks
+  - **346** — Can a shop do this yet?
+  - **383** — Where the last chunk left it
+  - **420** — Chunk index
+  - **498** — Found by using the app
+  - **630** — Rollout position
+  - **652** — Test baselines
+- **1281** — Corrections made in the 2026-08-07 PLAN/HISTORY split
+- **1312** — Standing decisions and unreachable capabilities
+  - **1320** — A sale records how it was paid for, chosen manually
+  - **1338** — A business publishes its own currency, and it converts nothing
+  - **1356** — A shop stocks itself, and a retired product keeps its history
+  - **1379** — A price is corrected on the server, and never a quantity
+  - **1412** — A product records what it cost, and a sale freezes it
+  - **1437** — A profit figure is complete or it is not shown
+  - **1460** — Bulk catalog work is a rewrite, and the old code is not the starting point
+  - **1490** — A spreadsheet becomes products, and its stock has an origin
+  - **1530** — One screen reaches both bulk callables, and it previews before it writes
+  - **1559** — A suspicious return is scored on the server, after the first deployment
+  - **1583** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
+  - **1602** — A refused invitation names what will work, and only a transient failure invites a retry
+  - **1629** — The token layer is additive, and a density is a nested `Theme`
+  - **1665** — The ripple dies at the theme, and the press arrives with the button
+  - **1692** — A button is a component, and a spring is the substrate under it
+  - **1717** — Every button is an `AppButton`, and the tier is a decision per site
+  - **1739** — Five statuses, and three components two of which have no specification
+  - **1771** — One field, everywhere - and an audit finding that was false
+  - **1798** — A route arrives on a spring, and one parallax is deliberately missing
+  - **1830** — A category is named, and a document ID is not a name
+  - **1852** — A screen title is content, and the toolbar keeps only the way back
+  - **1887** — One boundary, one variable, and a maximum width on every page
+  - **1915** — One record model, three renderings, and the loss the caller owns
+  - **1944** — The staff directory stops choosing its own form, and a record gets a form slot
+  - **1967** — A product states its facts as facts, and only one that cannot be sold has a standing
+  - **1993** — One ledger entry, one vocabulary, and a screen that had three
+  - **2022** — A shift has a standing, and two paragraphs were never about a record
+  - **2050** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
+  - **2081** — A page's standing is a status, and a report row's reads the mode it was written in
+  - **2108** — A figure is a component, and a row of them measures what it holds
+  - **2144** — A figure is evidence on these three, and one document is read two ways on purpose
+  - **2167** — A notice says which answer it is, and four of them were never refusals
+  - **2195** — A title appears once, and the page that said it was read-only was not
+  - **2220** — A column asks for what it holds, and a share is a guess about content
+  - **2253** — A boundary is a measurement, and the front door had a second palette
+  - **2291** — An input is a pill again, and the specification moved first
+  - **2330** — The till draws the token layer, and a status is never a colour on its own
+  - **2363** — Thirteen components exist, and what is left of §5.1 is one that does and one that should not
+  - **2417** — A printer is dialled behind a seam, and a receipt number is the idempotency key
+  - **2458** — A read has three answers, a dialog may hold a form, and a page bar does not move
+  - **2499** — Built, tested, and still unreachable
+  - **2540** — The home is cards below 1024 and a side menu above it, and the till is pushed
+- **2597** — Open decisions
+  - **2599** — One printer per device, or several — and it decides the shape of a durable record
+  - **2620** — §5.1 gives `LedgerEntry` a row and §4.3 took every screen it names
+  - **2636** — A form dialog cannot be escaped by its scrim, and two dialogs changed behaviour
+  - **2652** — `AppDialog` is 720 wide because §4.3's `Form` row is, and no section states a dialog's maximum
+  - **2669** — ~~§7 wants a filled destructive confirm~~ — resolved 2026-08-16: §7 gave up the word
+  - **2689** — ~~§2.2 gives a section head `title.lg`~~ — resolved 2026-08-16: it gives it `title.md`
+  - **2714** — §4.4's home top bar needs two facts the home is not given, and fetching them is not a restyle
+  - **2751** — §4.4 wants the side menu on every route, and every route reaches it by a push
+  - **2787** — Public password reset needs App Check, which this app has none of
+  - **2894** — `Callout` has no specification, and three glyph sizes were borrowed
+  - **2918** — Every string is painted 0.25px per character wider than its token style says
+  - **2939** — ~~A chip is the only thing §2.3's pill argument still guards~~ — resolved 2026-08-16: the chip is a pill
+  - **2967** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
+  - **2991** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
+  - **3012** — Three run counts are decoded on every read and displayed by nothing
+  - **3029** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
+  - **3064** — `design.md` states no page padding, and `AppScaffold` had to pick one
+  - **3083** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
+  - **3108** — `AppSheet` has no specification, and step 7 opens a sheet
+  - **3131** — The app teaches by folding prose, and nobody has decided whether folding is teaching
+  - **3154** — The invitation email names no business, and no step reaches an email
+  - **3176** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
+  - **3215** — Three design-system questions the redesign has refused to answer
+  - **3259** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
+  - **3270** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
+  - **3340** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
+- **3406** — Identity, Tenancy, and Public Interfaces
+  - **3408** — Environments
+  - **3415** — Root model
+  - **3447** — Tenant path contract
+  - **3457** — Tenant routing and limits
+  - **3474** — Shared authorization
+  - **3491** — Public callable interfaces
+  - **3525** — Full export surface
+- **3555** — Platform, Ownership, and Membership Integrity
+- **3611** — Invitations and Email
+- **3675** — Offline Operations, Stock, and Receipts
+- **3724** — Reconciliation, Rules, and Testing
+  - **3726** — Reconciliation
+  - **3790** — Rules
+  - **3816** — Required tests
+- **3834** — Working on this repository
+  - **3836** — The emulator prelude is not optional
+  - **3851** — Standing traps
+  - **4267** — Repository state
+- **4442** — Next bounded chunk
+  - **4578** — What it needs from the product owner, and it needs it first
+  - **4590** — What it builds
+  - **4609** — What it must not do
+  - **4642** — What it builds, in the order that section prescribes
+  - **4661** — The one decision this chunk must have answered before item 3
+  - **4669** — What it must not do
+  - **4686** — What this chunk owes on top of the work
+  - **4693** — Behind it
+  - **4701** — ~~The reskin tail's own five items, its exclusions and its size estimate~~ — retired 2026-08-16
 
 <!-- index:end -->
 
@@ -335,7 +340,7 @@ it**; `LedgerEntry` is the only one left with *none* - §4.3's `RecordList` took
 screens it names, and it is an open decision rather than a build. ~~**Three surfaces are still
 unmigrated**: the `TenantBusinessSwitcher` dialog, `TenantBootstrapFailure` and
 `PlatformRouteUnavailable`.~~ **All three closed 2026-08-16 and there are none left.** |
-| **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
+| **Flutter client** | ~93% | **Printing Phase 1's plumbing landed 2026-08-17** — the compile-time transport seam, one `dart:io` socket covering Android, iOS, Windows, macOS and Linux, the tenant printer document that fails closed, a durable job queue keyed by the receipt number, and eight failure codes mapped once to eight sentences. **It is deliberately unreachable**: nothing calls it, because the receipt's *layout* is a design surface §12 has not settled. The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
 ### Can a shop do this yet?
@@ -366,7 +371,7 @@ callable exists, and not green if it is merely tested.
 | Read daily and period totals | 🟢 | Daily summary, plus period totals by member and category |
 | Ask for reconciliation | 🟢 | Owner/admin, from the reconciliation status route |
 | See why a day disagrees, and correct a shift | 🟢 | Differences list → `amendShiftSummary` |
-| Print a receipt | 🔴 | Nothing is built. **Not blocked** — `docs/printer_transport.md` has been the settled design since 2026-08-11 and four chunks inherited a stale "waiting on the interface" exclusion without opening it. Phase 1 is one `dart:io` transport behind a compile-time seam, a durable per-endpoint-serialized job queue keyed by the receipt number, a tenant printer document that fails closed, and eight failure codes. It is the queued chunk |
+| Print a receipt | 🔴 | **Phase 1's plumbing landed 2026-08-17 and this row is still red, which is the honest colour**: green means a person could do it in a running app today, and nothing calls the queue. Built and tested — one `dart:io` transport behind a compile-time seam, a durable per-endpoint-serialized job queue keyed by the receipt number, a tenant printer document that fails closed, eight failure codes. Missing — the receipt's **layout**, which `design.md` §12 makes a design surface of its own, and the three surfaces that reach it. **It was never blocked on the interface**: `docs/printer_transport.md` has been the settled design since 2026-08-11 and four chunks inherited a stale exclusion without opening it |
 | Import a catalog from a spreadsheet | 🟢 | "Manage catalog" → **"Bulk changes and import"** → "Import a spreadsheet". Paste the rows, header included; commas, tabs, and semicolons all parse and a quoted cell may hold one. Preview writes nothing, then commit. Rows chain 50 at a time. A category is named by its own name and must already exist. Owner/admin/manager; a **cost column** needs owner/admin and refuses a manager's whole sheet |
 | Change many products at once | 🟢 | Same route → "Correct many products". Tick products across pages, then move one field: category, unit price, unit cost, or remove the unit cost. Preview writes nothing, then commit. Category is owner/admin/manager; the three money corrections are owner/admin and are not offered to anyone else |
 | Flag a suspicious return | 🔴 | **Scoped 2026-08-08, sequenced after the first deployment.** The old app scores six signals client-side and keeps nothing; see the standing decision |
@@ -402,7 +407,15 @@ component in the unreachable table on purpose.
 design.** `dart format lib/` reformatted **124 legacy files** the hard rules forbid touching, and a
 save-and-restore keyed by *basename* rather than by path silently swapped three unit-test files for
 their same-named harness files. Both were caught and reverted; both are in the `HISTORY.md` session.
-Rewrite this paragraph; do not append to it.
+
+**Printing followed it the same day and the correction is the story.** Four chunks had inherited an
+exclusion reading "blocked on the print service's interface, which has not been shared" — and
+`docs/printer_transport.md` has been committed since **2026-08-11**. Nobody opened it for five days
+because the exclusion list said not to. Phase 1's plumbing is now built and tested: the compile-time
+transport seam, the `dart:io` socket, the tenant printer document that fails closed, the durable job
+queue keyed by the receipt number, and eight failure codes. **It is deliberately unreachable** — the
+receipt's *layout* does not exist, and `design.md` §12 makes that a design surface rather than a
+formatting detail. Rewrite this paragraph; do not append to it.
 
 ### Chunk index
 
@@ -417,6 +430,7 @@ no row moved at all.
 
 | Date | What it took | Track | Board | `HISTORY.md` session |
 | --- | --- | --- | --- | --- |
+| 2026-08-17 | **printing, Phase 1** - the transport seam, the `dart:io` socket, the printer document, the durable job queue, 8 failure codes; **a five-day-stale exclusion withdrawn** | Flutter 92→93% | — (unreachable table +1) | Printing gets its plumbing, and the exclusion that blocked it was five days stale |
 | 2026-08-16 | **the reskin tail** - `LoadingState`, `ErrorState`, `AppDialog`, `RollingNumber`, `Pagination` (13 screens), `AppTabs`; **finishes step 7** and the last 3 unmigrated surfaces | 99→99% | — | Three states, a dialog that holds a form, and a page bar that stops moving |
 | 2026-08-16 | **the reskin push, 15 commits** - 7 components, `design.md` v0.6→v0.8, fonts bundled; **step 7 all but `RollingNumber`** | 98→99% | - | Five components, seven decisions, and the reskin runs out of things it can do alone |
 | 2026-08-16 | `design.md` **v0.6** — §7 drops *filled*, §2.2 gives a section head `title.md`; `DESIGN-PROPOSAL-COMPONENTS.md` drafted | 98→98% | — | Two contradictions closed, and five components written down before anyone builds them |
@@ -639,23 +653,36 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **2099** ✅ the reskin tail took 2065 → 2099 on 2026-08-16; measured a dozen times earlier the same day (5b's halves 1979 → 1998 → 2013; step 7's 2013 → 2022; the sweep at 2022; then the seven-component push 2022 → 2065) and seven times on 2026-08-15 |
-| Functions | `npm --prefix functions test` | **409** ✅ measured twice on 2026-08-16 (~32–36 s), six times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured twice on 2026-08-16, seven times on 2026-08-15 (~68–186 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured twice on 2026-08-16, six times on 2026-08-15 (~78–214 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured twice on 2026-08-16, six times on 2026-08-15 (~131–295 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **2146** ✅ printing Phase 1 took 2099 → 2146 on 2026-08-17; the reskin tail took 2065 → 2099 on 2026-08-16; measured a dozen times earlier the same day (5b's halves 1979 → 1998 → 2013; step 7's 2013 → 2022; the sweep at 2022; then the seven-component push 2022 → 2065) and seven times on 2026-08-15 |
+| Functions | `npm --prefix functions test` | **409** ✅ measured on 2026-08-17 (~42 s), twice on 2026-08-16 (~32–36 s), six times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured on 2026-08-17 (~142 s), twice on 2026-08-16, seven times on 2026-08-15 (~68–186 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured twice on 2026-08-17 (~105 s, then re-run for its `pass` count), twice on 2026-08-16, six times on 2026-08-15 (~78–214 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured twice on 2026-08-17 (~189 s, then re-run for its `pass` count), twice on 2026-08-16, six times on 2026-08-15 (~131–295 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
 
-**The carry counter is at 2, which is the limit this file sets, so the next chunk runs all five
-whatever it touches.** It was taken to 2 deliberately and with the product owner's direction on
-2026-08-17: the reskin tail is client-only from end to end and `git diff` over `functions/`,
-`firestore.rules` and `rules-tests/` prints **zero lines**, so the four server suites ran *after* the
-commit rather than before it. The counts above are that run. **A third carry is not available** —
-whatever the printing chunk turns out to touch, it owes all four.
+**The carry counter is back at 0.** It reached its limit of 2 on 2026-08-16 — the reskin tail is
+client-only from end to end and `git diff` over `functions/`, `firestore.rules` and `rules-tests/`
+printed **zero lines** — so at the product owner's direction the four server suites ran *after* that
+commit rather than before it, and cleared it. The counts above are that run: functions **409**, rules
+**161**, and the two integration suites green.
+
+**Printing Phase 1 touched none of them either**, and that was checked rather than assumed:
+`configuration/printer` is already covered by `match /configuration/{documentId}`, so the Rules suite
+did not need to move and did not. **The queue entry for that chunk predicted a rules change and a
+rules test and was wrong** — a prediction made from the shape of the work rather than from the file,
+which is the same error as the six mis-counted figures.
 
 ~~**2668 tests across five suites.** **The carry counter is at 1**~~, and the reason is stated rather
 than assumed: the 2026-08-16 reskin push was a client-only chunk from end to end, and `git diff` over
 `functions/`, `firestore.rules` and `rules-tests/` printed **zero lines across all fifteen commits**,
 so the four server suites were not re-run.
+
+**Printing Phase 1 took Flutter 2099 → 2146** (+47: **15** in `checkout_print_transport_test.dart`,
+**22** in `checkout_print_jobs_test.dart`, **10** in `checkout_print_configuration_test.dart`).
+**Not one existing assertion changed**, which is what a slice with no callers should cost the suite:
+seven new files under `lib/checkout/` and four exports on the barrel, and nothing else in `lib/` was
+edited. **Four of the 47 failed on their first run and all four were the tests being right** — two
+about a `Future`-returning method that threw synchronously, one about a record that did not equal its
+own persisted form, and one about a recovery test that had released its own hang before asserting.
 
 **The reskin tail took Flutter 2065 → 2099** (+34: **8** in `states_test.dart`
 for the two new full-page states, **7** in `dialogs_test.dart` for `AppDialog`, **9** in the new
@@ -2387,6 +2414,47 @@ See `HISTORY.md` - "Five components, seven decisions, and the reskin runs out of
 alone" (2026-08-16) - for the six defects only a rendering found, the Lottie colour audit, and the
 blocker that was called wrongly and corrected.
 
+### A printer is dialled behind a seam, and a receipt number is the idempotency key
+
+`docs/printer_transport.md` is the design and **it has been settled since 2026-08-11**. Phase 1
+landed 2026-08-17. The rules that now bind:
+
+- **Every platform reaches a printer through one shim**, `checkout_print_transport.dart`, with a
+  conditional import per platform family. `dart:io` and the web transport are never both compiled
+  into a binary. **Do not import `dart:io` at a printing call site**; that is what makes Phase 2 a
+  new file rather than a refactor of every caller.
+- **The unsupported stub throws, and must keep throwing.** A receipt that was never printed and
+  never complained is the worst outcome available here. Phase 1 on web is
+  `transport_unsupported`, loudly.
+- **The transport never touches UI, never holds state, and never decides whether to retry.** It
+  throws a code from `PrinterTransportCode`. Retry belongs to the queue; a sentence belongs to
+  `checkout_print_failures.dart`, which is the only file in the slice containing English.
+- **A connect timeout is decided by elapsed time, not by an errno.** `Socket.connect` reports one as
+  a `SocketException` whose `osError` differs per platform and is sometimes absent. Do not "fix"
+  this by reading the code.
+- **The write timeout wraps `flush`, not `add`.** `add` is buffered and returns immediately; timing
+  it reports success for a payload still in the send buffer against a jammed printer.
+- **The printer document fails closed and there is no default address, ever.** Missing or malformed
+  leaves the receipt queued with a reason. The borrowed repository's fallback to a built-in
+  `192.168.100.100` is, on a customer's LAN, someone else's device.
+- **The job key is the receipt number `HiveCheckoutReceiptCounters` already allocates.** That makes
+  idempotency free: two enqueues for one sale are one job, and a crash mid-print recovers into the
+  same job rather than a second one. Do not add a second identifier.
+- **Serialization is per endpoint, not per job**, so one printer takes one connection and two
+  printers in one shop still run in parallel.
+- **Reaching `printed` means the queue never re-sends on its own.** A duplicate receipt is a
+  cash-handling problem. `reprint` is the only way past it, it requires an audit callback as a
+  **required** argument, and the audit is written before the re-queue.
+- **Every operator-facing string says *sent*, never *printed*.** `send` returning normally proves
+  the bytes left; no ESC/POS network transport can prove paper moved without status readback, which
+  Phase 1 does not do.
+- **`configuration/printer` needed no rules change**, because `match /configuration/{documentId}`
+  already covers it. This was checked; the queue entry that predicted a rules change was wrong.
+
+Reasoning, the two traps the tests found, and the decision the next chunk must have answered:
+`HISTORY.md` — "Printing gets its plumbing, and the exclusion that blocked it was five days stale"
+(2026-08-17).
+
 ### A read has three answers, a dialog may hold a form, and a page bar does not move
 
 The rules the reskin tail set on 2026-08-16, in present tense:
@@ -2432,6 +2500,7 @@ states, a dialog that holds a form, and a page bar that stops moving" (2026-08-1
 
 | Capability | State |
 | --- | --- |
+| Printing, Phase 1 | **Entered 2026-08-17 with one bounded reason and the reason queued**, which is the good kind of entry this table records. The transport seam, the `dart:io` socket, the unsupported stub, the tenant printer document, the durable job queue and the eight failure codes are built and tested; **nothing on the sale path calls `enqueue`, because nothing produces bytes yet.** `docs/printer_transport.md` scopes byte-building out — `flutter_esc_pos_utils`' `Generator` does it and is already a dependency — and what is missing is the receipt's **layout**, which `design.md` §12 says is a design surface of its own. The receipt body is the queued chunk. |
 | `requestPasswordReset` | **Blocked on App Check.** Still no caller — see below. The *worker* behind it is a different sentence and is no longer untested: `deliverPasswordReset`'s dependencies run against real Auth and real Firestore as of 2026-08-08. What keeps this row here is the client surface, which is what the decision blocks. |
 | Subscription | `TenantPaths.currentSubscription` and rules exist; **nothing reads it and nothing writes it**. `grep -i subscription functions/src` finds nothing at all, so there is no schema to model. Start on the server, not in Flutter. |
 | Category rename and delete | Permitted by `allow create, update, delete` on `categories` to owner/admin/manager, and offered to nobody. Deliberate, for the orphaning reason above; recorded here so the gap between rule and surface stays a decision. |
@@ -2526,6 +2595,27 @@ leaves the page and becomes the frame's" (2026-08-16).
 ---
 
 ## Open decisions
+
+### One printer per device, or several — and it decides the shape of a durable record
+
+**`docs/printer_transport.md` §10 decision 1, raised there and carried here on 2026-08-17 because
+the code that depends on it now exists.** That document calls it "the most consequential question
+left" and it is right: this design assumes **one configured printer per device**, and
+kitchen-plus-counter routing would make the endpoint a **per-job property** rather than tenant
+configuration.
+
+**What it costs to defer is smaller than the document expected, and that is worth knowing before
+answering.** `PrintJobRecord` already carries `host` and `port` **per job**, because a job has to
+remember where it was going across a restart — so the record's shape already supports several
+printers. What would change is only where those two fields come from: today `configuration/printer`,
+under the other answer a routing rule the caller applies.
+
+**What is genuinely undecided is the product question, not the schema**: whether a shop with two
+printers picks per sale, per product category, or per till. Only the first is cheap.
+
+**Nothing is blocked on this.** The transport, the configuration document and the failure vocabulary
+are all unaffected; the receipt-body chunk queued below touches it only if a routing rule has to
+choose an endpoint.
 
 ### §5.1 gives `LedgerEntry` a row and §4.3 took every screen it names
 
@@ -3760,6 +3850,25 @@ enormous expected-denial traces.
 
 ### Standing traps
 
+- ⛔ **`dart format lib/` reformats 410 files a chunk may not touch.** `claude.md` hard rule 3 makes
+  `lib/pos/**` and `lib/screens/**` read-only, and a directory argument does not know that: on
+  2026-08-16 a chunk that had edited twenty-two files reached for the directory and got **124
+  modified legacy files** back, with `flutter analyze` over `lib` jumping 475 → 491 while the churn
+  was in the tree. **Format the files you edited, by name.** Recovering means building the list
+  yourself — `git diff --name-only` minus the files the chunk actually touched, then
+  `git checkout HEAD --` over the remainder — because there is no flag that means "only mine".
+- ⛔ **Never key a save-and-restore by basename; this repository has colliding pairs.** The
+  screenshot baseline dance moves a chunk's new files aside and back, and
+  `test/ui/pagination_test.dart` and `tool/screenshots/pagination_test.dart` share a name — as do
+  `rolling_number_test.dart` and `tabs_test.dart`, and as `record_list_test.dart` already did. On
+  2026-08-16 three unit-test files came back as their harness namesakes and the full suite failed
+  with `Method not found: 'screenshotCase'`, which reads like a broken import and is not. **Preserve
+  the path.**
+- ⛔ **`git stash push -- <path>` inside a throwaway measurement stashes your work.** On 2026-08-16 a
+  one-line cross-check ended `git stash push -q -u -- lib` and took all 25 modified `lib/` files with
+  it; `git status` then showed a tree with the whole chunk missing and no error anywhere. It was
+  recovered with `git stash pop`. **A measurement command must not contain a mutating git verb** —
+  if a figure needs `HEAD`, read it with `git show HEAD:<path>`, which changes nothing.
 - ⛔ **Run the prelude, or you will diagnose your own machine wrongly — two consecutive sessions
   did.** `firebase-tools@15.24.0` requires Java **21 or above** and refuses before any emulator
   launches, and the machine default `java` is Temurin **17.0.20**. The JDK 21 it needs is the
@@ -4460,7 +4569,63 @@ listing eight screens of which seven were already migrated.
 
 ---
 
-**The queued chunk is printing, Phase 1, at the product owner's direction on 2026-08-17.**
+**The queued chunk is the receipt body and the surfaces that reach it — printing's second half.**
+
+**Phase 1's plumbing landed 2026-08-17 and is in the unreachable table with one bounded reason**:
+nothing calls `enqueue`, because nothing produces bytes. This chunk is what closes that, and it has
+two halves that need different kinds of decision.
+
+### What it needs from the product owner, and it needs it first
+
+1. **What is on the paper.** `design.md` §12 says a receipt "is a design surface with its own
+   constraints and **will not inherit from this document**", so the type scale, the ordering and the
+   emphasis are not derivable from §2.2 and must not be invented here. What a 32-column roll can
+   hold is about six words a line. **The minimum this chunk needs is a list of lines and their
+   order**; anything more is better.
+2. **`docs/printer_transport.md` §10 decision 1 — one printer per device, or several?** Still open,
+   still "the most consequential question left". It is now *cheaper* than it was: the job record
+   already carries `host` and `port` per job, so what changes is where they come from rather than the
+   record's shape. Ask, but do not stall on it — items 3 and 4 below are unaffected.
+
+### What it builds
+
+3. **The receipt formatter.** `flutter_esc_pos_utils`' `Generator` plus a `CapabilityProfile`, which
+   is already a dependency and already emits code-page selection — the thing the borrowed repo's
+   hand-rolled builder gets wrong, Latin-1 encoding `0x80`–`0xFF` and never emitting `ESC t`, so
+   every non-ASCII character prints in the printer's default code page. **Kenyan shop names have
+   non-ASCII characters in them.** Two widths, and the cutter flag decides whether it ends in a cut
+   or in feed lines.
+4. **The call site on the sale path.** After the sale is written — §6.3's rule applies to printing
+   exactly as it does to animation: the sale is recorded first and the receipt is queued over
+   committed state. `HiveCheckoutReceiptCounters` has already allocated the number this keys on.
+5. **The printer setup surface.** Owner and admin, writing `configuration/printer`. The transport's
+   `probe` is a first-class operation for exactly this screen: *is this printer reachable?* without
+   wasting paper. `PrinterTransportCapability.endpointIsPrinter` decides whether the address field
+   is shown at all.
+6. **The queue's own surface** — what a person sees when a receipt did not print. The eight
+   sentences exist in `checkout_print_failures.dart`; what does not exist is where they appear and
+   what "Send again" is attached to.
+
+### What it must not do
+
+- **Change the transport, the queue or the configuration model.** They are built, tested and
+  standing-decisioned. See the standing decision above.
+- **Delete the legacy print paths.** `pos/pos.dart`, `Receipt_service.dart` and
+  `thermal_printer_service.dart` are the only remaining record of the Flask contract in §5, and
+  `docs/printer_transport.md` §10 decision 3 says Phase 1 lands before they go. They are also under
+  the read-only hard rule.
+- **Phase 2, the web transport.** The stub is the correct answer until somebody asks for a browser.
+- **`receipt_reprinted`.** `audit_log.dart` states server code is the audit trail's only writer, so
+  it is a Cloud Function and a server chunk. `PrintJobQueue.reprint` already takes the seam.
+- **Step 12.** Still blocked on six open decisions.
+
+---
+
+~~**The queued chunk is printing, Phase 1, at the product owner's direction on 2026-08-17.**~~
+**Done 2026-08-17.** Everything below was built except the parts marked as the receipt body's, which
+are the entry above. The one thing it got wrong is recorded in "Test baselines": it predicted a rules
+change for `configuration/printer` and there was none, because `match /configuration/{documentId}`
+already covers it.
 
 **It is not blocked, and the correction matters more than the chunk does.** Four consecutive chunks
 carried an exclusion reading *"blocked on the print service's interface, which has not been

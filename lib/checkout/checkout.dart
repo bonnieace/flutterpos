@@ -6,6 +6,14 @@ export 'checkout_confirmation.dart';
 export 'checkout_draft.dart';
 export 'checkout_evidence.dart';
 export 'checkout_outbox.dart';
+// The printing slice. `checkout_print_transport.dart` re-exports `_base` and is
+// the only one of the four transport files a caller names: the `_io` and
+// `_unsupported` implementations are resolved by its conditional import, and
+// exporting either here would pull `dart:io` into a web build.
+export 'checkout_print_configuration.dart';
+export 'checkout_print_failures.dart';
+export 'checkout_print_jobs.dart';
+export 'checkout_print_transport.dart';
 export 'checkout_receipt.dart';
 export 'checkout_recovery.dart';
 export 'checkout_refusal.dart';

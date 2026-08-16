@@ -1,0 +1,505 @@
+/// Durable print jobs: `docs/printer_transport.md` §7.
+///
+/// **This is the part the borrowed repository has no concept of.** It prints
+/// fire-and-forget and returns a `bool`. Checkout here already survives being
+/// offline and crashing — `checkout_outbox.dart`, `checkout_recovery.dart` —
+/// and printing has to survive the same things.
+///
+/// **Storage.** An encrypted Hive box sharing the checkout outbox encryption
+/// key, for the reason `checkout_receipt.dart` gives about its counters: a
+/// queued receipt holds the same sale detail as the evidence it was printed
+/// from, so **the two must share exactly one fate**. A key rotation must never
+/// leave readable receipt bytes beside a wiped outbox.
+///
+/// **Identity is the receipt number, and that is the whole idempotency
+/// design.** `HiveCheckoutReceiptCounters` has already allocated
+/// `CT-A7F-20260729-0042`, unique per device per business date by construction.
+/// Using it as the job key means a crash mid-print recovers into the **same**
+/// job rather than a second one, with no extra identifier to invent, persist or
+/// reconcile.
+///
+/// **Serialization is per endpoint, not per job.** One ESC/POS printer accepts
+/// one connection on `:9100`; two concurrent jobs to one address interleave
+/// their bytes or get refused. The mutex is the same `_operationTails` pattern
+/// the outbox and the receipt counters already use, keyed by the address rather
+/// than by the receipt, so two printers in one shop still run in parallel.
+///
+/// **Reaching `printed` means the queue never re-sends on its own.** A
+/// duplicate receipt is a cash-handling problem, not a convenience. An operator
+/// reprint is a separate deliberate act — see [HivePrintJobQueue.reprint].
+library;
+
+import 'dart:async';
+
+import 'package:hive/hive.dart';
+
+import 'checkout_outbox.dart';
+import 'checkout_print_transport_base.dart';
+import 'checkout_receipt.dart';
+
+/// The states a print job moves through, mirroring [CheckoutOutboxState].
+enum PrintJobState {
+  /// Written durably, not yet attempted.
+  queued,
+
+  /// A send is in flight. A job found in this state after a restart was
+  /// interrupted and is resumed as the same job.
+  printing,
+
+  /// The transport handed every byte off. **Terminal, and never re-sent
+  /// automatically.**
+  printed,
+
+  /// Terminal failure. The reason is a [PrinterTransportCode].
+  needsAttention,
+}
+
+/// Raised when durable print state cannot be trusted.
+final class PrintJobException implements Exception {
+  const PrintJobException(this.code);
+
+  final String code;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is PrintJobException && other.code == code;
+
+  @override
+  int get hashCode => code.hashCode;
+
+  @override
+  String toString() => 'PrintJobException($code)';
+}
+
+typedef PrintJobClock = DateTime Function();
+
+/// One receipt waiting to reach paper.
+final class PrintJobRecord {
+  const PrintJobRecord._({
+    required this.tenantId,
+    required this.receiptNumber,
+    required this.host,
+    required this.port,
+    required this.bytes,
+    required this.state,
+    required this.attemptCount,
+    required this.attentionReason,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  static const int schemaVersion = 1;
+
+  final String tenantId;
+
+  /// `CT-A7F-20260729-0042`. Both the identity and the idempotency key.
+  final String receiptNumber;
+
+  final String host;
+  final int port;
+
+  /// The finished ESC/POS payload. **This class does not build bytes** —
+  /// `flutter_esc_pos_utils`' `Generator` does, and keeping that job out of
+  /// here is `docs/printer_transport.md`'s scope line.
+  final List<int> bytes;
+
+  final PrintJobState state;
+  final int attemptCount;
+
+  /// A [PrinterTransportCode], set only in [PrintJobState.needsAttention].
+  final String? attentionReason;
+
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  PrinterEndpoint get endpoint => PrinterEndpoint(host: host, port: port);
+
+  Map<String, Object?> toMap() => <String, Object?>{
+    'schemaVersion': schemaVersion,
+    'tenantId': tenantId,
+    'receiptNumber': receiptNumber,
+    'host': host,
+    'port': port,
+    'bytes': List<int>.unmodifiable(bytes),
+    'state': state.name,
+    'attemptCount': attemptCount,
+    'attentionReason': attentionReason,
+    'createdAtMs': createdAt.toUtc().millisecondsSinceEpoch,
+    'updatedAtMs': updatedAt.toUtc().millisecondsSinceEpoch,
+  };
+
+  /// **Malformed durable records throw rather than being repaired by
+  /// guessing.** Same rule as `malformed_receipt_counter`: a print job whose
+  /// bytes cannot be trusted must not be sent to a printer on the strength of
+  /// the fields that did parse.
+  static PrintJobRecord fromMap(Object? raw) {
+    if (raw is! Map) throw const PrintJobException('malformed_print_job');
+    final map = Map<Object?, Object?>.from(raw);
+    final receiptNumber = map['receiptNumber'];
+    final tenantId = map['tenantId'];
+    final host = map['host'];
+    final port = map['port'];
+    final bytes = map['bytes'];
+    final state = _stateFromName(map['state']);
+    final attemptCount = map['attemptCount'];
+    final attentionReason = map['attentionReason'];
+    final createdAtMs = map['createdAtMs'];
+    final updatedAtMs = map['updatedAtMs'];
+    if (map['schemaVersion'] != schemaVersion ||
+        tenantId is! String ||
+        receiptNumber is! String ||
+        !checkoutReceiptNumberPattern.hasMatch(receiptNumber) ||
+        host is! String ||
+        port is! int ||
+        bytes is! List ||
+        bytes.any((byte) => byte is! int || byte < 0 || byte > 255) ||
+        state == null ||
+        attemptCount is! int ||
+        attemptCount < 0 ||
+        (attentionReason != null && attentionReason is! String) ||
+        createdAtMs is! int ||
+        updatedAtMs is! int) {
+      throw const PrintJobException('malformed_print_job');
+    }
+    // A record that says it failed and does not say why is as untrustworthy as
+    // one with unreadable bytes.
+    if ((state == PrintJobState.needsAttention) != (attentionReason != null)) {
+      throw const PrintJobException('malformed_print_job');
+    }
+    try {
+      PrinterEndpoint(host: host, port: port);
+    } on ArgumentError {
+      throw const PrintJobException('malformed_print_job');
+    }
+    return PrintJobRecord._(
+      tenantId: tenantId,
+      receiptNumber: receiptNumber,
+      host: host,
+      port: port,
+      bytes: List<int>.unmodifiable(bytes.cast<int>()),
+      state: state,
+      attemptCount: attemptCount,
+      attentionReason: attentionReason as String?,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs, isUtc: true),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAtMs, isUtc: true),
+    );
+  }
+
+  static PrintJobState? _stateFromName(Object? value) {
+    if (value is! String) return null;
+    for (final state in PrintJobState.values) {
+      if (state.name == value) return state;
+    }
+    return null;
+  }
+
+  PrintJobRecord _moveTo(
+    PrintJobState next, {
+    required DateTime at,
+    int? attemptCount,
+    String? attentionReason,
+  }) => PrintJobRecord._(
+    tenantId: tenantId,
+    receiptNumber: receiptNumber,
+    host: host,
+    port: port,
+    bytes: bytes,
+    state: next,
+    attemptCount: attemptCount ?? this.attemptCount,
+    attentionReason: attentionReason,
+    createdAt: createdAt,
+    updatedAt: at,
+  );
+}
+
+/// The one legal move table. Anything not here throws `invalid_transition`.
+///
+/// **`printed` and `needsAttention` are both terminal from the queue's side.**
+/// A job leaves `needsAttention` only by an operator retrying it, and leaves
+/// `printed` only by an operator reprinting it — and both of those are explicit
+/// entry points on the queue rather than transitions the runner can take.
+const Map<PrintJobState, Set<PrintJobState>> _legalMoves =
+    <PrintJobState, Set<PrintJobState>>{
+      PrintJobState.queued: <PrintJobState>{PrintJobState.printing},
+      PrintJobState.printing: <PrintJobState>{
+        PrintJobState.printed,
+        PrintJobState.needsAttention,
+        // A restart finds an interrupted job in `printing` and resumes it as
+        // the same job, which means moving it back to `queued`.
+        PrintJobState.queued,
+      },
+      PrintJobState.printed: <PrintJobState>{},
+      PrintJobState.needsAttention: <PrintJobState>{PrintJobState.queued},
+    };
+
+/// The durable queue.
+final class HivePrintJobQueue {
+  HivePrintJobQueue._(this._box, this._clock);
+
+  static const String boxName = 'checkout-print-jobs-v1';
+  static const int encryptionKeyBytes = HiveCheckoutOutbox.encryptionKeyBytes;
+
+  /// Keyed by **endpoint**, not by job: one printer accepts one connection, and
+  /// two printers in one shop should still run in parallel.
+  static final Map<String, Future<void>> _operationTails =
+      <String, Future<void>>{};
+
+  final Box<dynamic> _box;
+  final PrintJobClock _clock;
+
+  static Future<HivePrintJobQueue> open({
+    required CheckoutOutboxEncryptionKeyProvider keyProvider,
+    HiveInterface? hive,
+    PrintJobClock? clock,
+  }) async {
+    final key = await keyProvider.loadOrCreateKey();
+    if (key.length != encryptionKeyBytes) {
+      throw const PrintJobException('invalid_encryption_key');
+    }
+    final box = await (hive ?? Hive).openBox<dynamic>(
+      boxName,
+      encryptionCipher: HiveAesCipher(List<int>.from(key)),
+      crashRecovery: false,
+    );
+    return HivePrintJobQueue._(box, clock ?? _utcNow);
+  }
+
+  /// Test and composition boundary for an already encrypted Hive box.
+  factory HivePrintJobQueue.fromBox(Box<dynamic> box, {PrintJobClock? clock}) =>
+      HivePrintJobQueue._(box, clock ?? _utcNow);
+
+  /// Queues one receipt, or returns the job that already exists for it.
+  ///
+  /// **Idempotent by the receipt number**, which is the point of keying on it:
+  /// calling this twice for one sale produces one job and therefore one
+  /// delivery, whether the second call is a retry, a rebuild or a recovery.
+  Future<PrintJobRecord> enqueue({
+    required String tenantId,
+    required String receiptNumber,
+    required PrinterEndpoint endpoint,
+    required List<int> bytes,
+  }) async {
+    // **`async`, so these arrive as a failed future rather than a synchronous
+    // throw.** A `Future`-returning method that sometimes throws before it
+    // returns one is a trap: `await queue.enqueue(...)` inside a `try` catches
+    // it and `queue.enqueue(...).catchError(...)` does not.
+    if (!checkoutReceiptNumberPattern.hasMatch(receiptNumber)) {
+      throw ArgumentError.value(receiptNumber, 'receiptNumber');
+    }
+    if (bytes.isEmpty) {
+      throw ArgumentError.value(bytes, 'bytes', 'Nothing to print.');
+    }
+    return _serialized(endpoint, () async {
+      final existing = _read(receiptNumber);
+      if (existing != null) return existing;
+      final now = _now();
+      final record = PrintJobRecord._(
+        tenantId: tenantId,
+        receiptNumber: receiptNumber,
+        host: endpoint.host,
+        port: endpoint.port,
+        bytes: List<int>.unmodifiable(bytes),
+        state: PrintJobState.queued,
+        attemptCount: 0,
+        attentionReason: null,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await _box.put(receiptNumber, record.toMap());
+      return record;
+    });
+  }
+
+  /// Reads one job, or null. Throws `malformed_print_job` rather than
+  /// answering null for a record it cannot trust.
+  PrintJobRecord? read(String receiptNumber) => _read(receiptNumber);
+
+  /// Every job that is not finished, oldest first.
+  ///
+  /// **One malformed record throws for the whole listing, and that is the
+  /// fail-closed rule rather than an oversight — but it is the one place the
+  /// rule is uncomfortable.** Skipping the bad record silently is the `catch
+  /// (_)` `docs/printer_transport.md` §2 refuses; throwing means one unreadable
+  /// job hides every readable one from the surface that would show them.
+  /// **The chunk that builds that surface should decide deliberately**, and if
+  /// it wants a third answer the honest one is a listing that returns the good
+  /// records *and* the count of unreadable ones, the way the profit display
+  /// already states how many lines it could not use.
+  List<PrintJobRecord> pending() {
+    final records = <PrintJobRecord>[];
+    for (final key in _box.keys) {
+      if (key is! String) continue;
+      final record = _read(key);
+      if (record == null) continue;
+      if (record.state == PrintJobState.printed) continue;
+      records.add(record);
+    }
+    records.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return List<PrintJobRecord>.unmodifiable(records);
+  }
+
+  /// Sends one queued job through [transport], moving it to `printed` or to
+  /// `needsAttention` with the transport's own code.
+  ///
+  /// **The queue owns the state machine and the transport owns nothing.** The
+  /// transport throws a code; deciding what that means for the record is here.
+  Future<PrintJobRecord> run(
+    String receiptNumber, {
+    required PrinterTransport transport,
+  }) async {
+    final job = _require(receiptNumber);
+    if (job.state == PrintJobState.printed) return job;
+    return _serialized(job.endpoint, () async {
+      final current = _require(receiptNumber);
+      // Re-read inside the mutex: a concurrent runner may have finished it
+      // between the check above and this line.
+      if (current.state == PrintJobState.printed) return current;
+      final started = await _move(
+        current,
+        PrintJobState.printing,
+        attemptCount: current.attemptCount + 1,
+      );
+      try {
+        await transport.send(started.endpoint, started.bytes);
+      } on PrinterTransportException catch (error) {
+        return _move(
+          started,
+          PrintJobState.needsAttention,
+          attentionReason: error.code,
+        );
+      } catch (_) {
+        // An unknown throw is still a failed print and must not leave the job
+        // stuck in `printing` forever.
+        return _move(
+          started,
+          PrintJobState.needsAttention,
+          attentionReason: PrinterTransportCode.unreachable,
+        );
+      }
+      return _move(started, PrintJobState.printed);
+    });
+  }
+
+  /// Returns an interrupted job to `queued` so it resumes as the same job.
+  ///
+  /// Called by recovery at start-up: a process that died mid-`send` leaves a
+  /// record in `printing`, and the receipt number means the resumed job is the
+  /// same one rather than a second delivery.
+  Future<PrintJobRecord> resumeInterrupted(String receiptNumber) {
+    final job = _require(receiptNumber);
+    return _serialized(job.endpoint, () async {
+      final current = _require(receiptNumber);
+      if (current.state != PrintJobState.printing) return current;
+      return _move(current, PrintJobState.queued);
+    });
+  }
+
+  /// Returns a failed job to `queued` after an operator asked for another try.
+  Future<PrintJobRecord> retry(String receiptNumber) {
+    final job = _require(receiptNumber);
+    return _serialized(job.endpoint, () async {
+      final current = _require(receiptNumber);
+      return _move(current, PrintJobState.queued);
+    });
+  }
+
+  /// An operator's deliberate second copy of a receipt that already printed.
+  ///
+  /// **Separate from [retry], and it must be**: reaching `printed` means the
+  /// queue never re-sends on its own, because a duplicate receipt is a
+  /// cash-handling problem rather than a convenience. This is the only way past
+  /// that, it is an explicit act, and `docs/printer_transport.md` §7 requires it
+  /// to be **audited** — `receipt_reprinted` beside `stock_adjusted` and
+  /// `return_verified_stock_restored`.
+  ///
+  /// **The audit write is not in this chunk and the reason is a boundary rather
+  /// than an omission**: `audit_log.dart` states that "server code is its only
+  /// writer", so `receipt_reprinted` is a Cloud Function and a server chunk.
+  /// [onReprint] is the seam it will land on; until one is passed, a reprint
+  /// still refuses to happen silently, because the caller must supply it.
+  Future<PrintJobRecord> reprint(
+    String receiptNumber, {
+    required Future<void> Function(PrintJobRecord job) onReprint,
+  }) async {
+    final job = _require(receiptNumber);
+    if (job.state != PrintJobState.printed) {
+      throw const PrintJobException('invalid_transition');
+    }
+    return _serialized(job.endpoint, () async {
+      final current = _require(receiptNumber);
+      // The audit record is written **before** the job is re-queued, so a
+      // reprint that was not recorded never happens. The opposite order loses
+      // the audit line exactly when it matters, which is a crash mid-reprint.
+      await onReprint(current);
+      final now = _now();
+      final requeued = current._moveTo(PrintJobState.queued, at: now);
+      await _box.put(receiptNumber, requeued.toMap());
+      return requeued;
+    });
+  }
+
+  Future<void> close() => _box.close();
+
+  PrintJobRecord _require(String receiptNumber) {
+    final record = _read(receiptNumber);
+    if (record == null) throw const PrintJobException('unknown_print_job');
+    return record;
+  }
+
+  PrintJobRecord? _read(String receiptNumber) {
+    final raw = _box.get(receiptNumber);
+    if (raw == null) return null;
+    return PrintJobRecord.fromMap(raw);
+  }
+
+  Future<PrintJobRecord> _move(
+    PrintJobRecord job,
+    PrintJobState next, {
+    int? attemptCount,
+    String? attentionReason,
+  }) async {
+    if (!(_legalMoves[job.state] ?? const <PrintJobState>{}).contains(next)) {
+      throw const PrintJobException('invalid_transition');
+    }
+    final moved = job._moveTo(
+      next,
+      at: _now(),
+      attemptCount: attemptCount,
+      attentionReason: attentionReason,
+    );
+    await _box.put(job.receiptNumber, moved.toMap());
+    return moved;
+  }
+
+  /// The clock, truncated to the millisecond the durable record stores.
+  ///
+  /// **Without this a record does not equal its own persisted form.** Hive
+  /// holds `createdAtMs`, so a re-read loses the microseconds a `DateTime`
+  /// carries, and a caller comparing what `enqueue` returned with what `read`
+  /// answers would find two different timestamps for one job.
+  DateTime _now() => DateTime.fromMillisecondsSinceEpoch(
+    _clock().toUtc().millisecondsSinceEpoch,
+    isUtc: true,
+  );
+
+  Future<T> _serialized<T>(
+    PrinterEndpoint endpoint,
+    Future<T> Function() action,
+  ) async {
+    final lockKey = '${_box.name}:$endpoint';
+    final previous = _operationTails[lockKey] ?? Future<void>.value();
+    final release = Completer<void>();
+    _operationTails[lockKey] = release.future;
+    try {
+      await previous;
+      return await action();
+    } finally {
+      release.complete();
+      if (identical(_operationTails[lockKey], release.future)) {
+        _operationTails.remove(lockKey);
+      }
+    }
+  }
+}
+
+DateTime _utcNow() => DateTime.now().toUtc();
