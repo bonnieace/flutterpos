@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
@@ -292,6 +293,7 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final action = _targetStatus == MembershipStatus.active
         ? 'Activate'
         : 'Deactivate';
@@ -300,7 +302,9 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
       children: [
         Text(
           '$action ${widget.target.displayName}?',
-          style: Theme.of(context).textTheme.titleMedium,
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
         ),
         const SizedBox(height: 8),
         Text(
@@ -310,10 +314,13 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
         ),
         if (_safeError != null) ...[
           const SizedBox(height: 12),
-          Text(
-            _safeError!,
+          Callout(
             key: const ValueKey('set-staff-status-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            // A refusal, named as one rather than painted red: the write
+            // was attempted and nothing changed. Before this the whole of
+            // the status was the colour, which is the case §9 rules out.
+            status: AppNotice.refused(_safeError!).status,
+            message: _safeError!,
           ),
         ],
         const SizedBox(height: 16),

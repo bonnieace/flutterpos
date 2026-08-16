@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/status.dart';
 import 'tenant_id.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_session.dart';
@@ -391,10 +392,13 @@ final class _TenantStaffInvitationFormState
         ),
         if (_safeError != null) ...[
           const SizedBox(height: 12),
-          Text(
-            _safeError!,
+          Callout(
             key: const ValueKey('invite-staff-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            // A refusal, named as one rather than painted red: the write
+            // was attempted and nothing changed. Before this the whole of
+            // the status was the colour, which is the case §9 rules out.
+            status: AppNotice.refused(_safeError!).status,
+            message: _safeError!,
           ),
         ],
         const SizedBox(height: 16),

@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
@@ -344,50 +345,58 @@ final class _TenantStaffInvitationResendFormState
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        'Resend invitation to ${widget.target.displayName}?',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      const SizedBox(height: 8),
-      Text('A new invitation will be queued for ${widget.target.email}.'),
-      if (_safeError != null) ...[
-        const SizedBox(height: 12),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         Text(
-          _safeError!,
-          key: const ValueKey('resend-staff-invitation-error'),
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
-        ),
-      ],
-      const SizedBox(height: 16),
-      // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
-      // form is laid out inside a record now, and a record at §4.1's `medium`
-      // band is half a page wide.
-      Wrap(
-        alignment: WrapAlignment.end,
-        spacing: AppTokens.componentOf(context).spacing.s8,
-        runSpacing: AppTokens.componentOf(context).spacing.s8,
-        children: [
-          AppButton(
-            key: const ValueKey('resend-staff-invitation-cancel'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: _submitting ? null : widget.onCancel,
+          'Resend invitation to ${widget.target.displayName}?',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
           ),
-          AppButton(
-            key: const ValueKey('resend-staff-invitation-confirm'),
-            label: 'Confirm resend',
-            icon: Icons.forward_to_inbox_outlined,
-            tier: AppButtonTier.primary,
-            loading: _submitting,
-            onPressed: _submit,
+        ),
+        const SizedBox(height: 8),
+        Text('A new invitation will be queued for ${widget.target.email}.'),
+        if (_safeError != null) ...[
+          const SizedBox(height: 12),
+          Callout(
+            key: const ValueKey('resend-staff-invitation-error'),
+            // A refusal, named as one rather than painted red: the write
+            // was attempted and nothing changed. Before this the whole of
+            // the status was the colour, which is the case §9 rules out.
+            status: AppNotice.refused(_safeError!).status,
+            message: _safeError!,
           ),
         ],
-      ),
-    ],
-  );
+        const SizedBox(height: 16),
+        // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
+        // form is laid out inside a record now, and a record at §4.1's `medium`
+        // band is half a page wide.
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: AppTokens.componentOf(context).spacing.s8,
+          runSpacing: AppTokens.componentOf(context).spacing.s8,
+          children: [
+            AppButton(
+              key: const ValueKey('resend-staff-invitation-cancel'),
+              label: 'Cancel',
+              tier: AppButtonTier.tertiary,
+              onPressed: _submitting ? null : widget.onCancel,
+            ),
+            AppButton(
+              key: const ValueKey('resend-staff-invitation-confirm'),
+              label: 'Confirm resend',
+              icon: Icons.forward_to_inbox_outlined,
+              tier: AppButtonTier.primary,
+              loading: _submitting,
+              onPressed: _submit,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 Map<String, Object?> _strictResendMap(

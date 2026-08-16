@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
@@ -527,6 +528,7 @@ final class _PlatformTenantLifecycleFormState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final suspending = widget.action == PlatformTenantLifecycleAction.suspend;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -536,7 +538,9 @@ final class _PlatformTenantLifecycleFormState
           suspending
               ? 'Suspend ${widget.tenant.name}?'
               : 'Reactivate ${widget.tenant.name}?',
-          style: Theme.of(context).textTheme.titleMedium,
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
         ),
         const SizedBox(height: 8),
         Text(
@@ -559,10 +563,13 @@ final class _PlatformTenantLifecycleFormState
         ],
         if (_safeError != null) ...[
           const SizedBox(height: 12),
-          Text(
-            _safeError!,
+          Callout(
             key: const ValueKey('platform-lifecycle-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            // A refusal, named as one rather than painted red: the write
+            // was attempted and nothing changed. Before this the whole of
+            // the status was the colour, which is the case §9 rules out.
+            status: AppNotice.refused(_safeError!).status,
+            message: _safeError!,
           ),
         ],
         const SizedBox(height: 16),
@@ -807,6 +814,7 @@ final class _PlatformLifecycleTenantScreenState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     if (_loading && _items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -865,7 +873,9 @@ final class _PlatformLifecycleTenantScreenState
                 children: [
                   Text(
                     tenant.name,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: tokens.typography.titleMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(

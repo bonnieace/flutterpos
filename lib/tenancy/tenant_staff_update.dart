@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_membership_labels.dart';
@@ -319,114 +320,122 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
   }
 
   @override
-  Widget build(BuildContext context) => Form(
-    key: _formKey,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Edit ${widget.target.displayName}',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        AppTextField(
-          key: const ValueKey('update-staff-name'),
-          controller: _nameController,
-          enabled: !_submitting,
-          label: 'Name',
-          onChanged: (_) => _markIntentChanged(),
-          validator: (value) {
-            try {
-              normalizeTenantStaffInviteName(value ?? '');
-              return null;
-            } on FormatException {
-              return 'Enter a name of 100 characters or fewer.';
-            }
-          },
-        ),
-        AppTextField(
-          key: const ValueKey('update-staff-phone'),
-          controller: _phoneController,
-          enabled: !_submitting,
-          keyboardType: TextInputType.phone,
-          label: 'Phone (optional)',
-          onChanged: (_) => _markIntentChanged(),
-          validator: (value) {
-            try {
-              normalizeTenantStaffInvitePhone(value ?? '');
-              return null;
-            } on FormatException {
-              return 'Enter a phone number of 32 characters or fewer.';
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        AppSelect<TenantRole>(
-          key: const ValueKey('update-staff-role'),
-          value: _role,
-          label: 'Role',
-          items:
-              (widget.target.isOwner
-                      ? const [TenantRole.owner]
-                      : const [
-                          TenantRole.admin,
-                          TenantRole.manager,
-                          TenantRole.cashier,
-                        ])
-                  .map(
-                    (role) => AppSelectItem<TenantRole>(
-                      value: role,
-                      label: tenantRoleLabel(role),
-                    ),
-                  )
-                  .toList(),
-          onChanged: _submitting || widget.target.isOwner
-              ? null
-              : (role) {
-                  if (role == null || role == _role) return;
-                  setState(() {
-                    _role = role;
-                    _intent = null;
-                    _safeError = null;
-                  });
-                },
-        ),
-        if (_safeError != null) ...[
-          const SizedBox(height: 12),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Text(
-            _safeError!,
-            key: const ValueKey('update-staff-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        ],
-        const SizedBox(height: 16),
-        // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
-        // form is laid out inside a record now, and a record at §4.1's `medium`
-        // band is half a page wide.
-        Wrap(
-          alignment: WrapAlignment.end,
-          spacing: AppTokens.componentOf(context).spacing.s8,
-          runSpacing: AppTokens.componentOf(context).spacing.s8,
-          children: [
-            AppButton(
-              key: const ValueKey('update-staff-cancel'),
-              label: 'Cancel',
-              tier: AppButtonTier.tertiary,
-              onPressed: _submitting ? null : widget.onCancel,
+            'Edit ${widget.target.displayName}',
+            style: tokens.typography.titleMedium.copyWith(
+              color: tokens.colors.text.primary,
             ),
-            AppButton(
-              key: const ValueKey('update-staff-submit'),
-              label: 'Save changes',
-              icon: Icons.save_outlined,
-              tier: AppButtonTier.primary,
-              loading: _submitting,
-              onPressed: _submit,
+          ),
+          const SizedBox(height: 8),
+          AppTextField(
+            key: const ValueKey('update-staff-name'),
+            controller: _nameController,
+            enabled: !_submitting,
+            label: 'Name',
+            onChanged: (_) => _markIntentChanged(),
+            validator: (value) {
+              try {
+                normalizeTenantStaffInviteName(value ?? '');
+                return null;
+              } on FormatException {
+                return 'Enter a name of 100 characters or fewer.';
+              }
+            },
+          ),
+          AppTextField(
+            key: const ValueKey('update-staff-phone'),
+            controller: _phoneController,
+            enabled: !_submitting,
+            keyboardType: TextInputType.phone,
+            label: 'Phone (optional)',
+            onChanged: (_) => _markIntentChanged(),
+            validator: (value) {
+              try {
+                normalizeTenantStaffInvitePhone(value ?? '');
+                return null;
+              } on FormatException {
+                return 'Enter a phone number of 32 characters or fewer.';
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          AppSelect<TenantRole>(
+            key: const ValueKey('update-staff-role'),
+            value: _role,
+            label: 'Role',
+            items:
+                (widget.target.isOwner
+                        ? const [TenantRole.owner]
+                        : const [
+                            TenantRole.admin,
+                            TenantRole.manager,
+                            TenantRole.cashier,
+                          ])
+                    .map(
+                      (role) => AppSelectItem<TenantRole>(
+                        value: role,
+                        label: tenantRoleLabel(role),
+                      ),
+                    )
+                    .toList(),
+            onChanged: _submitting || widget.target.isOwner
+                ? null
+                : (role) {
+                    if (role == null || role == _role) return;
+                    setState(() {
+                      _role = role;
+                      _intent = null;
+                      _safeError = null;
+                    });
+                  },
+          ),
+          if (_safeError != null) ...[
+            const SizedBox(height: 12),
+            Callout(
+              key: const ValueKey('update-staff-error'),
+              // A refusal, named as one rather than painted red: the write
+              // was attempted and nothing changed. Before this the whole of
+              // the status was the colour, which is the case §9 rules out.
+              status: AppNotice.refused(_safeError!).status,
+              message: _safeError!,
             ),
           ],
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: 16),
+          // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
+          // form is laid out inside a record now, and a record at §4.1's `medium`
+          // band is half a page wide.
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: AppTokens.componentOf(context).spacing.s8,
+            runSpacing: AppTokens.componentOf(context).spacing.s8,
+            children: [
+              AppButton(
+                key: const ValueKey('update-staff-cancel'),
+                label: 'Cancel',
+                tier: AppButtonTier.tertiary,
+                onPressed: _submitting ? null : widget.onCancel,
+              ),
+              AppButton(
+                key: const ValueKey('update-staff-submit'),
+                label: 'Save changes',
+                icon: Icons.save_outlined,
+                tier: AppButtonTier.primary,
+                loading: _submitting,
+                onPressed: _submit,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Map<String, Object?> _strictUpdateMap(Object? value) {

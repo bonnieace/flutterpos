@@ -195,81 +195,86 @@ final class _AmendmentContents extends StatelessWidget {
   final VoidCallback onPreviousPage;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('shift-amendments'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // §7's "Title appears once", in both of this route's two forms: unscoped
-      // it repeated the `AppScaffold` title exactly, and scoped it named
-      // *which* shift, which is `PageHeader.subtitle`'s row. The screen has the
-      // shift ID as a constructor argument, so it supplies the subtitle
-      // directly rather than this panel waiting for the page to load to say
-      // which shift it is showing.
-      const Text(
-        key: ValueKey('shift-amendments-scope'),
-        'A closed shift can be corrected to the total its own sales prove, when '
-        'the server found the two disagreed. Every correction is recorded here '
-        'permanently, with the reason given and the person who asked. Nothing '
-        'on this page can make, change, or remove one.',
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        key: ValueKey('shift-amendments-cash'),
-        'No correction here changed a drawer count. The recorded sales and the '
-        'counted cash are separate figures, and only the first can be '
-        'corrected this way - so a shift may still be reported short after one.',
-      ),
-      if (page.isShiftScoped) ...[
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('shift-amendments'),
+      padding: const EdgeInsets.all(20),
+      children: [
+        // §7's "Title appears once", in both of this route's two forms: unscoped
+        // it repeated the `AppScaffold` title exactly, and scoped it named
+        // *which* shift, which is `PageHeader.subtitle`'s row. The screen has the
+        // shift ID as a constructor argument, so it supplies the subtitle
+        // directly rather than this panel waiting for the page to load to say
+        // which shift it is showing.
+        const Text(
+          key: ValueKey('shift-amendments-scope'),
+          'A closed shift can be corrected to the total its own sales prove, when '
+          'the server found the two disagreed. Every correction is recorded here '
+          'permanently, with the reason given and the person who asked. Nothing '
+          'on this page can make, change, or remove one.',
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          key: ValueKey('shift-amendments-cash'),
+          'No correction here changed a drawer count. The recorded sales and the '
+          'counted cash are separate figures, and only the first can be '
+          'corrected this way - so a shift may still be reported short after one.',
+        ),
+        if (page.isShiftScoped) ...[
+          const SizedBox(height: 16),
+          AppButton(
+            key: const ValueKey('shift-amendments-show-all'),
+            label: 'Show every shift',
+            onPressed: onShowAllShifts,
+          ),
+        ],
         const SizedBox(height: 16),
-        AppButton(
-          key: const ValueKey('shift-amendments-show-all'),
-          label: 'Show every shift',
-          onPressed: onShowAllShifts,
+        // §4.3's responsive contract. A correction is the densest record in this
+        // app - it states what moved, what disagreed, why, and where it was read
+        // from - so what a column is worth was decided by what a person scans a
+        // correction trail for rather than by giving every sentence its own.
+        RecordList(
+          identityLabel: 'Correction',
+          items: <RecordItem>[for (final record in page.items) _record(record)],
+          empty: Text(
+            key: const ValueKey('shift-amendments-empty'),
+            page.isShiftScoped
+                ? 'This shift\'s summary has never been corrected.'
+                : 'No shift summary has been corrected in this business.',
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'This list is not in time order: a record is addressed by the request '
+          'that made it, not by when it was made. Each one states its own '
+          'recorded instant.',
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          children: [
+            if (pageIndex > 0)
+              AppButton(
+                key: const ValueKey('shift-amendments-previous'),
+                label: 'Previous page',
+                onPressed: onPreviousPage,
+              ),
+            if (page.hasMore)
+              AppButton(
+                key: const ValueKey('shift-amendments-next'),
+                label: 'Next page',
+                tier: AppButtonTier.primary,
+                onPressed: onNextPage,
+              ),
+          ],
         ),
       ],
-      const SizedBox(height: 16),
-      // §4.3's responsive contract. A correction is the densest record in this
-      // app - it states what moved, what disagreed, why, and where it was read
-      // from - so what a column is worth was decided by what a person scans a
-      // correction trail for rather than by giving every sentence its own.
-      RecordList(
-        identityLabel: 'Correction',
-        items: <RecordItem>[for (final record in page.items) _record(record)],
-        empty: Text(
-          key: const ValueKey('shift-amendments-empty'),
-          page.isShiftScoped
-              ? 'This shift\'s summary has never been corrected.'
-              : 'No shift summary has been corrected in this business.',
-        ),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        'This list is not in time order: a record is addressed by the request '
-        'that made it, not by when it was made. Each one states its own '
-        'recorded instant.',
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-      const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('shift-amendments-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('shift-amendments-next'),
-              label: 'Next page',
-              tier: AppButtonTier.primary,
-              onPressed: onNextPage,
-            ),
-        ],
-      ),
-    ],
-  );
+    );
+  }
 
   /// One correction as §5.2's rows.
   ///

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/tokens.dart';
 import 'platform_tenant_review.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
@@ -919,6 +920,7 @@ final class _PlatformGlobalUserStatusFormState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final disabling = widget.action == PlatformGlobalUserAction.disable;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -927,7 +929,9 @@ final class _PlatformGlobalUserStatusFormState
           disabling
               ? 'Disable ${widget.target.user.uid}?'
               : 'Reactivate ${widget.target.user.uid}?',
-          style: Theme.of(context).textTheme.titleSmall,
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
         ),
         if (disabling && widget.target.administrativeWarnings.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -1090,6 +1094,7 @@ final class _PlatformGlobalUserStatusScreenState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final target = _target;
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -1137,7 +1142,9 @@ final class _PlatformGlobalUserStatusScreenState
                 children: [
                   Text(
                     target.user.displayName ?? target.user.uid,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: tokens.typography.titleMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
                   ),
                   Text(target.user.uid),
                   Text(target.user.email),

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_session.dart';
@@ -423,77 +424,85 @@ final class _TenantStaffInvitationEmailReplacementFormState
   }
 
   @override
-  Widget build(BuildContext context) => Form(
-    key: _formKey,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Replace invitation email for ${widget.target.displayName}?',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'The pending membership for ${widget.target.email} will be cancelled and a new invitation will be queued.',
-        ),
-        const SizedBox(height: 12),
-        AppTextField(
-          key: const ValueKey('replace-staff-email-input'),
-          controller: _emailController,
-          enabled: !_submitting,
-          keyboardType: TextInputType.emailAddress,
-          label: 'Corrected email',
-          leading: Icons.email_outlined,
-          onChanged: (_) => _markIntentChanged(),
-          validator: (value) {
-            try {
-              TenantStaffInvitationEmailReplacementDraft._(
-                oldTargetUid: widget.target.uid,
-                email: value ?? '',
-                existingEmail: widget.target.email,
-              );
-              return null;
-            } on FormatException {
-              return 'Enter a different valid email address.';
-            }
-          },
-        ),
-        if (_safeError != null) ...[
-          const SizedBox(height: 12),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Text(
-            _safeError!,
-            key: const ValueKey('replace-staff-email-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        ],
-        const SizedBox(height: 16),
-        // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
-        // form is laid out inside a record now, and a record at §4.1's `medium`
-        // band is half a page wide.
-        Wrap(
-          alignment: WrapAlignment.end,
-          spacing: AppTokens.componentOf(context).spacing.s8,
-          runSpacing: AppTokens.componentOf(context).spacing.s8,
-          children: [
-            AppButton(
-              key: const ValueKey('replace-staff-email-cancel'),
-              label: 'Cancel',
-              tier: AppButtonTier.tertiary,
-              onPressed: _submitting ? null : widget.onCancel,
+            'Replace invitation email for ${widget.target.displayName}?',
+            style: tokens.typography.titleMedium.copyWith(
+              color: tokens.colors.text.primary,
             ),
-            AppButton(
-              key: const ValueKey('replace-staff-email-confirm'),
-              label: 'Replace email',
-              icon: Icons.alternate_email_outlined,
-              tier: AppButtonTier.primary,
-              loading: _submitting,
-              onPressed: _submit,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'The pending membership for ${widget.target.email} will be cancelled and a new invitation will be queued.',
+          ),
+          const SizedBox(height: 12),
+          AppTextField(
+            key: const ValueKey('replace-staff-email-input'),
+            controller: _emailController,
+            enabled: !_submitting,
+            keyboardType: TextInputType.emailAddress,
+            label: 'Corrected email',
+            leading: Icons.email_outlined,
+            onChanged: (_) => _markIntentChanged(),
+            validator: (value) {
+              try {
+                TenantStaffInvitationEmailReplacementDraft._(
+                  oldTargetUid: widget.target.uid,
+                  email: value ?? '',
+                  existingEmail: widget.target.email,
+                );
+                return null;
+              } on FormatException {
+                return 'Enter a different valid email address.';
+              }
+            },
+          ),
+          if (_safeError != null) ...[
+            const SizedBox(height: 12),
+            Callout(
+              key: const ValueKey('replace-staff-email-error'),
+              // A refusal, named as one rather than painted red: the write
+              // was attempted and nothing changed. Before this the whole of
+              // the status was the colour, which is the case §9 rules out.
+              status: AppNotice.refused(_safeError!).status,
+              message: _safeError!,
             ),
           ],
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: 16),
+          // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
+          // form is laid out inside a record now, and a record at §4.1's `medium`
+          // band is half a page wide.
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: AppTokens.componentOf(context).spacing.s8,
+            runSpacing: AppTokens.componentOf(context).spacing.s8,
+            children: [
+              AppButton(
+                key: const ValueKey('replace-staff-email-cancel'),
+                label: 'Cancel',
+                tier: AppButtonTier.tertiary,
+                onPressed: _submitting ? null : widget.onCancel,
+              ),
+              AppButton(
+                key: const ValueKey('replace-staff-email-confirm'),
+                label: 'Replace email',
+                icon: Icons.alternate_email_outlined,
+                tier: AppButtonTier.primary,
+                loading: _submitting,
+                onPressed: _submit,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Map<String, Object?> _strictReplacementMap(

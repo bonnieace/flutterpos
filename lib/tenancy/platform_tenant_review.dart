@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
@@ -612,6 +613,7 @@ final class _PlatformTenantReviewFormState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final rejecting = widget.action == PlatformTenantReviewAction.reject;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -621,7 +623,9 @@ final class _PlatformTenantReviewFormState
           rejecting
               ? 'Reject ${widget.tenant.name}?'
               : 'Approve ${widget.tenant.name}?',
-          style: Theme.of(context).textTheme.titleMedium,
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
         ),
         const SizedBox(height: 8),
         Text(
@@ -644,10 +648,13 @@ final class _PlatformTenantReviewFormState
         ],
         if (_safeError != null) ...[
           const SizedBox(height: 12),
-          Text(
-            _safeError!,
+          Callout(
             key: const ValueKey('platform-review-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            // A refusal, named as one rather than painted red: the write
+            // was attempted and nothing changed. Before this the whole of
+            // the status was the colour, which is the case §9 rules out.
+            status: AppNotice.refused(_safeError!).status,
+            message: _safeError!,
           ),
         ],
         const SizedBox(height: 16),
@@ -832,6 +839,7 @@ final class _PlatformPendingTenantReviewScreenState
   }
 
   Widget _buildBody(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     if (_loading && _items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -882,7 +890,9 @@ final class _PlatformPendingTenantReviewScreenState
               children: [
                 Text(
                   tenant.name,
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: tokens.typography.titleMedium.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(

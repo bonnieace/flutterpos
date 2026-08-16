@@ -468,158 +468,163 @@ final class _ProductStockContents extends StatelessWidget {
   _ProductDifferences get differences => view.differences;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('product-stock'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // §7's "Title appears once", and this was the example `design.md` names
-      // in its own words: `web/21-product-stock` read *White bread loaf* in
-      // `display` and *White bread loaf* again directly under it. The
-      // `AppScaffold` title is this same `product.name`.
-      const SizedBox(height: 4),
-      Text('SKU ${product.sku}'),
-      const SizedBox(height: 16),
-      // The headline figures. `product-stock-quantity` now keys the number
-      // itself rather than a sentence containing it, because the caption is
-      // the card's own label - the fact it states is unchanged.
-      StatRow(
-        tiles: [
-          StatTile(
-            valueKey: const ValueKey('product-stock-quantity'),
-            label: 'Recorded stock',
-            value: '${product.quantity}',
-            icon: Icons.inventory_2_outlined,
-            detail: 'held by the server',
-            // Negative is a real, permitted state rather than a fault, but it
-            // is the one a person needs to notice on sight. It used to be a red
-            // number, which is §9's "out of stock signalled by red text alone"
-            // in another place; §2.1 wants a container, a glyph and a word, and
-            // "difference found" is `problem`'s own meaning.
-            status: product.quantity < 0 ? AppStatus.problem : null,
-            statusLabel: product.quantity < 0 ? 'Below zero' : null,
-          ),
-          StatTile(
-            key: const ValueKey('product-stock-stat-movements'),
-            label: 'Ledger entries',
-            value: '${page.items.length}',
-            icon: Icons.receipt_long_outlined,
-            detail: page.hasMore ? 'on this page, more to load' : 'on this page',
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      // The last unfolded permanent paragraph above the fold on this screen.
-      // Step 4 put the adjustment explanation behind a `Disclosure` further down
-      // and left this one and the ledger's own note as loose body text, so the
-      // screen has been carrying one folded explanation and two unfolded ones
-      // ever since. It also carried the only raw `colorScheme` read left on this
-      // route; `Disclosure` reads §2.2's own body role from the token layer.
-      const Disclosure(
-        key: ValueKey('product-stock-quantity-disclosure'),
-        summary: 'Why stock can be negative',
-        child: Text(
-          key: ValueKey('product-stock-quantity-scope'),
-          'This is the quantity the server holds, not a figure derived on this '
-          'device. Stock may legitimately be negative: a sale is never blocked '
-          'by a stock count, so a product can be sold past zero and corrected '
-          'here afterwards.',
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('product-stock'),
+      padding: const EdgeInsets.all(20),
+      children: [
+        // §7's "Title appears once", and this was the example `design.md` names
+        // in its own words: `web/21-product-stock` read *White bread loaf* in
+        // `display` and *White bread loaf* again directly under it. The
+        // `AppScaffold` title is this same `product.name`.
+        const SizedBox(height: 4),
+        Text('SKU ${product.sku}'),
+        const SizedBox(height: 16),
+        // The headline figures. `product-stock-quantity` now keys the number
+        // itself rather than a sentence containing it, because the caption is
+        // the card's own label - the fact it states is unchanged.
+        StatRow(
+          tiles: [
+            StatTile(
+              valueKey: const ValueKey('product-stock-quantity'),
+              label: 'Recorded stock',
+              value: '${product.quantity}',
+              icon: Icons.inventory_2_outlined,
+              detail: 'held by the server',
+              // Negative is a real, permitted state rather than a fault, but it
+              // is the one a person needs to notice on sight. It used to be a red
+              // number, which is §9's "out of stock signalled by red text alone"
+              // in another place; §2.1 wants a container, a glyph and a word, and
+              // "difference found" is `problem`'s own meaning.
+              status: product.quantity < 0 ? AppStatus.problem : null,
+              statusLabel: product.quantity < 0 ? 'Below zero' : null,
+            ),
+            StatTile(
+              key: const ValueKey('product-stock-stat-movements'),
+              label: 'Ledger entries',
+              value: '${page.items.length}',
+              icon: Icons.receipt_long_outlined,
+              detail: page.hasMore ? 'on this page, more to load' : 'on this page',
+            ),
+          ],
         ),
-      ),
-      // **This one sits directly above the "Reconciliation found" section**,
-      // which draws every recorded difference as a red `Callout`. A bare
-      // sentence saying "Stock changed from 10 to 7." immediately above a stack
-      // of red blocks reads as part of the problem rather than as the answer to
-      // it, which is the sharpest case in the family for a notice carrying its
-      // own status.
-      if (notice case final answer?) ...[
         const SizedBox(height: 12),
-        Callout(
-          key: const ValueKey('product-stock-notice'),
-          status: answer.status,
-          message: answer.message,
+        // The last unfolded permanent paragraph above the fold on this screen.
+        // Step 4 put the adjustment explanation behind a `Disclosure` further down
+        // and left this one and the ledger's own note as loose body text, so the
+        // screen has been carrying one folded explanation and two unfolded ones
+        // ever since. It also carried the only raw `colorScheme` read left on this
+        // route; `Disclosure` reads §2.2's own body role from the token layer.
+        const Disclosure(
+          key: ValueKey('product-stock-quantity-disclosure'),
+          summary: 'Why stock can be negative',
+          child: Text(
+            key: ValueKey('product-stock-quantity-scope'),
+            'This is the quantity the server holds, not a figure derived on this '
+            'device. Stock may legitimately be negative: a sale is never blocked '
+            'by a stock count, so a product can be sold past zero and corrected '
+            'here afterwards.',
+          ),
         ),
-      ],
-      ..._differencesSection(context),
-      const SizedBox(height: 24),
-      Text('Stock ledger', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 4),
-      const Disclosure(
-        key: ValueKey('product-stock-ledger-disclosure'),
-        summary: 'What the ledger holds',
-        child: Text(
-          key: ValueKey('product-stock-ledger-scope'),
-          'Every sale, verified return, and manual adjustment the server '
-          'recorded for this product. It is listed by record ID, which is not '
-          'time order; each entry states when it was recorded.',
-        ),
-      ),
-      const SizedBox(height: 12),
-      // §4.3's responsive contract, in the same record vocabulary the two feeds
-      // beside it use. This screen used to describe the same document three
-      // ways - its own source label, its own figures sentence, its own
-      // attribution - which is precisely what `stock_movement_labels` exists to
-      // prevent and what it had never been folded into.
-      RecordList(
-        identityLabel: 'Movement',
-        items: <RecordItem>[
-          for (final movement in page.items)
-            stockMovementRecord(
-              movement,
-              keyPrefix: 'product-stock',
-              rowKey: movement.id,
-              names: view.names,
-              selfUid: selfUid,
-            ),
-        ],
-        empty: const Text(
-          key: ValueKey('product-stock-empty'),
-          'No stock movements have been recorded for this product.',
-        ),
-      ),
-      const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            // **Pagination is secondary, and it used to be a primary.** §2.1
-            // permits exactly one primary per screen region and on this route
-            // that is `Adjust stock`; "Next page" competing with it for the
-            // eye is the tier system not being applied rather than a taste
-            // call. The same repoint is made on every paginated feed.
-            AppButton(
-              key: const ValueKey('product-stock-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('product-stock-next'),
-              label: 'Next page',
-              onPressed: onNextPage,
-            ),
-          // The ledger explains every movement; this narrows the business-wide
-          // correction record to the manual ones recorded against this product.
-          AppButton(
-            key: const ValueKey('product-stock-adjustments'),
-            label: 'Manual adjustments',
-            icon: Icons.fact_check_outlined,
-            onPressed: onOpenAdjustments,
+        // **This one sits directly above the "Reconciliation found" section**,
+        // which draws every recorded difference as a red `Callout`. A bare
+        // sentence saying "Stock changed from 10 to 7." immediately above a stack
+        // of red blocks reads as part of the problem rather than as the answer to
+        // it, which is the sharpest case in the family for a notice carrying its
+        // own status.
+        if (notice case final answer?) ...[
+          const SizedBox(height: 12),
+          Callout(
+            key: const ValueKey('product-stock-notice'),
+            status: answer.status,
+            message: answer.message,
           ),
         ],
-      ),
-      if (canAdjust) ...[
+        ..._differencesSection(context),
         const SizedBox(height: 24),
-        const Divider(),
-        const SizedBox(height: 12),
-        _AdjustStockForm(
-          key: const ValueKey('product-stock-form'),
-          quantity: product.quantity,
-          busy: busy,
-          onAdjust: onAdjust,
+        Text('Stock ledger', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
+        const SizedBox(height: 4),
+        const Disclosure(
+          key: ValueKey('product-stock-ledger-disclosure'),
+          summary: 'What the ledger holds',
+          child: Text(
+            key: ValueKey('product-stock-ledger-scope'),
+            'Every sale, verified return, and manual adjustment the server '
+            'recorded for this product. It is listed by record ID, which is not '
+            'time order; each entry states when it was recorded.',
+          ),
         ),
+        const SizedBox(height: 12),
+        // §4.3's responsive contract, in the same record vocabulary the two feeds
+        // beside it use. This screen used to describe the same document three
+        // ways - its own source label, its own figures sentence, its own
+        // attribution - which is precisely what `stock_movement_labels` exists to
+        // prevent and what it had never been folded into.
+        RecordList(
+          identityLabel: 'Movement',
+          items: <RecordItem>[
+            for (final movement in page.items)
+              stockMovementRecord(
+                movement,
+                keyPrefix: 'product-stock',
+                rowKey: movement.id,
+                names: view.names,
+                selfUid: selfUid,
+              ),
+          ],
+          empty: const Text(
+            key: ValueKey('product-stock-empty'),
+            'No stock movements have been recorded for this product.',
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          children: [
+            if (pageIndex > 0)
+              // **Pagination is secondary, and it used to be a primary.** §2.1
+              // permits exactly one primary per screen region and on this route
+              // that is `Adjust stock`; "Next page" competing with it for the
+              // eye is the tier system not being applied rather than a taste
+              // call. The same repoint is made on every paginated feed.
+              AppButton(
+                key: const ValueKey('product-stock-previous'),
+                label: 'Previous page',
+                onPressed: onPreviousPage,
+              ),
+            if (page.hasMore)
+              AppButton(
+                key: const ValueKey('product-stock-next'),
+                label: 'Next page',
+                onPressed: onNextPage,
+              ),
+            // The ledger explains every movement; this narrows the business-wide
+            // correction record to the manual ones recorded against this product.
+            AppButton(
+              key: const ValueKey('product-stock-adjustments'),
+              label: 'Manual adjustments',
+              icon: Icons.fact_check_outlined,
+              onPressed: onOpenAdjustments,
+            ),
+          ],
+        ),
+        if (canAdjust) ...[
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 12),
+          _AdjustStockForm(
+            key: const ValueKey('product-stock-form'),
+            quantity: product.quantity,
+            busy: busy,
+            onAdjust: onAdjust,
+          ),
+        ],
       ],
-    ],
-  );
+    );
+  }
 
   /// What reconciliation recorded against this product, said where the person
   /// who can act on it is already standing.
@@ -629,6 +634,7 @@ final class _ProductStockContents extends StatelessWidget {
   /// every product would make the one that matters easier to miss rather than
   /// harder.
   List<Widget> _differencesSection(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     if (!differences.readable) {
       return <Widget>[
         const SizedBox(height: 12),
@@ -657,7 +663,9 @@ final class _ProductStockContents extends StatelessWidget {
       const SizedBox(height: 24),
       Text(
         'Reconciliation found',
-        style: Theme.of(context).textTheme.titleMedium,
+        style: tokens.typography.titleMedium.copyWith(
+          color: tokens.colors.text.primary,
+        ),
       ),
       const SizedBox(height: 4),
       // A permanent helper paragraph: it is true of every difference this screen
@@ -833,80 +841,85 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text('Adjust stock', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 4),
-      // §5.2 names the stock-adjustment explanation as prose to keep and move
-      // inside a `Disclosure`. The words are unchanged; the summary above them
-      // is new because the component requires one.
-      const Disclosure(
-        key: ValueKey('product-stock-adjustment-disclosure'),
-        summary: 'What an adjustment records',
-        child: Text(
-          'An adjustment is recorded permanently with its reason and cannot be '
-          'deleted. Correcting a mistake means recording another adjustment.',
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Adjust stock', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
+        const SizedBox(height: 4),
+        // §5.2 names the stock-adjustment explanation as prose to keep and move
+        // inside a `Disclosure`. The words are unchanged; the summary above them
+        // is new because the component requires one.
+        const Disclosure(
+          key: ValueKey('product-stock-adjustment-disclosure'),
+          summary: 'What an adjustment records',
+          child: Text(
+            'An adjustment is recorded permanently with its reason and cannot be '
+            'deleted. Correcting a mistake means recording another adjustment.',
+          ),
         ),
-      ),
-      const SizedBox(height: 12),
-      AppSelect<TenantStockAdjustmentType>(
-        key: const ValueKey('product-stock-type'),
-        value: _type,
-        label: 'Adjustment type',
-        items: [
-          for (final type in TenantStockAdjustmentType.values)
-            AppSelectItem<TenantStockAdjustmentType>(
-              value: type,
-              label: type.label,
-            ),
-        ],
-        onChanged: widget.busy ? null : _changeType,
-      ),
-      const SizedBox(height: 12),
-      if (_type.direction == TenantStockAdjustmentDirection.either)
-        SegmentedButton<bool>(
-          key: const ValueKey('product-stock-direction'),
-          segments: const [
-            ButtonSegment<bool>(value: true, label: Text('Add stock')),
-            ButtonSegment<bool>(value: false, label: Text('Remove stock')),
+        const SizedBox(height: 12),
+        AppSelect<TenantStockAdjustmentType>(
+          key: const ValueKey('product-stock-type'),
+          value: _type,
+          label: 'Adjustment type',
+          items: [
+            for (final type in TenantStockAdjustmentType.values)
+              AppSelectItem<TenantStockAdjustmentType>(
+                value: type,
+                label: type.label,
+              ),
           ],
-          selected: <bool>{_increase},
-          onSelectionChanged: widget.busy
-              ? null
-              : (selection) => setState(() => _increase = selection.single),
-        )
-      else
-        Text(
-          key: const ValueKey('product-stock-fixed-direction'),
-          _increase
-              ? 'This type always adds stock.'
-              : 'This type always removes stock.',
+          onChanged: widget.busy ? null : _changeType,
         ),
-      const SizedBox(height: 12),
-      AppTextField(
-        key: const ValueKey('product-stock-units'),
-        controller: _units,
-        keyboardType: TextInputType.number,
-        onChanged: (_) => setState(() {}),
-        label: 'Units',
-        leading: Icons.numbers,
-      ),
-      const SizedBox(height: 12),
-      AppTextField(
-        key: const ValueKey('product-stock-reason'),
-        controller: _reason,
-        maxLength: maximumStockAdjustmentReasonLength,
-        onChanged: (_) => setState(() {}),
-        label: 'Reason for this adjustment',
-      ),
-      const SizedBox(height: 12),
-      AppButton(
-        key: const ValueKey('product-stock-submit'),
-        label: 'Adjust stock',
-        tier: AppButtonTier.primary,
-        onPressed: _canSubmit ? _confirm : null,
-      ),
-    ],
-  );
+        const SizedBox(height: 12),
+        if (_type.direction == TenantStockAdjustmentDirection.either)
+          SegmentedButton<bool>(
+            key: const ValueKey('product-stock-direction'),
+            segments: const [
+              ButtonSegment<bool>(value: true, label: Text('Add stock')),
+              ButtonSegment<bool>(value: false, label: Text('Remove stock')),
+            ],
+            selected: <bool>{_increase},
+            onSelectionChanged: widget.busy
+                ? null
+                : (selection) => setState(() => _increase = selection.single),
+          )
+        else
+          Text(
+            key: const ValueKey('product-stock-fixed-direction'),
+            _increase
+                ? 'This type always adds stock.'
+                : 'This type always removes stock.',
+          ),
+        const SizedBox(height: 12),
+        AppTextField(
+          key: const ValueKey('product-stock-units'),
+          controller: _units,
+          keyboardType: TextInputType.number,
+          onChanged: (_) => setState(() {}),
+          label: 'Units',
+          leading: Icons.numbers,
+        ),
+        const SizedBox(height: 12),
+        AppTextField(
+          key: const ValueKey('product-stock-reason'),
+          controller: _reason,
+          maxLength: maximumStockAdjustmentReasonLength,
+          onChanged: (_) => setState(() {}),
+          label: 'Reason for this adjustment',
+        ),
+        const SizedBox(height: 12),
+        AppButton(
+          key: const ValueKey('product-stock-submit'),
+          label: 'Adjust stock',
+          tier: AppButtonTier.primary,
+          onPressed: _canSubmit ? _confirm : null,
+        ),
+      ],
+    );
+  }
 }

@@ -190,6 +190,7 @@ final class _ReceiptLookupResult extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     if (result.isMissing) {
       return const Text(
         key: ValueKey('receipt-lookup-missing'),
@@ -220,7 +221,9 @@ final class _ReceiptLookupResult extends StatelessWidget {
                 children: [
                   Text(
                     sale.receiptNumber,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: tokens.typography.titleMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -241,7 +244,9 @@ final class _ReceiptLookupResult extends StatelessWidget {
                   Text(
                     key: ValueKey('receipt-lookup-recorded-${sale.id}'),
                     _recordedLabel(sale),
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: tokens.typography.caption.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Align(

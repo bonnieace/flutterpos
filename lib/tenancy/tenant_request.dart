@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 import 'tenant_types.dart';
@@ -314,89 +316,97 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
   bool _isCurrent() => widget.isCurrent?.call() ?? true;
 
   @override
-  Widget build(BuildContext context) => Form(
-    key: _formKey,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Request a business',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 8),
-        const Text('New businesses remain pending until platform review.'),
-        const SizedBox(height: 16),
-        AppTextField(
-          key: const ValueKey('tenant-request-name'),
-          controller: _nameController,
-          enabled: !_submitting,
-          label: 'Business name',
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          onChanged: _fieldChanged,
-          validator: (value) => _validateName(value ?? ''),
-        ),
-        const SizedBox(height: 12),
-        AppTextField(
-          key: const ValueKey('tenant-request-slug'),
-          controller: _slugController,
-          enabled: !_submitting,
-          label: 'Business slug',
-          helper: 'Lower-case letters, numbers, and single hyphens.',
-          autocorrect: false,
-          enableSuggestions: false,
-          onChanged: _fieldChanged,
-          validator: (value) => _validateSlug(value ?? ''),
-        ),
-        if (_confirming && _intent != null) ...[
-          const SizedBox(height: 16),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Text(
-            'Submit ${_intent!.name} (${_intent!.slug}) for platform review?',
-            key: const ValueKey('tenant-request-confirmation'),
-          ),
-        ],
-        if (_safeError != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            _safeError!,
-            key: const ValueKey('tenant-request-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        ],
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            AppButton(
-              key: const ValueKey('tenant-request-cancel'),
-              label: _confirming ? 'Back' : 'Cancel',
-              tier: AppButtonTier.tertiary,
-              onPressed: _submitting
-                  ? null
-                  : _confirming
-                  ? () => setState(() {
-                      _confirming = false;
-                      _safeError = null;
-                    })
-                  : widget.onCancel,
+            'Request a business',
+            style: tokens.typography.titleMedium.copyWith(
+              color: tokens.colors.text.primary,
             ),
-            const SizedBox(width: 8),
-            AppButton(
-              key: ValueKey(
-                _confirming
-                    ? 'tenant-request-confirm'
-                    : 'tenant-request-review',
-              ),
-              label: _confirming ? 'Submit request' : 'Review request',
-              icon: Icons.add_business_outlined,
-              tier: AppButtonTier.primary,
-              loading: _submitting,
-              onPressed: _confirming ? _submit : _review,
+          ),
+          const SizedBox(height: 8),
+          const Text('New businesses remain pending until platform review.'),
+          const SizedBox(height: 16),
+          AppTextField(
+            key: const ValueKey('tenant-request-name'),
+            controller: _nameController,
+            enabled: !_submitting,
+            label: 'Business name',
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            onChanged: _fieldChanged,
+            validator: (value) => _validateName(value ?? ''),
+          ),
+          const SizedBox(height: 12),
+          AppTextField(
+            key: const ValueKey('tenant-request-slug'),
+            controller: _slugController,
+            enabled: !_submitting,
+            label: 'Business slug',
+            helper: 'Lower-case letters, numbers, and single hyphens.',
+            autocorrect: false,
+            enableSuggestions: false,
+            onChanged: _fieldChanged,
+            validator: (value) => _validateSlug(value ?? ''),
+          ),
+          if (_confirming && _intent != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Submit ${_intent!.name} (${_intent!.slug}) for platform review?',
+              key: const ValueKey('tenant-request-confirmation'),
             ),
           ],
-        ),
-      ],
-    ),
-  );
+          if (_safeError != null) ...[
+            const SizedBox(height: 12),
+            Callout(
+              key: const ValueKey('tenant-request-error'),
+              // A refusal, named as one rather than painted red: the write
+              // was attempted and nothing changed. Before this the whole of
+              // the status was the colour, which is the case §9 rules out.
+              status: AppNotice.refused(_safeError!).status,
+              message: _safeError!,
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              AppButton(
+                key: const ValueKey('tenant-request-cancel'),
+                label: _confirming ? 'Back' : 'Cancel',
+                tier: AppButtonTier.tertiary,
+                onPressed: _submitting
+                    ? null
+                    : _confirming
+                    ? () => setState(() {
+                        _confirming = false;
+                        _safeError = null;
+                      })
+                    : widget.onCancel,
+              ),
+              const SizedBox(width: 8),
+              AppButton(
+                key: ValueKey(
+                  _confirming
+                      ? 'tenant-request-confirm'
+                      : 'tenant-request-review',
+                ),
+                label: _confirming ? 'Submit request' : 'Review request',
+                icon: Icons.add_business_outlined,
+                tier: AppButtonTier.primary,
+                loading: _submitting,
+                onPressed: _confirming ? _submit : _review,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 String normalizeTenantRequestName(String value) {

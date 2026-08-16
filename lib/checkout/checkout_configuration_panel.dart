@@ -323,12 +323,14 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final tokens = AppTokens.componentOf(context);
     final published = widget.published;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Currency', style: text.titleMedium),
+        Text('Currency', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
         const SizedBox(height: 4),
         Text(
           key: const ValueKey('checkout-configuration-current'),

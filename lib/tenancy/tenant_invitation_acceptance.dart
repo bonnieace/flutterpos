@@ -5,6 +5,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'invitation_acceptance_failure.dart';
 import 'tenant_id.dart';
 import 'tenant_types.dart';
@@ -355,6 +357,7 @@ final class _TenantInvitationAcceptanceFormState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final tenantLabel = widget.tenantName?.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -363,7 +366,9 @@ final class _TenantInvitationAcceptanceFormState
           tenantLabel == null || tenantLabel.isEmpty
               ? 'Accept this business invitation?'
               : 'Accept invitation to $tenantLabel?',
-          style: Theme.of(context).textTheme.titleMedium,
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
         ),
         if (widget.invitedRole != null) ...[
           const SizedBox(height: 8),
@@ -376,10 +381,13 @@ final class _TenantInvitationAcceptanceFormState
         ),
         if (_safeError != null) ...[
           const SizedBox(height: 12),
-          Text(
-            _safeError!,
+          Callout(
             key: const ValueKey('accept-token-invitation-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            // A refusal, named as one rather than painted red: the write
+            // was attempted and nothing changed. Before this the whole of
+            // the status was the colour, which is the case §9 rules out.
+            status: AppNotice.refused(_safeError!).status,
+            message: _safeError!,
           ),
         ],
         const SizedBox(height: 16),

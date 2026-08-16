@@ -876,11 +876,18 @@ final class _CartEditorState extends State<_CartEditor> {
     return ListView(
       padding: EdgeInsets.all(AppScaffold.horizontalInset(tokens.spacing)),
       children: <Widget>[
-      // §2.2 gives `title.lg` to "screen title (compact), **section head**".
-      // This was `titleSmall`, which is Material's scale and not one of §2.2's.
+      // **A section head is `title.md` here, and §2.2 says `title.lg`.** Ten
+      // migrated screens read the row the other way - `Reconciliation runs`,
+      // `Paid by` and eight more are `title.md` - and the reason holds up: at
+      // §4.1's `compact` band `PageHeader` gives the *screen* title `title.lg`,
+      // so a section head at the same role puts two titles of equal weight on
+      // a phone, which is what §7's "title appears once" is about. The tree's
+      // convention wins over a fresh reading of the row; the contradiction is
+      // an open decision in `PLAN.md` rather than something a sweep settles.
+      // It was `titleSmall`, which is Material's scale and not one of §2.2's.
       Text(
         'Products',
-        style: tokens.typography.titleLarge.copyWith(
+        style: tokens.typography.titleMedium.copyWith(
           color: tokens.colors.text.primary,
         ),
       ),
@@ -1046,7 +1053,7 @@ final class _CartEditorState extends State<_CartEditor> {
     return <Widget>[
       Text(
         'This sale',
-        style: tokens.typography.titleLarge.copyWith(
+        style: tokens.typography.titleMedium.copyWith(
           color: tokens.colors.text.primary,
         ),
       ),
@@ -1160,7 +1167,7 @@ final class _CartEditorState extends State<_CartEditor> {
       <Widget>[
         Text(
           'How did the customer pay?',
-          style: tokens.typography.titleLarge.copyWith(
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
           ),
         ),

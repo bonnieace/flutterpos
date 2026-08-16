@@ -405,6 +405,7 @@ final class _CatalogContents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final categoryNames = tenantCategoryNames(snapshot.categories.items);
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -449,7 +450,9 @@ final class _CatalogContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 20),
-        Text('Categories', style: Theme.of(context).textTheme.titleMedium),
+        Text('Categories', style: tokens.typography.titleMedium.copyWith(
+          color: tokens.colors.text.primary,
+        )),
         const SizedBox(height: 8),
         if (snapshot.categories.items.isEmpty)
           const Text('No categories found.')
@@ -468,7 +471,9 @@ final class _CatalogContents extends StatelessWidget {
             child: Text('More categories are available.'),
           ),
         const SizedBox(height: 24),
-        Text('Products', style: Theme.of(context).textTheme.titleMedium),
+        Text('Products', style: tokens.typography.titleMedium.copyWith(
+          color: tokens.colors.text.primary,
+        )),
         const SizedBox(height: 8),
         // §4.3's responsive contract. This list used to be a `Card` around a
         // `ListTile` whose subtitle carried three separate facts in one

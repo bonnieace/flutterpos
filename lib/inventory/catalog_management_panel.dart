@@ -787,14 +787,15 @@ final class _CatalogManagementContents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     final tokens = AppTokens.componentOf(context);
     final categoryNames = tenantCategoryNames(view.categories.items);
     final selected = _selected;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('Catalog', style: text.titleMedium),
+        Text('Catalog', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
         const SizedBox(height: 4),
         // A permanent **helper** paragraph in §5.1's sense - always the same,
         // true of every product this route will ever hold, read once - so it
@@ -847,7 +848,9 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        Text('Categories', style: text.titleMedium),
+        Text('Categories', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
         const SizedBox(height: 8),
         if (view.categories.items.isEmpty)
           const Text(
@@ -909,7 +912,9 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 28),
-        Text('Add a product', style: text.titleMedium),
+        Text('Add a product', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
         const SizedBox(height: 8),
         if (!canWrite)
           // The second of this build's two read-only notices, and both are
@@ -1028,7 +1033,9 @@ final class _CatalogManagementContents extends StatelessWidget {
         ],
         if (onBulk case final onBulk?) ...[
           const SizedBox(height: 28),
-          Text('Many products at once', style: text.titleMedium),
+          Text('Many products at once', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
           const SizedBox(height: 8),
           // §5.2 names this paragraph by name as prose that should be kept and
           // moved inside a `Disclosure`. The words are unchanged; only the
@@ -1053,7 +1060,9 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 28),
-        Text('Products', style: text.titleMedium),
+        Text('Products', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
         const SizedBox(height: 8),
         // §4.3's responsive contract, on the screen §5.2 wrote its catalog
         // example against. The four facts that were one bullet-separated
@@ -1465,7 +1474,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final tokens = AppTokens.componentOf(context);
     return AlertDialog(
       title: Text('Correct "${widget.product.name}"'),
       content: SingleChildScrollView(
@@ -1573,7 +1582,9 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
               ),
             ],
             const SizedBox(height: 12),
-            Text('Category', style: text.titleSmall),
+            Text('Category', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -1598,7 +1609,9 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                   key: const ValueKey('catalog-management-edit-category-off'),
                   'This product is filed under $unlistedTenantCategoryPhrase. '
                   'Leaving it there is fine; choosing one above moves it.',
-                  style: text.bodySmall,
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
                 ),
               )
             else if (widget.moreCategories)
@@ -1608,7 +1621,9 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                   key: const ValueKey('catalog-management-edit-more-categories'),
                   'More categories exist than are shown here. A product can '
                   'only be moved into one of those above.',
-                  style: text.bodySmall,
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
                 ),
               ),
           ],

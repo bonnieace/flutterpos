@@ -190,95 +190,100 @@ final class _LedgerContents extends StatelessWidget {
   TenantProductLedger get ledger => view.ledger;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('product-ledger'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // **The one of the fourteen §7 sites that stays, and it is not a
-      // duplicate.** The `AppScaffold` title is `Product stock ledger` and this
-      // is the product's name, so the two say different things — it is a
-      // `PageHeader.subtitle` candidate rather than a deletion. It cannot move
-      // there: the subtitle is built by `TenantProductLedgerScreen`, which is
-      // constructed with a `productId` and nothing else, and the name only
-      // exists after the guarded load inside this panel. Reaching it means
-      // either an optional decoded product on the screen — which its callers,
-      // the movement feed included, do not all hold — or hoisting the load out
-      // of the guard. Both are structure rather than a title fix. Recorded in
-      // `PLAN.md`.
-      Text(
-        ledger.product?.name ?? 'Deleted product',
-        key: const ValueKey('product-ledger-title'),
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
-      const SizedBox(height: 4),
-      Text(
-        key: const ValueKey('product-ledger-identity'),
-        'Product ${ledger.productId}',
-      ),
-      const SizedBox(height: 8),
-      if (ledger.product case final product?)
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('product-ledger'),
+      padding: const EdgeInsets.all(20),
+      children: [
+        // **The one of the fourteen §7 sites that stays, and it is not a
+        // duplicate.** The `AppScaffold` title is `Product stock ledger` and this
+        // is the product's name, so the two say different things — it is a
+        // `PageHeader.subtitle` candidate rather than a deletion. It cannot move
+        // there: the subtitle is built by `TenantProductLedgerScreen`, which is
+        // constructed with a `productId` and nothing else, and the name only
+        // exists after the guarded load inside this panel. Reaching it means
+        // either an optional decoded product on the screen — which its callers,
+        // the movement feed included, do not all hold — or hoisting the load out
+        // of the guard. Both are structure rather than a title fix. Recorded in
+        // `PLAN.md`.
         Text(
-          key: const ValueKey('product-ledger-quantity'),
-          'Recorded stock: ${product.quantity}',
-        )
-      else
-        // The ledger is `write: if false` and Firestore does not cascade a
-        // delete into a subcollection, so it outlives the product it belongs
-        // to. Saying nothing here would present a permanent record as if it
-        // described something still on the shelf.
+          ledger.product?.name ?? 'Deleted product',
+          key: const ValueKey('product-ledger-title'),
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          key: const ValueKey('product-ledger-identity'),
+          'Product ${ledger.productId}',
+        ),
+        const SizedBox(height: 8),
+        if (ledger.product case final product?)
+          Text(
+            key: const ValueKey('product-ledger-quantity'),
+            'Recorded stock: ${product.quantity}',
+          )
+        else
+          // The ledger is `write: if false` and Firestore does not cascade a
+          // delete into a subcollection, so it outlives the product it belongs
+          // to. Saying nothing here would present a permanent record as if it
+          // described something still on the shelf.
+          const Text(
+            key: ValueKey('product-ledger-product-deleted'),
+            'This product no longer exists in the catalog. Its ledger is kept '
+            'permanently and is listed below; nothing here can be corrected, '
+            'because there is no product left to correct.',
+          ),
+        const SizedBox(height: 8),
         const Text(
-          key: ValueKey('product-ledger-product-deleted'),
-          'This product no longer exists in the catalog. Its ledger is kept '
-          'permanently and is listed below; nothing here can be corrected, '
-          'because there is no product left to correct.',
+          'The ledger is permanent and cannot be edited from this app. It is '
+          'listed by record ID, which is not time order; each entry states when '
+          'it was recorded.',
         ),
-      const SizedBox(height: 8),
-      const Text(
-        'The ledger is permanent and cannot be edited from this app. It is '
-        'listed by record ID, which is not time order; each entry states when '
-        'it was recorded.',
-      ),
-      const SizedBox(height: 16),
-      // §4.3's responsive contract. Every entry is stated in the shared record
-      // vocabulary, so this surface and the business-wide feed cannot describe
-      // the same document differently - which is what `stock_movement_labels`
-      // has existed for since before it held a record model.
-      RecordList(
-        identityLabel: 'Movement',
-        items: <RecordItem>[
-          for (final movement in ledger.movements.items)
-            stockMovementRecord(
-              movement,
-              keyPrefix: 'product-ledger',
-              rowKey: movement.id,
-              names: view.names,
-              selfUid: selfUid,
-            ),
-        ],
-        empty: const Text(
-          key: ValueKey('product-ledger-empty'),
-          'No stock movement has been recorded against this product.',
+        const SizedBox(height: 16),
+        // §4.3's responsive contract. Every entry is stated in the shared record
+        // vocabulary, so this surface and the business-wide feed cannot describe
+        // the same document differently - which is what `stock_movement_labels`
+        // has existed for since before it held a record model.
+        RecordList(
+          identityLabel: 'Movement',
+          items: <RecordItem>[
+            for (final movement in ledger.movements.items)
+              stockMovementRecord(
+                movement,
+                keyPrefix: 'product-ledger',
+                rowKey: movement.id,
+                names: view.names,
+                selfUid: selfUid,
+              ),
+          ],
+          empty: const Text(
+            key: ValueKey('product-ledger-empty'),
+            'No stock movement has been recorded against this product.',
+          ),
         ),
-      ),
-      const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('product-ledger-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (ledger.movements.hasMore)
-            AppButton(
-              key: const ValueKey('product-ledger-next'),
-              label: 'Next page',
-              onPressed: onNextPage,
-            ),
-        ],
-      ),
-    ],
-  );
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          children: [
+            if (pageIndex > 0)
+              AppButton(
+                key: const ValueKey('product-ledger-previous'),
+                label: 'Previous page',
+                onPressed: onPreviousPage,
+              ),
+            if (ledger.movements.hasMore)
+              AppButton(
+                key: const ValueKey('product-ledger-next'),
+                label: 'Next page',
+                onPressed: onNextPage,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
 
 }

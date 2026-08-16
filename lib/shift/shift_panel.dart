@@ -1,14 +1,15 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../ui/buttons.dart';
-import '../ui/fields.dart';
-import '../ui/routes.dart';
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../ui/buttons.dart';
+import '../ui/fields.dart';
+import '../ui/routes.dart';
+import '../ui/tokens.dart';
 import 'shift_controller.dart';
 import 'shift_history_panel.dart';
 import 'shift_sales_ledger.dart';
@@ -163,118 +164,123 @@ final class _ShiftContents extends StatelessWidget {
   final VoidCallback onClose;
 
   @override
-  Widget build(BuildContext context) => Column(
-    key: const ValueKey('tenant-shift-panel'),
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text('Shift', style: Theme.of(context).textTheme.titleSmall),
-      const SizedBox(height: 6),
-      Text(key: const ValueKey('shift-status'), _statusLabel()),
-      if (state.otherTenantShiftOpen)
-        const Text(
-          key: ValueKey('shift-other-tenant-open'),
-          'Another business still has an open shift on this device.',
-        ),
-      if (state.otherDeviceShiftOpen)
-        const Text(
-          key: ValueKey('shift-other-device-open'),
-          'Your shift in this business is open on another device. Close it '
-          'there before opening a shift here.',
-        ),
-      if (state.sales case final sales?) ...[
-        Text(
-          key: const ValueKey('shift-sales-summary'),
-          'Confirmed sales: ${sales.transactionCount} '
-          '${sales.transactionCount == 1 ? 'transaction' : 'transactions'}, '
-          '${sales.totalMinor} minor '
-          '${sales.totalMinor == 1 ? 'unit' : 'units'}.',
-        ),
-        // Stated here rather than only after the close is refused. A real run
-        // found this surface reporting "Confirmed sales: 0" beside a drawer
-        // holding two unsynchronized sales, and saying nothing about them
-        // until the cashier pressed Close and got a message back.
-        if (!sales.isComplete)
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      key: const ValueKey('tenant-shift-panel'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Shift', style: tokens.typography.titleMedium.copyWith(
+          color: tokens.colors.text.primary,
+        )),
+        const SizedBox(height: 6),
+        Text(key: const ValueKey('shift-status'), _statusLabel()),
+        if (state.otherTenantShiftOpen)
+          const Text(
+            key: ValueKey('shift-other-tenant-open'),
+            'Another business still has an open shift on this device.',
+          ),
+        if (state.otherDeviceShiftOpen)
+          const Text(
+            key: ValueKey('shift-other-device-open'),
+            'Your shift in this business is open on another device. Close it '
+            'there before opening a shift here.',
+          ),
+        if (state.sales case final sales?) ...[
           Text(
-            key: const ValueKey('shift-unsettled-sales'),
-            '${sales.unsettledCount} '
-            '${sales.unsettledCount == 1 ? 'sale' : 'sales'} on this device '
-            '${sales.unsettledCount == 1 ? 'is' : 'are'} not synchronized yet '
-            'and none of the figures here include '
-            '${sales.unsettledCount == 1 ? 'it' : 'them'}. The shift cannot be '
-            'closed until they are.',
+            key: const ValueKey('shift-sales-summary'),
+            'Confirmed sales: ${sales.transactionCount} '
+            '${sales.transactionCount == 1 ? 'transaction' : 'transactions'}, '
+            '${sales.totalMinor} minor '
+            '${sales.totalMinor == 1 ? 'unit' : 'units'}.',
           ),
-        // The expected cash waits for a complete shift. Until every sale is
-        // accounted for the figure is not a smaller truth, it is a number the
-        // drawer will not match - which is exactly what the run showed.
-        //
-        // A split that does not sum to the takings just stated is refused for
-        // the same reason: the cash figure is what a drawer is measured
-        // against, so a wrong one becomes an accusation about the person
-        // counting it.
-        if (sales.isComplete && sales.tendersDescribeTakings)
-          _ExpectedCash(split: sales.tenders),
-      ],
-      if (state.errorCode != null)
-        Text(key: const ValueKey('shift-error'), _errorLabel()),
-      const SizedBox(height: 8),
-      if (state.phase == TenantShiftPhase.closing) ...[
-        AppTextField(
-          key: const ValueKey('counted-cash'),
-          controller: countedCash,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          label: 'Counted cash (minor units)',
-          leading: Icons.payments_outlined,
-        ),
-        const SizedBox(height: 8),
-      ],
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          if (state.phase == TenantShiftPhase.none)
-            AppButton(
-              key: const ValueKey('open-shift'),
-              label: 'Open shift',
-              tier: AppButtonTier.primary,
-              onPressed: busy ? null : onOpen,
+          // Stated here rather than only after the close is refused. A real run
+          // found this surface reporting "Confirmed sales: 0" beside a drawer
+          // holding two unsynchronized sales, and saying nothing about them
+          // until the cashier pressed Close and got a message back.
+          if (!sales.isComplete)
+            Text(
+              key: const ValueKey('shift-unsettled-sales'),
+              '${sales.unsettledCount} '
+              '${sales.unsettledCount == 1 ? 'sale' : 'sales'} on this device '
+              '${sales.unsettledCount == 1 ? 'is' : 'are'} not synchronized yet '
+              'and none of the figures here include '
+              '${sales.unsettledCount == 1 ? 'it' : 'them'}. The shift cannot be '
+              'closed until they are.',
             ),
-          if (state.phase == TenantShiftPhase.open)
-            AppButton(
-              key: const ValueKey('start-cash-count'),
-              label: 'Start cash count',
-              tier: AppButtonTier.primary,
-              onPressed: busy ? null : onStartCashCount,
-            ),
-          if (state.phase == TenantShiftPhase.closing) ...[
-            AppButton(
-              key: const ValueKey('close-shift'),
-              label: 'Close shift',
-              tier: AppButtonTier.primary,
-              onPressed: busy ? null : onClose,
-            ),
-            AppButton(
-              key: const ValueKey('cancel-cash-count'),
-              label: 'Cancel cash count',
-              onPressed: busy ? null : onCancelCashCount,
-            ),
-          ],
-          AppButton(
-            key: const ValueKey('refresh-shift'),
-            label: 'Refresh shift',
-            onPressed: busy ? null : onRefresh,
-          ),
-          if (onViewHistory != null)
-            AppButton(
-              key: const ValueKey('view-shift-history'),
-              label: 'View shift history',
-              onPressed: busy ? null : onViewHistory,
-            ),
+          // The expected cash waits for a complete shift. Until every sale is
+          // accounted for the figure is not a smaller truth, it is a number the
+          // drawer will not match - which is exactly what the run showed.
+          //
+          // A split that does not sum to the takings just stated is refused for
+          // the same reason: the cash figure is what a drawer is measured
+          // against, so a wrong one becomes an accusation about the person
+          // counting it.
+          if (sales.isComplete && sales.tendersDescribeTakings)
+            _ExpectedCash(split: sales.tenders),
         ],
-      ),
-    ],
-  );
+        if (state.errorCode != null)
+          Text(key: const ValueKey('shift-error'), _errorLabel()),
+        const SizedBox(height: 8),
+        if (state.phase == TenantShiftPhase.closing) ...[
+          AppTextField(
+            key: const ValueKey('counted-cash'),
+            controller: countedCash,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            label: 'Counted cash (minor units)',
+            leading: Icons.payments_outlined,
+          ),
+          const SizedBox(height: 8),
+        ],
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (state.phase == TenantShiftPhase.none)
+              AppButton(
+                key: const ValueKey('open-shift'),
+                label: 'Open shift',
+                tier: AppButtonTier.primary,
+                onPressed: busy ? null : onOpen,
+              ),
+            if (state.phase == TenantShiftPhase.open)
+              AppButton(
+                key: const ValueKey('start-cash-count'),
+                label: 'Start cash count',
+                tier: AppButtonTier.primary,
+                onPressed: busy ? null : onStartCashCount,
+              ),
+            if (state.phase == TenantShiftPhase.closing) ...[
+              AppButton(
+                key: const ValueKey('close-shift'),
+                label: 'Close shift',
+                tier: AppButtonTier.primary,
+                onPressed: busy ? null : onClose,
+              ),
+              AppButton(
+                key: const ValueKey('cancel-cash-count'),
+                label: 'Cancel cash count',
+                onPressed: busy ? null : onCancelCashCount,
+              ),
+            ],
+            AppButton(
+              key: const ValueKey('refresh-shift'),
+              label: 'Refresh shift',
+              onPressed: busy ? null : onRefresh,
+            ),
+            if (onViewHistory != null)
+              AppButton(
+                key: const ValueKey('view-shift-history'),
+                label: 'View shift history',
+                onPressed: busy ? null : onViewHistory,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
 
   String _statusLabel() => switch (state.phase) {
     TenantShiftPhase.unknown => 'Shift state has not been confirmed yet.',

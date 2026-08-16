@@ -5,12 +5,33 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'email_delivery_status.dart';
 import 'tenant_bootstrap.dart';
 import 'tenant_id.dart';
 
 typedef AccountVerificationRequestIdFactory = String Function();
 typedef AccountVerificationCurrentCheck = bool Function();
+
+/// The request reached the server. §2.1's `ok` is *"reconciled, **confirmed**,
+/// in stock"*, and what is confirmed is the request rather than the delivery -
+/// which is exactly what the sentence is careful to say.
+const AppNotice _requestAccepted = AppNotice.confirmed(
+  'Request received. If this address can receive mail, a verification link is '
+  'on its way. Open the link, then check again below.',
+);
+
+/// The address cannot be reached at all.
+///
+/// §2.1's `problem` is *"difference found, **unreadable**, out of stock"*, and
+/// an address the provider will not deliver to is the closest of the five: a
+/// state that will not resolve by trying again. It is deliberately not
+/// `attention`, which is *awaiting*, because nothing here is awaited.
+const AppNotice _undeliverable = AppNotice.refused(
+  'This address cannot receive mail from us, so sending again will not help. '
+  'Check the address or contact support.',
+);
 
 /// Reloads the signed-in identity from the server and reports whether the
 /// address is now verified.
@@ -332,6 +353,7 @@ final class _AccountVerificationPanelState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     final busy = _sending || _reloading;
     return Card(
       key: const ValueKey('account-verification'),
@@ -342,46 +364,54 @@ final class _AccountVerificationPanelState
           children: [
             Text(
               'Verify your email address',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: tokens.typography.titleMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
               'Until this address is verified you cannot request a business or '
               'accept an invitation.',
             ),
+            // **Two of this card's three answers were told apart by hue
+            // alone**, which §9 rules out and §2.1 calls the failure it was
+            // written for: `colorScheme.primary` for the accepted one and
+            // `colorScheme.error` for the undeliverable one, both as a colour
+            // on a paragraph and neither carrying a container, a glyph or a
+            // word. They are the same four outcomes `AppNotice` names.
             if (_accepted) ...[
               const SizedBox(height: 12),
-              Text(
+              Callout(
                 key: const ValueKey('account-verification-accepted'),
                 // Deliberately not "we sent you an email". The server accepts
                 // the request without telling the client whether anything was
                 // delivered - an already-verified or suppressed address is
                 // accepted and sends nothing - so claiming delivery here would
                 // be asserting something this app cannot know.
-                'Request received. If this address can receive mail, a '
-                'verification link is on its way. Open the link, then check '
-                'again below.',
-                style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                status: _requestAccepted.status,
+                message: _requestAccepted.message,
               ),
             ],
             if (_deliveryStatus == EmailDeliveryStatus.unavailable) ...[
               const SizedBox(height: 12),
-              Text(
+              Callout(
                 key: const ValueKey('account-verification-undeliverable'),
                 // The server gives one answer for four causes, so this names
                 // none of them. Sending again cannot help, and saying so is the
                 // whole point: otherwise the user retries indefinitely.
-                'This address cannot receive mail from us, so sending again '
-                'will not help. Check the address or contact support.',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                status: _undeliverable.status,
+                message: _undeliverable.message,
               ),
             ],
             if (_safeError != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _safeError!,
+              Callout(
                 key: const ValueKey('account-verification-error'),
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                // A refusal, named as one rather than painted red: the write
+                // was attempted and nothing changed. Before this the whole of
+                // the status was the colour, which is the case §9 rules out.
+                status: AppNotice.refused(_safeError!).status,
+                message: _safeError!,
               ),
             ],
             const SizedBox(height: 16),

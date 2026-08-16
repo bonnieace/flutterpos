@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'platform_tenant_review.dart';
 import 'tenant_id.dart';
 import 'tenant_request.dart';
@@ -499,78 +501,86 @@ final class _PlatformTenantArchivalFormState
       widget.identity.canReview && (widget.isCurrent?.call() ?? true);
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        'Archive ${widget.tenant.name} (${widget.tenant.slug})?',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      const SizedBox(height: 8),
-      const Text(
-        'This permanently removes the business from active ownership counts. '
-        'It cannot be reopened through tenant management.',
-      ),
-      const SizedBox(height: 16),
-      AppTextField(
-        key: const ValueKey('platform-archival-reason'),
-        controller: _reasonController,
-        enabled: !_submitting,
-        minLines: 2,
-        maxLines: 4,
-        maxLength: 1000,
-        onChanged: _intentFieldChanged,
-        label: 'Archival reason',
-      ),
-      Text('Type ${widget.tenant.archiveConfirmation} to confirm.'),
-      const SizedBox(height: 8),
-      AppTextField(
-        key: const ValueKey('platform-archival-confirmation'),
-        controller: _confirmationController,
-        enabled: !_submitting,
-        autocorrect: false,
-        onChanged: _intentFieldChanged,
-        label: 'Confirmation',
-      ),
-      if (_safeError != null) ...[
-        const SizedBox(height: 12),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         Text(
-          _safeError!,
-          key: const ValueKey('platform-archival-error'),
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
-        ),
-      ],
-      const SizedBox(height: 16),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          AppButton(
-            key: const ValueKey('platform-archival-cancel'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: _submitting ? null : widget.onCancel,
+          'Archive ${widget.tenant.name} (${widget.tenant.slug})?',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
           ),
-          const SizedBox(width: 8),
-          // **`loading` rather than a hand-rolled spinner, and `onPressed` is
-          // no longer nulled while it runs.** §2.1's loading row holds the
-          // container and replaces the label; nulling the callback would paint
-          // the *disabled* container instead, which says "you may not do this"
-          // where the truth is "this is happening". `AppButton` suppresses the
-          // press itself while loading, so the guard is kept without the
-          // wrong colours.
-          AppButton(
-            key: const ValueKey('platform-archival-confirm'),
-            label: 'Archive business',
-            icon: Icons.archive_outlined,
-            tier: AppButtonTier.destructive,
-            loading: _submitting,
-            onPressed: _submit,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'This permanently removes the business from active ownership counts. '
+          'It cannot be reopened through tenant management.',
+        ),
+        const SizedBox(height: 16),
+        AppTextField(
+          key: const ValueKey('platform-archival-reason'),
+          controller: _reasonController,
+          enabled: !_submitting,
+          minLines: 2,
+          maxLines: 4,
+          maxLength: 1000,
+          onChanged: _intentFieldChanged,
+          label: 'Archival reason',
+        ),
+        Text('Type ${widget.tenant.archiveConfirmation} to confirm.'),
+        const SizedBox(height: 8),
+        AppTextField(
+          key: const ValueKey('platform-archival-confirmation'),
+          controller: _confirmationController,
+          enabled: !_submitting,
+          autocorrect: false,
+          onChanged: _intentFieldChanged,
+          label: 'Confirmation',
+        ),
+        if (_safeError != null) ...[
+          const SizedBox(height: 12),
+          Callout(
+            key: const ValueKey('platform-archival-error'),
+            // A refusal, named as one rather than painted red: the write
+            // was attempted and nothing changed. Before this the whole of
+            // the status was the colour, which is the case §9 rules out.
+            status: AppNotice.refused(_safeError!).status,
+            message: _safeError!,
           ),
         ],
-      ),
-    ],
-  );
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            AppButton(
+              key: const ValueKey('platform-archival-cancel'),
+              label: 'Cancel',
+              tier: AppButtonTier.tertiary,
+              onPressed: _submitting ? null : widget.onCancel,
+            ),
+            const SizedBox(width: 8),
+            // **`loading` rather than a hand-rolled spinner, and `onPressed` is
+            // no longer nulled while it runs.** §2.1's loading row holds the
+            // container and replaces the label; nulling the callback would paint
+            // the *disabled* container instead, which says "you may not do this"
+            // where the truth is "this is happening". `AppButton` suppresses the
+            // press itself while loading, so the guard is kept without the
+            // wrong colours.
+            AppButton(
+              key: const ValueKey('platform-archival-confirm'),
+              label: 'Archive business',
+              icon: Icons.archive_outlined,
+              tier: AppButtonTier.destructive,
+              loading: _submitting,
+              onPressed: _submit,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 final class PlatformRejectedTenantScreen extends StatefulWidget {
@@ -682,6 +692,7 @@ final class _PlatformRejectedTenantScreenState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     if (_loading && _items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -737,7 +748,9 @@ final class _PlatformRejectedTenantScreenState
                 children: [
                   Text(
                     tenant.name,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: tokens.typography.titleMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(

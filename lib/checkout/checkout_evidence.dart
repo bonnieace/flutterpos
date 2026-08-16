@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../ui/tokens.dart';
 import 'checkout_outbox.dart';
 
 /// Read-only counts of locally retained checkout evidence for one session.
@@ -216,6 +217,7 @@ final class _EvidenceContents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     if (summary.total == 0) {
       return const Text(
         key: ValueKey('pending-checkout-evidence-empty'),
@@ -229,7 +231,9 @@ final class _EvidenceContents extends StatelessWidget {
       children: [
         Text(
           'Checkouts stored on this device',
-          style: Theme.of(context).textTheme.titleSmall,
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
         ),
         const SizedBox(height: 6),
         Text('Saved offline: ${summary.savedOffline}'),

@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/buttons.dart';
+import '../support/notices.dart';
 
 void main() {
   group('account verification gateway', () {
@@ -145,11 +147,19 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      final accepted = tester
-          .widget<Text>(
-            find.byKey(const ValueKey('account-verification-accepted')),
-          )
-          .data!;
+      final accepted = noticeMessage(
+        tester,
+        'account-verification-accepted',
+      );
+      // **This card told its three answers apart by hue alone until the step-4
+      // sweep**, which is the case §9 rules out: `colorScheme.primary` here and
+      // `colorScheme.error` on the other two, with no container, glyph or word
+      // between them. A test that read only the sentence would have passed just
+      // as happily with all three painted as failures.
+      expect(
+        noticeStatus(tester, 'account-verification-accepted'),
+        AppStatus.ok,
+      );
       // An already-verified or suppressed address is accepted and sends
       // nothing, so the copy must stay conditional.
       expect(accepted, contains('If this address can receive mail'));
@@ -213,11 +223,7 @@ void main() {
       await tester.pump();
 
       expect(
-        tester
-            .widget<Text>(
-              find.byKey(const ValueKey('account-verification-error')),
-            )
-            .data,
+        noticeMessage(tester, 'account-verification-error'),
         contains('within five minutes'),
       );
       expect(
@@ -261,11 +267,7 @@ void main() {
       await tester.pump();
 
       expect(
-        tester
-            .widget<Text>(
-              find.byKey(const ValueKey('account-verification-error')),
-            )
-            .data,
+        noticeMessage(tester, 'account-verification-error'),
         'The verification email could not be requested. Please try again.',
       );
       expect(pressable(tester, 'account-verification-recheck'), isTrue);
@@ -288,13 +290,7 @@ void main() {
       // which is exactly when the user starts waiting for a message.
       expect(status.calls, 1);
       expect(
-        tester
-            .widget<Text>(
-              find.byKey(
-                const ValueKey('account-verification-undeliverable'),
-              ),
-            )
-            .data,
+        noticeMessage(tester, 'account-verification-undeliverable'),
         'This address cannot receive mail from us, so sending again will not '
         'help. Check the address or contact support.',
       );

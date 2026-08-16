@@ -5,6 +5,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'invitation_acceptance_failure.dart';
 import 'tenant_id.dart';
 import 'tenant_membership.dart';
@@ -391,46 +393,54 @@ final class _TenantVisibleInvitationAcceptanceFormState
   bool _isCurrent() => widget.isCurrent?.call() ?? true;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        'Accept invitation to ${widget.membership.tenantName}?',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      const SizedBox(height: 8),
-      Text('Invited role: ${tenantRoleLabel(widget.membership.role)}'),
-      if (_safeError != null) ...[
-        const SizedBox(height: 12),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         Text(
-          _safeError!,
-          key: const ValueKey('accept-visible-invitation-error'),
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
-        ),
-      ],
-      const SizedBox(height: 16),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          AppButton(
-            key: const ValueKey('accept-visible-invitation-cancel'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: _submitting ? null : widget.onCancel,
+          'Accept invitation to ${widget.membership.tenantName}?',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
           ),
-          const SizedBox(width: 8),
-          AppButton(
-            key: const ValueKey('accept-visible-invitation-confirm'),
-            label: 'Accept invitation',
-            icon: Icons.check_circle_outline,
-            tier: AppButtonTier.primary,
-            loading: _submitting,
-            onPressed: _submit,
+        ),
+        const SizedBox(height: 8),
+        Text('Invited role: ${tenantRoleLabel(widget.membership.role)}'),
+        if (_safeError != null) ...[
+          const SizedBox(height: 12),
+          Callout(
+            key: const ValueKey('accept-visible-invitation-error'),
+            // A refusal, named as one rather than painted red: the write
+            // was attempted and nothing changed. Before this the whole of
+            // the status was the colour, which is the case §9 rules out.
+            status: AppNotice.refused(_safeError!).status,
+            message: _safeError!,
           ),
         ],
-      ),
-    ],
-  );
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            AppButton(
+              key: const ValueKey('accept-visible-invitation-cancel'),
+              label: 'Cancel',
+              tier: AppButtonTier.tertiary,
+              onPressed: _submitting ? null : widget.onCancel,
+            ),
+            const SizedBox(width: 8),
+            AppButton(
+              key: const ValueKey('accept-visible-invitation-confirm'),
+              label: 'Accept invitation',
+              icon: Icons.check_circle_outline,
+              tier: AppButtonTier.primary,
+              loading: _submitting,
+              onPressed: _submit,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 Map<String, Object?> _strictAcceptanceMap(

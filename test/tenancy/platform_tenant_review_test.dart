@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/notices.dart';
 
 void main() {
   group('PlatformPendingTenantQueue', () {
@@ -274,6 +277,10 @@ void main() {
         find.byKey(const ValueKey('platform-review-error')),
         findsOneWidget,
       );
+      // A refusal is §2.1's `problem`, and asserting it is what
+      // the old red `Text` could not carry: the sentence alone
+      // reads the same whether the write landed or not.
+      expect(noticeStatus(tester, 'platform-review-error'), AppStatus.problem);
       await tester.tap(confirm);
       await tester.pump();
 

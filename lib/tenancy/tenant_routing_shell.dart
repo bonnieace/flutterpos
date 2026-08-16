@@ -6,6 +6,7 @@ import '../ui/buttons.dart';
 import '../ui/home_navigation.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'account_verification.dart';
 import 'email_delivery_status.dart';
@@ -1881,10 +1882,13 @@ final class _TenantBusinessSwitcherState extends State<TenantBusinessSwitcher> {
             ),
           if (_blocker != null) ...[
             const SizedBox(height: 12),
-            Text(
-              tenantSwitchBlockerMessage(_blocker!),
+            Callout(
               key: const ValueKey('tenant-switch-blocker'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              // A refusal, named as one rather than painted red: the write
+              // was attempted and nothing changed. Before this the whole of
+              // the status was the colour, which is the case §9 rules out.
+              status: AppNotice.refused(tenantSwitchBlockerMessage(_blocker!)).status,
+              message: tenantSwitchBlockerMessage(_blocker!),
             ),
           ],
           if (_switching) ...[

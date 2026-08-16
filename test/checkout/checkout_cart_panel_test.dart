@@ -9,6 +9,8 @@ import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/notices.dart';
+
 void main() {
   late _Catalog catalog;
   late _Drafts drafts;
@@ -1488,19 +1490,16 @@ Future<void> _submit(WidgetTester tester, String key, String value) async {
 String _text(WidgetTester tester, String key) =>
     tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
-/// The sentence a [Callout] at [key] states.
+/// The sentence a notice at [key] states.
 ///
-/// **The till's four notice surfaces are `Callout`s as of §11 step 7**, which
-/// is how every other panel in this app renders an `AppNotice`: the status is a
-/// container, an icon and a word rather than a colour on the sentence, so the
-/// thing being asserted is the component's own `message` and not a `Text` that
-/// happens to be underneath it. `_status` below asserts the other half.
-String _notice(WidgetTester tester, String key) =>
-    tester.widget<Callout>(find.byKey(ValueKey(key))).message;
+/// **The till's five notice surfaces are `Callout`s as of §11 step 7**, which
+/// is how every other panel in this app renders an `AppNotice`, so these read
+/// through the same `test/support/notices.dart` the other seven surfaces do
+/// rather than reaching for a `Text` underneath the component.
+String _notice(WidgetTester tester, String key) => noticeMessage(tester, key);
 
 /// Which of §2.1's five a notice at [key] carries.
-AppStatus _status(WidgetTester tester, String key) =>
-    tester.widget<Callout>(find.byKey(ValueKey(key))).status;
+AppStatus _status(WidgetTester tester, String key) => noticeStatus(tester, key);
 
 /// The single [TextField] at or under [key].
 TextField _field(WidgetTester tester, String key) => tester.widget<TextField>(

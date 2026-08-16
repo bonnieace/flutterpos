@@ -686,11 +686,13 @@ final class _BulkCatalogContents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final tokens = AppTokens.componentOf(context);
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('Many products at once', style: text.titleMedium),
+        Text('Many products at once', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
         const SizedBox(height: 4),
         // A helper rather than a notice, and the call is worth stating because
         // it could have gone the other way. §5.2 names this route's prose by
@@ -799,10 +801,12 @@ final class _BulkCatalogContents extends StatelessWidget {
   }
 
   List<Widget> _correctionForm(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final tokens = AppTokens.componentOf(context);
     final categoryNames = tenantCategoryNames(view.categories.items);
     return <Widget>[
-      Text('What to change', style: text.titleSmall),
+      Text('What to change', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
@@ -1006,9 +1010,11 @@ final class _BulkCatalogContents extends StatelessWidget {
   }
 
   List<Widget> _importForm(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final tokens = AppTokens.componentOf(context);
     return <Widget>[
-      Text('Paste the rows', style: text.titleSmall),
+      Text('Paste the rows', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
       const SizedBox(height: 8),
       // Three paragraphs of permanent helper prose behind one fold - §5.1's own
       // description of what `Disclosure` replaces, and the tallest single block
@@ -1063,10 +1069,12 @@ final class _BulkCatalogContents extends StatelessWidget {
     BuildContext context,
     TenantBulkCatalogReport report,
   ) {
-    final text = Theme.of(context).textTheme;
+    final tokens = AppTokens.componentOf(context);
     return <Widget>[
       const SizedBox(height: 24),
-      Text('What this does', style: text.titleMedium),
+      Text('What this does', style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          )),
       const SizedBox(height: 8),
       Text(
         key: const ValueKey('bulk-catalog-summary'),
@@ -1126,7 +1134,9 @@ final class _BulkCatalogContents extends StatelessWidget {
                 Text(
                   key: ValueKey('bulk-catalog-row-subject-${row.position}'),
                   row.subject,
-                  style: text.titleSmall,
+                  style: tokens.typography.titleMedium.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
                 ),
                 Text(
                   key: ValueKey('bulk-catalog-row-detail-${row.position}'),

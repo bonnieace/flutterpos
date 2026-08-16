@@ -740,69 +740,74 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        'Record a return',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        'Only what this sale still has available may be returned. Pending '
-        'returns already count against it.',
-      ),
-      const SizedBox(height: 12),
-      for (final line in widget.returnable.lines)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  key: ValueKey('sale-returns-remaining-${line.productId}'),
-                  '${line.name}: ${line.remainingQuantity} of '
-                  '${line.soldQuantity} available',
-                ),
-              ),
-              IconButton(
-                key: ValueKey('sale-returns-decrease-${line.productId}'),
-                onPressed: line.remainingQuantity == 0
-                    ? null
-                    : () => _change(line, -1),
-                icon: const Icon(Icons.remove_circle_outline),
-              ),
-              Text(
-                key: ValueKey('sale-returns-quantity-${line.productId}'),
-                '${_quantityOf(line.productId)}',
-              ),
-              IconButton(
-                key: ValueKey('sale-returns-increase-${line.productId}'),
-                onPressed: line.remainingQuantity == 0
-                    ? null
-                    : () => _change(line, 1),
-                icon: const Icon(Icons.add_circle_outline),
-              ),
-            ],
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Record a return',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
           ),
         ),
-      const SizedBox(height: 12),
-      AppTextField(
-        key: const ValueKey('sale-returns-reason'),
-        controller: _reason,
-        maxLength: maximumReturnReasonLength,
-        onChanged: (_) => setState(() {}),
-        label: 'Reason for this return',
-      ),
-      const SizedBox(height: 12),
-      AppButton(
-        key: const ValueKey('sale-returns-submit'),
-        label: 'Record return',
-        tier: AppButtonTier.primary,
-        onPressed: _canSubmit ? _confirm : null,
-      ),
-    ],
-  );
+        const SizedBox(height: 4),
+        const Text(
+          'Only what this sale still has available may be returned. Pending '
+          'returns already count against it.',
+        ),
+        const SizedBox(height: 12),
+        for (final line in widget.returnable.lines)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    key: ValueKey('sale-returns-remaining-${line.productId}'),
+                    '${line.name}: ${line.remainingQuantity} of '
+                    '${line.soldQuantity} available',
+                  ),
+                ),
+                IconButton(
+                  key: ValueKey('sale-returns-decrease-${line.productId}'),
+                  onPressed: line.remainingQuantity == 0
+                      ? null
+                      : () => _change(line, -1),
+                  icon: const Icon(Icons.remove_circle_outline),
+                ),
+                Text(
+                  key: ValueKey('sale-returns-quantity-${line.productId}'),
+                  '${_quantityOf(line.productId)}',
+                ),
+                IconButton(
+                  key: ValueKey('sale-returns-increase-${line.productId}'),
+                  onPressed: line.remainingQuantity == 0
+                      ? null
+                      : () => _change(line, 1),
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 12),
+        AppTextField(
+          key: const ValueKey('sale-returns-reason'),
+          controller: _reason,
+          maxLength: maximumReturnReasonLength,
+          onChanged: (_) => setState(() {}),
+          label: 'Reason for this return',
+        ),
+        const SizedBox(height: 12),
+        AppButton(
+          key: const ValueKey('sale-returns-submit'),
+          label: 'Record return',
+          tier: AppButtonTier.primary,
+          onPressed: _canSubmit ? _confirm : null,
+        ),
+      ],
+    );
+  }
 }
 
 /// Names the two states separately on the page a user is inspecting.
