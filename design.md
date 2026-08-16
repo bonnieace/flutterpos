@@ -1,6 +1,6 @@
 # Design system
 
-**Status:** v0.6 — in implementation. §11 steps 1–6, 8, 9 and 11 are done, and step 7
+**Status:** v0.7 — in implementation. §11 steps 1–6, 8, 9 and 11 are done, and step 7
 is half done; see each section's own "Done" note for what is true of the code.
 
 **The status line was stuck at v0.4 through v0.5 and is corrected here.** `PLAN.md`
@@ -183,6 +183,21 @@ is fine *because* status always appears in a bordered container and an action ne
 
 One family — Roboto — with a real scale. Two additions matter more than the sizes.
 
+**Amended in v0.7, 2026-08-16: the app bundles Roboto and Roboto Mono, and until it
+did neither sentence in this section was true of the running app.** `lib/theme.dart`
+named no family at all, so every string rendered in whatever face the device
+defaulted to, and `mono` carried its metrics while naming nothing — meaning **SKUs and
+receipt numbers rendered proportionally**, which is the one place this section says
+they must not. The screenshot harness injected Roboto itself, so **every capture ever
+reviewed was more branded than the app**, and none of them was evidence about type.
+
+**Two files, one type design, and that is the reading of "one family" that survives
+contact with the `mono` row.** "One family" and "monospace" cannot both be literally
+true; Roboto and Roboto Mono are the same design at two widths, so the app reads as
+one voice while `rj_000001` still compares character by character. Both are Apache
+2.0. The alternative — dropping the `mono` role — was refused: this app is about
+money, and `rj_00OOO1` is exactly the string the role exists for.
+
 **Tabular figures are mandatory** anywhere numbers stack vertically: prices, totals, stock
 counts, transaction counts, ledger deltas, percentages. `fontFeatures: [FontFeature.tabularFigures()]`.
 ~~Today's daily summary has proportional figures in a column of currency, which is why the
@@ -259,10 +274,10 @@ section gap than the comfortable one, and `space.24` is not on the scale at all.
 
 | Radius | Value | Applies to |
 | --- | --- | --- |
-| `radius.sm` | 8 | chips, badges |
+| `radius.sm` | 8 | badges ~~, chips~~ |
 | `radius.md` | 12 | cards, rows, sheets |
 | `radius.lg` | 20 | dialogs, bottom sheets |
-| `radius.pill` | 999 | buttons and inputs |
+| `radius.pill` | 999 | buttons, inputs, **chips and filters** |
 
 ~~Pill buttons are the signature and should stay. But when *everything* is a pill —
 buttons, chips, filters, cards, inputs — the shape stops signifying. Restrict `pill` to
@@ -283,6 +298,25 @@ carries a filled or bordered §2.1 action tier and a field carries `surface.fiel
 has a persistent label above it and a button never does; and a field is 48 high with its
 content left-aligned where a button centres. If those stop being enough, the honest fix is
 to take this amendment back rather than to add a fourth distinction.
+
+**Amended again in v0.7, 2026-08-16: a chip is a pill too, and this closes a
+disagreement the code has been carrying since 2026-08-13.** `lib/theme.dart`'s
+`chipTheme` has drawn `StadiumBorder` since before any of this was written, so every
+chip in the app has been a pill while this section said `radius.sm`. One of the two
+had to give and the product owner chose the theme.
+
+**So the pill argument now guards exactly two things: badges and cards.** That is
+thinner than v0.4 left it, and it is worth being honest about — with buttons, inputs,
+chips and filters all pill-shaped, the shape is close to being the app's default
+rather than a signal. The distinction that survives is between things you *act on* and
+things you *read*: a control is a pill, a container is not. A `StatusBadge` is read and
+keeps `radius.sm`; a `Callout`, a `RecordCard` and a `StatTile` are read and keep
+`radius.md`. **If a fifth control type wants the pill, that rule is the test to apply**
+— and if a container ever gets one, this amendment was the mistake.
+
+**Nothing in `lib/` changed when this landed**, because the theme was already drawing
+it. What changes is `FilterChipBar`, which is unbuilt: it takes `radius.pill` rather
+than the `radius.sm` its proposal assumed.
 
 ### 2.4 Motion
 
@@ -520,6 +554,42 @@ keep-alive, which is not a rule anyone would have chosen to write down.
 the struck model, and the part of it that survives intact. The device queue is a badge in
 the top bar that opens a panel, and §5.1's `SyncIndicator` is that panel.
 
+#### The home's top bar — amended in v0.7, 2026-08-16
+
+**The home, and only the home, puts its identity back in the bar.** Step 5a moved every
+screen title out of the toolbar and into the page on the grounds that a title is
+content, not chrome. That holds for the twenty-five routes it was written about and
+**does not hold for the home**, because the home's title is not a screen name — it is
+*which business you are in*, and it carries a control: switching. A thing you tap is
+chrome by definition.
+
+```
+┌───────────────────────────────────────────────┐
+│  Dev Corner Shop  ⌄            [ ↥ ② ]  [ ⋮ ] │
+│  Brian Kimani · cashier                       │
+└───────────────────────────────────────────────┘
+```
+
+| Slot | Content | Role |
+| --- | --- | --- |
+| Title | `branding.companyName`, falling back to `membership.tenantName`, with a chevron | `title.md` / `text.primary` |
+| Subtitle | the signed-in member and their role | `caption` / `text.tertiary` |
+| Queue | the device's unsent work, as a badged icon button | see `SyncIndicator`, §5.2 |
+| Overflow | everything that was an account control | `⋮`, opens a menu |
+
+**The title and the chevron are one control**, and it opens the business switcher. The
+subtitle is never a control.
+
+**This replaces the `PageHeader` on the home route only.** Every other route keeps
+step 5a's arrangement, and `AppScaffold` keeps its header slot for them. A route that
+is not the home does not get this bar.
+
+**What it buys is the thing v0.5 asked for and did not finish**: with the identity, the
+queue and the account controls in the bar, and the shift in its banner, the home's body
+holds *only* navigation and state — no tagline, no role sentence, no five-line queue
+list, no paragraph about what the panel cannot do. §4.4 opened by objecting to eleven
+identical pills; this is the other half of that objection.
+
 **The home's title is `branding.companyName`, falling back to `membership.tenantName`.**
 Decided 2026-08-16. This is already the rule `TenantBrandingPanel` applies at
 `tenant_branding.dart:53`, so it is ratified rather than introduced, and `companyName` is a
@@ -661,6 +731,63 @@ verification all carry a badge; an audit event, a ledger entry, a correction and
 The rule that decides it is that a list where every row wears a badge is a list with no signal in it,
 so a standing every record shares is not a standing.
 
+#### `ShiftBanner`
+
+**Added in v0.7, 2026-08-16, from the product owner's own drawing.** §4.4 has said
+since v0.5 that "the shift control is a persistent banner and is never a destination"
+and specified nothing further; this is that sentence, drawn.
+
+**One row: a status container, the standing in words, one line of detail, and exactly
+one action.** `surface.raised`, `radius.md`, `space.16` padding, the status's own
+`border`. Three states, and the state is named in words *and* in colour, never colour
+alone — §9.
+
+| State | Status | Says | Action |
+| --- | --- | --- | --- |
+| No shift open | `neutral` | "No shift open" / "Sales can be recorded, but nothing counts to a drawer yet." | **Open shift**, `primary` |
+| Shift open | `ok` | "Shift open" / opened-at, sale count, and the recorded total | **Count cash**, `secondary` |
+| Cash count unfinished | `attention` | "Cash count unfinished" / expected against sales, and what it blocks | **Close shift**, `primary` |
+
+The heading is `label.lg` in the status `fg`; the detail line is `caption` /
+`text.tertiary`; money in it is `numeric.body` and currency-coded, §8 rule 8. The
+leading glyph is the status's own at `StatusBadge`'s 14.
+
+**Exactly one action, and which one depends on the state** — the next thing to do,
+never a menu of everything possible. The other shift controls live behind the banner:
+
+**Tapping the banner opens an `AppSheet`** carrying the counted-cash field, *Refresh
+shift* and *View shift history* — the three controls the old home kept permanently on
+the page. The banner is still never a destination: a sheet is not a route.
+
+#### `SyncIndicator`
+
+**Added in v0.7, 2026-08-16, from the product owner's own drawing.** §5.1 has given it
+a row — it replaces "five-line offline queue list" — and no measurements at all.
+
+**In the top bar: an icon button with a count badge, and the badge is the whole
+signal.**
+
+- The glyph is upload-to-server, and it is asset 4 in §6.4 — animated while anything is
+  submitting, still otherwise.
+- The badge counts **what is still waiting**, never what is done.
+- The badge is `status.info` normally, and turns `status.problem` the moment anything
+  needs attention. Colour is not alone: the panel it opens names the state in words.
+- **No badge at all when the device is clear.** A zero is not a state worth drawing.
+
+**The panel it opens** is `surface.overlay` at `radius.md`, and it is where §7's
+"Offline / read-only" pattern sends the queue counts — "The checkout queue counts
+belong in a `StatRow`, not a five-line list."
+
+| Row | Treatment |
+| --- | --- |
+| The one that is not zero | a `status` container, `label.lg`, its count at `numeric.body` |
+| Every other row | `body.md` / `text.secondary`, count right-aligned at `numeric.body` |
+| Prose about why | a `Disclosure`, not a paragraph |
+
+**The heading carries the same glyph as the button that opened it**, and a `Close`
+control at the trailing edge. The three-line paragraph explaining that the device sends
+these on its own is §7's "Long copy" — policy, so it folds.
+
 #### `StatusBadge`
 
 `radius.sm`, `label.md`, 24h, icon 14px leading, `space.8` padding. Uses the full status
@@ -749,7 +876,42 @@ should be tested.
 
 ### 6.4 Animated assets
 
-**Default position: build them in Flutter, not in an animation tool.**
+**Amended in v0.7 at the product owner's direction, 2026-08-16: the assets are
+Lottie, sourced from public libraries rather than authored.** This section argued the
+other way at length and the argument is left standing below rather than deleted,
+because the costs it names are real and are now costs this project has accepted
+rather than avoided. What follows is what changed, what it buys, and what it gives up.
+
+**`lottie: ^3.1.0` is already a dependency** — it has been in `pubspec.yaml` this whole
+time, unused, which is worth knowing before anyone re-opens the "adds a dependency"
+half of the argument below.
+
+**The colour objection is the serious one, and it has a partial technical answer this
+section did not know about.** The complaint below is that "an asset authored in an
+external tool bakes its colours in", and it is true of the file. It is *not* true of
+the rendering: `lottie` exposes value delegates, so a colour inside the file can be
+overridden at runtime from the theme. That turns a re-export into a call site. It is
+partial rather than complete — a delegate addresses a named layer, so a file with
+twenty differently-named coloured shapes is still a liability.
+
+**So the rule that replaces "build it in Flutter" is a sourcing rule:** an external
+asset is **monochrome or line-art**, so that one delegate tints the whole thing and it
+sits on any palette. A multi-coloured illustration is refused for the same reason this
+section originally refused the whole format. **Colour-following is deferred rather than
+solved**, at the product owner's direction — the delegates are wired when a second
+palette exists, and until then the assets ship tinted once.
+
+**The device-tier gate is lifted.** §6.6 made every asset unverifiable without a named
+floor handset. The product owner's call on 2026-08-16 is that Lottie runs comfortably
+on the phones this app targets, so **a named floor device is no longer a precondition
+for building the assets** — it remains a precondition for making claims about §6.6's
+tiers, which is a smaller thing.
+
+**What is given up, stated plainly**: the fifteenfold size argument, the fps argument,
+and the palette-follows-for-free argument, all below and all still true. This is a
+speed-and-cost decision taken with those on the table.
+
+~~**Default position: build them in Flutter, not in an animation tool.**~~
 
 Six of the eight approved assets below are state indicators — a check mark that draws on,
 a sync glyph with four states, a small empty-state mark. Flutter draws these natively with
@@ -764,7 +926,23 @@ Only two things on the list genuinely want an animation tool: the brand mark and
 business-approval celebration. Both are one-shots, both are seen rarely, and both are the
 only places character is permitted.
 
-#### If you do commission assets, use Rive
+#### ~~If you do commission assets, use Rive~~ — withdrawn in v0.7, and the analysis kept
+
+**Nothing is commissioned and nothing is authored.** The sourcing decision is
+LottieFiles' free tier under the [Lottie Simple
+License](https://lottiefiles.com/page/license): commercial use permitted, attribution
+not required, and modifications are derivative works carrying the same licence — which
+matters only if the files are ever redistributed as a library, and they are not.
+
+**The one line below that turned out to be wrong is worth marking**, because it was the
+strongest argument against this path: *"Free Lottie files from public libraries exist,
+but they are generic mascots that will not match this palette or this product, and
+using one is worse than using nothing."* The sourcing rule above is the answer — a
+**line-art, monochrome** asset has no palette to clash with, and takes this one.
+
+The Rive analysis is kept below unedited. If the size or the frame rate ever becomes a
+real complaint on a real device, it is the file to re-read, and the conclusion it
+reaches is still the technically stronger one.
 
 The brief names Duolingo, which is the strongest argument for it: <cite index="27-1">Duolingo moved its interactive characters to Rive and reported roughly a fifteenfold file-size reduction alongside better performance and interactivity.</cite>
 The look being asked for is a Rive look.
@@ -1053,19 +1231,50 @@ Recorded here rather than settled, because each needs a call you haven't made ye
   land on the same screen and just see different controls?
 - **Printing.** Named as not-yet-existing. A receipt is a design surface with its own
   constraints and will not inherit from this document.
-- **Is there a character?** Duolingo's warmth comes from a creature with opinions, not
-  from the animation engine. A mascot is a brand commitment, not a motion decision, and it
-  is the wrong thing to arrive at accidentally through asset 7. Decide before commissioning
-  anything.
-- **Who builds the Rive files?** Rive needs its own editor and its own skill. Either you
-  learn it, your collaborator does, or you contract eight assets once and treat them as
-  fixed. Assume the third unless you decide otherwise.
-- **What is the floor device?** The tier system needs a named handset to test against.
-  Everything in §6.6 is unverifiable until that exists.
+- ~~**Is there a character?**~~ **Answered 2026-08-16: yes, and it is a shop cat.**
+  Chosen on three grounds and revisitable on all of them. It is *real* rather than
+  invented — a duka keeps a cat, so the mascot is an observation about the customer's
+  own shop rather than a brand invention. It carries no gender, ethnicity or religion,
+  which matters for a product sold across a region. And it is the character with the
+  deepest free line-art library, which under §6.4's new sourcing rule is the difference
+  between a mascot that exists and one that has to be commissioned. **It appears on
+  asset 7 only** — business approved — and §6.1's frequency rule keeps it there: a
+  character a cashier meets two hundred times a shift is not warmth, it is an
+  obstruction.
+- ~~**Who builds the Rive files?**~~ **Answered 2026-08-16: nobody. They are sourced.**
+  See §6.4 as amended — free-tier LottieFiles under the Lottie Simple License,
+  monochrome or line-art so one value delegate tints them.
+- **What is the floor device?** ~~The tier system needs a named handset to test against.
+  Everything in §6.6 is unverifiable until that exists.~~ **Narrowed rather than
+  answered, 2026-08-16.** It no longer blocks the assets: the product owner's call is
+  that Lottie runs comfortably on the phones this app targets, so §6.4's eight are
+  buildable now. It still blocks **§6.6 itself** — no claim about tier degradation can
+  be verified without a named handset, and none should be made. The honest position is
+  that this app currently has one tier and has not measured it.
 
 ---
 
 ## Changelog
+
+**v0.7** — The reskin's last unblocking. Six decisions from the product owner on
+2026-08-16, taken so that §11 steps 7, 10 and 12 stop being gated on questions.
+Breaking in two places, and both are reversals of positions this document argued for
+at length — §6.4's and §5.1's. Every one of them is left standing rather than deleted.
+
+- §2.3: **a chip is `radius.pill`**, closing a disagreement with `lib/theme.dart` that
+  the code has carried since 2026-08-13. The pill argument now guards badges and cards
+  only, and the surviving rule is *a control is a pill, a container is not*.
+- §2.2: the app **bundles Roboto and Roboto Mono**. It bundled nothing before this, so
+  the `mono` role named no family and SKUs rendered proportionally — and every
+  screenshot ever reviewed was more branded than the app.
+- §6.4: the eight assets are **Lottie, sourced** rather than natively drawn or
+  commissioned in Rive. The colour objection is answered partially, by value delegates
+  and by a sourcing rule that admits only monochrome and line-art files.
+- §6.6's device tier stops gating the assets, and keeps gating §6.6.
+- §12: **there is a character, and it is a shop cat**; nobody builds the files.
+- §4.4 gains **the home's top bar** — identity, member, queue and overflow — which
+  reverses step 5a for the home route only, and §5.2 gains **`ShiftBanner`** and
+  **`SyncIndicator`**, both drawn from the product owner's own mockups.
 
 **v0.6** — Two self-contradictions, both found by a chunk trying to follow this
 document and both resolved by the product owner on 2026-08-16 in favour of what the

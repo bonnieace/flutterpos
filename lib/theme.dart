@@ -164,15 +164,33 @@ final class SpiritScrollBehavior extends MaterialScrollBehavior {
 /// arrives at a call site when that call site is migrated, not before, and
 /// until then the theme is holding the line rather than delivering the design.
 ///
-/// **No `fontFamily` is named here, deliberately.** This theme asked for
-/// `Inter` for a long time and no `Inter` was ever bundled - `pubspec.yaml`
-/// declares no fonts and the repository holds no font file - so every screen
-/// silently rendered in the platform's default face while the code claimed
-/// otherwise. Naming nothing is the honest version of what already happens. To
-/// actually get `Inter`, add the files under `assets/fonts/`, declare them in
-/// `pubspec.yaml`, and name the family again here.
+/// ~~**No `fontFamily` is named here, deliberately.**~~ **Named as of 2026-08-16,
+/// and the fonts are bundled**, which is `design.md` **v0.7** and the close of the
+/// oldest untrue sentence in this file.
+///
+/// The note this replaces was honest about the symptom and wrong about the
+/// remedy: it said naming nothing was "the honest version of what already
+/// happens", and left an app whose §2.2 claims - one family, and monospace for
+/// record IDs - were true of no rendering anywhere. `fonts/` now holds Roboto at
+/// four faces under its Apache 2.0 licence, `pubspec.yaml` declares them, and
+/// this names the family.
+///
+/// **Every screenshot in `screenshots/` was already showing this.**
+/// `tool/screenshots/harness.dart` injects Roboto itself, precisely because a
+/// test face renders every glyph as a filled box - so the captures have always
+/// been of a more branded app than the one that shipped. Naming the family here
+/// makes the app match its own pictures rather than the other way round, and is
+/// why this change moves almost no image.
+///
+/// **`mono` is still not delivered**, and that is the half left: §2.2's `mono`
+/// role wants Roboto Mono, which the Flutter SDK does not cache, so the file has
+/// to be fetched. Until it is, `AppTypeRoles.mono` carries its metrics and names
+/// no family, and a SKU renders proportionally. See `PLAN.md`.
 final ThemeData spiritTheme = ThemeData(
   brightness: Brightness.dark,
+  // §2.2's "one family". See the note above for why this was absent for so long
+  // and what is still missing.
+  fontFamily: 'Roboto',
   scaffoldBackgroundColor: bgDark,
   extensions: const <ThemeExtension<dynamic>>[AppTokens.dark],
   // `design.md` §2.4: no ink ripples. One line reaches every button,

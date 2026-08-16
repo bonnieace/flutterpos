@@ -70,41 +70,41 @@ Every section of this file, with the line it starts on. Read the one you need.
   - **2446** — Public password reset needs App Check, which this app has none of
   - **2553** — `Callout` has no specification, and three glyph sizes were borrowed
   - **2577** — Every string is painted 0.25px per character wider than its token style says
-  - **2598** — A chip is the only thing §2.3's pill argument still guards, and the theme disagrees with it
-  - **2618** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
-  - **2642** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
-  - **2663** — Three run counts are decoded on every read and displayed by nothing
-  - **2680** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
-  - **2715** — `design.md` states no page padding, and `AppScaffold` had to pick one
-  - **2734** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
-  - **2759** — `AppSheet` has no specification, and step 7 opens a sheet
-  - **2782** — The app teaches by folding prose, and nobody has decided whether folding is teaching
-  - **2805** — The invitation email names no business, and no step reaches an email
-  - **2827** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
-  - **2866** — Three design-system questions the redesign has refused to answer
-  - **2910** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
-  - **2921** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
-  - **2991** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
-- **3041** — Identity, Tenancy, and Public Interfaces
-  - **3043** — Environments
-  - **3050** — Root model
-  - **3082** — Tenant path contract
-  - **3092** — Tenant routing and limits
-  - **3109** — Shared authorization
-  - **3126** — Public callable interfaces
-  - **3160** — Full export surface
-- **3190** — Platform, Ownership, and Membership Integrity
-- **3246** — Invitations and Email
-- **3310** — Offline Operations, Stock, and Receipts
-- **3359** — Reconciliation, Rules, and Testing
-  - **3361** — Reconciliation
-  - **3425** — Rules
-  - **3451** — Required tests
-- **3469** — Working on this repository
-  - **3471** — The emulator prelude is not optional
-  - **3486** — Standing traps
-  - **3883** — Repository state
-- **4013** — Next bounded chunk
+  - **2598** — ~~A chip is the only thing §2.3's pill argument still guards~~ — resolved 2026-08-16: the chip is a pill
+  - **2626** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
+  - **2650** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
+  - **2671** — Three run counts are decoded on every read and displayed by nothing
+  - **2688** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
+  - **2723** — `design.md` states no page padding, and `AppScaffold` had to pick one
+  - **2742** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
+  - **2767** — `AppSheet` has no specification, and step 7 opens a sheet
+  - **2790** — The app teaches by folding prose, and nobody has decided whether folding is teaching
+  - **2813** — The invitation email names no business, and no step reaches an email
+  - **2835** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
+  - **2874** — Three design-system questions the redesign has refused to answer
+  - **2918** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
+  - **2929** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
+  - **2999** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
+- **3049** — Identity, Tenancy, and Public Interfaces
+  - **3051** — Environments
+  - **3058** — Root model
+  - **3090** — Tenant path contract
+  - **3100** — Tenant routing and limits
+  - **3117** — Shared authorization
+  - **3134** — Public callable interfaces
+  - **3168** — Full export surface
+- **3198** — Platform, Ownership, and Membership Integrity
+- **3254** — Invitations and Email
+- **3318** — Offline Operations, Stock, and Receipts
+- **3367** — Reconciliation, Rules, and Testing
+  - **3369** — Reconciliation
+  - **3433** — Rules
+  - **3459** — Required tests
+- **3477** — Working on this repository
+  - **3479** — The emulator prelude is not optional
+  - **3494** — Standing traps
+  - **3891** — Repository state
+- **4021** — Next bounded chunk
 
 <!-- index:end -->
 
@@ -2595,7 +2595,7 @@ what it says; or §2.2 gains a sentence saying the ambient spacing is deliberate
 deltas onto it. **Do not decide it inside a chunk**: the second and third are one line each and would
 move **every string in the app**, which is a diff no visual step should be carrying incidentally.
 
-### A chip is the only thing §2.3's pill argument still guards, and the theme disagrees with it
+### ~~A chip is the only thing §2.3's pill argument still guards~~ — resolved 2026-08-16: the chip is a pill
 
 **Raised by `design.md` v0.4 on 2026-08-15, not decided inside it.** §2.3's reason for restricting
 `radius.pill` was that "when *everything* is a pill — buttons, chips, filters, cards, inputs — the
@@ -2609,11 +2609,19 @@ divergence owed to step 4. So today a chip *is* a pill, which means §2.3's argu
 being made by a document about a codebase that contradicts it. **The catalog's category chips and
 the checkout tender chips are where a person meets this.**
 
-**Two honest resolutions, and this chunk took neither because both are somebody else's.** Close it —
-move `chipTheme` to `radius.sm`, which is step 4's leftover and moves the catalog and checkout
-images; or amend §2.3 again to say the pill is the app's shape and `radius.sm` is for badges alone,
-which is a bigger claim than v0.4 made and should be made deliberately rather than by attrition.
-**Do not decide it inside a copy pass.**
+~~**Two honest resolutions, and this chunk took neither because both are somebody else's.**~~
+**The product owner took the second one on 2026-08-16**: `design.md` **v0.7** amends §2.3 so a chip
+and a filter are `radius.pill`, and `radius.sm` is for badges alone. The theme wins, and **nothing
+in `lib/` changed** — `chipTheme` has drawn `StadiumBorder` throughout.
+
+**The rule that now binds: a control is a pill, a container is not.** Buttons, inputs, chips and
+filters take `radius.pill`; badges take `radius.sm`; cards, rows, sheets and callouts take
+`radius.md`. That is what is left of §2.3's "when everything is a pill the shape stops signifying",
+and it is deliberately thinner than v0.4 left it. **The test for a sixth control type is that rule**,
+and a container that ever takes a pill means this amendment was the mistake.
+
+`FilterChipBar` is the one thing this changes, and it is unbuilt: it takes `radius.pill` rather than
+the `radius.sm` `DESIGN-PROPOSAL-COMPONENTS.md` assumed for it.
 
 ### An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
 

@@ -116,6 +116,31 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - images/
+    # design.md §6.4's eight animated assets, sourced from LottieFiles' free tier
+    # under the Lottie Simple License. Monochrome or line-art only, so one value
+    # delegate tints them - a multi-coloured file is refused, which is the whole
+    # of what makes an authored asset survive a palette change.
+    - assets/lottie/
+
+  # design.md §2.2. **The app bundled no font at all until 2026-08-16**, so every
+  # string rendered in whatever face the device happened to default to, and the
+  # `mono` role - record IDs, SKUs, receipt numbers - carried its metrics while
+  # naming no family, which meant the one place §2.2 asks for monospace rendered
+  # proportionally.
+  #
+  # Roboto and Roboto Mono are the same type design at two widths, which is the
+  # reading of §2.2's "one family" that survives contact with its own `mono` row.
+  # Both are Apache 2.0; `fonts/roboto_license.txt` is the copy that ships.
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: fonts/roboto-regular.ttf
+        - asset: fonts/roboto-medium.ttf
+          weight: 500
+        - asset: fonts/roboto-bold.ttf
+          weight: 700
+        - asset: fonts/roboto-italic.ttf
+          style: italic
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
