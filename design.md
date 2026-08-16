@@ -1,7 +1,12 @@
 # Design system
 
-**Status:** v0.4 — in implementation. §11 steps 1–9 are done; see each section's own
-"Done" note for what is true of the code.
+**Status:** v0.6 — in implementation. §11 steps 1–6, 8, 9 and 11 are done, and step 7
+is half done; see each section's own "Done" note for what is true of the code.
+
+**The status line was stuck at v0.4 through v0.5 and is corrected here.** `PLAN.md`
+carried that as the product owner's to fix for a day; v0.6 fixes it in the same pass
+that bumps the version, because a specification whose own header disagrees with its
+changelog is the failure this document exists to prevent, one level up.
 **Scope:** every screen the tenant app can reach. Excludes `lib/pos/**` and `lib/screens/**` (legacy, read-only).
 
 ---
@@ -206,8 +211,8 @@ They are strings a person compares character by character, not prose.
 | Role | Size / line | Weight | Use |
 | --- | --- | --- | --- |
 | `display` | 32 / 40 | 700 | screen title, expanded only |
-| `title.lg` | 22 / 28 | 500 | screen title (compact), section head |
-| `title.md` | 18 / 24 | 500 | card title, record name |
+| `title.lg` | 22 / 28 | 500 | screen title (compact) ~~, section head~~ |
+| `title.md` | 18 / 24 | 500 | card title, record name, **section head** |
 | `body.lg` | 16 / 24 | 400 | primary body, till-facing copy |
 | `body.md` | 14 / 20 | 400 | back-office body, table cells |
 | `label.lg` | 15 / 20 | 600 | button labels |
@@ -217,6 +222,21 @@ They are strings a person compares character by character, not prose.
 | `numeric.hero` | 28 / 32 | 700, tabular | the one figure a stat tile exists for |
 | `numeric.body` | 14 / 20 | 500, tabular | money and counts in flow |
 | `mono` | 13 / 18 | 400, monospace | record IDs, SKUs |
+
+**A section head moved from `title.lg` to `title.md` in v0.6, 2026-08-16, and this
+table was the half that was wrong.** Eleven migrated screens had drawn one at
+`title.md` since step 6 — `Reconciliation runs`, `Paid by`, `Currency`, `Products`,
+`This sale`, `Catalog`, `Categories`, `Shift` and the rest — and the code turned out
+to be resolving a contradiction this table could not see on its own.
+
+**The contradiction is with §7, at `compact`.** `title.lg` is *also* the screen title
+at that band, so a section head sharing the role puts two things of identical weight
+on a phone, one under the other, and §7's page pattern opens with "Title appears
+once" precisely to stop a page reading as though it has several. At `expanded` the
+screen title is `display` and the conflict does not arise — which makes a
+band-dependent answer defensible too, and it was considered and refused: a heading
+that changes role on resize is a rule nobody could look up, and §4.3's own principle
+is that a *form* changes with the band while the **role** does not.
 
 Uppercase is restricted to `label.eyebrow`. ~~`UNLOCK REGISTER` on the sign-in screen is
 both the wrong case and the wrong words.~~ **Done 2026-08-15**, in §11 step 9. The button
@@ -862,7 +882,23 @@ screens render the title in the app bar *and* again as an `H1` directly beneath 
 **Destructive action.** Never immediate. `action.destructive` opens a `ConfirmDialog`
 naming the specific record and the specific consequence: "Clear this sale — 3 items,
 KES 135.00 will be discarded. Nothing is recorded." Confirm button is
-`action.destructive`, filled. Currently *Clear this sale* fires on one tap.
+`action.destructive`. ~~, filled.~~ ~~Currently *Clear this sale* fires on one tap.~~
+
+**Amended in v0.6, 2026-08-16: the word "filled" is withdrawn, and it was never
+buildable.** §2.1's `action.destructive` row is a transparent container with a
+`#FF5C6C` label and a `#FF5C6C` border; there is no filled destructive container
+anywhere in this document, so "filled" asked for a colour §2.1 does not define.
+The two ways to resolve it were a fifth action role or this deletion, and the
+product owner took this one: the outlined destructive tier is what every other
+removing-or-reversing control in the app already wears, and a confirm button that
+looked unlike the button that opened it would break §8 rule 4's "the verb
+persists" in shape as well as in words.
+
+**The one-tap complaint is closed too.** *Clear this sale* has opened a
+confirmation since before §11 step 7, and step 7 put `AppButton`s in it on
+2026-08-16. What is still missing is the **component**: `ConfirmDialog` is §5.1's
+own row for this pattern and eleven `AlertDialog`s across eight files are waiting
+for it.
 
 **Empty.** Icon, one-line statement of what would be here, one sentence on how to create
 one, and a `primary` action if the person can. Not a paragraph.
@@ -1030,6 +1066,20 @@ Recorded here rather than settled, because each needs a call you haven't made ye
 ---
 
 ## Changelog
+
+**v0.6** — Two self-contradictions, both found by a chunk trying to follow this
+document and both resolved by the product owner on 2026-08-16 in favour of what the
+code already did. Neither changes a pixel; both change what a future reader is told.
+
+- §7's destructive pattern asked for a **filled** confirm button and §2.1 defines no
+  filled destructive container. The word is withdrawn rather than a fifth action role
+  being added. This unblocks `ConfirmDialog`, which eleven `AlertDialog`s across eight
+  files are waiting for.
+- §2.2 gave a **section head** `title.lg`, which is also the compact screen title, so
+  a phone got two headings of equal weight and §7's "Title appears once" had nothing
+  to stand on. A section head is `title.md`, which is what eleven migrated screens
+  already drew.
+- The status line, stuck at v0.4 since v0.5 landed, is corrected.
 
 **v0.5** — Navigation. Directed by the product owner on 2026-08-16, after the
 four-destination model was drawn and its *More* bucket turned out to hold five of the

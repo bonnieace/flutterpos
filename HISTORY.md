@@ -17,139 +17,140 @@ out, and which failures cost a debugging cycle. Each standing decision in
 Every session, newest last, with the line it starts on. Read the one a standing decision points at; never the file.
 
 - **13** — Sessions
-- **161** — Implementation handoff - 2026-07-29
-- **395** — Frontend implementation handoff - 2026-07-29
-- **440** — Authentication-to-tenant routing handoff - 2026-07-29
-- **500** — Route-guard and tenant repository foundation handoff - 2026-07-29
-- **562** — Read-only tenant catalog handoff - 2026-07-29
-- **655** — Read-only tenant staff-directory handoff - 2026-07-29
-- **755** — Typed staff invitation handoff - 2026-07-29
-- **858** — Typed staff update handoff - 2026-07-29
-- **954** — Typed staff status handoff - 2026-07-29
-- **1053** — Typed staff invitation resend handoff - 2026-07-29
-- **1155** — Typed staff invitation cancellation handoff - 2026-07-29
-- **1262** — Typed staff invitation email replacement handoff - 2026-07-30
-- **1369** — Typed visible invitation acceptance handoff - 2026-07-30
-- **1466** — Typed email-link invitation acceptance handoff - 2026-07-30
-- **1564** — Invitation emulator contract handoff - 2026-07-30
-- **1650** — Typed default tenant selection handoff - 2026-07-30
-- **1751** — Typed tenant request handoff - 2026-07-30
-- **1864** — Platform pending-tenant review handoff - 2026-07-30
-- **1982** — Platform tenant suspension/reactivation handoff - 2026-07-30
-- **2091** — Platform rejected-tenant archival handoff - 2026-07-30
-- **2209** — Platform exact-UID global-user status handoff - 2026-07-30
-- **2328** — Guarded platform-admin grant CLI handoff - 2026-07-31
-- **2438** — Guarded platform-admin revocation CLI handoff - 2026-07-31
-- **2650** — Tenant-switch safety coordinator handoff - 2026-07-31
-- **2777** — Encrypted Hive checkout-outbox foundation handoff - 2026-07-31
-- **2927** — Confirmation-safe checkout restart recovery handoff - 2026-07-31
-- **3072** — Deterministic checkout submission worker handoff - 2026-07-31
-- **3230** — Offline catalog cache and checkout draft handoff - 2026-07-31
-- **3403** — Per-device receipt numbering and checkout configuration handoff - 2026-07-31
-- **3591** — Guarded tenant shift lifecycle handoff - 2026-07-31
-- **3807** — Shift-scoped sale attribution and closing summary handoff - 2026-07-31
-- **4023** — Guarded shift-history read surface handoff - 2026-08-01
-- **4223** — Guarded sale-history read surface handoff - 2026-08-01
-- **4377** — Guarded staff-name resolution handoff - 2026-08-01
-- **4524** — Guarded daily summary handoff - 2026-08-01
-- **4681** — Guarded returns read surface handoff - 2026-08-01
-- **4845** — Guarded return creation handoff - 2026-08-01
-- **5013** — Guarded return verification handoff - 2026-08-01
-- **5146** — Guarded receipt lookup handoff - 2026-08-01
-- **5286** — Guarded stock adjustment surface handoff - 2026-08-01
-- **5502** — Guarded business-wide stock adjustment feed handoff - 2026-08-01
-- **5698** — Guarded tenant activity log handoff - 2026-08-01
-- **5909** — Guarded business-wide stock movement feed handoff - 2026-08-01
-- **6144** — Guarded reconciliation status surface handoff - 2026-08-01
-- **6381** — Guarded account verification entry point handoff - 2026-08-01
-- **6536** — Guarded email delivery-status handoff - 2026-08-01
-- **6663** — Checkout tender contract - payload v2 handoff - 2026-08-02
-- **6881** — Reachable point-of-sale till handoff - 2026-08-02
-- **7066** — Usable till handoff - search, quantity, stock, receipt - 2026-08-02
-- **7211** — Reconciliation can be asked for - 2026-08-02
-- **7418** — A till that holds a real catalog - 2026-08-02
-- **7536** — What a business has taken today - 2026-08-02
-- **7705** — Which category is actually selling - 2026-08-02
-- **7848** — Every reported figure now names its currency - 2026-08-02
-- **7984** — Who sold what - 2026-08-02
-- **8244** — The app can reach the emulators - 2026-08-02
-- **8405** — The totals panel, split - 2026-08-02
-- **8492** — What the business was paid with - 2026-08-02
-- **8683** — The first real run, and what it found - 2026-08-02
-- **8957** — A saved sale reaches the server while the till stays open - 2026-08-02
-- **9073** — Which differences reconciliation found - 2026-08-02
-- **9271** — A closed shift may be corrected to what its sales prove - 2026-08-04
-- **9514** — The correction is reachable from the row that reports it - 2026-08-04
-- **9725** — The first run that corrected a real shift - 2026-08-04
-- **10004** — The sentinel audit, and a guard that keeps it done - 2026-08-04
-- **10204** — The harness that would have caught it - 2026-08-04
-- **10403** — The corrections a business can finally see - 2026-08-04
-- **10602** — The two defects the real run left alone - 2026-08-04
-- **10830** — The shift half of the pipeline, proved end to end - 2026-08-04
-- **11022** — One shift's correction, reachable from the shift itself - 2026-08-05
-- **11216** — The stock half of the runner, entered for the first time - 2026-08-05
-- **11447** — The same narrowing, from the other side - 2026-08-05
-- **11618** — A stock difference, where the correction is made - 2026-08-05
-- **11836** — The kind that could never be recorded - 2026-08-05
-- **12037** — One decision, in one place, with tests - 2026-08-05
-- **12211** — The last thing the stock phase can conclude - 2026-08-05
-- **12396** — Saying there is more, after looking at it - 2026-08-05
-- **12587** — What the pinned buttons cost, measured - 2026-08-05
-- **12754** — A defect that was not there - 2026-08-05
-- **12894** — The narrowing that was not worth having - 2026-08-05
-- **13120** — The run behind the difference, finished - 2026-08-05
-- **13358** — The largest module's first unit tests - 2026-08-06
-- **13628** — A hook with no producer, and three bounds nothing had counted - 2026-08-07
-- **13991** — Nine months of `flutter test` paths, and who may run a job's next page - 2026-08-07
-- **14308** — PLAN.md split into current state and history - 2026-08-07
-- **14390** — A business can set what it sells in - 2026-08-07
-- **14615** — A shop can stock itself - 2026-08-07
-- **14835** — The trigger every reconciliation job comes from - 2026-08-07
-- **15066** — The sweep that decides who is reconciled tonight - 2026-08-07
-- **15357** — The callable that corrects a price - 2026-08-07
-- **15587** — The flake was the test's own clock - 2026-08-07
-- **15746** — A product records what it cost, and a sale freezes it - 2026-08-07
-- **15906** — The status board moved accounts - 2026-08-08
-- **15984** — Bulk catalog and return scoring are scoped as rewrites - 2026-08-08
-- **16106** — A price is corrected from the app - 2026-08-08
-- **16328** — Many products at once, previewed before they change - 2026-08-08
-- **16629** — Products imported from a spreadsheet, previewed before they exist - 2026-08-08
-- **16955** — Both bulk halves reach a person - 2026-08-08
-- **17214** — Profit is shown, or refused, and never overstated - 2026-08-08
-- **17457** — The password-reset worker runs against real Auth and real Firestore - 2026-08-08
-- **17656** — The app is driven on Android against the emulators - 2026-08-08
-- **17861** — The sign-in screen says something true - 2026-08-08
-- **18039** — A refused invitation says what will actually work - 2026-08-08
-- **18254** — The design system's token layer, wired to nothing - 2026-08-11
-- **18560** — A category is named, and never shown as a document ID - 2026-08-11
-- **18784** — The ripple dies at the theme - 2026-08-11
-- **18993** — The working tree is emptied into the repository - 2026-08-11
-- **19108** — `AppButton`, and the spring substrate under it - 2026-08-11
-- **19343** — Every remaining button becomes an `AppButton` - 2026-08-11
-- **19491** — A route arrives on a spring - 2026-08-12
-- **19718** — One field, everywhere - 2026-08-12
-- **19899** — Five statuses, two notices, and prose that folds away - 2026-08-12
-- **20084** — A screen title stops being chrome - 2026-08-12
-- **20308** — Every page gets a maximum width, and 768 stops being declared three times - 2026-08-12
-- **20587** — A record list becomes one component, and §4.3's middle band gets its first picture - 2026-08-13
-- **20837** — The staff directory becomes a `RecordList`, and a record gets somewhere to open a form - 2026-08-13
-- **21064** — The catalog becomes a `RecordList`, and a product that cannot be sold says so - 2026-08-13
-- **21269** — The stock family becomes one record, and a screen stops describing it three ways - 2026-08-13
-- **21465** — The shift family becomes a `RecordList`, and step 6's sweep is finished - 2026-08-13
-- **21705** — The reconciliation family gets one vocabulary, and step 4's sweep begins - 2026-08-14
-- **21979** — The catalog family folds its prose, and a bulk report gets its first picture - 2026-08-14
-- **22234** — A figure becomes a component, and the money screens stop writing numbers into sentences - 2026-08-14
-- **22478** — A difference states its figures, and step 8 is finished - 2026-08-15
-- **22711** — A notice says which answer it is, and four of them were never refusals - 2026-08-15
-- **22884** — A title appears once, and one page was telling everybody it was read-only - 2026-08-15
-- **23052** — A table stops guessing how wide its columns are - 2026-08-15
-- **23269** — The front door stops having a palette of its own - 2026-08-15
-- **23529** — An input is a pill again, and a keypad learns lower case - 2026-08-15
-- **23724** — A record says its standing in words, and §8 rule 1's own example was still on screen - 2026-08-15
-- **23935** — The home stops being eleven identical pills - 2026-08-16
-- **24077** — The menu leaves the page and becomes the frame's - 2026-08-16
-- **24266** — Ten chunks in, the till has had none of it - 2026-08-16
-- **24354** — The till gets the redesign, and seventeen answers stop being a colour - 2026-08-16
+- **162** — Implementation handoff - 2026-07-29
+- **396** — Frontend implementation handoff - 2026-07-29
+- **441** — Authentication-to-tenant routing handoff - 2026-07-29
+- **501** — Route-guard and tenant repository foundation handoff - 2026-07-29
+- **563** — Read-only tenant catalog handoff - 2026-07-29
+- **656** — Read-only tenant staff-directory handoff - 2026-07-29
+- **756** — Typed staff invitation handoff - 2026-07-29
+- **859** — Typed staff update handoff - 2026-07-29
+- **955** — Typed staff status handoff - 2026-07-29
+- **1054** — Typed staff invitation resend handoff - 2026-07-29
+- **1156** — Typed staff invitation cancellation handoff - 2026-07-29
+- **1263** — Typed staff invitation email replacement handoff - 2026-07-30
+- **1370** — Typed visible invitation acceptance handoff - 2026-07-30
+- **1467** — Typed email-link invitation acceptance handoff - 2026-07-30
+- **1565** — Invitation emulator contract handoff - 2026-07-30
+- **1651** — Typed default tenant selection handoff - 2026-07-30
+- **1752** — Typed tenant request handoff - 2026-07-30
+- **1865** — Platform pending-tenant review handoff - 2026-07-30
+- **1983** — Platform tenant suspension/reactivation handoff - 2026-07-30
+- **2092** — Platform rejected-tenant archival handoff - 2026-07-30
+- **2210** — Platform exact-UID global-user status handoff - 2026-07-30
+- **2329** — Guarded platform-admin grant CLI handoff - 2026-07-31
+- **2439** — Guarded platform-admin revocation CLI handoff - 2026-07-31
+- **2651** — Tenant-switch safety coordinator handoff - 2026-07-31
+- **2778** — Encrypted Hive checkout-outbox foundation handoff - 2026-07-31
+- **2928** — Confirmation-safe checkout restart recovery handoff - 2026-07-31
+- **3073** — Deterministic checkout submission worker handoff - 2026-07-31
+- **3231** — Offline catalog cache and checkout draft handoff - 2026-07-31
+- **3404** — Per-device receipt numbering and checkout configuration handoff - 2026-07-31
+- **3592** — Guarded tenant shift lifecycle handoff - 2026-07-31
+- **3808** — Shift-scoped sale attribution and closing summary handoff - 2026-07-31
+- **4024** — Guarded shift-history read surface handoff - 2026-08-01
+- **4224** — Guarded sale-history read surface handoff - 2026-08-01
+- **4378** — Guarded staff-name resolution handoff - 2026-08-01
+- **4525** — Guarded daily summary handoff - 2026-08-01
+- **4682** — Guarded returns read surface handoff - 2026-08-01
+- **4846** — Guarded return creation handoff - 2026-08-01
+- **5014** — Guarded return verification handoff - 2026-08-01
+- **5147** — Guarded receipt lookup handoff - 2026-08-01
+- **5287** — Guarded stock adjustment surface handoff - 2026-08-01
+- **5503** — Guarded business-wide stock adjustment feed handoff - 2026-08-01
+- **5699** — Guarded tenant activity log handoff - 2026-08-01
+- **5910** — Guarded business-wide stock movement feed handoff - 2026-08-01
+- **6145** — Guarded reconciliation status surface handoff - 2026-08-01
+- **6382** — Guarded account verification entry point handoff - 2026-08-01
+- **6537** — Guarded email delivery-status handoff - 2026-08-01
+- **6664** — Checkout tender contract - payload v2 handoff - 2026-08-02
+- **6882** — Reachable point-of-sale till handoff - 2026-08-02
+- **7067** — Usable till handoff - search, quantity, stock, receipt - 2026-08-02
+- **7212** — Reconciliation can be asked for - 2026-08-02
+- **7419** — A till that holds a real catalog - 2026-08-02
+- **7537** — What a business has taken today - 2026-08-02
+- **7706** — Which category is actually selling - 2026-08-02
+- **7849** — Every reported figure now names its currency - 2026-08-02
+- **7985** — Who sold what - 2026-08-02
+- **8245** — The app can reach the emulators - 2026-08-02
+- **8406** — The totals panel, split - 2026-08-02
+- **8493** — What the business was paid with - 2026-08-02
+- **8684** — The first real run, and what it found - 2026-08-02
+- **8958** — A saved sale reaches the server while the till stays open - 2026-08-02
+- **9074** — Which differences reconciliation found - 2026-08-02
+- **9272** — A closed shift may be corrected to what its sales prove - 2026-08-04
+- **9515** — The correction is reachable from the row that reports it - 2026-08-04
+- **9726** — The first run that corrected a real shift - 2026-08-04
+- **10005** — The sentinel audit, and a guard that keeps it done - 2026-08-04
+- **10205** — The harness that would have caught it - 2026-08-04
+- **10404** — The corrections a business can finally see - 2026-08-04
+- **10603** — The two defects the real run left alone - 2026-08-04
+- **10831** — The shift half of the pipeline, proved end to end - 2026-08-04
+- **11023** — One shift's correction, reachable from the shift itself - 2026-08-05
+- **11217** — The stock half of the runner, entered for the first time - 2026-08-05
+- **11448** — The same narrowing, from the other side - 2026-08-05
+- **11619** — A stock difference, where the correction is made - 2026-08-05
+- **11837** — The kind that could never be recorded - 2026-08-05
+- **12038** — One decision, in one place, with tests - 2026-08-05
+- **12212** — The last thing the stock phase can conclude - 2026-08-05
+- **12397** — Saying there is more, after looking at it - 2026-08-05
+- **12588** — What the pinned buttons cost, measured - 2026-08-05
+- **12755** — A defect that was not there - 2026-08-05
+- **12895** — The narrowing that was not worth having - 2026-08-05
+- **13121** — The run behind the difference, finished - 2026-08-05
+- **13359** — The largest module's first unit tests - 2026-08-06
+- **13629** — A hook with no producer, and three bounds nothing had counted - 2026-08-07
+- **13992** — Nine months of `flutter test` paths, and who may run a job's next page - 2026-08-07
+- **14309** — PLAN.md split into current state and history - 2026-08-07
+- **14391** — A business can set what it sells in - 2026-08-07
+- **14616** — A shop can stock itself - 2026-08-07
+- **14836** — The trigger every reconciliation job comes from - 2026-08-07
+- **15067** — The sweep that decides who is reconciled tonight - 2026-08-07
+- **15358** — The callable that corrects a price - 2026-08-07
+- **15588** — The flake was the test's own clock - 2026-08-07
+- **15747** — A product records what it cost, and a sale freezes it - 2026-08-07
+- **15907** — The status board moved accounts - 2026-08-08
+- **15985** — Bulk catalog and return scoring are scoped as rewrites - 2026-08-08
+- **16107** — A price is corrected from the app - 2026-08-08
+- **16329** — Many products at once, previewed before they change - 2026-08-08
+- **16630** — Products imported from a spreadsheet, previewed before they exist - 2026-08-08
+- **16956** — Both bulk halves reach a person - 2026-08-08
+- **17215** — Profit is shown, or refused, and never overstated - 2026-08-08
+- **17458** — The password-reset worker runs against real Auth and real Firestore - 2026-08-08
+- **17657** — The app is driven on Android against the emulators - 2026-08-08
+- **17862** — The sign-in screen says something true - 2026-08-08
+- **18040** — A refused invitation says what will actually work - 2026-08-08
+- **18255** — The design system's token layer, wired to nothing - 2026-08-11
+- **18561** — A category is named, and never shown as a document ID - 2026-08-11
+- **18785** — The ripple dies at the theme - 2026-08-11
+- **18994** — The working tree is emptied into the repository - 2026-08-11
+- **19109** — `AppButton`, and the spring substrate under it - 2026-08-11
+- **19344** — Every remaining button becomes an `AppButton` - 2026-08-11
+- **19492** — A route arrives on a spring - 2026-08-12
+- **19719** — One field, everywhere - 2026-08-12
+- **19900** — Five statuses, two notices, and prose that folds away - 2026-08-12
+- **20085** — A screen title stops being chrome - 2026-08-12
+- **20309** — Every page gets a maximum width, and 768 stops being declared three times - 2026-08-12
+- **20588** — A record list becomes one component, and §4.3's middle band gets its first picture - 2026-08-13
+- **20838** — The staff directory becomes a `RecordList`, and a record gets somewhere to open a form - 2026-08-13
+- **21065** — The catalog becomes a `RecordList`, and a product that cannot be sold says so - 2026-08-13
+- **21270** — The stock family becomes one record, and a screen stops describing it three ways - 2026-08-13
+- **21466** — The shift family becomes a `RecordList`, and step 6's sweep is finished - 2026-08-13
+- **21706** — The reconciliation family gets one vocabulary, and step 4's sweep begins - 2026-08-14
+- **21980** — The catalog family folds its prose, and a bulk report gets its first picture - 2026-08-14
+- **22235** — A figure becomes a component, and the money screens stop writing numbers into sentences - 2026-08-14
+- **22479** — A difference states its figures, and step 8 is finished - 2026-08-15
+- **22712** — A notice says which answer it is, and four of them were never refusals - 2026-08-15
+- **22885** — A title appears once, and one page was telling everybody it was read-only - 2026-08-15
+- **23053** — A table stops guessing how wide its columns are - 2026-08-15
+- **23270** — The front door stops having a palette of its own - 2026-08-15
+- **23530** — An input is a pill again, and a keypad learns lower case - 2026-08-15
+- **23725** — A record says its standing in words, and §8 rule 1's own example was still on screen - 2026-08-15
+- **23936** — The home stops being eleven identical pills - 2026-08-16
+- **24078** — The menu leaves the page and becomes the frame's - 2026-08-16
+- **24267** — Ten chunks in, the till has had none of it - 2026-08-16
+- **24355** — The till gets the redesign, and seventeen answers stop being a colour - 2026-08-16
+- **24502** — Two contradictions closed, and five components written down before anyone builds them - 2026-08-16
 
 <!-- index:end -->
 
@@ -24495,3 +24496,71 @@ towards the document in the same pass that was touching them anyway. The cost of
 twenty-four files of churn plus an argument with whoever chose the other reading; the cost of
 following the tree and raising it is one paragraph. Follow the tree, raise the contradiction, and
 let the product owner spend the churn if they want it.
+
+---
+
+## Two contradictions closed, and five components written down before anyone builds them - 2026-08-16
+
+A short follow-on to the batch above, in the same session. The product owner was asked the three
+blocking questions it raised and answered all three: **drop "filled" from §7**, **keep the section
+head at `title.md` and correct §2.2**, and **draft the five component specifications**.
+
+### The two amendments, and why neither moved a pixel
+
+`design.md` is at **v0.6**. Both changes went to the *document*, because in both cases the code was
+already resolving a contradiction the document could not see.
+
+**§7's filled destructive confirm never existed.** §2.1's `action.destructive` row is a transparent
+container with a `#FF5C6C` label and border; there is no filled variant anywhere. §7 asked for one
+in a single word. The two exits were a fifth action role — which needs a container colour and a
+label colour that clears §9 on it — or deleting the word. The word went. **The rule that replaces
+it is worth more than the deletion**: a confirm button takes the tier of the action that opened the
+dialog, which makes §8 rule 4's "the verb persists" hold in shape as well as in words and stops
+twelve call sites each choosing.
+
+**§2.2's section head was the half that was wrong.** `title.lg` is *also* `PageHeader`'s screen
+title at §4.1's `compact` band, so a section head sharing the role put two headings of identical
+weight on a phone, one under the other — which is what §7's "Title appears once" exists to prevent.
+Eleven migrated screens had been drawing `title.md` since step 6. The row moved. A band-dependent
+answer was considered and refused: a heading whose *role* changes on resize is a rule nobody could
+look up, and §4.3's own principle is that a **form** changes with the band while the role does not.
+
+**The status line was corrected in the same pass.** It had read v0.4 through the whole of v0.5, and
+`PLAN.md` carried it as the product owner's to fix. A specification whose header disagrees with its
+own changelog is the failure this document exists to prevent, one level up.
+
+**Nothing in `lib/` changed except two comments**, both of which described a contradiction that no
+longer exists. Suite unchanged; no image moved. That is the outcome an amendment of this kind should
+have, and it is the evidence that the code had the better reading of both rows.
+
+### The proposal
+
+`DESIGN-PROPOSAL-COMPONENTS.md`, a new file, **explicitly not binding and explicitly not built**.
+Five components, each with the call-site count measured on the day rather than carried:
+`ConfirmDialog` **12** across 9 files, `FilterChipBar` **20** across 5, `QuantityStepper` 1,
+`AppSheet` 1, `RollingNumber` 0.
+
+**It proposes an order that is not §5.1's priority order**, and says why: §5.1 gives
+`QuantityStepper` priority 1 because the defect is bad, and the count says `ConfirmDialog` and
+`FilterChipBar` are the whole app while the other three are the till alone.
+
+**Three things it refuses to answer, flagged ⚠ rather than decided.** Whether a confirmation is
+dismissible by its scrim; the **chip radius**, where §2.3 says `radius.sm` and the theme's
+`chipTheme` says `StadiumBorder` and `PLAN.md` has carried the disagreement since 2026-08-13; and
+whether the till's tender chooser is a filter at all — it is drawn as `ChoiceChip`s but a filter
+narrows a list you are looking at and a tender is a fact you are recording, and it carries a rule no
+filter has, which is that there is deliberately no default.
+
+**Two things it argues against itself on, which is the point of writing it down.** `AppSheet` is the
+only one of the five that is genuinely hard — §2.4 asks a sheet to settle on release *velocity* and
+`DraggableScrollableSheet` settles on position, so it cannot be a restyle — and it is proposed as
+its own chunk, built last. And `RollingNumber` **fixes nothing**: no accessibility failure, no
+missing capability, no duplicated code. The proposal says to cut it if anything else needs the time.
+
+### The rule worth keeping out of this one
+
+**When the document and the code disagree, find out which one is resolving a contradiction.** Both
+amendments here looked at first like the code drifting from the spec, and both turned out to be the
+spec contradicting itself somewhere else — §7 against §2.1, and §2.2 against §7. A session that had
+"corrected" the code towards the document would have shipped two regressions and called them
+compliance.

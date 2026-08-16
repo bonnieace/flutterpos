@@ -19,92 +19,92 @@ Every section of this file, with the line it starts on. Read the one you need.
   - **318** — Can a shop do this yet?
   - **355** — Where the last chunk left it
   - **373** — Chunk index
-  - **447** — Found by using the app
-  - **579** — Rollout position
-  - **601** — Test baselines
-- **1183** — Corrections made in the 2026-08-07 PLAN/HISTORY split
-- **1214** — Standing decisions and unreachable capabilities
-  - **1222** — A sale records how it was paid for, chosen manually
-  - **1240** — A business publishes its own currency, and it converts nothing
-  - **1258** — A shop stocks itself, and a retired product keeps its history
-  - **1281** — A price is corrected on the server, and never a quantity
-  - **1314** — A product records what it cost, and a sale freezes it
-  - **1339** — A profit figure is complete or it is not shown
-  - **1362** — Bulk catalog work is a rewrite, and the old code is not the starting point
-  - **1392** — A spreadsheet becomes products, and its stock has an origin
-  - **1432** — One screen reaches both bulk callables, and it previews before it writes
-  - **1461** — A suspicious return is scored on the server, after the first deployment
-  - **1485** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
-  - **1504** — A refused invitation names what will work, and only a transient failure invites a retry
-  - **1531** — The token layer is additive, and a density is a nested `Theme`
-  - **1567** — The ripple dies at the theme, and the press arrives with the button
-  - **1594** — A button is a component, and a spring is the substrate under it
-  - **1619** — Every button is an `AppButton`, and the tier is a decision per site
-  - **1641** — Five statuses, and three components two of which have no specification
-  - **1673** — One field, everywhere - and an audit finding that was false
-  - **1700** — A route arrives on a spring, and one parallax is deliberately missing
-  - **1732** — A category is named, and a document ID is not a name
-  - **1754** — A screen title is content, and the toolbar keeps only the way back
-  - **1789** — One boundary, one variable, and a maximum width on every page
-  - **1817** — One record model, three renderings, and the loss the caller owns
-  - **1846** — The staff directory stops choosing its own form, and a record gets a form slot
-  - **1869** — A product states its facts as facts, and only one that cannot be sold has a standing
-  - **1895** — One ledger entry, one vocabulary, and a screen that had three
-  - **1924** — A shift has a standing, and two paragraphs were never about a record
-  - **1952** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
-  - **1983** — A page's standing is a status, and a report row's reads the mode it was written in
-  - **2010** — A figure is a component, and a row of them measures what it holds
-  - **2046** — A figure is evidence on these three, and one document is read two ways on purpose
-  - **2069** — A notice says which answer it is, and four of them were never refusals
-  - **2097** — A title appears once, and the page that said it was read-only was not
-  - **2122** — A column asks for what it holds, and a share is a guess about content
-  - **2155** — A boundary is a measurement, and the front door had a second palette
-  - **2193** — An input is a pill again, and the specification moved first
-  - **2232** — The till draws the token layer, and a status is never a colour on its own
-  - **2265** — Built, tested, and still unreachable
-  - **2305** — The home is cards below 1024 and a side menu above it, and the till is pushed
-- **2362** — Open decisions
-  - **2364** — §7 wants a filled destructive confirm, and §2.1 has no filled destructive tier
-  - **2385** — §2.2 gives a section head `title.lg`, and eleven screens draw it `title.md`
-  - **2411** — §4.4 wants the side menu on every route, and every route reaches it by a push
-  - **2447** — Public password reset needs App Check, which this app has none of
-  - **2554** — `Callout` has no specification, and three glyph sizes were borrowed
-  - **2578** — Every string is painted 0.25px per character wider than its token style says
-  - **2599** — A chip is the only thing §2.3's pill argument still guards, and the theme disagrees with it
-  - **2619** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
-  - **2643** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
-  - **2664** — Three run counts are decoded on every read and displayed by nothing
-  - **2681** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
-  - **2716** — `design.md` states no page padding, and `AppScaffold` had to pick one
-  - **2735** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
-  - **2760** — `AppSheet` has no specification, and step 7 opens a sheet
-  - **2783** — The app teaches by folding prose, and nobody has decided whether folding is teaching
-  - **2806** — The invitation email names no business, and no step reaches an email
-  - **2828** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
-  - **2867** — Three design-system questions the redesign has refused to answer
-  - **2911** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
-  - **2922** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
-  - **2992** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
-- **3042** — Identity, Tenancy, and Public Interfaces
-  - **3044** — Environments
-  - **3051** — Root model
-  - **3083** — Tenant path contract
-  - **3093** — Tenant routing and limits
-  - **3110** — Shared authorization
-  - **3127** — Public callable interfaces
-  - **3161** — Full export surface
-- **3191** — Platform, Ownership, and Membership Integrity
-- **3247** — Invitations and Email
-- **3311** — Offline Operations, Stock, and Receipts
-- **3360** — Reconciliation, Rules, and Testing
-  - **3362** — Reconciliation
-  - **3426** — Rules
-  - **3452** — Required tests
-- **3470** — Working on this repository
-  - **3472** — The emulator prelude is not optional
-  - **3487** — Standing traps
-  - **3884** — Repository state
-- **4014** — Next bounded chunk
+  - **448** — Found by using the app
+  - **580** — Rollout position
+  - **602** — Test baselines
+- **1184** — Corrections made in the 2026-08-07 PLAN/HISTORY split
+- **1215** — Standing decisions and unreachable capabilities
+  - **1223** — A sale records how it was paid for, chosen manually
+  - **1241** — A business publishes its own currency, and it converts nothing
+  - **1259** — A shop stocks itself, and a retired product keeps its history
+  - **1282** — A price is corrected on the server, and never a quantity
+  - **1315** — A product records what it cost, and a sale freezes it
+  - **1340** — A profit figure is complete or it is not shown
+  - **1363** — Bulk catalog work is a rewrite, and the old code is not the starting point
+  - **1393** — A spreadsheet becomes products, and its stock has an origin
+  - **1433** — One screen reaches both bulk callables, and it previews before it writes
+  - **1462** — A suspicious return is scored on the server, after the first deployment
+  - **1486** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
+  - **1505** — A refused invitation names what will work, and only a transient failure invites a retry
+  - **1532** — The token layer is additive, and a density is a nested `Theme`
+  - **1568** — The ripple dies at the theme, and the press arrives with the button
+  - **1595** — A button is a component, and a spring is the substrate under it
+  - **1620** — Every button is an `AppButton`, and the tier is a decision per site
+  - **1642** — Five statuses, and three components two of which have no specification
+  - **1674** — One field, everywhere - and an audit finding that was false
+  - **1701** — A route arrives on a spring, and one parallax is deliberately missing
+  - **1733** — A category is named, and a document ID is not a name
+  - **1755** — A screen title is content, and the toolbar keeps only the way back
+  - **1790** — One boundary, one variable, and a maximum width on every page
+  - **1818** — One record model, three renderings, and the loss the caller owns
+  - **1847** — The staff directory stops choosing its own form, and a record gets a form slot
+  - **1870** — A product states its facts as facts, and only one that cannot be sold has a standing
+  - **1896** — One ledger entry, one vocabulary, and a screen that had three
+  - **1925** — A shift has a standing, and two paragraphs were never about a record
+  - **1953** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
+  - **1984** — A page's standing is a status, and a report row's reads the mode it was written in
+  - **2011** — A figure is a component, and a row of them measures what it holds
+  - **2047** — A figure is evidence on these three, and one document is read two ways on purpose
+  - **2070** — A notice says which answer it is, and four of them were never refusals
+  - **2098** — A title appears once, and the page that said it was read-only was not
+  - **2123** — A column asks for what it holds, and a share is a guess about content
+  - **2156** — A boundary is a measurement, and the front door had a second palette
+  - **2194** — An input is a pill again, and the specification moved first
+  - **2233** — The till draws the token layer, and a status is never a colour on its own
+  - **2266** — Built, tested, and still unreachable
+  - **2306** — The home is cards below 1024 and a side menu above it, and the till is pushed
+- **2363** — Open decisions
+  - **2365** — ~~§7 wants a filled destructive confirm~~ — resolved 2026-08-16: §7 gave up the word
+  - **2385** — ~~§2.2 gives a section head `title.lg`~~ — resolved 2026-08-16: it gives it `title.md`
+  - **2410** — §4.4 wants the side menu on every route, and every route reaches it by a push
+  - **2446** — Public password reset needs App Check, which this app has none of
+  - **2553** — `Callout` has no specification, and three glyph sizes were borrowed
+  - **2577** — Every string is painted 0.25px per character wider than its token style says
+  - **2598** — A chip is the only thing §2.3's pill argument still guards, and the theme disagrees with it
+  - **2618** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
+  - **2642** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
+  - **2663** — Three run counts are decoded on every read and displayed by nothing
+  - **2680** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
+  - **2715** — `design.md` states no page padding, and `AppScaffold` had to pick one
+  - **2734** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
+  - **2759** — `AppSheet` has no specification, and step 7 opens a sheet
+  - **2782** — The app teaches by folding prose, and nobody has decided whether folding is teaching
+  - **2805** — The invitation email names no business, and no step reaches an email
+  - **2827** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
+  - **2866** — Three design-system questions the redesign has refused to answer
+  - **2910** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
+  - **2921** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
+  - **2991** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
+- **3041** — Identity, Tenancy, and Public Interfaces
+  - **3043** — Environments
+  - **3050** — Root model
+  - **3082** — Tenant path contract
+  - **3092** — Tenant routing and limits
+  - **3109** — Shared authorization
+  - **3126** — Public callable interfaces
+  - **3160** — Full export surface
+- **3190** — Platform, Ownership, and Membership Integrity
+- **3246** — Invitations and Email
+- **3310** — Offline Operations, Stock, and Receipts
+- **3359** — Reconciliation, Rules, and Testing
+  - **3361** — Reconciliation
+  - **3425** — Rules
+  - **3451** — Required tests
+- **3469** — Working on this repository
+  - **3471** — The emulator prelude is not optional
+  - **3486** — Standing traps
+  - **3883** — Repository state
+- **4013** — Next bounded chunk
 
 <!-- index:end -->
 
@@ -383,6 +383,7 @@ no row moved at all.
 
 | Date | What it took | Track | Board | `HISTORY.md` session |
 | --- | --- | --- | --- | --- |
+| 2026-08-16 | `design.md` **v0.6** — §7 drops *filled*, §2.2 gives a section head `title.md`; `DESIGN-PROPOSAL-COMPONENTS.md` drafted | 98→98% | — | Two contradictions closed, and five components written down before anyone builds them |
 | 2026-08-16 | step **4**'s sweep tail — 17 hue-only outcomes to `AppNotice`, 33 theme reads to tokens, 24 files; **finishes step 4** | 97→98% | — | The till gets the redesign, and seventeen answers stop being a colour |
 | 2026-08-16 | step **7**'s unblocked half — the till on the token layer; §2.1's worked example closed; §4.2's `full` row gets its first reader | 97→97% | — | The till gets the redesign, and seventeen answers stop being a colour |
 | 2026-08-16 | step **5b, second half** — the menu into `AppScaffold.navigation`; destinations by frequency; **finishes step 5b** | 96→97% | — | The menu leaves the page and becomes the frame's |
@@ -2361,28 +2362,27 @@ leaves the page and becomes the frame's" (2026-08-16).
 
 ## Open decisions
 
-### §7 wants a filled destructive confirm, and §2.1 has no filled destructive tier
+### ~~§7 wants a filled destructive confirm~~ — resolved 2026-08-16: §7 gave up the word
 
 **§7's destructive pattern names a container the token layer does not contain.** It reads: *"Confirm
 button is `action.destructive`, **filled**."* §2.1's `action.destructive` row is `container:
 transparent`, `label: #FF5C6C`, `border: #FF5C6C` — there is no filled variant of it anywhere, and
 `AppButton` has no tier that would paint one.
 
-**The two ways out are both specification changes, so neither is a session's to take.** Either §2.1
-gains a fifth action role — a filled destructive, which needs a container colour and a label colour
-that clears §9 on it — or §7 drops the word *filled* and the confirm takes the outlined destructive
-tier the rest of the app uses. **The second costs nothing and is what ships today**, because a
-restyling chunk may not invent a colour; `_confirmClearSale` in `checkout_cart_panel.dart` carries
-the note.
+**Answered the same day by the product owner: the word is withdrawn.** `design.md` **v0.6** deletes
+*filled* from §7 rather than adding a fifth action role, and the confirm takes §2.1's outlined
+destructive tier — which is what already shipped, so nothing moved when the amendment landed.
 
-**It blocks `ConfirmDialog`**, which is §5.1's own row for this pattern and is one of the five
-components step 7's remaining half needs. Answering it is cheap and unblocks a component; leaving it
-means the one destructive confirmation in the app stays an `AlertDialog` with `AppButton`s in it.
+**The rule that now binds: a confirm button takes the tier of the action that opened the dialog.**
+A `destructive` button confirms with `destructive`, a `primary` one with `primary`. That is §8 rule
+4's "the verb persists" holding in shape as well as in words, and it is what stops twelve call sites
+each choosing. **`ConfirmDialog` is unblocked** and is proposed in
+`DESIGN-PROPOSAL-COMPONENTS.md` §1.
 
-Found 2026-08-16 by step 7's unblocked half. See `HISTORY.md` — "The till gets the redesign, and
-seventeen answers stop being a colour".
+See `HISTORY.md` — "The till gets the redesign, and seventeen answers stop being a colour"
+(2026-08-16) — for how it was found.
 
-### §2.2 gives a section head `title.lg`, and eleven screens draw it `title.md`
+### ~~§2.2 gives a section head `title.lg`~~ — resolved 2026-08-16: it gives it `title.md`
 
 **Every screen in the migrated tree draws a section head at `title.md`, and §2.2's own table says
 `title.lg`.** That row reads *"`title.lg` | 22 / 28 | 500 | screen title (compact), **section
@@ -2390,23 +2390,22 @@ head**"*. `Reconciliation runs`, `Paid by`, `Currency`, `Products`, `This sale`,
 `Categories`, `Shift` and the rest are all `title.md` — eight of them shipped that way before
 2026-08-16 and three more joined them in step 4's sweep tail.
 
-**The rule that now binds: a section head is `title.md`.** Do not "fix" it towards §2.2 one screen
-at a time; the app having one answer matters more than which answer it is, and a partial correction
-is worse than either.
+**Answered the same day by the product owner: `design.md` **v0.6** moves the row, and the eleven
+screens were right.** §2.2's `title.lg` row keeps the compact screen title and loses "section head";
+`title.md` gains it. Nothing in `lib/` changed, which is the outcome an amendment should have.
 
-**The argument for the code's reading, so the decision can be taken on it.** At §4.1's `compact`
-band `PageHeader` gives the *screen* title `title.lg`. A section head at the same role puts two
-titles of equal weight on a phone, which is what §7's "title appears once" exists to prevent — so
-the document contradicts itself at `compact` and `title.md` is the reading that resolves it. At
-`expanded` the screen title is `display` and the conflict disappears, which is why a band-dependent
-answer is also defensible and is a third option nobody has costed.
+**The rule that now binds: a section head is `title.md`.** It is not `title.lg` at any band, and a
+band-dependent answer was considered and refused — a heading whose *role* changes on resize is a
+rule nobody could look up, where §4.3's principle is that a **form** changes with the band and the
+role does not.
 
-**What it costs to change**: every migrated screen with a section head, which is eleven files, plus
-their images. That is the product owner's to spend.
+**Why the document was the half that was wrong.** `title.lg` is also `PageHeader`'s screen title at
+§4.1's `compact` band, so a section head sharing it put two headings of identical weight on a phone,
+one under the other — which is exactly what §7's "Title appears once" exists to prevent. The
+document contradicted itself and the code had been resolving it since step 6.
 
-Found 2026-08-16 by step 4's sweep tail, which hit it while touching twenty-four files and
-deliberately did not settle it. See `HISTORY.md` — "The till gets the redesign, and seventeen
-answers stop being a colour".
+See `HISTORY.md` — "The till gets the redesign, and seventeen answers stop being a colour"
+(2026-08-16).
 
 ### §4.4 wants the side menu on every route, and every route reaches it by a push
 
@@ -4116,9 +4115,22 @@ running. See the standing decision for the three findings and the `HISTORY.md` s
 
 ---
 
-**The queued chunk is `design.md` §11 step 7's *blocked* half, and it is a specification request
-rather than a build.** Five §5.1 components stand between the till and a finished step 7, and none
-of them has a specification:
+~~**The queued chunk is `design.md` §11 step 7's *blocked* half, and it is a specification request
+rather than a build.**~~ **The request was made and answered the same day.**
+`DESIGN-PROPOSAL-COMPONENTS.md` is the draft, written 2026-08-16 at the product owner's direction:
+five components, measured call-site counts, every value drawn from an existing §2 token, and **three
+questions flagged as ⚠ rather than answered** — whether a confirmation is scrim-dismissible, the
+chip radius §2.3 and the theme still disagree about, and whether the till's tender chooser is a
+filter at all. **Nothing in it is binding and nothing in it is built.** The next chunk is whatever
+survives your redlining, copied into `design.md` §5.2 first.
+
+**Its own proposed order is by call-site count rather than by §5.1 priority**, and the reason is in
+the file: `ConfirmDialog` is 12 sites across 9 files and `FilterChipBar` is 20 across 5, where the
+other three are the till alone. It also says plainly that `AppSheet` is its own chunk and that
+`RollingNumber` fixes nothing and can be cut.
+
+Five §5.1 components stand between the till and a finished step 7, and none of them has a
+specification yet:
 
 - **`QuantityStepper`** (§5.1 priority **1**) — "minus + delete, no plus" is §5.1's own description
   of the defect, and the cart line still draws two `IconButton`s. The picture to look at is
@@ -4133,8 +4145,10 @@ of them has a specification:
   sheet" at `compact` and `medium`, and what ships is `showModalBottomSheet`.
 - **`RollingNumber`** — §6.2's row for the total is motion, which is step 10's.
 
-**Take this to the product owner with the pictures attached rather than starting it.** The two
-captures that make the case are `web/15-new-sale-with-a-cart` and `mobile/15-new-sale-with-a-cart`.
+~~**Take this to the product owner with the pictures attached rather than starting it.**~~ **Done
+2026-08-16**; the two captures that make the case are `web/15-new-sale-with-a-cart` and
+`mobile/15-new-sale-with-a-cart`, and the proposal names the second one as the argument for
+`QuantityStepper` existing at all.
 
 **The alternatives, in order, and why each is below it**: **step 10**, which is next by number and
 blocked on three §12 questions plus two unspecified components — six of its eight assets are native

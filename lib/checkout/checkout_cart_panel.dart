@@ -876,15 +876,12 @@ final class _CartEditorState extends State<_CartEditor> {
     return ListView(
       padding: EdgeInsets.all(AppScaffold.horizontalInset(tokens.spacing)),
       children: <Widget>[
-      // **A section head is `title.md` here, and §2.2 says `title.lg`.** Ten
-      // migrated screens read the row the other way - `Reconciliation runs`,
-      // `Paid by` and eight more are `title.md` - and the reason holds up: at
-      // §4.1's `compact` band `PageHeader` gives the *screen* title `title.lg`,
-      // so a section head at the same role puts two titles of equal weight on
-      // a phone, which is what §7's "title appears once" is about. The tree's
-      // convention wins over a fresh reading of the row; the contradiction is
-      // an open decision in `PLAN.md` rather than something a sweep settles.
-      // It was `titleSmall`, which is Material's scale and not one of §2.2's.
+      // **A section head is `title.md`**, which `design.md` **v0.6** settled on
+      // 2026-08-16 by moving the row rather than the eleven screens: §2.2 used
+      // to give a section head `title.lg`, which is also `PageHeader`'s screen
+      // title at §4.1's `compact` band, so a phone got two headings of equal
+      // weight and §7's "Title appears once" had nothing to stand on. It was
+      // `titleSmall` here, which is Material's scale and not one of §2.2's.
       Text(
         'Products',
         style: tokens.typography.titleMedium.copyWith(
@@ -1128,14 +1125,15 @@ final class _CartEditorState extends State<_CartEditor> {
 
   /// **§7's destructive pattern, in an `AlertDialog` on purpose.**
   ///
-  /// `ConfirmDialog` is §5.1's own row for this and does not exist. What §7
-  /// asks for is *"`action.destructive`, **filled**"* on the confirm button,
-  /// and §2.1 has no filled destructive tier at all - its destructive row is a
-  /// transparent container with a red label and a red border. The two sections
-  /// disagree, and inventing the missing container here is what `claude.md`
-  /// forbids, so the confirm takes §2.1's tier and the disagreement is an open
-  /// decision in `PLAN.md`. The buttons are `AppButton`s either way, which is
-  /// what closes step 3's last two Material controls in a dialog.
+  /// `ConfirmDialog` is §5.1's own row for this and does not exist yet.
+  ///
+  /// **The confirm is §2.1's outlined destructive tier, and that is now the
+  /// specification rather than a workaround.** §7 used to ask for a *filled*
+  /// destructive confirm while §2.1 defined no filled destructive container at
+  /// all; the tier below was chosen because inventing the missing colour is what
+  /// `claude.md` forbids, and `design.md` **v0.6** withdrew the word on
+  /// 2026-08-16 at the product owner's direction. Nothing here changed when it
+  /// did, which is the outcome an amendment should have.
   Future<void> _confirmClearSale(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
