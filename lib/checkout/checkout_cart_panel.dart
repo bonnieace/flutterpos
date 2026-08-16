@@ -44,7 +44,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../tenancy/tenant_catalog.dart';
+import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
+import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/press.dart';
 import '../ui/records.dart';
@@ -52,8 +55,6 @@ import '../ui/scaffold.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
-import '../tenancy/tenant_route_guard.dart';
-import '../tenancy/tenant_session.dart';
 import 'checkout_catalog_cache.dart';
 import 'checkout_draft.dart';
 import 'checkout_refusal.dart';
@@ -1135,30 +1136,21 @@ final class _CartEditorState extends State<_CartEditor> {
   /// 2026-08-16 at the product owner's direction. Nothing here changed when it
   /// did, which is the outcome an amendment should have.
   Future<void> _confirmClearSale(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear this sale?'),
-        content: const Text(
-          'Every item is removed and the payment method is cleared. Nothing '
-          'has been saved yet, so no record is lost.',
-        ),
-        actions: [
-          AppButton(
-            key: const ValueKey('checkout-clear-cancel'),
-            label: 'Keep it',
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          AppButton(
-            key: const ValueKey('checkout-clear-confirm'),
-            label: 'Clear it',
-            tier: AppButtonTier.destructive,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+    // **§7's own worked example, in §5.1's own component.** The consequence and
+    // the reassurance were one paragraph; they are the two rows §7 asks for -
+    // what happens, then what is still true, which is §8 rule 6.
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Clear this sale?',
+      consequence:
+          'Every item is removed and the payment method is cleared.',
+      stillTrue: 'Nothing has been saved yet, so no record is lost.',
+      confirmLabel: 'Clear it',
+      cancelLabel: 'Keep it',
+      confirmKey: const ValueKey('checkout-clear-confirm'),
+      cancelKey: const ValueKey('checkout-clear-cancel'),
     );
-    if (confirmed == true && mounted) _clearSale();
+    if (confirmed && mounted) _clearSale();
   }
 
   List<Widget> _tenderSection(BuildContext context, AppTokens tokens) =>

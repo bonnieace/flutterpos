@@ -1,12 +1,5 @@
 ﻿import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
-import '../ui/fields.dart';
-import '../ui/record_list.dart';
-import '../ui/scaffold.dart';
-import '../ui/stats.dart';
-import '../ui/tokens.dart';
-import '../ui/status.dart';
 import '../reporting/reconciliation_anomalies.dart';
 import '../reporting/reconciliation_labels.dart';
 import '../tenancy/tenant_catalog.dart';
@@ -15,6 +8,14 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/buttons.dart';
+import '../ui/dialogs.dart';
+import '../ui/fields.dart';
+import '../ui/record_list.dart';
+import '../ui/scaffold.dart';
+import '../ui/stats.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'stock_actions.dart';
 import 'stock_adjustment.dart';
 import 'stock_adjustment_feed_panel.dart';
@@ -804,39 +805,28 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
   Future<void> _confirm() async {
     final quantityDelta = _quantityDelta;
     if (quantityDelta == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Adjust this stock?'),
-        content: Text(
-          // The type is a trailing clause rather than the sentence's object, so
-          // one wording is grammatical for all six - "a opening_balance" was
-          // wrong twice over, and an `a`/`an` test would only have fixed half.
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Adjust this stock?',
+      // The type is a trailing clause rather than the sentence's object, so
+      // one wording is grammatical for all six - "a opening_balance" was
+      // wrong twice over, and an `a`/`an` test would only have fixed half.
+      consequence:
           'This records an adjustment of '
           '${quantityDelta > 0 ? '+' : ''}$quantityDelta units, typed as '
           '${_type.sentenceLabel}. From the '
           'quantity recorded now, that is ${widget.quantity} to '
-          '${widget.quantity + quantityDelta}. The server re-reads the '
-          'product, so the final figure is whatever it holds at that moment. '
-          'It cannot be undone from this app except by another adjustment.',
-        ),
-        actions: [
-          AppButton(
-            key: const ValueKey('product-stock-cancel'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          AppButton(
-            key: const ValueKey('product-stock-confirm'),
-            label: 'Adjust stock',
-            tier: AppButtonTier.primary,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+          '${widget.quantity + quantityDelta}.',
+      stillTrue:
+          'The server re-reads the product, so the final figure is whatever '
+          'it holds at that moment. It cannot be undone from this app except '
+          'by another adjustment.',
+      confirmLabel: 'Adjust stock',
+      tier: AppButtonTier.primary,
+      confirmKey: const ValueKey('product-stock-confirm'),
+      cancelKey: const ValueKey('product-stock-cancel'),
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     widget.onAdjust(_type, quantityDelta, _reason.text);
   }
 

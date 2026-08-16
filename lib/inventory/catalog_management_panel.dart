@@ -1,17 +1,18 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
+import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
+import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
-import '../tenancy/tenant_repository.dart';
-import '../tenancy/tenant_route_guard.dart';
-import '../tenancy/tenant_session.dart';
-import '../tenancy/tenant_session_controller.dart';
 import 'catalog_management.dart';
 
 /// The catalog route that adds to, corrects, and retires from one business's
@@ -527,36 +528,22 @@ final class _TenantCatalogManagementPanelState
     required String action,
     bool destructive = false,
   }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SingleChildScrollView(child: Text(body)),
-        actions: [
-          AppButton(
-            key: const ValueKey('catalog-management-cancel'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          // The `destructive` flag used to paint `colorScheme.error` onto a
-          // filled button by hand. §2.1 has a tier for exactly this, so the
-          // flag now chooses a tier instead of a colour - which is
-          // `claude.md` hard rule 2, and it also means the destructive
-          // treatment is a transparent container with a red label and border
-          // rather than a solid red slab.
-          AppButton(
-            key: const ValueKey('catalog-management-confirm'),
-            label: action,
-            tier: destructive
-                ? AppButtonTier.destructive
-                : AppButtonTier.primary,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+    // The `destructive` flag used to paint `colorScheme.error` onto a filled
+    // button by hand. §2.1 has a tier for exactly this, so the flag chooses a
+    // tier instead of a colour - which is `claude.md` hard rule 2 - and
+    // `ConfirmDialog` carries the tier through to the barrier as well: a
+    // destructive question can be escaped by its scrim because cancel is the
+    // safe answer, and a primary one cannot.
+    final confirmed = await showConfirmDialog(
+      context,
+      title: title,
+      consequence: body,
+      confirmLabel: action,
+      tier: destructive ? AppButtonTier.destructive : AppButtonTier.primary,
+      confirmKey: const ValueKey('catalog-management-confirm'),
+      cancelKey: const ValueKey('catalog-management-cancel'),
     );
-    return confirmed == true && mounted;
+    return confirmed && mounted;
   }
 
   /// One loader per guard key, cached so a `setState` for the busy flag or a

@@ -1,17 +1,18 @@
 ﻿import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
-import '../ui/fields.dart';
-import '../ui/record_list.dart';
-import '../ui/scaffold.dart';
-import '../ui/status.dart';
-import '../ui/tokens.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/buttons.dart';
+import '../ui/dialogs.dart';
+import '../ui/fields.dart';
+import '../ui/record_list.dart';
+import '../ui/scaffold.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'return_actions.dart';
 import 'return_history.dart';
 import 'return_request.dart';
@@ -631,32 +632,19 @@ final class _SaleReturnsContents extends StatelessWidget {
     BuildContext context,
     TenantReturn record,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Restore this stock?'),
-        content: Text(
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Restore this stock?',
+      consequence:
           'This verifies the return and adds '
-          '${record.lines.map(_lineLabel).join(', ')} back to stock. It '
-          'cannot be undone from this app.',
-        ),
-        actions: [
-          AppButton(
-            key: const ValueKey('sale-returns-cancel-verify'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          AppButton(
-            key: const ValueKey('sale-returns-confirm-verify'),
-            label: 'Verify and restore',
-            tier: AppButtonTier.primary,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+          '${record.lines.map(_lineLabel).join(', ')} back to stock.',
+      stillTrue: 'It cannot be undone from this app.',
+      confirmLabel: 'Verify and restore',
+      tier: AppButtonTier.primary,
+      confirmKey: const ValueKey('sale-returns-confirm-verify'),
+      cancelKey: const ValueKey('sale-returns-cancel-verify'),
     );
-    if (confirmed == true) onVerify(record);
+    if (confirmed) onVerify(record);
   }
 
   String _label(String uid) =>
@@ -707,32 +695,19 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
       _reason.text.trim().length >= minimumReturnReasonLength;
 
   Future<void> _confirm() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Record this return?'),
-        content: Text(
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Record this return?',
+      consequence:
           'This records $_selectedUnits '
-          '${_selectedUnits == 1 ? 'unit' : 'units'} as a pending return. It '
-          'restores no stock: a manager must verify it first.',
-        ),
-        actions: [
-          AppButton(
-            key: const ValueKey('sale-returns-cancel-confirm'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          AppButton(
-            key: const ValueKey('sale-returns-confirm'),
-            label: 'Record return',
-            tier: AppButtonTier.primary,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+          '${_selectedUnits == 1 ? 'unit' : 'units'} as a pending return.',
+      stillTrue: 'It restores no stock: a manager must verify it first.',
+      confirmLabel: 'Record return',
+      tier: AppButtonTier.primary,
+      confirmKey: const ValueKey('sale-returns-confirm'),
+      cancelKey: const ValueKey('sale-returns-cancel-confirm'),
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     widget.onRecord(
       Map<String, int>.unmodifiable(_quantities),
       _reason.text,

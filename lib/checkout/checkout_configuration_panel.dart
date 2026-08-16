@@ -1,14 +1,15 @@
 ﻿import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
-import '../ui/fields.dart';
-import '../ui/scaffold.dart';
-import '../ui/status.dart';
-import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
+import '../ui/buttons.dart';
+import '../ui/dialogs.dart';
+import '../ui/fields.dart';
+import '../ui/scaffold.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'checkout_configuration.dart';
 
 /// Read-and-publish checkout settings route for the selected tenant.
@@ -156,44 +157,31 @@ final class _TenantCheckoutConfigurationPanelState
   ) async {
     final replacing = intent.changesPublishedCurrency;
     final previous = intent.replaces.currency;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          replacing ? 'Change the currency?' : 'Publish this currency?',
-        ),
-        content: Text(
-          replacing
-              // The one case with something to warn about. Nothing is converted
-              // and nothing is re-priced: a sale carries the code it was priced
-              // with inside its own hashed payload, and a device that has not
-              // synced keeps pricing with the code it still holds.
-              ? 'This business trades in $previous today. Every sale already '
-                    'recorded keeps that code, no amount is converted, and a '
-                    'device that has not synced keeps pricing new sales in '
-                    '$previous until it does. Sales priced after each device '
-                    'syncs record ${intent.currency}.'
-              : 'Every sale priced after this is published records '
-                    '${intent.currency}. Until it is published no sale can be '
-                    'rung up in this business at all.',
-        ),
-        actions: [
-          AppButton(
-            key: const ValueKey('checkout-configuration-cancel'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          AppButton(
-            key: const ValueKey('checkout-configuration-confirm'),
-            label: replacing ? 'Change currency' : 'Publish',
-            tier: AppButtonTier.primary,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: replacing ? 'Change the currency?' : 'Publish this currency?',
+      consequence: replacing
+          ? 'This business trades in $previous today. Sales priced after each '
+                'device syncs record ${intent.currency}.'
+          : 'Every sale priced after this is published records '
+                '${intent.currency}. Until it is published no sale can be '
+                'rung up in this business at all.',
+      // The one case with something to warn about, and it is §8 rule 6
+      // exactly: what is *not* affected. Nothing is converted and nothing is
+      // re-priced - a sale carries the code it was priced with inside its own
+      // hashed payload, and a device that has not synced keeps pricing with
+      // the code it still holds.
+      stillTrue: replacing
+          ? 'Every sale already recorded keeps that code, no amount is '
+                'converted, and a device that has not synced keeps pricing '
+                'new sales in $previous until it does.'
+          : null,
+      confirmLabel: replacing ? 'Change currency' : 'Publish',
+      tier: AppButtonTier.primary,
+      confirmKey: const ValueKey('checkout-configuration-confirm'),
+      cancelKey: const ValueKey('checkout-configuration-cancel'),
     );
-    return confirmed == true && mounted;
+    return confirmed && mounted;
   }
 
   /// One loader per guard key, cached so a `setState` for the busy flag or a

@@ -6,6 +6,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
+import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
 import '../ui/status.dart';
@@ -458,28 +459,16 @@ final class _TenantBulkCatalogPanelState
     required String body,
     required String action,
   }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SingleChildScrollView(child: Text(body)),
-        actions: [
-          AppButton(
-            key: const ValueKey('bulk-catalog-cancel'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          AppButton(
-            key: const ValueKey('bulk-catalog-confirm'),
-            label: action,
-            tier: AppButtonTier.primary,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: title,
+      consequence: body,
+      confirmLabel: action,
+      tier: AppButtonTier.primary,
+      confirmKey: const ValueKey('bulk-catalog-confirm'),
+      cancelKey: const ValueKey('bulk-catalog-cancel'),
     );
-    return confirmed == true && mounted;
+    return confirmed && mounted;
   }
 
   TenantGuardedLoader<_CatalogView> _loaderFor(String key) {

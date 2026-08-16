@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
-import '../ui/scaffold.dart';
-import '../ui/stats.dart';
-import '../ui/tokens.dart';
-import '../ui/status.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/buttons.dart';
+import '../ui/dialogs.dart';
+import '../ui/scaffold.dart';
+import '../ui/stats.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'reconciliation_actions.dart';
 import 'reconciliation_anomalies_panel.dart';
 import 'reconciliation_labels.dart';
@@ -647,32 +648,19 @@ final class _RequestReconciliation extends StatelessWidget {
   final VoidCallback onRequest;
 
   Future<void> _confirm(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ask the server to reconcile?'),
-        content: Text(
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Ask the server to reconcile?',
+      consequence:
           'This queues one ${mode.label.toLowerCase()} for the whole '
-          'business. ${mode.description} It cannot be cancelled or re-ordered '
-          'once queued.',
-        ),
-        actions: [
-          AppButton(
-            key: const ValueKey('reconciliation-request-cancel'),
-            label: 'Cancel',
-            tier: AppButtonTier.tertiary,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          AppButton(
-            key: const ValueKey('reconciliation-request-confirm'),
-            label: 'Ask for it',
-            tier: AppButtonTier.primary,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
+          'business. ${mode.description}',
+      stillTrue: 'It cannot be cancelled or re-ordered once queued.',
+      confirmLabel: 'Ask for it',
+      tier: AppButtonTier.primary,
+      confirmKey: const ValueKey('reconciliation-request-confirm'),
+      cancelKey: const ValueKey('reconciliation-request-cancel'),
     );
-    if (confirmed == true) onRequest();
+    if (confirmed) onRequest();
   }
 
   @override
