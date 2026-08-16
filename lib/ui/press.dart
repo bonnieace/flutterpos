@@ -56,6 +56,7 @@ final class PressSurface extends StatefulWidget {
     this.semanticLabel,
     this.excludeSemantics = false,
     this.fillWidth = false,
+    this.fillHeight = false,
   });
 
   /// The surface itself, drawing its own container, border and label.
@@ -110,6 +111,19 @@ final class PressSurface extends StatefulWidget {
   /// [SizedBox], which would stretch the box and leave the painted surface
   /// floating in the middle of it.
   final bool fillWidth;
+
+  /// Whether the surface fills the height it is offered.
+  ///
+  /// [fillWidth]'s twin, and off for the same reason: the minimum-tap-target
+  /// box shrink-wraps so that a 32-high button stays 32 while its hit area is
+  /// 48, which is what keeps §5.2's three button sizes from collapsing into
+  /// one.
+  ///
+  /// **A caller sets it where equal height is the layout**, which is a grid
+  /// rather than a row of buttons - `HomeNavigation` puts two cards side by
+  /// side under an `IntrinsicHeight` and needs the painted surfaces to be the
+  /// same height, not merely the slots they sit in.
+  final bool fillHeight;
 
   @override
   State<PressSurface> createState() => _PressSurfaceState();
@@ -299,7 +313,7 @@ class _PressSurfaceState extends State<PressSurface>
       child: Align(
         alignment: Alignment.center,
         widthFactor: widget.fillWidth ? null : 1,
-        heightFactor: 1,
+        heightFactor: widget.fillHeight ? null : 1,
         child: framed,
       ),
     );

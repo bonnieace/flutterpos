@@ -2,7 +2,115 @@
 
 Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.md),
 verbatim and in order — go there for why a decision was made, what a chunk
-deliberately left out, and which failures cost a debugging cycle.
+deliberately left out, and which failures cost a debugging cycle. That file
+carries an index of its own sessions at the top, on the same line-numbered
+model as this one.
+
+## Index
+
+<!-- index:start -->
+
+Every section of this file, with the line it starts on. Read the one you need.
+
+- **9** — Index
+  - **252** — Published status board
+- **305** — Status board
+  - **307** — Tracks
+  - **317** — Can a shop do this yet?
+  - **354** — Where the last chunk left it
+  - **368** — Chunk index
+  - **432** — Found by using the app
+  - **564** — Rollout position
+  - **586** — Test baselines
+- **1134** — Corrections made in the 2026-08-07 PLAN/HISTORY split
+- **1165** — Standing decisions and unreachable capabilities
+  - **1173** — A sale records how it was paid for, chosen manually
+  - **1191** — A business publishes its own currency, and it converts nothing
+  - **1209** — A shop stocks itself, and a retired product keeps its history
+  - **1232** — A price is corrected on the server, and never a quantity
+  - **1265** — A product records what it cost, and a sale freezes it
+  - **1290** — A profit figure is complete or it is not shown
+  - **1313** — Bulk catalog work is a rewrite, and the old code is not the starting point
+  - **1343** — A spreadsheet becomes products, and its stock has an origin
+  - **1383** — One screen reaches both bulk callables, and it previews before it writes
+  - **1412** — A suspicious return is scored on the server, after the first deployment
+  - **1436** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
+  - **1455** — A refused invitation names what will work, and only a transient failure invites a retry
+  - **1482** — The token layer is additive, and a density is a nested `Theme`
+  - **1518** — The ripple dies at the theme, and the press arrives with the button
+  - **1545** — A button is a component, and a spring is the substrate under it
+  - **1570** — Every button is an `AppButton`, and the tier is a decision per site
+  - **1592** — Five statuses, and three components two of which have no specification
+  - **1624** — One field, everywhere - and an audit finding that was false
+  - **1651** — A route arrives on a spring, and one parallax is deliberately missing
+  - **1683** — A category is named, and a document ID is not a name
+  - **1705** — A screen title is content, and the toolbar keeps only the way back
+  - **1739** — One boundary, one variable, and a maximum width on every page
+  - **1767** — One record model, three renderings, and the loss the caller owns
+  - **1796** — The staff directory stops choosing its own form, and a record gets a form slot
+  - **1819** — A product states its facts as facts, and only one that cannot be sold has a standing
+  - **1845** — One ledger entry, one vocabulary, and a screen that had three
+  - **1874** — A shift has a standing, and two paragraphs were never about a record
+  - **1902** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
+  - **1933** — A page's standing is a status, and a report row's reads the mode it was written in
+  - **1960** — A figure is a component, and a row of them measures what it holds
+  - **1996** — A figure is evidence on these three, and one document is read two ways on purpose
+  - **2019** — A notice says which answer it is, and four of them were never refusals
+  - **2047** — A title appears once, and the page that said it was read-only was not
+  - **2072** — A column asks for what it holds, and a share is a guess about content
+  - **2105** — A boundary is a measurement, and the front door had a second palette
+  - **2143** — An input is a pill again, and the specification moved first
+  - **2182** — Built, tested, and still unreachable
+  - **2222** — The home is cards below 1024 and a side menu above it, and the till is pushed
+- **2255** — Open decisions
+  - **2257** — Public password reset needs App Check, which this app has none of
+  - **2364** — `Callout` has no specification, and three glyph sizes were borrowed
+  - **2388** — Every string is painted 0.25px per character wider than its token style says
+  - **2409** — A chip is the only thing §2.3's pill argument still guards, and the theme disagrees with it
+  - **2429** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
+  - **2453** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
+  - **2474** — Three run counts are decoded on every read and displayed by nothing
+  - **2491** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
+  - **2526** — `design.md` states no page padding, and `AppScaffold` had to pick one
+  - **2545** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
+  - **2570** — `AppSheet` has no specification, and step 7 opens a sheet
+  - **2593** — The app teaches by folding prose, and nobody has decided whether folding is teaching
+  - **2616** — The invitation email names no business, and no step reaches an email
+  - **2638** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
+  - **2677** — Three design-system questions the redesign has refused to answer
+  - **2721** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
+  - **2732** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
+  - **2802** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
+- **2852** — Identity, Tenancy, and Public Interfaces
+  - **2854** — Environments
+  - **2861** — Root model
+  - **2893** — Tenant path contract
+  - **2903** — Tenant routing and limits
+  - **2920** — Shared authorization
+  - **2937** — Public callable interfaces
+  - **2971** — Full export surface
+- **3001** — Platform, Ownership, and Membership Integrity
+- **3057** — Invitations and Email
+- **3121** — Offline Operations, Stock, and Receipts
+- **3170** — Reconciliation, Rules, and Testing
+  - **3172** — Reconciliation
+  - **3236** — Rules
+  - **3262** — Required tests
+- **3280** — Working on this repository
+  - **3282** — The emulator prelude is not optional
+  - **3297** — Standing traps
+  - **3694** — Repository state
+- **3824** — Next bounded chunk
+  - **4759** — Then, in preference order
+  - **5033** — Standing exclusions
+- **5216** — Assumptions
+
+<!-- index:end -->
+
+Regenerated by `dart run tool/doc_index.dart`. Do not hand-edit between the
+markers, and run it after editing either file.
+
+---
 
 Last verified against the code on **2026-08-15**, which took six chunks.
 
@@ -243,531 +351,83 @@ callable exists, and not green if it is merely tested.
 | Platform: disable or reactivate an identity | 🟢 | Exact-UID review tab |
 | Platform: grant or revoke platform admin | 🟡 | Operator CLI only, deliberately not in-app |
 
-**The fifth 2026-08-15 chunk changed no row of the capability board, and it is the first chunk in
-this migration where that sentence needed a qualification.** Step 9 rewrote the screen "Sign in"
-names, and a person can do exactly what they could do this morning: type an address, type a
-password, tick remember, press the button. What changed is that the button says `Sign in`, the
-fields draw one border rather than two, an empty box is named under itself, and a device with no
-connection is told so in blue-grey rather than accused in red. **The row's own text was extended
-rather than its colour changed**, which is what a 🟢 row is supposed to do when the screen behind it
-is rebuilt. It moved the **Design system** track 93% to 95% and **no other track**, changed **no
-rollout step**, and touched no rule and no `functions/` file. **18 images moved and 6 were added, and
-16 of the 18 are not sign-in** — screens 19 and 20 are the app's only other `Checkbox`es, and the
-theme change in decision 9 is the whole of their delta.
+### Where the last chunk left it
 
-**The fourth 2026-08-15 chunk changed no row of the capability board either, and it changed no call
-site in `lib/` outside `lib/ui/`.** It took the **four `RecordList` column-arithmetic observations**.
-Every capability that reads a list of records — the staff directory, both catalog screens, all four
-stock screens, all four shift screens, the activity log — has been 🟢 throughout and does exactly what
-it did before; what changed is how wide the columns are on a desktop window. It moved the **Design
-system** track 92% to 93% and **no other track**, changed **no rollout step**, and touched no rule and
-no `functions/` file. **26 images moved and 5 were added, every one of them `web/` or `web-full/`** —
-the table is the `expanded` rendering, so a phone picture that had changed would have been a defect.
+**The capability board has not changed colour since 2026-08-08**, when profit and margin went
+green. It stands at **29 rows — 24 green, 4 red, 1 amber**. Every chunk since has been the
+`design.md` migration, which moves the **Design system** track and no board row; where such a
+chunk rebuilds the screen behind a green row, it extends that row's *text* and leaves its colour
+alone, and the row itself says so. The four red rows are blocked on a decision nobody has made, a
+schema that does not exist, or a sequencing choice taken after the first deployment — so **nothing
+the app needs in order to function is missing and unqueued.** The last chunk to run was step **5b's
+first half** on 2026-08-16, which put the landing route on `AppScaffold` — the seventh and last raw
+`Scaffold` step 5a named — and replaced its `Wrap` of eleven pills with `HomeNavigation`. It moved
+no board row and changed no behaviour: every `onPressed` and every visibility condition on that
+route is byte-for-byte what it was. Rewrite this paragraph; do not append to it.
 
-**Its findings are two things a review would never have caught and a rendering did.** A button is
-**8 pixels wider than §5.2's arithmetic** — `PressSurface` reserves the focus ring's gutter whether it
-is visible or not, and §9's tap target is a minimum *width* too — and every `Text` in this app is
-painted **0.25 pixels per character wider than its token style**, because a style with
-`inherit: true` is merged onto the enclosing `DefaultTextStyle` and this app's `ThemeData` carries
-Material's `letterSpacing: 0.25` on every role §2.2 leaves silent. The second is a finding rather than
-a repair; see the open decision.
+### Chunk index
 
-**The third 2026-08-15 chunk changed no row of the capability board either.** It took **§7's "Title
-appears once"** — the fourteen panels that drew their screen title a second time under the
-`PageHeader` carrying it. Nothing a shop can do changed; what changed is that fourteen routes stopped
-saying their own name twice, and **one of them stopped telling every reader the page was read-only
-when it was not**. It moved the **Design system** track 90% to 92% and no other track. **52 images
-moved**, more than any chunk since step 6b.
+One line per chunk, newest first: what it took, what it moved, and the `HISTORY.md` session that
+holds the rest. **The reasoning, the findings, the corrections, the image diffs, the test deltas
+and the costs are in that session and are not repeated here** — a session heading is how you reach
+them, and the file-top index turns the heading into a line number. Do not add a paragraph about a
+chunk you just ran; that paragraph is the `HISTORY.md` session you have already written.
 
-**Its finding is the staff directory**: `Read-only staff directory` was a heading drawn for every
-role, over an `AppScaffold` titled `Staff directory`, on a page that then offered an owner `Invite
-staff`. Nothing asserted the string, which is why it survived. See the standing decision.
+Track figures are the **Design system** track unless another is named. A dash in **Board** means
+no row moved at all.
 
-**The second 2026-08-15 chunk changed no row of the capability board either.** It took the
-**notice-status model**: `AppNotice` in `lib/ui/status.dart` and the seven surfaces that report what a
-write just did. Every capability those seven sit on — adding a category, correcting a product,
-adjusting stock, recording and verifying a return, publishing a currency, asking for reconciliation,
-correcting a shift — has been 🟢 throughout and does exactly what it did before; what changed is that
-the sentence saying whether it worked now says so as a status. It moved the **Design system** track
-88% to 90% and **no other track**, changed **no rollout step**, and touched no rule and no
-`functions/` file.
+| Date | What it took | Track | Board | `HISTORY.md` session |
+| --- | --- | --- | --- | --- |
+| 2026-08-16 | step **5b, first half** — `HomeNavigation`; the landing route on `AppScaffold`, titled by branding | 95→96% | — | The home stops being eleven identical pills |
+| 2026-08-15 | §8 copy pass, step **11** — twelve defects against a list of seven; role and standing words to one module | *not recorded* | — | A record says its standing in words, and §8 rule 1's own example was still on screen |
+| 2026-08-15 | `design.md` **v0.4** — every field a raised pill, `surface.field` at `radius.pill`, keypad caps lock | *not recorded* | — | An input is a pill again, and a keypad learns lower case |
+| 2026-08-15 | step **9** — sign-in rebuilt on the token layer; the double border since `1b2b13b` closed | 93→95% | text: Sign in | The front door stops having a palette of its own |
+| 2026-08-15 | `RecordList`'s table divides its row by measurement; `RecordTableColumns` | 92→93% | — | A table stops guessing how wide its columns are |
+| 2026-08-15 | §7 "Title appears once" — fourteen sites in fourteen files | 90→92% | — | A title appears once, and one page was telling everybody it was read-only |
+| 2026-08-15 | `AppNotice` — the four write outcomes mapped once to §2.1, on seven surfaces | 88→90% | — | A notice says which answer it is, and four of them were never refusals |
+| 2026-08-15 | step **8** second half — the figures on 27, 28 and 29; **finishes step 8** | 85→88% | — | A difference states its figures, and step 8 is finished |
+| 2026-08-14 | step **8** first half — `lib/ui/stats.dart` on 13, 21, 25 and 26 | 82→85% | — | A figure becomes a component, and the money screens stop writing numbers into sentences |
+| 2026-08-14 | step **4**'s sweep, catalog — 17, 18, 19's dialog, 20 | 80→82% | — | The catalog family folds its prose, and a bulk report gets its first picture |
+| 2026-08-14 | step **4**'s sweep, reconciliation — 27, 29, 28 and 21's exception report | 78→80% | — | The reconciliation family gets one vocabulary, and step 4's sweep begins |
+| 2026-08-13 | step **6**'s sweep, shift family — 30, 32, 33, 34; **finishes the sweep** | 75→78% | — | The shift family becomes a `RecordList`, and step 6's sweep is finished |
+| 2026-08-13 | step **6**'s sweep, stock family — 21, 22, 23, 24 | 70→75% | — | The stock family becomes one record, and a screen stops describing it three ways |
+| 2026-08-13 | step **6**'s sweep, catalog — 17 and 18 | 67→70% | — | The catalog becomes a `RecordList`, and a product that cannot be sold says so |
+| 2026-08-13 | step **6**'s sweep, staff directory — 13 | 65→67% | — | The staff directory becomes a `RecordList`, and a record gets somewhere to open a form |
+| 2026-08-13 | step **6b** — §4.3's `RecordList` contract, plus the activity log; **finishes step 6** | 60→65% | — | A record list becomes one component, and §4.3's middle band gets its first picture |
+| 2026-08-12 | step **6a** — §4.1's breakpoints and §4.2's content widths | 55→60% | — | Every page gets a maximum width, and 768 stops being declared three times |
+| 2026-08-12 | step **5a** — `AppScaffold` and `PageHeader`; **finishes 5a**, not 5b | 50→55% | — | A screen title stops being chrome |
+| 2026-08-12 | step **4** — `StatusBadge`, `Callout`, `Disclosure`; **finishes step 4**; `ConfirmDialog` leaves for step 7 | 45→50% | — | Five statuses, two notices, and prose that folds away |
+| 2026-08-12 | step **3**'s fields — `AppTextField` and `AppSelect` at 39 sites across 17 files; **finishes step 3** | 35→45% | — (closed finding 4) | One field, everywhere |
+| 2026-08-12 | step **2**'s last part — route transitions at 23 sites; **finishes step 2** | 30→35% | — | A route arrives on a spring |
+| 2026-08-11 | `AppButton`'s call-site sweep — 133 sites across 35 files | 25→30% | — | Every remaining button becomes an `AppButton` |
+| 2026-08-11 | step **3**'s first half — `AppButton` and the spring substrate under it | 15→25% | — | `AppButton`, and the spring substrate under it |
+| 2026-08-11 | step **2** — the ripple killed at the theme | 8→15% | — | The ripple dies at the theme |
+| 2026-08-11 | the design-system working tree committed, in four commits, at the product owner's direction | — | — | The working tree is emptied into the repository |
+| 2026-08-11 | finding **5** — no catalog surface states a category document ID to a person | — | — | A category is named, and never shown as a document ID |
+| 2026-08-11 | step **1** — the token layer, defined and wired to nothing | adds the track | — | The design system's token layer, wired to nothing |
+| 2026-08-08 | finding **3** — a refused invitation names what will actually work | — | text: Accept a staff invitation | A refused invitation says what will actually work |
+| 2026-08-08 | findings **1** and **2** — the sign-in screen says something true | — | text: Sign in | The sign-in screen says something true |
+| 2026-08-08 | the app driven on Android against real Auth, Firestore and Functions; six defects recorded, none fixed | — | text: Accept a staff invitation | The app is driven on Android against the emulators |
+| 2026-08-08 | `deliverPasswordReset` emulator integration; invitation baseline **12 → 23** | — | — | The password-reset worker runs against real Auth and real Firestore |
+| 2026-08-08 | profit and margin displayed, or refused, and never overstated | — | 🟢 See profit or margin | Profit is shown, or refused, and never overstated |
+| 2026-08-08 | the bulk surface — the first client caller either bulk callable ever had | — | 🟢 Import a catalog…, 🟢 Change many products… (board to 23 green) | Both bulk halves reach a person |
+| 2026-08-08 | `importProducts` built, tested, exported, no caller; functions **378 → 409**, handlers **48 → 49** | — | text only | Products imported from a spreadsheet, previewed before they exist |
+| 2026-08-08 | `updateProducts` built, tested, exported, no caller; functions **346 → 378**, handlers **47 → 48** | — | — | Many products at once, previewed before they change |
+| 2026-08-08 | the product-edit route — the first client caller `updateProduct` ever had | — | 🟢 Edit a product's price, name, code, cost, or category (board to 21 green) | A price is corrected from the app |
+| 2026-08-08 | bulk catalog and suspicious-return scoring scoped as rewrites | — | three red rows added; board becomes 29 rows | Bulk catalog and return scoring are scoped as rewrites |
+| 2026-08-08 | the status board re-minted under the account that now does the work | — | — | The status board moved accounts |
+| 2026-08-07 | a product records what it cost, and a sale freezes it onto its own line | — | 🟢 Record what a product cost; 🔴 See profit or margin added | A product records what it cost, and a sale freezes it |
+| 2026-08-07 | the intermittent Flutter failure that stood in front of the next capability; Flutter **1346 → 1347** | — | — | The flake was the test's own clock |
+| 2026-08-07 | `updateProduct` — the 24th callable and 47th export, with no caller for a day | — | text: Edit a product's price, name, code, cost, or category | The callable that corrects a price |
+| 2026-08-07 | a shop stocks its own catalog | — | 🟢 Add or retire a product | A shop can stock itself |
+| 2026-08-07 | a business publishes the currency it sells in | — | 🟢 Set the currency / checkout configuration | A business can set what it sells in |
 
-**Its finding is that four of the seven had branches that were never refusals** — *what you asked for
-is already true* — and every one of them had been rendered identically to "only an owner may do this".
-See the standing decision.
-
-**The first 2026-08-15 chunk changed no row of the capability board at all — not a colour and not a
-word of one — and this sentence is here so that is stated rather than left silent.** It took **the
-second half of step 8**, which is the figures on 27, 28 and 29, and **it finishes step 8**. "Ask for
-reconciliation", "See why a day disagrees, and correct a shift" and "Adjust stock" have all been 🟢
-throughout and a shop can do exactly what it could do yesterday. It moved the **Design system** track
-85% to 88% and **no other track**. It changed **no rollout step**, and it touched no rule and no
-`functions/` file — `git diff` *and* `git status` over `functions/`, `firestore.rules` and
-`rules-tests/` print zero lines.
-
-**Its largest finding is a fixture one, for the third and fourth time in three days.** The seeded
-reconciliation intake has always recorded a clean day, so the day card's second stat tile — the count
-of sale lines the server could not use, and the sentence saying they moved no stock and count towards
-no profit — had never been in any of the 221 images. And the three seeded differences happened to
-cover no kind that carries a long paragraph *and* a single figure, which is the mixed case step 8
-creates on that screen. Both were the seed rather than the code, and both now have a picture.
-
-**Its own decision worth arguing with: screen 29 gets no `StatTile` row, and this file predicted one.**
-A run does have headline counts — and every one of them is already stated by the card 29 shares with
-27, so a tile row would print one figure twice at two sizes. See the standing decision.
-
-**The 2026-08-14 step-8 chunk changed no board row at all — not a colour and not a word of one — and
-this sentence is here so that is stated rather than left silent.** It took **the first half of step
-8**: the money component in `lib/ui/stats.dart`, the two strips that were already in the app (13 and
-21), and the two money screens (25 and 26) with the step-4 sweep of their prose. "Read daily and
-period totals" and "See profit or margin" have both been 🟢 throughout and a shop can read exactly
-what it could read this morning. It moved the **Design system** track 82% to 85%. It changed **no
-rollout step**, and it touched no rule and no `functions/` file — `git diff` *and* `git status` over
-`functions/`, `firestore.rules` and `rules-tests/` print zero lines. It added **23 tests**, added
-**13** screenshots and **4** capture cases, removed none, and moved **22**.
-
-**Its largest finding is not in step 8 at all.** §7's page pattern says "Title appears once" and names
-the defect in its own words — "several screens render the title in the app bar *and* again as an `H1`
-directly beneath it". Step 5a moved every title into a `PageHeader` and **did not remove the copies
-underneath**: `grep -n headlineSmall lib` finds the shape in **15** panels, two of which this chunk
-fixed because they are its own screens. `web/21-product-stock` shows it plainly — *White bread loaf*
-in `display`, and *White bread loaf* again directly under it. Not all 13 remaining are duplicates
-(some name a section rather than the screen), so it is a per-screen judgement rather than a sweep of
-13 `Text`s, and it is queued below as its own small chunk.
-
-**Its own decision worth arguing with: a stat row measures its own figures.** `TenantStatStrip`'s
-`minimumWidth` was 168, which `design.md` does not contain and which was set when every figure in the
-app was two or three digits; at `numeric.hero`'s 28px/700, `KES 3810.25` is about 190 logical pixels
-before padding, so a phone would have put two money tiles side by side and ellipsised both.
-`StatRow.minimumTileWidth` lays the row's figures out with a `TextPainter` and takes the widest plus
-the tile's own padding. It is the "column shares derived from content" answer this file already calls
-honest for `RecordList`, reached first here because a stat row is four boxes rather than a
-twelve-screen contract — **and it is the one place in the component where a `TextPainter` runs on
-every build**, which is cheap at four tiles and would not be at a hundred.
-
-**Two more decisions, both about what a figure may say on its own.** A negative stock count used to be
-a red number, which is §9's "out of stock signalled by red text alone" in another place; it is a
-`problem` badge now. But the staff directory's `Pending` tile, whose old `emphasis` dimmed the figure,
-carries **nothing**: every pending member in the list below already wears an `attention` badge, and a
-second one on the *count* of them is the same signal twice.
-
-**The 2026-08-14 catalog-sweep chunk changed no board row at all — not a colour and not a word of one
-— and this sentence is here so that is stated rather than left silent.** It took the **second part of
-step 4's sweep**: the read-only catalog (17), manage catalog (18), the correction dialog (19) and bulk
-changes/import (20). "Add or retire a product", "Edit a product's price, name, code, cost, or
-category", "Change many products at once" and "Import a catalog from a spreadsheet" have all been 🟢
-throughout and a shop can do exactly what it could do this morning. It moved the **Design system**
-track 80% to 82%. It changed **no rollout step**, and it touched no rule and no `functions/` file —
-`git diff` *and* `git status` over `functions/`, `firestore.rules` and `rules-tests/` print zero
-lines. It added **9 tests**, added **8** screenshots and **2** capture cases, removed none, and moved
-**16**.
-
-**Its largest finding is the previous chunk's finding one level down: a budget measured in one
-container is a budget for that container.** `Disclosure.summaryCharacterBudget` is 32 and was measured
-on a **page**; `How a correction is checked` is 27 characters, shipped inside that budget, and
-truncated the first time anything photographed the correction dialog on a phone. An `AlertDialog` at
-`compact` insets itself from the window and then pads its own content, so a summary has roughly 200
-logical pixels where a page gives it about 250. `Disclosure.dialogSummaryCharacterBudget` is **24**,
-bracketed rather than invented — 27 truncates, 19 fits, the ellipsis sat about 25 characters in.
-
-**Two harness cases were photographing the wrong thing and both are fixed.**
-`mobile/19-correct-a-product` had **never shown the dialog it is named after**: `scrollUntilVisible`
-stops when a widget is built rather than when it is on screen, so at 411 the tap landed below the fold
-and missed without failing. And **no capture had ever put a bulk report on screen at all**, because
-`FakeCallable`'s empty map cannot survive `updateProducts`' strict decoder. `FakeBulkCatalogCallable`
-answers the way the server does with one row `unchanged` and one `failed`, and `20b`/`20c` are the
-same three rows either side of the commit.
-
-**Its own decision worth arguing with: a bulk report's row status reads the report's mode.**
-`created`/`updated` are `attention` in a preview and `ok` in a commit, because §2.1 gives `ok` the
-meaning *"confirmed"* and a green badge over a report whose first sentence is `Nothing has been
-written.` would state the opposite of the line above it. `unchanged` is `neutral` and `failed` is
-`problem` in both. **What the badge cannot fix is the word beside it** — the labels are the enum's
-own and read as past tense, so a previewed row says `Created` before anything exists, which is a copy
-question and is queued rather than decided.
-
-**Two pre-existing copy defects the new pictures found, both recorded and neither fixed**: the row
-detail's before/after arrow renders as tofu in the harness fonts (`bulk_catalog.dart:1590` — whether
-a device shows it is unknown), and `_summary` has no singular form, so a one-row report reads *"1
-were corrected, 1 already hold this value"*.
-
-**The 2026-08-14 reconciliation-sweep chunk changed no board row at all — not a colour and not a word
-of one — and this sentence is here so that is stated rather than left silent.** It took the **first
-part of step 4's sweep**: the reconciliation day page (27), the one-run page (29), the differences list
-(28) and screen 21's "Reconciliation found" exception report, which are the sweep's **two named screen
-sections** plus the two surfaces that share a record card with them. "Ask for reconciliation", "See why
-a day disagrees, and correct a shift" and "Adjust stock" have all been 🟢 throughout and a shop can do
-exactly what it could do yesterday. It moved the **Design system** track 78% to 80%. It changed **no
-rollout step**, and it touched no rule and no `functions/` file — `git diff` *and* `git status` over
-`functions/`, `firestore.rules` and `rules-tests/` print zero lines. It added **27 tests**, added **4**
-screenshots, removed none, and moved **14**.
-
-**Its finding is a divergence of the same family the stock chunk found, and one half of it is a
-defect rather than a difference of taste.** Two surfaces render one `reconciliation_anomalies`
-document, and the differences list described *all three* stock kinds with the stock-variance sentence:
-the model permits a zero variance on the two kinds that are not variances, so a broken checkpoint chain
-whose quantities happen to agree read as *"0 fewer than the ledger accounts for"* — a record that
-exists because there is a difference, stating that there is none. The stock route had the right words
-for all three since it was written. The same instant was also formatted two ways on pages that link to
-each other, `2026-08-01T02:30:00.000Z` against `2026-08-01 02:30 UTC`.
-`lib/reporting/reconciliation_labels.dart` is now the one vocabulary, on the model of
-`stock_movement_labels.dart`.
-
-**It is the first chunk where a *picture* corrected a previous step's shipped work.**
-`Disclosure`'s collapsed summary fits about **32 characters** at §4.1's `compact` band and nobody had
-measured it, because step 4's own `93-disclosure-*` matrix is `web` only and no capture had ever put a
-`Disclosure` on a phone. Step 4 shipped `What a run is, and what it does not prove` on the
-reconciliation day page on 2026-08-12 and it has been rendering as
-`What a run is, and what it does not pro…` ever since. Seven summaries were shortened, one of them step
-4's, and the figure is `Disclosure.summaryCharacterBudget` with a `length` guard on the route that
-carries four of them. **The guard is a character count and not a render measurement on purpose**: a
-plain `flutter test` has no Material fonts, so `didExceedMaxLines` there called a 25-character summary
-too long — see the new standing trap.
-
-**The 2026-08-13 shift-family chunk changed no board row at all — not a colour and not a word of one
-— and this sentence is here so that is stated rather than left silent.** It took the **eighth to
-eleventh screens of step 6's sweep, which are its last**: shift corrections (30), shift history (32),
-shift sales (33) and returns on a sale (34). "Open and close a shift", "Ring up a sale", "Record a
-return", "Verify a return, restoring stock" and "See why a day disagrees, and correct a shift" have
-all been 🟢 throughout and a shop can do exactly what it could do this morning. It moved the **Design
-system** track 75% to 78% and **finishes step 6's sweep**, so `RecordList` is now on all twelve of
-the screens `design.md` §11 names. It changed **no rollout step**, and it touched no rule and no
-`functions/` file — `git diff` *and* `git status` over `functions/`, `firestore.rules` and
-`rules-tests/` print zero lines. It added **8 tests**, added **1** screenshot, removed none, and
-moved **11** — all eleven the four shift captures, with **zero** date drift.
-
-**It is the first chunk in the sweep where a record turned out to have a §2.1 standing**, which is
-the question this file told it to settle by lookup rather than by habit. Two of the four families
-carry one and two do not, and the deciding rule is the same in both directions: a badge every row
-wears is no signal. A closed shift is *not* "closed" — every shift on that page is — it is whether
-its drawer agrees with its sales, which is `ok` / `problem` / `attention` in §2.1's own words. A
-return is pending or verified. A correction and a sale carry none.
-
-**It found three page-invariant paragraphs being repeated per record, and moved all three to the
-page.** Screen 32 asserted on every corrected row that a correction rewrites the recorded sales and
-never the counted cash — true of every correction ever — and told a cashier on every corrected row
-why they could not read the trail. Screen 33 appended the same seventy-character payment caution to
-every sale. **The third was decided by a picture rather than by argument**: the chunk was built
-with the caution kept on the record, and at §5.2's key-value it wrapped to four lines on every row
-and was the tallest thing on the page. `sales_totals_panel.dart` already states it once per surface
-and already uses `Not recorded` for a sale that names no method, so screen 33 adopted an existing
-vocabulary rather than inventing a second one.
-
-**It corrects this file once, and it is this file's own standing trap catching this file.** The
-`IconButton` count carried as **8, "re-counted 2026-08-13"**, is **6**: the other two are commented
-out inside `lib/config.dart`, which is exactly the "call-site count that does not exclude comment
-lines" trap recorded below, and which that trap says contributed eight phantom buttons to two
-consecutive estimates already.
-
-**The 2026-08-13 stock-family chunk changed no board row at all — not a colour and not a word of one
-— and this sentence is here so that is stated rather than left silent.** It took the **fourth, fifth,
-sixth and seventh screens of step 6's sweep**: product stock (21), stock corrections (22), stock
-movements (23) and one product ledger (24). "Adjust stock" has been 🟢 throughout and a shop can do
-exactly what it could do this morning. It moved the **Design system** track 70% to 75%. It changed
-**no rollout step**, and it touched no rule and no `functions/` file — `git diff` *and* `git status`
-over `functions/`, `firestore.rules` and `rules-tests/` print zero lines. It added **8 tests**, added
-and removed **no** screenshots, and moved **12** — all twelve the four stock captures, with **zero**
-date drift.
-
-**Its finding is a divergence rather than a defect, and the file that existed to prevent it had never
-reached the screen that had it.** `lib/inventory/stock_movement_labels.dart` was written on
-2026-08-08 so that two surfaces rendering one `stock_movements` document could not word it
-differently. Screen 21 was a third surface that had never been folded in: it called the same document
-`Adjustment: restock` where the two feeds said `Manual adjustment`, wrote its own "before and after"
-sentence, and dropped the attribution half of §5.2's provenance line where the others named the
-server. All four screens now build their records from one vocabulary, and the typed adjustment
-category — which only screen 21 had ever stated — is an attribute the other three gained.
-
-**One thing on screen 21 was deliberately not migrated and is named here rather than left silent.**
-The "Reconciliation found" exception report is a status word, a paragraph of guidance, and a
-provenance line per difference. §5.2 has no row for prose and a table column of four-sentence
-paragraphs is not what §4.3 is for, so it belongs to the **step-4 sweep** — which already owns "every
-remaining multi-line explanation" — and `Callout` is the component it wants. Screen 21's *ledger* is
-migrated; its exception report is not.
-
-**The 2026-08-13 catalog chunk changed no board row at all — not a colour and not a word of one — and
-this sentence is here so that is stated rather than left silent.** It took the **second and third
-screens of step 6's sweep**, the read-only catalog and manage catalog, which is a **redesign step
-rather than a capability**: "Add or retire a product", "Edit a product's price, name, code, cost, or
-category" and "Adjust stock" have all been 🟢 throughout, and a shop can do exactly what it could do
-this morning. It moved the **Design system** track 67% to 70%. It changed **no rollout step**, and it
-touched no rule and no `functions/` file — `git diff` *and* `git status` over `functions/`,
-`firestore.rules` and `rules-tests/` print zero lines. It added **6 tests**, added and removed **no**
-screenshots, and moved **9** — all nine the three catalog captures, with **zero** date drift.
-
-**It is the chunk that makes §5.2's own worked example false of the app.** §9 names the catalog's
-`Correct` / `Retire` pair twice among its known current failures, on two counts: a destructive action
-rendered identically to its neighbour, and *"20px targets on a touch surface"*. Step 3 closed the
-first with the destructive tier. This closes the second, and it closes it by taking the decision away
-rather than by correcting it at the call site: `RecordActionSet` draws every action at
-`AppButtonSize.lg` whatever the caller wanted, so `size: AppButtonSize.sm` is gone with the call site
-that set it.
-
-**It corrects this file three times, and all three are predictions this file made about this exact
-screen.** Step 18 was going to have **six columns** and be "the first real consumer of
-`RecordAttribute.inNarrowForm`": it has **five**, because the category is the record's second
-identifying line rather than an attribute, and three key-value lines fit a card at every band — so
-`inNarrowForm` **still has no consumer**, four screens into the sweep. And 18 was going to be "the
-second consumer of `details`": it is not, because `_edit` opens a `showDialog` and has since the
-correction route landed on 2026-08-08. A dialog is not a form inside a record.
-
-**One defect it found is its own, and one picture is the reason it was found.** The first render put
-a 13-digit barcode in a column at an equal share and the table wrapped it to `61611000000` / `19` —
-which is the one thing §2.2's *"compared character by character"* string must never do. The fix is
-`RecordAttribute.flex: 2`, a knob §4.3 already gives the caller and the activity log already uses, so
-nothing about the component moved.
-
-**The 2026-08-13 sweep chunk changed no board row at all — not a colour and not a word of one — and
-this sentence is here so that is stated rather than left silent.** It took the **first screen of step
-6's sweep**, the staff directory, which is a **redesign step rather than a capability**: "Invite,
-edit, deactivate staff" has been 🟢 throughout and a shop can do exactly what it could do yesterday.
-It moved the **Design system** track 65% to 67%. It changed **no rollout step**, and it touched no
-rule and no `functions/` file — `git diff` *and* `git status` over `functions/`, `firestore.rules`
-and `rules-tests/` print zero lines. It added **8 tests** and **8 screenshots**, and moved **3** —
-all three the staff directory's own, with **zero** date drift.
-
-**It found a defect that predates `RecordList` by a step, and the defect was live on every phone.**
-All five of the staff directory's inline forms ended in a `Row` of two 48-high `AppButton`s at
-`MainAxisAlignment.end`, needing about 490 logical pixels. A full-width card gave them ~760 and they
-had only ever been driven there. §4.1's `compact` band gives a card about 340. **They overflowed on a
-phone from the moment step 3 made those buttons `AppButton`s** — nobody had opened one there, and no
-capture had either, because `13-staff-directory` photographs the route on arrival. Five `Wrap`s, one
-regression test, verified to fail without the fix. `13b-staff-directory-editing` is the picture that
-did not exist.
-
-**It also corrects this file twice.** Step 6's screen list is **twelve** screens, not thirteen —
-`design.md` §11 reads `13, 17, 18, 21–24, 30, 32–35`, which counts 12 — so with the activity log and
-the staff directory done, **ten remain**, not twelve. And this file's cost estimate for the staff
-directory was oversized: it said five actions, two behind a menu, five test files to fix. **A staff
-record can never carry five**, because resend / cancel / replace need a pending unaccepted invitation
-and a status change needs an accepted one. The most is four, one action moved behind the menu at
-800 x 600, and **one** test file needed changing.
-
-**One thing the pictures show that it deliberately did not fix.** At `expanded`, a record with four
-actions wraps its action column to three runs and is three times taller than its neighbours; that is
-why `web-full/13-staff-directory` exists now and did not before. Step 6b's own comment predicted the
-mechanism and set `_actionsFlex = 3` on the two-action case, which was the only case it had. It is
-carried below as an observation rather than tuned from one screenshot.
-
-**The 2026-08-13 step-6b chunk changed no board row at all — not a colour and not a word of one —
-and this sentence is here so that is stated rather than left silent.** It took the second and larger
-half of `design.md` §11 step **6** — §4.3's `RecordList` contract — which is a **redesign step
-rather than a capability**: no shop can do anything today it could not do yesterday. It moved the
-**Design system** track 60% to 65% and **finishes step 6**. It changed **no rollout step**, and it
-touched no rule and no `functions/` file — `git diff` *and* `git status` over `functions/`,
-`firestore.rules` and `rules-tests/` print zero lines. It added **34 tests** and **17 screenshots**,
-and moved 45 — of which **three are the chunk and 42 are date drift**, measured by generating the
-whole set twice today with the one migrated screen reverted and restored.
-
-**It shipped as the component plus one screen, not the component plus thirteen**, which is the shape
-`AppButton` shipped in and is the reason this file predicted §4.3 would not fit one session. The
-migrated screen is the **activity log**, chosen for what it costs: it is a read-only list with no
-actions, so §4.3's `ActionSet` overflow rule moves nothing that five test files tap by key. **The
-staff directory is first in the sweep** and that churn is named there rather than discovered.
-
-**It found a defect in step 4's own component, and the defect was unreachable until now.**
-`StatusBadge` declared `maxLines: 1` and `ellipsis` and could honour neither, because its `Row` sits
-at `MainAxisSize.min` and offers unbounded width; every badge in the app until today sat in a `Wrap`
-and was never constrained. `RecordList`'s table is the first thing to give a status a share of a row.
-One `Flexible`, one test.
-
-~~**The carry is now 2 of 2 and the next chunk has no legal move.**~~ **Retracted the same day.**
-The chunk opened by raising the inherited JDK claim as blocking, exactly as this file instructed —
-and **the product owner said the suites had run before and asked for it to be checked**. They had.
-The emulator prelude was never run. With it, all three pass first time: **161, 10, 23**, so this
-chunk measured **all five** baselines and the carry counter is at **0**. See "Test baselines" and the
-withdrawn open decision.
-
-**The 2026-08-12 step-6a chunk changed no board row at all — not a colour and not a word of one —
-and this sentence is here so that is stated rather than left silent.** It took the first half of
-`design.md` §11 step **6** — §4.1's breakpoints and §4.2's content widths — which is a **redesign
-step rather than a capability**: no shop can do anything today it could not do yesterday. It moved
-the **Design system** track 55% to 60%. It changed **no rollout step**, and it touched no rule and
-no `functions/` file — `git diff` over `functions/`, `firestore.rules` and `rules-tests/` prints
-zero lines. It added **20 tests** and **6 screenshots**, and moved 51, with **zero** date drift for
-the fourth chunk running.
-
-**Its image diff is the most legible of the migration, and that is the check rather than a boast.**
-**49 of the 51 that moved are `web/`**, because 1440 is wider than every maximum §4.2 states and 411
-is narrower than every one — so a content maximum can only show at the desktop viewport. The other
-two are `mobile/06-accept-an-invitation` and `mobile/16-checkout-settings`, which are two of the
-three routes whose body padding went 24 to 20. **Every other mobile image is byte-identical**,
-including the sale path, sign-in, the landing route, and all four component matrices.
-
-~~**It is also the first chunk since 2026-08-08 that could not run three of its five suites.** The
-rules, reconciliation and invitation emulator suites are blocked by a **toolchain gate, not a
-failure**: `firebase-tools@15.24.0` requires Java 21 or above and this machine has only JDK 17.~~
-**Retracted 2026-08-13: it could run them and did not know how.** It ran `emulators:exec` without
-the prelude this file has carried throughout, read the resulting Java version error as a property of
-the machine, and wrote an open decision and a standing trap rather than opening its own "Working on
-this repository" section. The carry it took was real but its reason was not.
-
-**The 2026-08-12 step-5a chunk changed no board row at all — not a colour and not a word of one —
-and this sentence is here so that is stated rather than left silent.** It took `design.md` §11 step
-**5a**, `AppScaffold` and `PageHeader`, which is a **redesign step rather than a capability**: no
-shop can do anything today it could not do yesterday. It moved the **Design system** track 50% to
-55% and **finishes 5a**; 5b, the navigation model, is a behaviour change and is not in it. It
-changed **no rollout step**, and it touched no rule and no `functions/` file — `git diff` over
-`functions/`, `firestore.rules` and `rules-tests/` prints zero lines. It added **28 tests** and
-**14 screenshots**, moved 85 and added 6 more full-page images from screens that grew past the
-fold, with **zero** date drift for the third chunk running.
-
-**It is the second-largest image diff of the migration, and unlike the largest it is not a theme
-repoint.** 85 of 144 images moved because the title moved out of the toolbar and into the page on
-every route at once. What did *not* move is the check: 59 identical, and every one of them is a
-screen this chunk deliberately did not touch — sign-in, the sale path, the landing route, the
-bootstrap failure, and the four component matrices.
-
-**One structural change to a screen was forced by the frame and is named rather than buried.** The
-business selector's transient panels — verify your address, request a business — used to be laid
-out at their natural height. The header costs that route 72 logical pixels of body, which at
-800 x 600 was 16 pixels more than the request form had, so the panels are now a scrollable
-`Flexible`. See the standing decision.
-
-**The 2026-08-12 step-4 chunk changed no board row at all — not a colour and not a word of one —
-and this sentence is here so that is stated rather than left silent.** It took `design.md` §11 step
-4, which is a **redesign step rather than a capability**: no shop can do anything today it could
-not do yesterday. It moved the **Design system** track 45% to 50% and **finished step 4**. It
-changed **no rollout step**, and it touched no rule and no `functions/` file — `git diff` over
-`functions/`, `firestore.rules` and `rules-tests/` prints zero lines. It added **34 tests** and
-**17 screenshots**, and moved 11 more, with **zero** date drift for the second chunk running.
-
-**It also resolved the one thing `PLAN.md` said had to be resolved before step 4 started.**
-`ConfirmDialog` leaves step 4 and joins step 7 — not on a fresh argument, but because
-`DESIGN-AUDIT.md` §4.3 had the argument already and `design.md` §11 step 7's own row already says
-"destructive confirm". See the standing decision.
-
-**And it did what `prompt.md` asks about the web callable-auth defect rather than inheriting the
-choice silently.** The defect could not be settled: both routes to a device run are still shut, and
-the source settles nothing either — every callable goes through `FirebaseFunctions.instance` with
-no platform branch anywhere, so the client is identical on all three surfaces. **The open variable
-is still open**, and the next session inherits the same instruction rather than a resolved one.
-
-**The 2026-08-12 field chunk changed no board row either, and it closed a finding — which are not
-the same thing and this file should not let them blur.** "Add or retire a product" has been 🟢
-throughout: a shop could always file a product under a category, and finding 4 was that it had to
-hunt a screenful up the page to do it. **The board measures whether a shop can do something; the
-findings list measures whether a person can find it.** Finding 4 is closed and the row did not
-move, because the row was never the thing that was wrong.
-
-What the chunk did move: `AppTextField` and `AppSelect` at 39 call sites across 17 files, which
-**finishes step 3** and takes the **Design system** track 35% to 45%. It changed **no rollout
-step**, and it touched no rule and no `functions/` file. It added **29 tests** and **10
-screenshots**, and moved 32 more — with **zero** date drift, for the first time, because the
-baseline was generated earlier the same day.
-
-**It also unmade a decision this file recorded as taken.** `DESIGN-AUDIT.md` said there was no
-`DropdownButtonFormField` in the migrated tree and the product owner dropped `AppSelect` on that
-basis. **There are five.** The audit had generalised from the two places a category is chosen. The
-decision was put back with the real figure and reversed the same session, and both audit claims are
-struck through in place. See the standing decision.
-
-**All four non-Flutter suites were measured**, which discharges the carry the route chunk used up:
-409, 161, 10, 23, all green.
-
-**The 2026-08-12 route-transition session changed no board row at all — not a colour and not a word
-of one — and this sentence is here so that is stated rather than left silent.** It took `design.md`
-§11 step 2's fourth and last part, which is a **redesign step rather than a capability**: no shop
-can do anything today it could not do yesterday. It moved the **Design system** track 30% to 35%
-and **finished step 2**. It changed **no rollout step**, and it touched no rule and no `functions/`
-file. It added **30 tests** and **3 screenshots**, and it moved 39 more — every one of those 39
-being the documented date drift and nothing else, which for once is **measured** rather than
-argued: the set was generated twice on the same day, once with the migration and once with it
-reverted, and the two are identical across all 117 files.
-
-**What it corrected in this file is a framework claim this file made twice.** The queued chunk
-said a real spring route needs a hand-rolled `didPush` / `didPop` because
-`AnimationController.animateWith` always reports direction forward, leaking every popped route.
-**On Flutter 3.44 that is not reachable**: `TransitionRoute.createSimulation` is the supported
-seam and the pop path uses `animateBackWith`, which sets the reverse direction. It also said **22
-call sites**; there are **23**. And it found a coupling nobody had named — see the standing
-decision, because it is the reason eight of those twenty-three do not parallax.
-
-**The fifth session of 2026-08-11 changed no board row at all either.** It finished `design.md` §11
-step 3's first half by migrating the remaining **133 call sites across 35 files**, so every button
-in the migrated tree is now an `AppButton` except `checkout_cart_panel.dart`'s 7, which are step
-7's. It moved the **Design system** track 25% to 30%, changed **no rollout step**, and touched no
-rule and no `functions/` file. It added **no tests**, deliberately — it added no behaviour and no
-component — and it moved **74 of the 113 screenshots**. **What it corrected in this file is the
-correction the session before it made**: 168 call sites was itself wrong by 8, because
-`lib/config.dart` is a fully commented-out file and a count that greps source without excluding
-comments finds work that does not exist. The real total was 162.
-
-**The fourth session of 2026-08-11 changed no board row at all — not a colour and not a word of one
-— and this sentence is here so that is stated rather than left silent.** It took `design.md` §11
-step 3's first half, `AppButton`, which is a **redesign step rather than a capability**: no shop can
-do anything today it could not do yesterday. The **Design system** track moved 15% to 25%. It
-changed **no rollout step**, and it touched no rule and no `functions/` file — `git diff` over
-`functions/`, `firestore.rules` and `rules-tests/` prints zero lines. **It is the largest image diff
-of the migration so far**: 75 of the 101 screenshots moved and 12 were added, all of it from three
-theme repoints that reach every button in the app whether or not its call site was migrated.
-**What it corrected in this file is, again, a claim this file itself made**: the queued chunk said
-the call-site migration was "roughly forty buttons", and it is ~~168 across 38 files~~ — **retracted
-the same day: 168 counted 8 commented-out lines in `lib/config.dart`, and the real total was
-162**. It also
-**measured all four non-Flutter suites** rather than carrying them a third time.
-
-**The third session of 2026-08-11 changed no board row at all — not a colour and not a word of one
-— and this sentence is here so that is stated rather than left silent.** It took `design.md` §11
-step 2, the ripple kill, which is a **redesign step rather than a capability**: no shop can do
-anything today it could not do yesterday, and the **Design system** track is where it moved, 8% to
-15%. It touched no rule and no `functions/` file — `git diff` over both prints zero lines — and it
-changed **no rollout step**, because the app's fifteen and the design system's twelve are separate
-sequences. **It moved two of the 101 screenshots, and neither of them shows a ripple**; see the
-standing decision for what the delta actually is, because the honest reading of it matters more
-than the count.
-
-**The second session of 2026-08-11 changed no board row's colour either, and this sentence is here
-so that is stated rather than left silent.** It closed finding 5 — no catalog surface states a
-category document ID to a person any more — which is a **defect repair inside rows that were
-already green**, so there was no colour to move, and it changed **no row's text**, because no row
-ever claimed anything about how a category is named. It touched no rule and no `functions/` file:
-`git diff` over `firestore.rules`, `functions/` and `rules-tests/` prints **zero lines**, which is
-why the four non-Flutter baselines below are carried rather than re-measured. It changed **no
-rollout step**, and it moved none of the 101 screenshots — see the standing decision for why that
-proves nothing about the repair. **What it corrected in this file is, again, a claim this file
-itself made**: the queued chunk said the read-only catalog resolved category names correctly and
-that only two surfaces did not. Both are false; the retraction is inline at finding 5.
-
-**The 2026-08-11 token-layer session changed no board row at all — not a colour and not a word of
-one — and this sentence is here so that is stated rather than left silent.** It is the first chunk
-in this file whose **pass condition was that nothing changed**: `design.md` §11 step 1 defines
-every token and wires none of them, so the 101 screenshots were regenerated with the registration
-in place and again with it backed out and hashed byte-for-byte identical. It added a **Design
-system** row to the tracks table rather than moving a capability row here, because a token layer is
-not a capability: no shop can do anything today that it could not do yesterday. It touched no rule and no `functions/`
-file — `git diff` over both prints zero lines — and it changed **no rollout step**, because the
-fifteen frozen steps are the app's and the design system's twelve are its own.
-
-**The tenth session of 2026-08-08 changed no board row's colour either, and this sentence is here
-so that is stated rather than left silent.** It closed finding 3 — a refused invitation now says
-what will actually work — which is a **defect repair inside a row that was already green**, so
-again there was no colour to move. It changed **one row's text**, "Accept a staff invitation".
-It touched no rule and no `functions/` file, and the functions and rules counts held at 409 and
-161 to say so. It changed **no rollout step**: step 7 is about the server's invitation
-machinery, and the server was already right — it was the client that was throwing the server's
-answer away. **What it corrected in this file is a claim this file itself made**: the queued
-chunk asserted `failed-precondition` was the code behind the refusal, and the server throws
-`permission-denied` carrying a `violation` in `details`. That retraction is inline below.
-
-**The ninth session of 2026-08-08 changed no board row's colour either, and this sentence is here
-so that is stated rather than left silent.** It fixed findings 1 and 2 below — the sign-in screen
-now says something true — which is a **defect repair inside a row that was already green**, so
-there was no colour to move. It changed **one row's text**, "Sign in", to say what a failure now
-renders and why that is structural rather than careful. It touched no rule and no `functions/`
-file, and the functions and rules counts held at 409 and 161 to say so. It also changed **no
-rollout step**: a green capability that stops printing an exception at the user is not a step,
-it is the difference between a step being true and being embarrassing.
-
-**The eighth session of 2026-08-08 changed no board row's colour, and this sentence is here so
-that is stated rather than left silent.** It drove the app on an Android emulator against real
-Auth, Firestore, and Functions, and **every green row it touched stayed green on the evidence of
-a person using it** rather than on the evidence of a widget test — add, correct and retire a
-product, bulk correction, spreadsheet import, ring up a sale, daily summary as two different
-roles, the stock route, and reconciliation. It changed **one row's text**, "Accept a staff
-invitation", because the row was wrong about *which* identities may accept in-app; see that row
-and the finding behind it below. It changed no code at all, so the four suite baselines are
-carried rather than re-measured.
+**Two rows above record no track movement, and that is the entry rather than an omission.** The
+2026-08-15 chunks for `design.md` v0.4 and step 11 both wrote their narrative into "Test baselines"
+instead of here and neither stated where it left the **Design system** track. The track cell in the
+tracks table reads ~95%, which is where step 9 left it, so **either those two chunks moved it and
+did not say, or they did not move it and did not say that either.** Do not guess the figure;
+the next chunk to touch the track should re-measure it against §11 and state it.
 
 ### Found by using the app
 
@@ -882,119 +542,24 @@ any of them**. **The three redesign chunks since are worse off, not better**: th
 tests, `AppButton`'s 51 and the route transition's 30 prove the wiring and the physics, and the
 things they exist to deliver — a ripple's absence, a press that takes over mid-release, a page that
 leaves from the velocity it arrived with, a frame budget — are all invisible to a
-widget test by construction. The debt is **ten** chunks deep and all ten are queued below
+widget test by construction. ~~The debt is **ten** chunks deep and all ten are queued below
 against the next device run, sign-in first — the seventh, the call-site sweep, repainted
 almost every screen in the app, the eighth changed how every one of them is entered and left, the
 ninth redrew every box a person types into, and the tenth folded four explanations away behind a
-spring nobody has watched.
+spring nobody has watched.~~ **The count was true when written, on 2026-08-12, and the paragraph
+above it stopped being re-measured after that.** The debt is now **twenty-seven** chunks deep —
+every row of the chunk index above the Android device run, less the commit-only session that
+changed no code — and it is still queued against the next device run, sign-in first. The
+enumeration struck through above names the first ten and is kept for what it says about their
+*kind*: what those chunks exist to deliver is invisible to a widget test by construction, and
+seventeen more of the same kind have run since. **Do not re-narrate the seventeen here — count
+them off the index.**
 
 **One thing the run could not prove, stated because it would otherwise look proved.** The
 manager membership used for the profit role-boundary check was activated by a scratchpad Admin
 SDK script writing what `acceptVisibleTenantInvitation` would have written, for the reason in
 finding 6. `inviteStaff` was genuinely exercised and wrote the staff record, the mirror, the
 root identity, and the invitation proof correctly; **acceptance was not**.
-
-**The seventh session of 2026-08-08 changed no board row at all, deliberately, and this sentence
-is here so that is stated rather than left silent.** It wrote the emulator integration test for
-`deliverPasswordReset` — 11 tests against real Auth and real Firestore, joined to the invitation
-suite. Password reset stays **red** because red means a person cannot do it in a running app, and
-the client surface is what the App Check decision blocks; this chunk deliberately went past that
-gate rather than at it. What it moved is the invitation integration baseline below, **12 → 23**,
-and the evidence behind rollout steps 7 and 12. It touched no rule and no Dart file, and the
-functions count held at 409 — which is the measurement saying the one production change it made,
-exporting `firestorePasswordResetDependencies`, changed no behaviour.
-
-**One row went green in the session before it: profit and margin.** The board is 29
-rows at **24 green, 4 red, 1 amber**. It moved with **no server file and no rule touched** —
-409 functions tests and 161 rules tests, both unchanged, were the measurement — because
-`aggregateSales` already returned `profit` and `incompleteCostLineCount`, `daily_metrics`
-already stored both, and both client read models already parsed both. Only the display was
-missing, and only for a session allowed to see it.
-
-**What the row does not mean is worth pinning, because green usually means more than this.**
-A shop sees a profit figure on a day, or over a period, **only when every sale line behind it
-carries a cost** — and every sale recorded before 2026-08-07 has none and never will. So a
-90-day total will state that it cannot show one until the window rolls past that date, and a
-day is complete as soon as the products sold on it carry costs. That is the capability
-working, not failing: see the standing decision for why a partial figure is refused rather
-than qualified.
-
-**Two rows went green in the session before it, and they are the two that had been
-waiting on nothing but effort**: spreadsheet import and bulk change, which took the board to
-23 green. The route is `TenantBulkCatalogScreen`, offered as "Bulk changes and import" from
-inside "Manage catalog", and it is the first client caller either callable has ever had. It
-changed `firestore.rules` not at all and nothing in `functions/` either — both callables were
-already built, and neither needed a change to be reached.
-
-**That session is also the one where the unreachable table stopped growing.** Two
-consecutive server chunks had ended in it, which this file named as the limit; the third
-chunk was the surface rather than a third callable.
-
-**The import session earlier on 2026-08-08 changed no board row at all, deliberately, and
-this sentence is here so that is stated rather than left silent.** `importProducts` was
-built, tested, and exported that day and no route called it — the second server chunk in a
-row to end that way, which is why the next chunk was a Flutter surface. What it moved is the
-functions baseline below, from 378 to 409, and the handler count from 48 to 49. The import
-row's *text* changed without its colour, for the third time that pattern occurred; the row
-went green hours later.
-
-**The bulk-change session earlier the same day changed no board row either, for the same
-reason.** `updateProducts` was built, tested, and exported and no route calls it, which is
-the same shape `updateProduct` had for a day: green means a person could do it in a running
-app today, and a callable nothing calls is not that. What it moved is the functions
-baseline from 346 to 378, and the handler count from 47 to 48.
-
-**One further row went green earlier on 2026-08-08**: editing a product. The route is
-`TenantCatalogManagementScreen`'s "Correct" action, and it is the first client caller
-`updateProduct` has ever had — the callable was built on 2026-08-07 and nothing called
-it for a day. That row took the board to 21 green before the bulk surface took it to 23.
-
-**Three rows were added on 2026-08-08, all red, and none of them was new work
-appearing from nowhere** — spreadsheet import, bulk change, and suspicious-return
-flagging are capabilities the *previous* app had that this one did not, and they were
-scoped that day rather than left unnamed. Two of the three had never been written down
-anywhere; the board became 29 rows because of it. Adding them moved no code. **Two of the
-three were built and reachable by the end of the same day**; suspicious-return scoring is
-the one still red, and it is sequenced after the first deployment on purpose.
-
-**Two rows moved on 2026-08-07 when a product gained a cost** — "Record what a product
-cost" went green and "See profit or margin" was added red, because the server computed a
-figure nothing displayed. **That second row closed on 2026-08-08**, which is the whole life
-of it: added as a red row by the chunk that created the gap, named as an exclusion for four
-consecutive chunks with the same true reason, then taken as a chunk once that reason turned
-out to be the design rather than a blocker. Before that: **no row had changed colour since the catalog
-chunk, and the flake session did not change one either — it changed no board row at all, deliberately, and
-this sentence is here so that is stated rather than left silent.** Five 2026-08-07
-sessions followed the catalog chunk: two added unit tests only, one resolved
-decisions without touching code, the fourth built `updateProduct`, and the fifth fixed
-the intermittent Flutter failure that stood in front of the next capability. The fourth
-**rewrote the editing row's text without moving it** — the capability existed on the
-server and was unreachable from the app, which is a different sentence and the same
-colour. Green means a person could do it in a running app today, and a callable nothing
-calls is not that. The fifth touched two test files and no capability; what it moved is
-the Flutter baseline below, from 1346 to 1347, and the ⚠️ beside it.
-
-**No red row now stops a business operating.** The two that did both closed on
-2026-08-07: a business publishes its own currency, which is what the till refuses to
-sell without, and it stocks its own catalog, which every surface downstream of a
-product already assumed. Neither needed a rule, a callable, or an export — the rules
-had permitted both writes all along, and nothing had ever called them.
-
-**Editing a product was a decision, then a server chunk, and is now finished.**
-`updateProduct` landed on 2026-08-07 as the **twenty-fourth callable and the
-forty-seventh export**, and it changed `firestore.rules` not at all — `allow update` on
-`products` is still the checkout decrement and nothing else, byte for byte. The route
-that calls it landed on 2026-08-08 and changed `firestore.rules` not at all either, nor
-anything in `functions/`. A mistyped price is no longer an operator's job.
-
-**Three properties of that route are worth knowing before anything reuses the
-callable**, and all three come from its contract rather than from taste. It sends
-**only the fields that moved**, because the callable authorizes on the fields a payload
-names rather than on the resulting diff — resending an unchanged price would refuse a
-manager's name correction. It offers **all five fields at once**, because the callable
-validates the *resulting* document, so a refusal can name a field the correction never
-touched. And it holds one request ID **against the correction, not merely across the
-attempt**: see the finding below, which is the reason that distinction matters.
 
 ### Rollout position
 
@@ -1022,14 +587,16 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1979** ✅ measured seven times on 2026-08-15 (step 11 took it 1978 → 1979) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1998** ✅ measured 2026-08-16 (step 5b's first half took it 1979 → 1998) and seven times on 2026-08-15 |
 | Functions | `npm --prefix functions test` | **409** ✅ measured six times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured seven times on 2026-08-15 (~68–186 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured six times on 2026-08-15 (~78–214 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
 | Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured six times on 2026-08-15 (~131–295 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
 
-**2582 tests across five suites. All five were measured by all seven 2026-08-15 chunks — fifteen
-consecutive chunks measuring all five — and the carry counter is at 0.**
+**2601 tests across five suites.** All five were measured by all seven 2026-08-15 chunks — fifteen
+consecutive chunks measuring all five. **The carry counter is at 1**: step 5b's first half measured
+Flutter only, because no server file, rule, callable or schema is in its diff, so the other four
+suites could not have moved. The four figures above are their 2026-08-15 measurements.
 
 **Step 11 took Flutter 1978 → 1979** (+1: a bulk summary over counts of one, which is the sentence
 the chunk was fixing). **Thirteen existing assertions changed and none was loosened** — every one was
@@ -1597,2454 +1164,1020 @@ interfaces" and "Full export surface" below.
 
 ## Standing decisions and unreachable capabilities
 
+**How to read this section.** Each entry is the rule that now binds — what a later session must
+not re-litigate and must not break. The reasoning, the alternatives weighed, the costs, the
+screenshot counts and the test evidence are in `HISTORY.md` under the session named at the end of
+each entry. Do not restate a session narrative here; `PLAN.md` is read every session and
+`HISTORY.md` is not.
+
 ### A sale records how it was paid for, chosen manually
 
-Resolved 2026-08-01 by the product owner, implemented 2026-08-02. The cashier
-selects the tender at the point of sale — **cash, M-Pesa, or card** — and it is
-recorded on the sale. No payment *integration* is in scope: nothing authorizes a
-card, queries an STK push, or reconciles a provider statement. The recorded
-tender is the cashier's assertion, and every surface that displays it says so
-through the shared `checkoutTenderDisclaimer`.
+The cashier selects **cash, M-Pesa, or card** at the point of sale and it is recorded on the sale.
+No payment *integration* is in scope: nothing authorizes a card, queries an STK push, or reconciles
+a provider statement. The recorded tender is the cashier's assertion, and every surface displaying
+it says so through the shared `checkoutTenderDisclaimer`.
 
-The five hazards are settled, not open:
+Binding: `supportedCheckoutSalePayloadSchemaVersions = {1, 2}`, and a version is read from the
+payload rather than from the current constant — a v1 payload still parses and is never rewritten,
+because `checkoutPayloadHash` covers the whole payload and `_parseRecord` re-derives it on every
+read, so an in-place migration makes every stored record `malformed_record`. Rules constrain the
+tender through `validSaleTender` and require `payloadSchemaVersion`. The receipt pattern
+`CT-A7F-20260729-0042` is an identity and is not to be re-derived. The per-tender breakdown is on
+`getSalesComparison` only, never on stored `daily_metrics`.
 
-1. **A v1 payload still parses and is never rewritten.**
-   `supportedCheckoutSalePayloadSchemaVersions = {1, 2}`. Version is read from
-   the payload, never from the current constant.
-2. **That is why the hash still matches.** `checkoutPayloadHash` covers the whole
-   payload and `_parseRecord` re-derives it on every read, so an in-place
-   migration would make every stored record `malformed_record`.
-3. **Rules constrain the tender** through `validSaleTender`, and now *require*
-   `payloadSchemaVersion`, which the rule previously ignored.
-4. **The receipt pattern was not touched.** `CT-A7F-20260729-0042` is an identity,
-   derivable from device, business date, and sequence alone.
-5. **Reconciliation needed no change.** A per-tender breakdown was added to
-   `getSalesComparison` only, not to stored `daily_metrics`.
+Reasoning: `HISTORY.md` — "Checkout tender contract - payload v2 handoff" (2026-08-02) and "What
+the business was paid with" (2026-08-02).
 
 ### A business publishes its own currency, and it converts nothing
 
-Decided and implemented 2026-08-07, because the alternative was a business that
-cannot trade until an operator runs a script. "Checkout settings" on the landing
-route merges `configuration/checkout` for an owner or administrator — the pair the
-Firestore rule already allowed — and it is the only client write to that document.
+"Checkout settings" on the landing route merges `configuration/checkout` for an owner or
+administrator, and it is the only client write to that document.
 
-The hazards are settled, not open:
+Binding: no amount is ever converted or re-priced — there is no exchange rate anywhere in this app,
+and a recorded sale keeps the code it was priced with permanently because the payload is hashed. A
+device that has not synced keeps pricing with the previous code; this is **stated in the
+confirmation rather than prevented**, because preventing it would block the correction of a typo.
+A commit asks for a full sync pass through
+`CheckoutSyncSignals.requestSyncAfterConfigurationChange()`, unnarrowed — a save-shaped request
+would skip the only read that matters. The write **merges**; a whole-document `set` would delete a
+setting a later build adds. The publishing repository reports `malformed` where the till's read
+model throws, so an unusable currency is correctable by the one person who can fix it. **No request
+ID, deliberately**: one fixed path and one fixed value make the write idempotent by construction.
 
-1. **No amount is ever converted or re-priced.** `checkout_draft.dart` copies the
-   cached `currency` into each sale payload and that payload is hashed, so a
-   recorded sale keeps the code it was priced with permanently. There is no exchange
-   rate anywhere in this app, and the route says so.
-2. **A device that has not synced keeps pricing with the previous code.** The till
-   prices from the encrypted Hive snapshot, which only the catalog refresh re-reads,
-   so two devices can record one day's sales in two currencies. This is *stated in
-   the confirmation* rather than prevented, because preventing it would block the
-   correction of a typo — and a typo here stops nothing, while a wrong code
-   mislabels every report.
-3. **A commit asks for a full sync pass**, through
-   `CheckoutSyncSignals.requestSyncAfterConfigurationChange()`. It emits the same
-   unnarrowed reason a reconnect does; a save-shaped request sets
-   `refreshDerivedData: false` and would have skipped the only read that matters.
-4. **The write merges.** A whole-document `set` would delete a setting a later build
-   adds, because the strict read model ignores unknown fields rather than refusing
-   them. `configuration/branding` beside it is never touched.
-5. **A document the till cannot parse is correctable here.** The publishing
-   repository reports `malformed` where the till's read model throws, so the one
-   person who can fix an unusable currency is not shown the cashier's refusal.
-6. **No request ID, deliberately.** One fixed path and one fixed value make the
-   write idempotent by construction, so an unknown outcome is answered by
-   re-reading and, if needed, publishing the same code again.
+Reasoning: `HISTORY.md` — "A business can set what it sells in" (2026-08-07).
 
 ### A shop stocks itself, and a retired product keeps its history
 
-Decided and implemented 2026-08-07, the same day and for the same reason as the
-currency above: the alternative was a business that cannot trade until an operator
-runs a script. "Manage catalog" on the landing route adds a category, adds a product,
-and retires one. Adding is owner, administrator, or manager; retiring is owner or
-administrator — exactly the two role sets the Firestore rules already named, so no
-rule, callable, or export changed.
+"Manage catalog" on the landing route adds a category, adds a product, and retires one. Adding is
+owner, administrator, or manager; retiring is owner or administrator — the two role sets the
+Firestore rules already named, so no rule, callable, or export changed.
 
-The hazards are settled, not open:
+Binding: a product is written in exactly the shape the strict read model demands, because one
+product the till cannot parse makes the *whole* cached catalog a miss.
+`TenantProductCreateIntent` is the only thing between a typed form and a business that has stopped
+selling. A price is round-tripped through `checkoutMinorUnitsFromMajor` and the stored major-unit
+figure is derived from the minor units. **A product is always created holding nothing** — stock
+with no `stock_movements` entry has no recorded origin — except on the import path, which writes
+that entry in the same transaction. Retiring is **not an undo** and says so, and is deliberately
+**not** blocked on non-zero stock. The document ID is
+`pd_<40 hex of sha256("createTenantProduct tenantId createdBy requestId")>`, never a SKU slug: a
+replay lands on the same document where `allow update` refuses it. **Category create only** —
+rename and delete are permitted by the rule and deliberately not offered, because deleting a
+category orphans `categoryId` on every product filed under it and nothing repairs that. **SKU
+uniqueness is stated, not enforced**, and must stay that way: a client-side check against one
+loaded page is a guarantee the next device breaks.
 
-1. **A product is written in exactly the shape the strict read model demands.** The
-   rule checks only `quantity is int`. One product the till cannot parse makes the
-   *whole* cached catalog a miss, so `TenantProductCreateIntent` is the only thing
-   standing between a typed form and a business that has stopped selling. The unit
-   suite proves it by decoding `documentData()` back through `TenantProduct`.
-2. **A price is proved through the till's own function.** Bounded to a plain decimal
-   with at most two places — two is all `unitPriceMinor` holds — then round-tripped
-   through `checkoutMinorUnitsFromMajor`, and the stored major-unit figure is derived
-   from the minor units rather than from what was typed. The till's
-   `price_not_representable` refusal therefore happens where the price is typed, not
-   with a customer standing there.
-3. **A product is always created holding nothing.** Stock with no `stock_movements`
-   entry has no recorded origin, and `adjustStock` already carries `opening_balance`
-   for exactly this, so the opening quantity is recorded through the route that
-   writes a ledger entry.
-4. **Retiring is not an undo, and says so.** The confirmation states that the stock
-   ledger, every past sale line, and every reported figure keep naming the product;
-   that it still holds *n* in stock and nothing moves it; and that a replacement gets
-   its own identity, so this is not how a wrong name, code, or price is fixed. It is
-   **not** blocked on non-zero stock — that would invent a rule nothing else has.
-5. **The document ID is deterministic and scoped by request, never a SKU slug.**
-   `pd_<40 hex of sha256("createTenantProduct tenantId createdBy requestId")>`,
-   mirroring `_deterministicReturnId`. The ID is permanent and the ledger hangs below
-   it, while a SKU is neither unique nor correctable; deriving one from the other
-   would make a typo permanent in the ledger key. A replay lands on the same document,
-   where `allow update` refuses it — which is what makes reusing the ID safe.
-6. **Category create only.** The rule permits rename and delete to the same three
-   roles; neither is offered, because deleting a category orphans the `categoryId` on
-   every product filed under it and nothing in this app repairs that.
-7. **SKU uniqueness is stated, not enforced.** Nothing on the server makes a SKU
-   unique, the seed script seeds a deliberate collision, and the till already refuses
-   an ambiguous scan. A client-side check against one loaded page would be a guarantee
-   the next device breaks, so the confirmation names the consequence instead.
+Reasoning: `HISTORY.md` — "A shop can stock itself" (2026-08-07).
 
 ### A price is corrected on the server, and never a quantity
 
-Decided and built 2026-08-07. `updateProduct` is the only way a product's name, SKU,
-price, or category ever changes, and it exists as a callable rather than as a wider
-Firestore rule — see "How a price is corrected", resolved, for why. It writes through
-the Admin SDK, so `firestore.rules` is byte-identical and `allow update` on `products`
-is still the checkout decrement and nothing else.
+`updateProduct` is the only way a product's name, SKU, price, or category ever changes. It is a
+callable rather than a wider Firestore rule, and it writes through the Admin SDK, so `allow update`
+on `products` is still the checkout decrement and nothing else.
 
-The guarantees are settled, not open:
+Binding: it **never writes `quantity`, and a payload that mentions it is refused** with a message
+naming `adjustStock` — everything else rests on this, because a callable that could write a price
+*and* a quantity would be a second way to move stock with no ledger entry. An unknown key is
+refused rather than dropped, so the guarantee is observable from outside. A price is proved through
+`checkoutMinorUnitsFromMajor`. The **resulting** document must parse and be sellable, checked
+through `readSellableProduct`, the server-side twin of `TenantProduct.fromDocument`; the contract
+is to name every broken field in one request or none. A price needs owner or administrator; a name,
+SKU, or category needs the operational three — read from the *requested* fields, so a manager
+cannot discover a price by binary search over refusals. A named category must exist. A stored
+legacy `category` alias moves with `categoryId`. Before and after of every changed field is audited
+at `audit_logs/pu_<40 hex>` with `mutatesQuantity: false`. A request that changes nothing is
+refused rather than audited as a no-op.
 
-1. **It never writes `quantity`, and a payload that mentions it is refused** with a
-   message naming `adjustStock`. This is what everything else rests on: a callable that
-   could write a price *and* a quantity would be a second way to move stock with no
-   `stock_movements` entry. An unknown key is refused too, rather than dropped, so that
-   guarantee is observable from outside instead of taken on trust.
-2. **A price is proved through the till's own arithmetic.** `productPriceMinorUnits` is
-   `checkoutMinorUnitsFromMajor`, tolerance included, so `19.999` — which passes
-   everything a Firestore rule can check — is refused here rather than at the till with
-   a customer waiting. The stored major-unit figure is derived from the minor units.
-3. **The *resulting* document must parse and be sellable, not just the fields written.**
-   `readSellableProduct` is the server-side twin of `TenantProduct.fromDocument`, run
-   against the document as it will exist. One unparseable product makes the whole cached
-   catalog a miss, so the contract is: name every broken field in one request, or none.
-   A non-integer stored `quantity` and a non-HTTPS `image` are refused as an operator's
-   problem, because neither this callable nor `adjustStock` can correct them.
-4. **A price needs an owner or an administrator; a name, SKU, or category needs the
-   operational three.** Its own decision, not one inherited from create or delete. It is
-   read from the *requested* fields rather than the resulting diff, so a manager cannot
-   discover a price by binary search over refusals.
-5. **A named category must exist in this business**, checked whenever it is named rather
-   than only when it moves. A product filed under a category that does not exist is
-   invisible to every grouped surface without being unreadable.
-6. **A stored legacy `category` alias moves with `categoryId`.** The read model refuses a
-   product whose two category fields disagree, and that would take the whole cached
-   catalog down.
-7. **The before and after of every changed field is audited**, at
-   `audit_logs/pu_<40 hex>`, with actor, request ID, and `mutatesQuantity: false`. A
-   rule-based edit would have written `updatedAt` and nothing else. No `stock_movements`
-   entry and no `stock_adjustments` record, because nothing moves.
-8. **A request that changes nothing is refused, not audited as a no-op.** Reachable only
-   with a fresh request ID: a genuine retry answers off the idempotency record.
+The client route sends only the fields that moved, offers all five at once, hides price and cost
+from a manager rather than letting them be refused, and makes clearing a cost a checkbox — omitting
+`cost` and sending `cost: null` mean different things. The `cost: null` escape hatch for a
+malformed stored cost is **unreachable from this route, deliberately**: `TenantProduct` is strict,
+so a product with an unreadable cost renders no row and has no "Correct" button. The same holds for
+every `readSellableProduct` refusal. "The callable can do it" is a different sentence from "a
+person can do it", and the intersection is an operator's job.
 
-**The client route landed 2026-08-08 and its shape is forced by the eight guarantees
-above, not chosen.** "Correct" on any product in "Manage catalog" opens one dialog
-holding every editable field, prefilled with what the product holds. It sends only the
-fields that moved (the callable authorizes on requested fields, so an unchanged price
-resent would refuse a manager's name correction); it offers all five at once (the
-callable validates the resulting document, so a refusal can name a field the correction
-never touched); it hides price and cost from a manager rather than letting them be
-refused; and clearing a cost is a checkbox rather than an empty field, because omitting
-`cost` and sending `cost: null` mean different things.
-
-**Two gaps in the callable were found while wiring the route on 2026-08-08, and the
-bulk-change chunk later the same day fixed both** — it was inside `functions/`, which
-the route chunk was not. They are kept here because the reasoning is what stops either
-coming back:
-
-1. ~~**The idempotency fingerprint omits `cost`.**~~ **Closed 2026-08-08.** `products.ts`
-   hashed `productId`, `name`, `sku`, `priceMinor`, and `categoryId`, so two payloads
-   under one request ID differing *only* in cost hashed the same, and the second was
-   answered off the stored record with the new cost silently not applied — where any
-   other field would have been refused as `already-exists`. A silent wrong answer rather
-   than a refusal. It is now `productUpdateFingerprintInput`, exported so the property is
-   testable rather than buried in a callable, and **absent, `null`, and a value all hash
-   differently** — which is the distinction that matters, because omitting `cost` leaves
-   a recorded cost alone and `cost: null` clears it. **The client's own protection was
-   kept**: the retained request ID is still held against a fingerprint of the exact
-   correction, so this is belt and braces rather than the only guard, and a second client
-   would otherwise inherit nothing.
-2. ~~**`UpdateProductResponse` does not echo `cost`.**~~ **Closed on both sides
-   2026-08-08.** The server echoes `cost` and `costMinor`; before that a cost that moved
-   appeared in `changedFields` with no value beside it, so four of the five fields could be
-   reconciled against the request and the fifth could not. ~~The client half is still
-   open~~ — **also closed, in the bulk-surface session the same day.**
-   `TenantProductUpdateResult` now reads both, proves the pair agrees through
-   `checkoutMinorUnitsFromMajor`, and **reconciles them against the correction**: a
-   corrected cost must come back holding the requested figure and a cleared one must come
-   back null. The route states the new cost in its notice instead of leaving it to the
-   re-read. The reader is `tenantCatalogOptionalMoney`, shared with the bulk decoders, which
-   read the same pair out of a per-row product. (`UpdateProductRequest` declares `cost` too,
-   which is typing only — the handler reads a `Record<string, unknown>` — and changed no
-   behaviour.)
-
-**The `cost: null` escape hatch for a malformed stored cost is unreachable from this
-route, deliberately.** `TenantProduct` is strict and one product it refuses makes the
-whole page a read failure, so a product with an unreadable cost never renders a row and
-therefore has no "Correct" button. The same holds for every `readSellableProduct`
-refusal: `productUnreadable` and `needsOperator` are modelled and worded, and are
-reachable only if the document changes between the page load and the call. Neither half
-is wrong; the intersection is an operator's job, and "the callable can do it" is a
-different sentence from "a person can do it".
+Reasoning: `HISTORY.md` — "The callable that corrects a price" (2026-08-07) and "A price is
+corrected from the app" (2026-08-08). Two defects found while wiring the route — a fingerprint
+omitting `cost`, and a response not echoing it — were closed 2026-08-08; `productUpdateFingerprintInput`
+hashes absent, `null`, and a value differently, and `TenantProductUpdateResult` reconciles the echo
+against the correction.
 
 ### A product records what it cost, and a sale freezes it
 
-Asked for and built 2026-08-07, with one requirement attached by the product owner:
-**a change to a buying price must never move a profit figure already reported.** That
-requirement decided the design, and it is met by machinery that already existed rather
-than by a new rule someone could later relax.
+**A change to a buying price must never move a profit figure already reported.** That requirement
+decided the design and is met by machinery that already existed.
 
-The guarantees are settled, not open:
+Binding: the cost is copied onto the sale line at the moment of the sale, and nothing downstream
+ever consults the product again. Four locks hold it there and none may be relaxed — profit is
+computed from the line (`lineCost()` reads `cost`, then `unitCost`, then legacy `buyingPrice`, with
+no product join anywhere in the pipeline); a sale document refuses every client update; nightly
+regeneration re-reads `sales` rather than `products`; the offline payload is hash-sealed. **An
+absent cost stays absent, never zero** — zero would claim the business paid nothing and report a
+100% margin — and the server counts those lines as `incompleteCostLineCount`. A missing cost never
+refuses a sale; a cost the till cannot represent is refused where it is typed. No payload schema
+version bump: `unitCostMinor` was already an allowed optional line key at v2. Cost sits behind
+owner/admin (`MONETARY_PRODUCT_FIELDS`, `costRoles`) while creating a product stays
+owner/admin/manager, and a client sending a cost without the role is **refused, not ignored**.
 
-1. **The cost is copied onto the sale line at the moment of the sale**, in
-   `checkout_draft.dart`, beside the price and through the same
-   `checkoutMinorUnitsFromMajor`. Nothing downstream ever consults the product again.
-2. **Four independent locks hold it there**, and no new one was invented: profit is
-   computed from the line (`lineCost()` in `operations/domain.ts` reads `cost`, then
-   `unitCost`, then the legacy `buyingPrice`, and there is no product join anywhere in
-   the pipeline); a sale document refuses every client update (`allow update, delete:
-   if false`); nightly regeneration re-reads `sales` rather than `products`; and the
-   offline payload is hash-sealed, so the device copy cannot be edited either.
-3. **An absent cost stays absent, never zero.** Zero would claim the business paid
-   nothing and report a 100% margin. The server already counts those lines as
-   `incompleteCostLineCount` and the daily summary already says so.
-4. **A missing cost never refuses a sale.** Stopping a till trading over a reporting
-   field would be the wrong trade. A cost the till *cannot represent* is refused where
-   it is typed, as `cost_not_representable`.
-5. **`firestore.rules` is byte-identical, and the rules suite was run to say so.**
-   `validSaleLine` constrains only `productId` and `quantity` and names no key list, and
-   `allow create` on `products` checks only `quantity is int`. A rules test now pins
-   both, because the day someone tightens the create rule with a `hasOnly`, a business
-   that records what it pays stops being able to add products.
-6. **No payload schema version bump.** `unitCostMinor` was already an allowed optional
-   line key at v2 and the parser already read it, so `validSaleTender`'s
-   `payloadSchemaVersion == 2` branch is untouched. The consuming half of this feature
-   was built long ago and idle; only the source was missing.
-7. **Cost is money, so it sits behind owner/admin** — `MONETARY_PRODUCT_FIELDS` on the
-   server, `costRoles` on the client — while creating a product stays
-   owner/admin/manager. A client that sends a cost without the role is **refused, not
-   ignored**.
-8. **This is a surface boundary, not secrecy, and is documented as one.** `products` is
-   readable by any active member because the till cannot price a sale otherwise, and
-   Firestore cannot hide one field of a document. Every staff device therefore caches
-   buying prices. What the boundary buys is that no manager is *shown* a margin. The
-   alternative — a trigger stamping cost onto the sale server-side — was considered and
-   declined: it costs a write per sale, leaves a window where the sale has no cost, and
-   cannot work offline, which is the platform the whole Hive design exists for.
-9. **Clearing is `cost: null`, and it is the only field where null means something.**
-   It is also the escape hatch for a stored cost too malformed for the callable to
-   correct. The audit keeps the unreadable previous value verbatim.
+**This is a surface boundary, not secrecy, and is documented as one.** `products` is readable by any
+active member because the till cannot price a sale otherwise, so every staff device caches buying
+prices; what the boundary buys is that no manager is *shown* a margin. A rules test pins that
+`validSaleLine` names no key list and `allow create` on `products` checks only `quantity is int`,
+because tightening either with a `hasOnly` stops a business recording what it pays.
+
+Reasoning: `HISTORY.md` — "A product records what it cost, and a sale freezes it" (2026-08-07).
 
 ### A profit figure is complete or it is not shown
 
-Built 2026-08-08, the **last capability chunk** of that day, and it is what made "See profit or
-margin" green. It changed `firestore.rules` not at all and nothing in `functions/` either — 409
-functions tests and 161 rules tests, both unchanged, are the measurement. Everything it needed
-already existed: `aggregateSales` returns `profit` and `incompleteCostLineCount`,
-`getSalesComparison` sends both for a business, a member, or a category, `daily_metrics`
-stores both, and both client read models already parsed both. **Only the display was missing.**
-
-**The rule is one sentence, and everything else follows from it:**
-
 > **No profit figure is shown unless every sale line behind it carries a cost.**
 
-The guarantees are settled, not open:
+Binding: a **proportion is not available** — nothing reported anywhere says how many sale lines
+there were altogether — so an incomplete figure is an upper bound whose distance from the truth is
+unmeasurable. An "at most" ceiling was considered and **declined**. Three bases are decided from the
+figures themselves rather than from where they came: `complete` shows the figure, its margin, and
+**says that it is complete**; `incomplete` shows no figure and carries the count inside the reason;
+`inconsistent` — a profit exceeding its takings — **outranks** `incomplete`. The subtracted cost is
+recovered as `sales - profit` in whole minor units through `reportingMinorUnits`, deliberately not
+`checkoutMinorUnitsFromMajor`. A margin never outlives the figure it was divided from and is absent
+for a period that took nothing. Owner and administrator only, and it is the same surface boundary
+recording a cost is — a manager's device already holds every figure involved.
+`TenantProfitStatement` is shared by both surfaces so one fact cannot be worded two ways, and a
+session sees the profit statement or the bare count sentence, never both.
 
-1. **A proportion is not available, and that is what decided the rule.** Nothing reported
-   anywhere says how many sale lines there were altogether — only how many lacked a cost. So
-   "96 lines have no cost" cannot become "96 of 4,000" without a server change. A line with no
-   cost is counted by the server as costing nothing, so an incomplete figure is an **upper
-   bound**, and with no denominator **how far above the truth it sits is unmeasurable**. An
-   unmeasurable overstatement is not a smaller version of the truth.
-2. **An "at most" ceiling was considered and declined.** It is honest wording, but the number
-   it decorates is still the number a reader remembers, and the qualifier's weight is exactly
-   what nothing here can quantify: two costed lines in five hundred produce a ceiling equal to
-   the takings — the 100% margin this app already refused once. Suppression heals as costs are
-   recorded; a ceiling only stops being *very* misleading.
-3. **Three bases, decided from the figures themselves rather than from where they came**, so
-   the reconciled daily summary and the server-added period totals cannot disagree about when a
-   number may be believed. `complete` shows the figure and its margin and **says that it is
-   complete**, because a reader cannot tell a complete figure from an overstated one by looking
-   at it. `incomplete` shows no figure and carries the count inside the reason. `inconsistent`
-   is a profit exceeding the takings it came from — a negative total cost, which nothing that
-   writes either figure can produce — and it **outranks** `incomplete` the way
-   `stockComparisonOutcome` orders its causes, because naming missing cost data for it would
-   name a cause that does not explain it.
-4. **The subtracted cost is recovered in whole minor units**, as `sales - profit`, which is
-   exact rather than approximate because the server adds money as integers. The rounding is
-   `reportingMinorUnits`, promoted out of `sales_totals.dart`, where the tender split is
-   checked against its own total the same way. Deliberately **not**
-   `checkoutMinorUnitsFromMajor`: that one refuses an amount the till could not price, and
-   these figures are already recorded.
-5. **A margin never outlives the figure it was divided from**, and is also absent for a period
-   that took nothing — a margin on no takings is a division by zero, not a figure of zero. A
-   percentage is the most believed number on any report and carries no units to warn a reader.
-6. **Owner and administrator only, and no rule changed.** This is the tier the product-cost
-   decision above already named, in the sentence saying what it buys is that no manager is
-   *shown* a margin. `daily_metrics` is readable by owner/admin/manager and
-   `getSalesComparison` answers all three, so **a manager's device already holds every figure
-   involved**: this is a surface boundary, not a secrecy guarantee, exactly as recording a cost
-   is. `TenantProfitReport.allowedRoles` restates `costRoles` rather than importing it, because
-   it is this domain's own decision about a different document.
-7. **A session sees the profit statement or the bare count sentence, never both.** Both panels
-   already named the count to every reporting role; a profit block that also named it gave an
-   owner two sentences holding one number, which reads as two findings. The sales-totals
-   sentence lost its trailing "so no profit figure is shown" and is now word for word the daily
-   summary's, because it is the same fact about the same sale lines over a different stretch.
-8. **`TenantProfitStatement` is shared by both surfaces**, so one fact cannot be worded two
-   ways, and it takes a `keyPrefix` because the daily summary renders one per day.
+**What this costs a real shop:** every sale recorded before 2026-08-07 has no cost and never will,
+so a 90-day total cannot show a figure until the window rolls past that date. A **day** completes as
+soon as everything sold on it carries a cost.
 
-**What this costs a real shop, stated because green usually means more.** Every sale recorded
-before 2026-08-07 has no cost and never will, so a 90-day total says it cannot show a figure
-until the window rolls past that date. A **day** is complete as soon as everything sold on it
-carries a cost, which is why the daily summary is the surface where this becomes useful first.
+Reasoning: `HISTORY.md` — "Profit is shown, or refused, and never overstated" (2026-08-08).
 
 ### Bulk catalog work is a rewrite, and the old code is not the starting point
 
-Scoped 2026-08-08 by the product owner: spreadsheet import and bulk change are wanted,
-**the idea and the flow carry over, the code does not.** The previous app holds
-`lib/services/bulk_upload_service.dart` (320 lines) and
-`lib/services/bulk_update_service.dart` (468 lines), reachable only from
-`lib/pos/goods.dart` and therefore from nothing that runs. Read them for the flow; do
-not port them.
+**The idea and the flow carry over, the code does not.** `lib/services/bulk_upload_service.dart`
+and `lib/services/bulk_update_service.dart` are reachable only from `lib/pos/goods.dart` and
+therefore from nothing that runs. Read them for the flow; **do not port them.** Five reasons, the
+second structural: they write the root `alcohol` collection, which the rules deny;
+`batch.update(docRef, arbitraryFields)` is impossible because `allow update` on `products` permits
+only the checkout decrement, so bulk change is **N × `updateProduct` executed on the server**, a
+different program rather than a modified one; the create path bypasses `TenantProductCreateIntent`,
+the deterministic ID, request-ID idempotency and "created holding nothing"; it writes `buyingPrice`
+rather than `cost` and a category display *name* where the model wants a `categoryId`, both failing
+silently; and it enforces SKU uniqueness by reading the entire collection into the client.
 
-**Five reasons a port fails, and the second one is fatal rather than awkward:**
+**A name collision to know about before grepping:** `MOBILE_BULK_UPDATE_IMPLEMENTATION.md` and
+`MOBILE_BULK_UPDATE_SETUP.md` document a method called `updateProducts()` — the previous app's
+client-side batch, which does the structurally opposite thing to the callable of that name. Those
+are pre-migration artifacts and are left alone.
 
-1. **They write the root `alcohol` collection.** Products live at
-   `tenants/{tenantId}/products/{productId}`, and the rules deny legacy root
-   operational collections outright.
-2. **`batch.update(docRef, arbitraryFields)` is structurally impossible here.**
-   `allow update` on `products` permits `['quantity', 'updatedAt']` with a strictly
-   decreasing quantity — the checkout decrement, and nothing else. Widening it is
-   exactly what "How a price is corrected" rejected, because a rule-based edit records
-   no actor, no previous value, and no reason. **So bulk change is N × `updateProduct`
-   executed on the server, not a batch executed on a device.** That is a different
-   program, not a modified one.
-3. **The create path bypasses four guarantees**, each of which cost a chunk:
-   `TenantProductCreateIntent` validation, without which one unparseable product makes
-   the *whole* cached catalog a miss and the business stops selling; the deterministic
-   `pd_<40 hex>` ID, which is what makes a replay land on the same document instead of
-   duplicating it; request-ID idempotency, absent entirely, so a retried import today
-   duplicates the catalog; and "a product is created holding nothing", which
-   `BulkProduct.quantity` writes straight through, leaving stock with no ledger origin.
-4. **Two field names have drifted, and both fail silently.** It writes `buyingPrice`,
-   not `cost`, so an import's cost data would be invisible to `TenantProduct.cost` —
-   the server reads `buyingPrice` only as a legacy alias on *sale lines*, never on a
-   product. And it writes `category` as a display *name* where the model wants a
-   `categoryId`: "Bakery" passes document-ID validation, matches no category document,
-   and leaves the product invisible to every grouped surface without being unreadable.
-5. **It enforces SKU uniqueness by reading the entire collection into the client.**
-   Already decided against — a client-side check against what one device loaded is a
-   guarantee the next device breaks, and at tenant scale the read itself is the cost.
+Both halves are built. `updateProducts` binds: an **unchanged row is an outcome, not a refusal**,
+because re-running a 400-row correction that half applied must be able to finish; three defects
+belong to the request rather than a row (an unknown top-level key, more rows than the bound, and **a
+product named twice**); permission is decided over the **union** of every row's requested fields
+before anything is read, delegated to `assertProductUpdateAuthorized`, so the preview refuses too;
+and there is **one `getAll` for the whole request**, because a transaction may not read after its
+first write. **Order is part of the request fingerprint**, because every outcome is indexed by where
+its row sat.
 
-**The bulk-change half landed 2026-08-08 as `updateProducts`, and four decisions it made
-are not re-derivable from the list above:**
-
-1. **An unchanged row is an outcome, not a refusal.** One product at a time, a request
-   that changes nothing is refused as a caller defect. In a bulk change it is the
-   ordinary case: re-running a 400-row correction that half applied must be able to
-   finish, and it cannot if the rows that already landed take the request down with them.
-   The *resulting* document is still validated either way, so "nothing to do here" is
-   never a way to skip the read model.
-2. **Three defects belong to the request rather than to a row**, because reporting them
-   per row would make the report itself wrong: an unknown top-level key, more rows than
-   the bound, and **a product named twice**. The last is the interesting one — two rows
-   for one product are two conflicting intents and there is no honest outcome to report
-   for either, since the second would be planned against a document the first has already
-   changed.
-3. **Permission is decided over the union of every row's requested fields, before
-   anything is read**, and the decision is delegated to `assertProductUpdateAuthorized`
-   so the tier cannot drift. A manager naming a price or a cost *anywhere* refuses the
-   whole request, and the refusal names the offending rows as `rows[1], rows[2]` —
-   payload paths rather than ordinals, matching the zero-based `index` every outcome
-   carries. Deciding it up front means the preview refuses too, which is the point: a
-   manager who previewed green and then hit a commit-time refusal learns only that the
-   app guesses.
-4. **One `getAll` for the whole request, because Firestore permits nothing else.** A
-   transaction may not read after its first write, so a per-row read-then-write loop is
-   not a slower version of this — it is a transaction that throws on its second row. Two
-   corollaries: a request whose every row was refused reads nothing at all, because
-   `getAll()` with no references is an error; and `FakeFirestore` gained `getAll`, whose
-   first caller is the preview path.
-
-**Order is part of the request fingerprint, deliberately**, because every outcome is
-indexed by where its row sat — a reordered retry answered off the stored record would
-hand back indexes naming different rows. The corrections are unaffected either way: a
-row's audit entry is identified by its product, not by its position, so re-sending with
-rows reordered lands on the same documents.
-
-**A name collision to know about before grepping.** `MOBILE_BULK_UPDATE_IMPLEMENTATION.md`
-and `MOBILE_BULK_UPDATE_SETUP.md` both document a method called **`updateProducts()`** —
-the previous app's client-side Firestore batch in `bulk_update_service.dart`, which
-writes the root `alcohol` collection. The new server callable shares the name and does
-the structurally opposite thing. Those two documents are pre-migration artifacts and were
-left alone.
-
-**What the rewrite should do differently, beyond being server-side. All seven are now
-built: the first six landed on 2026-08-08 as `updateProducts`, and the seventh with
-`importProducts` the same day:**
-
-- ✅ **Validate, then *preview*, then commit.** The old flow validated and committed. The
-  preview is the improvement and it is the whole point: a spreadsheet is the one input
-  nobody proofreads, and the first time a person should see what 400 rows are about to
-  do is *before* they do it, not in the catalog afterwards. `mode` is **required and has
-  no default**, and a preview writes nothing — not the corrections, not the audit
-  entries, and deliberately **not an idempotency record**, which is what lets a client
-  preview and then commit under one request ID.
-- ✅ **Name every broken row at once**, the same contract `updateProduct` already keeps
-  for fields. A row-at-a-time refusal turns a 400-row import into 400 round trips of
-  discovery.
-- ✅ **Partial success is stated, never implied.** A per-row outcome — `updated`,
-  `unchanged`, or `failed` — with nothing silently dropped and nothing silently coerced.
-- ✅ **Reuse `planProductUpdate`.** It was already a pure function from a stored document
-  plus a request to a validated plan, and it already produced the per-field audit
-  entries. It gained exactly one option, `allowUnchanged`, and the two paths cannot
-  validate differently because there is only one of them.
-- ✅ **Bounded and chained.** `MAXIMUM_PRODUCT_BATCH_ROWS` is **50**. There is no
-  server-side cursor because there is no server-side collection to walk — the caller
-  holds the rows — so the server owes a bound it will not exceed and a request that is
-  independently idempotent.
-- ✅ **One audit entry per product, correlated by the import's request ID**, so "what did
-  that import do" is answerable without inventing a new kind of record. Each row writes
-  `audit_logs/pu_<40 hex>` carrying `batchId` and `rowIndex` beside the usual
-  `eventType: "product_updated"`; a single-product correction carries neither, so a
-  query by batch matches only bulk rows. Import writes `audit_logs/pi_<40 hex>` carrying
-  `importId` and `rowIndex` beside `eventType: "product_imported"`, for the same reason.
-- ✅ **Opening stock goes through `adjustStock` semantics**, so imported units have a
-  recorded origin like every other unit in the system. **Built 2026-08-08 with
-  `importProducts`** — see the decision below for what it costs per row, and why the
-  product is created *holding* the opening quantity rather than created empty and adjusted.
+Reasoning: `HISTORY.md` — "Bulk catalog and return scoring are scoped as rewrites" (2026-08-08) and
+"Many products at once, previewed before they change" (2026-08-08).
 
 ### A spreadsheet becomes products, and its stock has an origin
 
-Built 2026-08-08 as `importProducts`, the second half of the rewrite above and the larger
-one. It reuses that half's envelope — the required mode, the bounded row list, the per-row
-outcome, the preview that writes nothing, `describeRows` for a refusal that names offending
-rows as payload paths — and it reuses the *validation* that decides what a product may
-hold: a row's name, code, price, and cost are read by `readProductUpdateInput`, and the
-document each row would create is read back through `readSellableProduct`, the server-side
-twin of `TenantProduct.fromDocument`, before anything is written. The two paths cannot
-drift about what a product is.
+`importProducts` reuses the bulk envelope — required mode, bounded row list, per-row outcome, a
+preview that writes nothing — and the validation that decides what a product may hold, so the two
+paths cannot drift about what a product is.
 
-**The three problems only a create raises, and how each was answered:**
+Binding: a row names its category by `categoryId` **or** `categoryName`, never both and never
+neither; a name is folded case-insensitively over collapsed whitespace, and **an unmatched name
+refuses the row rather than creating the category** — a category is permanent here, so "Bakry" typed
+once would become a grouping nobody can repair. A name two categories share fails that row too. The
+wire key is `categoryName` and never `category`. The product ID is derived from the row's
+**position** — the only deterministic ID in this codebase that is, and a deliberate reversal of the
+correction path's product-derived ID — so order is part of the fingerprint and matters more here
+than anywhere else. **A row may carry a `quantity`, and this is the only product payload that may**:
+`updateProduct`'s refusal is satisfied rather than relaxed, because this path writes the
+`stock_adjustments` record and `stock_movements` entry in the same transaction with
+`sourceType: "product_import"`, `adjustmentType: "opening_balance"`, `previousQuantity: 0`. A row
+opening with nothing writes no ledger entry and says `mutatesQuantity: false`; whenever that flag is
+true the entry names the `adjustmentId`.
 
-1. **A category named "Bakery" is resolved, and an unmatched name refuses the row.** A row
-   names its category by `categoryId` **or** by `categoryName`, never both and never
-   neither. A name is folded — case-insensitive, over collapsed whitespace — because
-   "bakery" and "Bakery" are one category to everybody who is not a computer. **It does not
-   create the category**, and that is the decision: a category is permanent here, since the
-   rules permit rename and delete and this app offers neither, so "Bakry" typed once would
-   become a grouping nobody can repair whose products every grouped report separates from
-   the real one. The preview is what makes refusing tolerable — every unmatched name comes
-   back at once, before anything is written, and the catalog surface already creates
-   categories. A name **two** categories share fails that row too, because nothing makes a
-   category name unique and there is no honest answer. The wire key is `categoryName` and
-   never `category`: a stored product's `category` is the legacy alias for `categoryId` and
-   holds an ID, which is exactly the drift the previous app's uploader shipped.
-2. **The product ID is derived from the row's position**, as
-   `pd_<40 hex of sha256(identity + NUL + rowIndex)>`, together with `sa_` for the row's
-   stock adjustment and `pi_` for its audit entry, all three from one digest. This is
-   the only deterministic ID in this codebase derived from a position, and it is a
-   deliberate reversal: `productBatchRowUpdateId` derives a correction's audit entry from
-   the *product* so a reordered retry lands on the same documents, and an import has no
-   product to derive from. So **order is part of the fingerprint and matters more here than
-   anywhere else** — a reordered retry answered off the stored record would report IDs
-   belonging to different products, and one not answered off it would create the whole
-   catalog a second time.
-3. **A row may carry a `quantity`, and this is the only product payload that may.**
-   `updateProduct` refuses one outright with a message naming `adjustStock`; that refusal is
-   not relaxed here, it is satisfied. The reason it exists is that a quantity with no
-   `stock_movements` entry has no recorded origin, and this path writes that entry in the
-   same transaction: a `stock_adjustments` record and a `stock_movements` entry in
-   `adjustStock`'s own shape, field for field, with `sourceType: "product_import"`,
-   `adjustmentType: "opening_balance"`, and `previousQuantity: 0` — the product is created
-   in the same transaction, so it held nothing. It is created **holding** the opening
-   quantity rather than created empty and then adjusted: the recorded history is identical
-   and it is one write fewer. **A row that opens holding nothing writes no ledger entry at
-   all** and its audit entry says `mutatesQuantity: false`; whenever that flag is true the
-   entry names the `adjustmentId`, and that pairing is the whole justification for accepting
-   a quantity here.
+Four rules that reverse or diverge from the correction half: **a product named twice is not
+refused**, because two rows describing one product each create their own document; **a price is not
+behind owner/admin here, only cost is**, because setting a first price is creation and the
+add-product form beside it accepts one; **an absent cost and an explicit `null` mean the same thing
+and hash the same**, because there is nothing to clear on a product that does not exist; and
+**re-running an import needs a new request ID, which stocks the shelf twice** — stated rather than
+prevented, with the preview as the answer.
 
-**Four decisions that are not re-derivable from the bulk-change half:**
+Bounds: `MAXIMUM_PRODUCT_IMPORT_ROWS` **50** (matching the correction half deliberately — two
+bounds for one screen would be a trap), `MAXIMUM_IMPORT_CATEGORY_SCAN` **500**, read as `limit(501)`,
+exceeding it refusing the whole request. One field is written that the catalog's create form does
+not: `updatedAt`, because the nightly stock verification defers a product written in the last five
+minutes and this is the one create path that can produce a product already holding stock.
 
-1. **A product named twice is *not* refused, reversing the correction's rule.** Two rows
-   addressing one document are conflicting intents; two rows describing one product each
-   create their own document. A shop legitimately stocking two products with one name and
-   one code is a state this app permits and the till already refuses to resolve by scan, SKU
-   uniqueness is stated rather than enforced everywhere else, and a check against fifty rows
-   would not see the four hundred already in the catalog.
-2. **A price is not behind owner/admin here; only cost is.** `updateProduct` gates both,
-   because *changing* a price silently alters what every later sale records. Setting the
-   first price is creation — `allow create` on `products` already names the operational
-   three and the add-product form already lets a manager type a price — so an import that
-   refused what the form beside it accepts would be a rule nobody could explain. The cost
-   tier is delegated to `assertProductUpdateAuthorized` over the single field `cost`, so
-   neither threshold nor wording can drift, and it is decided before anything is read, so
-   the preview refuses too.
-3. **An absent cost and an explicit `null` mean the same thing and hash the same** — the
-   opposite of `updateProduct`, where null clears. There is nothing to clear on a product
-   that does not exist yet, so a blank spreadsheet cell means the business did not say, and
-   a null cost is therefore not a monetary row.
-4. **Re-running an import needs a new request ID, and that stocks the shelf twice.** Stated
-   rather than prevented, and tested. A genuine retry under the same request ID is answered
-   off the idempotency record and lands on the same documents, which the previous app's
-   uploader could not do at all. The preview is the answer to a duplicated import, not a
-   uniqueness check this app has never been able to make.
+**Import does not parse anything.** The callable takes rows; whatever turns a spreadsheet into rows
+is a client concern.
 
-**Two bounds, both stated rather than implied.** `MAXIMUM_PRODUCT_IMPORT_ROWS` is **50** —
-the same figure the correction half uses even though the per-row budget is four documents
-rather than two, because fifty rows is at most 200 writes plus one idempotency record
-against Firestore's 500, and two different bounds for one screen would be a trap.
-`MAXIMUM_IMPORT_CATEGORY_SCAN` is **500**, read as `limit(501)` so "there are too many" is
-answered by the read itself; exceeding it refuses the **whole request**, because the defect
-belongs to the business rather than to a row, and the message says to name each row's
-category by ID, which needs no scan. Which read runs is decided by the rows: an ID-only
-request reads exactly those documents through `getAll`, and a request naming any name scans
-instead — that scan answers the ID rows too, so the two are alternatives rather than both.
-
-**One field is written that the catalog's own create form does not: `updatedAt`.** The
-nightly stock verification defers a product written in the last five minutes by reading it,
-and this is the one create path that can produce a product already holding stock — without
-it, an imported product could be compared against a ledger entry the query walking it
-cannot see yet.
-
-**What import still does not do is parse anything.** The callable takes rows; whatever turns
-a spreadsheet into rows is a client concern, and so is every surface. Which is why this
-moved no board row. **The surface landed the same day** — see the decision below.
+Reasoning: `HISTORY.md` — "Products imported from a spreadsheet, previewed before they exist"
+(2026-08-08).
 
 ### One screen reaches both bulk callables, and it previews before it writes
 
-Built 2026-08-08, the chunk immediately before the profit display, and it is what made
-spreadsheet import and bulk change green. `TenantBulkCatalogScreen` is offered as **"Bulk
-changes and import"** from
-inside "Manage catalog" rather than from the landing route, because correcting many products
-starts by looking at them and the product list it needs is the list that route already shows.
-It changed `firestore.rules` not at all and nothing in `functions/` either.
-
-**Where the rows come from was the open question and it is now answered.** A **bulk
-correction reads its rows from the catalog this app already holds** — tick products on the
-route's own paged list — and an **import reads delimited text pasted into the screen**.
-Delimited text is the input a person already has: every spreadsheet exports it, it survives a
-copy-and-paste, and it needs no package and no file picker. `.xlsx` is still excluded and
+`TenantBulkCatalogScreen` is offered as "Bulk changes and import" from inside "Manage catalog"
+rather than from the landing route. A **bulk correction reads its rows from the catalog this app
+already holds**; an **import reads delimited text pasted into the screen**. `.xlsx` is excluded and
 adding it later changes nothing else, because the parser is one function from text to rows.
 
-The guarantees are settled, not open:
+Binding: a bulk correction moves **one field across many products, never a form** — the rows come
+from products already on the device, a name and a code belong to one product each, and the server
+decides permission over the union of requested fields. A page is **immutable once built**, and a
+commit re-sends the objects the preview sent under the same request ID; anything that changes what
+the plan was built from throws the plan away. **A commit is offered only after a preview that
+answered every page.** The role asymmetry is honoured twice because the server imposes two rules: a
+manager gets no money correction at all, and a manager's sheet carrying a `cost` column is refused
+**as a sheet**. A row is labelled by what a person recognises — position in the selection, or line
+of the pasted sheet — never by the server's page-local index. Every row appears in the report,
+including rows this client refuses before sending. The catalog surface's own validators decide what
+a row may hold, so an imported, a form-created and a singly-corrected product cannot differ. A
+sheet-level defect throws and a row-level defect is reported; **a column this import does not read
+refuses the sheet** rather than being ignored. The delimiter is decided from the header alone. A
+half-answered chain is the ordinary case and is stated, and a page whose answer cannot be decoded is
+an **unknown outcome** rather than a failure. The duplicate-import hazard is stated in the commit
+confirmation.
 
-1. **A bulk correction moves one field across many products, never a form.** Three reasons.
-   The rows come from products already on the device, so there is no column to read a
-   per-product value out of. A name and a code belong to one product each — two products
-   cannot share a corrected name, and a shared code is what the till refuses to resolve by
-   scan. And the server decides permission over the **union** of every row's requested
-   fields, so folding a price into a category move would refuse the whole request for a
-   manager who never asked to change money. Four things are offered: file under a category,
-   set a unit price, set a unit cost, remove the unit cost.
-2. **A page is immutable once built, and a commit re-sends the objects the preview sent.**
-   Order is part of the request fingerprint and a page keeps one request ID across its own
-   preview and its own commit — which is exactly what the server's decision to record no
-   idempotency record for a preview exists to allow. Rebuilding the plan would issue new IDs
-   and could reorder rows, so anything that changes what the plan was built from throws the
-   plan and its report away rather than letting them drift apart.
-3. **A commit is offered only after a preview that answered every page.** A rule, not
-   caution: committing a page nobody previewed is the thing the preview exists to prevent.
-4. **The role asymmetry is honoured twice, differently, because the server imposes two
-   rules.** A correction naming money *anywhere* refuses the whole request, so a manager is
-   offered **no money correction at all**. An import **may** take a price from a manager —
-   setting a first price is creation and the add-product form beside it accepts one — and must
-   still refuse a cost, so a manager's sheet carrying a `cost` column is refused **as a
-   sheet**, before any row is read, which is where the server decides it too.
-5. **A row is labelled by what a person recognises, not by what the server indexes.** A
-   correction shows its **position in the selection** and an import shows the **line of the
-   pasted sheet, header included**. The server's index is page-local: index 0 of the second
-   request is the fifty-first product ticked, and a person fixing a refusal is looking at
-   their own file.
-6. **Every row appears in the report, and a row this client can refuse is refused before
-   anything is sent and still reported.** A blank name, a spaced code, an unrepresentable
-   price, a negative opening balance, a row naming a category twice or not at all, a row with
-   fewer cells than its header — each is that row's own refusal, carried beside the server's
-   outcomes so every broken row is named at once.
-7. **The catalog surface's own validators decide what a row may hold.**
-   `tenantCatalogNormalizedName`, `tenantCatalogNormalizedSku`, and
-   `tenantCatalogPriceMinorUnits` were promoted from private to public for this, so a product
-   created by an import, created by the add-product form, and corrected one at a time cannot
-   differ in what this client will write. A `_shared` wrapper converts their exception type
-   and carries the code through unchanged — deliberately not a second copy.
-8. **A sheet-level defect throws and a row-level defect is reported**, the split the server
-   already makes. No header, a required column missing, no category column, one column twice,
-   more rows than the chain holds, and **a column this import does not read** all refuse the
-   sheet. The last one matters: a column nobody reads is refused rather than ignored, so
-   nothing a person supplied is dropped without being mentioned.
-9. **The delimiter is decided from the header alone** — tab, comma, or semicolon — so every
-   row splits the same way. Deciding it per row would let one row with a stray tab split
-   differently from its neighbours. A double-quoted cell may hold the delimiter and two
-   quotes inside one are a literal quote, without which `Bread, sliced` becomes two cells and
-   shifts every column after it.
-10. **A half-answered chain is the ordinary case and is stated.** Pages go one after another,
-    a refusal stops the chain, and the report says how many requests answered — which in a
-    commit is how many were written. A page whose answer cannot be decoded is an **unknown
-    outcome** rather than a failure, because the request was sent.
-11. **The duplicate-import hazard is stated where a person can see it.** The commit
-    confirmation says that running the sheet again creates the products a second time, because
-    nothing here makes a code unique and retiring a product is not an undo.
+Bounds are the client's own: `maximumBulkCatalogRows` **50**, `maximumBulkCatalogSheetRows` **500**.
+A selection survives paging because it is held by product ID above the guard.
 
-**Two bounds are the client's own.** A page is `maximumBulkCatalogRows` = **50**, matching
-both server constants, and one pasted sheet is `maximumBulkCatalogSheetRows` = **500**, ten
-pages. The server bounds a request; nothing bounds how many requests a client makes, and a
-pasted ten-thousand-row sheet is two hundred sequential round trips nobody can watch finish.
-
-**One thing to know before reusing the selection.** A catalog read page is bounded at fifty
-by `readCollectionPage`, so a selection gets past fifty only by paging — which the selection
-survives, because it is held by product ID above the guard rather than derived from what is
-rendered.
+Reasoning: `HISTORY.md` — "Both bulk halves reach a person" (2026-08-08).
 
 ### A suspicious return is scored on the server, after the first deployment
 
-Scoped 2026-08-08 and **deliberately sequenced after the first deployment** — rollout
-step 13 — at the product owner's direction. The supporting reason is worth recording
-because it also makes the work better: every threshold in this feature is a judgement
-about what normal looks like, and normal is not knowable from seed data. A ruleset tuned
-against fixtures is a guess that will be re-tuned the week real returns arrive.
+**Not built.** Deliberately sequenced after the first deployment — rollout step 13 — at the product
+owner's direction: every threshold in this feature is a judgement about what normal looks like, and
+normal is not knowable from seed data.
 
-The previous app has `lib/services/fraud_detection_service.dart` (555 lines) and
-`lib/model/return_analysis.dart`, reachable only from the legacy returns screens. **Six
-signals carry over as an idea**: a quick return (under 4 hours), a late one (over 72), a
-seller's return rate, void behaviour, a refund amount beyond a z-score of 2, and
-velocity (3 returns in 4 hours). A seventh, product-level analysis, is commented out in
-the original.
+Binding on whoever builds it. `lib/services/fraud_detection_service.dart` and
+`lib/model/return_analysis.dart` carry **six signals as an idea** — a quick return (under 4 hours),
+a late one (over 72), a seller's return rate, void behaviour, a refund beyond a z-score of 2, and
+velocity (3 returns in 4 hours). Four things must change: it is **client-side, and a
+client-computed score is not a control** — nothing is persisted, so nothing can be reviewed,
+audited or acted on, and the gate that matters is `verifyReturnAndRestoreStock` on the server;
+**the void signal has no input**, because this app has no void concept at all, so voids get modelled
+first or that signal is dropped rather than ported as dead code; **thresholds cannot be global
+constants in a multi-tenant app** and belong in `configuration/`; and **the destination already
+exists** — `reconciliation_anomalies`, server-written, with a live surface readable by
+owner/admin/manager. The shape is a trigger that scores on return creation and writes one anomaly
+document.
 
-**Four things must change, and the first is why it is not a port:**
+Field drift to expect: the old scorer reads `soldBy` (a display name), `dateAdded`, `productName`,
+`totalReturned` and `itemsReturned`; this app records `soldById` (a UID) and `businessDate`.
 
-1. **It is client-side, and a client-computed score is not a control.** It touches
-   Firestore not at all — it takes already-fetched snapshots — and the result lands in
-   `_riskCache`, widget state that dies with the screen. Nothing is persisted, so
-   nothing can be reviewed, audited, or acted on later. The gate that matters is
-   `verifyReturnAndRestoreStock`, which is on the server.
-2. **One of the six signals has no input.** The void signal keys on `type == 'void'`,
-   and **this app has no void concept at all.** Either voids get modelled first or that
-   signal is dropped; it must not be ported as dead code that always scores zero.
-3. **Thresholds cannot be global constants in a multi-tenant app.** Three returns in
-   four hours is an ordinary afternoon for a bar and an emergency for a jeweller. They
-   belong in `configuration/`, per business, which is also why this waits for real data.
-4. **The destination already exists**, which makes this cheaper than its line count
-   suggests. `reconciliation_anomalies` is a server-written collection with a live
-   surface at `lib/reporting/reconciliation_anomalies_panel.dart`, readable by
-   owner/admin/manager — and a risky return is an anomaly. The shape is a trigger that
-   scores on return creation and writes one anomaly document, surfaced where operators
-   already look.
-
-Field drift to expect on the way: the old scorer reads `soldBy` (a display name),
-`dateAdded`, `productName`, `totalReturned`, and `itemsReturned`; this app records
-`soldById` (a UID) and `businessDate`.
+Reasoning: `HISTORY.md` — "Bulk catalog and return scoring are scoped as rewrites" (2026-08-08).
 
 ### A sign-in failure is a sentence this app wrote, and it cannot be anything else
 
-Built 2026-08-08, the last chunk of that day, closing findings 1 and 2 from the Android run. It
-changed `firestore.rules` not at all and nothing in `functions/` either — 409 functions tests and
-161 rules tests, both unchanged, are the measurement. It moved no board row's colour, because it
-is a defect repair inside a row that was already green.
+Binding: the provider's `message` is **dropped at a boundary**, so no surface above it can render
+one. `lib/tenancy/sign_in.dart` holds the interface, the adapter, and `SignInException`, which
+carries **a code and nothing else**. `signInSafeError` reads a code and never a message, and its
+fallback names no cause. A wrong password, an unknown address and a malformed credential are **one
+identical sentence** — Firebase collapses them into `invalid-credential` once email enumeration
+protection is on — and a test asserts the set of answers over all five codes has size one. An empty
+address or password is refused by the form before Firebase is called; the address is trimmed and
+the **password is not**, because a space is a character a password may contain. A refusal is cleared
+by editing, compared on **text** rather than on the controller's notification, because a reveal
+toggle notifies on selection change. A sign-in that succeeded **leaves the button busy**, because
+the routing shell replaces the screen. The user is answered **before** Sentry is told. The screen
+holds no Firebase type at all, `setPersistence` included, which is what lets it be widget-tested
+without initializing Firebase.
 
-**The defect was that the first screen of this app printed a Flutter platform-channel name at
-whoever was signing in.** The fix is deliberately not a patch on the code that produced it.
-
-The guarantees are settled, not open:
-
-1. **The provider's `message` is dropped at a boundary, so no surface above it can render one.**
-   `lib/tenancy/sign_in.dart` holds `EmailPasswordSignIn` (the interface),
-   `FirebaseEmailPasswordSignIn` (the adapter), and `SignInException`, which carries **a code and
-   nothing else** — the same shape `email_delivery_status.dart` and `account_verification.dart`
-   already use for their callables. The old screen rendered `e.message ?? "Login failed"`. "A
-   user reads language" is now a property of the type, not of care taken at a call site.
-2. **`signInSafeError` reads a code and never a message, and its fallback names no cause.**
-   Anything that is not a `SignInException` — a platform channel error, a plugin defect, a
-   programming mistake — gets one sentence that does not mention the credential. Mapping only the
-   code that caused the report would have left every other channel-level failure printing itself,
-   and the bug class is "the error is a string nobody wrote", not that one code.
-3. **A wrong password, an unknown address, and a malformed credential are one identical
-   sentence.** Firebase collapses them into `invalid-credential` itself once email enumeration
-   protection is on, so distinguishing them here is a disclosure that survives only until that
-   setting changes — and this app already closes enumeration deliberately on the password-reset
-   endpoint. A test asserts the set of answers over all five codes has size one.
-4. **An empty address or password is refused by the form, before Firebase is called.** An empty
-   password is not a credential. The address is judged first and is trimmed; the password is
-   **not** trimmed, because a space is a character a password may contain, so one made of spaces
-   is the server's to judge. The only thing this app claims to know is that a password is absent.
-5. **A refusal is cleared by editing, and a cursor moving is not editing.** The handler compares
-   the **text**, not the notification, because a `TextEditingController` also notifies on a
-   selection change — which is exactly what the password field's own reveal toggle does, and
-   revealing a password answers nothing the refusal said.
-6. **A sign-in that succeeded leaves the button busy, deliberately.** The routing shell replaces
-   this screen when the session opens; releasing the button first would offer a second sign-in
-   against a session already being built.
-7. **The user is answered before Sentry is told.** The old order awaited
-   `Sentry.captureException` and only then set the message, so a slow or failing reporting
-   transport delayed — or swallowed — the sentence on screen.
-8. **The screen holds no Firebase type at all**, `setPersistence` included. Its swallowed failure
-   is unchanged and now documented as the *expected* case: persistence is a web concept and every
-   other platform answers `unimplemented`. The default adapter is built lazily on first
-   submission, which is what lets the whole screen be widget-tested without initializing Firebase
-   and left `lib/main.dart` untouched.
-
-**What is not proved is that anybody has looked at it.** The chunk's own shape asked for one
-device pass afterwards and the session instruction forbade the Android build, so this is 32 tests
-and no eyes — including the `no rendered string contains dev.flutter.pigeon` assertion that would
-have caught the original in 2026-08-04, asserted over every `Text` in the tree rather than over
-the error slot alone. Queued below.
+Reasoning: `HISTORY.md` — "The sign-in screen says something true" (2026-08-08). Not proved on a
+device; queued.
 
 ### A refused invitation names what will work, and only a transient failure invites a retry
 
-Built 2026-08-08, the chunk after the sign-in repair and the same defect class on the other
-surface a stranger meets. It closed finding 3. It changed `firestore.rules` not at all and
-nothing in `functions/` either — 409 functions tests and 161 rules tests, both unchanged, are
-the measurement. It moved no board row's colour, because it is a defect repair inside a row
-that was already green.
-
-**The queued chunk's own premise was wrong, and checking it was the finding.** This file said
-`failed-precondition` was the code behind the refusal and attached an instruction to check the
-server rather than guess from the flag name. The server throws **`permission-denied`** with
-`{violation}` in `details` (`functions/src/staff/acceptance.ts:171`), where the violation is one
-of **eight** tokens from `invitationAcceptanceViolation` in `staff/acceptancePolicy.ts`.
-`versioned_proof_required` — the one the device hit — is the last of them. **The code alone
-could never have identified it**, and the detail that could had never been read by anything.
-`failed-precondition` is a real answer from these callables, but it is the five-minute
-recent-authentication rule, not this.
-
-**The rule is one sentence, and everything else follows from it:**
-
 > **Only a failure this app knows to be transient may invite a retry.**
 
-The guarantees are settled, not open:
-
-1. **One module, because it is one server function.**
-   `lib/tenancy/invitation_acceptance_failure.dart` is imported by both acceptance paths, since
-   `acceptTenantInvitation` and `acceptVisibleTenantInvitation` are two `onCall` wrappers over a
-   single `acceptInvitation` refusing through a single policy function. Two client copies would
-   be two ways to word one server decision, and the first divergence would be invisible.
-2. **`InvitationAcceptanceException` carries a code and a violation, and no message.** Same
-   shape and same reason as `SignInException`. The violation may cross the boundary because it
-   is a server-authored enumerated token rather than prose; the rule that no string this app did
-   not write reaches a user is unchanged.
-3. **Every violation the server produces is permanent for the invitation it refused**, so none
-   of them says "try again" and each names the one thing that can move the user forward.
-   Exactly two answers offer a retry — `unavailable`/`deadline-exceeded` and
-   `resource-exhausted` — and a test asserts that partition over seventeen codes and both modes
-   rather than describing it.
-4. **The mode is carried because the server branches on it.** A `permission-denied` naming no
-   violation means a rejected HMAC proof on the token path and an ineligible signed-in identity
-   on the visible one. One sentence covering both would be vague on purpose.
-5. **The sentence for `versioned_proof_required` does not tell the user to verify anything.**
-   `visibleAcceptanceAllowed` is fixed at invite time and verifying afterwards does not change
-   it, so that advice would be true-sounding, actionable, and useless — the same failure mode as
-   "Please try again" in different clothes. It sends them to the emailed link and names
-   `resendStaffInvitation`'s effect as the way to get another one.
-6. **`email_unverified` is unreachable today and is mapped anyway.** The server's own
-   `mode === "visible" && emailVerified !== true` guard throws before the policy function is
-   consulted, so nothing produces that token. It is modelled because the server declares it;
-   **do not delete it as dead code.**
-7. **Reading a violation is tolerant, and it is the only tolerant thing in the file.** An older
-   client meeting a violation a later server adds degrades to the code-level sentence rather
-   than turning a refusal into an unrenderable failure. Shape is judged strictly and content
-   permissively, in that order.
-8. **The fallback offers no retry**, unlike the sign-in fallback, which does. A user staring at
-   a sign-in screen has nothing else to do; here there is somebody to ask, an acceptance that
-   failed for an unmodelled reason is far more often a policy refusal than a blip, and the
-   button is still on screen for anyone who wants to retry anyway.
-
-**`catch (_)` was the defect and the sentence was the symptom, and both halves were missing.**
-Neither adapter converted anything — each called `httpsCallable(...).call()` with **no
-`try`/`catch` at all**, unlike `FirebaseSendAccountVerificationCallable` beside them — and both
-surfaces then discarded the error. So there was no code to branch on anywhere in the client.
-
-**What is not proved is that anybody has looked at it**, and it cannot be proved locally
-either: the identity that hits this refusal is the one whose invitation email never arrives on
-the emulators. Queued below.
+Binding: **one module**, `lib/tenancy/invitation_acceptance_failure.dart`, imported by both
+acceptance paths, because `acceptTenantInvitation` and `acceptVisibleTenantInvitation` are two
+wrappers over a single policy function. `InvitationAcceptanceException` carries a code and a
+violation and **no message**; the violation may cross the boundary because it is a server-authored
+enumerated token rather than prose. **Every violation the server produces is permanent for the
+invitation it refused**, so none says "try again" — exactly two answers offer a retry
+(`unavailable`/`deadline-exceeded` and `resource-exhausted`), and a test asserts that partition over
+seventeen codes and both modes. The mode is carried because the server branches on it. The sentence
+for `versioned_proof_required` does not tell the user to verify anything, because
+`visibleAcceptanceAllowed` is fixed at invite time. **`email_unverified` is unreachable today and is
+mapped anyway — do not delete it as dead code.** Reading a violation is tolerant and is the only
+tolerant thing in the file. The fallback offers **no** retry, unlike sign-in's.
 
 **Seven other surfaces still say "Please try again." and were deliberately left alone** — staff
 invitation, resend, cancellation, email replacement, staff status, staff update, default tenant,
-and tenant request. None of them strands a user with no way forward, which is what made this one
-a finding, and widening to them would have made an unbounded chunk. Named so the next session
-sees a decision rather than an oversight.
+tenant request. None strands a user with no way forward. Named so the next session sees a decision
+rather than an oversight.
+
+Reasoning: `HISTORY.md` — "A refused invitation says what will actually work" (2026-08-08). The
+server throws `permission-denied` with `{violation}` in `details`, one of eight tokens from
+`invitationAcceptanceViolation`; `failed-precondition` is a real answer from these callables but is
+the five-minute recent-authentication rule, not this. Not proved on a device; queued.
 
 ### The token layer is additive, and a density is a nested `Theme`
 
-Built 2026-08-11, `design.md` §11 step 1. It changed `firestore.rules` not at all and nothing in
-`functions/` either — `git diff` over both prints **zero lines**, which is a stronger measurement
-than an unchanged suite count. It moved no board row, and **an empty screenshot diff was its pass
-condition** rather than an embarrassment.
+`design.md` §11 step 1. **Step 1 is additive**: conforming the token layer in place would move
+~40 outlined-button labels, every caption, every card radius, every input and every chip at once,
+so §6 decision 1 moved all of it into steps 2–5 where each diff has one cause. The cost accepted
+with it is that for several steps the app runs on a half-migrated palette, and **the divergences are
+asserted as divergences** in `test/ui/tokens_test.dart`, so the step that closes one fails the test
+and removes the row in the same change.
 
-**Step 1 is additive, and that was a decision rather than the obvious reading.** `design.md` §11
-says step 1 "changes no pixels"; `DESIGN-AUDIT.md` §4.8 found that conforming the token layer in
-place moves the outlined button's label off mint at ~40 call sites, every caption to
-`text.tertiary`, every card from radius 16 to 12, every input from 14 to 8 and off `bgMid`, every
-chip off stadium, and the bottom sheet from 24 to 20 — the largest image diff of the whole
-migration, attributable to nothing in particular. §6 decision 1 moved all of it into steps 2–5,
-where each diff has one cause. The cost accepted with it: for several steps the app runs on a
-half-migrated palette. **The divergences are asserted as divergences** in
-`test/ui/tokens_test.dart`, so the step that closes one fails the test and removes the row in the
-same change.
+**Density is a nested `Theme` per screen**, decided by the product owner. §3 gives comfortable and
+compact different body roles, `bodyMedium` is a single global value, and every bare `Text(` call
+site resolves to it through `DefaultTextStyle`, so one `ThemeData` cannot hold two body sizes. A
+back-office screen wraps its subtree in a `Theme` carrying the compact `AppTokens` and a swapped
+`bodyMedium`. `AppDensity` holds both value sets, `bodyRole` is the seam, and `pointerOnly` carries
+§3's rule that a touch device never gets 32px targets whatever its width — as data, so the widget
+that resolves density cannot forget it. **The widget arrives with the first compact screen.**
 
-**Density is a nested `Theme` per screen.** Decided by the product owner this session, and it was
-the one open item `DESIGN-AUDIT.md` §6 called "not cosmetic in any sense": §3 gives comfortable and
-compact different body roles, `bodyMedium` is a single global value, and **all 756 bare `Text(`
-call sites** in the migrated tree resolve to it through `DefaultTextStyle`, so one `ThemeData`
-cannot hold two body sizes. A back-office screen will wrap its subtree in a `Theme` built from
-`Theme.of(context).copyWith(...)` carrying the compact `AppTokens` and a `bodyMedium` swapped to
-that density's body role. It keeps §3's "chosen by the screen" literal and edits **none** of the
-756 sites; reading the role at every call site was the other correct answer and eventually edits
-all of them.
+**One trap before building it:** `AppTokens` implements no `==`, so equality is identity. A
+`withDensity(...)` call **inside a build method** allocates a new instance every build and rebuilds
+everything below the nested `Theme`. Hold the compact token set as a `static const` beside
+`AppTokens.dark`; do not add an `==` over six nested role objects.
 
-**The mechanism is not in this chunk, only the half that decides.** `AppDensity` holds both value
-sets, `bodyRole` is the seam the nested `Theme` reads, and `pointerOnly` carries §3's rule that a
-touch device never gets 32px targets whatever its width — as data, so the widget that resolves
-density cannot forget it. A widget test drives the seam end to end, so the decision is proved
-rather than described. The widget arrives with the first compact screen.
+Binding: a widget reaches a **role, never a value** — §2.1's primitives are private to
+`lib/ui/tokens.dart`, and a widget that cannot find its role needs `design.md` amended, not a hex
+code. The type roles carry no colour and name no family. **A field named `type` would break the
+extension silently**, because `ThemeExtension` declares `Object get type`; the type roles are
+reached as `typography`. `AppTokens.of` throws rather than falling back. A published contrast figure
+is asserted as a **measurement, not a floor**. A spacing token is named by its value, not by §2.3's
+index. Button `minimumSize` is `Size(0, 48)` and a test says so. §3's "12 / 8" row padding is
+horizontal-then-vertical, by arithmetic.
 
-**One thing to know before building it, found while writing the test and deliberately not fixed in
-a frozen tree.** `AppTokens` implements no `==`, so equality is identity, and identity is free for
-`AppTokens.dark` because a `const` instance is canonicalized. A `withDensity(...)` call **inside a
-build method** allocates a new instance every build, which makes the enclosing `ThemeData` unequal
-to its predecessor and rebuilds everything below the nested `Theme` on every parent rebuild. The
-fix when that widget is written is to hold the compact token set as a `static const` beside
-`AppTokens.dark` rather than to build one per frame — not to add an `==` over six nested role
-objects.
-
-The guarantees are settled, not open:
-
-1. **A widget reaches a role, never a value.** §2.1's primitives are private to
-   `lib/ui/tokens.dart`; a widget that cannot find its role needs `design.md` amended, not a hex
-   code. That is `design.md` §0's order of operations and `claude.md` hard rule 2.
-2. **The type roles carry no colour and name no family**, and both are asserted. Colour is a
-   separate role and a widget pairs the two; the family is absent because `lib/theme.dart` names
-   none either — this app asked for `Inter` for years and no `Inter` was ever bundled.
-3. **A field named `type` would have broken the extension silently.** `ThemeExtension` declares
-   `Object get type` and it is the key `ThemeData.extensions` is looked up under, so a field of
-   that name makes `Theme.of(context).extension<AppTokens>()` answer `null` for ever with nothing
-   failing to compile. The type roles are reached as `typography`; the analyzer reported the
-   override as an `Information`-level hint, which is how it would have shipped.
-4. **`AppTokens.of` throws rather than falling back.** A `Theme` built from a fresh `ThemeData`
-   drops every extension, and answering with the defaults would render a compact screen at
-   comfortable spacing — a wiring fault wearing a layout fault's clothes. The error names
-   `copyWith`.
-5. **A published contrast figure is asserted as a measurement, not as a floor.** Which is what
-   caught §2.1's `text.primary` cell: white on `#0D1F16` is **17.147**, the document said 17.2,
-   and the first run failed by 0.0028 over a 0.05 tolerance. Corrected to 17.1 in `design.md`.
-   `DESIGN-AUDIT.md` §1.3 had recomputed 17.15, printed it beside the claim and concluded the
-   figures were correct, so a recomputation had already looked straight past it.
-6. **A spacing token is named by its value**, because §2.3 named the scale by index while §3 and
-   §5.2 name it by value and the two collide on `space.16` — 64 against 16. Only the value reading
-   is coherent: the index reading gives *compact* a larger section gap than comfortable, and
-   `space.24` is not on the scale at all. §2.3 now says so. No value moved.
-7. **Button `minimumSize` was not touched, and a test says so.** It is `Size(0, 48)` and §5.2's
-   `md` is 40h; a token layer that shrank a touch target would break §9, which is pass/fail under
-   `claude.md` hard rule 6.
-8. **§3's "12 / 8" row padding is read as horizontal-then-vertical, by arithmetic.** The document
-   never says which is which, comfortable is symmetric, and only compact carries the question: 8
-   above and below a 20-high `body.md` line is 36 inside the 40 minimum, and 12 would need 44 and
-   could not fit. Both readings are on the §2.3 scale; only one fits its own row height, and the
-   test pins both halves of that.
-
-**Three things are recorded rather than resolved, because resolving any of them means inventing a
-value `design.md` does not define.** `claude.md` says the correct outcome there is a question.
-
-1. **§2.1's container borders do not clear §9's 3:1 for a UI boundary.** Measured on
-   `surface.base`: `border.subtle` 1.38, `border.strong` 1.97, the five status borders 1.38 to
-   2.04. **The one boundary that carries information on its own — the focus ring — clears it at
-   11.71**, and it is the only boundary §9 names with a value; a status is a container plus an icon
-   plus a word, so its border is decoration rather than signal. That is an argument, not a
-   resolution: either §9's boundary row means something narrower than every border, or ten colours
-   have to become lighter. **This is a product-owner question, and it is the one item from step 1
-   that a later step cannot quietly absorb** — `StatusBadge` is step 4 and it will need the answer.
-2. **`mono` has no family and cannot have one yet.** §2.2 opens with "One family — Roboto" and its
-   last row says "monospace", and this app bundles no font at all — which is also why the
-   screenshot harness is currently more branded than the app, since it injects Roboto itself. The
-   role carries its 13 / 18 / 400 metrics and **is not yet fit for the job §2.2 gives it**: record
-   IDs and SKUs still render proportionally. A test asserts every role's family is null, so the
-   day this is answered that assertion fails deliberately. Same decision as §1.6 of the audit,
-   which is still open.
-3. **Dark is the only palette, because it is the only one defined.** §12 asks whether dark is the
-   only theme and answers nothing, and inventing a light palette is exactly what `claude.md`
-   forbids. If one is ever decided it arrives as a second `AppColorRoles` instance and every widget
-   that reads a role follows it without being edited, which is the reason the role layer exists.
+Reasoning: `HISTORY.md` — "The design system's token layer, wired to nothing" (2026-08-11). Three
+items are recorded rather than resolved, because resolving them means inventing a value `design.md`
+does not define — see "Open decisions" for the container-border contrast question, `mono`'s missing
+family, and dark being the only palette.
 
 ### The ripple dies at the theme, and the press arrives with the button
 
-Built 2026-08-11, `design.md` §11 step 2 and the first redesign step that changes what a person
-sees. It changed `firestore.rules` not at all and nothing in `functions/` either — `git diff` over
-both prints **zero lines**. It moved no board row: a redesign step is not a capability.
+`design.md` §11 step 2, three of its four parts. **§2.4's instruction to replace `InkWell` is wrong
+about this codebase**: there is exactly one `InkWell` in the migrated tree, and every other ripple
+comes from Material's own implementations.
 
-**§2.4 says to replace `InkWell` with an opacity-and-scale overlay, and that instruction is wrong
-about this codebase.** There is exactly **one** `InkWell` in the migrated tree
-(`checkout_cart_panel.dart:1029`); every other ripple comes from Material's own button, chip, tile
-and icon-button implementations. `DESIGN-AUDIT.md` §4.5 found it and §6 decision 4 split the work
-accordingly, and this chunk is the first half of that split.
+Binding: **one line reaches every ripple** — `splashFactory: NoSplash.splashFactory` on `ThemeData`,
+zero call sites touched. **`useMaterial3: true` is now stated rather than inherited, and that is
+load-bearing**: the Material 2 paths in `outlined_button.dart` and `text_button.dart` hardcode
+`InkRipple.splashFactory`, so flipping the flag silently restores ripples on two of the four tiers.
+The four button themes read the token layer, and `AppActionRole.hoverFill()`/`pressedFill()` answer
+§2.1's two different rules so the theme need not know which kind of tier it holds. **Focus resolves
+to the hover wash deliberately** — §2.1's focus ring is a border, belonging to `AppButton` and
+step 12 — and a `WidgetStateProperty` must never answer `null` for a focused button. Scroll physics
+bounce everywhere with no glow through `SpiritScrollBehavior` on the app, extending
+`MaterialScrollBehavior` rather than replacing it, because §2.4 says *everywhere* and that is not a
+rule three hundred list views can be trusted to remember.
 
-The guarantees are settled, not open:
+**Route transitions were not in it**, and are named rather than left as an implied completion: §2.4
+requires anything spatial to be a spring, and a `PageTransitionsBuilder` written on a duration would
+satisfy the step number while contradicting the section it comes from. They landed with
+`AppPageRoute` below.
 
-1. **One line reaches every ripple in the app.** `splashFactory: NoSplash.splashFactory` on
-   `ThemeData`, because `InkResponse` falls back to it and the Material 3 button defaults delegate
-   to it explicitly. Zero call sites were touched.
-2. **`useMaterial3: true` is now stated rather than inherited, and that is load-bearing.** The
-   **Material 2** paths in `outlined_button.dart` and `text_button.dart` hardcode
-   `InkRipple.splashFactory`, so flipping that flag would silently restore ripples on two of the
-   four tiers. It was unset before, which means true-by-default; a test asserts both it and the
-   splash factory.
-3. **The four button themes are the first thing in the app to read the token layer.** Filled and
-   elevated carry `action.primary`, outlined carries `action.secondary`, text carries
-   `action.tertiary`. `AppActionRole.hoverFill()` and `pressedFill()` answer §2.1's **two**
-   different rules — the primary tier moves its container to named colours, the other three wash
-   their own label at 8% and 12% — so the theme does not have to know which kind of tier it holds.
-4. **`action.destructive` has no Material theme to attach to** and arrives with `AppButton` in
-   step 3. So does the label repoint: the outlined button is **still mint** where §2.1 wants sage,
-   and `test/ui/tokens_test.dart` still asserts that divergence. The overlay moved; the label did
-   not.
-5. **Only two rows of §2.1's state table are implemented, and the other three are named rather
-   than implied.** Hover and pressed are here. **Disabled** still resolves through Material's
-   defaults rather than to §2.1's `#1E3A2B` / `#5D7468`, and **loading** — container held, label
-   replaced by a 16px spinner, width frozen — cannot be expressed in a `ButtonStyle` at all. Both
-   are `AppButton`'s, which is why `AppActionRoles` already carries `disabledContainer`,
-   `disabledLabel`, `disabledBorder` and `loadingIndicatorSize` with no reader.
-6. **Focus resolves to the hover wash, and that is deliberately not §2.1's focus row.** §2.1 gives
-   focus-visible a 2px ring at 2px offset, which is a border rather than an overlay and belongs to
-   `AppButton` and to §9's audit in step 12. What a `WidgetStateProperty` must not do meanwhile is
-   answer `null` for a focused button — that paints no overlay at all and would leave a keyboard
-   user with less feedback than before the step.
-7. **Scroll physics bounce everywhere with no glow**, through `SpiritScrollBehavior` on the app
-   rather than a physics argument at each scrollable, because §2.4 says *everywhere* and that is
-   not a rule three hundred list views can be trusted to remember. `MaterialScrollBehavior` is
-   extended rather than replaced, so desktop scrollbars and the drag-device set are untouched.
-8. **`PressSurface` is not here, and the reason is arithmetic.** It needs a spring substrate that
-   does not exist — there are zero `AnimationControllers` in the migrated tree — so a step-2 sweep
-   would build the springs, touch ~40 call sites, and touch all of them again in step 3 when
-   `AppButton` replaces them. Inside `AppButton` it costs one pass.
-
-**Two of the 101 screenshots moved, and what changed in them is a text caret rather than a
-ripple.** Both are `31b-a-receipt-found`. The harness case ends with `tester.tap('Find receipt')`
-and **no `pumpAndSettle`**, so the capture lands wherever the frame timeline happens to be: with a
-ripple in flight the binding kept pumping frames and the field's caret was captured mid-blink in
-its "on" phase, and with no ripple the tree settles immediately and the caret is captured "off".
-The change is real and attributable — two consecutive runs of identical code hash identically —
-but **it is not a picture of the thing this step did**. A ripple exists only mid-press and a glow
-only mid-drag; neither can appear in a screenshot, which is why this step's verification is a
-device check with the performance overlay on, per `design.md` §10, and why the five tests below
-matter more than the images. **Expect that pair to move again at step 3**, when springs change the
-frame timeline once more.
-
-**One part of §11 step 2 is not done, and it is named rather than left as an implied
-completion: route transitions.** The step's title includes them, and §2.4 requires anything
-spatial to be a **spring** that retargets from its current position and velocity. A
-`PageTransitionsBuilder` written on a duration would satisfy the step number while contradicting
-the section it comes from, so it waits for the substrate `AppButton` builds in step 3. Step 2 is
-therefore the ripple, the overlays, and the scroll physics — three of its four parts.
+Reasoning: `HISTORY.md` — "The ripple dies at the theme" (2026-08-11). A ripple exists only
+mid-press and a glow only mid-drag, so this step's verification is a device check with the
+performance overlay on, per `design.md` §10.
 
 ### A button is a component, and a spring is the substrate under it
 
-Built 2026-08-11, `design.md` §11 step 3's first half. It changed `firestore.rules` not at all
-and nothing in `functions/` or `rules-tests/` either — `git diff` over all three prints **zero
-lines**, and this time all four non-Flutter suites were run to say so as well. It moved no board
-row: a redesign step is not a capability.
+`design.md` §11 step 3.
 
-**The queued chunk's own description was wrong, and checking it decided the scope.** This file
-said the call-site migration was "roughly forty buttons". Counted against source, the migrated
-tree holds **168** `FilledButton` / `OutlinedButton` / `TextButton` / `ElevatedButton`
-constructor calls across **38 files**, plus 13 `IconButton`s. The product owner chose to build
-the component and migrate one complete area — `tenant_routing_shell.dart`, 22 sites — leaving
-**146 across 37 files** as the next chunk.
+Binding: **a spring never starts from zero.** `SpringDrive.animateTo` is the only way to move one
+and always reads the live value and live velocity out of the controller it retargets.
+`AnimationController.forward()` is deliberately neither wrapped nor exposed. The drive runs 0 to 1
+and the widget lerps off it, because `SpringSimulation` decides it is done against an absolute
+`Tolerance`. **The painted height and the tap target are different things** — §5.2 gives `sm` 32h
+and §9 makes 48dp pass/fail, and both hold only by separating them; the test taps all four edges
+rather than measuring a box. **The focus ring's 4px gutter is reserved always**, because a ring
+appearing on focus would reflow the row a keyboard user just tabbed into. It is `focus-visible`,
+not `focused`, read from `FocusManager.instance.highlightMode` — the same place `InkResponse` reads
+it. The label flexes unconditionally, because Material's own button does. `action.destructive`
+exists for the first time here. Six of §5's nine states apply; `error` belongs to `AppTextField`, a
+button that may not be used is `disabled` rather than read-only, and there is no empty button.
 
-The guarantees are settled, not open:
+**`spring.snappy` is underdamped and §2.4 is generous about it.** Measured damping ratios: `snappy`
+**0.821**, `smooth` 1.012, `gentle` 1.014, `bouncy` 0.558. No value was changed and none should be
+— 1.1% of a press is 0.0003 of scale for one frame — but the ratios are asserted so
+"near-critically damped" cannot quietly cover a different spring later. `bouncy` overshoots by 12%,
+which is the distinction §6.2's reward layer rests on.
 
-1. **A spring never starts from zero.** `SpringDrive.animateTo` is the only way to move one and
-   it always reads the live value and the live velocity out of the controller it is retargeting.
-   `AnimationController.forward()` is deliberately neither wrapped nor exposed: it is the API
-   that satisfies a spring-shaped call site while doing the one thing §2.4 and `claude.md`
-   forbid. A test catches the drive mid-flight, retargets it, and asserts both that the position
-   is the caught one and that the **velocity survives** — the half a position check cannot see.
-2. **The drive runs 0 to 1 and the widget lerps off it.** `SpringSimulation` decides it is done
-   against an absolute `Tolerance`, so a spring run directly from 1.0 to 0.97 finishes inside
-   the tolerance it is measured with and never moves.
-3. **The painted height and the tap target are different things.** §5.2 gives `sm` 32h and §9
-   makes 48dp pass/fail; both hold only by separating them. **The first implementation reserved
-   the area outside the gesture detector**, so it measured 48 and answered nothing — the test
-   now taps all four edges rather than measuring a box.
-4. **The focus ring's 4px gutter is reserved always.** A ring appearing on focus would reflow
-   the row a keyboard user just tabbed into, which is a worse failure than the one §9 names.
-5. **It is `focus-visible`, not `focused`**, read from `FocusManager.instance.highlightMode` —
-   the same place `InkResponse` reads it, so a migrated control and an unmigrated one beside it
-   agree about when a ring shows.
-6. **The label flexes, unconditionally, because Material's own button does.** `RenderFlex`
-   permits flex under unbounded constraints when `mainAxisSize` is `min` and rejects it only at
-   `max`, which here is `expand`, where the width is bounded by construction. The two failed
-   alternatives are recorded as traps below.
-7. **`action.destructive` exists for the first time.** It has no Material button theme to attach
-   to, so until this component there was no way to render §2.1's fourth tier at all. **It has no
-   call site yet**: the rule that fixes the sale screen — *Clear this sale* is destructive,
-   *Save sale* is primary — is step 7's to apply, and the landing route has nothing destructive
-   on it. It is covered by the harness matrix and by tests, not by a screen.
-8. **Three theme repoints, two of them the divergences step 1 planted.** `test/ui/tokens_test.dart`
-   asserted the outlined label's mint and the primary label's `bgDark` as divergences *on
-   purpose*; both moved, the test failed, and the rows became agreements in the same change,
-   which is exactly the mechanism working. **The third was not on the list**: the outlined
-   border, `#1E3A2B` → `#2C5340`, taken so an unmigrated `OutlinedButton` and an `AppButton` in
-   `secondary` on one screen cannot disagree about the same tier.
-9. **Six of §5's nine states, and the missing three are named rather than implied.** `error`
-   belongs to `AppTextField` per §5.2 — a button has no value to be wrong about; a button that
-   may not be used is `disabled` rather than read-only; there is no empty button.
-
-**`spring.snappy` is underdamped and §2.4 is generous about it.** Damping ratios measured this
-session: `snappy` **0.821**, `smooth` 1.012, `gentle` 1.014, `bouncy` 0.558. §2.4 claims all but
-`bouncy` are "critically or near-critically damped"; `smooth` and `gentle` are a shade *past*
-critical and `snappy` overshoots by **1.1%**. No value was changed and none should be: 1.1% of a
-press is 0.0003 of scale for one frame. `bouncy` overshoots by **12%**, an order of magnitude
-more, which is the distinction §6.2's reward layer rests on. The ratios are now asserted so
-"near-critically" cannot quietly cover a different spring later.
-
-**75 of the 101 screenshots moved and 12 were added — the largest image diff of the migration so
-far, and all of it has one cause.** The label repoints reach every button in the app through the
-theme, migrated or not. **What the 12 new ones prove and do not prove** is worth pinning: they
-are the state matrix, driven for real — four simultaneous touch pointers for `pressed`, a mouse
-per capture for `hover`, one focused node per capture for `focus-visible` — and they photograph
-the scale at a **settled** moment. Whether the spring is interruptible, and whether it drops a
-frame, remains a device check under §10.
+Reasoning: `HISTORY.md` — "`AppButton`, and the spring substrate under it" (2026-08-11).
 
 ### Every button is an `AppButton`, and the tier is a decision per site
 
-Built 2026-08-11, finishing `design.md` §11 step 3's first half. It changed `firestore.rules` not
-at all and nothing in `functions/` or `rules-tests/` either. It moved no board row and added no
-tests, both deliberately: a migration that adds no behaviour and no component should add neither.
+**A call-site count that greps source without excluding comment lines finds work that does not
+exist.** `lib/config.dart` is fully commented out and its only importer is legacy; two successive
+wrong figures came from that. Method, not number: exclude comments before counting.
 
-**The count was wrong a second time, and the correction is a method rather than a number.** The
-previous session corrected "roughly forty" to 168; 168 was wrong by 8, because `lib/config.dart`
-is a **fully commented-out file** whose only importer is legacy. **A call-site count that greps
-source without excluding comment lines finds work that does not exist**, and both wrong figures
-came from that. The real total was 162: 155 migrated, 7 left.
+Binding: the **7 remaining sites are `checkout_cart_panel.dart`'s and they are step 7's**, not
+skipped — that is where §2.1's rule that *Clear this sale* is destructive and *Save sale* is primary
+must be applied. Fifteen call sites hand-rolling §2.1's loading row are `loading:` now, and **the
+nulled callback did not come with them**: a null callback renders *disabled*, which says "you may
+not do this" over a control whose truth is "this is happening"; `AppButton` suppresses the press
+while loading and freezes the width. Where one control has two meanings, the tier is read from the
+same expression that already picked the icon and the label. **Pagination stopped being primary** —
+§2.1 permits one primary per screen region. Prefer a balanced-paren rewriter over a regex: the
+rewriter refused 17 sites it was not sure of, and every one held a decision.
 
-The guarantees are settled, not open:
+One layout consequence is owned rather than left to be found: a form action inside a stretching
+`Column` is now centred at its natural width instead of full width, because `AppButton`
+shrink-wraps, and §5.2 describes a padding-sized button.
 
-1. **The 7 that remain are `checkout_cart_panel.dart`'s and they are step 7's**, not skipped. That
-   is the sale path, where §2.1's rule that *Clear this sale* is destructive and *Save sale* is
-   primary must be applied; doing it here would have put a step-7 decision inside a step-3 diff.
-2. **Fifteen call sites were hand-rolling §2.1's loading row** — spinner swapped for the icon,
-   label swapped for a gerund, `onPressed` nulled. They are `loading:` now, and **the nulled
-   callback did not come with them**: a null callback renders §2.1's *disabled* row, which says
-   "you may not do this" over a control whose truth is "this is happening". `AppButton` suppresses
-   the press while loading, so the guard survives without the wrong colours — and the width
-   freezes, which the hand-rolled version never did.
-3. **`action.destructive` has nine call sites and two of them are why it exists.** A cancellation
-   form reached past the theme for `colorScheme.error`/`onError`, and a confirm dialog carried a
-   `destructive` boolean that picked a `backgroundColor` — both `claude.md` hard rule 2 being
-   broken because there was no role to reach for. **Four of the nine are one control with two
-   meanings** (suspend/reactivate, reject/approve, disable/reactivate, deactivate/reactivate), and
-   the tier is read from the same expression that already picked the icon and the label.
-4. **`Correct` / `Retire` closes a §9 failure on both of the counts §9 names it for** — "20px
-   targets on a touch surface, and destructive-adjacent actions rendered identically".
-5. **Pagination stopped being primary.** `Next page` was a `FilledButton` on six feeds while the
-   screen's real primary sat beside it. §2.1 permits one primary per screen region.
-6. **A rewriter did the regular shapes and refused 17 it was not sure of**, every one of which
-   turned out to hold a decision. That refusal is the reason to prefer a balanced-paren rewriter
-   over a regex here: a regex would have rewritten all 17 silently and wrongly.
-7. **One layout consequence is owned rather than left to be found.** A form action inside a
-   stretching `Column` is now centred at its natural width instead of full width, because
-   `AppButton` shrink-wraps. §5.2 describes a padding-sized button, so the new shape is the
-   conformant one — but it is a layout change inside a chunk whose headline is colour.
-
-**74 of the 113 screenshots moved and one was added.** The addition is
-`mobile-full/34-returns-on-a-sale.png`, which did not exist before: nothing was added to that
-screen, it grew past the fold because every button now reserves the focus ring's 4px gutter and
-honours a 48dp minimum.
+Reasoning: `HISTORY.md` — "Every remaining button becomes an `AppButton`" (2026-08-11).
 
 ### Five statuses, and three components two of which have no specification
 
 `design.md` §11 step 4. `StatusBadge`, `Callout` and `Disclosure` are in `lib/ui/status.dart`, with
 `AppStatus` as the five-valued enum §2.1 describes.
 
-**Only `StatusBadge` and `Disclosure` are specified.** §5.2 gives the badge a one-line row -
-`radius.sm`, `label.md`, 24h, icon 14px leading, `space.8` padding, the full triple - and gives
-`Disclosure` a paragraph. **`Callout` has a §5.1 row and no measurements at all.** It is therefore
-drawn out of §2 rows that already exist, each named in its own doc comment: the status triple for
-the container, `radius.md` from §2.3's "cards, rows, sheets" row, `space.16` padding and `space.12`
-between glyph and words, `title.md` for a title and the density's body role for the message. This
-is the same move `AppSelect` made in step 3 for the same reason, and it is recorded so a reader
-does not mistake a borrowed row for a specified one.
+**Only `StatusBadge` and `Disclosure` are specified.** `Callout` has a §5.1 row and no measurements,
+so it is drawn out of §2 rows that already exist, each named in its own doc comment. Recorded so a
+reader does not mistake a borrowed row for a specified one. **Two icon sizes were borrowed and are
+open questions** — see "Open decisions".
 
-**The prose is `text.secondary`, not the status colour, and that is a reading of §2.1 rather than a
-deviation from it.** §2.1's rule is that a status is a container plus an icon plus a word. It does
-not say every word inside the container is tinted, and a whole paragraph set in status red is
-harder to read than a paragraph beside a red glyph.
+Binding: the prose inside a callout is `text.secondary`, **not the status colour** — §2.1's rule is
+that a status is a container plus an icon plus a word, not that every word inside is tinted. **The
+glyphs are the component's decision**: §5.2 makes an icon mandatory and names none, so a default per
+status is what stops that requirement being a blank each call site fills differently. A call site may
+override it. **Closed means gone from the tree** — a collapsed `Disclosure` renders no part of its
+explanation, and the condition is the widget's own flag **and**
+`extent <= Tolerance.defaultTolerance.distance`, because keying on `extent == 0` leaves the prose
+mounted forever. `SettlingSpringSimulation` was deliberately not wired into `SpringDrive`: that
+changes every press spring in the app for an invisible difference. The reveal is `spring.smooth` and
+the chevron rotates off the same drive.
 
-**The glyphs are the component's decision.** §5.2 makes an icon mandatory - "it is what makes the
-status legible without colour" - and names no glyph for any of the five. A default per status is
-what stops that requirement from being a blank each call site fills differently, which is how one
-green came to mean seven things. A call site may still override it, and the staff directory does,
-for an invitation. An icon is not a token, so this is not the invention `claude.md` forbids; it is
-recorded here because it is a decision rather than a reading.
+Two mappings are decisions rather than lookups: an **inactive** member is `neutral`, not `problem`;
+an **unrecognised** reconciliation state is `info`, not `problem`, because a server state this app
+does not model is not evidence of anything wrong.
 
-**Two sizes were borrowed, and both are open questions rather than settled ones.** §5.2 names
-exactly two icon sizes - `AppButton`'s leading icon at 18 and `StatusBadge`'s at 14 - and neither
-`Disclosure`'s info glyph and chevron nor `Callout`'s glyph is among them. Both take 18, as the
-nearest named row for a leading glyph on a line of body text. See the open decision below.
+**`ConfirmDialog` left step 4 for step 7**, whose own row names "destructive confirm": it
+consolidates four `await`-and-branch call sites and so cannot ship as a visual change.
 
-**Closed means gone from the tree, and how "closed" is decided is the interesting part.** A
-collapsed `Disclosure` renders no part of its explanation, so a screen reader does not read out
-prose nobody can see. `SpringSimulation` finishes against `Tolerance`, whose defaults are absolute,
-so a spring asked for zero parks within `1e-3` of it and **stays there** - keying the removal on
-`extent == 0` leaves the prose mounted forever after every close. The condition is the widget's own
-flag **and** `extent <= Tolerance.defaultTolerance.distance`, which asks the physics where arrived
-is rather than guessing. `SettlingSpringSimulation` is the other way to solve it and was
-deliberately not wired into `SpringDrive`: that changes every press spring in the app for an
-invisible difference.
-
-**The reveal is `spring.smooth`, which §2.4's own table names "expansion" for**, and the chevron
-rotates off the same drive rather than off a second animation that could disagree with it
-mid-flight. `AnimatedCrossFade` and `ExpansionTile` were both unusable: each is a duration and a
-curve.
-
-**`ConfirmDialog` left step 4 for step 7.** `DESIGN-AUDIT.md` §4.3 says it consolidates four
-`await`-and-branch call sites and so cannot ship as a visual change, which brushes `claude.md` hard
-rule 1. What §4.3 did not say is that it already has a home: **§11 step 7's own row names
-"destructive confirm"**. Nothing else in step 4 depended on it, so the decision cost nothing.
-
-**Four screens were migrated and one status was deliberately left alone.** The staff directory's
-membership and invitation standings, the reconciliation day's outcome, that page's manager notice,
-and the four long explanations §5.2 names or matches. **`reconciliation-request-notice` stays a
-`Text`**: it is a `String?` the panel passes down and nothing in the model says whether a given
-notice is a success or a refusal, so choosing a status would mean either inspecting the sentence -
-guesswork - or changing what the parent computes, which is not a visual change.
-
-**Two mappings are decisions rather than lookups.** An **inactive** member is `neutral`, not
-`problem`: §2.1 gives "closed" to neutral and a deactivated member is closed rather than a
-difference found. An **unrecognised** reconciliation state is `info`, not `problem`, even though
-§2.1 lists "unreadable" under problem - because the comment on `_verdict` had already decided in
-words that a server state this app does not model is not evidence of anything wrong, and painting
-it red would invent in colour the answer the code refuses to invent in prose.
-
-**A `Disclosure` is not free at desktop width, and the screenshots say so.** The reconciliation page
-now overflows a 1440-wide window where it used to fit: its two paragraphs are one and two lines at
-that width, so folding them saves almost nothing while the header's padding and the new badge add
-about forty pixels. At 411 the same paragraphs are four and five lines and the page got shorter,
-which is the win §5.2 describes. **Worth knowing before step 6 folds more prose away.**
-
-~~**The role chip survives, and it is now visibly the odd one out.** `TenantStatusChip` still draws a
-staff member's *role*, which is not one of the five statuses and must not be dressed as one. It is
-a 20-radius pill beside a `radius.sm` badge. It belongs to `FilterChipBar`, §5.1 priority 2.~~
-**Closed 2026-08-13, and not by `FilterChipBar`.** The staff directory's migration onto `RecordList`
-made the role a **`RecordAttribute`** — §5.2's key-value row — which is where a fact that is not one of
-§2.1's five belongs. `TenantStatusChip` had no other call site and was deleted. Its glyph and its
-primary tint for owners and admins went with it, deliberately: see the sweep's standing decision.
+Reasoning: `HISTORY.md` — "Five statuses, two notices, and prose that folds away" (2026-08-12). A
+`Disclosure` is not free at desktop width — at 1440 folding two short paragraphs saves less than the
+badge and padding add.
 
 ### One field, everywhere - and an audit finding that was false
 
-Built 2026-08-12, finishing `design.md` §11 step 3. `AppTextField`, `AppSelect` and the
-`AppFieldWell` they share are at **39 call sites across 17 files** — 34 fields and 5 selects. It
-changed `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+`design.md` §11 step 3's second half. `AppTextField`, `AppSelect` and the `AppFieldWell` they share
+are at **41 call sites across 18 files**. **The only fields left in the migrated tree are the sale
+path's two**, and they are step 7's.
 
-**The three fields left in the migrated tree are named rather than counted as remaining work.**
-`checkout_cart_panel.dart` has two, and it is step 7's sale path in its entirety;
-~~`pill_input.dart` has one, and §4.4's uppercase labels, pill well and green glow are step 9's.~~
-**Step 9 took `pill_input.dart`'s two on 2026-08-15** — it was two fields, not one — so the count is
-**41 call sites across 18 files** and the only fields left in the migrated tree are the sale path's
-two.
+Binding: **the error replaces the helper line**, so the field does not change height when it goes
+wrong and a form does not reflow under the finger typing into it; asserted as a size equality. The
+counter renders only above 80% of the limit and counts **characters**, the unit `maxLength`
+enforces. **A field shows focus however it was focused, and a button does not** — a focused field is
+*where the keys go*, and on a form with several of them not saying which is receiving the typing is
+the failure §9 is about. A validator is supported rather than rewriting the eight `TextFormField`
+call sites, and where both a validator message and an explicit error exist the explicit one wins,
+because a server's refusal is about the value that was *submitted*. `AppSelect` has no specification
+and borrows the field's entirely; its menu takes `radius.md` as the nearest row rather than a fifth
+radius being invented. **`hover` is in the harness showing no change, on purpose** — §5.2 specifies
+no hover treatment for a field and `claude.md` forbids inventing a token; queued as a question for
+the product owner.
 
-The decisions are settled:
+**An audit finding that says "nothing exists" is a claim about the whole tree and needs a whole-tree
+grep behind it.** `DESIGN-AUDIT.md` §2.2 said there was no `DropdownButtonFormField` in the migrated
+tree; there are five, and `AppSelect` had been dropped from §5.1 on that basis. Caught before
+anything was built around it and reversed the same session. Both claims are struck through with the
+correction rather than deleted.
 
-1. **The error replaces the helper line, and that is a layout rule before it is a colour rule.**
-   One slot under the field holds one or the other, so the field does not change height when it
-   goes wrong and a form does not reflow under the finger typing into it. Asserted as a size
-   equality.
-2. **The counter renders only above 80% of the limit, and counts characters.** That is the unit
-   `maxLength` enforces through `LengthLimitingTextInputFormatter`; a counter that disagreed with
-   the limit it names would be worse than none. `TextField`'s own counter is suppressed rather
-   than restyled.
-3. **A field shows focus however it was focused, and a button does not.** `PressSurface` paints
-   §9's ring only under `FocusHighlightMode.traditional`, because a ring under a thumb is noise.
-   A focused field is not a highlight, it is *where the keys go*, and on a form with several of
-   them not saying which one is receiving the typing is the failure §9 is about.
-4. **A validator is supported rather than the eight `TextFormField` call sites being rewritten.**
-   Passing one registers the field with the enclosing `Form`, so `Form.validate()` reaches it as
-   before, and the message lands in the same slot an explicit `error` would. Where both exist the
-   explicit one wins: a server's refusal is about the value that was *submitted* and a validator
-   is about the value on screen.
-5. **`AppSelect` has no specification and borrows the field's entirely.** §5.1 gives it a row and
-   §5.2 specifies only the load-bearing five, which it is not among. Same label, well, border,
-   radius, height, helper and error — which is what "one pattern, everywhere" forces. The one
-   value not read straight from a §2 row is the menu's corner: §2.3 names four radii and none of
-   them lists a menu, so `radius.md` is applied as the nearest row rather than a fifth being
-   invented.
-6. **`hover` is in the harness showing no change, on purpose.** §5.2 specifies no hover treatment
-   for a field, and `claude.md` forbids inventing a token, so `92-appfield-hover` is a picture of
-   nothing happening — captured rather than omitted so a reviewer can see the absence is
-   deliberate. **Queued below as a question for the product owner.** `pressed` and `loading` are
-   absent because a field is not a control you push, and a field whose value is not ready is
-   `disabled` or `read-only`, both already in the matrix.
-
-#### The audit claim that was false, and what it cost
-
-`DESIGN-AUDIT.md` §2.2 said: "**There is no `DropdownButtonFormField` in the migrated tree.**" The
-product owner dropped `AppSelect` from §5.1 on that basis at the start of the session. **There are
-five** — `audit_log_panel`, `stock_adjustment_panel`, `stock_movement_feed_panel`,
-`tenant_staff_invitation`, `tenant_staff_update` — which is exactly the row §5.1 wrote for it. The
-audit had looked at the two places a *category* is chosen, found `ChoiceChip`, and generalised from
-two call sites to a whole tree.
-
-It cost nothing only because it was caught before anything was built around it: the decision was
-put back to the product owner with the real figure and reversed the same session. **An audit
-finding that says "nothing exists" is a claim about the whole tree and needs a whole-tree grep
-behind it.** Both claims in `DESIGN-AUDIT.md` are struck through with the correction rather than
-deleted, so the reversal is legible to whoever reads the audit next.
+Reasoning: `HISTORY.md` — "One field, everywhere" (2026-08-12).
 
 ### A route arrives on a spring, and one parallax is deliberately missing
 
-Built 2026-08-12, finishing `design.md` §11 step 2. `AppPageRoute` is a `PageRoute` subclass and
-all **23** `MaterialPageRoute` call sites in the migrated tree are now it. It changed
-`firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+`design.md` §11 step 2's fourth part. `AppPageRoute` is a `PageRoute` subclass and all **23**
+`MaterialPageRoute` call sites in the migrated tree are now it.
 
-The decisions are settled, not open:
+Binding: the SDK supplies the seam — `TransitionRoute.createSimulation({required bool forward})` —
+and the pop path hands the result to `AnimationController.animateBackWith`, so the finished route
+reaches `dismissed`, `finalizeRoute` runs, and the leak this chunk was scoped around **cannot happen
+through this API**. **Interruptibility is a property of when that hook is called**, not of code
+written here: `createSimulation` runs before the controller is stopped, so the live value and
+velocity are the figures of the transition still in flight. It uses **`SettlingSpringSimulation`**,
+because a plain spring parks a page a fraction of a pixel off its own edge for as long as it is on
+screen; **`SpringDrive` still uses the plain one on purpose.** Two rows, latched once in `install()`
+— a transition changing identity halfway because a window was resized would be worse than either
+row. §4.1's `medium` is not named by §6.2 and the literal reading is taken: 768–1023 gets the
+compact row. **Reduced motion is a simulation that is already done**, not a shortened duration.
+The route reads `MediaQuery` **without depending on it**, because a route is not a widget and the
+context it holds is the navigator's.
 
-1. **The SDK supplies the seam this file said did not exist.**
-   `TransitionRoute.createSimulation({required bool forward})` is called on every push and pop,
-   and the pop path hands the result to `AnimationController.animateBackWith`, which sets the
-   reverse direction — so the finished route reaches `dismissed`, `finalizeRoute` runs, and the
-   leak this chunk was scoped around **cannot happen through this API**. Verified rather than
-   believed: a hundred pushes and pops, each waited on through `Route.completed`.
-2. **Interruptibility is a property of *when* that hook is called, not of code written here.**
-   `createSimulation` runs **before** the controller is stopped, so `controller.value` and
-   `controller.velocity` inside it are the live figures of the transition still in flight. A pop
-   mid-push leaves from where the page is at the speed it is going, which is §2.4's first rule.
-3. **`SettlingSpringSimulation`, because a spring stops near its end rather than at it.**
-   `SpringSimulation` is done within `Tolerance.distance` — `1e-3` — and `AnimationController`
-   keeps whatever it last reported. On a press that is invisible; on a route it is a page parked a
-   fraction of a pixel off its own edge, rendering every glyph on a fractional offset, for as long
-   as it is on screen. **`SpringDrive` still uses the plain one on purpose**: the screenshots were
-   captured against it and swapping it would move images for a difference nobody can see.
-4. **Two rows, latched once.** §6.2 gives compact a horizontal spring on `spring.smooth` with the
-   covered surface at `motion.routeParallax`, and expanded a fade-through on `motion.medium` with
-   no horizontal travel — a duration, correctly, because nothing in it moves. The row is decided
-   in `install()` and held for the life of the route; a transition that changed identity half way
-   through because a window was resized would be worse than either row.
-5. **§4.1's `medium` is not named by §6.2, and the literal reading is taken.** `expanded` is
-   `>= 1024`, so 768–1023 gets the compact row — the same grouping §4.3 uses for the sale pane.
-   **No fourth breakpoint constant was declared**; `tenantTableBreakpoint` was already 1024, and
-   step 6a folded that constant into `AppLayout.expandedFloor` at the same number.
-6. **Reduced motion is a simulation that is already done**, not a shortened duration.
-   `transitionDuration = Duration.zero` is unreachable — the duration is a getter with no context —
-   and `AnimationController`'s own 0.05 scaling reads
-   `SemanticsBinding.instance.disableAnimations`, a different flag from the one §2.4 names and one
-   a widget test setting `MediaQueryData.disableAnimations` cannot see.
-7. **The route reads `MediaQuery` without depending on it**, through
-   `context.getInheritedWidgetOfExactType<MediaQuery>()`. A route is not a widget and the context
-   it holds is the *navigator's*; `MediaQuery.of` there would rebuild the navigator on every
-   metrics change, the keyboard opening included.
-
-**The eighth push in `tenant_routing_shell.dart` was missed by whatever counted the call sites**:
-this file said 22 and there are 23.
-
-#### The parallax that is missing, and the coupling behind it
-
-`MaterialApp.home` builds the landing route as a `MaterialPageRoute`, and
-`MaterialRouteTransitionMixin.canTransitionTo` refuses to animate a route out under one it does
-not recognise **unless that route offers a `delegatedTransition`**. Eight of the twenty-three
-pushes leave the landing route. The delegated transition was built, it worked, and it was taken
-out again, because it cost **an extra Firestore read on every push and every pop** — `sales,
-returns, sales` where the same tap used to read `sales, returns`.
-
-**The mechanism, because four failing tests named none of it.** `ModalRoute.didChangeNext` sets
-`receivedTransition` when the incoming route offers one, and `_buildFlexibleTransitions` wraps the
-covered route's own transition in it. That changes the **shape** of the tree above the page, so the
-page — which hangs off `route._subtreeKey`, a `GlobalKey` — is re-parented rather than updated. A
-re-parented subtree rebuilds; `_TenantSaleHistoryPanelState.build` hands `TenantRouteGuard` a
-**fresh `load` closure** every rebuild; and the guard's `didUpdateWidget` compares
-`oldWidget.load != widget.load` **by identity** and reloads.
-
-`claude.md` hard rule 1 decides it: a UI change never issues a repository call. So 15 pushes
-parallax and 8 do not, **and both halves are asserted** — the day the coupling closes, the test
-pinning the boundary fails and gets rewritten in the same change.
+**Fifteen pushes parallax and eight do not, and both halves are asserted.** `MaterialApp.home`
+builds the landing route as a `MaterialPageRoute`, which will not animate out under a route offering
+no `delegatedTransition`. The delegated transition was built, worked, and was taken out again
+because it cost **an extra Firestore read on every push and every pop**: offering one re-parents the
+covered page's subtree, which rebuilds it, which hands `TenantRouteGuard` a fresh `load` closure,
+which its identity comparison treats as a reload. `claude.md` hard rule 1 decides it. The day the
+coupling closes, the test pinning the boundary fails and gets rewritten in the same change.
 
 **The coupling predates this chunk and is queued below as its own item.** It is a latent defect
-either way: any rebuild of any of those panels, from any cause, already re-queries. Repairing it is
-a behaviour change and does not belong in a visual chunk.
+either way: any rebuild of those panels, from any cause, already re-queries.
+
+Reasoning: `HISTORY.md` — "A route arrives on a spring" (2026-08-12).
 
 ### A category is named, and a document ID is not a name
 
-Built 2026-08-11, closing finding 5. It changed `firestore.rules` not at all and nothing in
-`functions/` or `rules-tests/` either — `git diff` over all three prints **zero lines**. It moved
-no board row, because a defect repair inside rows that were already green has no colour to move.
-
-**The queued chunk's premise was wrong twice and checking it decided the work.** This file said
-the defect sat in two surfaces and that the read-only catalog already resolved names correctly.
-It held the identical `?? product.categoryId` fallback; it looked right on the device only
-because nothing filed off its categories page was ever rendered through it. Counted against
-source, **eight places named a category and every one of them could state an ID** — the
-read-only catalog list, the "Manage catalog" list and its "Filed under" line, the "Correct"
-dialog's off-page sentence, the correction confirmation's "Category: was …", the bulk selection
-list, the bulk correction report, and the import preview. Six reached the ID through a `?? id`
-fallback and two printed it outright; between them they held **five** copies of the lookup, and
-only the "Filed under" line was unreachable.
-
-**The rule is one sentence, and everything else follows from it:**
-
 > **A document ID is not a worse name for a category. It is not a name.**
 
-The guarantees are settled, not open:
+Binding: **one resolution**, in `lib/tenancy/tenant_catalog.dart` beside `TenantCategory` —
+`tenantCategoryNames`, `tenantCategoryLabel`, `tenantCategoryPhrase`. It deliberately disagrees with
+`tenantStaffLabel`, which **keeps the UID visible**, because a UID is what every sale, shift and
+audit record is attributed by while nothing a person sees refers to a category by its ID. The
+unlisted state reads **"Category not listed here"**: two causes arrive there — a business with more
+categories than one page, and a category document that cannot be read — and the wording claims
+neither. Two wordings for one answer, split by grammar: `tenantCategoryLabel` opens a line,
+`tenantCategoryPhrase` sits inside one. The import preview names what the sheet said in three
+descending degrees of certainty, and **the ID is not a third degree**. The import's wording is held
+with its plan, because a commit re-sends the pages the preview sent. **A recorded decision was
+reversed on purpose**: "stating the ID beats stating nothing" now says the opposite in all three
+places, per `design.md` §8 rule 1. Reporting was left alone — `SalesTotalsCategoryOptions.nameOf`
+with `?? 'one category'` is correct for a filter label.
 
-1. **One resolution, in the file that defines what a category is.** `tenantCategoryNames`,
-   `tenantCategoryLabel` and `tenantCategoryPhrase` live in `lib/tenancy/tenant_catalog.dart`
-   beside `TenantCategory`, which every one of those surfaces already imports. Modelled on
-   `tenantStaffLabel`, and the doc comment records where the two deliberately disagree: a staff
-   label **keeps the UID visible** beside a resolved name, because a UID is what every sale,
-   shift and audit record is attributed by. Nothing a person sees refers to a category by its ID.
-2. **The unlisted state stays legible rather than blank.** `cat-not-cached` is not bad data — it
-   is a product filed under a category the surface cannot read — so it reads **"Category not
-   listed here"**. Two causes arrive there and the client cannot tell them apart: a business with
-   more categories than one bounded page, and a category document that cannot be read at all. The
-   wording says only what is known and claims neither.
-3. **Two wordings for one answer, and the split is grammar.** `tenantCategoryLabel` opens a line;
-   `tenantCategoryPhrase` sits inside one, because "filed under Category not listed here" is not
-   a sentence anybody wrote. Both are asserted, so they cannot quietly become one.
-4. **The import preview names what the sheet said, in three descending degrees of certainty**:
-   the categories this surface read, then the row's own `categoryName` — a true name, because the
-   server matched it against a real category to accept the row — then the unlisted phrase. **The
-   ID is not a third degree.** The row's own name is second because the server's fold is
-   case-insensitive, so what was typed can differ in case from what is stored.
-5. **The import's wording is held with its plan.** `_importCategoryNames` is captured with the
-   preview and cleared with it, because a commit re-sends the pages the preview sent and must word
-   them identically while the route re-reads its categories between the two. A bulk correction
-   needs no equivalent: its rows carry the wording they were planned with.
-6. **A recorded decision was reversed on purpose.** "Stating the ID beats stating nothing" was a
-   comment in two modules and the reason on a test. All three now say the opposite, per
-   `design.md` §8 rule 1 — name things the way the shopkeeper does, never the way the system does.
-7. **Reporting was left alone.** `SalesTotalsCategoryOptions.nameOf` with `?? 'one category'` is
-   correct for a filter label, where naming an unlisted category is noise about something the
-   reader did not ask about. Six resolution paths became two, and the second is that one.
-8. **No behaviour changed.** No repository call, no state logic, no routing condition, no payload.
-   Two functions gained a named parameter; every wire payload in the diff is byte-identical.
-
-**The 101 screenshots moved not one byte, and that is evidence about the rest of the app rather
-than about this repair.** `tool/screenshots/fakes.dart` files every seeded product under one of
-its three seeded categories, so no capture reaches the branch this chunk changed and the four
-that render a category *could not* move. The repair is covered by the seven tests, two of which
-assert over **every `Text` in the tree** — `cat-` and `ct_`, the seeded shape and the shape
-`buildCategoryIntent` derives — rather than over the slot that was wrong, because the two
-defective surfaces were exactly the two nobody was looking at.
+Reasoning: `HISTORY.md` — "A category is named, and never shown as a document ID" (2026-08-11). The
+premise was wrong twice: eight surfaces named a category and every one could state an ID, holding
+five copies of the lookup between them.
 
 ### A screen title is content, and the toolbar keeps only the way back
 
-Built 2026-08-12, finishing `design.md` §11 step **5a** — `AppScaffold` and `PageHeader`, per
-`DESIGN-AUDIT.md` §6 decision 3's split of step 5. **5b, §4.4's navigation model, is not in it and
-stays queued**: it is a behaviour change and needs a device check. `lib/ui/scaffold.dart` is 25 call
-sites across 23 files. It changed `firestore.rules` not at all and nothing in `functions/` or
-`rules-tests/` either.
+`design.md` §11 step **5a** — `AppScaffold` and `PageHeader`. **5b, §4.4's navigation model, is not
+in it and stays queued**: it is a behaviour change and needs a device check.
 
-The decisions are settled, not open:
+Binding: **the title left the toolbar because §2.2 will not fit in one** — `display` is 32/40 at 700
+and no 56-high Material toolbar holds it, so a screen title is a piece of *content*, at `title.lg`
+below §4.1's `expanded` floor and `display` at or above it. **`AppBar` was kept rather than
+hand-drawn**, because it owns the leading control, the "is there a way back" logic, the safe-area
+inset and the toolbar semantics, and redrawing it would move routing behaviour into a visual change.
+**The frame costs a route 72 logical pixels of body** — written down rather than discovered, and
+attached to the next device run. The tab strip on the platform route sits under the header, because
+§7's order is header → callout → filters → content. **Below 768 the primary action drops under the
+title**, because a `Row` gives an unflexed action all the width it asks for. The title role is
+resolved against the **screen**, not the header's own box, or a `LayoutBuilder` would produce a
+fourth breakpoint at 1064 that nobody declared. **`subtitle` and `primaryAction` shipped with no call
+site**; `subtitle` gained callers with §7's title chunk.
 
-1. **The title left the toolbar because §2.2 will not fit in one.** `display` is 32 / 40 at weight
-   700 and no 56-high Material toolbar holds it, so a screen title is a piece of *content*. §7 says
-   "Title appears once", and it now appears once — in the page, at `title.lg` below §4.1's
-   `expanded` floor and `display` at or above it. `AppBar` stays, carrying the way back and the
-   app-level actions that were already beside the title.
-2. **`AppBar` was kept rather than hand-drawn, and that is `claude.md` hard rule 1 rather than
-   laziness.** It owns the leading control and the "is there a way back from here" logic, the
-   safe-area inset, the scrolled-under treatment and the toolbar semantics. Redrawing it would move
-   routing behaviour into a visual change. The title's `header: true` semantics moved with the
-   title, so a screen reader still announces a heading.
-3. **The frame costs a route 72 logical pixels of body and that is written down rather than
-   discovered.** A toolbar *and* a header, where there used to be a toolbar: ~128 pixels of frame
-   on a 411 x 891 phone instead of 56. It buys §7's page pattern and §2.2's title roles. Whether it
-   reads as generous or as wasteful is a judgement no screenshot settles, and it is attached to the
-   next device run.
-4. **One screen had to change shape to pay for it, and it is the only one.** The business
-   selector's transient panels — verify your address, request a business — were laid out at their
-   natural height above an `Expanded` list; at 800 x 600 with the request form open the new header
-   left 16 pixels too few and the form overflowed. They are a scrollable `Flexible` now. **It is an
-   improvement rather than a concession**: at the height where it first broke, the old layout had
-   already crushed the membership list to 56 pixels to make room for the form. One test gained two
-   `ensureVisible` calls for the same reason.
-5. **The tab strip on the platform route moved out of `AppBar.bottom` and under the header.** §7's
-   order is *header → callout → filters → content*, and a tab strip is this page's filter row;
-   leaving it in the toolbar would have put it above the title it filters. The
-   `DefaultTabController` still owns the selection and nothing about what a tab does changed.
-6. **Below 768 the primary action drops under the title instead of beside it.** Laid side by side
-   on a phone, a `Row` gives an unflexed action all the width it asks for and the title takes what
-   is left — for a product name and a five-word button that is a two-pixel column of wrapped
-   letters, which fails §5.2's "never truncated" more completely than an ellipsis would. The
-   boundary is `tenantWideLayoutBreakpoint`, whose own doc comment says it answers "is there room
-   for two things side by side". **That constant had zero consumers and now has one**;
-   `DESIGN-AUDIT.md` §5 is corrected in place. Its reader `tenantLayoutIsWide` is still dead code.
-   **Superseded the same day by step 6a**: the constant and its dead reader are gone, and the
-   boundary is `AppBreakpoint.medium` at the same 768.
-7. **The title role is resolved against the screen, not against the header's own box.** The box is
-   the page inset narrower, so a `LayoutBuilder` would have flipped `display` on at 1064 — a fourth
-   breakpoint produced by arithmetic that nobody declared and nobody could look up.
-8. **Two things were deliberately left out, both because they belong to a numbered step.** No
-   content width is constrained: §4.2's 720 / 1200 / 420 go in with the `RecordList` contract in
-   step 6, and the seam for them is now one widget instead of twenty-three. **The first of those
-   two was closed the same day by step 6a below**, on that seam and in one chunk, which is the seam
-   paying for itself. And **no density is resolved** — see the open question below, which
-   `lib/ui/tokens.dart` has been carrying since step 1 and which this chunk examined and declined
-   rather than answered. That one is still owed.
-9. **`subtitle` and `primaryAction` ship with no call site**, which is stated rather than left to
-   be noticed. Every migrated route kept its existing title verbatim; turning a title into a
-   title-and-subtitle pair is a copy decision and §11 step 11 is the copy pass, and moving a
-   panel's primary action up into the frame crosses the screen/panel boundary that keeps these
-   routes testable. Both slots are exercised by the harness and by `test/ui/scaffold_test.dart`.
-10. **Seven raw `Scaffold`s remain and every one is named.** `checkout_cart_panel.dart` (step 7),
-    `login_screen.dart` (~~step 9~~ — **step 9 landed 2026-08-15 and left it a `Scaffold`
-    deliberately**: no toolbar content, and on a wide window the title belongs to the form pane
-    rather than to a header spanning a form and a keypad; it carries a `PageHeader` inside that
-    pane), the landing route in `tenant_routing_shell.dart` (step 5b, and
-    see below), `_RoutingProgress`, `_TenantBootstrapError` and `PlatformRouteUnavailable` (three
-    full-page states that are `LoadingState` / `ErrorState` / `EmptyState` in §5.1, none of which
-    exists yet), and `pdf_preview_screen.dart`, which is legacy-adjacent and has no title at all.
-11. **The landing route is out, and the reason is not that it is step 5b.** It is that its title is
-    genuinely undecided: the toolbar says `membership.tenantName` and `TenantBrandingPanel`
-    underneath resolves `branding.companyName`, **and the two can differ**. Which of them is the
-    page's title is a product question, §4.4 rewrites this screen anyway, and answering it inside a
-    framing chunk would have been inventing. Its two app-bar assertions in
-    `test/tenancy/tenant_safe_landing_test.dart` are untouched and still pass.
+**Seven raw `Scaffold`s remain and every one is named**: `checkout_cart_panel.dart` (step 7);
+`login_screen.dart` (deliberately a `Scaffold` — no toolbar content, and on a wide window the title
+belongs to the form pane); the landing route in `tenant_routing_shell.dart` (step 5b);
+`_RoutingProgress`, `_TenantBootstrapError` and `PlatformRouteUnavailable` (three full-page states
+that are `LoadingState`/`ErrorState`/`EmptyState` in §5.1, none of which exists yet); and
+`pdf_preview_screen.dart`, which is legacy-adjacent and has no title.
 
-**85 of 144 images moved, 14 were added for the state matrix, and 6 more full-page images appeared**
-because those screens now grow past the fold. **59 are identical**, and that set is the check: every
-one of them is a screen this chunk did not touch.
+~~**The landing route is out, and not because it is step 5b.** Its title is genuinely undecided: the
+toolbar says `membership.tenantName` and `TenantBrandingPanel` resolves `branding.companyName`, **and
+the two can differ**. Which is the page's title is a product question.~~ **Answered by the product
+owner on 2026-08-16: `branding.companyName`, falling back to `membership.tenantName`.** It was a
+product question and it got a product answer; see the v0.5 standing decision for why this is
+ratification rather than a new rule, and for the one structural consequence it hands to step 5b.
+
+Reasoning: `HISTORY.md` — "A screen title stops being chrome" (2026-08-12).
 
 ### One boundary, one variable, and a maximum width on every page
 
-`design.md` §11 step **6, first half**, taken 2026-08-12 — §4.1's breakpoints and §4.2's content
-widths, without §4.3's `RecordList` contract, which is the other half and the larger one. It
-changed `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+`design.md` §11 step **6, first half** — §4.1's breakpoints and §4.2's content widths. Split from
+§4.3's `RecordList` contract because that half requires inventing a record model and **deciding per
+screen what the compact form loses**, which is a product judgement per screen. Same shape
+`AppButton` and `AppTextField` both shipped in: the mechanism first, the per-screen judgement
+second.
 
-**Why the step was split, since §11 states it as one.** §11's own title for it is "`RecordList`
-contract and content widths" — two halves with a conjunction between them — and `DESIGN-AUDIT.md`
-§4.7 is explicit that the first is not a rename of what exists: it requires inventing the record
-model §5.2 describes, re-expressing thirteen screens' data in it, and **deciding per screen what
-the compact form loses**, which is a product judgement per screen rather than a styling change. The
-widths half is where §4.1's rewiring belongs and it is self-contained. This is the shape `AppButton`
-and `AppTextField` both shipped in: the mechanism first, the per-screen judgement second.
+Binding: **one declaration.** `AppLayout` in `lib/ui/tokens.dart` holds §4.1's two floors and §4.2's
+three widths; four former mechanisms are gone, and `tokens_test.dart` asserts both floors as
+literals. **A band is resolved from a screen width, never from a `BoxConstraints`** — §4.2 now puts
+a 1200 cap and 20 of padding between the screen and anything inside it, so a `BoxConstraints` at a
+1024 screen finds 984 and draws the compact form on a surface §4.1 calls expanded.
+**`AppScaffold.contentWidth` is required rather than defaulted**, because §4.2 gives a form and a
+table different maxima and no value is right when a call site says nothing; requiring it puts the
+judgement in the diff, one line per screen. **The header and the body are constrained together; the
+toolbar is not** — a back arrow drifting inwards would be chrome obeying a content rule.
+`AppContentWidth.full` adds **no widget** rather than an unbounded one. Nothing overrides the layout
+contract per subtree, unlike density: §3 says density is chosen by the screen, while §4.1 and §4.2
+state ranges no screen is entitled to disagree with.
 
-The decisions are settled, not open:
+Two of the four rewired declarations sat in step 7's and step 9's files. §4.1 names both files as
+part of its own rewiring; each edit was one expression and neither file's visual design was touched.
+**Sanctioned rather than smuggled** — the same latitude is not general.
 
-1. **One declaration, and it absorbed a fourth nobody had counted.** `DESIGN-AUDIT.md` §5 named
-   `tenantWideLayoutBreakpoint` (768), `tenantTableBreakpoint` (1024) and `checkout_cart_panel.dart`'s
-   `wideTillBreakpoint` (768 again), then found a third *mechanism*: `login_screen.dart` computing
-   `width < 768` inline with a comment. All four are gone. `AppLayout` in `lib/ui/tokens.dart` holds
-   §4.1's two floors and §4.2's three widths and every former caller reads it. **The numbers did not
-   move**, which is what §4.1 asks for in so many words, and `test/ui/tokens_test.dart` asserts both
-   floors as literals so it cannot happen quietly.
-2. **Two of those four sat in files this chunk may not otherwise touch, and that is sanctioned
-   rather than smuggled.** `checkout_cart_panel.dart` is step 7's and `login_screen.dart` is step
-   9's. §4.1 names both files as part of its own rewiring and the queued chunk said "step 6 is where
-   they become one name". Each edit is one expression — a constant becomes a getter, an inline
-   comparison becomes a call — neither file's visual design was touched, and neither file's
-   screenshots moved.
-3. **A band is resolved from a screen width, never from a `BoxConstraints`.** §4.1 states its ranges
-   as properties of the surface a person is looking at. Step 5a made this argument for the title
-   role; step 6a made it load-bearing, because §4.2 now puts a 1200 cap and 20 of padding between
-   the screen and anything inside it. **The app's one breakpoint-driven layout switch moved with
-   it**: the staff directory's card-to-table test read its own `BoxConstraints`, which at a 1024
-   screen would now find 984 and draw cards on a surface §4.1 calls expanded. Neither viewport is
-   near that boundary, so it moved no image.
-4. **`AppScaffold.contentWidth` is required rather than defaulted, and this is the decision most
-   likely to be argued with.** §4.2 opens "Every screen has a max content width" and gives a form
-   and a table different ones, so no value is right when a call site says nothing — and a default
-   would be silently wrong for the majority either way, since **20 of the 25 routes are record
-   lists**. Requiring it puts the judgement in the diff, one line per screen. The five reading
-   surfaces are checkout settings, receipt lookup, one reconciliation run, and the shell's two
-   invitation screens.
-5. **The header and the body are constrained together; the toolbar is not.** A title at the window
-   edge above records in a centred column would read as two pages, and constraining the shared
-   column is also what keeps the header's 20 inset lined up with the 20 every body pads itself with.
-   A back arrow that drifted inwards on a wide window would be chrome obeying a content rule.
-6. **`AppContentWidth.full` adds no widget rather than an unbounded one.** `maxWidthOf` answers null
-   there, so no `ConstrainedBox` is built — one that constrains nothing is a line that has to be
-   read before it can be ignored. **Nothing in `lib/` passes it yet**; the sale would, and it is
-   step 7's. It is built, tested and photographed anyway, because §4.2 states the row and a sale
-   screen that quietly got 1200 would be short 240 pixels of products.
-7. **The three routes that padded 24 now pad 20**, which is the unification step 5a recorded as
-   owed rather than a new opinion: checkout settings and the shell's two invitation screens were
-   four pixels out from their own headers. The figure did not change; three bodies moved to it.
-8. **Nothing overrides the layout contract per subtree, unlike density.** §3 says outright that
-   density is chosen by the screen; §4.1 and §4.2 state ranges and maxima no screen is entitled to
-   disagree with. It lives on `AppTokens` anyway, for the same reason `AppSpacing` does, and
-   `tokens_test` asserts the registered set carries `AppLayout.contract` itself — which is what lets
-   `PageHeader`'s two statics read the constant where they have no context to read a theme from.
-9. **§4.3's opt-out is still unapplied to `design.md`.** `DESIGN-AUDIT.md` §6 decision 2 amends
-   §4.3 to concede that the caller decides what a compact rendering loses. It belongs with the half
-   that implements §4.3 and was deliberately not applied here.
-
-**51 of 164 images moved, 6 were added for the `95-*` matrix, and 113 are identical.** **49 of the
-51 are `web/` or `web-full/`** — 1440 is wider than every §4.2 maximum and 411 narrower than every
-one, so a content maximum can only show at the desktop viewport. The other two are
-`mobile/06-accept-an-invitation` and `mobile/16-checkout-settings`, which are two of the three
-routes whose padding went 24 to 20. Every other mobile image is byte-identical, and **an unexpected
-name in that set would have been a maximum firing below 720** — the one way this change could be
-wrong and be invisible at the wide viewport.
+Reasoning: `HISTORY.md` — "Every page gets a maximum width, and 768 stops being declared three
+times" (2026-08-12).
 
 ### One record model, three renderings, and the loss the caller owns
 
-`design.md` §11 step **6, second half**, taken 2026-08-13 — §4.3's responsive contract, as
-`RecordList` in `lib/ui/record_list.dart`, with the **activity log** as its first consumer. It
-changed `firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+`design.md` §11 step **6, second half** — §4.3's responsive contract as `RecordList` in
+`lib/ui/record_list.dart`.
 
-**It is the component plus one screen, and that is the shape this file predicted §4.3 needed.** The
-queued chunk said the work is inventing a record model, re-expressing thirteen screens' data in it,
-and deciding per screen what the compact form loses — a product judgement per screen rather than a
-styling change. So the mechanism went first and the twelve remaining screens are a sweep, exactly as
-`AppButton` shipped as a component plus one route and then took a second chunk for its other 133
-call sites.
+Binding: **the model is §5.2's five rows and nothing else** — identity, optional `RecordStatus`,
+`RecordAttribute` list, provenance, `RecordAction` list. **§4.3's opt-out is conceded in writing and
+is per attribute** (`RecordAttribute.inNarrowForm`), with the limit stated: identity, status,
+provenance and actions are on every rendering at every band, and **the form is never the caller's**.
+**Columns are a property of the list, not of its first record** — `columnsOf` is the ordered union
+of every label any record carries, and a silent record gets an **empty cell, not a dash**, because a
+dash is a value. Two readings of §5.2 went into the document as well as the code: *status — leading
+position* means first **in the record**, and *never truncated below two lines* is a **floor**.
+§4.3's `(>3)` is honoured: three or fewer actions are inline at every band; past three, compact
+takes an overflow menu, medium keeps three, expanded draws them all. **Every action is
+`AppButtonSize.lg` in every form** — this component resolves no density and a 1024-wide surface may
+be a touchscreen till. **An ordinary audit event carries no status**: a list where every row wears a
+badge is a list with no signal in it. `RecordItem.details` is the component's own addition, named as
+such in its doc comment rather than written into `design.md`; it is drawn **at every band**, and in
+a table it takes the whole row beneath the cells.
 
-The decisions are settled, not open:
+The three column shares were the component's first guess, measured at 1200 against a two-column
+list, and are now ceilings rather than answers — see "A column asks for what it holds" below.
 
-1. **The model is §5.2's five rows and nothing else.** `RecordItem` carries an identity, an optional
-   `RecordStatus`, a list of `RecordAttribute`, a provenance line, and a list of `RecordAction`.
-   `TenantRecordCard` and `TenantRecordTable` shared **no model at all** — that is `DESIGN-AUDIT.md`
-   §4.7's finding — and the one screen that chose between them called two builders presenting
-   different information.
-2. **`design.md` §4.3 now concedes the opt-out, in writing.** `DESIGN-AUDIT.md` §6 decision 2 was
-   taken on 2026-08-11 and had never been applied; step 6a left it deliberately for the half that
-   implements §4.3, and this is that half. The concession is **per attribute** —
-   `RecordAttribute.inNarrowForm` — and the limit is stated with it: identity, status, provenance
-   and actions are on every rendering at every band, and the *form* is never the caller's.
-3. **Columns are a property of the list, not of its first record.** The first draft copied
-   `TenantRecordTable`'s shape — first record's attributes are the columns, every other record must
-   agree — and real data killed it immediately: an audit event either changed a status or did not,
-   so the top record would decide what the rest are allowed to say. `RecordList.columnsOf` is the
-   ordered union of every label any record carries. A silent record gets an **empty cell, not a
-   dash**: a dash is a value. What is asserted is one record carrying the same label twice.
-4. **Two readings of §5.2 are decisions, and both went into the document rather than only into the
-   code.** *"Status — leading position"* is first **in the record**: above the identity on a card,
-   first column in a table. *"Never truncated below two lines"* is a **floor**: an identity gets two
-   lines then ellipsises, where every other line on a record gets one.
-5. **§4.3's `(>3)` is honoured rather than ignored.** Three or fewer actions are inline at every
-   band; past three, compact takes an overflow menu, medium keeps three, expanded draws them all.
-   It is the only reading under which §5.2's "on compact, an overflow menu" and §4.3's "overflow
-   after 3" are both true — any other hides a record's single action behind a menu on a phone.
-6. **Every action is `AppButtonSize.lg` in every form.** That is the half of §5.2's catalog
-   complaint §9 makes pass/fail — "20px targets on a touch surface". `sm` exists for a pointer at
-   compact density, this component resolves no density, and a 1024-wide surface may be a touchscreen
-   till.
-7. **An ordinary audit event carries no status.** Only `isCritical` gets a badge. §2.1's five each
-   mean one thing and "an event was recorded" is not among them; a log where every row wears a badge
-   is a log with no signal in it.
-8. **Three column shares are component decisions and are argued rather than tuned.** Identity takes
-   three times an attribute's share because it carries a title, a subtitle and a provenance line;
-   actions take the same, because two 48-high pills side by side is the ordinary case and a wrapped
-   set makes **every row** as tall as its actions; status takes two, because §2.1's statuses attract
-   phrases rather than words. All three measured at 1200, §4.2's maximum for this surface.
-9. **The overflow menu is Material's**, coloured from the token layer. §5.1's inventory has no menu
-   component at all.
-10. **The harness gained a `tablet/` viewport**, and it is the first band §4.1 declared that no
-    picture covered. See the note under "Test baselines" for why it is not in `screenshotViewports`.
-11. ~~**One slot is deliberately absent**: somewhere to put a form a record opens.~~ **Added
-    2026-08-13 with the staff directory, which is exactly the arrangement this line asked for.** It is
-    `RecordItem.details`, it is named in its own doc comment as the component's own addition rather
-    than a §5.2 row, and the two questions the sweep was told to settle once are settled: it is drawn
-    **at every band**, because an action that opens a form on a phone and does nothing on a desktop
-    window is a behaviour that differs by band; and in a table it takes **the whole row beneath the
-    cells**, which is what `TenantTableRow.details` did. A row with nothing open lays out exactly as
-    it did before the slot existed, and there is a test for that.
-
-**It found a defect in `StatusBadge`, and the defect was unreachable before it.** The badge declared
-`maxLines: 1` and `ellipsis` and could honour neither: its `Row` sits at `MainAxisSize.min`, which
-offers children unbounded width, so a badge in a box narrower than its word painted the overflow
-stripe. Every badge in this app until today sat in a `Wrap`. One `Flexible`, one test, and it
-surfaced as a **capture failure** — `96-record-list @ web`, over by 5.5 pixels on "Out of stock" —
-rather than as a review finding.
-
-**45 of 170 images moved, 17 were added for the `96-*` matrix, and 125 are identical.** **Three of
-the 45 are this chunk** — `web/35-activity-log`, `mobile/35-activity-log`, `mobile-full/35-activity-log`
-— and the other 42 are date drift. That split is **measured**: the whole set was generated twice on
-2026-08-13, once with `lib/audit/audit_log_panel.dart` reverted to `HEAD` and once with it migrated,
-and exactly those three differ between the runs.
+Reasoning: `HISTORY.md` — "A record list becomes one component, and §4.3's middle band gets its
+first picture" (2026-08-13). It found a `StatusBadge` defect unreachable before it: the badge
+declared `maxLines: 1` and could honour neither that nor `ellipsis`, because its `Row` sits at
+`MainAxisSize.min`.
 
 ### The staff directory stops choosing its own form, and a record gets a form slot
 
-The **first screen of step 6's sweep**, taken 2026-08-13, the same day as the component. It changed
-`firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+The first screen of step 6's sweep. `TenantRecordCard`, `TenantRecordTable`, `TenantTableColumn`,
+`TenantTableRow` and `TenantStatusChip` are **deleted** — this was the last consumer of all five.
+`TenantInitialsAvatar` survives because the till uses it.
 
-**It deletes more than it adds, which is why `PLAN.md` said to take it first.** This was the only
-screen in the app that hand-rolled §4.3's choice — a `Builder` reading `AppLayout.contract` with two
-separate builders under it that presented *different information* to the two bands — and §4.3 says a
-screen cannot opt out of the form. `TenantRecordCard`, `TenantRecordTable`, `TenantTableColumn`,
-`TenantTableRow` and `TenantStatusChip` are **deleted**: this was the last consumer of all five.
-`TenantInitialsAvatar` survives because the till uses it, and `TenantStatCard` / `TenantStatStrip`
-survive because they are step 8's.
+Binding: **a record carries one standing, and this screen showed two badges.** Membership status is
+the `RecordStatus`, because it is the one that decides what a person can do; the invitation state
+became a **`RecordAttribute`** — §5.2's key-value row — which is where a fact that is not one of
+§2.1's five belongs. **The initials block is gone**: §5.2 names no leading row, and an avatar slot
+for one caller would be inventing a specification row. **The action order is inherited, so which
+action a narrow band hides is inherited too** — reordering is a product decision, and this was a
+restyle. "Cancel invitation" and "Deactivate" are destructive; "Activate" is not. The state-clearing
+toggle stays **per form**.
 
-The decisions, all settled rather than open:
+`Pagination` was examined and declined here and three times after: this screen's pagination is one
+sentence rather than one of `DESIGN-AUDIT.md` §2.3's four idioms, and where it *is* one of the four,
+`Pagination` is §5.1 priority 3 and not step 6's.
 
-1. **`RecordItem.details` is the component's own row, not §5.2's**, and it says so in its doc comment
-   rather than being written into `design.md`. See the retracted item 11 above.
-2. **A record carries one standing, and this screen showed two badges.** Membership status is the
-   `RecordStatus`, because it is the one that decides what a person can do. The invitation state is a
-   `RecordAttribute` beside the role — still a labelled word rather than a colour, so §9 is unaffected
-   — and only a pending member has one.
-3. **The role stops being a chip and loses its glyph and its tint.** Role is not one of §2.1's five,
-   so it cannot be a badge. The chip tinted owners and admins `colors.primary`, and a colour meaning
-   "this person is privileged" on its own is the drift §1 is about; the word carried it and the word
-   is still there.
-4. **The initials block is gone from this screen.** It was `TenantRecordCard.leading` and §5.2 names
-   no leading row. An avatar slot for one caller would be inventing a specification row.
-5. **Nothing is marked out of the narrow form.** Two attributes fit a card; `inNarrowForm` is for the
-   six-column catalog later in the sweep.
-6. **The action order is inherited, so which action a narrow band hides is inherited too** — on a
-   pending member, "Replace email"; on a phone, all of them. Reordering is a product decision about
-   which action a small screen hides, and this was a restyle.
-7. **"Cancel invitation" and "Deactivate" are destructive; "Activate" is not.** The same control is
-   destructive in one direction only, which is the tier being decided by what the press does.
-8. **Five hand-written state-clearing blocks became one helper**, with the toggle still **per form**:
-   pressing an action whose own form is open closes it; pressing a different action on the same member
-   replaces the open form.
-9. **`Pagination` was examined and declined.** This screen's pagination is one sentence, not one of
-   `DESIGN-AUDIT.md` §2.3's four idioms, and `Pagination` is §5.1 priority 3. Nothing about it moved.
-
-**It found a defect a step older than `RecordList`.** All five inline forms ended in a `Row` at
-`MainAxisAlignment.end` holding two 48-high `AppButton`s — about 490 logical pixels of children — and
-had only ever been driven at the ~760 a full-width card gave them. A `compact` card gives ~340 and a
-`medium` two-column card gives 342. It overflowed on a phone from the moment step 3 made those buttons
-`AppButton`s; nobody had opened one there. Five `Wrap`s, one regression test **verified to fail
-without the fix**, and five files gained a `lib/ui/tokens.dart` import so the gap is `space.8` rather
-than the literal it replaced.
-
-**8 of 195 images are new, 3 moved, 184 are byte-identical, and the drift is zero** — the baseline was
-step 6b's, generated the same day, so the whole diff is the chunk with no reverted second run needed.
-The 3 are the staff directory's own. `web-full/13-staff-directory` is **new**, and that is the
-four-action row: the table did not reach past a 1440 x 900 window before and does now.
+Reasoning: `HISTORY.md` — "The staff directory becomes a `RecordList`, and a record gets somewhere
+to open a form" (2026-08-13). It found a step-3-era overflow: five inline forms ended in a `Row` of
+two 48-high buttons that had only ever been driven at full-card width.
 
 ### A product states its facts as facts, and only one that cannot be sold has a standing
 
-The **second and third screens of step 6's sweep**, taken together on 2026-08-13 because they are the
-same records: the read-only catalog (17) and manage catalog (18). It changed `firestore.rules` not at
-all and nothing in `functions/` or `rules-tests/` either.
+The second and third screens of step 6's sweep — the read-only catalog (17) and manage catalog (18).
+**These are the two screens §5.2 wrote its catalog example against, and the example is now false of
+them**: both drew a product as four facts in one bullet-separated subtitle.
 
-**These are the two screens §5.2 wrote its catalog example against**, and the example is now false of
-them. Both drew a product as a `Card` around a `ListTile` with four facts in one bullet-separated
-subtitle — `Bakery • 6161100000019 • 40 in stock • 65.00` — which is precisely the shape §5.2
-replaces with key-value attributes. Nobody can scan the third field of a bullet list down a page.
+Binding: **the category is the record's `subtitle`, not an attribute** — §5.2's identity row admits
+"an address, a code, a category", and the deciding case is that an unlisted category reads
+*"Category: Category not listed here"* as an attribute and simply *"Category not listed here"* as a
+subtitle. **Only a product that cannot be sold carries a standing**; the silence on every other
+product is the activity log's rule. **A negative quantity is out of stock rather than a fourth
+status**, and the figure is still stated beside the badge. One definition of both, as
+`tenantProductStanding` and `tenantProductAttributes` beside `TenantProduct`. **Nothing is marked out
+of the narrow form** — `inNarrowForm` drops a fact rather than shortening one, so a tidier card would
+cost a shopkeeper the code they scan by. The `Code` column takes twice an ordinary share through
+`RecordAttribute.flex`. **Opening a product's stock is a control now**, a `RecordAction` rather than
+a whole-row `ListTile.onTap`; what decides whether it is offered is unchanged. `details` has no
+consumer here, because turning the edit dialog into an inline form would be a behaviour change.
 
-The decisions, all settled rather than open:
+**One prefix with two owners is a defect a passing test can hide.** The "In stock" value key and the
+"View stock" action key collided; the test asserting the action is *absent* for a cashier is what
+caught it, because a collision only shows where the two are expected to disagree.
 
-1. **The category is the record's `subtitle`, not an attribute.** §5.2's identity row admits "an
-   address, a code, a category" as a second identifying line in as many words. The deciding case is
-   the one the category wording exists for: a product filed under a category this page did not read
-   reads *"Category: Category not listed here"* as an attribute and simply *"Category not listed
-   here"* as a subtitle. It is also why the table has **five** columns rather than six.
-2. **Only a product that cannot be sold carries a standing.** §2.1 gives `problem` three meanings and
-   names *"out of stock"* as one of them, so the badge is a lookup. What is a judgement is the
-   silence on every other product, and it is the rule the activity log set: a list where every row
-   wears a badge is a list with no signal in it.
-3. **A negative quantity is out of stock rather than a fourth status.** The read model accepts a
-   signed integer deliberately, and what an oversold product means at the till is what zero means.
-   The figure is still stated beside the badge.
-4. **One definition of both, shared by the two screens.** `tenantProductStanding` and
-   `tenantProductAttributes` sit beside `TenantProduct`, for the reason `tenantCategoryLabel` does.
-5. **Nothing is marked out of the narrow form**, and `RecordAttribute.inNarrowForm` therefore still
-   has no consumer four screens in. It **drops** a fact rather than shortening one, so reaching a
-   tidier card with it would cost a shopkeeper the code they scan by.
-6. **The `Code` column takes twice an ordinary share.** A 13-digit barcode wrapped to two lines at an
-   equal share. `RecordAttribute.flex` is §4.3's own knob for this and the activity log already uses
-   it, so the component did not move — which is the difference between this and the `_actionsFlex`
-   observation below.
-7. **`size: AppButtonSize.sm` is gone by the decision being removed**, not by being changed here.
-   `RecordActionSet` draws every action at `lg`, and that is the half of §9's catalog complaint a
-   tier could not close.
-8. **Opening a product's stock is a control now.** Screen 17 hid it in `ListTile.onTap` — the whole
-   row was the control and nothing said so, which is an invisible bare text link. It is a
-   `RecordAction` labelled "View stock". **What decides whether it is offered is unchanged**: the
-   guarded session resolves `productStockRoute` to null for a role the inventory domain does not
-   admit, exactly as it did when that decided `onTap`.
-9. **`Pagination` was examined and declined, and the reason is different from the staff
-   directory's.** Screen 18's `Previous` / `Page n` / `Next` row *is* one of `DESIGN-AUDIT.md` §2.3's
-   four idioms, where the staff directory's was one sentence. So the reason is a queue position
-   rather than an argument: §5.1 priority 3, not step 6's. Nothing about it moved.
-10. **`details` has no consumer here**, because `_edit` opens `_EditProductDialog` through
-    `showDialog` and has since 2026-08-08. Turning a dialog into a form inside a record would be a
-    behaviour change rather than a restyle.
-
-**It found a key collision, and a test found it rather than a review.** The attribute prefix on
-screen 17 is `catalog-product`, so the "In stock" value key is `catalog-product-stock-product-a` —
-which is what the "View stock" action was first given. The test asserting the action is **absent**
-for a cashier is what caught it: one widget where none was expected, and the widget was a `Text`
-reading `-2`. **One prefix with two owners is a defect a passing test can hide**, because the
-collision only shows where the two are expected to disagree.
-
-**9 of 195 images moved, none were added or removed, and 186 are byte-identical.** All nine are the
-three catalog captures. `web/18` and `mobile/18` are *unchanged* while their `-full` variants moved,
-which is not an anomaly: at 1440 x 900 the fold on 18 shows the headings and the add-product form and
-the product list is a thousand pixels below it.
+Reasoning: `HISTORY.md` — "The catalog becomes a `RecordList`, and a product that cannot be sold says
+so" (2026-08-13).
 
 ### One ledger entry, one vocabulary, and a screen that had three
 
-The **fourth to seventh screens of step 6's sweep**, taken together on 2026-08-13 because they are
-one family reading one ledger: product stock (21), stock corrections (22), stock movements (23) and
-one product ledger (24). It changed `firestore.rules` not at all and nothing in `functions/` or
-`rules-tests/` either.
+The fourth to seventh screens of step 6's sweep — product stock (21), stock corrections (22), stock
+movements (23), one product ledger (24). **The file written to prevent this exact drift had never
+reached the screen that had it**: `stock_movement_labels.dart` says two copies of a sentence is two
+chances to change one and not the other, and screen 21 was a third copy while screen 22 was a fourth
+surface nobody had noticed was the same shape.
 
-**Its finding is that the file written to prevent this exact drift had never reached the screen that
-had it.** `lib/inventory/stock_movement_labels.dart` says in its own opening line that two copies of
-a sentence is two chances to change one and not the other. Screen 21 was a third copy: it worded the
-same `stock_movements` document as `Adjustment: restock` where the two feeds said `Manual
-adjustment`, wrote *"The recorded before and after quantities are not part of this entry"* where they
-wrote *"Before and after were not recorded"*, and dropped the attribution half of §5.2's provenance
-line for a server-written movement where they named the server. Screen 22 was a fourth surface nobody
-had noticed was the same shape at all — the same `adjustStock` transaction writes the adjustment
-record it lists and the movement the other three list.
+Binding: **what is shared is the whole `RecordItem`, not the strings inside it.** The labels file
+exports `stockMovementRecord` and `stockAdjustmentRecord`, and the four screens differ in exactly
+two things — `subtitle` and `actions`. **No record carries a status**, by the activity log's rule.
+The typed adjustment category is an **attribute**, not part of the identity. **A reason and a source
+are two columns**, not one precedence-based line, or one document files under different columns
+depending on which screen drew it. Screen 23's product ID and the control that opens its ledger are
+**two things with two keys**: the ID is the `subtitle`, `Open ledger` is a `RecordAction` at 48dp
+offered only when the route was injected.
 
-The decisions, all settled rather than open:
+Screen 21's exception report was deliberately left for the step-4 sweep: §5.2 has no row for prose,
+and turning four paragraphs into key-value attributes rewrites what the screen says rather than what
+shape it says it in.
 
-1. **What is shared is the whole `RecordItem`, not the strings inside it.** The labels file exports
-   `stockMovementRecord` and `stockAdjustmentRecord` now, and the four screens differ in exactly two
-   things: what identifies a record on their own page (`subtitle`) and what a person can do to it
-   (`actions`). Sharing sentence builders is what let one caller drift while three agreed.
-2. **No record carries a status.** The activity log's decision reached again from the same rule:
-   §2.1's five each mean one thing, "stock moved" is not among them, and a list where every row wears
-   a badge has no signal in it. Screen 21's tinted 40 x 40 arrow block said only what the sign on the
-   delta says and said it in colour, so removing it settles a §9 question rather than raising one.
-3. **The typed adjustment category is an attribute, not part of the identity.** It is a fact *about*
-   a record. Nothing is lost from screen 21, which had folded it into its title, and the other three
-   gain it.
-4. **A reason and a source are two columns, and a record carries both where it has both.** The two
-   feeds showed a reason *or* a source through one precedence-based line. A table has one column per
-   label, so precedence would file one document under different columns depending on which screen
-   drew it. `Reason` takes twice an ordinary share and `Source` takes one — see the render note below.
-5. **Screen 23's product ID and the control that opens its ledger are two things with two keys.**
-   They were one widget that changed *type* — a `Text` without an injected route, an
-   `AppButtonSize.sm` tertiary pill wearing the same sentence as its label with one — which §5.2
-   forbids on both counts, "never bare text links" and a 20px target. The ID is the `subtitle` and is
-   stated either way; `Open ledger` is a `RecordAction` at 48dp offered only when the route was
-   injected, so the injection contract is unchanged.
-6. **Screen 21's exception report was deliberately left for the step-4 sweep**, and the boundary is
-   named rather than inherited. A "Reconciliation found" entry is a status word, a paragraph of
-   guidance naming what will and will not resolve the difference, and a provenance line. §5.2 has no
-   row for prose, and turning those four paragraphs into key-value attributes is a rewrite of what
-   the screen says rather than of what shape it says it in. `Callout` is the component that wants it.
-7. **`Pagination` was examined and declined a third time**, on the same queue-position ground the
-   catalog chunk used: all four screens carry a `Previous page` / `Next page` pair, which is one of
-   `DESIGN-AUDIT.md` §2.3's four idioms, and `Pagination` is §5.1 priority 3 and not step 6's.
+**`dart format` is not safe to run over a whole file in this repository.** At `HEAD`,
+`dart format --set-exit-if-changed lib test` reports 201 of 322 files would change — the tree was
+written against an older formatter — so formatting a file rewrites regions a chunk never touched and
+strips a UTF-8 BOM in two files. **Format the lines you write, not the file they are in.**
 
-**The first render corrected one caller value and one fixture.** `Source` took `flex: 2` by symmetry
-with `Reason` and is four or five characters in practice, while the identity column beside it —
-title, subtitle *and* provenance against four attribute columns — is the one short of width; it is
-`flex: 1` now, the same knob the catalog's barcode used in the opposite direction. And
-`tool/screenshots/fakes.dart` required `adjustmentType` on every seeded movement, so the seeded sale
-carried `adjustmentType: 'sale'` and every record filled every column — which hid both the real shape
-of a sale and the empty cell §4.3 promises. Both that field and `sourceId` are optional now.
-
-**12 of 195 images moved, 0 added, 0 removed, 183 byte-identical, and the drift is zero.** All twelve
-are the four migrated captures. No page crossed the fold in either direction, which is worth stating
-because a card is usually taller than the row it replaces — the arrow block came off each entry at
-the same time.
+Reasoning: `HISTORY.md` — "The stock family becomes one record, and a screen stops describing it
+three ways" (2026-08-13).
 
 ### A shift has a standing, and two paragraphs were never about a record
 
-The **eighth to eleventh screens of step 6's sweep, and its last**, taken together on 2026-08-13
-because they are one family around a shift: shift corrections (30), shift history (32), shift sales
-(33) and returns on a sale (34). It changed `firestore.rules` not at all and nothing in `functions/`
-or `rules-tests/` either. **`design.md` §11 step 6 is finished with it**, in both halves.
+The eighth to eleventh screens of step 6's sweep and its last — shift corrections (30), shift history
+(32), shift sales (33), returns on a sale (34). **`design.md` §11 step 6 is finished with it.**
 
-The decisions, all settled rather than open:
+Binding: **a shift carries a standing** — `ok` where the drawer agrees with the sales, `problem`
+where it does not, `attention` where the shift closed with no summary; "closed" is not the standing,
+because every shift on that page is closed. The amount stays an attribute, so **no figure is ever
+carried by a badge**. A return's standing is pending/verified. **A correction and a sale carry
+none**: what varies across a page of sales is whether *this device* has seen the server confirm one,
+and every surface states that in a provenance line. **A sentence naming whichever of two figures
+moved cannot be a column** — they are two columns, and the figure that did not move says
+**`Unchanged`** rather than leaving an empty cell that would read as a figure nobody recorded.
+Screen 30's `Difference` is one column holding up to four sentences, deliberately: four columns to
+say one thing would leave two empty on nearly every record. **Three page-invariant paragraphs left
+the record for the page** — a claim about how the system works is not a fact about a record, however
+many records raise it. **`Verify and restore stock` stops being primary**, because `RecordActionSet`
+draws every action `secondary` unless destructive and §2.1 gives `action.primary` to one per screen
+region. **A count under a heading never has to agree**: §5.2 makes the noun the key, so the
+singular-plural rule stops reaching the figure.
 
-1. **A shift carries a standing, and it is the sweep's first `yes`.** The question this file said to
-   settle by looking §2.1 up is unambiguous once the wrong candidate is discarded: "closed" is not
-   the standing, because every shift on that page is closed and the read model refuses anything else.
-   What varies is what the screen exists to settle — `ok` where the drawer agrees with the sales
-   (§2.1's "reconciled, confirmed"), `problem` where it does not ("difference found"), `attention`
-   where the shift closed with no summary and can be compared with nothing ("unreconciled"). The
-   amount stays an attribute, so no figure is ever carried by a badge, and the sentence the row used
-   to state is the badge's `semanticLabel`.
-2. **A return's standing was already the leading thing on its record**, as a glyph and a
-   `titleMedium` sentence where §5.2 puts the identity. Pending / verified is §2.1's "pending,
-   awaiting" and its "confirmed", and it decides what a person may do. "Stock restored" left the
-   badge for the `Verified` attribute, which names when and by whom.
-3. **A correction and a sale carry none, for different reasons.** "A correction was recorded" is not
-   one of the five — the activity log's rule. A sale is the more interesting refusal: what varies
-   across a page of sales is whether *this device* has seen the server confirm one, and every surface
-   in this app states that in a provenance line. A badge would say on one screen what a sentence says
-   on the next.
-4. **A sentence naming whichever of two figures moved cannot be a column.** Screen 30's `Corrected
-   its recorded sales from … and its transaction count from …` files one document under a different
-   heading depending on what it changed - the argument the stock family used to split a reason from a
-   source. They are two columns now, in the stock family's own `115.00 to 345.00` shape, and the
-   figure that did not move says **`Unchanged`** rather than leaving an empty cell that would read as
-   a figure nobody recorded.
-5. **Screen 30's `Difference` is one column holding up to four sentences, deliberately.** Two
-   variances, a shift whose two records of the same money disagreed, and a difference struck off the
-   unresolved list are four statements about *one* disagreement; four columns to say that would leave
-   two of them empty on nearly every record. The label is constant and only the value varies, which
-   is `Before and after` → `Not recorded` again.
-6. **Three page-invariant paragraphs left the record for the page**, and it is one principle applied
-   three times: a claim about how the system works is not a fact about a record, however many records
-   raise it. Screen 32's correction guarantee, screen 32's cashier line about who may read the trail,
-   and screen 33's payment caution. Each is stated once, and the two conditional ones appear only
-   when a listed record raises them.
-7. **The payment caution's move was decided by the first render, not by argument.** The chunk was
-   built with it kept on the record — the safer choice, and `sale_history.dart` requires every
-   surface showing a tender to carry it. At `flex: 2` it wrapped to four lines on **every** row and
-   was the tallest thing on the page. The contract is per *surface*, which is how
-   `sales_totals_panel.dart` has always read it; a single-sale screen like receipt lookup (31, not in
-   step 6's list) keeps the sentence beside the value because there the two are the same thing. Its
-   `Not recorded` is that page's word too, adopted rather than reinvented.
-8. **`Verify and restore stock` stops being primary, and the component took the decision away.**
-   `RecordActionSet` draws every action `secondary` unless destructive; verifying removes nothing.
-   §2.1 gives `action.primary` to "exactly one per screen region" and a page of five pending returns
-   had five. Same shape as `AppButtonSize.sm` disappearing with the catalog's call site.
-9. **A count under a heading never has to agree.** `over 1 transaction` / `over 3 transactions` was
-   the singular-plural rule every reporting surface holds; §5.2 makes the noun the key, so the rule
-   stops reaching the figure. The test that proved the singular proves that now.
-10. **`Pagination` was examined and declined a fourth time**, on the queue position §5.1 gives it.
+The payment caution's move to the page was decided by the first render rather than by argument: the
+contract in `sale_history.dart` is per *surface*, and a single-sale screen keeps the sentence beside
+the value because there the two are the same thing.
 
-**Two caller-side widths were corrected by the first render**, both with `RecordAttribute.flex`:
-`Total` on screen 33, because `KES 285.00` is a code and an amount where its neighbours are one
-figure, and `Transactions` on screen 30 — for its *heading* rather than its value, the word being
-four times the width of `1 to 3`.
-
-**`dart format` is not safe to run over a whole file in this repository, and that is worth knowing
-before the next chunk.** `dart format --set-exit-if-changed lib test` at `HEAD` reports **201 of 322
-files** would change: the tree was written against an older formatter. Formatting a file therefore
-rewrites regions a chunk never touched — six such hunks in `return_history_panel.dart` alone, plus a
-stripped UTF-8 BOM in two files — and every one of them was reverted by hand here. Format the lines
-you write, not the file they are in.
+Reasoning: `HISTORY.md` — "The shift family becomes a `RecordList`, and step 6's sweep is finished"
+(2026-08-13).
 
 ### A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
 
-`design.md` §11 **step 4's sweep**, first part, taken on 2026-08-14 over the four surfaces whose
-subject is reconciliation: the day page (27), the one-run page (29), the differences list (28) and
-screen 21's "Reconciliation found" exception report. The last two are the **two named screen sections**
-the sweep was told it owns, and `PLAN.md` said whichever chunk took one should take both. It changed
-`firestore.rules` not at all and nothing in `functions/` or `rules-tests/` either.
+`design.md` §11 **step 4's sweep**, first part — the four reconciliation surfaces: the day page (27),
+the one-run page (29), the differences list (28) and screen 21's exception report.
 
-**The sweep's own rule for choosing between the two components was read off an existing screen rather
-than invented, and it is now family-wide.** §5.1 splits them by what the prose is *for*: a permanent
-**helper** paragraph — always the same, true of every record the screen will ever show, read once — is a
-`Disclosure` and folds; a permanent **notice** — about the state of this page, this read, this role — is
-a `Callout` and does not. Step 4 had already applied exactly that split on the day page and never
-carried it to the three surfaces that page links to. The one judgement in applying it is screen 27's
-`reconciliation-request-scope`, which is a `Callout` **because** it is the sentence that decides whether
-pressing the button below does what the person thinks it does, and a sentence you have to open is a
-sentence nobody reads.
+Binding, and it is family-wide: **§5.1 splits the two components by what the prose is for.** A
+permanent **helper** paragraph — always the same, true of every record the screen will ever show,
+read once — is a `Disclosure` and folds. A permanent **notice** — about the state of this page, this
+read, this role — is a `Callout` and does not. The one judgement in applying it is screen 27's
+`reconciliation-request-scope`, a `Callout` **because** it decides whether pressing the button below
+does what the person thinks it does, and a sentence you have to open is a sentence nobody reads.
 
-**A recorded difference has no §2.1 standing; a run has one.** §2.1 gives "difference found" to
-`problem` and every record on all four surfaces is one, so a badge on each is the no-signal case the
-`RecordList` sweep ruled out four times — what the status is *for* here is the container a notice is
-drawn in. A page of runs genuinely mixes `ok`, `attention` and `problem`, so there the badge carries
-signal, and a run's state had been a **word inside a `titleMedium`** on the card **both** the day page
-and the run page mount.
+**A recorded difference has no §2.1 standing; a run has one.** Every record on all four surfaces is
+a difference found, so a badge on each is the no-signal case. A page of runs genuinely mixes `ok`,
+`attention` and `problem`. `failed` and `quarantined` are both `problem`, separated by a detail line
+that is **the enum's own label, shown only where it says more than the badge's word**. Screen 21's
+unreadable difference read is **`info`, not `problem`**, because the same sentence covers a read that
+fails *or is refused*, and calling a permission boundary a fault would invent in colour an answer the
+code refuses to invent in words.
 
-**Two mappings are decisions rather than lookups, and one of them is a reading of a doc comment.**
-`failed` and `quarantined` are both `problem` — §2.1 has no row for "failed, but a retry is scheduled",
-and §2.1's own design is a container plus an icon plus a **word**, so two states sharing a colour while
-differing in the word is the system working. What separates them is a detail line that is **the enum's
-own label, shown only where it says more than the badge's word**; four of the six labels *are* the word,
-so restating them would be the duplication the container exists to avoid. And screen 21's unreadable
-difference read is **`info`, not `problem`**, even though §2.1 gives "unreadable" to `problem`: the
-panel's own comment says the same sentence covers a read that *"fails or is refused"*, and a session
-permitted to read stock and not differences meets it. Calling a permission boundary a fault would invent
-in colour an answer the code refuses to invent in words — the same reading step 4 made for an
-unrecognised day.
+`lib/reporting/reconciliation_labels.dart` is the family vocabulary, on the model of
+`stock_movement_labels.dart`. **What a screen can *do* about a record stayed at the call site** —
+`_resolutionNote` names a form three inches down one page — while the kind, the subject, the figures
+and the provenance are shared. What a difference *is* is the same everywhere.
 
-**One divergence, and half of it is a defect.** `lib/reporting/reconciliation_labels.dart` is the family
-vocabulary, on the model of `stock_movement_labels.dart`, and what it found is that the differences list
-described *all three* stock kinds with the stock-variance sentence. The model guarantees a `variance` on
-all three and permits it to be **zero** on the two that are not variances, so a broken checkpoint chain
-whose quantities agree read as *"Its ledger expects 10, and the product records 10: 0 fewer than the
-ledger accounts for."* The list also said nothing at all about an unmodelled kind, formatted the same
-instant as an ISO string where a run used a UTC minute, and ordered its provenance run-first where §5.2
-puts the instant first. The stock route had the right words for all three kinds since it was written.
+Screen 28's cards stay cards: 28 is **not one of the twelve screens step 6 names**, and migrating it
+would be step 6 work outside step 6's list.
 
-**What a screen can *do* about a record stayed at the call site**, which is the boundary that keeps the
-module honest: `_resolutionNote` — "an adjustment recorded below is how this is put right" — names a form
-three inches down one page, so it is private to that panel while the kind, the subject, the figures and
-the provenance are shared. What a difference *is* is the same everywhere.
-
-**Two things were deliberately not done and are named rather than left silent.** Screen 28's cards are a
-`RecordList` candidate and stay cards, because 28 is **not one of the twelve screens step 6 names** and
-migrating it would be step 6 work outside step 6's list. And **`reconciliation-request-notice` was
-excluded, along with a twin this file did not know about**: `reconciliation-amend-notice` on screen 28 is
-exactly the same item, arrived at the same way. Both are a `String?` with nothing in the model saying
-whether the sentence is a success or a refusal; widening the field is state shape, which `claude.md` hard
-rule 1 keeps out of a visual chunk.
-
-**The chunk's largest finding was made by a picture and it corrects step 4.** See the two new standing
-traps: `Disclosure`'s summary fits about 32 characters on a phone, step 4 shipped a 41-character one,
-and no capture had ever put a `Disclosure` on a phone because its `93-*` matrix is `web` only.
+Reasoning: `HISTORY.md` — "The reconciliation family gets one vocabulary, and step 4's sweep begins"
+(2026-08-14).
 
 ### A page's standing is a status, and a report row's reads the mode it was written in
 
-`design.md` §11 **step 4's sweep**, second part, taken on 2026-08-14 over the four catalog surfaces:
-the read-only catalog (17), manage catalog (18), the correction dialog (19) and bulk changes and
-import (20). It changed `firestore.rules` not at all and nothing in `functions/` or `rules-tests/`
-either.
+`design.md` §11 **step 4's sweep**, second part — the four catalog surfaces: read-only catalog (17),
+manage catalog (18), the correction dialog (19), bulk changes and import (20).
 
-**Screen 17 was stating one fact twice and rendering it as neither.** The route opened with a
-`headlineSmall` reading `Read-only catalog` and closed, a page below, with an uncontained paragraph
-naming what is unavailable. §2.1's rule is that a status is a container plus a glyph plus a **word**,
-and §2.1's own row for `info` is *"offline, read-only, informational"* — so the lookup is the
-document's, `Callout.title` supplies the word, and the paragraph is the message. The `headlineSmall`
-went with it: §2.2 has one screen-title role and step 5a put it in the `PageHeader`.
+Binding: **screen 17 was stating one fact twice and rendering it as neither** — a `headlineSmall`
+title and, a page below, an uncontained paragraph. §2.1's row for `info` is *"offline, read-only,
+informational"*, so `Callout.title` supplies the word and the paragraph is the message. **Six of the
+family's seven notices are `info` and the seventh is `problem`, and the split is what the sentences
+claim rather than how they feel**: the six say what *this build* or *this role* cannot do; the
+seventh is a stopped bulk chain, and `ambiguous` is deliberately included in it because an unknown
+outcome is not `attention`'s "awaiting" — nothing further is coming. **A bulk report's row status
+reads the report's mode**: `unchanged` is `neutral`, `failed` is `problem`, and `created`/`updated`
+are **`attention` in a preview and `ok` in a commit**, because a green badge over a report whose own
+first sentence is `Nothing has been written.` would state the opposite of the line above it. What the
+badge cannot fix is the word beside it — the four labels read as past tense, so a previewed row says
+`Created` before anything exists. **That is a copy question and it is queued, not decided.**
 
-**Six of the family's seven notices are `info` and the seventh is `problem`, and the split is what
-the sentences claim rather than how they feel.** The six say what *this build* or *this role* cannot
-do — no writer injected, no bulk callable injected, a manager who may stock the catalog and may not
-price it — and none of them reports a failure or hides anything, which is the reading the
-reconciliation day page made for its own forbidden notice. The seventh is a **stopped bulk chain**.
-All eight values of `TenantBulkCatalogFailure` mean the same thing at page scale, so they take one
-status; `ambiguous` is the arguable one and is deliberately included, because an unknown outcome is
-not `attention`'s "awaiting" — nothing further is coming.
+**No pagination line became a `Callout`**: "More products are available." states a property of the
+pager rather than something a person can or cannot do, and sits directly under the list it qualifies,
+which is §5.2's helper-text position.
 
-**A bulk report's row status reads the report's mode, and that is the decision most worth arguing
-with.** The status was a word inside the card title — `Corrected: Bar soap - blue` — which is the
-rendering §2.1 forbids, and a report genuinely mixes its four outcomes, so a badge here carries
-signal rather than being the every-row badge `RecordList`'s rule rules out. `unchanged` is `neutral`
-(*"archived, retired, closed"*: the row is not in play, and deliberately not `info`, which this route
-uses for page-scale notices), `failed` is `problem`, and `created`/`updated` are **`attention` in a
-preview and `ok` in a commit**: §2.1 gives `ok` the meaning *"confirmed"*, and a green badge over a
-report whose own first sentence is `Nothing has been written.` would state the opposite of the line
-above it. **What the badge cannot fix is the word beside it** — the four labels are the enum's own and
-read as past tense, so a previewed row says `Created` before anything exists. That is a copy question
-and it is queued, not decided.
+Screen 20's report cards stay cards, for the reason 28's did.
 
-**Four helper paragraphs fold and no notice does, and one of the four could have gone either way.**
-`catalog-management-scope`, `catalog-management-edit-scope`, `bulk-catalog-scope` and
-`bulk-catalog-sheet-help` are all "always the same, true of every product this screen will ever hold,
-read once". `bulk-catalog-scope` is the argument: it is the promise that decides whether a person
-dares press Preview, which is exactly what made the day page's request scope a `Callout`. It goes the
-other way because that sentence *corrects a misunderstanding about what the button covers* while this
-one reassures about a flow §5.2 names by name as `Disclosure` material.
-
-**No pagination line became a `Callout`, and that is one rule applied in three places.** "More
-products are available.", "More categories are available." and "More categories exist than are shown
-here." are all about *this read*, which is one of the three things the sweep's rule sends to a
-`Callout`. They stay captions: they state a property of the pager rather than something a person can
-or cannot do, and the two on 18 sit directly under the list they qualify, which is §5.2's helper-text
-position.
-
-**Two items were deliberately not done and are named rather than left silent.** The report's cards
-are a `RecordList` candidate and stay cards, because 20 is not one of the twelve screens step 6 names
-— the same call the previous chunk made for 28. And **`bulk-catalog-notice` and
-`catalog-management-notice` were excluded**, which makes the queued notice-status model chunk **four**
-notices rather than two: both are the same `String?`-with-no-status shape as
-`reconciliation-request-notice` and `reconciliation-amend-notice`, and all four should move together.
-
-**The chunk's largest finding was made by a picture and it corrects itself.** See the new standing
-trap: a `Disclosure` summary inside a dialog has about 200 logical pixels where a page gives it 250,
-and a 27-character summary that is inside `Disclosure.summaryCharacterBudget` truncated the first time
-anything photographed that dialog on a phone.
+Reasoning: `HISTORY.md` — "The catalog family folds its prose, and a bulk report gets its first
+picture" (2026-08-14).
 
 ### A figure is a component, and a row of them measures what it holds
 
-`design.md` §11 step 8, first half, 2026-08-14. `lib/ui/stats.dart` holds `StatTile`, `StatRow` and
-`StatLine`; `TenantStatCard` and `TenantStatStrip` are deleted, and `lib/ui/records.dart` is down to
+`design.md` §11 step 8, first half. `lib/ui/stats.dart` holds `StatTile`, `StatRow` and `StatLine`;
+`TenantStatCard` and `TenantStatStrip` are deleted, and `lib/ui/records.dart` is down to
 `TenantInitialsAvatar`, which is the till's and therefore step 7's.
 
-**Only the first of the three is in §5.1's inventory, and that is stated rather than smuggled.**
-`StatTile` is §5.1's own row — it replaces the "recorded stock" / "ledger entries" tiles by name.
-`StatRow` is the name §7 uses in passing for the queue counts and has no row of its own. **`StatLine`
-is in neither section**: one label and one figure on a line, for money *in flow*, added because two
-reporting surfaces render exactly that shape and §2.2's `numeric.body` row is the specification for
-it. The precedent for admitting a widget the document does not name is `RecordItem.details`, which
-step 6 added the same way and labelled the same way.
+**Only `StatTile` is in §5.1's inventory**, and `StatLine` is in neither §5.1 nor §5.2 — admitted on
+the precedent `RecordItem.details` set, and labelled the same way. All three are built from named §2
+rows, because §5.2 covers five components and none of these is among them.
 
-**What each one is built out of, all from named §2 rows**, because §5.2 covers five components and
-none of these is among them — the same position `Callout` was left in by step 4, and the same
-resolution: `radius.md` and `space.16` from §2.3; `surface.raised` with a `border.subtle` hairline
-from §2.1; `label.md` / `text.secondary` for the caption; `numeric.hero` / `text.primary` for the
-figure; `caption` / `text.tertiary` for the detail line; `space.12` between tiles and between a label
-and its figure. The glyph is 18, borrowed from §5.2's only named leading-icon size for the third time
-after `Callout` and `Disclosure` — which is now three components borrowing one number, and is the
-strongest form of the §5.2 gap this file already carries as a question for the product owner.
+Binding: **a stat tile is for "the one figure a stat tile exists for", and §2.2's own words are the
+test** — `numeric.hero` has exactly one use in the document and `numeric.body` is "money and counts
+in flow". Screen 26 gets tiles; screen 25 lists seven days and gets `StatLine`s. **The minimum tile
+width is measured rather than declared**: `StatRow.minimumTileWidth` lays every figure out with a
+`TextPainter` at `numeric.hero` and takes the widest plus the tile's own padding — no constant, no
+caller knob, nothing invented, no figure ellipsised. **The caption is sentence case, which closes the
+last uppercase surface in `lib/`**; `label.eyebrow`'s only readers now are the harness's section
+headings. **A figure with a standing wears a badge; a figure without one wears nothing** — the raw
+`Color` a caller used to pass was a hardcoded value *and* colour-alone signalling, and a badge on a
+*count* of records that each already wear one is the same signal twice. **A run of tiles is a `Row`
+inside an `IntrinsicHeight`, not a `Wrap`**, or a tile carrying a badge stands taller than its
+neighbour.
 
-**Six decisions, in the order they will be argued with.**
+**The note under the profit statement did not fold.** The rule that widget exists to keep is that no
+profit figure is rendered without, in the same block, what is known about the cost data behind it,
+and a `Disclosure` would make the qualification optional to read. **The tender disclaimer is the
+same exception**: permanent and page-invariant, and a visible `Callout` anyway, because
+`checkout_tender.dart` requires every surface showing a tender to carry it.
 
-1. **A stat tile is for "the one figure a stat tile exists for", and §2.2's own words are the test.**
-   `numeric.hero` has exactly one use in the document and `numeric.body` is "money and counts in
-   flow". Screen 26 answers one question with one pair of figures and gets tiles; screen 25 lists
-   seven days and gets `StatLine`s. Three hero tiles per day is a phone summary two and a half times
-   taller than the sentences it replaced, which is §5.2's catalog-form complaint in the other
-   direction.
-2. **The minimum tile width is measured rather than declared.** `StatRow.minimumTileWidth` lays every
-   figure in the row out with a `TextPainter` at `numeric.hero` and takes the widest plus the tile's
-   own horizontal padding, composed from the token rather than restated. No constant, no caller knob,
-   nothing invented, and no figure ellipsised. The 168 it replaces was a number `design.md` does not
-   contain, and at 28px/700 `KES 3810.25` is about 190 pixels of glyphs — so on a phone that strip
-   would have truncated both money tiles. It costs a `TextPainter` per build, which is nothing at four
-   tiles and would not be at a hundred; a row that large is not a stat row.
-3. **The caption is sentence case, which closes the last uppercase surface in `lib/`.** §2.2 permits
-   uppercase on `label.eyebrow` only and permits `label.eyebrow` on "field group labels only". Both
-   halves point the same way. `AppTypeRoles.labelEyebrow`'s note, which named this component as the
-   one left, is retracted at the text; the role's only readers now are the harness's section headings.
-4. **A figure with a standing wears a badge; a figure without one wears nothing, and both cases are in
-   the app.** `emphasis` was a raw `Color` a caller passed, which is a hardcoded value at the call site
-   *and* colour-alone signalling — §9 lists it as a known failure in another place. Screen 21's
-   negative stock is `problem` / `Below zero`. **The staff directory's `Pending` tile carries no status
-   at all**, because every pending member in the list under it already wears one and a badge on the
-   *count* of them is the same signal twice. A count is a fact; the standing belongs to the records.
-5. **A day's standing is §2.1's own vocabulary and it used to be a sentence.** "Not reconciled yet."
-   is `attention`'s stated meaning word for word, and a reconciled day is `ok`'s. Both are badges on
-   the day's header row, and the list genuinely differs by row — today is `attention`, the days behind
-   it are `ok` — so this passes the every-row test rather than failing it.
-6. **A run of tiles is a `Row` inside an `IntrinsicHeight`, not a `Wrap`.** A `Wrap` gives each child
-   its own height, so a tile carrying a badge stands taller than the one beside it, which reads as an
-   unfinished layout rather than as a difference that means anything. Found by the first picture.
+`design.md` §2.2 was amended: its ragged-figures example was false of these screens, and the
+retraction says what was actually wrong — not the numerals, but that the figures were *inside
+sentences*.
 
-**The profit statement is shared by both money screens and changed once.** "Profit: KES 430.25, a
-margin of 34.4%." is two `StatLine`s now, and **the note under them did not fold**: the rule that
-widget exists to keep is that no profit figure is rendered without, in the same block, what is known
-about the cost data behind it, and a `Disclosure` would make the qualification optional to read.
-
-**What the sweep half decided on these two screens.** The page-invariant explanations fold — where
-these figures come from, what these totals include, why a sale names no method, an unrecognised
-method — and the notices do not: an unpublished currency and a failed read are `Callout`s at `info`
-and `problem`. **The tender disclaimer is the exception that proves the rule**: it is permanent and
-page-invariant, which would make it a `Disclosure`, and it stays a visible `Callout` because
-`checkout_tender.dart` requires *every* surface showing a tender to carry it and a fold is a sentence
-a person can finish the screen without reading.
-
-**No behaviour changed.** No repository call, no callable payload, no routing condition, no state
-shape. The one thing that moved beyond presentation is that screen 25's figures no longer need
-singular/plural switching, because each count sits under its own label — which deleted a defect class
-rather than guarding it.
-
-**`design.md` §2.2 was amended, on the model of step 6's amendment to §5.2.** That section names this
-app's daily summary as its example of "proportional figures in a column of currency, which is why the
-amounts look ragged". It is false of that screen and of the period totals now, and the retraction says
-what was actually wrong: not the numerals but that the figures were *inside sentences*, so nothing
-could line up whatever the font feature did. **Screens 27, 28 and 29 still carry the original
-complaint** and the amendment says so.
+Reasoning: `HISTORY.md` — "A figure becomes a component, and the money screens stop writing numbers
+into sentences" (2026-08-14).
 
 ### A figure is evidence on these three, and one document is read two ways on purpose
 
-`design.md` §11 step 8, second half, 2026-08-15, and **it finishes step 8**. Screens 27, 28 and 29 —
-the reconciliation day page, the differences list and the one-run page — were the three §2.2's own
-amendment still named as carrying the original complaint. They do not now, and `design.md` §2.2 says
-so at the text where it used to say the opposite.
+`design.md` §11 step 8, second half, **and it finishes step 8** — screens 27, 28 and 29.
 
-**What these three wanted is not what 25 and 26 wanted, and reading that off the screens is the whole
-of the design work.** The money screens answer one question with one figure, so they took
-`numeric.hero` and `StatTile`. These state quantities as *evidence* — an expected quantity against a
-recorded one, a variance, a run's counts of what it did — which is a column of comparable numbers and
-therefore `numeric.body` and a shared right edge. **`StatLine` is most of this chunk and `StatTile`
-appears once**, on the day card, for the count of sale receipts the day's verdict rests on.
+Binding: **these three state quantities as evidence**, which is a column of comparable numbers and
+therefore `numeric.body` and a shared right edge, where 25 and 26 answer one question with one figure
+and took `numeric.hero`. **Screen 29 gets no `StatTile` row**, because every one of those counts is
+already stated by `TenantReconciliationRunCard`, which 29 shares with 27 so two routes cannot
+describe one run differently; a tile row would print one figure at 28px and again at 14px a
+centimetre below. **One difference is rendered two ways on purpose, and both live in one `switch`**:
+`reconciliation_labels.dart` declares each kind's reading once as a private `_DifferenceReading` —
+sentence, prose-without-figures, figures — and the test asserts every figure's magnitude also appears
+in that kind's sentence. **This is the one thing in the chunk that could rot**, and the guard is why
+it is written down. **A variance states its direction twice**, by sign and by word, which is §9's
+never-colour-alone rule in another form. **A revision is not a figure** and `_published` stayed a
+sentence: §2.2's numeric roles are for money and counts, and nothing about a generation marker is
+worth comparing by magnitude. **A figure label is a column heading and is never inflected.**
 
-**Five decisions, in the order they will be argued with.**
+The three panels moved onto the token layer while they were open — they were the last reporting
+surfaces reading `Theme.of(context).textTheme` and padding with bare integers.
 
-1. **Screen 29 gets no `StatTile` row, and this file predicted one.** The prediction was reasonable —
-   a run does have a small set of headline counts — and it is wrong once the screen is in front of
-   you: every one of those counts is already stated by `TenantReconciliationRunCard`, which 29 shares
-   with 27 so that two routes cannot describe one run differently. A tile row above the card would
-   print `Stock differences 1` at 28px and `Stock differences 1` at 14px a centimetre below it, which
-   is step 8's own first-half finding — two adjacent things saying one figure — one level up. The
-   figures went into the shared card instead, where both routes get them.
-2. **One difference is rendered two ways on purpose, and both live in one `switch`.** Step 8 wants the
-   figures out of the prose; screen 21's exception report draws a difference as a `Callout`, and
-   `Callout` has a `message` and no slot for a widget. So `reconciliation_labels.dart` declares each
-   kind's reading once as a private `_DifferenceReading` — the sentence, the prose left once the
-   figures are pulled out, and the figures — and `reconciliation_labels_test.dart` asserts that every
-   figure's magnitude also appears in that kind's sentence. **This is the one thing in the chunk that
-   could rot**, and the guard is why it is written down rather than trusted: the module exists because
-   three surfaces had each invented their own words, and answering step 8 by inventing a fourth would
-   have been the same defect wearing a component.
-3. **A variance states its direction twice.** `Difference -3` with `fewer than the ledger accounts
-   for` under the label. A sign is a one-glyph signal, and §9's rule that a status is never colour
-   alone is the same rule; the word is what a person actually reads and the sign is what makes the
-   column comparable. It also means the *shift* variance that is zero reads `0` beside `agrees with
-   the sales recorded`, where the sentence used to say "agrees" and give no figure at all — one half
-   of a two-figure comparison was a word.
-4. **A revision is not a figure, and `_published` stayed a sentence.** "The published totals were
-   generated from change 2; the day has since reached change 3." §2.2's numeric roles are for money
-   and counts; a revision is a generation marker, nothing about it is worth comparing by magnitude,
-   and promoting it would be applying the letter of step 8 against its own reason. It is the one
-   number on these three screens deliberately left in prose.
-5. **A figure label is a column heading and is never inflected.** `Unreadable sale lines: 1`. The prose
-   form still says "1 sale line could not be read", because there it is a clause. This is the same
-   grammar the daily summary deleted rather than guarded in step 8's first half.
-
-**Two branches were invisible in every picture and are not now.** The seeded reconciliation intake has
-always recorded a clean day, so `hasInvalidSaleLines` was false in all 221 images and the day card's
-second tile — plus the sentence under the row saying those lines moved no stock and count towards no
-profit — existed only in a widget test. `27b-reconciliation-unusable-lines` is that day, and it is also
-the only picture of a two-tile `StatRow` reflowing on a phone. And the three seeded differences
-happened to be one pure-figure kind, one figure-plus-sentence kind and one of each, with **no kind that
-carries a long paragraph *and* a single figure** — `chain_d4e5f6` is a broken checkpoint chain on the
-one product that already had a difference, so 28 and `21b-product-stock-differences` both photograph
-it. That is the "a fixture that hides the case the component exists for" trap for the third and fourth
-time, and both times it was the seed rather than the code.
-
-**A defect the first picture found and the tests could not.** With the figures lifted out, the sentence
-saying what the unusable lines cost ran straight into the published-totals line under it and the two
-read as one paragraph about one thing. Nothing asserts a gap; the capture is what showed it. That is
-the same argument step 8's first half made for taking the picture before writing the tests.
-
-**No behaviour changed.** No repository call, no callable payload, no routing condition, no state
-shape, no new read. `metricsProcessed`, `productsProcessed` and `shiftsProcessed` are decoded on every
-run and displayed by nothing — that was true before this chunk and is still true, and showing them
-would be adding content rather than restyling it. It is recorded under open decisions rather than
-taken.
-
-**The three panels moved onto the token layer while they were open.** They were the last reporting
-surfaces still reading `Theme.of(context).textTheme` and padding with bare integers, which is
-`claude.md` hard rule 2, and 25 and 26 had been on tokens since the first half. **The one exception in
-each file is the in-body `headlineSmall` screen title**, which is §7's queued thirteen-panel defect and
-is now commented as such at all three sites rather than silently left.
+Reasoning: `HISTORY.md` — "A difference states its figures, and step 8 is finished" (2026-08-15).
 
 ### A notice says which answer it is, and four of them were never refusals
 
-2026-08-15, and **it is a model chunk rather than a step**: `lib/ui/status.dart` gains `AppNotice`, and
-the seven surfaces that reported what a write had just done stopped carrying a `String?` whose meaning
-was in the sentence.
+A model chunk rather than a step: `lib/ui/status.dart` gains `AppNotice`, and the surfaces that
+reported what a write had just done stopped carrying a `String?` whose meaning was in the sentence.
 
-**`PLAN.md` said four sites and the grep found seven**, which is the third time this file has
-under-counted something it queued and the second time the instruction to grep first is what caught it.
-`reconciliation-request-notice` (27), `reconciliation-amend-notice` (28), `catalog-management-notice`
-(18) and `bulk-catalog-notice` (20) were the four this file knew about. `product-stock-notice` (21),
-`sale-returns-notice` (34) and `checkout-configuration-notice` (16) are the same item and were never
-listed. An eighth, `checkout-code-notice`, is in `checkout_cart_panel.dart` and stays excluded with
-the rest of step 7.
+Binding: **the four named constructors are the four outcomes this app's write boundaries already
+model.** `TenantCatalogWriteKind` is literally `committed / rejected / ambiguous / unavailable`, and
+`AppNotice.confirmed`, `.refused`, `.unknown` and `.offline` map to §2.1's `ok`, `problem`,
+`attention` and `info` **once, here**, so a call site names *what happened* and never picks a colour.
+**There is deliberately no constructor for `neutral`**: §2.1 gives it "archived, retired, closed",
+which is a standing a *record* has and never a page reporting on a write. **Every `ambiguous` branch
+is `attention` rather than `problem`** — nothing is known to have failed, and painting it red reports
+a failure the app has no evidence of. **Four branches were never refusals**:
+`TenantProductUpdateFailure.unchanged`, `product_unchanged`, `currency_unchanged` and
+`TenantReturnVerificationFailure.alreadyVerified` all say *what you asked for is already true*, and
+are `info`. A surface with no success branch at all carries an `AppNotice` anyway, because the type
+states that invariant where a `String?` left it to be traced through the assignments.
+`test/support/notices.dart` is **not** a migration seam like `buttons.dart` and `fields.dart` — it
+reads the destination.
 
-**The four named constructors are the four outcomes this app's write boundaries already model**, which
-is the whole reason the model is small: `TenantCatalogWriteKind` is literally `committed / rejected /
-ambiguous / unavailable`, and every other gateway answers in the same shape. `AppNotice.confirmed`,
-`.refused`, `.unknown` and `.offline` map to §2.1's `ok`, `problem`, `attention` and `info` once,
-here, so a call site names *what happened* and never picks a colour. That is the argument
-`AppStatus.defaultIcon` already makes about glyphs, one level up. **There is deliberately no
-constructor for `neutral`**: §2.1 gives it "archived, retired, closed", which is a standing a *record*
-has and never a page reporting on a write.
+**The grep that finds these is `grep -n "\-notice'" lib`.** It found seven where this file listed
+four, and missed sign-in's `login-error`, since renamed `login-notice` so the next run finds it.
+`checkout-code-notice` in `checkout_cart_panel.dart` stays excluded with the rest of step 7.
 
-**The substantive finding is that four of these were never refusals.**
-`TenantProductUpdateFailure.unchanged`, the catalog's `product_unchanged` code, checkout settings'
-`currency_unchanged`, and `TenantReturnVerificationFailure.alreadyVerified` all say the same thing —
-*what you asked for is already true* — and every one of them had been sitting in the same black
-paragraph, in the same position, as "Only an owner or administrator may change this". They are `info`
-now. The clearest is the return one: a manager who verifies a return that was already verified is
-told the stock is restored, not that something failed.
-
-**Every `ambiguous` branch is `attention` rather than `problem`, and there are six of them.** Nothing
-is known to have failed, the write may well have landed, and each of those sentences already tells a
-person where to look. Painting them red would report a failure the app has no evidence of — which is
-the same argument the reconciliation vocabulary makes for `other` being `info` rather than
-"unreadable".
-
-**Three smaller decisions.** `bulk-catalog-notice` is the one surface with **no success branch at
-all** — every value is a refusal raised before anything was sent — and it carries an `AppNotice`
-anyway, because the type states that invariant where a `String?` left it to be traced through the
-assignments. The amend notice's "View this shift's corrections" button became the `Callout`'s **own
-action** rather than a control under it, which is the slot §5.1 gives that component. And
-`test/support/notices.dart` is **not** a migration seam like `buttons.dart` and `fields.dart`: those
-exist because `lib/` holds two button systems at once, and this one reads the destination.
-
-**The pictures found nothing, and that is the finding.** All 225 images were byte-identical after the
-change, because **every one of these notices appears only after a write and no capture case performs
-one** — so no notice had ever been photographed on any screen in the whole harness. It is the
-"invisible in every capture" trap for the fifth time and the first time it is *structural* rather than
-a narrow fixture: reaching one needs a form driven, a confirmation tapped, and a fake write boundary.
-`18b-catalog-notice` is that, on the surface with the most notice branches in the app.
-
-**No behaviour changed.** No repository call, no callable payload, no routing condition, no state
-shape. `AppNotice` replaces a `String?` field on seven `State` classes and a `String?` parameter on
-seven presentational widgets; every branch that set one still sets one, with the same words.
+Reasoning: `HISTORY.md` — "A notice says which answer it is, and four of them were never refusals"
+(2026-08-15). All 225 images were byte-identical, because no capture case performs a write — the
+"invisible in every capture" trap, structural rather than a narrow fixture.
 
 ### A title appears once, and the page that said it was read-only was not
 
-2026-08-15, and it closes §7's own named defect: *"several screens render the title in the app bar
-**and** again as an `H1` directly beneath it"*. `grep -n headlineSmall lib` over the migrated tree
-returns **two** live uses now, both deliberate, where step 8 left thirteen.
+It closes §7's own named defect: *"several screens render the title in the app bar and again as an
+`H1` directly beneath it"*. **The check is `grep -n headlineSmall lib`**, which returns two live uses
+now, both deliberate, where step 8 left thirteen — the entry carries the grep rather than a number,
+because this file has under-counted four queued lists from memory in three days.
 
-**It was fourteen sites in fourteen files, and this file listed thirteen.** `tenant_staff_directory.dart`
-was never on the list; `sale_history_panel.dart` holds two. That is the fourth queued list this file
-has under-counted from memory in three days, which is why the entry now carries the grep that finds
-them rather than the number.
+Binding: **moving a string the screen already draws is not a copy decision**, where *rewriting* a
+title into a title-and-subtitle pair is and remains step 11's. So: if the in-body heading equals what
+the `AppScaffold` title says, it goes; if it names *which* record the route is showing, it becomes
+`PageHeader.subtitle`; and the noun goes with it, because `Reconciliation run` over `rj_000001` is
+what the header already says.
 
-**The rule, and it was written in `PageHeader.subtitle`'s own doc comment all along.** The slot exists
-for "where the screen needs to say which slice of something it is showing — a date, a product, a
-period", and it was populated at no call site because step 5a ruled that *rewriting* a title into a
-title-and-subtitle pair is a copy decision for step 11. **Moving a string the screen already draws is
-not that.** So: if the in-body heading equals what the `AppScaffold` title says, it goes; if it names
-*which* record the route is showing, it becomes the subtitle; and the noun goes with it, because
-`Reconciliation run` over `rj_000001` is what the header already says and `Run rj_000001` under it
-repeats the noun above its own value.
+**The staff directory's heading was also saying something false** — `Read-only staff directory`
+unconditionally, over a page offering `Invite staff` two lines below. A page's standing is §2.1's
+rather than a heading's, so it is an `info` `Callout` shown only when the session can neither invite
+nor edit. **Screen 24's heading stays and is not a duplicate**: the product *name* only exists after
+the guarded load inside the panel, so reaching it is structure rather than a title fix, and it is
+commented at the site.
 
-```text
-deleted, said what the title said     moved to PageHeader.subtitle
-21 product stock      (identical)     16 reconciliation status  -> the business date
-17 find a receipt     (identical)     19 one reconciliation run -> the job ID
-28 unresolved differences (identical) 34 returns on a sale      -> the receipt number
-35 activity log                       33 shift sales            -> the shift's business date
-23 stock movements                    30 shift corrections      -> the shift ID, when scoped
-22 stock adjustments
-32 shift history                      left, and not a duplicate
-33 recent sales (the unscoped branch) 24 one product ledger     -> see below
-30 shift corrections (unscoped)
-13 staff directory -> became a status
-```
-
-**Two of the fourteen are decisions rather than applications of the rule.**
-
-1. **The staff directory's heading was also saying something false.** It read `Read-only staff
-   directory` **unconditionally**, under an `AppScaffold` titled `Staff directory` — so an owner was
-   told the page was read-only and then offered `Invite staff` two lines below it. Nothing asserted
-   the string, which is why it survived. A page's standing is §2.1's rather than a heading's, and this
-   is the repair the read-only catalog already carries, reached from the other direction: there the
-   fact was true and stated twice, here it was stated once and true only sometimes. It is an `info`
-   `Callout` now, shown only when the session can neither invite nor edit — both conditions the page's
-   own affordances already ask.
-2. **Screen 24's heading stays, and it is not a duplicate.** `Product stock ledger` and `White bread
-   loaf` say different things, so it is a subtitle candidate. It cannot become one:
-   `TenantProductLedgerScreen` is constructed with a `productId` and the *name* only exists after the
-   guarded load inside the panel. Reaching it means an optional decoded product on the screen — which
-   its callers, the movement feed included, do not all hold — or hoisting the load out of the guard.
-   Both are structure rather than a title fix, and it is commented at the site.
-
-**No behaviour changed.** Fourteen `Text` widgets were deleted or moved, five `AppScaffold`s gained a
-`subtitle` argument from a value they were already constructed with, one heading became a conditional
-`Callout` from a condition the same widget already computed, and `TenantSaleHistoryRequest` gained a
-`subtitle` getter beside the `title` it has always had. No repository call, no callable, no routing
-condition, no new read.
-
-**52 images moved, which is more than any chunk since step 6b**, and the honest figure took a second
-baseline: the UTC date rolled over between the previous run and this one, so a naive comparison
-reported 58 and six of those were seeded dates advancing by a day on screens this chunk never touched.
-See "Test baselines" for the method.
-
-**Two observations the pictures give and this chunk did not act on.** First, a subtitle carrying a
-record ID — `rj_000001` on screen 29 — is drawn at the density's body role, and §2.2 says record
-identifiers are `mono`. Teaching `PageHeader` to detect an identifier would be inventing a rule; the
-honest fixes are §2.2 gaining a sentence about the header, or the slot taking a role argument. It is a
-§2.2 question rather than a defect. Second, `13c-staff-directory-read-only` is the first picture of
-that route at a band where its badges are legible, and they read **`active`** and **`pending`** in
-lowercase — the membership enum's own wire values, where §8 rule 7 is sentence case everywhere but
-`label.eyebrow`. Pre-existing, unrelated to titles, and step 11's.
+Reasoning: `HISTORY.md` — "A title appears once, and one page was telling everybody it was read-only"
+(2026-08-15). Two observations it did not act on are in "Open decisions": a subtitle carrying a record
+ID is drawn at the body role where §2.2 says identifiers are `mono`, and the membership badges read
+`active`/`pending` in the enum's own wire case.
 
 ### A column asks for what it holds, and a share is a guess about content
 
-The **four `RecordList` column-arithmetic observations**, taken 2026-08-15 as one chunk because they
-are one defect seen from four directions. It changed `firestore.rules` not at all, nothing in
-`functions/` or `rules-tests/`, and **no call site anywhere in `lib/` outside `lib/ui/`**.
+The four `RecordList` column-arithmetic observations, taken as one chunk because they are one defect
+seen from four directions. Step 6b divided a table row with four constants measured at 1200 against a
+**two-column** activity log; the twelve screens that followed carry two to six columns. The mechanism
+is `RecordTableColumns` in `lib/ui/record_list.dart`.
 
-Step 6b divided a table row with four constants — identity 3, status 2, actions 3, an attribute 1 —
-measured at 1200 against a **two-column activity log**, because that was the only consumer that
-existed on the day. The twelve screens that followed carry **two to six** columns, and each of the
-four observations is what those constants do to a shape they were not measured against. The
-mechanism is `RecordTableColumns` in `lib/ui/record_list.dart`:
+Binding: **every column states a demand** — the widest badge, the widest inline action set, the
+longest value, and in every case at least its own header, because a column narrower than its heading
+would ellipsise the heading. **A demand is capped at the column's old share**, so the first pass
+always fits and nothing can overflow at any width; the four constants are **ceilings now, not
+answers**. **What nobody claimed fills the shallowest unmet need first** — proportion is the obvious
+rule and the wrong one, because a column 6 pixels short and one 400 short are not two claims of the
+same kind. **The identity takes what is left over** and is the only column ever given more than it
+asked for. A title asks for half its width; the subtitle and provenance are `maxLines: 1` and ask for
+all of theirs. **A component answers for its own geometry** — `StatusBadge.measureWidth` and
+`AppButton.measureWidth`, rather than the table reassembling §5.2's padding rules. `space.12` between
+adjacent cells; `design.md` asked for no gutter and now records one.
 
-1. **Every column states a demand**: the widest badge in the list, the widest set of actions laid out
-   inline, the longest value, and in every case at least its own header. A column narrower than its
-   heading would ellipsise the heading, which is why the header is in the sum.
-2. **A demand is capped at the column's old share**, so the first pass always fits and nothing can
-   overflow at any width — the property that made this safe to apply to twelve screens at once. The
-   four constants are ceilings now, not answers, and a table where every column wants at least its
-   share lays out exactly as it did before.
-3. **What nobody claimed fills the shallowest unmet need first.** Proportion is the obvious rule and
-   is the wrong one: a column 6 pixels short and a column 400 short are not two claims of the same
-   kind, because satisfying the small one removes a wrapped line and part-satisfying the large one
-   removes nothing.
-4. **The identity takes what is left over**, and it is the only column ever given more than it asked
-   for. Something has to absorb the difference, and §5.2's "never truncated below two lines" row is
-   the one column where more room is always worth having.
-5. **A title asks for half its width**, because §5.2 gives it two lines; the subtitle and the
-   provenance line are `maxLines: 1` and ask for all of theirs.
-6. **A component answers for its own geometry.** `StatusBadge.measureWidth` and
-   `AppButton.measureWidth` are new statics beside `StatusBadge.height`, and the table asks them
-   rather than reassembling §5.2's padding rules — which would be a second copy of the specification.
-7. **`space.12` between adjacent cells**, from §2.3's scale. `design.md` asked for no gutter and now
-   records one.
+**The actions column is deliberately *not* sized to the widest set**, which is the obvious intrinsic
+answer: four of the staff directory's five rows carry two actions, so a column sized for the fifth
+would be 380 pixels of nothing on 80% of the table. A tall row on one record is a smaller cost than an
+empty column on all of them.
 
-**Two of the four are closed, one is closed where it was observed, and one is improved rather than
-closed.** The status column is the widest badge in the list and nothing more; the gutter is
-everywhere; `web/23-stock-movements` fits its 58-character provenance line on one line where it used
-to wrap on every row, though `web/30-shift-corrections` at six columns still does not. **Observation 1
-— four actions wrapping to three runs — went to two runs on the staff directory and cannot go to
-one**, and the arithmetic is the argument: four actions with real labels need about 630 pixels, the
-other four columns of that screen need about 700, and the row is 1128. What changed is where the
-spare width goes, not how much there is.
+Two findings that only came from asserting a measurement against a rendering: **a button is 8 pixels
+wider than §5.2's arithmetic**, because `PressSurface` reserves the ring's width and offset on every
+side whether visible or not; and **every `Text` in this app is painted 0.25px per character wider than
+its token style says**, because a style with `inherit: true` merges onto a `ThemeData` carrying
+Material's `letterSpacing: 0.25`. Every measurement here takes the ambient style as an argument. **The
+theme half is a finding and not a repair** — see "Open decisions".
 
-**The decision most worth arguing with is that the actions column is *not* sized to the widest set.**
-That is the obvious "intrinsic column" answer and the first picture killed it: four of the staff
-directory's five rows carry two actions, so a column sized for the fifth would be 380 pixels of
-nothing on 80% of the table. A tall row on one record is a smaller cost than an empty column on all
-of them.
-
-**It found two things about this app that no review would have, and both came from asserting a
-measurement against a rendering.**
-
-- **A button is 8 pixels wider than §5.2's arithmetic.** `PressSurface` reserves the focus ring's
-  `width + offset` on every side whether the ring is visible or not, and §9's tap target is a minimum
-  *width* as well as a minimum height. The first formula agreed with §5.2, disagreed with the widget,
-  and wrapped the set of four it had just made room for.
-- **Every `Text` in this app is painted 0.25 pixels per character wider than its token style says.**
-  A style with `inherit: true` — every style in the token layer — is merged onto the enclosing
-  `DefaultTextStyle`, and this app's `ThemeData` carries Material's `letterSpacing: 0.25` on every
-  role §2.2 leaves silent. Four pixels on `Cancel invitation`; the difference between one line and
-  two on a set of four. Every measurement here takes the ambient style as an argument. **The theme
-  half is a finding and not a repair** — see the open decision.
-
-**No behaviour changed.** `RecordAttribute.flex` keeps its name and its eight call sites while its
-meaning narrows from an allocation to a ceiling; `AppButton`'s leading icon `18` became
-`AppButton.iconSize`, read by the widget that paints it and the formula that measures it. Nothing
-else in `lib/` was touched.
+Reasoning: `HISTORY.md` — "A table stops guessing how wide its columns are" (2026-08-15).
 
 ### A boundary is a measurement, and the front door had a second palette
 
-`design.md` §11 step **9**, sign-in, taken 2026-08-15. **It finishes step 9 and it was one screen
-rather than the eight §11 lists.** Screens 02 to 07 have been `AppScaffold` routes with `AppButton`s
-and `AppTextField`s since steps 3 and 5a — they are phases of `tenant_routing_shell.dart` and were
-swept with everything else — and screen 08 is one of the three full-page `Center` states §5.1 names
-`LoadingState` / `ErrorState` / `EmptyState`, none of which exists. So the surface was **01**, which
-had its own field, its own button, its own card and its own on-screen keypad. It changed
-`firestore.rules` not at all and nothing in `functions/` or `rules-tests/`.
+`design.md` §11 step **9**, sign-in. **It was one screen rather than the eight §11 lists**: screens
+02–07 are phases of `tenant_routing_shell.dart` and were swept with everything else, and screen 08 is
+one of the three full-page states §5.1 names and none of which exists.
 
-**Three widget files are dead**: `pill_input.dart`, `pill_button.dart`, `glass_card.dart`. Nothing
-imports them. **Deleting them was refused by this session's tool permissions**, exactly as the
-five stale screenshots were on 2026-08-15, so they are named here and in the exclusions instead of
-being quietly left.
+Binding: **it is a `Scaffold` with a `PageHeader`, not an `AppScaffold`.** Sign-in has nothing for a
+toolbar, so `AppScaffold` would draw 56 pixels of empty chrome; the decisive half is that on a wide
+window this screen is two panes and **the title belongs to the form**, not to a header spanning a form
+and a keypad. **Whether the keypad appears is a measurement, and it replaces a breakpoint.** The screen
+used to ask §4.1 whether the window was 768 wide; what it needs to know is whether half the window
+holds ten keys at §9's 48dp target. It did not — at 768 that was 24 pixels of slot each and 13 painted.
+`PosKeyboard.minimumWidth` is **632**, so the keypad shows at **1264** and above. **A screen consulting
+one variable is not the same as a screen asking the right question.** **A keypad key is not an
+`AppButton`**, because §5.2's own minimum horizontal padding plus the ring gutter leaves nothing for
+the character at §9's 48-wide minimum; the key draws itself out of the same §2 rows and invents no
+token. **A defect this screen found itself sits on the field it is about; a provider answer sits in the
+page notice.** **`Enter` is drawn disabled because it does nothing** — its handler has been an empty
+branch since the file was written, and wiring it is a behaviour change `claude.md` hard rule 1 keeps
+out of a visual step.
 
-The decisions are settled, not open:
+**The double border is closed, and the mechanism is worth keeping.** `PillInput` set
+`border: InputBorder.none`, which was correct and stopped being sufficient the day `spiritTheme`
+gained `enabledBorder`, `focusedBorder` and `filled: true` — `InputDecorator` prefers the specific
+slots over `border`. `AppFieldWell` strips all six and sets `filled: false`, and a test pumps the
+screen **under the real theme** rather than a bare one and asserts every slot.
 
-1. **It is a `Scaffold` with a `PageHeader`, not an `AppScaffold`, and that is the framing decision
-   worth arguing with.** `AppScaffold` is a toolbar, a header and a §4.2-capped body spanning the
-   page. Sign-in has nothing for a toolbar — no way back from the app's front door, nothing to sign
-   out of — so it would draw 56 logical pixels of empty chrome above the title. The decisive half is
-   the wide layout: this screen is two panes and **the title belongs to the form**, not to a header
-   spanning a form and a keypad. §7's page pattern is kept; the frame it usually arrives in is not.
-   The raw-`Scaffold` count therefore stays at **7** with this one's reason rewritten from "step 9"
-   to "no toolbar content, deliberately".
-2. **Whether the keypad appears is a measurement, and it replaces a breakpoint.** The screen asked
-   §4.1 whether the window was 768 wide. §4.1's bands say how much room a *page* has; what this
-   screen needed to know is whether half the window can hold ten keys at §9's 48dp target. It could
-   not, and the arithmetic is worth writing out because this file first wrote it down as an
-   estimate and the estimate was too kind: the old layout gave the keypad four ninths of the window
-   and then spent 48 on the card's margin and 48 on its padding, so at 768 that is
-   `768 × 4/9 − 96 = 245` for ten keys — **24 pixels of slot each and 13 painted** — and at 1023 it
-   is still only 36 and 24. It had been that way since the file was written, under
-   a boundary that looked right because it named a declared constant. `PosKeyboard.minimumWidth`
-   answers it now: ten targets, nine `space.8` gaps, the card's inset and the pane's margin, which is
-   **632**, so the screen shows the keypad at **1264** and above. **A screen consulting one variable
-   is not the same as a screen asking the right question**, and this is the only place in the app
-   where the two came apart.
-3. **A keypad key is not an `AppButton`, and §5.2's own arithmetic is why.** §5.2 gives `AppButton` a
-   minimum horizontal padding of `space.20` — 40 pixels before a glyph — and `PressSurface` reserves
-   8 more for the ring gutter. At §9's 48-wide minimum that leaves nothing for the character. A
-   component cannot be used at a size its own specification forbids, so the key draws itself out of
-   the same §2 rows `AppButton` reads — `action.secondary`, `radius.pill`, `label.lg`, `PressSurface`
-   for press, hover, ring and target. Nothing invents a token.
-4. **The refusal is an `AppNotice`, and this screen was the ninth surface rather than none of them.**
-   It held a `String?` painted `Colors.red`, which is the exact half-model the seven back-office
-   surfaces shed on 2026-08-15. It was missed because the grep that found those is
-   `grep -n "\-notice'" lib` and this screen's key was `login-error`. It is `login-notice` now, so
-   the next run of that grep finds it.
-5. **One of its branches was never a refusal**, which is the same finding the notice chunk made one
-   day earlier and one screen along. `network-request-failed` — *"This device could not reach the
-   server"* — is §2.1's `info`: nothing was refused, because nothing was answered. It had been drawn
-   identically to a wrong password. `SignInFailureKind` in `sign_in.dart` carries the distinction,
-   decided in the one `switch` that already owned the words so a second table cannot disagree with
-   it.
-6. **A defect this screen found itself sits on the field it is about; a provider answer sits in the
-   page notice.** §5.2 gives a field an error line that replaces its helper and §9 asks that a form
-   error be associated with its input. *"Enter the password for this account."* is about one box;
-   *"That email address and password do not match an account."* is about the credential, and a
-   credential is not a box.
-7. **The double border is closed, and the mechanism is worth keeping.** Since commit `1b2b13b` on
-   2026-08-10 every login field painted two: `PillInput` set `border: InputBorder.none`, which was
-   correct and stopped being sufficient the day `spiritTheme` gained `enabledBorder`, `focusedBorder`
-   and `filled: true` — `InputDecorator` prefers the specific slots over `border`. `AppFieldWell`
-   strips all six and sets `filled: false`, and a test now pumps this screen **under the real theme**
-   rather than a bare one and asserts every slot. That is the assertion that would have caught it.
-8. **`Enter` is drawn disabled because it does nothing.** Its handler has been an empty branch with
-   the comment `// Optional submit action` since the file was written. §2.1's disabled row is a
-   rendering rather than a flag, so a control with no callback looks like one; wiring it to submit is
-   a behaviour change and `claude.md` hard rule 1 keeps that out of a visual step. It is the same
-   move §7's title chunk made when the staff directory stopped claiming to be read-only.
-9. **The theme's checkbox went to §2.1 and one thing it cannot fix is recorded.** The tick was
-   `Colors.green` at the call site over a theme painting `accentGreen` — two greens for one control —
-   and the check mark was `bgDark`, the *page* colour, which is the divergence `onPrimary` carried
-   until step 3. Both read `action.primary` now and the outline reads `action.secondary.border`. See
-   the open decision for the part that is still wrong.
-10. **Three copy changes, and only one of them is a copy decision.** `UNLOCK REGISTER →` became
-    `Sign in`, which is §8 rule 3 naming *Unlock register* in its own list of what a control must
-    never say. `EMAIL / USER ID` and `PASSWORD` became sentence case, which is §2.2 and §8 rule 7 —
-    the *words* are unchanged, because what those fields should be called is step 11's. And the
-    password placeholder `Enter Password` was **deleted**, because §5.2 says a placeholder is an
-    example and never a restatement of the label.
+**A glyph outside the Latin ranges is an asset, not a character, and it needs a picture before it
+ships.** `⌫` is U+232B, Roboto does not carry it, and the first picture of the new keypad showed an
+empty rectangle where the key's entire face should be. It is `Icons.backspace_outlined` with a
+semantic label now. Same defect as the bulk report's before/after arrow, one step worse.
 
-**What it found by rendering that no review would have: the backspace key was a tofu box.** `⌫` is
-U+232B and Roboto does not carry it, so the first picture of the new keypad showed an empty
-rectangle where the key's entire face should be. It is the same defect `PLAN.md` already records
-against the bulk report's before/after arrow, one step worse — a missing mark inside a sentence is a
-blemish, and a control whose only face is a box cannot be named at all. It is
-`Icons.backspace_outlined` at `AppButton.iconSize` with a semantic label, which is §9's icon-only
-row. **The general form is the part to carry: a glyph outside the Latin ranges is an asset, not a
-character, and it needs a picture before it ships.**
+**Three widget files are dead and nothing imports them**: `pill_input.dart`, `pill_button.dart`,
+`glass_card.dart`. Deleting them was refused by the session's tool permissions, so they are named here
+and in the exclusions rather than quietly left.
 
-**Two things deliberately not done.** `enableInteractiveSelection: false`, which `PillInput` set with
-the comment *"Prevent selection/highlight"*, is gone — `AppTextField` offers no passthrough and
-adding one to carry a sign-in quirk into "one pattern, everywhere" is the wrong trade; a person can
-now select the text in these two fields, which is what every other field in the app already allows.
-And the two leading icons inside the wells went, because §5.2 specifies no leading icon for a field
-and the persistent label is what names it.
+Reasoning: `HISTORY.md` — "The front door stops having a palette of its own" (2026-08-15).
 
 ### An input is a pill again, and the specification moved first
 
-**`design.md` v0.4**, taken 2026-08-15 **at the product owner's direction** rather than as a
-migration step: they saw §11 step 9 land, said they disliked the near-black input fields, and asked
-for the original sign-in's raised pill with its leading and trailing icons back — across **all** the
-fields, not just sign-in — plus a **Caps** key on the on-screen keypad. It changed `firestore.rules`
-not at all and nothing in `functions/` or `rules-tests/`.
+**`design.md` v0.4**, taken at the product owner's direction rather than as a migration step. **The
+specification changed before the code did, which is `design.md` §0's own order of operations and the
+only reason this was a chunk rather than a patch.**
 
-**The specification changed before the code did, which is `design.md` §0's own order of operations
-and the only reason this is a chunk rather than a patch.** What the request asked for contradicted
-two things §2.3 and §5.2 said outright, so amending them was the work; the widgets followed.
+Binding: **§2.1 gains `surface.field` `#1E3A2B` and `surface.sunken` loses the input well**, keeping
+the table header and the code block, which genuinely are recessed. No new hex — `#1E3A2B` is
+`green.700`, so v0.4 added a *role*. It collides with `border.subtle` by value, deliberately and
+named: they never meet, because a field well is bounded by `border.strong`. **A field is the lightest
+surface in the set**, so the ordering runs `sunken` → `base` → `raised` → `overlay` → `field`, and
+`tokens_test.dart` walks the five in order. **§2.3's pill stops being buttons-only**, and what it costs
+is written into §2.3 rather than discovered: a button and a field share an outline, and what keeps them
+apart is the action tier's fill, the field's persistent label, and the field's left-aligned content —
+**if those stop being enough the honest fix is to take the amendment back, not to add a fourth
+distinction**. **§5.2's leading icon is optional in the strong sense**: 17 of 41 fields carry one and
+24 decline it, because a glyph that does not narrow what a field is for is noise. **The focus glow is
+back and §9's ring is still in front of it** — both are drawn, and the test asserts the pairing rather
+than the glow; §2.1 gains its only permitted shadow, on the grounds that a focus glow is an interaction
+state and not depth. **The placeholder moved to `text.secondary`, and that one is arithmetic**:
+`text.tertiary` measures **4.29:1** on `surface.field` against §9's 4.5 floor, asserted at the figure
+rather than at a floor so a later session that "restores" it fails a test that says why. Helper text is
+untouched, because it sits outside the well. **The 1px `border.strong` stays** because §5.2 switches the
+border to `status.problem.border` on error, and a well with no border has no error border.
+**`inputDecorationTheme` moved with it**, which `AppFieldWell` does not reach — what still reads it is
+the sale path's two unmigrated `TextField`s and the legacy island — and its `hintStyle` had to move or
+it would have vanished into the new fill.
 
-1. **§2.1 gains `surface.field` `#1E3A2B`, and `surface.sunken` loses the input well.** It keeps the
-   table header and the code block, which are the two uses that genuinely are recessed. **No new
-   hex**: `#1E3A2B` is `green.700`, already a primitive, so v0.4 added a *role* — which is what §2.1
-   tells a widget to do when it needs a colour that has none. It collides with `border.subtle` by
-   value, deliberately and named: they never meet, because a field well is bounded by
-   `border.strong`.
-2. **A field is now the lightest surface in the set**, so the ordering runs `sunken` → `base` →
-   `raised` → `overlay` → `field`. A well is not recessed; it sits *on* the page. That reads as
-   backwards until you look at it, which is why it is asserted rather than described —
-   `tokens_test.dart` walks the five in order.
-3. **§2.3's pill stops being buttons-only.** The "when *everything* is a pill the shape stops
-   signifying" argument is kept and now does its work on chips, filters, badges and cards. **What
-   this costs is written into §2.3 rather than discovered**: a button and a field share an outline,
-   and what keeps them apart is the action tier's fill, the field's persistent label, and the
-   field's left-aligned content. If those stop being enough the honest fix is to take the amendment
-   back, not to add a fourth distinction.
-4. **§5.2 gains an optional leading icon at 18, and it is optional in the strong sense.** A glyph
-   that does not narrow what a field is for is noise in a form of six, so **17 of 41 fields carry
-   one** and 24 decline it: address, password, phone, money, code, quantity, receipt and filter get
-   a glyph; "Reason for this adjustment", "Business name" and "Note" do not. The alternative — one
-   for every field — was offered and declined, because 24 of the glyphs would have been chosen to
-   fill a slot.
-5. **The focus glow is back, and §9's ring is still in front of it.** The original drew a glow
-   *instead* of a ring, which is the §9 failure `DESIGN-AUDIT.md` §4.4 named. v0.4 draws both, and
-   the test asserts the pairing rather than the glow: `accentGreen` at 30%, blurred 8, spread 1,
-   behind the 2px ring. §2.1 gains its only permitted shadow, on the grounds that a focus glow is an
-   interaction state and not depth.
-6. **The placeholder moved from `text.tertiary` to `text.secondary`, and that one is arithmetic.**
-   `text.tertiary` measures **4.29:1** on `surface.field` against §9's 4.5 floor, where it measures
-   5.9 on the page. It was predicted before the change was made, measured after, and is asserted in
-   `tokens_test.dart` at the figure rather than at a floor — so a later session that "restores" it
-   fails a test that says why. **Helper text is untouched**: it sits outside the well.
-7. **The 1px `border.strong` stays, and the reason is functional rather than inherited.** §5.2
-   switches the border to `status.problem.border` on error. A well with no border has no error
-   border, and the original `PillInput` — which drew none at rest — had no error state at all.
-8. **`inputDecorationTheme` moved with it**, which `AppFieldWell` does not reach. Every field in the
-   migrated tree strips that theme; what still reads it is the sale path's two unmigrated
-   `TextField`s and the legacy island. Leaving it would have meant the one screen a cashier uses
-   most keeping two dark rectangles while every other field became a pill. **Its `hintStyle` had to
-   move or it would have vanished** — it was `mutedGreen`, which is `#1E3A2B`, which is now the
-   fill.
-9. **The keypad has a caps lock, and it fixes something as well as adding something.** Every letter
-   key used to insert its upper-case identifier, so this keypad typed `OWNER@EXAMPLE.COM` and could
-   **not type a lower-case password at all**. Off is now the default; `Caps` latches. The key faces
-   change with it, so a person sees which case they will get rather than finding out by typing.
-10. **`Caps` is one flex unit and an icon, and that was forced by arithmetic.** A labelled `Caps`
-    needs two units, which would make the `Z` row 11 and narrow every key in the keypad below §9's
-    48. `PosKeyboard.columns` is now **measured over `rows`** rather than hardcoded to 10, so the
-    next key added widens the pane the keypad asks for instead of silently shrinking every key.
-11. **A latched key is §2.1's `primary` tier**, which is the one tier that fills its container — so
-    `Caps` is filled and mint among bordered ones, and its announcement reads `Caps, on`. §9's
-    "never hue alone" is satisfied by the fill, the glyph and the words together.
+**The keypad has a caps lock, and it fixes something as well as adding something.** Every letter key
+used to insert its upper-case identifier, so this keypad typed `OWNER@EXAMPLE.COM` and could **not type
+a lower-case password at all**. Off is the default; `Caps` latches; the key faces change with it.
+**`Caps` is one flex unit and an icon, forced by arithmetic** — a labelled `Caps` needs two, which would
+make the `Z` row 11 and narrow every key below §9's 48 — and `PosKeyboard.columns` is now **measured
+over `rows`** rather than hardcoded to 10, so the next key added widens the pane instead of silently
+shrinking every key. **A latched key is §2.1's `primary` tier**, the one tier that fills its container,
+and its announcement reads `Caps, on`.
 
-**What it cost, against what was predicted.** The estimate given to the product owner was "all 41
-fields and selects across 18 files, so nearly every screen's screenshot moves". That was right:
-**72 images moved and 1 was added, and 172 did not move** — and the 172 is the check, because every
-one of them is a screen with no field on it.
+Reasoning: `HISTORY.md` — "An input is a pill again, and a keypad learns lower case" (2026-08-15).
 
 ### Built, tested, and still unreachable
 
@@ -4085,6 +2218,37 @@ other.
 was the surface rather than a third callable.** That is the mechanism working: a third would
 have meant a growing pile of callables no person can reach, which is the failure mode this
 table exists to make visible.
+
+### The home is cards below 1024 and a side menu above it, and the till is pushed
+
+`design.md` **v0.5** replaced §4.4 on 2026-08-16. The rules that now bind:
+
+- **Navigation is `HomeNavigation`, one component with two renderings.** Card grid below 1024 — two
+  columns to 768, three to 1023 — and a persistent side menu at 1024 and above. **No overflow
+  bucket at any band**, which is the property the model exists to hold; four destinations could not
+  carry eleven controls without one, and it would have been the largest destination in the app.
+- **The home is the root route at every band.** At `expanded` it keeps its content and loses its
+  cards. Landing a role on a default section is a routing condition and is not permitted here.
+- **The side menu belongs to `AppScaffold`, never to a nested `Navigator`.** That is what keeps this
+  step visual and keeps `Navigator.pop` meaning what it means.
+- **The till is pushed, never mounted.** An unsaved cart is in-memory only, so a mounted till would
+  make its survival depend on `IndexedStack` keep-alive. Do not make any home destination a mounted
+  tab without making the cart durable first.
+- **A card states its own condition.** A card carrying no state is a button, and eleven buttons is
+  what §4.4 opened by objecting to.
+- **The home's title is `branding.companyName`, falling back to `membership.tenantName`.** The route
+  resolves the document above its own header; `TenantBrandingPanel` does not draw the name and does
+  not load it.
+- **`HomeNavigation`'s menu width is 256** — a component decision on §2.3's scale, in the same
+  position as `AppScaffold.horizontalInset` and open for the same reason: no section states a
+  navigation column's width.
+
+**Still unanswered, and no chunk should invent them**: `HomeNavigation` has a §4.3 row and no §5.1
+row; `AppTabs` is §5.1 priority 3 and unbuilt, and the mockups' Money strip needs it; the top bar's
+shop switcher and queue badge are two extensions `PageHeader` does not have.
+
+Reasoning, the mockups, the cart evidence and the two layout defects the screenshots caught:
+`HISTORY.md` — "The home stops being eleven identical pills" (2026-08-16).
 
 ---
 
@@ -5712,11 +3876,41 @@ than audited for. **§8 rule 8 is knowingly still broken on eight surfaces** and
 not a copy one. So step 11 should not be called finished in step 12 without a pass that reads prose
 rather than greps it.
 
-**The next chunk is not obvious and this file is not choosing one.** What is left of §11 is step 5b
+~~**The next chunk is not obvious and this file is not choosing one.** What is left of §11 is step 5b
 (a behaviour change), step 7 (the sale path, which now needs `AppSheet` specified first — a new open
 decision), step 10 (still blocked on §12) and step 12 (blocked on six open decisions of its own). The
 honest reading is that **the redesign is now gated on the product owner rather than on work**, which
-is a different state from any this file has recorded before.
+is a different state from any this file has recorded before.~~ **Half of that gate lifted on
+2026-08-16 and the reading was right about what it would take.** `design.md` **v0.5** replaced §4.4,
+which makes **step 5b a visual chunk rather than a behaviour change** — the till is pushed, so the
+step never reaches `checkout_draft`, `checkout_recovery` or `checkout_outbox` — and answers the
+landing route's title, which was the last thing holding step 5a's remaining raw `Scaffold`. **Step 5b
+is now the obvious next chunk**, and it is the first time since step 9 that this section can name one.
+
+---
+
+**The queued chunk is `design.md` §11 step 5b's second half — the persistent side menu.** Its first
+half ran on 2026-08-16 and stopped at the home: `HomeNavigation` draws the menu at `expanded`, but
+inside the home's own body, so it is not on any other route. §4.4 puts it in `AppScaffold`, which is
+already on every migrated route, so no routing moves and no `Navigator` nests.
+
+**What it costs is a screenshot sweep rather than a component.** Every migrated route's `web/` image
+gains a 256-wide column, which is the largest single image diff since step 6. Three things to settle
+inside it and none is a new decision: what the menu does to `AppContentWidth` (the maximum is
+measured against the page, and the page is now narrower); whether the menu scrolls independently of
+the content; and whether a route reached by a push shows the menu at all, or only the home does —
+§4.4 says every route, and the honest check is what a pushed route's back arrow means once the menu
+can also leave it.
+
+**Two small things belong to it rather than to a new chunk**: the destinations still need reordering
+by frequency with the two account controls last, which §4.4 asks for and the first half declined to
+risk beside a layout change; and `HomeNavigation` needs its §5.1 inventory row.
+
+**What did not move**: step 7 still needs `AppSheet` specified and still needs three components that
+do not exist — `QuantityStepper` (§5.1 priority **1**), `RollingNumber` and `ConfirmDialog` — which
+is a larger build than "blocked on a spec" implied; step 10 is still blocked on the same three §12
+calls, though **six of its eight assets are native and blocked by none of them**, and v0.5 gave two
+of those six a host; and step 12 is still blocked on its own six.
 
 **What the step-10 blockers were, kept because they are still true:**
 

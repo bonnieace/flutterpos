@@ -202,8 +202,15 @@ void main() {
       await _pumpRouting(tester);
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Business tenant-b'), findsOneWidget);
+      // **§11 step 5b made `branding.companyName` the home's title**, so once
+      // tenant-b's document arrives the fallback stops being drawn at all.
+      // Before this step both were on screen - `membership.tenantName` in the
+      // toolbar and the company name in the panel below it - and that duplicate
+      // is what §7's "title appears once" was about. The line above still
+      // asserts the fallback, because tenant-a's read is deliberately left
+      // hanging and a title has to say something while one is in flight.
       expect(find.text('Tenant B current'), findsOneWidget);
+      expect(find.text('Business tenant-b'), findsNothing);
       expect(fixture.store.value, 'tenant-b');
       expect(fixture.gateway.listCalls, 3);
 

@@ -391,6 +391,7 @@ each breakpoint, and that declaration lives with the component, not with the scr
 | `FilterChips` | horizontal scroll, one line | wrap | wrap |
 | `Form` | single column | single column | single column, 720 max |
 | `Sale` | products + cart sheet | products + cart sheet | two panes |
+| `HomeNavigation` | 2-column cards | 3-column cards | side menu (§4.4) |
 
 A screen that renders a `RecordList` gets the right form for free. **A screen cannot opt
 out of the form**; if it needs a different one, that's a new component and it gets
@@ -438,17 +439,74 @@ own addition rather than added here as a sixth row of §5.2.
 
 ### 4.4 Navigation
 
-The home screen is currently a `Wrap` of ten identical pills that breaks into a ragged
-centred stack on a phone. Replace with a fixed model:
+The home screen is currently a `Wrap` of **eleven** identical pills that breaks into a
+ragged centred stack on a phone. ~~Replace with a fixed model: bottom navigation at
+compact with four destinations — *Sell*, *Stock*, *Money*, *More* — a rail at medium, and
+a rail expanded with labels at expanded. *Sell* is the landing route for a cashier;
+*Money* for an owner.~~
 
-- **compact**: bottom navigation, four destinations — *Sell*, *Stock*, *Money*, *More*.
-  The shift control is a persistent banner above the bar, not a destination.
-- **medium**: navigation rail, same four.
-- **expanded**: navigation rail expanded with labels.
+**Amended in v0.5, at the product owner's direction on 2026-08-16.** The complaint above
+stands and is still why this section exists; what changed is the replacement. Four
+destinations cannot hold eleven controls without a *More* bucket, and on the mapping that
+was drawn against them that bucket held **five of the eleven** — the largest destination
+in the app, against one in *Sell*. A bottom bar optimises the top three and charges
+everything else a tap plus a scan.
 
-*Sell* is the landing route for a cashier; *Money* for an owner. Everything currently on
-the home screen maps into one of the four or into *More*. **New sale** ceases to be a
-button among eleven and becomes the default screen for the role that needs it.
+`HomeNavigation` is one component with two renderings, chosen by band exactly as §4.3
+chooses `RecordList`'s three:
+
+| Band | Rendering |
+| --- | --- |
+| `compact` | card grid, 2 columns, primary card spans both |
+| `medium` | card grid, 3 columns, primary card spans the row |
+| `expanded` | persistent side menu, every destination labelled |
+
+Gutter is `space.16`, read from §2.3's scale. **There is no overflow bucket at any band**,
+which is the defect this model exists to remove: below 1024 every control is one tap from
+the home, and at 1024 and above the side menu has room to name them all.
+
+**The home is the root route at every band, and at expanded it keeps its content and
+loses its cards** — the destinations have moved into the menu, and drawing both would put
+the same eleven things on screen twice. What remains on the page is what was never
+navigation: the business it belongs to, the shift, and the device's queue.
+
+**The route stack is identical at every band**, which is the property that makes a resize
+safe: only the navigation's *form* changes, the way a `RecordList` changes form without
+changing what it lists. Landing a role on a default section would break that, and it is a
+*routing condition* besides, which §11 step 5b is not permitted to introduce.
+
+**The side menu belongs to `AppScaffold`, not to a nested `Navigator`.** `AppScaffold` is
+already on every migrated route, so the menu renders on each one without routing moving
+and `Navigator.pop` keeps meaning what it means. A nested navigator would buy persistence
+by making navigation a behaviour change.
+
+**A card is not a pill, and the difference is the whole argument for this model.**
+
+- **New sale** is the one `action.primary` on the page per §2.1, full width, always first.
+  It ceases to be a button among eleven — which is what the struck model wanted — by
+  outranking them rather than by leaving the page.
+- Remaining cards are ordered by frequency, never alphabetically.
+- **A card states its own condition**: unresolved differences, shift standing, queue
+  depth. A card carrying no state is a button, and eleven of those is what this section
+  opened by objecting to.
+
+**The till is pushed, never mounted.** Opening a sale pushes a route under the existing
+`TenantSessionScope`, so a cart's lifetime is its route's and a business switch invalidates
+a sale in progress exactly as it invalidates a read. That is what ships today and this
+model keeps it. A mounted till would make an in-memory cart's survival depend on widget
+keep-alive, which is not a rule anyone would have chosen to write down.
+
+**The shift control is a persistent banner and is never a destination** — unchanged from
+the struck model, and the part of it that survives intact. The device queue is a badge in
+the top bar that opens a panel, and §5.1's `SyncIndicator` is that panel.
+
+**The home's title is `branding.companyName`, falling back to `membership.tenantName`.**
+Decided 2026-08-16. This is already the rule `TenantBrandingPanel` applies at
+`tenant_branding.dart:53`, so it is ratified rather than introduced, and `companyName` is a
+required non-empty string wherever the branding document exists. Two consequences for
+whoever builds this: the branding load moves from a panel inside the page up to the route
+so the header can title itself, and the panel then stops drawing the name, because a title
+appears once.
 
 ---
 
@@ -971,6 +1029,21 @@ Recorded here rather than settled, because each needs a call you haven't made ye
 ---
 
 ## Changelog
+
+**v0.5** — Navigation. Directed by the product owner on 2026-08-16, after the
+four-destination model was drawn and its *More* bucket turned out to hold five of the
+eleven controls the home screen carries. Breaking: §4.4 is replaced rather than adjusted.
+
+- §4.4 replaces bottom navigation and the rail with a **card home** below 1024 and a
+  **persistent side menu** at or above it. No overflow bucket at any band, which is the
+  defect the change exists to remove.
+- §4.4 states that **the till is pushed, never mounted**. This closes the open question of
+  whether an in-memory cart survives a navigation switch: there is no switch, and the
+  answer stops depending on `IndexedStack` keep-alive.
+- §4.4 names the home's title as **`branding.companyName`**, falling back to
+  `membership.tenantName` — the rule `TenantBrandingPanel` already applies, ratified.
+- §4.3 gains a **`HomeNavigation`** row. §5.1 does not yet have one, and should gain it
+  when the component is built.
 
 **v0.4** — The input field. Directed by the product owner on 2026-08-15 after seeing §11
 step 9 land: the near-black well was the thing they disliked, and the original sign-in's

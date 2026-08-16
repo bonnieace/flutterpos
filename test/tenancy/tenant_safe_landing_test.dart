@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A typical phone in logical pixels. The landing route's fold is a property of
@@ -87,27 +88,37 @@ void main() {
   });
 
   testWidgets('the scrollable is given the whole body', (tester) async {
-    // The measurement, as an assertion. 731 high, less a 56-pixel app bar and
-    // the route's own 24-pixel padding top and bottom, is 627 - and all of it is
-    // the scrollable's now.
+    // The measurement, as an assertion. 731 high, less a 56-pixel app bar,
+    // leaves 675 of body.
+    //
+    // **§11 step 5b spends 72 of it on the page header and this test is where
+    // that figure lands.** `AppScaffold` pads 20 above a `PageHeader` and then
+    // a section gap below it, which `PLAN.md` recorded as "the frame costs a
+    // route 72 logical pixels of body" when step 5a built it - measured on
+    // every other route and, until this step, never on this one. 675 less 72
+    // less the route's own 24-pixel bottom padding is 579, and all of it is the
+    // scrollable's.
     await _pumpLanding(tester, panelHeight: 900);
 
-    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 627);
+    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 579);
   });
 
-  testWidgets('the app bar keeps its action inside itself at phone width', (
+  testWidgets('the title leaves the toolbar and the action stays in it', (
     tester,
   ) async {
-    // Recorded because a previous handover in PLAN.md claimed this was broken and
-    // it never was. Every rendering made while looking at this route showed
-    // "Sign o" with the rest of the word missing - which is the **debug banner**
-    // painted over the top-right corner, not the app bar clipping anything. The
-    // banner is paint, so it does not appear in these measurements and does not
-    // appear in a release build either.
+    // Recorded because a previous handover in PLAN.md claimed the action was
+    // clipped and it never was. Every rendering made while looking at this route
+    // showed "Sign o" with the rest of the word missing - which is the **debug
+    // banner** painted over the top-right corner, not the app bar clipping
+    // anything. The banner is paint, so it does not appear in these
+    // measurements and does not appear in a release build either.
     //
-    // A long business name is the case that would break it if anything did, so
-    // both are asserted: the title elides and stops short of the action rather
-    // than pushing it off the edge.
+    // **§11 step 5b removed the collision this test was written about.** A
+    // title and an action shared the toolbar, and a long business name was the
+    // case that would have broken it. The title is `PageHeader`'s now - §7's
+    // "title appears once", and §2.2's `display` role does not fit a 56-high
+    // toolbar at all - so what is asserted is that it left, and that the one
+    // thing still in the toolbar is inside it.
     for (final name in <String>[
       'Chilltent Lounge',
       'Chilltent Lounge Nairobi Westlands Branch',
@@ -121,14 +132,19 @@ void main() {
           matching: find.text('Sign out'),
         ),
       );
-      // The branding panel names the business too, so the title is found inside
-      // the bar rather than by its text alone.
-      final title = tester.getRect(
-        find.descendant(of: find.byType(AppBar), matching: find.text(name)),
-      );
 
       expect(label.right, lessThanOrEqualTo(bar.right), reason: name);
-      expect(label.left, greaterThan(title.right), reason: name);
+      expect(label.left, greaterThanOrEqualTo(bar.left), reason: name);
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text(name)),
+        findsNothing,
+        reason: name,
+      );
+      expect(
+        find.descendant(of: find.byType(PageHeader), matching: find.text(name)),
+        findsOne,
+        reason: name,
+      );
     }
   });
 
@@ -172,7 +188,14 @@ void main() {
       ],
     );
 
-    await tester.tap(find.byKey(const ValueKey('manage-catalog')));
+    // **The destination is a card now, and a card is taller than the pill it
+    // replaced**, so on a 120-pixel panel this one sits below the fold where the
+    // pill did not. Scrolling to it is what a person does; the assertion is
+    // still that opening it keeps the session scope.
+    final destination = find.byKey(const ValueKey('manage-catalog'));
+    await tester.ensureVisible(destination);
+    await tester.pumpAndSettle();
+    await tester.tap(destination);
     await tester.pumpAndSettle();
 
     expect(find.text('Catalog open'), findsOne);

@@ -7,7 +7,151 @@ they correct.
 
 `PLAN.md` holds current state. This file is the record of how it got there, and
 is the place to look for why a decision was made, what a chunk deliberately left
-out, and which failures cost a debugging cycle.
+out, and which failures cost a debugging cycle. Each standing decision in
+`PLAN.md` names the session below that carries its reasoning.
+
+## Sessions
+
+<!-- index:start -->
+
+Every session, newest last, with the line it starts on. Read the one a standing decision points at; never the file.
+
+- **13** — Sessions
+- **158** — Implementation handoff - 2026-07-29
+- **392** — Frontend implementation handoff - 2026-07-29
+- **437** — Authentication-to-tenant routing handoff - 2026-07-29
+- **497** — Route-guard and tenant repository foundation handoff - 2026-07-29
+- **559** — Read-only tenant catalog handoff - 2026-07-29
+- **652** — Read-only tenant staff-directory handoff - 2026-07-29
+- **752** — Typed staff invitation handoff - 2026-07-29
+- **855** — Typed staff update handoff - 2026-07-29
+- **951** — Typed staff status handoff - 2026-07-29
+- **1050** — Typed staff invitation resend handoff - 2026-07-29
+- **1152** — Typed staff invitation cancellation handoff - 2026-07-29
+- **1259** — Typed staff invitation email replacement handoff - 2026-07-30
+- **1366** — Typed visible invitation acceptance handoff - 2026-07-30
+- **1463** — Typed email-link invitation acceptance handoff - 2026-07-30
+- **1561** — Invitation emulator contract handoff - 2026-07-30
+- **1647** — Typed default tenant selection handoff - 2026-07-30
+- **1748** — Typed tenant request handoff - 2026-07-30
+- **1861** — Platform pending-tenant review handoff - 2026-07-30
+- **1979** — Platform tenant suspension/reactivation handoff - 2026-07-30
+- **2088** — Platform rejected-tenant archival handoff - 2026-07-30
+- **2206** — Platform exact-UID global-user status handoff - 2026-07-30
+- **2325** — Guarded platform-admin grant CLI handoff - 2026-07-31
+- **2435** — Guarded platform-admin revocation CLI handoff - 2026-07-31
+- **2647** — Tenant-switch safety coordinator handoff - 2026-07-31
+- **2774** — Encrypted Hive checkout-outbox foundation handoff - 2026-07-31
+- **2924** — Confirmation-safe checkout restart recovery handoff - 2026-07-31
+- **3069** — Deterministic checkout submission worker handoff - 2026-07-31
+- **3227** — Offline catalog cache and checkout draft handoff - 2026-07-31
+- **3400** — Per-device receipt numbering and checkout configuration handoff - 2026-07-31
+- **3588** — Guarded tenant shift lifecycle handoff - 2026-07-31
+- **3804** — Shift-scoped sale attribution and closing summary handoff - 2026-07-31
+- **4020** — Guarded shift-history read surface handoff - 2026-08-01
+- **4220** — Guarded sale-history read surface handoff - 2026-08-01
+- **4374** — Guarded staff-name resolution handoff - 2026-08-01
+- **4521** — Guarded daily summary handoff - 2026-08-01
+- **4678** — Guarded returns read surface handoff - 2026-08-01
+- **4842** — Guarded return creation handoff - 2026-08-01
+- **5010** — Guarded return verification handoff - 2026-08-01
+- **5143** — Guarded receipt lookup handoff - 2026-08-01
+- **5283** — Guarded stock adjustment surface handoff - 2026-08-01
+- **5499** — Guarded business-wide stock adjustment feed handoff - 2026-08-01
+- **5695** — Guarded tenant activity log handoff - 2026-08-01
+- **5906** — Guarded business-wide stock movement feed handoff - 2026-08-01
+- **6141** — Guarded reconciliation status surface handoff - 2026-08-01
+- **6378** — Guarded account verification entry point handoff - 2026-08-01
+- **6533** — Guarded email delivery-status handoff - 2026-08-01
+- **6660** — Checkout tender contract - payload v2 handoff - 2026-08-02
+- **6878** — Reachable point-of-sale till handoff - 2026-08-02
+- **7063** — Usable till handoff - search, quantity, stock, receipt - 2026-08-02
+- **7208** — Reconciliation can be asked for - 2026-08-02
+- **7415** — A till that holds a real catalog - 2026-08-02
+- **7533** — What a business has taken today - 2026-08-02
+- **7702** — Which category is actually selling - 2026-08-02
+- **7845** — Every reported figure now names its currency - 2026-08-02
+- **7981** — Who sold what - 2026-08-02
+- **8241** — The app can reach the emulators - 2026-08-02
+- **8402** — The totals panel, split - 2026-08-02
+- **8489** — What the business was paid with - 2026-08-02
+- **8680** — The first real run, and what it found - 2026-08-02
+- **8954** — A saved sale reaches the server while the till stays open - 2026-08-02
+- **9070** — Which differences reconciliation found - 2026-08-02
+- **9268** — A closed shift may be corrected to what its sales prove - 2026-08-04
+- **9511** — The correction is reachable from the row that reports it - 2026-08-04
+- **9722** — The first run that corrected a real shift - 2026-08-04
+- **10001** — The sentinel audit, and a guard that keeps it done - 2026-08-04
+- **10201** — The harness that would have caught it - 2026-08-04
+- **10400** — The corrections a business can finally see - 2026-08-04
+- **10599** — The two defects the real run left alone - 2026-08-04
+- **10827** — The shift half of the pipeline, proved end to end - 2026-08-04
+- **11019** — One shift's correction, reachable from the shift itself - 2026-08-05
+- **11213** — The stock half of the runner, entered for the first time - 2026-08-05
+- **11444** — The same narrowing, from the other side - 2026-08-05
+- **11615** — A stock difference, where the correction is made - 2026-08-05
+- **11833** — The kind that could never be recorded - 2026-08-05
+- **12034** — One decision, in one place, with tests - 2026-08-05
+- **12208** — The last thing the stock phase can conclude - 2026-08-05
+- **12393** — Saying there is more, after looking at it - 2026-08-05
+- **12584** — What the pinned buttons cost, measured - 2026-08-05
+- **12751** — A defect that was not there - 2026-08-05
+- **12891** — The narrowing that was not worth having - 2026-08-05
+- **13117** — The run behind the difference, finished - 2026-08-05
+- **13355** — The largest module's first unit tests - 2026-08-06
+- **13625** — A hook with no producer, and three bounds nothing had counted - 2026-08-07
+- **13988** — Nine months of `flutter test` paths, and who may run a job's next page - 2026-08-07
+- **14305** — PLAN.md split into current state and history - 2026-08-07
+- **14387** — A business can set what it sells in - 2026-08-07
+- **14612** — A shop can stock itself - 2026-08-07
+- **14832** — The trigger every reconciliation job comes from - 2026-08-07
+- **15063** — The sweep that decides who is reconciled tonight - 2026-08-07
+- **15354** — The callable that corrects a price - 2026-08-07
+- **15584** — The flake was the test's own clock - 2026-08-07
+- **15743** — A product records what it cost, and a sale freezes it - 2026-08-07
+- **15903** — The status board moved accounts - 2026-08-08
+- **15981** — Bulk catalog and return scoring are scoped as rewrites - 2026-08-08
+- **16103** — A price is corrected from the app - 2026-08-08
+- **16325** — Many products at once, previewed before they change - 2026-08-08
+- **16626** — Products imported from a spreadsheet, previewed before they exist - 2026-08-08
+- **16952** — Both bulk halves reach a person - 2026-08-08
+- **17211** — Profit is shown, or refused, and never overstated - 2026-08-08
+- **17454** — The password-reset worker runs against real Auth and real Firestore - 2026-08-08
+- **17653** — The app is driven on Android against the emulators - 2026-08-08
+- **17858** — The sign-in screen says something true - 2026-08-08
+- **18036** — A refused invitation says what will actually work - 2026-08-08
+- **18251** — The design system's token layer, wired to nothing - 2026-08-11
+- **18557** — A category is named, and never shown as a document ID - 2026-08-11
+- **18781** — The ripple dies at the theme - 2026-08-11
+- **18990** — The working tree is emptied into the repository - 2026-08-11
+- **19105** — `AppButton`, and the spring substrate under it - 2026-08-11
+- **19340** — Every remaining button becomes an `AppButton` - 2026-08-11
+- **19488** — A route arrives on a spring - 2026-08-12
+- **19715** — One field, everywhere - 2026-08-12
+- **19896** — Five statuses, two notices, and prose that folds away - 2026-08-12
+- **20081** — A screen title stops being chrome - 2026-08-12
+- **20305** — Every page gets a maximum width, and 768 stops being declared three times - 2026-08-12
+- **20584** — A record list becomes one component, and §4.3's middle band gets its first picture - 2026-08-13
+- **20834** — The staff directory becomes a `RecordList`, and a record gets somewhere to open a form - 2026-08-13
+- **21061** — The catalog becomes a `RecordList`, and a product that cannot be sold says so - 2026-08-13
+- **21266** — The stock family becomes one record, and a screen stops describing it three ways - 2026-08-13
+- **21462** — The shift family becomes a `RecordList`, and step 6's sweep is finished - 2026-08-13
+- **21702** — The reconciliation family gets one vocabulary, and step 4's sweep begins - 2026-08-14
+- **21976** — The catalog family folds its prose, and a bulk report gets its first picture - 2026-08-14
+- **22231** — A figure becomes a component, and the money screens stop writing numbers into sentences - 2026-08-14
+- **22475** — A difference states its figures, and step 8 is finished - 2026-08-15
+- **22708** — A notice says which answer it is, and four of them were never refusals - 2026-08-15
+- **22881** — A title appears once, and one page was telling everybody it was read-only - 2026-08-15
+- **23049** — A table stops guessing how wide its columns are - 2026-08-15
+- **23266** — The front door stops having a palette of its own - 2026-08-15
+- **23526** — An input is a pill again, and a keypad learns lower case - 2026-08-15
+- **23721** — A record says its standing in words, and §8 rule 1's own example was still on screen - 2026-08-15
+- **23932** — The home stops being eleven identical pills - 2026-08-16
+
+<!-- index:end -->
+
+Regenerated by `dart run tool/doc_index.dart`. Do not hand-edit between the
+markers, and run it after appending a session.
 
 ---
 
@@ -23774,6 +23918,148 @@ entry described screen 28's variance, and the defect is app-wide.
 deliberately not fixed - it is §4.3's `StatRow` scroll form, which is step 8's leftover. **The chip
 radius.** The sale path. §3's density. The ambient letter spacing. The checkbox outline. The `Callout`
 measurements. Every server file and `firestore.rules`, by choice. Deployment.
+
+### Unrelated local changes, still unstaged
+
+```text
+.vscode/settings.json      editor settings, machine-local
+android/gradle.properties  machine-local
+pubspec.lock               modified locally, not by any chunk here
+prompt.md                  the session instruction, the product owner's own file
+screenshots/               generated, ignored
+```
+
+## The home stops being eleven identical pills - 2026-08-16
+
+`design.md` §11 step **5b, first half**: §4.4's navigation model, as a card grid below 1024 and a
+side menu at or above it. The second half - lifting that menu into `AppScaffold` so it draws on
+every route - is not in this chunk and is the next one.
+
+### What the product owner decided first, and why it is not this chunk's
+
+Three calls arrived before any code, and all three are recorded in `design.md` **v0.5** rather than
+here.
+
+**§4.4's four-destination bottom bar was drawn and then rejected.** Five mockups came back - a
+device-queue panel, a compact page, the shift banner's three states, an expanded page with a rail.
+Mapping the landing route's **eleven** controls onto *Sell / Stock / Money / More* put **five of
+them in `More`**, which made the overflow bucket the largest destination in the app against one
+control in *Sell*. The objection was the tap that bucket charges every control that did not make
+the top three, and it is correct: a card home puts all eleven one tap from the front page.
+
+**The till is pushed, never mounted.** Asked as "is the till a destination or a route", and the
+evidence settled it rather than taste: the cart is a plain in-memory `Map<String, int>` at
+`checkout_cart_panel.dart:168`; `checkout_draft.dart` builds a draft only at save time - *"refused
+before anything durable is written"* - and `CheckoutRecoveryCoordinator` is confirmation-only for
+sales already in the outbox. So a mounted till would make an unsaved cart's survival depend on
+`IndexedStack` keep-alive, which is not a rule anyone would choose to write down. Pushing is also
+what already ships, so this chunk never reached `checkout_draft`, `checkout_recovery` or
+`checkout_outbox`.
+
+**The home's title is `branding.companyName`, falling back to `membership.tenantName`.** This closes
+the standing decision that left step 5a's last raw `Scaffold` alone. It turned out to be
+ratification rather than a new rule: `tenant_branding.dart:53` already read
+`branding?.companyName ?? fallbackName` and the call site already passed `membership.tenantName`.
+
+### What was built
+
+**`lib/ui/home_navigation.dart`** - `HomeDestination` and `HomeNavigation`, one component with two
+renderings chosen by band, which is §4.3's own construction and `RecordList`'s. Two columns below
+768, three to 1023, the side menu at 1024 and above. The primary spans its row at every band; the
+rest are rows of `Expanded` under an `IntrinsicHeight`, because a `Wrap` sizes each child to its own
+content and a row of cards with different label lengths is not a grid.
+
+**A card carries its own condition**, which is the whole argument for this model over a tab bar -
+`3 unresolved differences` and `shift open, 17 sales` are things a badge cannot say. It is optional
+in the strong sense; a status that restates the label is noise.
+
+**Every measurement is read from a §2 row written for something else** - `radius.md`,
+`surface.raised`, `border.subtle`, `space.16`, `title.md`, `caption`/`text.tertiary`, and the glyph
+at **18**, which is §5.2's leading-icon row. The same borrowing `AppSelect`, `Callout`, `Disclosure`
+and `RecordActionSet` each made, and it is `PLAN.md`'s open question against §5.2 rather than this
+file's. **The one figure with no row anywhere is the menu's width**, 256, which is a component
+decision beside `AppScaffold.horizontalInset` and is now recorded next to it.
+
+**The landing route** moved from a raw `Scaffold` to `AppScaffold`, which was the seventh of the
+seven step 5a named and the last one that was ever going to be a step's rather than a component's.
+Its eleven `AppButton`s in a `Wrap` became eleven `HomeDestination`s. **Every `onPressed` closure
+and every visibility condition is unchanged** - the diff is the rendering and nothing else.
+
+**`TenantBrandingPanel` stopped drawing the name and stopped loading it.** The route resolves the
+document once, above its own header, and hands the result down; the panel keeps the slogan and the
+session's standing. That removed a second read of a document the route had already fetched, so the
+route makes fewer reads than before, not more. Its permanent notice also became a `Callout` - §5.1's
+row for it, blocked until now only because the route was step 5b's and step 4's notice sweep could
+not touch it.
+
+### Two defects the screenshots caught and the tests did not
+
+**Worth recording together, because they are the same mistake.**
+
+**The primary card was drawn at 40% of its row, centred**, and the test that asserted it spans the
+row passed. `PressSurface.fillWidth` fills the *hit area*; its `Align` then hands the child **loose**
+constraints, so the painted `Container` shrink-wrapped its label and floated in a slot that was the
+correct width. The test measured the slot - `find.byKey` reaches the `PressSurface`, not the card.
+**The fix is `width: double.infinity` on the container**, and the test now measures the painted
+`Container` rather than the key.
+
+**The side menu came out 1156 wide against a declared 256.** A vertical scroll view hands its child
+a *tight* width, and a `SizedBox` cannot shrink under a tight constraint. `Align` re-loosens it.
+
+**Neither was visible in a passing suite and both were obvious in a picture**, which is the argument
+`design.md` §10 makes for the screenshot diff being the review artefact. It is also the sharper half
+of the same section's warning: a widget test proves the tree, and the tree was right.
+
+**One shared component changed**: `PressSurface` gained `fillHeight`, `fillWidth`'s twin, defaulting
+to false so nothing else moved. Cards beside each other need equal painted height, not merely equal
+slots.
+
+### Tests
+
+```text
+flutter analyze lib/ui/home_navigation.dart lib/tenancy/tenant_routing_shell.dart   No issues found
+flutter test --no-pub --concurrency=1 --reporter=failures-only                      1998 (was 1979, +19)
+flutter test tool/screenshots/home_navigation_test.dart                             12 images, 3 bands x 4 cases
+flutter test tool/screenshots/landing_screens_test.dart                             12 images regenerated
+```
+
+**+19: 18 new in `test/ui/home_navigation_test.dart`** - the two band tests as statics rather than
+pixel widths, the grid's row arithmetic, the primary's hoist and span, equal width and height,
+disabled, press, empty, the status line, two semantics cases, §9's 48dp at all three bands, and
+text at 200% - **and +1 in `tenant_repository_test.dart`**, where one test became two because a
+business with no branding document is now a case the panel has to answer on its own.
+
+**Four existing assertions changed and none was loosened.** `the scrollable is given the whole body`
+moved 627 to 579, which is the 72 pixels `PLAN.md` recorded step 5a's frame as costing every other
+route and this one had never paid. `the app bar keeps its action inside itself` became
+`the title leaves the toolbar and the action stays in it`, and now asserts the title is *absent*
+from the `AppBar` and present in `PageHeader`. `catalog management opens under the same session
+scope` gained an `ensureVisible`, because a card is taller than the pill it replaced and this one
+sits below the fold on a 120-pixel panel. And in `tenant_routing_shell_test.dart`,
+`Business tenant-b` became `Tenant B current` - the branding name now wins over the membership name,
+which is exactly the rule the product owner chose, proving itself in a test written long before it.
+
+**Emulator suites were not run and are not applicable.** No server file, no rule, no callable and no
+schema is in this diff. Functions 409, Rules 161, Reconciliation 10 and Invitation 23 stand at their
+2026-08-15 measurements, and the carry counter moves to 1.
+
+### Excluded
+
+**The persistent side menu**, which is step 5b's second half: §4.4 puts it in `AppScaffold` so it
+draws on every route without a nested `Navigator`, and here it draws on the home only. That is a
+sweep across every migrated route's expanded screenshot rather than a component change.
+
+**Reordering the destinations by frequency.** §4.4 asks for it and `HomeNavigation` already hoists
+the primary, so the largest part is automatic; moving the two account controls to the end is a
+block move in a 1954-line file and was not worth risking beside a layout change. The screenshot
+matrix shows the intended order and the route does not yet match it.
+
+**`HomeNavigation` has no §5.1 row.** §4.3 gained one in v0.5; the inventory did not, and a
+component that exists without an inventory row is the thing §5.1 is for.
+
+Everything standing: the chip radius, the sale path, §3's density, the ambient letter spacing, the
+checkbox outline, the `Callout` measurements, §8 rule 8's eight surfaces. Every server file and
+`firestore.rules`, by choice. Deployment.
 
 ### Unrelated local changes, still unstaged
 

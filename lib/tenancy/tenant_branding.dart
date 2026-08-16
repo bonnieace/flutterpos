@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../ui/status.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
-import 'tenant_route_guard.dart';
+import 'tenant_types.dart';
 
 /// Read-only branding fields stored in `configuration/branding`.
 final class TenantBranding {
@@ -35,51 +36,54 @@ final class TenantBrandingRepository extends TenantReadRepository {
 }
 
 /// The first migrated read-only tenant slice used by the safe landing route.
+///
+/// **It no longer draws the business's name, and no longer loads it.** §11 step
+/// 5b made `branding.companyName` the home's *title*, and §7's "title appears
+/// once" makes drawing it again here a duplicate rather than a heading. The
+/// route resolves the document once, above its own header, and hands the result
+/// down - which also removes the second read this panel used to make of a
+/// document the route had already fetched.
+///
+/// **What is left is what was never the title**: the slogan, which is the one
+/// branding field with nowhere else to go, and the session's own standing.
 final class TenantBrandingPanel extends StatelessWidget {
   const TenantBrandingPanel({
     super.key,
-    required this.reader,
-    required this.fallbackName,
+    required this.branding,
+    required this.role,
   });
 
-  final TenantDocumentReader reader;
-  final String fallbackName;
+  /// The resolved document, or null where the business has published none.
+  final TenantBranding? branding;
+
+  /// The signed-in session's role, for the line that states it.
+  final TenantRole role;
 
   @override
-  Widget build(BuildContext context) => TenantRouteGuard<TenantBranding?>(
-    load: (session) =>
-        TenantBrandingRepository(session: session, reader: reader).load(),
-    builder: (context, session, branding) {
-      final name = branding?.companyName ?? fallbackName;
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.verified_user_outlined, size: 52),
-          const SizedBox(height: 16),
-          Text(name, style: Theme.of(context).textTheme.headlineSmall),
-          if (branding?.slogan != null) ...[
-            const SizedBox(height: 6),
-            Text(branding!.slogan!, textAlign: TextAlign.center),
-          ],
-          const SizedBox(height: 8),
-          Text('Signed in as ${tenantRoleLabel(session.role)}'),
-          const SizedBox(height: 16),
-          // **§8 rule 1's own worked example, still live on the landing route.**
-          // The rule quotes this exact sentence as "a commit message on a
-          // production screen" and states what it should read instead, so the
-          // replacement is the specification's rather than this chunk's.
-          //
-          // The container is the part step 11 does not own: §5.1 sends a
-          // permanent notice paragraph to a `Callout`, and this is one. It stays
-          // a `Text` because the landing route is step 5b's and the notice sweep
-          // is step 4's remainder; `PLAN.md` carries both.
-          const Text(
-            "Some screens aren't available yet.",
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
-    },
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Icon(Icons.verified_user_outlined, size: 52),
+      const SizedBox(height: 16),
+      if (branding?.slogan case final slogan?) ...[
+        Text(slogan, textAlign: TextAlign.center),
+        const SizedBox(height: 8),
+      ],
+      Text('Signed in as ${tenantRoleLabel(role)}'),
+      const SizedBox(height: 16),
+      // §5.1 sends a permanent notice paragraph to a `Callout`, and this is
+      // one. It stayed a `Text` until now only because the landing route was
+      // step 5b's and step 4's notice sweep could not touch it; this is step
+      // 5b, so the container it was waiting for is no longer blocked.
+      //
+      // The wording is §8 rule 1's, settled by step 11 - the rule quotes the
+      // sentence this replaced as its own worked example of "a commit message
+      // on a production screen".
+      const Callout(
+        status: AppStatus.info,
+        message: "Some screens aren't available yet.",
+      ),
+    ],
   );
 }
 

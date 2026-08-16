@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/home_navigation.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
@@ -21,6 +22,7 @@ import 'tenant_membership.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_repository.dart';
 import 'tenant_request.dart';
+import 'tenant_route_guard.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_switch.dart';
@@ -1442,9 +1444,37 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final List<TenantRole> auditLogRoles;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(membership.tenantName),
+  Widget build(BuildContext context) => TenantRouteGuard<TenantBranding?>(
+    // **The read `TenantBrandingPanel` used to make, one level up.** §11 step 5b
+    // titles this page `branding.companyName`, and a title cannot be resolved
+    // below the header that draws it. Nothing new is fetched and no call site
+    // moved: the panel no longer loads the document it used to load, so this
+    // route makes exactly the one read it always made.
+    load: (session) =>
+        TenantBrandingRepository(session: session, reader: reader).load(),
+    // **The page is never gated on the document, and that is the point of
+    // giving every phase the same builder.** A business that has published no
+    // branding, a read that failed, a read still in flight and a denied session
+    // all draw the home with `membership.tenantName` - which is the fallback
+    // §4.4 names and the string this toolbar carried before this step. The
+    // worst case is the previous behaviour rather than a spinner where a shop
+    // expects its own front page.
+    loading: _page(context, null),
+    denied: _page(context, null),
+    failure: (context, _) => _page(context, null),
+    builder: (context, session, branding) => _page(context, branding),
+  );
+
+  /// The home, titled by [branding] where the business has published one.
+  Widget _page(BuildContext context, TenantBranding? branding) {
+    final tokens = AppTokens.componentOf(context);
+    final inset = AppScaffold.horizontalInset(tokens.spacing);
+    return AppScaffold(
+      title: branding?.companyName ?? membership.tenantName,
+      // §4.2's record row rather than its reading row: this page is a grid of
+      // destinations at two of its three bands, and 720 would put a
+      // three-column grid on a tablet into a column narrower than the screen.
+      contentWidth: AppContentWidth.records,
       actions: [
         AppButton(
           label: 'Sign out',
@@ -1452,55 +1482,50 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           onPressed: onSignOut,
         ),
       ],
-    ),
-    // Everything on this route scrolls together, including the routes below.
-    //
-    // They used to be pinned outside the scrollable, and on a phone that was
-    // measured rather than argued about: an owner sees eight of them, they do not
-    // pair up at 411 logical pixels wide, and the row took **288 of the 631**
-    // pixels the body has. The scrollable was left 339, which put "Open shift" -
-    // the thing somebody about to trade came here for - below the fold, behind
-    // seven navigation buttons. A cashier lost 108 to the same row.
-    //
-    // Nothing is pinned in their place. "Change business" was the candidate, as
-    // the route's escape hatch, but signing out is already in the app bar,
-    // switching business is rare, and pinning one button reintroduces a smaller
-    // version of the same cost for the least-used control on the screen. If
-    // anything is ever pinned here it should be "New sale", which is the one
-    // action this screen exists to start - and that is a product decision, not
-    // this one.
-    body: Padding(
-      padding: const EdgeInsets.all(24),
-      child: _LandingScrollArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TenantBrandingPanel(
-              reader: reader,
-              fallbackName: membership.tenantName,
-            ),
-            if (shiftPanel != null) ...[
+      // Everything on this route scrolls together, including the navigation.
+      //
+      // The destinations used to be pinned outside the scrollable, and on a
+      // phone that was measured rather than argued about: an owner sees eight of
+      // them, they did not pair up at 411 logical pixels wide, and the row took
+      // **288 of the 631** pixels the body has. The scrollable was left 339,
+      // which put "Open shift" - the thing somebody about to trade came here for
+      // - below the fold, behind seven navigation buttons. A cashier lost 108 to
+      // the same row.
+      //
+      // **§11 step 5b changed what is in that space and not this decision.** A
+      // two-column grid pairs where a `Wrap` of pills would not, so the same
+      // eleven destinations cost fewer rows than they did; they are still below
+      // the shift, because what a person came here to do outranks where they
+      // might go next.
+      body: Padding(
+        padding: EdgeInsets.fromLTRB(inset, 0, inset, tokens.spacing.s24),
+        child: _LandingScrollArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TenantBrandingPanel(
+                branding: branding,
+                role: membership.role,
+              ),
+              if (shiftPanel != null) ...[
+                const SizedBox(height: 24),
+                shiftPanel!,
+              ],
+              if (pendingCheckoutPanel != null) ...[
+                const SizedBox(height: 24),
+                pendingCheckoutPanel!,
+              ],
               const SizedBox(height: 24),
-              shiftPanel!,
-            ],
-            if (pendingCheckoutPanel != null) ...[
-              const SizedBox(height: 24),
-              pendingCheckoutPanel!,
-            ],
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.center,
-              children: [
+              HomeNavigation(
+                destinations: [
                 if (onSwitchTenant != null &&
                     switchCandidates.any(
                       (candidate) =>
                           candidate.canAccess() &&
                           candidate.tenantId != membership.tenantId,
                     ))
-                  AppButton(
-                    key: const ValueKey('change-business'),
+                  HomeDestination(
+                    destinationKey: const ValueKey('change-business'),
                     label: 'Change business',
                     icon: Icons.swap_horiz,
                     onPressed: () => _showBusinessSwitcher(context),
@@ -1509,14 +1534,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   // The one disabled control on this route, and it is a state
                   // rather than a refusal: this business already is the
                   // default, so there is nothing to press.
-                  const AppButton(
+                  const HomeDestination(
                     label: 'Default business',
                     icon: Icons.star,
                     onPressed: null,
                   )
                 else
-                  AppButton(
-                    key: const ValueKey('make-default-tenant'),
+                  HomeDestination(
+                    destinationKey: const ValueKey('make-default-tenant'),
                     label: 'Make default',
                     icon: Icons.star_outline,
                     onPressed: () => _showDefaultConfirmation(context),
@@ -1529,11 +1554,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   // §2.1 permits exactly one primary action per screen region,
                   // and on the landing route this is it: everything else here
                   // opens something to read, and this one sells.
-                  AppButton(
-                    key: const ValueKey('start-checkout'),
+                  HomeDestination(
+                    destinationKey: const ValueKey('start-checkout'),
                     label: 'New sale',
                     icon: Icons.point_of_sale,
-                    tier: AppButtonTier.primary,
+                    isPrimary: true,
                     onPressed: () {
                       final controller = TenantSessionScope.of(context);
                       Navigator.of(context).push(
@@ -1546,7 +1571,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                       );
                     },
                   ),
-                AppButton(
+                HomeDestination(
                   label: 'View read-only catalog',
                   icon: Icons.inventory_2_outlined,
                   onPressed: () {
@@ -1583,8 +1608,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 // reaches its till through here first.
                 if (catalogManagementRoute != null &&
                     membership.role.canAccess(catalogManagementRoles))
-                  AppButton(
-                    key: const ValueKey('manage-catalog'),
+                  HomeDestination(
+                    destinationKey: const ValueKey('manage-catalog'),
                     label: 'Manage catalog',
                     icon: Icons.edit_note_outlined,
                     onPressed: () {
@@ -1604,8 +1629,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 // opens it is not the person standing at the till.
                 if (checkoutConfigurationRoute != null &&
                     membership.role.canAccess(checkoutConfigurationRoles))
-                  AppButton(
-                    key: const ValueKey('checkout-configuration'),
+                  HomeDestination(
+                    destinationKey: const ValueKey('checkout-configuration'),
                     label: 'Checkout settings',
                     icon: Icons.tune_outlined,
                     onPressed: () {
@@ -1622,8 +1647,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   ),
                 if (dailySummaryRoute != null &&
                     membership.role.canAccess(dailySummaryRoles))
-                  AppButton(
-                    key: const ValueKey('view-daily-summary'),
+                  HomeDestination(
+                    destinationKey: const ValueKey('view-daily-summary'),
                     label: 'View daily summary',
                     icon: Icons.insights_outlined,
                     onPressed: () {
@@ -1640,8 +1665,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   ),
                 if (receiptLookupRoute != null &&
                     membership.role.canAccess(receiptLookupRoles))
-                  AppButton(
-                    key: const ValueKey('find-receipt'),
+                  HomeDestination(
+                    destinationKey: const ValueKey('find-receipt'),
                     label: 'Find a receipt',
                     icon: Icons.receipt_long_outlined,
                     onPressed: () {
@@ -1658,8 +1683,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   ),
                 if (auditLogRoute != null &&
                     membership.role.canAccess(auditLogRoles))
-                  AppButton(
-                    key: const ValueKey('view-audit-log'),
+                  HomeDestination(
+                    destinationKey: const ValueKey('view-audit-log'),
                     label: 'View activity log',
                     icon: Icons.fact_check_outlined,
                     onPressed: () {
@@ -1677,7 +1702,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 if (membership.role.canAccess(
                   TenantStaffDirectoryScreen.allowedRoles,
                 ))
-                  AppButton(
+                  HomeDestination(
                     label: 'View staff directory',
                     icon: Icons.people_outline,
                     onPressed: () {
@@ -1692,13 +1717,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                       );
                     },
                   ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Future<void> _showDefaultConfirmation(BuildContext context) async {
     final controller = TenantSessionScope.read(context);

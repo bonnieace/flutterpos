@@ -47,20 +47,17 @@ void main() {
     await expectLater(repository.load(), throwsA(isA<TenantScopeViolation>()));
   });
 
-  testWidgets('branding slice renders through the tenant route guard', (
+  /// **The panel stopped drawing the business's name in §11 step 5b**, and this
+  /// asserts the absence rather than only the presence. The name is the home's
+  /// *title* now, resolved once above the header, and §7's "title appears once"
+  /// is the rule that made drawing it here a duplicate. A test that only checked
+  /// the slogan would still pass if the name came back.
+  testWidgets('branding slice states the slogan and the role, never the name', (
     tester,
   ) async {
+    final membership = _membership('tenant-a');
     final controller = TenantSessionController()
-      ..open(uid: 'user-a', membership: _membership('tenant-a'));
-    final reader = _FakeReader(
-      response: TenantDocumentSnapshot(
-        path: 'tenants/tenant-a/configuration/branding',
-        data: const {
-          'companyName': 'Tenant A Bar',
-          'slogan': 'Cold drinks, warm welcome',
-        },
-      ),
-    );
+      ..open(uid: 'user-a', membership: membership);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -68,8 +65,11 @@ void main() {
           controller: controller,
           child: Scaffold(
             body: TenantBrandingPanel(
-              reader: reader,
-              fallbackName: 'Fallback name',
+              branding: const TenantBranding(
+                companyName: 'Tenant A Bar',
+                slogan: 'Cold drinks, warm welcome',
+              ),
+              role: membership.role,
             ),
           ),
         ),
@@ -77,8 +77,31 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Tenant A Bar'), findsOneWidget);
+    expect(find.text('Tenant A Bar'), findsNothing);
     expect(find.text('Cold drinks, warm welcome'), findsOneWidget);
+    expect(find.text('Signed in as Administrator'), findsOneWidget);
+  });
+
+  /// A business that has published no branding still states its session.
+  testWidgets('branding slice without a document still states the role', (
+    tester,
+  ) async {
+    final membership = _membership('tenant-a');
+    final controller = TenantSessionController()
+      ..open(uid: 'user-a', membership: membership);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TenantSessionScope(
+          controller: controller,
+          child: Scaffold(
+            body: TenantBrandingPanel(branding: null, role: membership.role),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
     expect(find.text('Signed in as Administrator'), findsOneWidget);
   });
 
