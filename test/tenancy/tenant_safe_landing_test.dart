@@ -157,9 +157,16 @@ void main() {
     // every other route and, until this step, never on this one. 675 less 72
     // less the route's own 24-pixel bottom padding is 579, and all of it is the
     // scrollable's.
+    //
+    // **§11 step 7 spends 28 more of it on the header's subtitle**, which is
+    // `design.md` v0.7's top bar arriving in the slot the frame already had:
+    // `Signed in as {role}` at the density's body role, plus `space.4` above
+    // it. 579 less 28 is 551. The queue counts left the body in the same change
+    // - they are a badged button in the toolbar now - so the body lost a
+    // section and gained a line, and this figure is the net.
     await _pumpLanding(tester, panelHeight: 900);
 
-    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 579);
+    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 551);
   });
 
   testWidgets('the title leaves the toolbar and the action stays in it', (

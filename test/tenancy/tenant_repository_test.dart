@@ -52,7 +52,7 @@ void main() {
   /// *title* now, resolved once above the header, and §7's "title appears once"
   /// is the rule that made drawing it here a duplicate. A test that only checked
   /// the slogan would still pass if the name came back.
-  testWidgets('branding slice states the slogan and the role, never the name', (
+  testWidgets('branding slice states the slogan, never the name or the role', (
     tester,
   ) async {
     final membership = _membership('tenant-a');
@@ -69,7 +69,6 @@ void main() {
                 companyName: 'Tenant A Bar',
                 slogan: 'Cold drinks, warm welcome',
               ),
-              role: membership.role,
             ),
           ),
         ),
@@ -77,13 +76,16 @@ void main() {
     );
     await tester.pump();
 
+    // The name is the header's, per §4.4 since v0.5 - and as of v0.7 the role
+    // is too. What is left for this panel is the slogan, which nothing else
+    // draws.
     expect(find.text('Tenant A Bar'), findsNothing);
     expect(find.text('Cold drinks, warm welcome'), findsOneWidget);
-    expect(find.text('Signed in as Administrator'), findsOneWidget);
+    expect(find.text('Signed in as Administrator'), findsNothing);
   });
 
   /// A business that has published no branding still states its session.
-  testWidgets('branding slice without a document still states the role', (
+  testWidgets('branding slice without a document states no role of its own', (
     tester,
   ) async {
     final membership = _membership('tenant-a');
@@ -95,14 +97,22 @@ void main() {
         home: TenantSessionScope(
           controller: controller,
           child: Scaffold(
-            body: TenantBrandingPanel(branding: null, role: membership.role),
+            body: TenantBrandingPanel(branding: null),
           ),
         ),
       ),
     );
     await tester.pump();
 
-    expect(find.text('Signed in as Administrator'), findsOneWidget);
+    // **The role left this panel on 2026-08-16 and did not lose a reader.**
+    // `design.md` v0.7 gives the home's top bar "the signed-in member and their
+    // role", and the first picture of that showed "Signed in as Owner" twice on
+    // one screen - which is §7's "title appears once" failing for the identity.
+    // v0.7 predicted it and said what to do: the panel stops drawing what the
+    // header now states. The panel still renders with no branding document,
+    // which is what this case is actually about.
+    expect(find.text('Signed in as Administrator'), findsNothing);
+    expect(find.byType(TenantBrandingPanel), findsOneWidget);
   });
 
   group('bounded collection filters', () {

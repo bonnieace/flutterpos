@@ -75,11 +75,11 @@ void main() {
         ),
       );
 
-      expect(find.text('Saved offline: 2'), findsOneWidget);
-      expect(find.text('Submitting: 1'), findsOneWidget);
-      expect(find.text('Awaiting confirmation: 3'), findsOneWidget);
-      expect(find.text('Needs attention: 1'), findsOneWidget);
-      expect(find.text('Confirmed: 4'), findsOneWidget);
+      expect(await _count(tester, 'Saved offline'), 2);
+      expect(await _count(tester, 'Submitting'), 1);
+      expect(await _count(tester, 'Awaiting confirmation'), 3);
+      expect(await _count(tester, 'Needs attention'), 1);
+      expect(await _count(tester, 'Confirmed'), 4);
       expect(find.byType(TextButton), findsNothing);
       expect(find.byType(ElevatedButton), findsNothing);
       expect(find.byType(IconButton), findsNothing);
@@ -88,6 +88,11 @@ void main() {
     testWidgets('states plainly when no checkout is stored', (tester) async {
       await _pumpPanel(tester, const _FakeSource(CheckoutEvidenceSummary()));
 
+      // **The badge is absent, which is the statement.** §5.1's rule is that a
+      // device holding nothing draws no count, so the sentence moved into the
+      // readout a person opens to ask.
+      expect(find.text('0'), findsNothing);
+      await _open(tester);
       expect(
         find.text('No checkouts are stored on this device.'),
         findsOneWidget,
@@ -113,7 +118,11 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('Saved offline: 9'), findsNothing);
+      // Nothing at all: no button, so no count and nothing to open.
+      expect(
+        find.byKey(const ValueKey('pending-checkout-evidence')),
+        findsNothing,
+      );
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
@@ -141,10 +150,14 @@ void main() {
       ]);
       await _pumpPanel(tester, source, refreshSignals: signals.stream);
 
+      // Nothing stored yet, so no badge - and the sentence lives in the panel.
+      expect(find.text('2'), findsNothing);
+      await _open(tester);
       expect(
         find.text('No checkouts are stored on this device.'),
         findsOneWidget,
       );
+      await _open(tester);
 
       signals.add(null);
       // One frame delivers the signal, one restarts the guarded read, and one
@@ -154,7 +167,7 @@ void main() {
       await tester.pump();
 
       expect(source.calls, 2);
-      expect(find.text('Saved offline: 2'), findsOneWidget);
+      expect(await _count(tester, 'Saved offline'), 2);
     });
 
     testWidgets('an unrelated rebuild does not re-read', (tester) async {
@@ -170,7 +183,7 @@ void main() {
       await tester.pump();
 
       expect(source.calls, 1);
-      expect(find.text('Saved offline: 1'), findsOneWidget);
+      expect(await _count(tester, 'Saved offline'), 1);
     });
 
     testWidgets('every state is named even when its count is zero', (
@@ -185,11 +198,11 @@ void main() {
         const _FakeSource(CheckoutEvidenceSummary(awaitingConfirmation: 1)),
       );
 
-      expect(find.text('Saved offline: 0'), findsOneWidget);
-      expect(find.text('Submitting: 0'), findsOneWidget);
-      expect(find.text('Awaiting confirmation: 1'), findsOneWidget);
-      expect(find.text('Needs attention: 0'), findsOneWidget);
-      expect(find.text('Confirmed: 0'), findsOneWidget);
+      expect(await _count(tester, 'Saved offline'), 0);
+      expect(await _count(tester, 'Submitting'), 0);
+      expect(await _count(tester, 'Awaiting confirmation'), 1);
+      expect(await _count(tester, 'Needs attention'), 0);
+      expect(await _count(tester, 'Confirmed'), 0);
       expect(
         find.text('No checkouts are stored on this device.'),
         findsNothing,
@@ -213,7 +226,7 @@ void main() {
       source.complete(const CheckoutEvidenceSummary(savedOffline: 1));
       await tester.pump();
       await tester.pump();
-      expect(find.text('Saved offline: 1'), findsOneWidget);
+      expect(await _count(tester, 'Saved offline'), 1);
 
       signals.add(null);
       await tester.pump();
@@ -222,7 +235,7 @@ void main() {
       // Mid-refresh: the counts are still there, and the panel says they may be
       // stale rather than leaving that to be inferred.
       expect(source.calls, 2);
-      expect(find.text('Saved offline: 1'), findsOneWidget);
+      expect(await _count(tester, 'Saved offline'), 1);
       expect(
         find.byKey(const ValueKey('pending-checkout-evidence-rereading')),
         findsOne,
@@ -232,7 +245,7 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('Saved offline: 3'), findsOneWidget);
+      expect(await _count(tester, 'Saved offline'), 3);
       expect(
         find.byKey(const ValueKey('pending-checkout-evidence-rereading')),
         findsNothing,
@@ -254,14 +267,13 @@ void main() {
       source.complete(const CheckoutEvidenceSummary(savedOffline: 1));
       await tester.pump();
       await tester.pump();
-      expect(find.text('Saved offline: 1'), findsOneWidget);
+      expect(await _count(tester, 'Saved offline'), 1);
 
       controller.open(uid: 'user-a', membership: _membership('tenant-b'));
       await tester.pump();
 
       // The second read is outstanding, so nothing may be shown at all.
       expect(source.calls, 2);
-      expect(find.text('Saved offline: 1'), findsNothing);
       expect(
         find.byKey(const ValueKey('pending-checkout-evidence')),
         findsNothing,
@@ -270,7 +282,7 @@ void main() {
       source.complete(const CheckoutEvidenceSummary(confirmed: 7));
       await tester.pump();
       await tester.pump();
-      expect(find.text('Confirmed: 7'), findsOneWidget);
+      expect(await _count(tester, 'Confirmed'), 7);
     });
 
     testWidgets('a signal after disposal reads nothing', (tester) async {
@@ -406,3 +418,31 @@ TenantMembership _membership(String tenantId) => TenantMembership(
   canonicalTenantExists: true,
   canonicalMembershipExists: true,
 );
+
+/// Opens the queue panel if it is not already open, and reads one count.
+///
+/// **The five counts moved behind the badge in §11 step 7**, which is §5.1's
+/// own "Replaces" column for this widget - "five-line offline queue list" - and
+/// §7's instruction that the counts belong in a readout rather than on the
+/// page. Nothing about what is *read* changed; where it is drawn did.
+Future<int> _count(WidgetTester tester, String label) async {
+  final panel = find.byKey(const ValueKey('pending-checkout-evidence-panel'));
+  if (panel.evaluate().isEmpty) {
+    await tester.tap(find.byKey(const ValueKey('pending-checkout-evidence')));
+    await tester.pump();
+  }
+  final row = find.ancestor(of: find.text(label), matching: find.byType(Row));
+  final counts = find
+      .descendant(of: row.first, matching: find.byType(Text))
+      .evaluate()
+      .map((e) => (e.widget as Text).data)
+      .whereType<String>()
+      .where((s) => int.tryParse(s) != null);
+  return int.parse(counts.single);
+}
+
+/// Opens the queue panel.
+Future<void> _open(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('pending-checkout-evidence')));
+  await tester.pump();
+}

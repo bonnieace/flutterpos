@@ -1482,13 +1482,25 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       // destinations at two of its three bands, and 720 would put a
       // three-column grid on a tablet into a column narrower than the screen.
       contentWidth: AppContentWidth.records,
+      // §4.4's top bar, in the two slots that need no data the home is not
+      // given. The queue button is `CheckoutPendingEvidencePanel` itself,
+      // moved rather than rebuilt: it already held the counts, so restyling it
+      // into `SyncIndicator` put the badge in reach of the bar without the
+      // number being hoisted anywhere. See `PLAN.md` for the two slots of the
+      // mockup that are still short - the member's name and the switcher.
       actions: [
+        if (pendingCheckoutPanel != null) pendingCheckoutPanel!,
         AppButton(
           label: 'Sign out',
           tier: AppButtonTier.tertiary,
           onPressed: onSignOut,
         ),
       ],
+      // §4.4: "the signed-in member and their role". The role is what this page
+      // holds - a member's *name* is read by the staff directory and by nothing
+      // else - so the subtitle states what is true rather than what the mockup
+      // draws, and `PLAN.md` carries the difference.
+      subtitle: 'Signed in as ${tenantRoleLabel(membership.role)}',
       // Everything in the *body* scrolls together, the cards included.
       //
       // The destinations used to be pinned outside the scrollable, and on a
@@ -1516,18 +1528,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TenantBrandingPanel(
-                branding: branding,
-                role: membership.role,
-              ),
+              TenantBrandingPanel(branding: branding),
               if (shiftPanel != null) ...[
                 const SizedBox(height: 24),
                 shiftPanel!,
               ],
-              if (pendingCheckoutPanel != null) ...[
-                const SizedBox(height: 24),
-                pendingCheckoutPanel!,
-              ],
+
               // **The cards, and only below 1024**, where the frame is drawing
               // no menu. §4.4: at `expanded` the home "keeps its content and
               // loses its cards", so the gap above them goes with them - a page

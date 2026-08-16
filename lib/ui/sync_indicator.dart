@@ -166,6 +166,7 @@ final class SyncQueuePanel extends StatelessWidget {
     required this.title,
     required this.entries,
     required this.onClose,
+    this.emptyMessage,
     this.explanation,
     this.icon = Icons.upload_outlined,
   });
@@ -173,6 +174,13 @@ final class SyncQueuePanel extends StatelessWidget {
   final String title;
   final List<SyncQueueEntry> entries;
   final VoidCallback onClose;
+
+  /// Said instead of the counts when every one of them is zero.
+  ///
+  /// A device holding nothing draws no badge, so this is the only place left to
+  /// state it - and five zeroes in a row is a worse way to say "nothing here"
+  /// than a sentence is.
+  final String? emptyMessage;
 
   /// §7's *Long copy*: the paragraph about why a person cannot send these
   /// themselves is policy, so it folds rather than sitting open.
@@ -218,7 +226,15 @@ final class SyncQueuePanel extends StatelessWidget {
               ],
             ),
             SizedBox(height: tokens.spacing.s12),
-            for (final entry in entries) ...<Widget>[
+            if (emptyMessage case final sentence?)
+              Text(
+                sentence,
+                style: tokens.density
+                    .body(tokens.typography)
+                    .copyWith(color: tokens.colors.text.secondary),
+              )
+            else
+              for (final entry in entries) ...<Widget>[
               _Row(entry: entry),
               SizedBox(height: tokens.spacing.s8),
             ],

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../ui/status.dart';
-import 'tenant_membership_labels.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_types.dart';
@@ -50,14 +49,10 @@ final class TenantBrandingPanel extends StatelessWidget {
   const TenantBrandingPanel({
     super.key,
     required this.branding,
-    required this.role,
   });
 
   /// The resolved document, or null where the business has published none.
   final TenantBranding? branding;
-
-  /// The signed-in session's role, for the line that states it.
-  final TenantRole role;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -69,7 +64,16 @@ final class TenantBrandingPanel extends StatelessWidget {
         Text(slogan, textAlign: TextAlign.center),
         const SizedBox(height: 8),
       ],
-      Text('Signed in as ${tenantRoleLabel(role)}'),
+      // **The role line left this panel on 2026-08-16 and did not lose a
+      // reader.** `design.md` v0.7 gives the home's top bar "the signed-in
+      // member and their role", so `AppScaffold.subtitle` states it one line
+      // under the business name - and the first picture of that showed
+      // "Signed in as Owner" twice on one screen, which is §7's "title appears
+      // once" failing for the identity rather than for the title.
+      //
+      // v0.7 predicted exactly this and said what to do: the panel "stops
+      // drawing the name, because a title appears once". The same argument
+      // reaches the role, one line down.
       const SizedBox(height: 16),
       // §5.1 sends a permanent notice paragraph to a `Callout`, and this is
       // one. It stayed a `Text` until now only because the landing route was
