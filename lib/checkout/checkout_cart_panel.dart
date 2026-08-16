@@ -53,6 +53,7 @@ import '../ui/fields.dart';
 import '../ui/press.dart';
 import '../ui/records.dart';
 import '../ui/scaffold.dart';
+import '../ui/sheet.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/stepper.dart';
@@ -736,27 +737,16 @@ final class _CartEditorState extends State<_CartEditor> {
       );
 
   Future<void> _openCartSheet(BuildContext context, String currency) {
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => ValueListenableBuilder<int>(
+    return showAppSheet<void>(
+      context,
+      builder: (sheetContext, controller) => ValueListenableBuilder<int>(
         valueListenable: _revision,
         // The sheet is a route of its own, so this element does not rebuild
         // when the panel behind it does. [_revision] is what keeps the two in
         // step - without it, adding an item from inside the sheet would leave
         // the sheet showing the cart as it was when it opened.
-        builder: (context, _, _) => DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.7,
-          maxChildSize: 0.95,
-          builder: (context, controller) => _cartPane(
-            context,
-            currency,
-            _totalMinor,
-            controller: controller,
-          ),
-        ),
+        builder: (context, _, _) =>
+            _cartPane(context, currency, _totalMinor, controller: controller),
       ),
     );
   }

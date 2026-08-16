@@ -1,6 +1,6 @@
 # Design system
 
-**Status:** v0.7 — in implementation. §11 steps 1–6, 8, 9 and 11 are done, and step 7
+**Status:** v0.8 — in implementation. §11 steps 1–6, 8, 9 and 11 are done, and step 7
 is half done; see each section's own "Done" note for what is true of the code.
 
 **The status line was stuck at v0.4 through v0.5 and is corrected here.** `PLAN.md`
@@ -354,8 +354,28 @@ velocity; it never restarts from zero and never has to finish. If a person taps 
 the second tap takes over mid-flight.
 
 **Gestures own their surfaces.** Sheets, panes, and back-navigation follow the finger 1:1,
-rubber-band past their bounds, and settle on release velocity rather than on release
-position. A sheet that only opens and closes on tap is not the same product.
+rubber-band past their bounds, and ~~settle on release velocity rather than on release
+position~~ **settle on the nearest detent to where they were released**. A sheet that only
+opens and closes on tap is not the same product.
+
+**Amended in v0.8, at the product owner's direction on 2026-08-16: a sheet settles on
+position.** The velocity rule was the single most expensive sentence in this document. Flutter's
+`DraggableScrollableSheet` settles on position, so honouring it meant writing a gesture
+recogniser and a settling simulation by hand — a build with no test that can prove it, because
+§10 says outright that "the harness cannot see motion" and a spring's interruptibility is a
+device check. That is a large, unverifiable piece of work to buy a difference most people meet
+once.
+
+**What survives is the part that was doing the work**: the sheet follows the finger 1:1, it
+rubber-bands, it has more than two positions, and it is dragged rather than tapped. The
+sentence this section actually cares about — "a sheet that only opens and closes on tap is not
+the same product" — is still true.
+
+**What is given up, stated rather than discovered**: a fast flick that ends low still settles
+low. Somebody who throws the sheet upward and lets go early gets the detent nearest their
+finger rather than the one their gesture was aimed at. If that ever reads as sluggish on a
+device, this amendment is the entry to reverse, and the cost of reversing it is the recogniser
+described above.
 
 **Continuity over replacement.** When a record opens, its row expands into the detail
 surface — the identity element keeps its position and grows. Nothing cross-fades between
@@ -849,7 +869,7 @@ character.
 | Remove from cart | row collapses to zero height, contents fade first | `spring.smooth` | `lightImpact` |
 | Save sale | button label → spinner → check, width frozen; cart collapses | `spring.smooth` | `mediumImpact` |
 | Open a record | row expands into detail, identity element continuous | `spring.smooth` | `selectionClick` |
-| Sheet drag | follows finger, rubber-bands, settles on velocity | `spring.smooth` | `lightImpact` at detent |
+| Sheet drag | follows finger, rubber-bands, settles on the nearest detent (v0.8; was velocity) | `spring.smooth` | `lightImpact` at detent |
 | Route push (compact) | horizontal, incoming full / outgoing parallax at 30%, back-swipe from edge | `spring.smooth` | none |
 | Route change (expanded) | fade-through, no horizontal travel | `motion.medium` | none |
 | Pane resize | width springs | `spring.gentle` | none |
@@ -1266,6 +1286,16 @@ Recorded here rather than settled, because each needs a call you haven't made ye
 ---
 
 ## Changelog
+
+**v0.8** — One sentence, and it is the most expensive one this document contained.
+Directed by the product owner on 2026-08-16 while §11 step 7's last component was
+being scoped.
+
+- §2.4 and §6.2: a sheet **settles on the nearest detent** rather than on release
+  velocity. Flutter settles on position, so the old rule meant hand-writing a gesture
+  recogniser and a settling simulation that §10 says no test in this repository can
+  prove. What the rule was protecting — follows the finger, rubber-bands, more than two
+  positions, dragged rather than tapped — is unchanged.
 
 **v0.7** — The reskin's last unblocking. Six decisions from the product owner on
 2026-08-16, taken so that §11 steps 7, 10 and 12 stop being gated on questions.
