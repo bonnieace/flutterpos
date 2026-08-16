@@ -911,6 +911,17 @@ tiers, which is a smaller thing.
 and the palette-follows-for-free argument, all below and all still true. This is a
 speed-and-cost decision taken with those on the table.
 
+**Asset 6 came straight back, and the split it produced is the rule now.** The
+empty-state file sourced under this amendment was a coloured illustration in
+seven warm browns; the alternative already in the repository was a 244KB,
+252-colour, forever-looping GIF, which breaks four lines of the budget below at
+once. So **asset 6 is drawn natively** - `_BoxPainter` in `lib/ui/states.dart` -
+and the product owner's rule of 2026-08-16 is **by what the asset is**: a state
+indicator nobody needs to be charmed by is drawn, and anything with character is
+sourced. On present sourcing that leaves the mascot and the sync glyph as files,
+and the check mark, the two result state machines, the shift mark and the empty
+mark as paint.
+
 ~~**Default position: build them in Flutter, not in an animation tool.**~~
 
 Six of the eight approved assets below are state indicators — a check mark that draws on,

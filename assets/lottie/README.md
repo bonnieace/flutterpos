@@ -15,13 +15,28 @@ authored asset survive a palette change.
 | `approved.json` | 3.3KB | **1** — `#000000` | ✅ pure line art, one delegate tints it |
 | `upload.json` | 17KB | **2** — black, white | ✅ line art |
 | `sync.json` | 8.0KB | **3** — `#00B8FF`, `#F4B624`, white | ⚠️ tintable, but three delegates |
-| `empty.json` | 33KB | **7** — beiges and oranges | ❌ **fails the rule** |
+| ~~`empty.json`~~ | ~~33KB~~ | ~~**7** — beiges and oranges~~ | **removed — drawn natively instead** |
 
-**`empty.json` is a coloured illustration, not line art**, and its seven warm
-browns and oranges have nothing to do with this palette. §6.4's own withdrawn
-sentence predicted exactly this file: *"generic mascots that will not match this
-palette or this product, and using one is worse than using nothing."* It should
-be replaced with a monochrome empty state before it is wired to anything.
+**Asset 6 is not a file any more.** `empty.json` failed the sourcing rule
+outright — a coloured illustration in seven warm browns and oranges, which have
+nothing to do with this palette — and §6.4's own withdrawn sentence predicted
+exactly it: *"generic mascots that will not match this palette or this product,
+and using one is worse than using nothing."*
+
+The other candidate in the repository, `images/empty.gif`, was measured rather
+than judged and is worse on four counts at once: **244KB** against this file's
+120KB budget for every external asset *combined* and its 64KB per-asset ceiling;
+**150 × 150** of raster, which is blurry at a phone's 2×; **252 colours**, so it
+cannot be tinted at all; and **77 frames looping forever**, where the budget
+below reads *"idle loops on an operational screen: 0"* and an empty state is a
+screen somebody is reading.
+
+So the product owner's call on 2026-08-16 was to draw it: `_BoxPainter` in
+`lib/ui/states.dart`, about sixty lines, zero payload, no licence, and its two
+colours read from the theme on every build — which is the property §6.4 was
+written to protect and the one a sourced file gives up. **The split is by what
+the asset is**: a box outline nobody needs to be charmed by is drawn, and the
+mascot and the sync glyph stay sourced.
 
 **Tinting is not deferrable, and this is the thing to know.** `approved.json` is
 pure `#000000` on a page whose background is `#0D1F16` — it is *invisible* until
@@ -60,15 +75,15 @@ Record every file's source URL in the table below as it lands.
 | 3 | Cash count result | Shift close | — | state machine; compose from 1 and a warning mark |
 | 4 | Upload to server | Top bar queue button | `upload.json` | https://lottiefiles.com/12740-uploading-to-cloud |
 | 5 | Reconciliation result | Reconciliation run | — | state machine; compose from 1 and a warning mark |
-| 6 | Empty state mark | `EmptyState` | `empty.json` | https://lottiefiles.com/free-animation/empty-box-XtO1oiZwG6 |
+| 6 | Empty state mark | `EmptyState` | — | **drawn**: `_BoxPainter`, `lib/ui/states.dart` |
 | 7 | Business approved | Platform approval | `approved.json` | https://lottiefiles.com/free-animation/cat-line-animation-art-FRvtghbpW2 |
 | 8 | Shift opened mark | `ShiftBanner` | — | reuse 1 at `spring.snappy` |
 
-**Three have no link and that is deliberate.** Assets 3 and 5 are *state machines* —
+**Four have no link and that is deliberate.** Assets 3 and 5 are *state machines* —
 balanced / short / over, clean / differences found — and a single generic file cannot
 carry three outcomes honestly; they are composed from the check mark and a warning
 mark with this app's own status colours, which also sidesteps colour-baking entirely.
-Asset 8 is asset 1 played once.
+Asset 8 is asset 1 played once, and asset 6 is drawn - see above.
 
 ## Budget, from §6.4 and still binding
 

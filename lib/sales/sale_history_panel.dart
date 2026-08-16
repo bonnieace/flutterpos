@@ -1,18 +1,19 @@
 ﻿import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
-import '../ui/record_list.dart';
-import '../ui/routes.dart';
-import '../ui/scaffold.dart';
-import '../ui/tokens.dart';
 import '../checkout/checkout_tender.dart';
-import '../returns/return_history_panel.dart';
 import '../returns/return_actions.dart';
+import '../returns/return_history_panel.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/buttons.dart';
+import '../ui/record_list.dart';
+import '../ui/routes.dart';
+import '../ui/scaffold.dart';
+import '../ui/states.dart';
+import '../ui/tokens.dart';
 import 'sale_history.dart';
 
 /// What a sale page is scoped to.
@@ -277,9 +278,13 @@ final class _SaleHistoryContents extends StatelessWidget {
       RecordList(
         identityLabel: 'Sale',
         items: <RecordItem>[for (final sale in page.items) _record(sale)],
-        empty: const Text(
+        // §7's Empty pattern. No action: a sale is rung up at the till rather
+        // than from its own history, so there is nothing here for a person to
+        // press that would end the emptiness.
+        empty: const EmptyState(
           key: ValueKey('sale-history-empty'),
-          'No sales were found.',
+          title: 'No sales yet',
+          hint: 'A sale appears here once it has been confirmed.',
         ),
       ),
       // **Said once under the list, in the words `sales_totals_panel.dart`

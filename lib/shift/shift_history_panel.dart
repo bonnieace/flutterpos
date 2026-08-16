@@ -1,11 +1,5 @@
 ﻿import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
-import '../ui/record_list.dart';
-import '../ui/routes.dart';
-import '../ui/scaffold.dart';
-import '../ui/status.dart';
-import '../ui/tokens.dart';
 import '../reporting/shift_amendment_feed.dart';
 import '../reporting/shift_amendment_feed_panel.dart';
 import '../returns/return_actions.dart';
@@ -16,6 +10,13 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
+import '../ui/buttons.dart';
+import '../ui/record_list.dart';
+import '../ui/routes.dart';
+import '../ui/scaffold.dart';
+import '../ui/states.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'shift_history.dart';
 
 /// Read-only shift history route for the selected tenant session.
@@ -294,9 +295,12 @@ final class _ShiftHistoryContents extends StatelessWidget {
       RecordList(
         identityLabel: 'Shift',
         items: <RecordItem>[for (final entry in page.items) _entry(entry)],
-        empty: const Text(
+        // §7's Empty pattern. Closing a shift happens on the shift banner and
+        // not here, so this states what would be here and offers nothing.
+        empty: const EmptyState(
           key: ValueKey('shift-history-empty'),
-          'No closed shifts were found.',
+          title: 'No closed shifts yet',
+          hint: 'A shift appears here once it has been closed.',
         ),
       ),
       const SizedBox(height: 16),

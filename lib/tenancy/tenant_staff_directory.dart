@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -427,7 +428,14 @@ final class _StaffContentsState extends State<_StaffContents> {
         items: <RecordItem>[
           for (final staff in widget.page.items) _record(staff),
         ],
-        empty: const Text('No staff memberships found.'),
+        // §7's Empty pattern. Inviting somebody is the action that would end
+        // this, and it already sits above the list on this screen - offering it
+        // twice would make the emptier page the one with more controls on it.
+        empty: const EmptyState(
+          key: ValueKey('staff-directory-empty'),
+          title: 'No staff yet',
+          hint: 'Invite somebody to give them access to this business.',
+        ),
       ),
       if (widget.page.hasMore)
         const Padding(

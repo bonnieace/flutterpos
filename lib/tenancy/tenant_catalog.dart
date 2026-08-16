@@ -4,6 +4,7 @@ import '../ui/buttons.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
@@ -455,7 +456,10 @@ final class _CatalogContents extends StatelessWidget {
         )),
         const SizedBox(height: 8),
         if (snapshot.categories.items.isEmpty)
-          const Text('No categories found.')
+          const EmptyState(
+            key: ValueKey('catalog-categories-empty'),
+            title: 'No categories yet',
+          )
         else
           Wrap(
             spacing: 8,
@@ -486,7 +490,14 @@ final class _CatalogContents extends StatelessWidget {
             for (final product in snapshot.products.items)
               _record(context, product, categoryNames),
           ],
-          empty: const Text('No products found.'),
+          // §7's Empty pattern. This is the *read-only* catalog, so there is
+          // deliberately no action: a person who can add a product does it from
+          // Manage catalog, and offering it here would offer it to the roles
+          // that cannot.
+          empty: const EmptyState(
+            key: ValueKey('catalog-products-empty'),
+            title: 'No products yet',
+          ),
         ),
         // **Deliberately still a caption and not a `Callout`.** The sweep's rule
         // makes a notice about this page, this read or this role a `Callout`,
