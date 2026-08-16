@@ -102,9 +102,9 @@ Every section of this file, with the line it starts on. Read the one you need.
   - **3386** — Standing traps
   - **3783** — Repository state
 - **3913** — Next bounded chunk
-  - **4876** — Then, in preference order
-  - **5150** — Standing exclusions
-- **5333** — Assumptions
+  - **4910** — Then, in preference order
+  - **5184** — Standing exclusions
+- **5367** — Assumptions
 
 <!-- index:end -->
 
@@ -3998,31 +3998,65 @@ forbidden here. That is an open decision now, above, and it is the one thing lef
 
 ---
 
-**The queued chunk is the end of step 4's sweep, headed by `receipt_lookup_panel.dart`.** It is the
-only chunk on this page that needs nothing that does not exist: no new component, no `design.md`
-answer, no product-owner call. Screen 16 is **the densest genuinely unswept file left** at three
-`textTheme` reads, and behind it is the long tail of 35 files with one or two each — the platform
-tabs, the staff gateways, `shift_panel.dart`, `sale_history_panel.dart`,
-`return_history_panel.dart`, `audit_log_panel.dart` and the stock feeds. The list and its
-measurement are below, re-counted 2026-08-15.
+~~**The queued chunk is the end of step 4's sweep, headed by `receipt_lookup_panel.dart`.**~~
+**Re-queued the same day, at the product owner's direction, and the reason is the one this section
+should have applied in the first place.** The sweep tail was queued because it was *unblocked*, not
+because it was worth much: it moves screens nobody looks at. See `HISTORY.md` — "Ten chunks in, the
+till has had none of it" (2026-08-16) — for the evidence, which is worth reading before queueing
+anything else.
 
-**Size it by reading the record models first, not by counting `textTheme` reads.** Four chunks in a
-row found their real cost in a shared document rather than in a restyle, and the sweep's own three
-lessons — a status on a migrated screen is a `RecordStatus` and not a loose `StatusBadge`; "does this
-record have a standing" is answered both ways on purpose; a shared wording module is worth reaching
-for the moment two surfaces render one document — are what the tail should be read against.
+---
 
-**The alternative, and why it is second rather than first**: step 11's copy backlog, the seven items
-listed below. It is unblocked too, but **step 11 already ran** and this file cannot say which of the
-seven it closed — the entry predates the chunk. Taking it means re-verifying every item against the
-app before writing anything, which is the right way to take it and is not the same size of job as it
-looks.
+**The queued chunk is `design.md` §11 step 7's unblocked half — the sale path, in the components
+that already exist.** It is the screen a cashier uses all day and **it has had none of the
+redesign**. The four unspecified components are the reason this step has been listed as blocked for
+four days, and they are a reason not to finish it rather than a reason not to start it.
 
-**What did not move**: step 7 still needs `AppSheet` specified and still needs three components that
-do not exist — `QuantityStepper` (§5.1 priority **1**), `RollingNumber` and `ConfirmDialog` — which
-is a larger build than "blocked on a spec" implied; step 10 is still blocked on the same three §12
-calls, though **six of its eight assets are native and blocked by none of them**, and v0.5 gave two
-of those six a host; and step 12 is still blocked on its own six.
+**Measured 2026-08-16 rather than carried, and the carried figures were right for once** — the first
+inherited count in six to survive re-measurement. `lib/checkout/checkout_cart_panel.dart` holds
+**1 raw `Scaffold`**, **7 Material buttons** (2 `OutlinedButton`, 2 `TextButton`, 3 `FilledButton`),
+**2 Material `TextField`s** and **12 `textTheme` reads**. Two things no count had reached: **2
+`IconButton`s** — the minus and the bin, which are `QuantityStepper`'s — and **4 `ChoiceChip`s**,
+which are `FilterChipBar`'s.
+
+**What is buildable with what exists, and it is most of what a person sees:**
+
+- **§2.1's action tiers, which is the defect §2.1 was written about.** That section's own worked
+  example reads *"**Clear this sale** is `destructive`, **Save sale** is `primary`. Today the
+  destructive action is the more prominent of the two."* **It is still on screen** in
+  `web/15-new-sale-with-a-cart`. Nothing but `AppButton` is needed to close it.
+- The raw `Scaffold` → `AppScaffold` + `PageHeader`, which gives this screen §4.2's **`full`** row —
+  declared since step 6a and **read by nothing**, because the sale is the only page that is `full`.
+- The 2 `TextField`s → `AppTextField`, which finishes §11 step 3's call-site sweep: they are the
+  whole of what is left of it.
+- The 12 `textTheme` reads → tokens, which finishes step 4's sweep at its densest file by a factor
+  of four, and takes the **eighth** notice surface — `checkout-code-notice`, which `AppNotice` has
+  been waiting for.
+- The total → `StatTile`, and the permanent prose → `Disclosure`.
+
+**What is genuinely blocked, and must be named rather than approximated:** `QuantityStepper` (§5.1
+priority **1** — the stepper with no plus is its own row), `FilterChipBar`, `ConfirmDialog`,
+`AppSheet` and `RollingNumber`. **`AppSheet` blocks the responsive half specifically**: §4.3 gives
+`Sale` "products + cart sheet" at `compact` and `medium` and two panes only at `expanded`, so the
+band behaviour cannot be built without it. **Build none of them by guessing** — that is what
+`claude.md` forbids and what this queue has protected for four days. The chunk delivers the
+`expanded` two-pane screen in real components and hands the sheet, the stepper and the chips back as
+a specification request with a screenshot attached.
+
+**The alternatives, in order, and why each is below it**: the end of step 4's sweep headed by
+`receipt_lookup_panel.dart` — unblocked, three `textTheme` reads, and a screen far less used than
+the till; then step 11's copy backlog, the seven items listed below, which is unblocked too but
+**step 11 already ran** and this file cannot say which of the seven it closed, so taking it means
+re-verifying every item against the app first.
+
+**What did not move**: ~~step 7 still needs `AppSheet` specified and still needs three components
+that do not exist — `QuantityStepper` (§5.1 priority **1**), `RollingNumber` and `ConfirmDialog` —
+which is a larger build than "blocked on a spec" implied~~ — **all still true of step 7's *whole*,
+and it stopped being a reason to leave the step alone on 2026-08-16**: the queue entry above splits
+it, because the tier inversion, the page frame, the two fields and the twelve `textTheme` reads need
+none of the five. Step 10 is still blocked on the same three §12 calls, though **six of its eight
+assets are native and blocked by none of them**, and v0.5 gave two of those six a host; and step 12
+is still blocked on its own six.
 
 **What the step-10 blockers were, kept because they are still true:**
 
