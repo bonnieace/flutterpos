@@ -461,6 +461,12 @@ class SpiritPOSApp extends StatelessWidget {
           // sale rang up moments earlier is reported as no sale at all.
           refreshSignals: checkoutSyncSignals.evidenceChanges,
         ),
+        // §4.4 v0.7's top bar wants the signed-in member's name. Firebase has
+        // already loaded it, so this hands over state that exists rather than
+        // adding a read to the home - which is what kept the bar blocked for a
+        // day. It is frequently null: an identity created by an emailed
+        // invitation has no display name until somebody types one.
+        memberName: () => FirebaseAuth.instance.currentUser?.displayName,
         signOut: FirebaseAuth.instance.signOut,
         signedOut: const LoginScreen(),
       ),

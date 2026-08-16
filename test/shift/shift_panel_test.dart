@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout_tender.dart';
 import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/banner.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -46,18 +47,16 @@ void main() {
   ) async {
     final sessions = await _pumpPanel(tester, state, server);
 
-    expect(
-      find.text('No shift is open in this business.'),
-      findsOneWidget,
-    );
+    expect(_heading(tester), 'No shift open');
 
     await tester.tap(find.byKey(const ValueKey('open-shift')));
     await _settle(tester);
-    expect(find.text('A shift is open in this business.'), findsOneWidget);
+    expect(_heading(tester), 'Shift open');
     expect(server.created.single.$2['status'], 'open');
 
     await tester.tap(find.byKey(const ValueKey('start-cash-count')));
     await _settle(tester);
+    await _openShiftSheet(tester);
     expect(
       find.byKey(const ValueKey('counted-cash')),
       findsOneWidget,
@@ -74,10 +73,16 @@ void main() {
       find.byKey(const ValueKey('counted-cash')),
       '125000',
     );
-    await tester.tap(find.byKey(const ValueKey('close-shift')));
-    await _settle(tester);
+    // §8 rule 4: the banner says *Close shift* and so does the control in the
+    // sheet that finishes it. This is already in the sheet, so it confirms.
+    await _tapInSheet(tester, 'close-shift-confirm');
+    // **`pumpAndSettle`, not the five-frame `_settle`.** Closing now dismisses
+    // a route as well as writing, and a sheet's exit animation outlasts fifty
+    // milliseconds - so the banner behind it was still reading the phase the
+    // sheet was opened in.
+    await tester.pumpAndSettle();
 
-    expect(find.text('No shift is open in this business.'), findsOneWidget);
+    expect(_heading(tester), 'No shift open');
     expect(server.updated.single.$2['closingCashMinor'], 125000);
     expect(
       (await TenantShiftSwitchStateSource(
@@ -95,12 +100,7 @@ void main() {
 
     await _pumpPanel(tester, state, server);
 
-    expect(
-      find.text(
-        'A cash count is unfinished. Finish it before switching business.',
-      ),
-      findsOneWidget,
-    );
+    expect(_heading(tester), 'Cash count unfinished');
     expect(find.byKey(const ValueKey('close-shift')), findsOneWidget);
     expect(find.byKey(const ValueKey('open-shift')), findsNothing);
   });
@@ -122,7 +122,7 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('shift-sales-summary')), findsOneWidget);
+    expect(_detail(tester), contains('Confirmed sales'));
     expect(
       find.text('Confirmed sales: 4 transactions, 98750 minor units.'),
       findsOneWidget,
@@ -181,8 +181,13 @@ void main() {
       ),
     );
 
+    await _openShiftSheet(tester);
+
     expect(
-      find.text('Expected cash: 25000 minor units over 2 sales.'),
+
+      find.text(
+
+        'Expected cash: 25000 minor units over 2 sales.'),
       findsOneWidget,
       reason: 'a drawer holds the cash bucket, not the shift total',
     );
@@ -220,8 +225,10 @@ void main() {
     );
 
     // Being told to expect nothing is an answer; an absent line is not.
+    await _openShiftSheet(tester);
     expect(
-      find.text('Expected cash: 0 minor units over 0 sales.'),
+      find.text(
+        'Expected cash: 0 minor units over 0 sales.'),
       findsOneWidget,
     );
   });
@@ -256,6 +263,7 @@ void main() {
       ),
     );
 
+    await _openShiftSheet(tester);
     expect(
       find.text(
         '2 sales name no recognised payment method, worth 5000 minor units. '
@@ -296,10 +304,16 @@ void main() {
       ),
     );
 
+    await _openShiftSheet(tester);
+
     expect(
-      find.text('Expected cash: 1 minor unit over 1 sale.'),
+
+      find.text(
+
+        'Expected cash: 1 minor unit over 1 sale.'),
       findsOneWidget,
     );
+    await _openShiftSheet(tester);
     expect(
       find.text(
         '1 sale names no recognised payment method, worth 3000 minor units. '
@@ -332,6 +346,7 @@ void main() {
     // Nothing on screen was recorded by a cashier, so the sentence claiming so
     // would be about nothing at all.
     expect(find.text(checkoutTenderDisclaimer), findsNothing);
+    await _openShiftSheet(tester);
     expect(find.byKey(const ValueKey('shift-expected-cash')), findsOneWidget);
   });
 
@@ -359,7 +374,8 @@ void main() {
 
     // The takings themselves are unaffected; only the claim about how they were
     // paid is refused.
-    expect(find.byKey(const ValueKey('shift-sales-summary')), findsOneWidget);
+    expect(_detail(tester), contains('Confirmed sales'));
+    await _openShiftSheet(tester);
     expect(find.byKey(const ValueKey('shift-expected-cash')), findsNothing);
     expect(find.textContaining('Expected cash'), findsNothing);
   });
@@ -391,6 +407,7 @@ void main() {
     );
     // An expected-cash figure over an incomplete shift is a number the drawer
     // will not match, so it waits rather than misleading the count.
+    await _openShiftSheet(tester);
     expect(find.byKey(const ValueKey('shift-expected-cash')), findsNothing);
   });
 
@@ -442,7 +459,8 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('shift-unsettled-sales')), findsNothing);
+    expect(_detail(tester), isNot(contains('not synchronized')));
+    await _openShiftSheet(tester);
     expect(find.byKey(const ValueKey('shift-expected-cash')), findsOneWidget);
   });
 
@@ -452,7 +470,8 @@ void main() {
 
     await _pumpPanel(tester, state, server);
 
-    expect(find.text('A shift is open in this business.'), findsOneWidget);
+    expect(_heading(tester), 'Shift open');
+    await _openShiftSheet(tester);
     expect(find.byKey(const ValueKey('shift-expected-cash')), findsNothing);
   });
 
@@ -488,13 +507,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-shift')));
     await _settle(tester);
 
+    // The error code is louder than the standing warning, so it is the line.
     expect(
-      find.byKey(const ValueKey('shift-other-tenant-open')),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Close the open shift in the other business first.'),
-      findsOneWidget,
+      _detail(tester),
+      contains('Close the open shift in the other business first.'),
     );
     expect(server.created, isEmpty);
   });
@@ -506,7 +522,7 @@ void main() {
 
     await _pumpPanel(tester, state, server);
 
-    expect(find.text('Shift state is unavailable.'), findsOneWidget);
+    expect(_heading(tester), 'Shift unavailable');
     expect(find.textContaining('malformed_shift_state'), findsNothing);
   });
 
@@ -527,7 +543,8 @@ void main() {
     );
 
     await _pumpPanel(tester, state, server, history: true);
-    await tester.tap(find.byKey(const ValueKey('view-shift-history')));
+    await _openShiftSheet(tester);
+    await _tapInSheet(tester, 'view-shift-history');
     await _settle(tester);
 
     expect(find.text('Shift history'), findsOneWidget);
@@ -551,6 +568,7 @@ void main() {
   ) async {
     await _pumpPanel(tester, state, server);
 
+    await _openShiftSheet(tester);
     expect(find.byKey(const ValueKey('view-shift-history')), findsNothing);
   });
 
@@ -560,13 +578,13 @@ void main() {
     final sessions = await _pumpPanel(tester, state, server);
     await tester.tap(find.byKey(const ValueKey('open-shift')));
     await _settle(tester);
-    expect(find.text('A shift is open in this business.'), findsOneWidget);
+    expect(_heading(tester), 'Shift open');
 
     sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
     await _settle(tester);
 
-    expect(find.text('A shift is open in this business.'), findsNothing);
-    expect(find.text('No shift is open in this business.'), findsOneWidget);
+    expect(_heading(tester), isNot('Shift open'));
+    expect(_heading(tester), 'No shift open');
   });
 }
 
@@ -787,3 +805,43 @@ TenantMembership _membership(
   canonicalTenantExists: true,
   canonicalMembershipExists: true,
 );
+
+/// The one line the banner states beneath the standing.
+///
+/// **Seven facts became one line in §11 step 7**, which is what a banner is:
+/// the status sentence, two "open elsewhere" warnings, the sales summary, the
+/// unsynchronized-sales warning and the error line all competed for the same
+/// row, and `ShiftBanner` carries whichever is loudest. So a test that used to
+/// look for a keyed paragraph reads the line instead.
+String _detail(WidgetTester tester) =>
+    tester.widget<ShiftBanner>(find.byType(ShiftBanner)).detail;
+
+/// The standing, in the words §9 requires beside the colour.
+String _heading(WidgetTester tester) =>
+    tester.widget<ShiftBanner>(find.byType(ShiftBanner)).heading;
+
+/// Opens the sheet behind the banner, where every control that is not the next
+/// step in the shift's lifecycle now lives.
+Future<void> _openShiftSheet(WidgetTester tester) async {
+  if (find.byKey(const ValueKey('tenant-shift-sheet')).evaluate().isNotEmpty) {
+    return;
+  }
+  await tester.tap(find.byKey(const ValueKey('tenant-shift-panel')));
+  await _settle(tester);
+}
+
+/// Taps a control inside the shift sheet, after scrolling it into view.
+///
+/// **`ensureVisible` first**, which is `PLAN.md`'s standing trap from
+/// 2026-08-14: a tap on a widget that is built but below the fold lands on
+/// whatever is at that coordinate and **does not fail**. The sheet opens at its
+/// `half` detent, so its last controls start off screen - and the first run of
+/// this file without it reported a close that silently never reached the
+/// server.
+Future<void> _tapInSheet(WidgetTester tester, String key) async {
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}

@@ -94,6 +94,7 @@ final class TenantRoutingShell extends StatefulWidget {
     this.checkoutConfigurationRoles = const <TenantRole>[],
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
+    this.memberName,
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
@@ -162,6 +163,21 @@ final class TenantRoutingShell extends StatefulWidget {
   /// Optional read-only local-work evidence rendered on the safe landing
   /// route. It is supplied by the composition root so tenancy code stays
   /// independent of the checkout domain.
+  /// What to call the signed-in person in the home's top bar.
+  ///
+  /// **A callback rather than a `String`, and already-loaded state rather than
+  /// a read.** `design.md` v0.7 gives the bar "the signed-in member and their
+  /// role"; the role is on the membership and the name is not on any tenant
+  /// record this route holds — the staff directory is the only surface that
+  /// reads names. What *is* to hand is the identity the person signed in with,
+  /// whose display name Firebase has already loaded, so this asks the
+  /// composition root for it instead of adding a read to the home.
+  ///
+  /// Null wherever it is unset, which is common: an identity created by an
+  /// emailed invitation has no display name until somebody types one. The bar
+  /// falls back to the role alone rather than to a placeholder.
+  final String? Function()? memberName;
+
   final Widget? pendingCheckoutPanel;
 
   /// Optional point-of-sale route, injected for the same reason. It takes no
@@ -746,6 +762,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       onDefaultTenantChanged: _retry,
       switchCandidates: _bootstrapResult?.selection.visible ?? const [],
       onSwitchTenant: _switchTenant,
+      memberName: widget.memberName?.call(),
       checkoutRoute: widget.checkoutRoute,
       checkoutConfigurationRoute: widget.checkoutConfigurationRoute,
       checkoutConfigurationRoles: widget.checkoutConfigurationRoles,
@@ -1350,6 +1367,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.checkoutConfigurationRoles = const <TenantRole>[],
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
+    this.memberName,
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
@@ -1376,6 +1394,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final List<TenantMembership> switchCandidates;
   final Future<TenantSwitchResult> Function(TenantMembership membership)?
   onSwitchTenant;
+  /// What to call the signed-in person. See `TenantRoutingShell.memberName`.
+  final String? memberName;
+
   final Widget? pendingCheckoutPanel;
   final Widget Function(TenantSessionController sessions)? checkoutRoute;
 
@@ -1500,7 +1521,14 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       // holds - a member's *name* is read by the staff directory and by nothing
       // else - so the subtitle states what is true rather than what the mockup
       // draws, and `PLAN.md` carries the difference.
-      subtitle: 'Signed in as ${tenantRoleLabel(membership.role)}',
+      // §4.4 v0.7: "the signed-in member and their role". Both where the
+      // identity has a display name, and the role alone where it does not -
+      // which is common, since an identity created by an emailed invitation
+      // carries none until somebody types one. A placeholder would be worse
+      // than the shorter sentence.
+      subtitle: memberName == null
+          ? 'Signed in as ${tenantRoleLabel(membership.role)}'
+          : '$memberName - ${tenantRoleLabel(membership.role)}',
       // Everything in the *body* scrolls together, the cards included.
       //
       // The destinations used to be pinned outside the scrollable, and on a
