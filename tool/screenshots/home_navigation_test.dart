@@ -1,10 +1,17 @@
-/// Step 5b's first half: `design.md` §4.4's `HomeNavigation`, photographed.
+/// Step 5b: `design.md` §4.4's `HomeNavigation`, photographed.
 ///
 /// **The matrix of this component is §4.4's own table**, so every case is
 /// captured at all three bands: a two-column grid below 768, a three-column grid
 /// to 1023, and the side menu at 1024 and above. `RecordList` is the precedent -
 /// a component whose subject is the responsive contract itself has to be seen at
 /// each band or the contract is reviewed on part of its cases.
+///
+/// **The `web` captures moved in the second half and the other two did not.**
+/// The menu is the frame's now rather than the body's, so at 1440 it is a
+/// full-height column beside the page instead of a block inside it, and the
+/// content beside it starts where the column ends. Below 1024 nothing about
+/// these pictures changed, which is the check: the cards are content and the
+/// second half did not touch content.
 ///
 /// **The states are the ones a destination actually has.** §5's matrix is a
 /// control's: `enabled`, `disabled` and this component's own addition - a card
@@ -160,13 +167,17 @@ final class _Page extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final inset = AppScaffold.horizontalInset(tokens.spacing);
+    // Both hosts, exactly as the landing route wires them: the frame draws the
+    // menu at `expanded` and the body draws the cards below it, so one capture
+    // per band photographs whichever of the two that band uses.
     return AppScaffold(
       title: 'Dev Corner Shop',
       contentWidth: AppContentWidth.records,
+      navigation: destinations,
       body: SingleChildScrollView(
         child: Padding(
           padding: EdgeInsets.fromLTRB(inset, 0, inset, tokens.spacing.s24),
-          child: HomeNavigation(destinations: destinations),
+          child: HomeNavigation.cards(destinations: destinations),
         ),
       ),
     );

@@ -13,97 +13,98 @@ model as this one.
 Every section of this file, with the line it starts on. Read the one you need.
 
 - **9** — Index
-  - **252** — Published status board
-- **305** — Status board
-  - **307** — Tracks
-  - **317** — Can a shop do this yet?
-  - **354** — Where the last chunk left it
-  - **368** — Chunk index
-  - **432** — Found by using the app
-  - **564** — Rollout position
-  - **586** — Test baselines
-- **1134** — Corrections made in the 2026-08-07 PLAN/HISTORY split
-- **1165** — Standing decisions and unreachable capabilities
-  - **1173** — A sale records how it was paid for, chosen manually
-  - **1191** — A business publishes its own currency, and it converts nothing
-  - **1209** — A shop stocks itself, and a retired product keeps its history
-  - **1232** — A price is corrected on the server, and never a quantity
-  - **1265** — A product records what it cost, and a sale freezes it
-  - **1290** — A profit figure is complete or it is not shown
-  - **1313** — Bulk catalog work is a rewrite, and the old code is not the starting point
-  - **1343** — A spreadsheet becomes products, and its stock has an origin
-  - **1383** — One screen reaches both bulk callables, and it previews before it writes
-  - **1412** — A suspicious return is scored on the server, after the first deployment
-  - **1436** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
-  - **1455** — A refused invitation names what will work, and only a transient failure invites a retry
-  - **1482** — The token layer is additive, and a density is a nested `Theme`
-  - **1518** — The ripple dies at the theme, and the press arrives with the button
-  - **1545** — A button is a component, and a spring is the substrate under it
-  - **1570** — Every button is an `AppButton`, and the tier is a decision per site
-  - **1592** — Five statuses, and three components two of which have no specification
-  - **1624** — One field, everywhere - and an audit finding that was false
-  - **1651** — A route arrives on a spring, and one parallax is deliberately missing
-  - **1683** — A category is named, and a document ID is not a name
-  - **1705** — A screen title is content, and the toolbar keeps only the way back
-  - **1739** — One boundary, one variable, and a maximum width on every page
-  - **1767** — One record model, three renderings, and the loss the caller owns
-  - **1796** — The staff directory stops choosing its own form, and a record gets a form slot
-  - **1819** — A product states its facts as facts, and only one that cannot be sold has a standing
-  - **1845** — One ledger entry, one vocabulary, and a screen that had three
-  - **1874** — A shift has a standing, and two paragraphs were never about a record
-  - **1902** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
-  - **1933** — A page's standing is a status, and a report row's reads the mode it was written in
-  - **1960** — A figure is a component, and a row of them measures what it holds
-  - **1996** — A figure is evidence on these three, and one document is read two ways on purpose
-  - **2019** — A notice says which answer it is, and four of them were never refusals
-  - **2047** — A title appears once, and the page that said it was read-only was not
-  - **2072** — A column asks for what it holds, and a share is a guess about content
-  - **2105** — A boundary is a measurement, and the front door had a second palette
-  - **2143** — An input is a pill again, and the specification moved first
-  - **2182** — Built, tested, and still unreachable
-  - **2222** — The home is cards below 1024 and a side menu above it, and the till is pushed
-- **2255** — Open decisions
-  - **2257** — Public password reset needs App Check, which this app has none of
-  - **2364** — `Callout` has no specification, and three glyph sizes were borrowed
-  - **2388** — Every string is painted 0.25px per character wider than its token style says
-  - **2409** — A chip is the only thing §2.3's pill argument still guards, and the theme disagrees with it
-  - **2429** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
-  - **2453** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
-  - **2474** — Three run counts are decoded on every read and displayed by nothing
-  - **2491** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
-  - **2526** — `design.md` states no page padding, and `AppScaffold` had to pick one
-  - **2545** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
-  - **2570** — `AppSheet` has no specification, and step 7 opens a sheet
-  - **2593** — The app teaches by folding prose, and nobody has decided whether folding is teaching
-  - **2616** — The invitation email names no business, and no step reaches an email
-  - **2638** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
-  - **2677** — Three design-system questions the redesign has refused to answer
-  - **2721** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
-  - **2732** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
-  - **2802** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
-- **2852** — Identity, Tenancy, and Public Interfaces
-  - **2854** — Environments
-  - **2861** — Root model
-  - **2893** — Tenant path contract
-  - **2903** — Tenant routing and limits
-  - **2920** — Shared authorization
-  - **2937** — Public callable interfaces
-  - **2971** — Full export surface
-- **3001** — Platform, Ownership, and Membership Integrity
-- **3057** — Invitations and Email
-- **3121** — Offline Operations, Stock, and Receipts
-- **3170** — Reconciliation, Rules, and Testing
-  - **3172** — Reconciliation
-  - **3236** — Rules
-  - **3262** — Required tests
-- **3280** — Working on this repository
-  - **3282** — The emulator prelude is not optional
-  - **3297** — Standing traps
-  - **3694** — Repository state
-- **3824** — Next bounded chunk
-  - **4759** — Then, in preference order
-  - **5033** — Standing exclusions
-- **5216** — Assumptions
+  - **253** — Published status board
+- **306** — Status board
+  - **308** — Tracks
+  - **318** — Can a shop do this yet?
+  - **355** — Where the last chunk left it
+  - **372** — Chunk index
+  - **444** — Found by using the app
+  - **576** — Rollout position
+  - **598** — Test baselines
+- **1162** — Corrections made in the 2026-08-07 PLAN/HISTORY split
+- **1193** — Standing decisions and unreachable capabilities
+  - **1201** — A sale records how it was paid for, chosen manually
+  - **1219** — A business publishes its own currency, and it converts nothing
+  - **1237** — A shop stocks itself, and a retired product keeps its history
+  - **1260** — A price is corrected on the server, and never a quantity
+  - **1293** — A product records what it cost, and a sale freezes it
+  - **1318** — A profit figure is complete or it is not shown
+  - **1341** — Bulk catalog work is a rewrite, and the old code is not the starting point
+  - **1371** — A spreadsheet becomes products, and its stock has an origin
+  - **1411** — One screen reaches both bulk callables, and it previews before it writes
+  - **1440** — A suspicious return is scored on the server, after the first deployment
+  - **1464** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
+  - **1483** — A refused invitation names what will work, and only a transient failure invites a retry
+  - **1510** — The token layer is additive, and a density is a nested `Theme`
+  - **1546** — The ripple dies at the theme, and the press arrives with the button
+  - **1573** — A button is a component, and a spring is the substrate under it
+  - **1598** — Every button is an `AppButton`, and the tier is a decision per site
+  - **1620** — Five statuses, and three components two of which have no specification
+  - **1652** — One field, everywhere - and an audit finding that was false
+  - **1679** — A route arrives on a spring, and one parallax is deliberately missing
+  - **1711** — A category is named, and a document ID is not a name
+  - **1733** — A screen title is content, and the toolbar keeps only the way back
+  - **1768** — One boundary, one variable, and a maximum width on every page
+  - **1796** — One record model, three renderings, and the loss the caller owns
+  - **1825** — The staff directory stops choosing its own form, and a record gets a form slot
+  - **1848** — A product states its facts as facts, and only one that cannot be sold has a standing
+  - **1874** — One ledger entry, one vocabulary, and a screen that had three
+  - **1903** — A shift has a standing, and two paragraphs were never about a record
+  - **1931** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
+  - **1962** — A page's standing is a status, and a report row's reads the mode it was written in
+  - **1989** — A figure is a component, and a row of them measures what it holds
+  - **2025** — A figure is evidence on these three, and one document is read two ways on purpose
+  - **2048** — A notice says which answer it is, and four of them were never refusals
+  - **2076** — A title appears once, and the page that said it was read-only was not
+  - **2101** — A column asks for what it holds, and a share is a guess about content
+  - **2134** — A boundary is a measurement, and the front door had a second palette
+  - **2172** — An input is a pill again, and the specification moved first
+  - **2211** — Built, tested, and still unreachable
+  - **2251** — The home is cards below 1024 and a side menu above it, and the till is pushed
+- **2308** — Open decisions
+  - **2310** — §4.4 wants the side menu on every route, and every route reaches it by a push
+  - **2346** — Public password reset needs App Check, which this app has none of
+  - **2453** — `Callout` has no specification, and three glyph sizes were borrowed
+  - **2477** — Every string is painted 0.25px per character wider than its token style says
+  - **2498** — A chip is the only thing §2.3's pill argument still guards, and the theme disagrees with it
+  - **2518** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
+  - **2542** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
+  - **2563** — Three run counts are decoded on every read and displayed by nothing
+  - **2580** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
+  - **2615** — `design.md` states no page padding, and `AppScaffold` had to pick one
+  - **2634** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
+  - **2659** — `AppSheet` has no specification, and step 7 opens a sheet
+  - **2682** — The app teaches by folding prose, and nobody has decided whether folding is teaching
+  - **2705** — The invitation email names no business, and no step reaches an email
+  - **2727** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
+  - **2766** — Three design-system questions the redesign has refused to answer
+  - **2810** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
+  - **2821** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
+  - **2891** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
+- **2941** — Identity, Tenancy, and Public Interfaces
+  - **2943** — Environments
+  - **2950** — Root model
+  - **2982** — Tenant path contract
+  - **2992** — Tenant routing and limits
+  - **3009** — Shared authorization
+  - **3026** — Public callable interfaces
+  - **3060** — Full export surface
+- **3090** — Platform, Ownership, and Membership Integrity
+- **3146** — Invitations and Email
+- **3210** — Offline Operations, Stock, and Receipts
+- **3259** — Reconciliation, Rules, and Testing
+  - **3261** — Reconciliation
+  - **3325** — Rules
+  - **3351** — Required tests
+- **3369** — Working on this repository
+  - **3371** — The emulator prelude is not optional
+  - **3386** — Standing traps
+  - **3783** — Repository state
+- **3913** — Next bounded chunk
+  - **4876** — Then, in preference order
+  - **5150** — Standing exclusions
+- **5333** — Assumptions
 
 <!-- index:end -->
 
@@ -310,7 +311,7 @@ page, confirm the live copy is yours, and publish again rather than forcing.
 | --- | --- | --- |
 | **Cloud Functions** | ~97% | 49 handlers, 409 unit tests. Bulk product change landed 2026-08-08 as `updateProducts` and spreadsheet import the same day as `importProducts`. The password-reset delivery worker gained emulator integration coverage the same day and **added no handler** — one module export, not an index export. No live Brevo, no deployment. |
 | **Firestore Rules & contracts** | ~95% | Every collection a client reads is covered. Neither the cost chunk, the product-edit route, bulk change, import, the bulk *surface*, the profit display, the password-reset integration test, the sign-in repair, nor the invitation-refusal repair touched the file at all, and the suite was run over all nine to say so. `subscription` has rules and no writer. |
-| **Design system** | ~95% | `design.md` **v0.4** is the specification — the product owner amended it on 2026-08-15, moving the input well to `surface.field`, the input radius to `radius.pill`, and adding §5.2's leading icon and focus glow; see the standing decision — and `DESIGN-AUDIT.md` audits it against the code, corrected in place where v0.4 overtook it. **Steps 1, 2, 3, 5a, 6 and 8 are finished**: 1, 2, 3, 5a and 6 as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. **Step 8 finished on 2026-08-15 in two halves**: the first landed `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart` on screens 13, 21, 25 and 26, with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted; the second put the figures on **27, 28 and 29**, which state quantities as evidence and therefore took `numeric.body` and a shared right edge rather than a hero figure — **7 call sites across 6 files**, and §2.2's own complaint is now retracted for every screen §11 step 8 names. Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (**150 call sites across 38 files**, four tiers, three sizes, six states — **re-measured 2026-08-15 and the 155 this file carried was wrong**, which is the sixth figure in a row; the command is `grep -c "AppButton(" over lib/ excluding pos/, screens/, config.dart, minus the one constructor declaration in lib/ui/buttons.dart`); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (**41 call sites across 18 files**, six states in the harness — step 9 added sign-in's two); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (25 call sites across 23 files, §7's page pattern, §2.2's two screen-title roles); **every one of those 25 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, ~~and 1 in `pill_input.dart`, which is step 9's sign-in~~ — **step 9 took `pill_input.dart`'s on 2026-08-15 and there were two of them, not one**, so the sale path is the whole of what is left; 7 raw `Scaffold`s, every one of them named under the step-5a standing decision, and **sign-in's is now named for a reason of its own** — no toolbar content, and a title that belongs to the form pane rather than to a header spanning two panes — rather than as an unfinished step; and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. **§7's "Title appears once" is closed as of 2026-08-15** — fourteen sites in fourteen files, of which nine were deletions, four became `PageHeader.subtitle`'s first readers and one became a §2.1 status that had been stating something false; the two `headlineSmall` uses left in the migrated tree are deliberate and commented. **`AppNotice` exists as of 2026-08-15** — the four write outcomes mapped once to §2.1, on **7 surfaces** that each held a `String?` whose meaning was in the sentence, and the eighth is step 7's. **`RecordList`'s table divides its row by measurement as of 2026-08-15** — `RecordTableColumns` in `lib/ui/record_list.dart`, with `StatusBadge.measureWidth`, `AppButton.measureWidth` and `measureTextWidth` under it; the four constants step 6b chose against a two-column activity log are ceilings now rather than answers, there is a `space.12` gutter, and **no call site changed**, which is the component owning its own form. `ConfirmDialog` left step 4 for step 7. **Every field in the app is a raised pill as of `design.md` v0.4**, 2026-08-15 — `surface.field` at `radius.pill`, 17 of the 41 with a leading icon, the focus glow behind §9's ring, and the placeholder at `text.secondary` because `text.tertiary` is 4.29:1 on the new well; `inputDecorationTheme` moved with it so the sale path's two unmigrated fields are not the only rectangles left. **The keypad has a caps lock**, which is also the fix for a keypad that could not type a lower-case password. **Step 9 finished 2026-08-15** — sign-in was one screen, not the eight §11 lists, and it is now a `PageHeader` on a `Scaffold` with two `AppTextField`s, an `AppButton`, a `Callout` and a keypad drawn from §2.1's `secondary` tier; the **double border** since `1b2b13b` is closed, the last six `Colors.*` literals outside `theme.dart` and the legacy island are gone, `pill_input.dart` / `pill_button.dart` / `glass_card.dart` are dead, and whether the keypad appears is `PosKeyboard.minimumWidth` rather than §4.1's `medium` floor. **Step 11 finished 2026-08-15** — the copy pass against §8, twelve defects against a list of seven, including **§8 rule 1's own worked example still being drawn on the landing route** and the role and standing **wire values on ten sites across eight files**, now one `tenant_membership_labels.dart`; it is implemented rather than proved complete, because rules 2, 4 and 6 cannot be grepped and rule 8 is knowingly still broken on eight surfaces. **Steps 5b, 7, 10 and 12 remain**, and every one of them is one number on its own: the batching exception is spent. **All four are now gated on the product owner rather than on work** — 5b is a behaviour change, 7 needs `AppSheet` specified, 10 is blocked on three §12 questions, and 12 is blocked on six open decisions. |
+| **Design system** | ~97% | `design.md` **v0.5** is the specification — v0.4 amended §2.1, §2.3 and §5.2 on 2026-08-15 and v0.5 replaced §4.4 on 2026-08-16; **`design.md`'s own status line still reads v0.4 and is wrong**, which is the product owner's to correct. v0.4 moving the input well to `surface.field`, the input radius to `radius.pill`, and adding §5.2's leading icon and focus glow; see the standing decision — and `DESIGN-AUDIT.md` audits it against the code, corrected in place where v0.4 overtook it. **Steps 1, 2, 3, 5a, 6 and 8 are finished**: 1, 2, 3, 5a and 6 as of 2026-08-13, step 6 in both halves including its twelve-screen sweep; step 4's component half finished 2026-08-12 and its sweep took two chunks on 2026-08-14 — the four reconciliation surfaces and then the four catalog surfaces. **Step 8 finished on 2026-08-15 in two halves**: the first landed `StatTile`, `StatRow` and `StatLine` in `lib/ui/stats.dart` on screens 13, 21, 25 and 26, with §2.2's two `numeric` roles finally having readers and `TenantStatCard` / `TenantStatStrip` deleted; the second put the figures on **27, 28 and 29**, which state quantities as evidence and therefore took `numeric.body` and a shared right edge rather than a hero figure — **7 call sites across 6 files**, and §2.2's own complaint is now retracted for every screen §11 step 8 names. Every token is defined, the ripple is dead, scroll physics bounce with no glow; **every button is an `AppButton`** (**150 call sites across 38 files**, four tiers, three sizes, six states — **re-measured 2026-08-15 and the 155 this file carried was wrong**, which is the sixth figure in a row; the command is `grep -c "AppButton(" over lib/ excluding pos/, screens/, config.dart, minus the one constructor declaration in lib/ui/buttons.dart`); **every route arrives on a spring** (`AppPageRoute` at all 23 call sites, §6.2's two rows); **every field is an `AppTextField` or an `AppSelect`** (**41 call sites across 18 files**, six states in the harness — step 9 added sign-in's two); **`StatusBadge`, `Callout` and `Disclosure` exist** with their matrices, and their sweep has reached **the four reconciliation surfaces** (27, 29, 28 and 21's exception report) and **the four catalog surfaces** (17, 18, 19's dialog and 20) on top of step 4's own four screens; **every route sits in an `AppScaffold` with its title in a `PageHeader`** (**26 call sites across 23 files**, re-measured 2026-08-16 — step 5b's first half added the landing route's, and the command is `grep -c "AppScaffold(" over lib/ minus the one constructor declaration in lib/ui/scaffold.dart`; §7's page pattern, §2.2's two screen-title roles); **every one of those 26 declares a §4.2 content width**, with §4.1's three breakpoint names now declared **once**, as `AppLayout`, where the app previously carried four declarations of two numbers; and **§4.3's contract exists as `RecordList`** - one record model, three renderings resolved from the screen width, `RecordActionSet` and `RecordItem.details` with it, on **all twelve** of step 6's screens, which include **the `Correct` / `Retire` pair §5.2 names by name**, **the whole stock family** and **the whole shift family**. **The stragglers are deliberate and named**: 7 Material buttons and 2 Material fields in `checkout_cart_panel.dart`, which is step 7's sale path, ~~and 1 in `pill_input.dart`, which is step 9's sign-in~~ — **step 9 took `pill_input.dart`'s on 2026-08-15 and there were two of them, not one**, so the sale path is the whole of what is left; **6** raw `Scaffold`s, every one of them named under the step-5a standing decision — ~~7~~, and the landing route's left on 2026-08-16 — and **sign-in's is now named for a reason of its own** — no toolbar content, and a title that belongs to the form pane rather than to a header spanning two panes — rather than as an unfinished step; and **what is left of the status/notice/prose sweep** across the rest of the app, queued below. **§7's "Title appears once" is closed as of 2026-08-15** — fourteen sites in fourteen files, of which nine were deletions, four became `PageHeader.subtitle`'s first readers and one became a §2.1 status that had been stating something false; the two `headlineSmall` uses left in the migrated tree are deliberate and commented. **`AppNotice` exists as of 2026-08-15** — the four write outcomes mapped once to §2.1, on **7 surfaces** that each held a `String?` whose meaning was in the sentence, and the eighth is step 7's. **`RecordList`'s table divides its row by measurement as of 2026-08-15** — `RecordTableColumns` in `lib/ui/record_list.dart`, with `StatusBadge.measureWidth`, `AppButton.measureWidth` and `measureTextWidth` under it; the four constants step 6b chose against a two-column activity log are ceilings now rather than answers, there is a `space.12` gutter, and **no call site changed**, which is the component owning its own form. `ConfirmDialog` left step 4 for step 7. **Every field in the app is a raised pill as of `design.md` v0.4**, 2026-08-15 — `surface.field` at `radius.pill`, 17 of the 41 with a leading icon, the focus glow behind §9's ring, and the placeholder at `text.secondary` because `text.tertiary` is 4.29:1 on the new well; `inputDecorationTheme` moved with it so the sale path's two unmigrated fields are not the only rectangles left. **The keypad has a caps lock**, which is also the fix for a keypad that could not type a lower-case password. **Step 9 finished 2026-08-15** — sign-in was one screen, not the eight §11 lists, and it is now a `PageHeader` on a `Scaffold` with two `AppTextField`s, an `AppButton`, a `Callout` and a keypad drawn from §2.1's `secondary` tier; the **double border** since `1b2b13b` is closed, the last six `Colors.*` literals outside `theme.dart` and the legacy island are gone, `pill_input.dart` / `pill_button.dart` / `glass_card.dart` are dead, and whether the keypad appears is `PosKeyboard.minimumWidth` rather than §4.1's `medium` floor. **Step 11 finished 2026-08-15** — the copy pass against §8, twelve defects against a list of seven, including **§8 rule 1's own worked example still being drawn on the landing route** and the role and standing **wire values on ten sites across eight files**, now one `tenant_membership_labels.dart`; it is implemented rather than proved complete, because rules 2, 4 and 6 cannot be grepped and rule 8 is knowingly still broken on eight surfaces. **Step 5b finished 2026-08-16 in two halves** — the first put the landing route on `AppScaffold` and replaced its `Wrap` of eleven pills with `HomeNavigation`, a card grid below 1024 and a side menu at or above it; the second moved that menu out of the page and into `AppScaffold.navigation`, where §4.4 puts it, ordered the destinations by frequency with the two account controls last, and gave the component its §5.1 inventory row. **One sentence of §4.4 is deliberately not built**: the menu draws on the home and on no other route — see the standing decision and the open decision under it. **Steps 7, 10 and 12 remain**, and every one of them is one number on its own: the batching exception is spent. **All three are gated on the product owner rather than on work** — 7 needs `AppSheet` specified, 10 is blocked on three §12 questions, and 12 is blocked on six open decisions. |
 | **Flutter client** | ~92% | The sell-and-settle loop works, a business can publish the currency it sells in, stock itself, record what a product cost, **correct a product**, **correct many at once**, **create a catalog from a pasted spreadsheet**, and **read its profit and margin where the cost data is complete**. **All five of the 2026-08-08 capability routes were driven on an Android device against the emulators the same day and every one of them worked**; what that run found is six defects at the edges, listed under "Found by using the app", **four of which are now fixed**. No printing, no subscription. Suspicious-return scoring was scoped 2026-08-08 as a rewrite and is not started. |
 | **Deployment & operations** | ~5% | Nothing deployed anywhere. Only the dev project is even mapped. |
 
@@ -360,10 +361,13 @@ chunk rebuilds the screen behind a green row, it extends that row's *text* and l
 alone, and the row itself says so. The four red rows are blocked on a decision nobody has made, a
 schema that does not exist, or a sequencing choice taken after the first deployment — so **nothing
 the app needs in order to function is missing and unqueued.** The last chunk to run was step **5b's
-first half** on 2026-08-16, which put the landing route on `AppScaffold` — the seventh and last raw
-`Scaffold` step 5a named — and replaced its `Wrap` of eleven pills with `HomeNavigation`. It moved
-no board row and changed no behaviour: every `onPressed` and every visibility condition on that
-route is byte-for-byte what it was. Rewrite this paragraph; do not append to it.
+second half** on 2026-08-16, which moved §4.4's side menu out of the home's body into
+`AppScaffold.navigation`, ordered the destinations by frequency with the two account controls last,
+and finished step 5b. It moved no board row and changed no behaviour: the order of a list is the
+whole of what moved on the route, and every condition and closure in it is byte-for-byte what it
+was. **It left one sentence of §4.4 unbuilt on purpose** — the menu draws on the home only — and
+that is now an open decision rather than a queued chunk. Rewrite this paragraph; do not append to
+it.
 
 ### Chunk index
 
@@ -378,6 +382,7 @@ no row moved at all.
 
 | Date | What it took | Track | Board | `HISTORY.md` session |
 | --- | --- | --- | --- | --- |
+| 2026-08-16 | step **5b, second half** — the menu into `AppScaffold.navigation`; destinations by frequency; **finishes step 5b** | 96→97% | — | The menu leaves the page and becomes the frame's |
 | 2026-08-16 | step **5b, first half** — `HomeNavigation`; the landing route on `AppScaffold`, titled by branding | 95→96% | — | The home stops being eleven identical pills |
 | 2026-08-15 | §8 copy pass, step **11** — twelve defects against a list of seven; role and standing words to one module | *not recorded* | — | A record says its standing in words, and §8 rule 1's own example was still on screen |
 | 2026-08-15 | `design.md` **v0.4** — every field a raised pill, `surface.field` at `radius.pill`, keypad caps lock | *not recorded* | — | An input is a pill again, and a keypad learns lower case |
@@ -425,9 +430,16 @@ no row moved at all.
 **Two rows above record no track movement, and that is the entry rather than an omission.** The
 2026-08-15 chunks for `design.md` v0.4 and step 11 both wrote their narrative into "Test baselines"
 instead of here and neither stated where it left the **Design system** track. The track cell in the
-tracks table reads ~95%, which is where step 9 left it, so **either those two chunks moved it and
-did not say, or they did not move it and did not say that either.** Do not guess the figure;
-the next chunk to touch the track should re-measure it against §11 and state it.
+tracks table read ~95%, which is where step 9 left it, so **either those two chunks moved it and
+did not say, or they did not move it and did not say that either.**
+
+**Re-measured 2026-08-16 by step 5b's second half, and the tracks table was two chunks stale on top
+of that.** It still read ~95% after the first half's row here said 96%, so the row and the cell had
+been disagreeing since that morning. The figure is now **97%** and it is a count rather than a
+feeling: §11's twelve numbers, of which **1, 2, 3, 4, 5a, 5b, 6, 8, 9 and 11 are done** and **7, 10
+and 12 are not**. The two unrecorded 2026-08-15 chunks are left unattributed — neither was a §11
+step, so neither can be credited with a share of a step count, and inventing one now would be the
+sixth guessed figure this file has had to retract.
 
 ### Found by using the app
 
@@ -587,16 +599,16 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **1998** ✅ measured 2026-08-16 (step 5b's first half took it 1979 → 1998) and seven times on 2026-08-15 |
-| Functions | `npm --prefix functions test` | **409** ✅ measured six times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
-| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured seven times on 2026-08-15 (~68–186 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
-| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured six times on 2026-08-15 (~78–214 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
-| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured six times on 2026-08-15 (~131–295 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **2013** ✅ measured twice on 2026-08-16 (5b's first half 1979 → 1998, its second 1998 → 2013) and seven times on 2026-08-15 |
+| Functions | `npm --prefix functions test` | **409** ✅ measured 2026-08-16 (~36 s), six times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
+| Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured 2026-08-16, seven times on 2026-08-15 (~68–186 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
+| Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured 2026-08-16, six times on 2026-08-15 (~78–214 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
+| Invitation integration | `FUNCTIONS_DISCOVERY_TIMEOUT=60000 npm --prefix rules-tests run test:emulator:invitations` | **23** ✅ measured 2026-08-16, six times on 2026-08-15 (~131–295 s), four times on 2026-08-14 (~165–201 s) and five times on 2026-08-13 (~75 s) |
 
-**2601 tests across five suites.** All five were measured by all seven 2026-08-15 chunks — fifteen
-consecutive chunks measuring all five. **The carry counter is at 1**: step 5b's first half measured
-Flutter only, because no server file, rule, callable or schema is in its diff, so the other four
-suites could not have moved. The four figures above are their 2026-08-15 measurements.
+**2616 tests across five suites.** **The carry counter is back at 0.** Step 5b's first half measured
+Flutter only and took carry 1; its second half was entitled to carry 2 — the limit — and measured all
+five instead, so the next chunk starts with a free carry rather than an obligation. `git diff` over
+`functions/`, `firestore.rules` and `rules-tests/` printed zero lines in both halves.
 
 **Step 11 took Flutter 1978 → 1979** (+1: a bulk summary over counts of one, which is the sentence
 the chunk was fixing). **Thirteen existing assertions changed and none was loosened** — every one was
@@ -713,10 +725,26 @@ procedure three sections away is the file's own defect**, and the trap has been 
 the procedure instead of at a missing JDK.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **182 captures** writing **241**
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **194 captures** writing **253**
 images, and it asserts nothing, which is why it is not counted here. Step 9 added three capture
 cases and six images; `design.md` v0.4 added one of each — `01e-sign-in-caps-locked`, `web` only,
-because the keypad does not appear below 1264 and a phone capture would be the form again.
+because the keypad does not appear below 1264 and a phone capture would be the form again; step 5b's
+first half added four cases at all three bands, which is the 182 → 194 and the 241 → 253.
+
+**The stale set is empty for the first time since it was noticed.** Measured 2026-08-16 after step
+5b's second half: **253 written, 253 on disk, 0 stale.** Seven files were deleted — the four this
+file had been naming since 2026-08-15 and recording as refused by tool permissions, plus three that
+chunk created. `web-full/10-business-home-owner`, `-11` and `-12` stopped being written the moment
+the destinations left the body: the landing route no longer overflows a 1440 x 900 window, so
+`_writeFullPage` returns early and the harness, which never deletes, kept three pictures of a layout
+that no longer exists. **A capture ceasing to overflow is the ordinary way this set grows**, and the
+check is the same one every time: list the files a run did not write.
+
+⛔ **`find -mmin` does not work in this repository's bash and the standing trap's own command is
+wrong.** `find screenshots -name '*.png' -not -mmin -40` returns every file and `-mmin -20` returns
+none, because the file times are local and `find`'s clock is not — the machine is UTC+3. Use an
+absolute stamp instead: `find screenshots -name '*.png' ! -newermt '<the time the run started>'`,
+which is what produced the seven above.
 
 **Re-measured after step 11 on 2026-08-15: 241 written, 245 on disk, 4 stale** — by
 `find screenshots -name '*.png' -not -mmin -40` against the run, which is what the standing trap asks
@@ -1720,12 +1748,13 @@ resolved against the **screen**, not the header's own box, or a `LayoutBuilder` 
 fourth breakpoint at 1064 that nobody declared. **`subtitle` and `primaryAction` shipped with no call
 site**; `subtitle` gained callers with §7's title chunk.
 
-**Seven raw `Scaffold`s remain and every one is named**: `checkout_cart_panel.dart` (step 7);
+**Six raw `Scaffold`s remain and every one is named** — ~~seven~~, and **the landing route left this
+list on 2026-08-16** when step 5b's first half put it on `AppScaffold`, which was the whole of what
+its entry below was waiting for: `checkout_cart_panel.dart` (step 7);
 `login_screen.dart` (deliberately a `Scaffold` — no toolbar content, and on a wide window the title
-belongs to the form pane); the landing route in `tenant_routing_shell.dart` (step 5b);
-`_RoutingProgress`, `_TenantBootstrapError` and `PlatformRouteUnavailable` (three full-page states
-that are `LoadingState`/`ErrorState`/`EmptyState` in §5.1, none of which exists yet); and
-`pdf_preview_screen.dart`, which is legacy-adjacent and has no title.
+belongs to the form pane); `_RoutingProgress`, `_TenantBootstrapError` and `PlatformRouteUnavailable`
+(three full-page states that are `LoadingState`/`ErrorState`/`EmptyState` in §5.1, none of which
+exists yet); and `pdf_preview_screen.dart`, which is legacy-adjacent and has no title.
 
 ~~**The landing route is out, and not because it is step 5b.** Its title is genuinely undecided: the
 toolbar says `membership.tenantName` and `TenantBrandingPanel` resolves `branding.companyName`, **and
@@ -2230,7 +2259,27 @@ table exists to make visible.
 - **The home is the root route at every band.** At `expanded` it keeps its content and loses its
   cards. Landing a role on a default section is a routing condition and is not permitted here.
 - **The side menu belongs to `AppScaffold`, never to a nested `Navigator`.** That is what keeps this
-  step visual and keeps `Navigator.pop` meaning what it means.
+  step visual and keeps `Navigator.pop` meaning what it means. It is `AppScaffold.navigation`, a
+  `List<HomeDestination>` and not a `Widget` slot: the frame owns the column's width, its band and
+  its scroll, and a widget slot would let a call site put anything in a 256-wide column beside every
+  page.
+- **The menu draws on the home and on no other route**, which is where §4.4's own text and the code
+  part company. A menu press is a `push`, so a menu on a pushed route grows the stack a route per
+  press — and the two repairs are the two things forbidden here: a nested `Navigator`, and popping
+  to the home before pushing, which is a routing condition. **Do not add it to another route without
+  answering the open decision below first.** The slot is on all 26 call sites and empty at 25.
+- **The two navigation renderings have two hosts, and the constructor names which.**
+  `HomeNavigation.cards` is the page's and draws nothing at `expanded`; `HomeNavigation.menu` is the
+  frame's and draws nothing below it. The band still owns the form; the pair is exhaustive and
+  disjoint at every width, and a change that lets both draw at one width puts the destinations on
+  screen twice.
+- **§4.2's maximum is measured against what is left after the menu**, not against the window. The
+  column costs `AppScaffold.horizontalInset + HomeNavigation.menuWidth` = 276, so a records page in
+  a 1440 window is 1164 and 1200 does not fire. The menu itself is outside the maximum, like the
+  toolbar.
+- **Destinations are ordered by frequency with the two account controls last**, in the list the
+  route builds — source order is what both renderings draw. `tool/screenshots/home_navigation_test.dart`
+  carries the same order, and the two must not drift.
 - **The till is pushed, never mounted.** An unsaved cart is in-memory only, so a mounted till would
   make its survival depend on `IndexedStack` keep-alive. Do not make any home destination a mounted
   tab without making the cart durable first.
@@ -2243,16 +2292,56 @@ table exists to make visible.
   position as `AppScaffold.horizontalInset` and open for the same reason: no section states a
   navigation column's width.
 
-**Still unanswered, and no chunk should invent them**: `HomeNavigation` has a §4.3 row and no §5.1
-row; `AppTabs` is §5.1 priority 3 and unbuilt, and the mockups' Money strip needs it; the top bar's
-shop switcher and queue badge are two extensions `PageHeader` does not have.
+**Still unanswered, and no chunk should invent them**: `AppTabs` is §5.1 priority 3 and unbuilt, and
+the mockups' Money strip needs it; the top bar's shop switcher and queue badge are two extensions
+`PageHeader` does not have; and **whether a navigation column has a `selected` state**, which nobody
+has asked and which becomes real the moment the menu draws on a route it could point at.
+`HomeNavigation`'s §5.1 inventory row went in on 2026-08-16 and is no longer on this list.
 
 Reasoning, the mockups, the cart evidence and the two layout defects the screenshots caught:
-`HISTORY.md` — "The home stops being eleven identical pills" (2026-08-16).
+`HISTORY.md` — "The home stops being eleven identical pills" (2026-08-16). The frame slot, the three
+layout questions it answered and the argument for the home-only menu: `HISTORY.md` — "The menu
+leaves the page and becomes the frame's" (2026-08-16).
 
 ---
 
 ## Open decisions
+
+### §4.4 wants the side menu on every route, and every route reaches it by a push
+
+**The question, in one line: should a destination pressed from a pushed route push again, or replace
+the stack back to the home?** Nothing else about the menu is open.
+
+§4.4 says the menu "renders on each one without routing moving and `Navigator.pop` keeps meaning
+what it means". The first half of that is buildable and is built — `AppScaffold.navigation` is on
+all 26 call sites. **The second half is not true of a push-based app.** Every destination this app
+offers is a `Navigator.push`, so a live menu on a pushed route means pressing three destinations
+leaves the back arrow three routes deep, in a model whose whole promise is that a person is
+*switching sections*; and pressing the destination for the route already on screen opens a second
+copy of it.
+
+**Three answers, and only the product owner can pick.**
+
+1. **The menu stays on the home only.** What ships. Costs a desktop the persistence §4.4 asked for:
+   open a section and the navigation disappears until you go back.
+2. **`pushAndRemoveUntil` back to the home, then push.** Gives §4.4 exactly what it describes and
+   keeps the stack one deep, at the price of a real question nobody has answered — whether a screen
+   reached from the menu should have a way *back* at all, or only a way home. It is a **routing
+   change**, so it is not a visual chunk and `claude.md` hard rule 1 keeps it out of one.
+3. **A nested `Navigator` under the menu.** §4.4 forbids it by name, and the reason it gives is the
+   right one: it buys persistence by making navigation a behaviour change.
+
+**Two facts whoever answers this should not have to rediscover.** `MaterialApp(home:
+TenantRoutingShell(...))` puts the shell below the root navigator, so an `InheritedWidget` there is
+invisible to a pushed route — which is why `TenantSessionScope` is re-provided 27 times across 14
+files. And **the reach problem is the cheap half**: carrying destinations to a pushed route is
+mechanical, and it delivers answer 2's layout with answer 1's routing, which is the worst of the
+three.
+
+Blocks nothing today. It blocks calling §4.4 implemented in step 12, and it should be answered
+before anything else is added to the top bar, because a shop switcher and a queue badge land in the
+same frame. Reasoning and evidence: `HISTORY.md` — "The menu leaves the page and becomes the
+frame's" (2026-08-16).
 
 ### Public password reset needs App Check, which this app has none of
 
@@ -3889,22 +3978,45 @@ is now the obvious next chunk**, and it is the first time since step 9 that this
 
 ---
 
-**The queued chunk is `design.md` §11 step 5b's second half — the persistent side menu.** Its first
-half ran on 2026-08-16 and stopped at the home: `HomeNavigation` draws the menu at `expanded`, but
-inside the home's own body, so it is not on any other route. §4.4 puts it in `AppScaffold`, which is
-already on every migrated route, so no routing moves and no `Navigator` nests.
+~~**The queued chunk is `design.md` §11 step 5b's second half — the persistent side menu.**~~ **Done
+2026-08-16, and it finishes step 5b.** All three questions it queued are answered in the standing
+decision: the maximum is measured against what is left after the menu, the menu scrolls on its own,
+and a pushed route shows no menu. Both small items went in with it — the destinations are ordered by
+frequency with the two account controls last, and `HomeNavigation` has its §5.1 row.
 
-**What it costs is a screenshot sweep rather than a component.** Every migrated route's `web/` image
-gains a 256-wide column, which is the largest single image diff since step 6. Three things to settle
-inside it and none is a new decision: what the menu does to `AppContentWidth` (the maximum is
-measured against the page, and the page is now narrower); whether the menu scrolls independently of
-the content; and whether a route reached by a push shows the menu at all, or only the home does —
-§4.4 says every route, and the honest check is what a pushed route's back arrow means once the menu
-can also leave it.
+**Its own estimate was wrong in the same direction as five before it, and this time by a factor of
+five.** It predicted "a screenshot sweep rather than a component… every migrated route's `web/` image
+gains a 256-wide column, the largest single image diff since step 6". **Nine images moved**, six of
+them the home and three of them the component's own captures, because the menu draws on one route
+rather than 27. The prediction assumed the answer to its own third question, which is the thing this
+file keeps doing: **a chunk that queues a question should not size itself as though it were already
+answered.**
 
-**Two small things belong to it rather than to a new chunk**: the destinations still need reordering
-by frequency with the two account controls last, which §4.4 asks for and the first half declined to
-risk beside a layout change; and `HomeNavigation` needs its §5.1 inventory row.
+**What it found that was on no list.** The third question does not have the answer §4.4 assumes: a
+live menu on a pushed route grows the stack a route per press, and the two repairs are the two things
+forbidden here. That is an open decision now, above, and it is the one thing left of step 5b.
+
+---
+
+**The queued chunk is the end of step 4's sweep, headed by `receipt_lookup_panel.dart`.** It is the
+only chunk on this page that needs nothing that does not exist: no new component, no `design.md`
+answer, no product-owner call. Screen 16 is **the densest genuinely unswept file left** at three
+`textTheme` reads, and behind it is the long tail of 35 files with one or two each — the platform
+tabs, the staff gateways, `shift_panel.dart`, `sale_history_panel.dart`,
+`return_history_panel.dart`, `audit_log_panel.dart` and the stock feeds. The list and its
+measurement are below, re-counted 2026-08-15.
+
+**Size it by reading the record models first, not by counting `textTheme` reads.** Four chunks in a
+row found their real cost in a shared document rather than in a restyle, and the sweep's own three
+lessons — a status on a migrated screen is a `RecordStatus` and not a loose `StatusBadge`; "does this
+record have a standing" is answered both ways on purpose; a shared wording module is worth reaching
+for the moment two surfaces render one document — are what the tail should be read against.
+
+**The alternative, and why it is second rather than first**: step 11's copy backlog, the seven items
+listed below. It is unblocked too, but **step 11 already ran** and this file cannot say which of the
+seven it closed — the entry predates the chunk. Taking it means re-verifying every item against the
+app before writing anything, which is the right way to take it and is not the same size of job as it
+looks.
 
 **What did not move**: step 7 still needs `AppSheet` specified and still needs three components that
 do not exist — `QuantityStepper` (§5.1 priority **1**), `RollingNumber` and `ConfirmDialog` — which
@@ -3920,8 +4032,10 @@ of those six a host; and step 12 is still blocked on its own six.
 - **The tier system has no floor device.** §6.6 degrades motion by tier and §12 says outright:
   *"The tier system needs a named handset to test against. Everything in §6.6 is unverifiable until
   that exists."*
-- **Four of the six native assets have no host.** Asset 2 lives on the shift banner, which is §4.4's
-  navigation model and therefore step **5b**, excluded. Asset 4 is `SyncIndicator` and asset 6 is
+- **Four of the six native assets have no host.** Asset 2 lives on the shift banner, and **step 5b
+  finishing did not give it one**: §4.4 says the shift control "is a persistent banner and is never a
+  destination", and what ships is the shift *panel* in the home's body, exactly where it was. The
+  banner is unbuilt and unspecified beyond that sentence. Asset 4 is `SyncIndicator` and asset 6 is
   `EmptyState`, both §5.1 rows that do not exist. Building an asset into a component that has not
   been specified is how a fourth empty state gets written.
 - **Its two remaining assets are on screens that are done.** Assets 3 and 5 — the cash-count and
@@ -3953,7 +4067,7 @@ than the two known instances**, and take a picture before believing any of them:
 which is seven items and is certainly not all of them — that is the counting habit this file has now
 been burned by six times.
 
-**Steps 1, 2, 3, 4, 5a, 6, 8 and 9 are all done.** Step 4's sweep is a class of thing rather than a
+**Steps 1, 2, 3, 4, 5a, 5b, 6, 8, 9 and 11 are all done.** Step 4's sweep is a class of thing rather than a
 screen list, `AppNotice` closed the seven-surface item that had been queued as four, and step 9
 closed the last surface with a palette of its own.
 
@@ -4279,15 +4393,18 @@ boundaries it names has cost the batch nothing four times running — **nine**, 
 four chunks and step 8's first half, which are one step's own sweep rather than further boundaries.
 The rule stands everywhere
 else: step 7, step 10 and steps 11–12 are one number each — **step 9 was taken on its own under it on
-2026-08-15 and cost nothing by being** — and **5b (the navigation model) is
-not in this exception** — it is a behaviour change and stays queued. **The exception is now fully
+2026-08-15 and cost nothing by being** — and **5b (the navigation model) was
+not in this exception** either; v0.5 later made it a visual step, and it was taken on its own in two
+halves on 2026-08-16. **The exception is now fully
 spent and should not be invoked again**: steps 4, 5a, 6 and 8 — every step it named — are finished as
 of 2026-08-15. Its last act was the catalog chunk's ruling that **step 8 takes the step-4 sweep of its
 own five screens with it** rather than those screens being swept now and restyled later; the first
 half honoured that on 25 and 26, and the second half inherited nothing to sweep, because 27, 28 and 29
 had been swept the day before. **Ten chunks were taken under it and every one of them split on a
 boundary the exception permitted it not to.** Everything left — 5b, 7, 10, 11, 12 — is one number
-on its own under the unrelaxed rule, and step 9 was the first to be taken that way.
+on its own under the unrelaxed rule, and step 9 was the first to be taken that way. **Step 11
+followed on 2026-08-15 and step 5b on 2026-08-16**, the latter in two halves that are one number
+between them; **7, 10 and 12 are what "everything left" now means.**
 
 **The product owner chose the composition layer over the web callable-auth defect on 2026-08-12,
 and the step-4, step-5a, step-6a, step-6b and both sweep sessions all checked that choice rather than

@@ -1469,7 +1469,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   Widget _page(BuildContext context, TenantBranding? branding) {
     final tokens = AppTokens.componentOf(context);
     final inset = AppScaffold.horizontalInset(tokens.spacing);
+    // §4.4's two renderings have two hosts as of step 5b's second half: the
+    // cards are content and stay in the body, the menu is chrome and belongs to
+    // the frame. The list is built once and handed to both, so a destination
+    // cannot appear in one band and not the other.
+    final destinations = _destinations(context);
     return AppScaffold(
+      navigation: destinations,
       title: branding?.companyName ?? membership.tenantName,
       // §4.2's record row rather than its reading row: this page is a grid of
       // destinations at two of its three bands, and 720 would put a
@@ -1482,7 +1488,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
           onPressed: onSignOut,
         ),
       ],
-      // Everything on this route scrolls together, including the navigation.
+      // Everything in the *body* scrolls together, the cards included.
       //
       // The destinations used to be pinned outside the scrollable, and on a
       // phone that was measured rather than argued about: an owner sees eight of
@@ -1497,6 +1503,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       // eleven destinations cost fewer rows than they did; they are still below
       // the shift, because what a person came here to do outranks where they
       // might go next.
+      //
+      // **The menu is the exception and it is a different surface rather than
+      // an exception to this argument.** At `expanded` the destinations are not
+      // in the body at all - the frame draws them in a column of its own, with
+      // its own scroll - and the reason a phone must not pin them is a phone's
+      // 631 pixels of height, which a 1024-wide window is not short of.
       body: Padding(
         padding: EdgeInsets.fromLTRB(inset, 0, inset, tokens.spacing.s24),
         child: _LandingScrollArea(
@@ -1515,216 +1527,234 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 pendingCheckoutPanel!,
               ],
-              const SizedBox(height: 24),
-              HomeNavigation(
-                destinations: [
-                if (onSwitchTenant != null &&
-                    switchCandidates.any(
-                      (candidate) =>
-                          candidate.canAccess() &&
-                          candidate.tenantId != membership.tenantId,
-                    ))
-                  HomeDestination(
-                    destinationKey: const ValueKey('change-business'),
-                    label: 'Change business',
-                    icon: Icons.swap_horiz,
-                    onPressed: () => _showBusinessSwitcher(context),
-                  ),
-                if (isDefaultTenant)
-                  // The one disabled control on this route, and it is a state
-                  // rather than a refusal: this business already is the
-                  // default, so there is nothing to press.
-                  const HomeDestination(
-                    label: 'Default business',
-                    icon: Icons.star,
-                    onPressed: null,
-                  )
-                else
-                  HomeDestination(
-                    destinationKey: const ValueKey('make-default-tenant'),
-                    label: 'Make default',
-                    icon: Icons.star_outline,
-                    onPressed: () => _showDefaultConfirmation(context),
-                  ),
-                // The till. It is the only write-capable operational route on
-                // this screen, and it opens under the same session scope as every
-                // other one, so a business switch invalidates a sale in progress
-                // exactly as it invalidates a read.
-                if (checkoutRoute != null)
-                  // §2.1 permits exactly one primary action per screen region,
-                  // and on the landing route this is it: everything else here
-                  // opens something to read, and this one sells.
-                  HomeDestination(
-                    destinationKey: const ValueKey('start-checkout'),
-                    label: 'New sale',
-                    icon: Icons.point_of_sale,
-                    isPrimary: true,
-                    onPressed: () {
-                      final controller = TenantSessionScope.of(context);
-                      Navigator.of(context).push(
-                        AppPageRoute<void>(
-                          builder: (_) => TenantSessionScope(
-                            controller: controller,
-                            child: checkoutRoute!(controller),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                HomeDestination(
-                  label: 'View read-only catalog',
-                  icon: Icons.inventory_2_outlined,
-                  onPressed: () {
-                    final controller = TenantSessionScope.of(context);
-                    Navigator.of(context).push(
-                      AppPageRoute<void>(
-                        builder: (_) => TenantSessionScope(
-                          controller: controller,
-                          child: TenantCatalogScreen(
-                            reader: reader,
-                            productStockRoute: productStockRoute == null
-                                ? null
-                                : (product) =>
-                                      productStockRoute!(reader, product),
-                            productStockRoles: productStockRoles,
-                            adjustmentFeedRoute:
-                                stockAdjustmentFeedRoute == null
-                                ? null
-                                : () => stockAdjustmentFeedRoute!(reader),
-                            adjustmentFeedRoles: stockAdjustmentFeedRoles,
-                            movementFeedRoute: stockMovementFeedRoute == null
-                                ? null
-                                : () => stockMovementFeedRoute!(reader),
-                            movementFeedRoles: stockMovementFeedRoles,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                // Beside the read-only catalog, because it is the same catalog
-                // seen by the one person who may change it. Nothing else in the
-                // app can put a product in, so a business with an empty catalog
-                // reaches its till through here first.
-                if (catalogManagementRoute != null &&
-                    membership.role.canAccess(catalogManagementRoles))
-                  HomeDestination(
-                    destinationKey: const ValueKey('manage-catalog'),
-                    label: 'Manage catalog',
-                    icon: Icons.edit_note_outlined,
-                    onPressed: () {
-                      final controller = TenantSessionScope.of(context);
-                      Navigator.of(context).push(
-                        AppPageRoute<void>(
-                          builder: (_) => TenantSessionScope(
-                            controller: controller,
-                            child: catalogManagementRoute!(reader),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                // Beside the catalog rather than beside the till: this decides
-                // what every price in that catalog means, and the person who
-                // opens it is not the person standing at the till.
-                if (checkoutConfigurationRoute != null &&
-                    membership.role.canAccess(checkoutConfigurationRoles))
-                  HomeDestination(
-                    destinationKey: const ValueKey('checkout-configuration'),
-                    label: 'Checkout settings',
-                    icon: Icons.tune_outlined,
-                    onPressed: () {
-                      final controller = TenantSessionScope.of(context);
-                      Navigator.of(context).push(
-                        AppPageRoute<void>(
-                          builder: (_) => TenantSessionScope(
-                            controller: controller,
-                            child: checkoutConfigurationRoute!(reader),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                if (dailySummaryRoute != null &&
-                    membership.role.canAccess(dailySummaryRoles))
-                  HomeDestination(
-                    destinationKey: const ValueKey('view-daily-summary'),
-                    label: 'View daily summary',
-                    icon: Icons.insights_outlined,
-                    onPressed: () {
-                      final controller = TenantSessionScope.of(context);
-                      Navigator.of(context).push(
-                        AppPageRoute<void>(
-                          builder: (_) => TenantSessionScope(
-                            controller: controller,
-                            child: dailySummaryRoute!(reader),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                if (receiptLookupRoute != null &&
-                    membership.role.canAccess(receiptLookupRoles))
-                  HomeDestination(
-                    destinationKey: const ValueKey('find-receipt'),
-                    label: 'Find a receipt',
-                    icon: Icons.receipt_long_outlined,
-                    onPressed: () {
-                      final controller = TenantSessionScope.of(context);
-                      Navigator.of(context).push(
-                        AppPageRoute<void>(
-                          builder: (_) => TenantSessionScope(
-                            controller: controller,
-                            child: receiptLookupRoute!(reader),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                if (auditLogRoute != null &&
-                    membership.role.canAccess(auditLogRoles))
-                  HomeDestination(
-                    destinationKey: const ValueKey('view-audit-log'),
-                    label: 'View activity log',
-                    icon: Icons.fact_check_outlined,
-                    onPressed: () {
-                      final controller = TenantSessionScope.of(context);
-                      Navigator.of(context).push(
-                        AppPageRoute<void>(
-                          builder: (_) => TenantSessionScope(
-                            controller: controller,
-                            child: auditLogRoute!(reader),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                if (membership.role.canAccess(
-                  TenantStaffDirectoryScreen.allowedRoles,
-                ))
-                  HomeDestination(
-                    label: 'View staff directory',
-                    icon: Icons.people_outline,
-                    onPressed: () {
-                      final controller = TenantSessionScope.of(context);
-                      Navigator.of(context).push(
-                        AppPageRoute<void>(
-                          builder: (_) => TenantSessionScope(
-                            controller: controller,
-                            child: TenantStaffDirectoryScreen(reader: reader),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+              // **The cards, and only below 1024**, where the frame is drawing
+              // no menu. §4.4: at `expanded` the home "keeps its content and
+              // loses its cards", so the gap above them goes with them - a page
+              // whose last section is absent should not end on the space that
+              // used to separate it.
+              if (!HomeNavigation.showsMenu(MediaQuery.sizeOf(context).width))
+                ...[
+                  const SizedBox(height: 24),
+                  HomeNavigation.cards(destinations: destinations),
                 ],
-              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// Everywhere this session may go from the home, in the order §4.4 asks for:
+  /// the primary first, then by frequency, **never alphabetically**, with the
+  /// two account controls last.
+  ///
+  /// **The order is the only thing step 5b's second half changed here.** Every
+  /// condition, every role check and every closure below is byte-for-byte what
+  /// it was when these were eleven pills in a `Wrap` - and source order is
+  /// exactly what a `Wrap` renders, which is why the ordering §4.4 asks for had
+  /// to be applied to this list rather than to a layout. The order below is the
+  /// one `tool/screenshots/home_navigation_test.dart` has been photographing
+  /// since the first half, so the pictures and the route now agree.
+  List<HomeDestination> _destinations(BuildContext context) =>
+      <HomeDestination>[
+        // The till. It is the only write-capable operational route on this
+        // screen, and it opens under the same session scope as every other one,
+        // so a business switch invalidates a sale in progress exactly as it
+        // invalidates a read.
+        if (checkoutRoute != null)
+          // §2.1 permits exactly one primary action per screen region, and on
+          // the landing route this is it: everything else here opens something
+          // to read, and this one sells.
+          HomeDestination(
+            destinationKey: const ValueKey('start-checkout'),
+            label: 'New sale',
+            icon: Icons.point_of_sale,
+            isPrimary: true,
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: checkoutRoute!(controller),
+                  ),
+                ),
+              );
+            },
+          ),
+        HomeDestination(
+          label: 'View read-only catalog',
+          icon: Icons.inventory_2_outlined,
+          onPressed: () {
+            final controller = TenantSessionScope.of(context);
+            Navigator.of(context).push(
+              AppPageRoute<void>(
+                builder: (_) => TenantSessionScope(
+                  controller: controller,
+                  child: TenantCatalogScreen(
+                    reader: reader,
+                    productStockRoute: productStockRoute == null
+                        ? null
+                        : (product) => productStockRoute!(reader, product),
+                    productStockRoles: productStockRoles,
+                    adjustmentFeedRoute: stockAdjustmentFeedRoute == null
+                        ? null
+                        : () => stockAdjustmentFeedRoute!(reader),
+                    adjustmentFeedRoles: stockAdjustmentFeedRoles,
+                    movementFeedRoute: stockMovementFeedRoute == null
+                        ? null
+                        : () => stockMovementFeedRoute!(reader),
+                    movementFeedRoles: stockMovementFeedRoles,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        // Beside the read-only catalog, because it is the same catalog seen by
+        // the one person who may change it. Nothing else in the app can put a
+        // product in, so a business with an empty catalog reaches its till
+        // through here first.
+        if (catalogManagementRoute != null &&
+            membership.role.canAccess(catalogManagementRoles))
+          HomeDestination(
+            destinationKey: const ValueKey('manage-catalog'),
+            label: 'Manage catalog',
+            icon: Icons.edit_note_outlined,
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: catalogManagementRoute!(reader),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (dailySummaryRoute != null &&
+            membership.role.canAccess(dailySummaryRoles))
+          HomeDestination(
+            destinationKey: const ValueKey('view-daily-summary'),
+            label: 'View daily summary',
+            icon: Icons.insights_outlined,
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: dailySummaryRoute!(reader),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (receiptLookupRoute != null &&
+            membership.role.canAccess(receiptLookupRoles))
+          HomeDestination(
+            destinationKey: const ValueKey('find-receipt'),
+            label: 'Find a receipt',
+            icon: Icons.receipt_long_outlined,
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: receiptLookupRoute!(reader),
+                  ),
+                ),
+              );
+            },
+          ),
+        // Beside the catalog rather than beside the till: this decides what
+        // every price in that catalog means, and the person who opens it is not
+        // the person standing at the till.
+        if (checkoutConfigurationRoute != null &&
+            membership.role.canAccess(checkoutConfigurationRoles))
+          HomeDestination(
+            destinationKey: const ValueKey('checkout-configuration'),
+            label: 'Checkout settings',
+            icon: Icons.tune_outlined,
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: checkoutConfigurationRoute!(reader),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (auditLogRoute != null && membership.role.canAccess(auditLogRoles))
+          HomeDestination(
+            destinationKey: const ValueKey('view-audit-log'),
+            label: 'View activity log',
+            icon: Icons.fact_check_outlined,
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: auditLogRoute!(reader),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (membership.role.canAccess(TenantStaffDirectoryScreen.allowedRoles))
+          HomeDestination(
+            label: 'View staff directory',
+            icon: Icons.people_outline,
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: TenantStaffDirectoryScreen(reader: reader),
+                  ),
+                ),
+              );
+            },
+          ),
+        // **The two account controls are last, and §4.4 says so by name.**
+        // Neither of them is where a shop goes to trade; they are where a
+        // person goes once, to change which business this is.
+        if (onSwitchTenant != null &&
+            switchCandidates.any(
+              (candidate) =>
+                  candidate.canAccess() &&
+                  candidate.tenantId != membership.tenantId,
+            ))
+          HomeDestination(
+            destinationKey: const ValueKey('change-business'),
+            label: 'Change business',
+            icon: Icons.swap_horiz,
+            onPressed: () => _showBusinessSwitcher(context),
+          ),
+        if (isDefaultTenant)
+          // The one disabled control on this route, and it is a state rather
+          // than a refusal: this business already is the default, so there is
+          // nothing to press.
+          const HomeDestination(
+            label: 'Default business',
+            icon: Icons.star,
+            onPressed: null,
+          )
+        else
+          HomeDestination(
+            destinationKey: const ValueKey('make-default-tenant'),
+            label: 'Make default',
+            icon: Icons.star_outline,
+            onPressed: () => _showDefaultConfirmation(context),
+          ),
+      ];
 
   Future<void> _showDefaultConfirmation(BuildContext context) async {
     final controller = TenantSessionScope.read(context);

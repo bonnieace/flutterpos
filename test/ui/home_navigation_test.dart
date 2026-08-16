@@ -92,7 +92,7 @@ void main() {
     });
 
     testWidgets('a phone lays the ordinary cards two to a row', (tester) async {
-      await _pump(tester, HomeNavigation(destinations: _eight()));
+      await _pump(tester, HomeNavigation.cards(destinations: _eight()));
 
       final first = _rectOf(tester, 'Destination 1');
       final second = _rectOf(tester, 'Destination 2');
@@ -104,7 +104,7 @@ void main() {
     });
 
     testWidgets('a tablet lays them three to a row', (tester) async {
-      await _pump(tester, HomeNavigation(destinations: _eight()), width: 834);
+      await _pump(tester, HomeNavigation.cards(destinations: _eight()), width: 834);
 
       expect(_rectOf(tester, 'Destination 1').top, _rectOf(tester, 'Destination 3').top);
       expect(
@@ -114,7 +114,7 @@ void main() {
     });
 
     testWidgets('a desktop draws the menu instead of the grid', (tester) async {
-      await _pump(tester, HomeNavigation(destinations: _eight()), width: 1440);
+      await _pump(tester, HomeNavigation.menu(destinations: _eight()), width: 1440);
 
       // Every destination is still reachable - the menu's whole argument over a
       // bottom bar is that nothing goes into an overflow bucket.
@@ -130,9 +130,64 @@ void main() {
     });
   });
 
+  group('two hosts, and exactly one of them draws at any width', () {
+    // §4.4 puts the menu in the frame and the cards in the page, so the two
+    // constructors have to partition every width between them. Both halves are
+    // asserted: a host that drew in the wrong band would put the destinations
+    // on screen twice at 1024, and one that drew in neither would lose them.
+    testWidgets('the page draws nothing at expanded', (tester) async {
+      await _pump(
+        tester,
+        HomeNavigation.cards(destinations: _eight()),
+        width: 1440,
+      );
+
+      expect(find.byType(PressSurface), findsNothing);
+    });
+
+    testWidgets('the frame draws nothing below expanded', (tester) async {
+      for (final width in <double>[411, 834, 1023]) {
+        await _pump(
+          tester,
+          HomeNavigation.menu(destinations: _eight()),
+          width: width,
+        );
+
+        expect(
+          find.byType(PressSurface),
+          findsNothing,
+          reason: 'the menu drew at $width',
+        );
+      }
+    });
+
+    testWidgets('every destination is drawn exactly once at every band', (
+      tester,
+    ) async {
+      for (final width in <double>[411, 834, 1023, 1024, 1440]) {
+        await _pump(
+          tester,
+          Column(
+            children: <Widget>[
+              HomeNavigation.cards(destinations: _eight()),
+              HomeNavigation.menu(destinations: _eight()),
+            ],
+          ),
+          width: width,
+        );
+
+        expect(
+          find.byType(PressSurface),
+          findsNWidgets(8),
+          reason: 'both hosts mounted at $width',
+        );
+      }
+    });
+  });
+
   group('§4.4 hierarchy', () {
     testWidgets('the primary is first and spans the row', (tester) async {
-      await _pump(tester, HomeNavigation(destinations: _eight()));
+      await _pump(tester, HomeNavigation.cards(destinations: _eight()));
 
       final primary = _rectOf(tester, 'New sale');
       final first = _rectOf(tester, 'Destination 1');
@@ -149,7 +204,7 @@ void main() {
     ) async {
       await _pump(
         tester,
-        HomeNavigation(
+        HomeNavigation.cards(
           destinations: <HomeDestination>[
             _destination('Destination 1'),
             _destination('New sale', isPrimary: true),
@@ -164,7 +219,7 @@ void main() {
     });
 
     testWidgets('the primary carries §2.1\'s primary container', (tester) async {
-      await _pump(tester, HomeNavigation(destinations: _eight()));
+      await _pump(tester, HomeNavigation.cards(destinations: _eight()));
 
       final decoration =
           tester
@@ -187,7 +242,7 @@ void main() {
     ) async {
       await _pump(
         tester,
-        HomeNavigation(
+        HomeNavigation.cards(
           destinations: <HomeDestination>[
             _destination('Short'),
             _destination(
@@ -214,7 +269,7 @@ void main() {
     ) async {
       await _pump(
         tester,
-        HomeNavigation(
+        HomeNavigation.cards(
           destinations: <HomeDestination>[
             _destination('Default business', enabled: false),
           ],
@@ -231,7 +286,7 @@ void main() {
     testWidgets('a disabled label is §2.1\'s disabled colour', (tester) async {
       await _pump(
         tester,
-        HomeNavigation(
+        HomeNavigation.cards(
           destinations: <HomeDestination>[
             _destination('Default business', enabled: false),
           ],
@@ -248,7 +303,7 @@ void main() {
       var pressed = 0;
       await _pump(
         tester,
-        HomeNavigation(
+        HomeNavigation.cards(
           destinations: <HomeDestination>[
             HomeDestination(
               destinationKey: const ValueKey('open'),
@@ -267,7 +322,7 @@ void main() {
     });
 
     testWidgets('no destinations draws nothing at all', (tester) async {
-      await _pump(tester, const HomeNavigation(destinations: []));
+      await _pump(tester, const HomeNavigation.cards(destinations: []));
 
       expect(find.byType(PressSurface), findsNothing);
     });
@@ -277,7 +332,7 @@ void main() {
     testWidgets('the status line is drawn under the label', (tester) async {
       await _pump(
         tester,
-        HomeNavigation(
+        HomeNavigation.cards(
           destinations: <HomeDestination>[
             _destination('Money', status: '3 unresolved differences'),
           ],
@@ -297,7 +352,7 @@ void main() {
       final handle = tester.ensureSemantics();
       await _pump(
         tester,
-        HomeNavigation(
+        HomeNavigation.cards(
           destinations: <HomeDestination>[
             _destination('Money', status: '3 unresolved differences'),
           ],
@@ -320,7 +375,7 @@ void main() {
       final handle = tester.ensureSemantics();
       await _pump(
         tester,
-        HomeNavigation(
+        HomeNavigation.cards(
           destinations: <HomeDestination>[_destination('Stock')],
         ),
       );
@@ -337,7 +392,11 @@ void main() {
       for (final width in <double>[411, 834, 1440]) {
         await _pump(
           tester,
-          HomeNavigation(destinations: _eight()),
+          // Whichever host that band draws in. §9 is about what a finger can
+          // hit, and a menu row is as much a target as a card is.
+          HomeNavigation.showsMenu(width)
+              ? HomeNavigation.menu(destinations: _eight())
+              : HomeNavigation.cards(destinations: _eight()),
           width: width,
         );
 
@@ -360,12 +419,12 @@ void main() {
     testWidgets('a card grows with the text rather than clipping it', (
       tester,
     ) async {
-      await _pump(tester, HomeNavigation(destinations: _eight()));
+      await _pump(tester, HomeNavigation.cards(destinations: _eight()));
       final before = _rectOf(tester, 'Destination 1').height;
 
       await _pump(
         tester,
-        HomeNavigation(destinations: _eight()),
+        HomeNavigation.cards(destinations: _eight()),
         textScale: 2,
       );
 

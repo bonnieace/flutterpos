@@ -524,6 +524,7 @@ below exists in the widget and appears in the screenshot harness.
 | --- | --- | --- |
 | `AppScaffold` | ad-hoc `Scaffold` per route | 1 |
 | `PageHeader` | duplicated title + subtitle | 1 |
+| `HomeNavigation` | a `Wrap` of eleven identical pills | 1 |
 | `AppButton` (4 tiers × 3 sizes) | mixed `FilledButton` / `OutlinedButton` / `TextButton` | 1 |
 | `AppTextField` | mixed placeholder-label and floating-label fields | 1 |
 | `AppSelect` | raw `DropdownButtonFormField` | 1 |

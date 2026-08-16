@@ -35,15 +35,37 @@
 ///
 /// **The one figure with no row anywhere is the menu's width.** §4.2 states
 /// content maxima and §2.3's scale stops at 64; neither describes a navigation
-/// column. [_menuWidth] is a component decision on that scale and is recorded in
-/// `PLAN.md` beside `AppScaffold.horizontalInset`, which is the same gap and was
-/// answered the same way.
+/// column. [HomeNavigation.menuWidth] is a component decision on that scale and
+/// is recorded in `PLAN.md` beside `AppScaffold.horizontalInset`, which is the
+/// same gap and was answered the same way.
 ///
-/// **What this half does not do is make the menu persistent.** §4.4 puts it in
-/// `AppScaffold` so it draws on every route without a nested `Navigator`; here
-/// it draws on the home only. Lifting it is step 5b's second half, and it is a
-/// sweep across every migrated route's expanded screenshot rather than a
-/// component change.
+/// **Step 5b's second half moved the menu into the frame, and that is why there
+/// are two constructors.** §4.4 puts the side menu in `AppScaffold` rather than
+/// in a page's body, so the two renderings this component owns now have two
+/// different *hosts*: the cards are content and sit in the page, below the shift
+/// panel, where the home puts them; the menu is chrome and sits beside the page,
+/// outside its content maximum and outside its scroll, where only the frame can
+/// put it. A single constructor cannot say which host is asking, and a widget
+/// that drew the menu inside the body would put a navigation column inside the
+/// page's 1200 maximum.
+///
+/// **The band still owns the form and the host owns nothing but placement**,
+/// which is the property §4.3 asks for. [HomeNavigation.cards] draws the grid
+/// below 1024 and *nothing* at 1024 and above; [HomeNavigation.menu] draws the
+/// menu at 1024 and above and *nothing* below it. The pair is exhaustive and
+/// disjoint at every width, so no caller can choose a rendering and no width
+/// gets both or neither.
+///
+/// **The menu draws on the home and on no other route, and that is a decision
+/// with evidence rather than an unfinished sweep.** §4.4 asks for it on every
+/// route on the grounds that "`Navigator.pop` keeps meaning what it means", and
+/// on a pushed route it does not: a menu press is a `push`, so pressing three
+/// destinations leaves a back arrow three routes deep and a destination pressed
+/// while standing on it opens a second copy of itself. The two repairs are a
+/// nested `Navigator`, which §4.4 forbids by name, and popping to the home
+/// before pushing, which is a routing condition and is `claude.md` hard rule 1.
+/// The slot is in `AppScaffold` so the answer is one call site away once the
+/// product owner picks one; see `PLAN.md`'s open decision.
 library;
 
 import 'package:flutter/material.dart';
@@ -102,18 +124,47 @@ final class HomeDestination {
   final Key? destinationKey;
 }
 
+/// Which of the two hosts §4.4 gives this component is drawing it.
+///
+/// Private because it is not a choice: a page cannot ask for the menu and the
+/// frame cannot ask for the cards. It is the constructor's own record of where
+/// it was called from.
+enum _HomeNavigationHost { page, frame }
+
 /// The home's navigation: a card grid below 1024, a side menu at or above it.
 final class HomeNavigation extends StatelessWidget {
-  const HomeNavigation({super.key, required this.destinations});
+  /// The page's rendering: §4.4's card grid, in the body, where the home puts
+  /// it - below the shift, because what a person came here to do outranks where
+  /// they might go next.
+  ///
+  /// Draws **nothing at `expanded`**, where the destinations are in the frame's
+  /// menu instead. §4.4: "at expanded it keeps its content and loses its cards".
+  const HomeNavigation.cards({super.key, required this.destinations})
+    : _host = _HomeNavigationHost.page;
+
+  /// The frame's rendering: §4.4's side menu, beside the page rather than
+  /// inside it, which is what puts it outside the content maximum and outside
+  /// the page's scroll. `AppScaffold.navigation` is the only caller.
+  ///
+  /// Draws **nothing below `expanded`**, where the destinations are the page's
+  /// cards instead.
+  const HomeNavigation.menu({super.key, required this.destinations})
+    : _host = _HomeNavigationHost.frame;
 
   /// Everywhere the home can go, in the order §4.4 asks for: the primary first,
   /// then by frequency. **Never alphabetically** - that is the ordering a `Wrap`
   /// of identical pills has, and it is the one this section replaced.
   final List<HomeDestination> destinations;
 
+  final _HomeNavigationHost _host;
+
   /// A side menu's width. See the library note: a component decision, not a
   /// token, because no section of `design.md` describes a navigation column.
-  static const double _menuWidth = 256;
+  ///
+  /// **Public because the frame allocates the column and the component draws
+  /// it**, and two declarations of one width is the drift §4.1 spent step 6
+  /// removing.
+  static const double menuWidth = 256;
 
   /// How many columns a band's card grid has. §4.4's table.
   ///
@@ -142,9 +193,16 @@ final class HomeNavigation extends StatelessWidget {
     // bordered box containing nothing would be a fourth implementation of one.
     if (destinations.isEmpty) return const SizedBox.shrink();
 
+    // **The band picks the form; the host only says who is asking.** The two
+    // constructors partition every width between them, so exactly one of them
+    // draws at any width and the other draws nothing - which is what stops the
+    // home showing its destinations twice at 1024, once in the frame's menu and
+    // once in its own body.
     if (band == AppBreakpoint.expanded) {
+      if (_host == _HomeNavigationHost.page) return const SizedBox.shrink();
       return _HomeMenu(destinations: destinations, tokens: tokens);
     }
+    if (_host == _HomeNavigationHost.frame) return const SizedBox.shrink();
     return _HomeGrid(
       destinations: destinations,
       columns: columnsFor(band),
@@ -381,7 +439,7 @@ final class _HomeMenu extends StatelessWidget {
     // navigation column in the middle of the page.
     alignment: AlignmentDirectional.centerStart,
     child: SizedBox(
-      width: HomeNavigation._menuWidth,
+      width: HomeNavigation.menuWidth,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,

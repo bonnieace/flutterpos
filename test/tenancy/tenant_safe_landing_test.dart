@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/home_navigation.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -84,6 +85,64 @@ void main() {
         matching: find.byKey(const ValueKey('make-default-tenant')),
       ),
       findsOne,
+    );
+  });
+
+  testWidgets('a desktop draws the destinations beside the page, not in it', (
+    tester,
+  ) async {
+    // §11 step 5b's second half. §4.4 gives the menu to `AppScaffold`, so at
+    // `expanded` the destinations are chrome in a column of their own and the
+    // page keeps only what was never navigation - here, the shift panel.
+    //
+    // Asserted by position rather than by structure: a menu that had merely
+    // been moved to the top of the body would still be "not in the grid", and
+    // the thing that makes it the frame's is that it sits beside the page.
+    await _pumpLanding(
+      tester,
+      panelHeight: 120,
+      role: TenantRole.owner,
+      size: const Size(1440, 900),
+    );
+
+    final destination = tester.getRect(
+      find.byKey(const ValueKey('make-default-tenant')),
+    );
+    final panel = tester.getRect(find.byKey(const ValueKey('landing-test-panel')));
+
+    expect(destination.right, lessThanOrEqualTo(panel.left));
+    // Drawn once rather than twice: §4.4 says the home "keeps its content and
+    // loses its cards" at this band, and a page that built both hosts would
+    // put the same destinations on screen in two places.
+    expect(find.byType(HomeNavigation), findsOneWidget);
+  });
+
+  testWidgets('the account controls come last - design.md §4.4', (
+    tester,
+  ) async {
+    // "Remaining cards are ordered by frequency, never alphabetically", with
+    // the two account controls last. Source order is what a grid renders, so
+    // the order is a property of the list the route builds.
+    await _pumpLanding(
+      tester,
+      panelHeight: 120,
+      role: TenantRole.owner,
+      catalogManagementRoute: (_) => const Scaffold(body: Text('Catalog open')),
+      catalogManagementRoles: const <TenantRole>[
+        TenantRole.owner,
+        TenantRole.admin,
+        TenantRole.manager,
+      ],
+    );
+
+    final account = find.byKey(const ValueKey('make-default-tenant'));
+    final catalog = find.byKey(const ValueKey('manage-catalog'));
+    await tester.ensureVisible(account);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getRect(account).top,
+      greaterThan(tester.getRect(catalog).top),
     );
   });
 
@@ -229,8 +288,9 @@ Future<void> _pumpLanding(
   TenantRole role = TenantRole.cashier,
   Widget Function(TenantDataReader reader)? catalogManagementRoute,
   List<TenantRole> catalogManagementRoles = const <TenantRole>[],
+  Size size = _phone,
 }) async {
-  tester.view.physicalSize = _phone;
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);

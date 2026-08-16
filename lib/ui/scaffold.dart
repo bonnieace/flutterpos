@@ -35,6 +35,14 @@
 /// with and without toolbar actions, and the two title roles either side of
 /// §4.1's `expanded` boundary - and that is the matrix in the harness.
 ///
+/// **5b's second half landed here rather than in a screen, which is §4.4's own
+/// instruction.** "The side menu belongs to `AppScaffold`, not to a nested
+/// `Navigator`" - so the frame owns the navigation column: its width, its
+/// scroll, and the fact that it sits outside the page's content maximum the way
+/// the toolbar already does. [AppScaffold.navigation] is that slot. It is empty
+/// at 25 of the 26 call sites and the reason is a decision rather than an
+/// unfinished sweep; see that field.
+///
 /// **One of the two things step 5a deliberately left is now done, in step 6.**
 /// §4.2's content widths are in: [AppScaffold.contentWidth] is required at every
 /// call site, and the seam step 5a built - one widget between every route and
@@ -55,6 +63,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'home_navigation.dart';
 import 'tokens.dart';
 
 /// A screen's title, its optional subtitle, and its optional primary action.
@@ -214,10 +223,10 @@ final class PageHeader extends StatelessWidget {
 /// ```
 /// ┌─────────────────────────────────┐
 /// │ ←                     [actions] │  toolbar: the way back, and chrome
-/// ├─────────────────────────────────┤
-/// │ Manage catalog     [Add product]│  PageHeader: title, subtitle, action
-/// │                                 │  density.sectionGap
-/// │ …content…                       │  body
+/// ├──────────┬──────────────────────┤
+/// │ New sale │ Manage catalog  [Add]│  navigation: §4.4's menu, expanded only
+/// │ Catalog  │                      │  PageHeader: title, subtitle, action
+/// │ Receipts │ …content…            │  density.sectionGap, then body
 /// ```
 ///
 /// **The toolbar keeps `AppBar` rather than being hand-drawn**, and that is a
@@ -241,6 +250,7 @@ final class AppScaffold extends StatelessWidget {
     this.primaryAction,
     this.actions = const <Widget>[],
     this.automaticallyImplyLeading = true,
+    this.navigation = const <HomeDestination>[],
   });
 
   /// The screen's name. See [PageHeader.title].
@@ -284,6 +294,30 @@ final class AppScaffold extends StatelessWidget {
   /// Forwarded to [AppBar.automaticallyImplyLeading] unchanged.
   final bool automaticallyImplyLeading;
 
+  /// §4.4's navigation destinations, drawn as a persistent side menu at
+  /// `expanded` and as nothing at all below it, where the page's own cards
+  /// carry them.
+  ///
+  /// **A list of destinations rather than a `Widget` slot, and that is the
+  /// opposite decision from [primaryAction] on purpose.** An action is the
+  /// page's and the frame decides only where it sits; a navigation column is
+  /// the *frame's*, and §4.4 fixes its width, its band and its relationship to
+  /// the content maximum. A `Widget` here would let a call site put anything in
+  /// a 256-wide column beside every page and call it navigation.
+  ///
+  /// **Empty at every call site but the home, and that is a decision rather
+  /// than an unfinished sweep.** §4.4 asks for the menu on every route on the
+  /// stated grounds that "`Navigator.pop` keeps meaning what it means", and on
+  /// a route reached by a push it stops meaning it: every destination here is a
+  /// `push`, so a menu on a pushed route grows the stack a route per press and
+  /// a person who pressed three of them meets a back arrow three deep. The two
+  /// things that would fix it are a nested `Navigator`, which §4.4 forbids by
+  /// name, and popping to the home before pushing, which is a routing condition
+  /// that `claude.md` hard rule 1 keeps out of a visual change. `PLAN.md`
+  /// carries it as an open decision; the slot is here so answering it is one
+  /// call site rather than a component.
+  final List<HomeDestination> navigation;
+
   /// Everything below the header, in §7's order: optional `Callout`, filters,
   /// content, pagination.
   final Widget body;
@@ -311,6 +345,10 @@ final class AppScaffold extends StatelessWidget {
     // the accessor's own note for why the fallback cannot shrink a tap target.
     final tokens = AppTokens.componentOf(context);
     final inset = horizontalInset(tokens.spacing);
+    // The surface a person is looking at, not this frame's box - §4.1's ranges
+    // and `PageHeader.showsDisplayTitle`'s note say the same thing, and the
+    // menu is resolved against the same width the header's role is.
+    final screenWidth = MediaQuery.sizeOf(context).width;
     final page = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -329,33 +367,85 @@ final class AppScaffold extends StatelessWidget {
       ],
     );
     final maximum = tokens.layout.maxWidthOf(contentWidth);
+    // **The header and the body are constrained together, above the body's
+    // own padding.** §4.2 caps *content*, and a screen whose title sat at the
+    // window edge while its records sat in a centred 1200 column would read
+    // as two pages. Constraining the shared column is also what keeps the
+    // header's 20 inset lined up with the 20 every body pads itself with.
+    //
+    // **The toolbar is deliberately outside it.** A back arrow that drifted
+    // inwards on a wide window, away from the corner every platform puts it
+    // in, would be chrome obeying a content rule.
+    //
+    // **[AppContentWidth.full] adds no widget rather than an unbounded one.**
+    // `maxWidthOf` answers null there, and a `ConstrainedBox` that constrains
+    // nothing is a line of code that has to be read before it can be ignored.
+    final Widget content = maximum == null
+        ? page
+        : Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maximum),
+              child: page,
+            ),
+          );
     return Scaffold(
       backgroundColor: tokens.colors.surface.base,
       appBar: AppBar(
         automaticallyImplyLeading: automaticallyImplyLeading,
         actions: actions.isEmpty ? null : actions,
       ),
-      // **The header and the body are constrained together, above the body's
-      // own padding.** §4.2 caps *content*, and a screen whose title sat at the
-      // window edge while its records sat in a centred 1200 column would read
-      // as two pages. Constraining the shared column is also what keeps the
-      // header's 20 inset lined up with the 20 every body pads itself with.
-      //
-      // **The toolbar is deliberately outside it.** A back arrow that drifted
-      // inwards on a wide window, away from the corner every platform puts it
-      // in, would be chrome obeying a content rule.
-      //
-      // **[AppContentWidth.full] adds no widget rather than an unbounded one.**
-      // `maxWidthOf` answers null there, and a `ConstrainedBox` that constrains
-      // nothing is a line of code that has to be read before it can be ignored.
-      body: maximum == null
-          ? page
-          : Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maximum),
-                child: page,
-              ),
+      body: navigation.isEmpty || !HomeNavigation.showsMenu(screenWidth)
+          ? content
+          : Row(
+              // Both columns run the full height of the body. A menu that
+              // stopped where its last row does would leave the page's
+              // background showing through a column of chrome.
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _NavigationColumn(destinations: navigation, tokens: tokens),
+                // **The maximum is measured against the page, and the page is
+                // what is left after the menu.** §4.2 caps content, the menu is
+                // not content, and centring 1200 in the whole window would push
+                // a table under a column that is drawn on top of nothing.
+                Expanded(child: content),
+              ],
             ),
     );
   }
+}
+
+/// §4.4's side menu, in the column the frame allocates for it.
+///
+/// **It scrolls on its own, and that is the answer to a question §4.4 does not
+/// ask.** Eleven rows are about 600 tall, and `expanded` starts at 1024 wide
+/// with no floor under the height at all - a 1024 x 600 window is a landscape
+/// tablet and a half-height desktop window. A column that overflowed would
+/// stripe the bottom of the navigation on the one band that has it. Its scroll
+/// is separate from the page's, so scrolling a long table does not carry the
+/// destinations off the top of the screen, which is the whole point of the menu
+/// being persistent.
+final class _NavigationColumn extends StatelessWidget {
+  const _NavigationColumn({required this.destinations, required this.tokens});
+
+  final List<HomeDestination> destinations;
+  final AppTokens tokens;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    // The page's own inset on the outside, and none on the inside: the content
+    // beside it pads itself by the same 20, so the gap between the two columns
+    // is the page inset rather than a figure invented here.
+    padding: EdgeInsets.fromLTRB(
+      AppScaffold.horizontalInset(tokens.spacing),
+      tokens.spacing.s20,
+      0,
+      tokens.spacing.s20,
+    ),
+    child: SizedBox(
+      width: HomeNavigation.menuWidth,
+      child: SingleChildScrollView(
+        child: HomeNavigation.menu(destinations: destinations),
+      ),
+    ),
+  );
 }

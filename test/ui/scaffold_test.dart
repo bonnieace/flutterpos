@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/home_navigation.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -868,6 +869,213 @@ void main() {
 
       expect(find.text('Stock adjustments'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('the navigation column - design.md §4.4', () {
+    /// The width the page column ends up with, measured the same way §4.2's
+    /// group measures it: off the laid-out header rather than off a constraint
+    /// that may or may not be honoured below it.
+    double pageWidth(WidgetTester tester) =>
+        tester.getSize(find.byType(PageHeader)).width +
+        AppScaffold.horizontalInset(_tokens.spacing) * 2;
+
+    /// The inset the frame draws to the left of the menu, plus the menu.
+    final double columnCost =
+        AppScaffold.horizontalInset(_tokens.spacing) + HomeNavigation.menuWidth;
+
+    List<HomeDestination> destinations([int count = 3]) => <HomeDestination>[
+      for (var index = 0; index < count; index++)
+        HomeDestination(
+          destinationKey: ValueKey('destination-$index'),
+          label: 'Destination $index',
+          icon: Icons.inventory_2_outlined,
+          isPrimary: index == 0,
+          onPressed: () {},
+        ),
+    ];
+
+    Widget page({
+      List<HomeDestination> navigation = const <HomeDestination>[],
+      AppContentWidth contentWidth = AppContentWidth.records,
+    }) => AppScaffold(
+      contentWidth: contentWidth,
+      title: 'Dev Corner Shop',
+      navigation: navigation,
+      body: const SizedBox(),
+    );
+
+    testWidgets('a route that names no destinations draws no column', (
+      tester,
+    ) async {
+      // 26 of the 27 call sites, and the picture every one of them already
+      // has: an empty slot has to cost nothing at all, not a column of ground.
+      await _pump(tester, page(), width: 1440);
+
+      expect(find.byType(HomeNavigation), findsNothing);
+      expect(pageWidth(tester), _tokens.layout.records);
+    });
+
+    testWidgets('an empty destination list draws no column either', (
+      tester,
+    ) async {
+      // A role offered nothing is not the same call site as a route that names
+      // nothing, and it must not leave 276 pixels of empty column behind.
+      await _pump(
+        tester,
+        page(navigation: const <HomeDestination>[]),
+        width: 1440,
+      );
+
+      expect(find.byType(HomeNavigation), findsNothing);
+      expect(pageWidth(tester), _tokens.layout.records);
+    });
+
+    testWidgets('the menu draws at §4.1\'s expanded floor and not below it', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        page(navigation: destinations()),
+        width: _compactWidth,
+      );
+      expect(find.byType(HomeNavigation), findsNothing);
+      // The page keeps the whole window below the floor - the cards are the
+      // body's there, and a frame that reserved the column anyway would
+      // narrow every phone by 276 pixels for a menu nobody can see.
+      expect(pageWidth(tester), _compactWidth);
+
+      await _pump(
+        tester,
+        page(navigation: destinations()),
+        width: _expandedWidth,
+      );
+      expect(find.byType(HomeNavigation), findsOneWidget);
+    });
+
+    testWidgets('the column is §4.4\'s declared width', (tester) async {
+      await _pump(tester, page(navigation: destinations()), width: 1440);
+
+      expect(
+        tester.getSize(find.byType(HomeNavigation)).width,
+        HomeNavigation.menuWidth,
+      );
+    });
+
+    testWidgets('the menu sits at the page inset, outside the maximum', (
+      tester,
+    ) async {
+      // The same argument the toolbar already gets: chrome that drifted inwards
+      // on a wide window, away from the edge, would be chrome obeying a content
+      // rule. At 1600 the content maximum fires and the menu must not move.
+      await _pump(tester, page(navigation: destinations()), width: 1600);
+
+      expect(
+        tester.getRect(find.byType(HomeNavigation)).left,
+        AppScaffold.horizontalInset(_tokens.spacing),
+      );
+    });
+
+    testWidgets('the content maximum is measured against what is left', (
+      tester,
+    ) async {
+      // 1440 less the column is 1164, which is under §4.2's 1200 - so the
+      // maximum does not fire and the page is the remainder. A page still
+      // measured against the window would be 1200 wide in a 1164 space and
+      // would overflow under the menu.
+      await _pump(tester, page(navigation: destinations()), width: 1440);
+
+      expect(pageWidth(tester), 1440 - columnCost);
+    });
+
+    testWidgets('the maximum still fires where the remainder is wider', (
+      tester,
+    ) async {
+      await _pump(tester, page(navigation: destinations()), width: 1600);
+
+      expect(pageWidth(tester), _tokens.layout.records);
+      // Centred in what is left rather than in the window: the page's own
+      // centre is the middle of the space beside the menu.
+      expect(
+        tester.getRect(find.byType(PageHeader)).center.dx,
+        closeTo((columnCost + 1600) / 2, 0.5),
+      );
+    });
+
+    testWidgets('the toolbar spans the window rather than the page', (
+      tester,
+    ) async {
+      await _pump(tester, page(navigation: destinations()), width: 1440);
+
+      expect(tester.getSize(find.byType(AppBar)).width, 1440);
+    });
+
+    testWidgets('the menu scrolls on its own', (tester) async {
+      // A column of eleven rows is about 600 tall and `expanded` puts no floor
+      // under the height, so the one band that has a menu is also the band a
+      // half-height window lands in. Its scrollable is its own: scrolling a
+      // long page must not carry the destinations off the top.
+      await _pump(
+        tester,
+        AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Dev Corner Shop',
+          navigation: destinations(11),
+          body: ListView(
+            children: <Widget>[
+              for (var index = 0; index < 40; index++)
+                SizedBox(height: 40, child: Text('Row $index')),
+            ],
+          ),
+        ),
+        width: _expandedWidth,
+        height: 400,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.ancestor(
+          of: find.byType(HomeNavigation),
+          matching: find.byType(Scrollable),
+        ),
+        findsOneWidget,
+      );
+      // Two scrollables that are not one inside the other - the menu's and the
+      // page's.
+      expect(find.byType(Scrollable), findsNWidgets(2));
+      expect(
+        find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(HomeNavigation),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('every destination is reachable in the column', (tester) async {
+      var pressed = 0;
+      await _pump(
+        tester,
+        AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Dev Corner Shop',
+          navigation: <HomeDestination>[
+            HomeDestination(
+              destinationKey: const ValueKey('open'),
+              label: 'Open',
+              icon: Icons.point_of_sale,
+              onPressed: () => pressed++,
+            ),
+          ],
+          body: const SizedBox(),
+        ),
+        width: _expandedWidth,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pumpAndSettle();
+
+      expect(pressed, 1);
     });
   });
 }
