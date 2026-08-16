@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'platform_tenant_review.dart';
@@ -693,30 +694,31 @@ final class _PlatformRejectedTenantScreenState
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    // §5.1's three full-page states, in the three components that now carry
+    // them. The bare indicator and the two bare `Text`s are the rows for
+    // `LoadingState`, `ErrorState` and `EmptyState` word for word.
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingState(message: 'Reading rejected businesses.');
     }
     if (_safeError != null && _items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _safeError!,
-              key: const ValueKey('platform-archival-queue-error'),
-            ),
-            const SizedBox(height: 12),
-            AppButton(
-              label: 'Retry',
-              tier: AppButtonTier.primary,
-              onPressed: _reload,
-            ),
-          ],
-        ),
+      return ErrorState(
+        key: const ValueKey('platform-archival-queue-error'),
+        badgeLabel: 'Not read',
+        statement: _safeError!,
+        stillTrue: 'Nothing has been archived, and nothing was changed.',
+        actions: <Widget>[
+          AppButton(
+            label: 'Retry',
+            tier: AppButtonTier.primary,
+            onPressed: _reload,
+          ),
+        ],
       );
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('No rejected businesses.'));
+      // No hint and no action: §7 asks for "one sentence on how to create one"
+      // and a rejected business is not something anybody here creates.
+      return const EmptyState(title: 'No rejected businesses');
     }
     return RefreshIndicator(
       onRefresh: _reload,
@@ -764,11 +766,11 @@ final class _PlatformRejectedTenantScreenState
                     Align(
                       alignment: Alignment.centerRight,
                       child: AppButton(
-                               key: ValueKey('platform-archive-${tenant.tenantId}'),
-                               label: 'Archive',
-                               icon: Icons.archive_outlined,
-                               onPressed: () => _archive(tenant),
-                             ),
+                        key: ValueKey('platform-archive-${tenant.tenantId}'),
+                        label: 'Archive',
+                        icon: Icons.archive_outlined,
+                        onPressed: () => _archive(tenant),
+                      ),
                     )
                   else
                     PlatformTenantArchivalForm(

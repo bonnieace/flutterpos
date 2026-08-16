@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_bootstrap.dart';
@@ -840,27 +841,27 @@ final class _PlatformPendingTenantReviewScreenState
 
   Widget _buildBody(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    // §5.1's three full-page states. See the archival queue for the note.
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingState(message: 'Reading pending business requests.');
     }
     if (_safeError != null && _items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(_safeError!, key: const ValueKey('platform-queue-error')),
-            const SizedBox(height: 12),
-            AppButton(
-              label: 'Retry',
-              tier: AppButtonTier.primary,
-              onPressed: _reload,
-            ),
-          ],
-        ),
+      return ErrorState(
+        key: const ValueKey('platform-queue-error'),
+        badgeLabel: 'Not read',
+        statement: _safeError!,
+        stillTrue: 'No request was approved or rejected.',
+        actions: <Widget>[
+          AppButton(
+            label: 'Retry',
+            tier: AppButtonTier.primary,
+            onPressed: _reload,
+          ),
+        ],
       );
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('No pending business requests.'));
+      return const EmptyState(title: 'No pending business requests');
     }
     return ListView.separated(
       padding: const EdgeInsets.all(20),

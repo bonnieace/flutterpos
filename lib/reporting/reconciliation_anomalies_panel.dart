@@ -6,7 +6,9 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
 import '../ui/chips.dart';
+import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/pagination.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/stats.dart';
@@ -567,23 +569,12 @@ final class _AnomalyContents extends StatelessWidget {
           onPressed: () => onOpenAmendments(null),
         ),
         SizedBox(height: tokens.spacing.s16),
-        Wrap(
-          spacing: tokens.spacing.s12,
-          children: [
-            if (pageIndex > 0)
-              AppButton(
-                key: const ValueKey('reconciliation-anomalies-previous'),
-                label: 'Previous page',
-                onPressed: onPreviousPage,
-              ),
-            if (page.hasMore)
-              AppButton(
-                key: const ValueKey('reconciliation-anomalies-next'),
-                label: 'Next page',
-                tier: AppButtonTier.primary,
-                onPressed: onNextPage,
-              ),
-          ],
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('reconciliation-anomalies-previous'),
+          nextKey: const ValueKey('reconciliation-anomalies-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
         ),
       ],
     );
@@ -725,8 +716,8 @@ final class _AnomalyContents extends StatelessWidget {
     BuildContext context,
     TenantReconciliationAnomaly anomaly,
   ) async {
-    final reason = await showDialog<String>(
-      context: context,
+    final reason = await showAppDialog<String>(
+      context,
       builder: (context) => _AmendShiftDialog(anomaly: anomaly),
     );
     if (reason != null) onAmend(anomaly, reason);
@@ -753,8 +744,8 @@ final class _AmendShiftDialogState extends State<_AmendShiftDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Correct this shift\'s totals?'),
+  Widget build(BuildContext context) => AppDialog(
+    title: 'Correct this shift\'s totals?',
     content: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -822,9 +813,7 @@ final class _KindChips extends StatelessWidget {
           for (final kind in TenantReconciliationAnomalyKind.values)
             if (kind != TenantReconciliationAnomalyKind.other)
               FilterChipOption<TenantReconciliationAnomalyKind>(
-                key: ValueKey(
-                  'reconciliation-anomaly-kind-${kind.wireValue}',
-                ),
+                key: ValueKey('reconciliation-anomaly-kind-${kind.wireValue}'),
                 value: kind,
                 label: kind.label,
               ),

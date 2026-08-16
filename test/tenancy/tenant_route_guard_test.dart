@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/states.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -22,7 +23,11 @@ void main() {
       ),
     );
 
-    expect(find.text('Tenant access unavailable.'), findsOneWidget);
+    // §5.1's `ErrorState`, which is what the guard's `denied` default became
+    // on 2026-08-16. The sentence it replaces named a *tenant* to a shopkeeper,
+    // which is §8 rule 1, and it carried no status at all.
+    expect(find.text('You do not have access to this page.'), findsOneWidget);
+    expect(find.byType(ErrorState), findsOneWidget);
     expect(loadCalls, 0);
   });
 
@@ -48,7 +53,11 @@ void main() {
       ),
     );
 
-    expect(find.text('Tenant access unavailable.'), findsOneWidget);
+    // §5.1's `ErrorState`, which is what the guard's `denied` default became
+    // on 2026-08-16. The sentence it replaces named a *tenant* to a shopkeeper,
+    // which is §8 rule 1, and it carried no status at all.
+    expect(find.text('You do not have access to this page.'), findsOneWidget);
+    expect(find.byType(ErrorState), findsOneWidget);
     expect(loadCalls, 0);
   });
 

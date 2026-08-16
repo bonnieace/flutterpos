@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/status.dart';
+import '../ui/tabs.dart';
 import '../ui/tokens.dart';
 import 'platform_tenant_archival.dart';
 import 'platform_global_user_status.dart';
@@ -676,49 +678,50 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
       // changed - the `DefaultTabController` above still owns the selection.
       body: Column(
         children: <Widget>[
-          const TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: 'Pending business reviews'),
-              Tab(text: 'Active & suspended'),
-              Tab(text: 'Rejected archive'),
-              Tab(text: 'Global user status'),
+          // §5.1's `AppTabs`, which is where the type roles, the indicator and
+          // §9's 48dp height now live. The four labels are unchanged.
+          const AppTabs(
+            tabs: <String>[
+              'Pending business reviews',
+              'Active & suspended',
+              'Rejected archive',
+              'Global user status',
             ],
           ),
           Expanded(
             child: TabBarView(
               children: [
-          PlatformPendingTenantReviewScreen(
-            identity: identity,
-            dataSource: pendingDataSource,
-            callable: callable,
-            requestIdFactory: requestIdFactory,
-            isCurrent: isCurrent,
-            onSignOut: onSignOut,
-            embedded: true,
-          ),
-          PlatformLifecycleTenantScreen(
-            identity: identity,
-            dataSource: lifecycleDataSource,
-            callable: callable,
-            requestIdFactory: requestIdFactory,
-            isCurrent: isCurrent,
-          ),
-          PlatformRejectedTenantScreen(
-            identity: identity,
-            dataSource: rejectedDataSource,
-            callable: callable,
-            requestIdFactory: requestIdFactory,
-            isCurrent: isCurrent,
-          ),
-          PlatformGlobalUserStatusScreen(
-            identity: identity,
-            dataSource: globalUserDataSource,
-            callable: globalUserCallable,
-            requestIdFactory: requestIdFactory,
-            isCurrent: isCurrent,
-            onCurrentOperatorAffected: onSignOut,
-          ),
+                PlatformPendingTenantReviewScreen(
+                  identity: identity,
+                  dataSource: pendingDataSource,
+                  callable: callable,
+                  requestIdFactory: requestIdFactory,
+                  isCurrent: isCurrent,
+                  onSignOut: onSignOut,
+                  embedded: true,
+                ),
+                PlatformLifecycleTenantScreen(
+                  identity: identity,
+                  dataSource: lifecycleDataSource,
+                  callable: callable,
+                  requestIdFactory: requestIdFactory,
+                  isCurrent: isCurrent,
+                ),
+                PlatformRejectedTenantScreen(
+                  identity: identity,
+                  dataSource: rejectedDataSource,
+                  callable: callable,
+                  requestIdFactory: requestIdFactory,
+                  isCurrent: isCurrent,
+                ),
+                PlatformGlobalUserStatusScreen(
+                  identity: identity,
+                  dataSource: globalUserDataSource,
+                  callable: globalUserCallable,
+                  requestIdFactory: requestIdFactory,
+                  isCurrent: isCurrent,
+                  onCurrentOperatorAffected: onSignOut,
+                ),
               ],
             ),
           ),
@@ -815,30 +818,29 @@ final class _PlatformLifecycleTenantScreenState
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    // §5.1's three full-page states. See the archival queue for the note.
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingState(
+        message: 'Reading active and suspended businesses.',
+      );
     }
     if (_safeError != null && _items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _safeError!,
-              key: const ValueKey('platform-lifecycle-queue-error'),
-            ),
-            const SizedBox(height: 12),
-            AppButton(
-              label: 'Retry',
-              tier: AppButtonTier.primary,
-              onPressed: _reload,
-            ),
-          ],
-        ),
+      return ErrorState(
+        key: const ValueKey('platform-lifecycle-queue-error'),
+        badgeLabel: 'Not read',
+        statement: _safeError!,
+        stillTrue: 'No business standing was changed.',
+        actions: <Widget>[
+          AppButton(
+            label: 'Retry',
+            tier: AppButtonTier.primary,
+            onPressed: _reload,
+          ),
+        ],
       );
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('No active or suspended businesses.'));
+      return const EmptyState(title: 'No active or suspended businesses');
     }
     return RefreshIndicator(
       onRefresh: _reload,

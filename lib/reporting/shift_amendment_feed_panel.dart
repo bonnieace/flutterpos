@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -137,10 +138,7 @@ final class _TenantShiftAmendmentPanelState
         reader: widget.reader,
       );
       return shiftId == null
-          ? repository.loadAmendments(
-              pageSize: widget.pageSize,
-              cursor: cursor,
-            )
+          ? repository.loadAmendments(pageSize: widget.pageSize, cursor: cursor)
           : repository.loadShiftAmendments(
               shiftId: shiftId,
               pageSize: widget.pageSize,
@@ -254,23 +252,12 @@ final class _AmendmentContents extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          children: [
-            if (pageIndex > 0)
-              AppButton(
-                key: const ValueKey('shift-amendments-previous'),
-                label: 'Previous page',
-                onPressed: onPreviousPage,
-              ),
-            if (page.hasMore)
-              AppButton(
-                key: const ValueKey('shift-amendments-next'),
-                label: 'Next page',
-                tier: AppButtonTier.primary,
-                onPressed: onNextPage,
-              ),
-          ],
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('shift-amendments-previous'),
+          nextKey: const ValueKey('shift-amendments-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
         ),
       ],
     );

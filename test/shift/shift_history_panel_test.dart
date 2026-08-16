@@ -7,6 +7,7 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
+import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
@@ -241,7 +242,16 @@ void main() {
 
     await _pumpPanel(tester, controller, reader, pageSize: 2);
     expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
-    expect(find.byKey(const ValueKey('shift-history-previous')), findsNothing);
+    // Present and disabled rather than absent, since `Pagination` - see the
+    // ledger panel's test for the reasoning.
+    expect(
+      tester
+          .widget<AppButton>(
+            find.byKey(const ValueKey('shift-history-previous')),
+          )
+          .onPressed,
+      isNull,
+    );
 
     // The paging controls sit below the cards, so the list must scroll to
     // them before they are built.

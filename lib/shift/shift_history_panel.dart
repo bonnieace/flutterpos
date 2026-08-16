@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../reporting/shift_amendment_feed.dart';
 import '../reporting/shift_amendment_feed_panel.dart';
@@ -11,6 +11,7 @@ import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -148,8 +149,9 @@ final class _TenantShiftHistoryPanelState
         // this surface's management set. The two happen to name the same roles
         // today, and offering a link this session's server would refuse would
         // teach a cashier nothing except that the app guesses.
-        canReadCorrections:
-            TenantShiftAmendmentFeedRepository.canReadInSession(session),
+        canReadCorrections: TenantShiftAmendmentFeedRepository.canReadInSession(
+          session,
+        ),
         onScopeChanged: _setScope,
         onNextPage: () => _nextPage(named.page.nextCursor),
         onPreviousPage: _previousPage,
@@ -304,23 +306,12 @@ final class _ShiftHistoryContents extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('shift-history-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('shift-history-next'),
-              label: 'Next page',
-              tier: AppButtonTier.primary,
-              onPressed: onNextPage,
-            ),
-        ],
+      Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('shift-history-previous'),
+        nextKey: const ValueKey('shift-history-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
       ),
     ],
   );

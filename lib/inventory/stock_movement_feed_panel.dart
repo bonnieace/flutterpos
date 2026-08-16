@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -309,22 +309,12 @@ final class _MovementFeedContents extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('stock-movements-feed-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('stock-movements-feed-next'),
-              label: 'Next page',
-              onPressed: onNextPage,
-            ),
-        ],
+      Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('stock-movements-feed-previous'),
+        nextKey: const ValueKey('stock-movements-feed-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
       ),
     ],
   );
@@ -382,5 +372,4 @@ final class _MovementFeedContents extends StatelessWidget {
       ),
     );
   }
-
 }

@@ -226,7 +226,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('Tenant access unavailable.'), findsOneWidget);
+      expect(find.text('You do not have access to this page.'), findsOneWidget);
       expect(cashierReader.documentPaths, isEmpty);
       expect(cashierReader.queryCount, 0);
       expect(callable.payloads, isEmpty);

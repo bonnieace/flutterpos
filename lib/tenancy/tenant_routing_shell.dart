@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/dialogs.dart';
 import '../ui/home_navigation.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'account_verification.dart';
@@ -565,10 +567,18 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
     return TenantSessionScope(
       controller: _sessionController,
       child: switch (_phase) {
-        _RoutingPhase.waitingForAuth ||
-        _RoutingPhase.bootstrapping ||
-        _RoutingPhase.openingTenant ||
-        _RoutingPhase.signingOut => const _RoutingProgress(),
+        _RoutingPhase.waitingForAuth => const _RoutingProgress(
+          message: 'Checking whether you are signed in.',
+        ),
+        _RoutingPhase.bootstrapping => const _RoutingProgress(
+          message: 'Opening your account.',
+        ),
+        _RoutingPhase.openingTenant => const _RoutingProgress(
+          message: 'Opening the business.',
+        ),
+        _RoutingPhase.signingOut => const _RoutingProgress(
+          message: 'Signing you out.',
+        ),
         _RoutingPhase.selector ||
         _RoutingPhase.noAccessibleTenant => TenantBusinessSelector(
           identity: _visibleInvitationIdentity(),
@@ -907,12 +917,30 @@ final class _InvalidTenantInvitationScreen extends StatelessWidget {
   );
 }
 
+/// The shell's own waiting screen, one sentence per phase.
+///
+/// **The sentence varies because the four phases behind it are not the same
+/// wait.** `waitingForAuth`, `bootstrapping`, `openingTenant` and `signingOut`
+/// all drew the identical bare spinner, and §5.1's row for that widget is the
+/// whole reason `LoadingState` exists: a person watching this screen wants to
+/// know whether their business is opening or their session is ending, and the
+/// spinner answered neither.
+///
+/// **It stays a `Scaffold` rather than becoming an `AppScaffold`**, and that is
+/// a decision rather than an unfinished migration. `AppScaffold` requires a
+/// title and draws a `PageHeader` for it; this is not a page and has no name.
+/// Giving it one would put a heading above a centred state and break §7's
+/// "title appears once" in the only way that section did not anticipate —
+/// by inventing the title.
 final class _RoutingProgress extends StatelessWidget {
-  const _RoutingProgress();
+  const _RoutingProgress({required this.message});
+
+  final String message;
 
   @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: CircularProgressIndicator()));
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(child: LoadingState(message: message)),
+  );
 }
 
 final class TenantBusinessSelector extends StatefulWidget {
@@ -1394,6 +1422,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final List<TenantMembership> switchCandidates;
   final Future<TenantSwitchResult> Function(TenantMembership membership)?
   onSwitchTenant;
+
   /// What to call the signed-in person. See `TenantRoutingShell.memberName`.
   final String? memberName;
 
@@ -1567,11 +1596,12 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               // loses its cards", so the gap above them goes with them - a page
               // whose last section is absent should not end on the space that
               // used to separate it.
-              if (!HomeNavigation.showsMenu(MediaQuery.sizeOf(context).width))
-                ...[
-                  const SizedBox(height: 24),
-                  HomeNavigation.cards(destinations: destinations),
-                ],
+              if (!HomeNavigation.showsMenu(
+                MediaQuery.sizeOf(context).width,
+              )) ...[
+                const SizedBox(height: 24),
+                HomeNavigation.cards(destinations: destinations),
+              ],
             ],
           ),
         ),
@@ -1800,12 +1830,15 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       return;
     }
     final navigator = Navigator.of(context);
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    await showAppDialog<void>(
+      context,
       builder: (dialogContext) => TenantSessionScope(
         controller: controller,
-        child: AlertDialog(
+        // No title: `TenantDefaultForm` carries its own heading and its own two
+        // controls, so `AppDialog` here is the surface and nothing else. §7's
+        // "title appears once" is the rule, and a dialog is not exempt from it.
+        child: AppDialog(
+          actions: const <Widget>[],
           content: TenantDefaultForm(
             session: session,
             membership: membership,
@@ -1832,9 +1865,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         onSwitchTenant == null) {
       return;
     }
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    await showAppDialog<void>(
+      context,
       builder: (dialogContext) => TenantBusinessSwitcher(
         currentMembership: membership,
         candidates: switchCandidates,
@@ -1894,17 +1926,34 @@ final class _TenantBusinessSwitcherState extends State<TenantBusinessSwitcher> {
     });
   }
 
+  /// **The `SizedBox(width: 440)` this had is gone and is not replaced by
+  /// another number.** 440 was the only width any dialog in this app ever
+  /// stated and no section of `design.md` contains it; `AppDialog` takes §4.3's
+  /// `Form` row - "single column, 720 max" - so the maximum is the system's and
+  /// a narrow window shrinks the dialog rather than clipping it.
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Change business'),
-    content: SizedBox(
-      width: 440,
-      child: Column(
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return AppDialog(
+      title: 'Change business',
+      actions: <Widget>[
+        AppButton(
+          label: 'Cancel',
+          tier: AppButtonTier.tertiary,
+          onPressed: _switching ? null : widget.onCancel,
+        ),
+      ],
+      content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Choose another accessible business.'),
-          const SizedBox(height: 12),
+          Text(
+            'Choose another accessible business.',
+            style: tokens.density
+                .body(tokens.typography)
+                .copyWith(color: tokens.colors.text.secondary),
+          ),
+          SizedBox(height: tokens.spacing.s12),
           for (final membership in _available)
             ListTile(
               key: ValueKey('switch-business-${membership.tenantId}'),
@@ -1915,31 +1964,26 @@ final class _TenantBusinessSwitcherState extends State<TenantBusinessSwitcher> {
               onTap: _switching ? null : () => _switch(membership),
             ),
           if (_blocker != null) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: tokens.spacing.s12),
             Callout(
               key: const ValueKey('tenant-switch-blocker'),
               // A refusal, named as one rather than painted red: the write
               // was attempted and nothing changed. Before this the whole of
               // the status was the colour, which is the case §9 rules out.
-              status: AppNotice.refused(tenantSwitchBlockerMessage(_blocker!)).status,
+              status: AppNotice.refused(
+                tenantSwitchBlockerMessage(_blocker!),
+              ).status,
               message: tenantSwitchBlockerMessage(_blocker!),
             ),
           ],
           if (_switching) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: tokens.spacing.s12),
             const LinearProgressIndicator(),
           ],
         ],
       ),
-    ),
-    actions: [
-      AppButton(
-        label: 'Cancel',
-        tier: AppButtonTier.tertiary,
-        onPressed: _switching ? null : widget.onCancel,
-      ),
-    ],
-  );
+    );
+  }
 }
 
 String tenantSwitchBlockerMessage(
@@ -1981,33 +2025,38 @@ final class TenantBootstrapFailure extends StatelessWidget {
   final VoidCallback onRetry;
   final Future<void> Function() onSignOut;
 
+  /// §7's *failure to read a record*, in the component §5.1 names.
+  ///
+  /// **What this replaces is worth naming, because three of the four parts of
+  /// §7's pattern were missing.** It was a 48px `Icons.error_outline` - hue and
+  /// a glyph, no word, which is exactly what §9 rules out - two unstyled
+  /// `Text`s at Material's defaults, and four hardcoded numbers. It had no
+  /// badge, no identifier and nothing at all about what is still true.
+  ///
+  /// **The identifier slot stays empty here on purpose.** §7 asks for "the
+  /// record's identifier in `mono`" and the record that would not open is a
+  /// business this person has not been shown yet; the only string available is
+  /// a UID, and printing one at somebody is §8 rule 1's worked example of what
+  /// not to do.
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48),
-            const SizedBox(height: 16),
-            const Text('We could not open your business account.'),
-            const SizedBox(height: 8),
-            Text(_safeBootstrapError(error), textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 12,
-              children: [
-                AppButton(
-                  label: 'Retry',
-                  tier: AppButtonTier.primary,
-                  onPressed: onRetry,
-                ),
-                AppButton(label: 'Sign out', onPressed: onSignOut),
-              ],
-            ),
-          ],
-        ),
+    body: SafeArea(
+      child: ErrorState(
+        badgeLabel: 'Not opened',
+        statement: 'We could not open your business account.',
+        detail: _safeBootstrapError(error),
+        // §8 rule 6, and the reason *Sign out* is offered beside *Retry*: the
+        // sign-in survived, so the failure is about the account rather than
+        // about the person, and there is something to retry.
+        stillTrue: 'You are still signed in, and nothing has been changed.',
+        actions: <Widget>[
+          AppButton(
+            label: 'Retry',
+            tier: AppButtonTier.primary,
+            onPressed: onRetry,
+          ),
+          AppButton(label: 'Sign out', onPressed: onSignOut),
+        ],
       ),
     ),
   );
@@ -2027,21 +2076,22 @@ final class PlatformRouteUnavailable extends StatelessWidget {
 
   final Future<void> Function() onSignOut;
 
+  /// **`neutral`, not `problem`, and that is the one decision on this screen.**
+  /// §7's pattern is written for a read that failed and §2.1's `problem` is
+  /// "difference found, unreadable, out of stock"; none of that happened here.
+  /// This build simply has no platform console, which §2.1's `neutral` -
+  /// "archived, retired, closed" - describes exactly. Painting it red would
+  /// send somebody looking for a fault that does not exist, and that is why
+  /// [ErrorState.status] is a parameter at all.
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.admin_panel_settings_outlined, size: 52),
-            const SizedBox(height: 16),
-            const Text('Platform administrator access is not available.'),
-            const SizedBox(height: 16),
-            AppButton(label: 'Sign out', onPressed: onSignOut),
-          ],
-        ),
+    body: SafeArea(
+      child: ErrorState(
+        status: AppStatus.neutral,
+        badgeLabel: 'Unavailable',
+        statement: 'Platform administrator access is not available.',
+        stillTrue: 'Your businesses are unaffected.',
+        actions: <Widget>[AppButton(label: 'Sign out', onPressed: onSignOut)],
       ),
     ),
   );

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../checkout/checkout_tender.dart';
 import '../returns/return_actions.dart';
@@ -8,7 +8,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
-import '../ui/buttons.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -171,12 +171,12 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
           reader: widget.reader,
         );
         final page = await switch (request) {
-          TenantShiftSaleHistoryRequest(:final shift) => repository
-              .loadShiftSales(
-                shift: shift,
-                pageSize: widget.pageSize,
-                cursor: cursor,
-              ),
+          TenantShiftSaleHistoryRequest(:final shift) =>
+            repository.loadShiftSales(
+              shift: shift,
+              pageSize: widget.pageSize,
+              cursor: cursor,
+            ),
           TenantOwnSaleHistoryRequest() => repository.loadOwnRecentSales(
             pageSize: widget.pageSize,
             cursor: cursor,
@@ -315,23 +315,12 @@ final class _SaleHistoryContents extends StatelessWidget {
         ),
       ],
       const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('sale-history-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('sale-history-next'),
-              label: 'Next page',
-              tier: AppButtonTier.primary,
-              onPressed: onNextPage,
-            ),
-        ],
+      Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('sale-history-previous'),
+        nextKey: const ValueKey('sale-history-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
       ),
     ],
   );

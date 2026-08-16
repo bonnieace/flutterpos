@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -9,6 +9,7 @@ import '../ui/buttons.dart';
 import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/pagination.dart';
 import '../ui/scaffold.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -104,8 +105,7 @@ enum _BulkTask {
   final String label;
 }
 
-final class _TenantBulkCatalogPanelState
-    extends State<TenantBulkCatalogPanel> {
+final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
   // Every controller lives above the guard, for the reason the catalog surface's
   // do: paging and reloading both replace the guarded subtree with a loading
   // indicator, and a pasted four-hundred-row sheet would go with it.
@@ -240,9 +240,10 @@ final class _TenantBulkCatalogPanelState
       _valueCategoryId ?? '',
     ),
     TenantProductField.price => TenantBulkCatalogEdit.price(_value.text),
-    TenantProductField.cost => _clearCost
-        ? const TenantBulkCatalogEdit.clearCost()
-        : TenantBulkCatalogEdit.cost(_value.text),
+    TenantProductField.cost =>
+      _clearCost
+          ? const TenantBulkCatalogEdit.clearCost()
+          : TenantBulkCatalogEdit.cost(_value.text),
     // Unreachable: neither is offered, because a name and a code belong to one
     // product each.
     TenantProductField.name ||
@@ -375,7 +376,9 @@ final class _TenantBulkCatalogPanelState
     var answered = 0;
     for (final page in plan.pages) {
       try {
-        rows.addAll(describeBatchOutcomes(page, await gateway.send(page, mode)));
+        rows.addAll(
+          describeBatchOutcomes(page, await gateway.send(page, mode)),
+        );
         answered++;
       } on TenantBulkCatalogRequestException catch (error) {
         return TenantBulkCatalogReport(
@@ -629,8 +632,7 @@ final class _BulkCatalogContents extends StatelessWidget {
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
 
-  bool get _offered =>
-      task == _BulkTask.correct ? canCorrect : canImport;
+  bool get _offered => task == _BulkTask.correct ? canCorrect : canImport;
 
   /// Whether a preview would have something to describe.
   bool get _canPreview {
@@ -680,9 +682,12 @@ final class _BulkCatalogContents extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('Many products at once', style: tokens.typography.titleMedium.copyWith(
+        Text(
+          'Many products at once',
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
-          )),
+          ),
+        ),
         const SizedBox(height: 4),
         // A helper rather than a notice, and the call is worth stating because
         // it could have gone the other way. §5.2 names this route's prose by
@@ -796,9 +801,12 @@ final class _BulkCatalogContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final categoryNames = tenantCategoryNames(view.categories.items);
     return <Widget>[
-      Text('What to change', style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          )),
+      Text(
+        'What to change',
+        style: tokens.typography.titleMedium.copyWith(
+          color: tokens.colors.text.primary,
+        ),
+      ),
       const SizedBox(height: 8),
       // **The one bar whose selection is a pair rather than a value.** Which
       // field moves and whether a cost is being *removed* are two variables in
@@ -948,26 +956,13 @@ final class _BulkCatalogContents extends StatelessWidget {
             ),
           ),
       const SizedBox(height: 12),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          AppButton(
-            key: const ValueKey('bulk-catalog-previous-page'),
-            label: 'Previous',
-            tier: AppButtonTier.tertiary,
-            onPressed: pageIndex == 0 || busy ? null : onPreviousPage,
-          ),
-          Text(
-            key: const ValueKey('bulk-catalog-page'),
-            'Page ${pageIndex + 1}',
-          ),
-          AppButton(
-            key: const ValueKey('bulk-catalog-next-page'),
-            label: 'Next',
-            tier: AppButtonTier.tertiary,
-            onPressed: view.products.hasMore && !busy ? onNextPage : null,
-          ),
-        ],
+      Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('bulk-catalog-previous-page'),
+        pageKey: const ValueKey('bulk-catalog-page'),
+        nextKey: const ValueKey('bulk-catalog-next-page'),
+        onPrevious: pageIndex == 0 || busy ? null : onPreviousPage,
+        onNext: view.products.hasMore && !busy ? onNextPage : null,
       ),
     ];
   }
@@ -975,9 +970,12 @@ final class _BulkCatalogContents extends StatelessWidget {
   List<Widget> _importForm(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return <Widget>[
-      Text('Paste the rows', style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          )),
+      Text(
+        'Paste the rows',
+        style: tokens.typography.titleMedium.copyWith(
+          color: tokens.colors.text.primary,
+        ),
+      ),
       const SizedBox(height: 8),
       // Three paragraphs of permanent helper prose behind one fold - §5.1's own
       // description of what `Disclosure` replaces, and the tallest single block
@@ -1035,14 +1033,14 @@ final class _BulkCatalogContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return <Widget>[
       const SizedBox(height: 24),
-      Text('What this does', style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          )),
-      const SizedBox(height: 8),
       Text(
-        key: const ValueKey('bulk-catalog-summary'),
-        _summary(report, task),
+        'What this does',
+        style: tokens.typography.titleMedium.copyWith(
+          color: tokens.colors.text.primary,
+        ),
       ),
+      const SizedBox(height: 8),
+      Text(key: const ValueKey('bulk-catalog-summary'), _summary(report, task)),
       if (report.failure case final failure?) ...[
         const SizedBox(height: 8),
         // The one `problem` in the catalog family, and it is the only notice in
@@ -1150,7 +1148,12 @@ enum _BulkFieldChoice {
   category(TenantProductField.categoryId, false, 'categoryId', 'Category'),
   price(TenantProductField.price, false, 'price', 'Unit price'),
   cost(TenantProductField.cost, false, 'cost', 'Unit cost'),
-  clearCost(TenantProductField.cost, true, 'clear-cost', 'Remove the unit cost');
+  clearCost(
+    TenantProductField.cost,
+    true,
+    'clear-cost',
+    'Remove the unit cost',
+  );
 
   const _BulkFieldChoice(this.field, this.clearsCost, this.slug, this.label);
 
@@ -1205,9 +1208,7 @@ AppStatus _rowStatus(
   TenantBulkCatalogMode mode,
 ) => switch (status) {
   TenantBulkCatalogRowStatus.created || TenantBulkCatalogRowStatus.updated =>
-    mode == TenantBulkCatalogMode.preview
-        ? AppStatus.attention
-        : AppStatus.ok,
+    mode == TenantBulkCatalogMode.preview ? AppStatus.attention : AppStatus.ok,
   TenantBulkCatalogRowStatus.unchanged => AppStatus.neutral,
   TenantBulkCatalogRowStatus.failed => AppStatus.problem,
 };

@@ -6,6 +6,159 @@ import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('AppDialog', () {
+    testWidgets('holds a child, which is the whole of what it adds', (
+      tester,
+    ) async {
+      // `ConfirmDialog` refuses children by design and three form-bearing
+      // dialogs had nowhere to go. This is that component.
+      await _pumpAppDialog(
+        tester,
+        title: 'Correct "Maize flour 2kg"',
+        content: const TextField(key: ValueKey('a-field')),
+        actions: <Widget>[
+          AppButton(label: 'Cancel', onPressed: () {}),
+          AppButton(
+            label: 'Review correction',
+            tier: AppButtonTier.primary,
+            onPressed: () {},
+          ),
+        ],
+      );
+
+      expect(find.text('Correct "Maize flour 2kg"'), findsOne);
+      expect(find.byKey(const ValueKey('a-field')), findsOne);
+      expect(find.byType(AppButton), findsExactly(2));
+    });
+
+    testWidgets('takes §4.3s form maximum rather than a width of its own', (
+      tester,
+    ) async {
+      // §4.3's `Form` row: "single column, 720 max", which is also §4.2's row
+      // for reading and forms. It replaces a hardcoded `SizedBox(width: 440)`
+      // that one call site chose for itself.
+      expect(AppDialog.maximumWidth, AppLayout.contract.reading);
+
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpAppDialog(
+        tester,
+        title: 'Change business',
+        content: const SizedBox(width: 2000, height: 40),
+      );
+
+      final width = tester
+          .getSize(
+            find.descendant(
+              of: find.byType(AppDialog),
+              matching: find.byType(SingleChildScrollView),
+            ),
+          )
+          .width;
+      expect(width, AppDialog.maximumWidth);
+    });
+
+    testWidgets('draws no title row when there is no title', (tester) async {
+      // §7's "title appears once": the set-default form carries its own
+      // heading, so the dialog around it must not repeat the word.
+      await _pumpAppDialog(
+        tester,
+        content: const Text('The form owns its own heading.'),
+      );
+
+      expect(find.byType(Text), findsOne);
+    });
+
+    testWidgets('draws no actions row when the child owns its controls', (
+      tester,
+    ) async {
+      await _pumpAppDialog(tester, content: const Text('A form.'));
+
+      expect(find.byType(AppButton), findsNothing);
+    });
+
+    testWidgets('scrolls the child itself, so a call site nests nothing', (
+      tester,
+    ) async {
+      // Two scroll views inside each other is an unbounded-height error rather
+      // than a cosmetic problem, and a form in a dialog on a phone is taller
+      // than the window more often than not.
+      await _pumpAppDialog(
+        tester,
+        content: const SizedBox(height: 4000),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(AppDialog),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsOne,
+      );
+    });
+
+    testWidgets('is not dismissed by a tap on the scrim', (tester) async {
+      // `ConfirmDialog`'s barrier is dismissible for a destructive question
+      // because the stray tap lands on cancel, which is safe. A stray tap
+      // outside a *form* throws away everything typed into it.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: spiritTheme,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => AppButton(
+                label: 'Open',
+                onPressed: () => showAppDialog<void>(
+                  context,
+                  builder: (_) => const AppDialog(
+                    title: 'Correct this shift\'s totals?',
+                    content: Text('A form.'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppDialog), findsOne);
+    });
+
+    testWidgets('opens behind §2.1s scrim rather than Materials', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: spiritTheme,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => AppButton(
+                label: 'Open',
+                onPressed: () => showAppDialog<void>(
+                  context,
+                  builder: (_) =>
+                      const AppDialog(content: Text('A form.')),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      final route = ModalRoute.of(
+        tester.element(find.byType(AppDialog)),
+      )!;
+      expect(route.barrierColor, AppTokens.dark.colors.surface.scrim);
+    });
+  });
+
   group('ConfirmDialog', () {
     testWidgets('takes the tier of the action that opened it', (tester) async {
       // The one rule this component exists to hold. §8 rule 4 asks that the
@@ -242,3 +395,20 @@ Future<bool?> _ask(
 }
 
 void _noop() {}
+
+Future<void> _pumpAppDialog(
+  WidgetTester tester, {
+  required Widget content,
+  String? title,
+  List<Widget> actions = const <Widget>[],
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: spiritTheme,
+      home: Scaffold(
+        body: AppDialog(title: title, actions: actions, content: content),
+      ),
+    ),
+  );
+  await tester.pump();
+}

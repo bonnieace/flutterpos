@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
@@ -126,14 +126,15 @@ final class _TenantProductLedgerPanelState
     _loaderKey = key;
     final cursor = _cursors[_pageIndex];
     return _loader = (session) async {
-      final ledger = await TenantProductStockRepository(
-        session: session,
-        reader: widget.reader,
-      ).loadLedger(
-        productId: widget.productId,
-        pageSize: widget.pageSize,
-        cursor: cursor,
-      );
+      final ledger =
+          await TenantProductStockRepository(
+            session: session,
+            reader: widget.reader,
+          ).loadLedger(
+            productId: widget.productId,
+            pageSize: widget.pageSize,
+            cursor: cursor,
+          );
       // A sale movement records no actor: nightly reconciliation writes it.
       return _LedgerView(
         ledger: ledger,
@@ -147,8 +148,7 @@ final class _TenantProductLedgerPanelState
 
   @override
   Widget build(BuildContext context) {
-    final guardKey =
-        '${widget.productId}:$_pageIndex:${_cursors[_pageIndex]}';
+    final guardKey = '${widget.productId}:$_pageIndex:${_cursors[_pageIndex]}';
     return TenantRouteGuard<_LedgerView>(
       key: ValueKey(guardKey),
       allowedRoles: TenantProductStockRepository.allowedRoles,
@@ -265,25 +265,14 @@ final class _LedgerContents extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          children: [
-            if (pageIndex > 0)
-              AppButton(
-                key: const ValueKey('product-ledger-previous'),
-                label: 'Previous page',
-                onPressed: onPreviousPage,
-              ),
-            if (ledger.movements.hasMore)
-              AppButton(
-                key: const ValueKey('product-ledger-next'),
-                label: 'Next page',
-                onPressed: onNextPage,
-              ),
-          ],
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('product-ledger-previous'),
+          nextKey: const ValueKey('product-ledger-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: ledger.movements.hasMore ? onNextPage : null,
         ),
       ],
     );
   }
-
 }

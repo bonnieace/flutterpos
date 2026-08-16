@@ -572,7 +572,7 @@ void main() {
       final reader = _CatalogReader(handler: (_) async => const []);
       final missing = TenantSessionController();
       await tester.pumpWidget(_catalogApp(controller: missing, reader: reader));
-      expect(find.text('Tenant access unavailable.'), findsOneWidget);
+      expect(find.text('You do not have access to this page.'), findsOneWidget);
       expect(reader.queries, isEmpty);
 
       final cashier = TenantSessionController()
@@ -587,7 +587,7 @@ void main() {
           allowedRoles: const [TenantRole.manager],
         ),
       );
-      expect(find.text('Tenant access unavailable.'), findsOneWidget);
+      expect(find.text('You do not have access to this page.'), findsOneWidget);
       expect(reader.queries, isEmpty);
     });
 

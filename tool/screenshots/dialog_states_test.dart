@@ -20,6 +20,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_application_1/ui/dialogs.dart';
+import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 
 import 'harness.dart';
@@ -50,6 +51,22 @@ void main() {
   screenshotCase(
     '94-confirmdialog-without-reassurance',
     build: () => const _Dialog(stillTrue: null),
+    fullPage: false,
+  );
+
+  // `AppDialog`'s two rows: with a title and actions, and with neither. The
+  // second is the set-default form's arrangement - a child that carries its own
+  // heading and its own controls - and it is the case a component that always
+  // drew a title row would get wrong.
+  screenshotCase(
+    '94-appdialog-titled',
+    build: () => const _FormDialog(),
+    fullPage: false,
+  );
+
+  screenshotCase(
+    '94-appdialog-bare',
+    build: () => const _FormDialog(titled: false),
     fullPage: false,
   );
 }
@@ -95,4 +112,80 @@ final class _Dialog extends StatelessWidget {
     onConfirm: answerable ? () {} : null,
     onCancel: () {},
   );
+}
+
+/// `AppDialog`, drawn with the shape the product-correction dialog gives it: a
+/// verb for a title, a form, and two controls at the trailing edge.
+final class _FormDialog extends StatelessWidget {
+  const _FormDialog({this.titled = true});
+
+  final bool titled;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Scaffold(
+      backgroundColor: tokens.colors.surface.base,
+      body: AppDialog(
+        title: titled ? 'Correct "Maize flour 2kg"' : null,
+        actions: titled
+            ? <Widget>[
+                AppButton(
+                  label: 'Cancel',
+                  tier: AppButtonTier.tertiary,
+                  onPressed: () {},
+                ),
+                AppButton(
+                  label: 'Review correction',
+                  tier: AppButtonTier.primary,
+                  onPressed: () {},
+                ),
+              ]
+            : const <Widget>[],
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (!titled) ...<Widget>[
+              // The bare case: a child that carries its own heading, which is
+              // §7's "title appears once" arriving inside a dialog.
+              Text(
+                'Make this your default business',
+                style: tokens.typography.titleMedium.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+              SizedBox(height: tokens.spacing.s12),
+            ],
+            AppTextField(
+              label: 'Product name',
+              controller: TextEditingController(text: 'Maize flour 2kg'),
+            ),
+            SizedBox(height: tokens.spacing.s8),
+            AppTextField(
+              label: 'Unit price',
+              leading: Icons.payments_outlined,
+              controller: TextEditingController(text: '135.00'),
+              helper:
+                  'Applies to the next sale. Sales already recorded keep the '
+                  'price they were sold at.',
+            ),
+            if (!titled) ...<Widget>[
+              SizedBox(height: tokens.spacing.s16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
+                  AppButton(
+                    label: 'Make default',
+                    tier: AppButtonTier.primary,
+                    onPressed: () {},
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

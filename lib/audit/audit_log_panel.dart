@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/status.dart';
@@ -254,9 +254,7 @@ final class _AuditLogContents extends StatelessWidget {
       // shape it is said in.
       RecordList(
         identityLabel: 'Event',
-        items: <RecordItem>[
-          for (final record in page.items) _record(record),
-        ],
+        items: <RecordItem>[for (final record in page.items) _record(record)],
         empty: Text(
           key: const ValueKey('audit-log-empty'),
           page.isEventScoped
@@ -266,23 +264,12 @@ final class _AuditLogContents extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('audit-log-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('audit-log-next'),
-              label: 'Next page',
-              tier: AppButtonTier.primary,
-              onPressed: onNextPage,
-            ),
-        ],
+      Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('audit-log-previous'),
+        nextKey: const ValueKey('audit-log-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
       ),
     ],
   );

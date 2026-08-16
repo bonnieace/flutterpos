@@ -571,9 +571,7 @@ final class _CartEditorState extends State<_CartEditor> {
 
   int? _unitPriceMinor(String productId) {
     final product = _snapshot.productById(productId);
-    return product == null
-        ? null
-        : checkoutMinorUnitsFromMajor(product.price);
+    return product == null ? null : checkoutMinorUnitsFromMajor(product.price);
   }
 
   /// Whether any line total, or the cart total, is beyond what a sale records.
@@ -882,165 +880,165 @@ final class _CartEditorState extends State<_CartEditor> {
     return ListView(
       padding: EdgeInsets.all(AppScaffold.horizontalInset(tokens.spacing)),
       children: <Widget>[
-      // **A section head is `title.md`**, which `design.md` **v0.6** settled on
-      // 2026-08-16 by moving the row rather than the eleven screens: §2.2 used
-      // to give a section head `title.lg`, which is also `PageHeader`'s screen
-      // title at §4.1's `compact` band, so a phone got two headings of equal
-      // weight and §7's "Title appears once" had nothing to stand on. It was
-      // `titleSmall` here, which is Material's scale and not one of §2.2's.
-      Text(
-        'Products',
-        style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        ),
-      ),
-      SizedBox(height: tokens.spacing.s4),
-      // Quietened rather than deleted. It is true, and a cashier pricing from
-      // a stale device needs it - but it is standing context, not the thing
-      // being looked at, so it no longer competes with the products for
-      // attention the way full-weight body text did.
-      Text(
-        key: const ValueKey('checkout-catalog-freshness'),
-        'Prices and stock come from this device, last synced '
-        '${_instant(_snapshot.refreshedAt)}. A sale is never blocked by a '
-        'stock count.',
-        style: quiet,
-      ),
-      if (!_snapshot.complete)
+        // **A section head is `title.md`**, which `design.md` **v0.6** settled on
+        // 2026-08-16 by moving the row rather than the eleven screens: §2.2 used
+        // to give a section head `title.lg`, which is also `PageHeader`'s screen
+        // title at §4.1's `compact` band, so a phone got two headings of equal
+        // weight and §7's "Title appears once" had nothing to stand on. It was
+        // `titleSmall` here, which is Material's scale and not one of §2.2's.
         Text(
-          key: const ValueKey('checkout-catalog-partial'),
-          'This device holds only part of the product list for this business, '
-          'so a product may be missing from it.',
+          'Products',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        // Quietened rather than deleted. It is true, and a cashier pricing from
+        // a stale device needs it - but it is standing context, not the thing
+        // being looked at, so it no longer competes with the products for
+        // attention the way full-weight body text did.
+        Text(
+          key: const ValueKey('checkout-catalog-freshness'),
+          'Prices and stock come from this device, last synced '
+          '${_instant(_snapshot.refreshedAt)}. A sale is never blocked by a '
+          'stock count.',
           style: quiet,
         ),
-      SizedBox(height: tokens.spacing.s8),
-      // §5.2's field, and the last two call sites of §11 step 3's sweep. The
-      // leading glyph is the "optional in the strong sense" case that section
-      // describes: a magnifier says *this one is searched*, which the label
-      // cannot say faster, and the till is where a cashier is not reading.
-      AppTextField(
-        key: const ValueKey('checkout-search'),
-        label: 'Search by name or code',
-        leading: Icons.search,
-        controller: _search,
-        textInputAction: TextInputAction.done,
-        onChanged: (_) => setState(() => _codeNotice = null),
-        onSubmitted: (_) => _submitSearch(),
-        helper: 'Scan or enter a code and press enter to add it.',
-      ),
-      // **The eighth notice surface `AppNotice` has been waiting for.** All
-      // three sentences `_submitSearch` writes here are the same outcome -
-      // nothing was added - so this is one `refused`, not a status picked per
-      // branch. It was a bare `Text`, in the position a confirmation would
-      // also have taken.
-      if (_codeNotice case final notice?) ...[
-        SizedBox(height: tokens.spacing.s8),
-        Callout(
-          key: const ValueKey('checkout-code-notice'),
-          status: notice.status,
-          message: notice.message,
-        ),
-      ],
-      if (_snapshot.categories.isNotEmpty || _hasUncachedCategories) ...[
-        SizedBox(height: tokens.spacing.s8),
-        // **The one bar whose selection is not simply a value**, because
-        // "Other" is a *mode* - products naming a category this device does not
-        // hold - and is tracked separately from `_categoryId` rather than as a
-        // sentinel ID, since a real category could legitimately be named
-        // anything. The sentinel lives here, at the one call site that has the
-        // problem, instead of in the component.
-        FilterChipBar<String>(
-          semanticLabel: 'Narrow the products by category',
-          selected: _uncachedCategoriesOnly ? _uncachedSentinel : _categoryId,
-          onSelected: (value) => value == _uncachedSentinel
-              ? _selectCategory(uncachedOnly: true)
-              : _selectCategory(categoryId: value),
-          options: <FilterChipOption<String>>[
-            const FilterChipOption<String>(
-              key: ValueKey('checkout-category-all'),
-              value: null,
-              label: 'All',
-            ),
-            for (final category in _snapshot.categories)
-              FilterChipOption<String>(
-                key: ValueKey('checkout-category-${category.id}'),
-                value: category.id,
-                label: category.name,
-              ),
-            if (_hasUncachedCategories)
-              const FilterChipOption<String>(
-                key: ValueKey('checkout-category-other'),
-                value: _uncachedSentinel,
-                label: 'Other',
-              ),
-          ],
-        ),
-      ],
-      SizedBox(height: tokens.spacing.s8),
-      // **Two full-page-ish states that stay prose, deliberately.** §5.1 gives
-      // `EmptyState` a row and §5.2 specifies it nowhere, and step 9 already
-      // took this decision once for screen 08: giving one of the three missing
-      // full-page states a bespoke treatment here is how a fourth
-      // implementation of an empty state gets written. They take a §2.2 role
-      // and no shape of their own.
-      if (_snapshot.products.isEmpty)
-        Text(
-          key: const ValueKey('checkout-catalog-empty'),
-          'This device holds no products for this business yet. Connect to '
-          'sync them before selling.',
-          style: body,
-        )
-      else if (visible.isEmpty)
-        Text(
-          key: const ValueKey('checkout-catalog-no-matches'),
-          'No product on this device matches that search. Clear it to see the '
-          'whole list.',
-          style: body,
-        )
-      else ...[
-        if (matches.length > visible.length) ...[
+        if (!_snapshot.complete)
           Text(
-            key: const ValueKey('checkout-catalog-truncated'),
-            'Showing ${visible.length} of ${matches.length} matching '
-            'products. Narrow the search, or enter a code to add one '
-            'directly.',
+            key: const ValueKey('checkout-catalog-partial'),
+            'This device holds only part of the product list for this business, '
+            'so a product may be missing from it.',
             style: quiet,
           ),
-          SizedBox(height: tokens.spacing.s8),
-        ],
-        GridView.builder(
-          // The cap above is what makes eager building safe, so the grid does
-          // not need to be lazy and must not scroll itself - it sits inside
-          // the pane's own scroll.
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            // An extent rather than a column count, so one grid serves a phone
-            // and a till screen without a second breakpoint deciding columns.
-            //
-            // **The extent and the height are this component's own and are not
-            // §2.3's to supply.** A tile is not a spacing, a radius or a size
-            // token - `design.md` states no product-tile geometry anywhere -
-            // and 230 x 116 is what this grid already used. The two *gaps* are
-            // §2.3's, and were 8 by coincidence rather than by reference.
-            maxCrossAxisExtent: _productTileExtent,
-            mainAxisExtent: _productTileHeight,
-            crossAxisSpacing: tokens.spacing.s8,
-            mainAxisSpacing: tokens.spacing.s8,
-          ),
-          itemCount: visible.length,
-          itemBuilder: (context, index) {
-            final product = visible[index];
-            return _ProductTile(
-              key: ValueKey('checkout-product-${product.id}'),
-              product: product,
-              detail: _productDetail(product, currency),
-              onTap: () => _add(product),
-            );
-          },
+        SizedBox(height: tokens.spacing.s8),
+        // §5.2's field, and the last two call sites of §11 step 3's sweep. The
+        // leading glyph is the "optional in the strong sense" case that section
+        // describes: a magnifier says *this one is searched*, which the label
+        // cannot say faster, and the till is where a cashier is not reading.
+        AppTextField(
+          key: const ValueKey('checkout-search'),
+          label: 'Search by name or code',
+          leading: Icons.search,
+          controller: _search,
+          textInputAction: TextInputAction.done,
+          onChanged: (_) => setState(() => _codeNotice = null),
+          onSubmitted: (_) => _submitSearch(),
+          helper: 'Scan or enter a code and press enter to add it.',
         ),
-      ],
-      SizedBox(height: tokens.spacing.s20),
+        // **The eighth notice surface `AppNotice` has been waiting for.** All
+        // three sentences `_submitSearch` writes here are the same outcome -
+        // nothing was added - so this is one `refused`, not a status picked per
+        // branch. It was a bare `Text`, in the position a confirmation would
+        // also have taken.
+        if (_codeNotice case final notice?) ...[
+          SizedBox(height: tokens.spacing.s8),
+          Callout(
+            key: const ValueKey('checkout-code-notice'),
+            status: notice.status,
+            message: notice.message,
+          ),
+        ],
+        if (_snapshot.categories.isNotEmpty || _hasUncachedCategories) ...[
+          SizedBox(height: tokens.spacing.s8),
+          // **The one bar whose selection is not simply a value**, because
+          // "Other" is a *mode* - products naming a category this device does not
+          // hold - and is tracked separately from `_categoryId` rather than as a
+          // sentinel ID, since a real category could legitimately be named
+          // anything. The sentinel lives here, at the one call site that has the
+          // problem, instead of in the component.
+          FilterChipBar<String>(
+            semanticLabel: 'Narrow the products by category',
+            selected: _uncachedCategoriesOnly ? _uncachedSentinel : _categoryId,
+            onSelected: (value) => value == _uncachedSentinel
+                ? _selectCategory(uncachedOnly: true)
+                : _selectCategory(categoryId: value),
+            options: <FilterChipOption<String>>[
+              const FilterChipOption<String>(
+                key: ValueKey('checkout-category-all'),
+                value: null,
+                label: 'All',
+              ),
+              for (final category in _snapshot.categories)
+                FilterChipOption<String>(
+                  key: ValueKey('checkout-category-${category.id}'),
+                  value: category.id,
+                  label: category.name,
+                ),
+              if (_hasUncachedCategories)
+                const FilterChipOption<String>(
+                  key: ValueKey('checkout-category-other'),
+                  value: _uncachedSentinel,
+                  label: 'Other',
+                ),
+            ],
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s8),
+        // **Two full-page-ish states that stay prose, deliberately.** §5.1 gives
+        // `EmptyState` a row and §5.2 specifies it nowhere, and step 9 already
+        // took this decision once for screen 08: giving one of the three missing
+        // full-page states a bespoke treatment here is how a fourth
+        // implementation of an empty state gets written. They take a §2.2 role
+        // and no shape of their own.
+        if (_snapshot.products.isEmpty)
+          Text(
+            key: const ValueKey('checkout-catalog-empty'),
+            'This device holds no products for this business yet. Connect to '
+            'sync them before selling.',
+            style: body,
+          )
+        else if (visible.isEmpty)
+          Text(
+            key: const ValueKey('checkout-catalog-no-matches'),
+            'No product on this device matches that search. Clear it to see the '
+            'whole list.',
+            style: body,
+          )
+        else ...[
+          if (matches.length > visible.length) ...[
+            Text(
+              key: const ValueKey('checkout-catalog-truncated'),
+              'Showing ${visible.length} of ${matches.length} matching '
+              'products. Narrow the search, or enter a code to add one '
+              'directly.',
+              style: quiet,
+            ),
+            SizedBox(height: tokens.spacing.s8),
+          ],
+          GridView.builder(
+            // The cap above is what makes eager building safe, so the grid does
+            // not need to be lazy and must not scroll itself - it sits inside
+            // the pane's own scroll.
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              // An extent rather than a column count, so one grid serves a phone
+              // and a till screen without a second breakpoint deciding columns.
+              //
+              // **The extent and the height are this component's own and are not
+              // §2.3's to supply.** A tile is not a spacing, a radius or a size
+              // token - `design.md` states no product-tile geometry anywhere -
+              // and 230 x 116 is what this grid already used. The two *gaps* are
+              // §2.3's, and were 8 by coincidence rather than by reference.
+              maxCrossAxisExtent: _productTileExtent,
+              mainAxisExtent: _productTileHeight,
+              crossAxisSpacing: tokens.spacing.s8,
+              mainAxisSpacing: tokens.spacing.s8,
+            ),
+            itemCount: visible.length,
+            itemBuilder: (context, index) {
+              final product = visible[index];
+              return _ProductTile(
+                key: ValueKey('checkout-product-${product.id}'),
+                product: product,
+                detail: _productDetail(product, currency),
+                onTap: () => _add(product),
+              );
+            },
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s20),
       ],
     );
   }
@@ -1116,6 +1114,14 @@ final class _CartEditorState extends State<_CartEditor> {
           label: 'Total',
           value: '$currency ${_money(total)}',
           valueKey: const ValueKey('checkout-total'),
+          // §6.2's "Total recalculates - digits roll; only changed digits
+          // move, `spring.smooth`, no haptic". The one figure in this app that
+          // changes while a person is looking at it.
+          //
+          // **§6.3 is why this is safe on the sale path**: the string is
+          // formatted from `total`, which is already computed, and the roll
+          // plays over it. Nothing here sits between an input and its record.
+          rolling: true,
         ),
       // Offered only when there is something to abandon, and never for a saved
       // sale: nothing here is persisted, so this destroys no record.
@@ -1157,8 +1163,7 @@ final class _CartEditorState extends State<_CartEditor> {
     final confirmed = await showConfirmDialog(
       context,
       title: 'Clear this sale?',
-      consequence:
-          'Every item is removed and the payment method is cleared.',
+      consequence: 'Every item is removed and the payment method is cleared.',
       stillTrue: 'Nothing has been saved yet, so no record is lost.',
       confirmLabel: 'Clear it',
       cancelLabel: 'Keep it',
@@ -1329,7 +1334,9 @@ final class _ProductTile extends StatelessWidget {
           // forbids status by hue alone, and the word and the glyph below are
           // what carry it; the border is the same signal drawn again.
           border: Border.all(
-            color: depleted ? problem.border : tokens.colors.surface.borderSubtle,
+            color: depleted
+                ? problem.border
+                : tokens.colors.surface.borderSubtle,
           ),
         ),
         child: Padding(

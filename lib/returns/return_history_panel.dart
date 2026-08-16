@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
@@ -9,6 +9,7 @@ import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/status.dart';
@@ -174,16 +175,17 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       _notice = null;
     });
     try {
-      final intent = TenantReturnRequestRepository(
-        session: session,
-        reader: widget.reader,
-      ).buildCreateIntent(
-        returnable: returnable,
-        quantities: quantities,
-        reason: reason,
-        requestId: _requestId ??=
-            (widget.requestIdFactory ?? secureTenantReturnRequestId)(),
-      );
+      final intent =
+          TenantReturnRequestRepository(
+            session: session,
+            reader: widget.reader,
+          ).buildCreateIntent(
+            returnable: returnable,
+            quantities: quantities,
+            reason: reason,
+            requestId: _requestId ??=
+                (widget.requestIdFactory ?? secureTenantReturnRequestId)(),
+          );
       final result = await writer.recordReturn(intent);
       if (!_stillCurrent(capturedKey)) return;
       // Only an ambiguous outcome may have landed, so only it keeps the
@@ -222,14 +224,15 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     final cursor = _cursors[_pageIndex];
     final pageIndex = _pageIndex;
     return _loader = (session) async {
-      final page = await TenantReturnHistoryRepository(
-        session: session,
-        reader: widget.reader,
-      ).loadSaleReturns(
-        saleId: request.saleId,
-        pageSize: widget.pageSize,
-        cursor: cursor,
-      );
+      final page =
+          await TenantReturnHistoryRepository(
+            session: session,
+            reader: widget.reader,
+          ).loadSaleReturns(
+            saleId: request.saleId,
+            pageSize: widget.pageSize,
+            cursor: cursor,
+          );
       return _ReturnsView(
         page: page,
         names: await _resolverFor(session).resolve(
@@ -401,24 +404,25 @@ AppNotice _verificationNotice(TenantReturnVerificationFailure failure) =>
 /// A recorded return is `ok` and **that is a claim worth being careful about**:
 /// nothing has been restored yet. The sentence says so, and the status means
 /// only that the record this screen was asked to write exists.
-AppNotice _resultNotice(TenantReturnWriteResult result) => switch (result.kind) {
-  TenantReturnWriteKind.committed => const AppNotice.confirmed(
-    'Return recorded. No stock has been restored yet; a manager must '
-    'verify it first.',
-  ),
-  TenantReturnWriteKind.rejected => const AppNotice.refused(
-    'The return was refused and nothing was recorded. Check the '
-    'quantities and try again.',
-  ),
-  TenantReturnWriteKind.ambiguous => const AppNotice.unknown(
-    'The result is unknown. Reload this page to see whether the return '
-    'was recorded, and do not record it again.',
-  ),
-  TenantReturnWriteKind.unavailable => const AppNotice.offline(
-    'This device is offline, so nothing was recorded. A return must be '
-    'recorded while online.',
-  ),
-};
+AppNotice _resultNotice(TenantReturnWriteResult result) =>
+    switch (result.kind) {
+      TenantReturnWriteKind.committed => const AppNotice.confirmed(
+        'Return recorded. No stock has been restored yet; a manager must '
+        'verify it first.',
+      ),
+      TenantReturnWriteKind.rejected => const AppNotice.refused(
+        'The return was refused and nothing was recorded. Check the '
+        'quantities and try again.',
+      ),
+      TenantReturnWriteKind.ambiguous => const AppNotice.unknown(
+        'The result is unknown. Reload this page to see whether the return '
+        'was recorded, and do not record it again.',
+      ),
+      TenantReturnWriteKind.unavailable => const AppNotice.offline(
+        'This device is offline, so nothing was recorded. A return must be '
+        'recorded while online.',
+      ),
+    };
 
 /// Every one of these is the client refusing before anything was sent.
 AppNotice _refusalNotice(String code) => AppNotice.refused(switch (code) {
@@ -489,10 +493,7 @@ final class _SaleReturnsContents extends StatelessWidget {
       ],
       const SizedBox(height: 16),
       if (page.items.isNotEmpty) ...[
-        Text(
-          key: const ValueKey('sale-returns-counts'),
-          _countsLabel(page),
-        ),
+        Text(key: const ValueKey('sale-returns-counts'), _countsLabel(page)),
         const SizedBox(height: 12),
       ],
       // §4.3's responsive contract.
@@ -507,23 +508,12 @@ final class _SaleReturnsContents extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('sale-returns-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('sale-returns-next'),
-              label: 'Next page',
-              tier: AppButtonTier.primary,
-              onPressed: onNextPage,
-            ),
-        ],
+      Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('sale-returns-previous'),
+        nextKey: const ValueKey('sale-returns-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
       ),
       if (canRecord) ...[
         const SizedBox(height: 24),
@@ -708,10 +698,7 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
       cancelKey: const ValueKey('sale-returns-cancel-confirm'),
     );
     if (!confirmed || !mounted) return;
-    widget.onRecord(
-      Map<String, int>.unmodifiable(_quantities),
-      _reason.text,
-    );
+    widget.onRecord(Map<String, int>.unmodifiable(_quantities), _reason.text);
   }
 
   @override

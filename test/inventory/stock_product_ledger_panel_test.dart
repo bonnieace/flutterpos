@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
+import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -310,14 +311,30 @@ void main() {
 
     await _pump(tester, _controller(), reader, pageSize: 2);
     expect(find.byKey(const ValueKey('product-ledger-entry-mv-1')), findsOne);
-    expect(find.byKey(const ValueKey('product-ledger-previous')), findsNothing);
+    // **Present and disabled rather than absent**, since `Pagination`. Eleven
+    // screens used to hide the control on the first page, so the bar moved
+    // under a thumb as a person paged; §5's `disabled` row is what that is for,
+    // and this is the stronger assertion of the two.
+    expect(
+      tester
+          .widget<AppButton>(
+            find.byKey(const ValueKey('product-ledger-previous')),
+          )
+          .onPressed,
+      isNull,
+    );
 
     await tester.tap(find.byKey(const ValueKey('product-ledger-next')));
     await tester.pump();
     await tester.pump();
     expect(reader.queries.last.startAfterDocumentId, 'mv-2');
     expect(find.byKey(const ValueKey('product-ledger-entry-mv-3')), findsOne);
-    expect(find.byKey(const ValueKey('product-ledger-next')), findsNothing);
+    expect(
+      tester
+          .widget<AppButton>(find.byKey(const ValueKey('product-ledger-next')))
+          .onPressed,
+      isNull,
+    );
 
     await tester.tap(find.byKey(const ValueKey('product-ledger-previous')));
     await tester.pump();

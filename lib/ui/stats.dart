@@ -47,6 +47,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'rolling_number.dart';
 import 'status.dart';
 import 'tokens.dart';
 
@@ -81,6 +82,7 @@ final class StatTile extends StatelessWidget {
     this.status,
     this.statusLabel,
     this.valueKey,
+    this.rolling = false,
   }) : assert(
          (status == null) == (statusLabel == null),
          'A status is a container, an icon and a word (design.md §2.1). Give '
@@ -116,6 +118,17 @@ final class StatTile extends StatelessWidget {
   /// Key on the figure's own `Text`, for a caller whose tests address the number
   /// rather than the tile around it.
   final Key? valueKey;
+
+  /// Whether the figure **rolls** when it changes, per §6.2's "total
+  /// recalculates" row.
+  ///
+  /// **Opt-in rather than always-on, and the reason is §6.4's budget rather
+  /// than caution.** Of this app's `StatTile` call sites, all but one show a
+  /// figure that was read once and does not change while a person looks at it -
+  /// yesterday's takings, a stock count, a reconciliation difference. Rolling
+  /// those would be animation with nothing to report. The one that changes
+  /// under a person's hands is the till's total, which is the row §6.2 names.
+  final bool rolling;
 
   /// The glyph size, borrowed rather than invented.
   ///
@@ -165,19 +178,28 @@ final class StatTile extends StatelessWidget {
                 ],
               ),
               SizedBox(height: tokens.spacing.s8),
-              Text(
-                key: valueKey,
-                value,
-                maxLines: 1,
-                // A figure that does not fit is a layout this component could
-                // not honour, and [StatRow] exists so that it does not happen:
-                // it measures the widest figure it holds and gives every tile
-                // room for it. This is the floor under that, not the plan.
-                overflow: TextOverflow.ellipsis,
-                style: tokens.typography.numericHero.copyWith(
-                  color: tokens.colors.text.primary,
+              if (rolling)
+                RollingNumber(
+                  value: value,
+                  textKey: valueKey,
+                  style: tokens.typography.numericHero.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
+                )
+              else
+                Text(
+                  key: valueKey,
+                  value,
+                  maxLines: 1,
+                  // A figure that does not fit is a layout this component could
+                  // not honour, and [StatRow] exists so that it does not happen:
+                  // it measures the widest figure it holds and gives every tile
+                  // room for it. This is the floor under that, not the plan.
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.typography.numericHero.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
                 ),
-              ),
               if (status case final standing?) ...<Widget>[
                 SizedBox(height: tokens.spacing.s8),
                 StatusBadge(status: standing, label: statusLabel!),

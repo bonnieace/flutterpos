@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../reporting/reconciliation_anomalies.dart';
 import '../reporting/reconciliation_labels.dart';
@@ -11,6 +11,7 @@ import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/stats.dart';
@@ -68,10 +69,8 @@ const int _productDifferencePageSize = 5;
 /// figure off the screen with it. The same degrade-rather-than-fail rule the
 /// staff-name resolver beside it already follows.
 final class _ProductDifferences {
-  const _ProductDifferences.listed({
-    required this.items,
-    required this.hasMore,
-  }) : readable = true;
+  const _ProductDifferences.listed({required this.items, required this.hasMore})
+    : readable = true;
 
   const _ProductDifferences.unreadable()
     : items = const <TenantReconciliationAnomaly>[],
@@ -231,13 +230,14 @@ final class _TenantProductStockPanelState
     String productId,
   ) async {
     try {
-      final page = await TenantReconciliationAnomalyRepository(
-        session: session,
-        reader: widget.reader,
-      ).loadProductPage(
-        productId: productId,
-        pageSize: _productDifferencePageSize,
-      );
+      final page =
+          await TenantReconciliationAnomalyRepository(
+            session: session,
+            reader: widget.reader,
+          ).loadProductPage(
+            productId: productId,
+            pageSize: _productDifferencePageSize,
+          );
       return _ProductDifferences.listed(
         items: page.items,
         hasMore: page.hasMore,
@@ -506,7 +506,9 @@ final class _ProductStockContents extends StatelessWidget {
               label: 'Ledger entries',
               value: '${page.items.length}',
               icon: Icons.receipt_long_outlined,
-              detail: page.hasMore ? 'on this page, more to load' : 'on this page',
+              detail: page.hasMore
+                  ? 'on this page, more to load'
+                  : 'on this page',
             ),
           ],
         ),
@@ -544,9 +546,12 @@ final class _ProductStockContents extends StatelessWidget {
         ],
         ..._differencesSection(context),
         const SizedBox(height: 24),
-        Text('Stock ledger', style: tokens.typography.titleMedium.copyWith(
+        Text(
+          'Stock ledger',
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
-          )),
+          ),
+        ),
         const SizedBox(height: 4),
         const Disclosure(
           key: ValueKey('product-stock-ledger-disclosure'),
@@ -582,35 +587,36 @@ final class _ProductStockContents extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          children: [
-            if (pageIndex > 0)
-              // **Pagination is secondary, and it used to be a primary.** §2.1
-              // permits exactly one primary per screen region and on this route
-              // that is `Adjust stock`; "Next page" competing with it for the
-              // eye is the tier system not being applied rather than a taste
-              // call. The same repoint is made on every paginated feed.
-              AppButton(
-                key: const ValueKey('product-stock-previous'),
-                label: 'Previous page',
-                onPressed: onPreviousPage,
-              ),
-            if (page.hasMore)
-              AppButton(
-                key: const ValueKey('product-stock-next'),
-                label: 'Next page',
-                onPressed: onNextPage,
-              ),
-            // The ledger explains every movement; this narrows the business-wide
-            // correction record to the manual ones recorded against this product.
-            AppButton(
-              key: const ValueKey('product-stock-adjustments'),
-              label: 'Manual adjustments',
-              icon: Icons.fact_check_outlined,
-              onPressed: onOpenAdjustments,
-            ),
-          ],
+        // **Pagination is secondary, and it used to be a primary.** §2.1
+        // permits exactly one primary per screen region and on this route that
+        // is `Adjust stock`; "Next page" competing with it for the eye is the
+        // tier system not being applied rather than a taste call. The same
+        // repoint is made on every paginated feed - and as of `Pagination` it
+        // is made once, in the component, rather than on thirteen screens.
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('product-stock-previous'),
+          nextKey: const ValueKey('product-stock-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
+        ),
+        const SizedBox(height: 12),
+        // **Out of the page bar it was sharing, and that is the migration
+        // finding on this screen.** It is not pagination: it opens another
+        // route. It sat in the same `Wrap` only because the `Wrap` was where
+        // the buttons were, and `Pagination` owning its own form is what
+        // surfaced it.
+        //
+        // The ledger explains every movement; this narrows the business-wide
+        // correction record to the manual ones recorded against this product.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AppButton(
+            key: const ValueKey('product-stock-adjustments'),
+            label: 'Manual adjustments',
+            icon: Icons.fact_check_outlined,
+            onPressed: onOpenAdjustments,
+          ),
         ),
         if (canAdjust) ...[
           const SizedBox(height: 24),
@@ -836,9 +842,12 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Adjust stock', style: tokens.typography.titleMedium.copyWith(
+        Text(
+          'Adjust stock',
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
-          )),
+          ),
+        ),
         const SizedBox(height: 4),
         // §5.2 names the stock-adjustment explanation as prose to keep and move
         // inside a `Disclosure`. The words are unchanged; the summary above them

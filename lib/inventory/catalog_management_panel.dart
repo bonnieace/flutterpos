@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_repository.dart';
@@ -9,6 +9,7 @@ import '../ui/buttons.dart';
 import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -287,16 +288,16 @@ final class _TenantCatalogManagementPanelState
               '${intent.sku}, and priced at ${_money(intent.priceMinor)} in the '
               'currency this business publishes. '
               '${intent.costMinor == null ? 'No unit cost is recorded, so its '
-                    'sales report no profit and are counted as missing cost data.' : 'It costs ${_money(intent.costMinor!)} a unit; every sale '
-                    'records that figure as it stands at the moment of the sale, '
-                    'so correcting it later never changes a profit already '
-                    'reported.'} '
+                        'sales report no profit and are counted as missing cost data.' : 'It costs ${_money(intent.costMinor!)} a unit; every sale '
+                        'records that figure as it stands at the moment of the sale, '
+                        'so correcting it later never changes a profit already '
+                        'reported.'} '
               'It is added holding no stock: '
               'record the opening quantity from the product itself, so the '
               'ledger says where those units came from.\n\n'
               '${widget.updateCallable == null ? 'Nothing in this app can change a name, a code, or a price '
-                    'afterwards.' : 'A name, code, price, or unit cost can be corrected afterwards '
-                    'from this same list, and every correction is recorded.'} '
+                        'afterwards.' : 'A name, code, price, or unit cost can be corrected afterwards '
+                        'from this same list, and every correction is recorded.'} '
               'Nothing makes a code unique either - if another '
               'product already scans as ${intent.sku}, the till will refuse '
               'that scan rather than pick one.',
@@ -398,8 +399,8 @@ final class _TenantCatalogManagementPanelState
     if (callable == null || _busy) return;
     final capturedKey = _sessionKey(session);
 
-    final draft = await showDialog<_ProductEditDraft>(
-      context: context,
+    final draft = await showAppDialog<_ProductEditDraft>(
+      context,
       builder: (context) => _EditProductDialog(
         product: product,
         categories: view.categories.items,
@@ -409,9 +410,8 @@ final class _TenantCatalogManagementPanelState
         // reads its tier from the fields a payload names: a form that offered a
         // price it knew would be refused would teach a manager only that the
         // app guesses.
-        canChangeMoney: TenantCatalogManagementRepository.canRecordCostInSession(
-          session,
-        ),
+        canChangeMoney:
+            TenantCatalogManagementRepository.canRecordCostInSession(session),
       ),
     );
     if (draft == null || !_stillCurrent(capturedKey)) return;
@@ -610,8 +610,9 @@ final class _TenantCatalogManagementPanelState
         productSku: _productSku,
         productPrice: _productPrice,
         productCost: _productCost,
-        canRecordCost:
-            TenantCatalogManagementRepository.canRecordCostInSession(session),
+        canRecordCost: TenantCatalogManagementRepository.canRecordCostInSession(
+          session,
+        ),
         selectedCategoryId: _selectedCategoryId,
         pageIndex: _pageIndex,
         onCategorySelected: (categoryId) =>
@@ -781,9 +782,12 @@ final class _CatalogManagementContents extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('Catalog', style: tokens.typography.titleMedium.copyWith(
+        Text(
+          'Catalog',
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
-          )),
+          ),
+        ),
         const SizedBox(height: 4),
         // A permanent **helper** paragraph in §5.1's sense - always the same,
         // true of every product this route will ever hold, read once - so it
@@ -836,9 +840,12 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        Text('Categories', style: tokens.typography.titleMedium.copyWith(
+        Text(
+          'Categories',
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
-          )),
+          ),
+        ),
         const SizedBox(height: 8),
         if (view.categories.items.isEmpty)
           const Text(
@@ -900,9 +907,12 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 28),
-        Text('Add a product', style: tokens.typography.titleMedium.copyWith(
+        Text(
+          'Add a product',
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
-          )),
+          ),
+        ),
         const SizedBox(height: 8),
         if (!canWrite)
           // The second of this build's two read-only notices, and both are
@@ -1021,9 +1031,12 @@ final class _CatalogManagementContents extends StatelessWidget {
         ],
         if (onBulk case final onBulk?) ...[
           const SizedBox(height: 28),
-          Text('Many products at once', style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          )),
+          Text(
+            'Many products at once',
+            style: tokens.typography.titleMedium.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
           const SizedBox(height: 8),
           // §5.2 names this paragraph by name as prose that should be kept and
           // moved inside a `Disclosure`. The words are unchanged; only the
@@ -1048,9 +1061,12 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 28),
-        Text('Products', style: tokens.typography.titleMedium.copyWith(
+        Text(
+          'Products',
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
-          )),
+          ),
+        ),
         const SizedBox(height: 8),
         // §4.3's responsive contract, on the screen §5.2 wrote its catalog
         // example against. The four facts that were one bullet-separated
@@ -1082,30 +1098,13 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // `Previous` / `Next` are named in §9 as a known target failure.
-            // The tier is unchanged; what changes is that they now answer a
-            // 48dp tap. The `Pagination` component itself is step 3 of §5.1's
-            // priority 3 and is not this chunk's.
-            AppButton(
-              key: const ValueKey('catalog-management-previous-page'),
-              label: 'Previous',
-              tier: AppButtonTier.tertiary,
-              onPressed: pageIndex == 0 || busy ? null : onPreviousPage,
-            ),
-            Text(
-              key: const ValueKey('catalog-management-page'),
-              'Page ${pageIndex + 1}',
-            ),
-            AppButton(
-              key: const ValueKey('catalog-management-next-page'),
-              label: 'Next',
-              tier: AppButtonTier.tertiary,
-              onPressed: view.products.hasMore && !busy ? onNextPage : null,
-            ),
-          ],
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('catalog-management-previous-page'),
+          pageKey: const ValueKey('catalog-management-page'),
+          nextKey: const ValueKey('catalog-management-next-page'),
+          onPrevious: pageIndex == 0 || busy ? null : onPreviousPage,
+          onNext: view.products.hasMore && !busy ? onNextPage : null,
         ),
       ],
     );
@@ -1385,22 +1384,21 @@ final class _ProductEditDraft {
 
   /// Identifies this exact correction, so a retained request ID can be held
   /// against the correction it was issued for and no other.
-  String fingerprint(String productId) =>
-      <String>[
-        productId,
-        name,
-        sku,
-        categoryId,
-        price ?? '',
-        cost ?? '',
-        '$clearCost',
-      // NUL-separated, matching every other identity digest in this codebase.
-      // Written as an escape rather than typed: it reached this file as a
-      // literal NUL byte, which made `grep` report the whole module as binary
-      // and return nothing from it - the standing trap, met here in Dart for
-      // the first time. It must stay a NUL rather than become a space, because
-      // this is what a retained request ID is held against.
-      ].join('\u0000');
+  String fingerprint(String productId) => <String>[
+    productId,
+    name,
+    sku,
+    categoryId,
+    price ?? '',
+    cost ?? '',
+    '$clearCost',
+    // NUL-separated, matching every other identity digest in this codebase.
+    // Written as an escape rather than typed: it reached this file as a
+    // literal NUL byte, which made `grep` report the whole module as binary
+    // and return nothing from it - the standing trap, met here in Dart for
+    // the first time. It must stay a NUL rather than become a space, because
+    // this is what a retained request ID is held against.
+  ].join('\u0000');
 }
 
 /// The one form that corrects a product, offering every editable field at once.
@@ -1463,159 +1461,164 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return AlertDialog(
-      title: Text('Correct "${widget.product.name}"'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // A permanent helper paragraph, true of every correction this
-            // dialog will ever make, so it folds. A dialog is the place where
-            // the height it costs is worth most: what a person came here to do
-            // is edit five fields, and the explanation of how they are checked
-            // is read once and then never again.
-            //
-            // **The summary is short because a dialog is not a page.** This
-            // shipped as `How a correction is checked` - 27 characters, inside
-            // `Disclosure.summaryCharacterBudget` - and truncated the first time
-            // anything photographed this dialog on a phone. See
-            // `Disclosure.dialogSummaryCharacterBudget`.
-            const Disclosure(
-              key: ValueKey('catalog-management-edit-scope-disclosure'),
-              summary: 'How this is checked',
-              child: Text(
-                key: ValueKey('catalog-management-edit-scope'),
-                'Every field is filled in with what the product holds now. '
-                'Change the ones that are wrong and save them together: a '
-                'correction is checked against the whole product, so one that '
-                'leaves a different field unreadable is refused outright.',
-              ),
+    // §5.1 has no row for a dialog that holds a form; `AppDialog` is the
+    // component `DESIGN-PROPOSAL-COMPONENTS.md` §1 split out for exactly these
+    // three, and it owns the scroll - the `SingleChildScrollView` that was
+    // here is now the component's.
+    return AppDialog(
+      title: 'Correct "${widget.product.name}"',
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // A permanent helper paragraph, true of every correction this
+          // dialog will ever make, so it folds. A dialog is the place where
+          // the height it costs is worth most: what a person came here to do
+          // is edit five fields, and the explanation of how they are checked
+          // is read once and then never again.
+          //
+          // **The summary is short because a dialog is not a page.** This
+          // shipped as `How a correction is checked` - 27 characters, inside
+          // `Disclosure.summaryCharacterBudget` - and truncated the first time
+          // anything photographed this dialog on a phone. See
+          // `Disclosure.dialogSummaryCharacterBudget`.
+          const Disclosure(
+            key: ValueKey('catalog-management-edit-scope-disclosure'),
+            summary: 'How this is checked',
+            child: Text(
+              key: ValueKey('catalog-management-edit-scope'),
+              'Every field is filled in with what the product holds now. '
+              'Change the ones that are wrong and save them together: a '
+              'correction is checked against the whole product, so one that '
+              'leaves a different field unreadable is refused outright.',
             ),
-            const SizedBox(height: 12),
-            AppTextField(
-              key: const ValueKey('catalog-management-edit-name'),
-              controller: _name,
-              maxLength: maximumCatalogNameLength,
-              label: 'Product name',
-            ),
+          ),
+          const SizedBox(height: 12),
+          AppTextField(
+            key: const ValueKey('catalog-management-edit-name'),
+            controller: _name,
+            maxLength: maximumCatalogNameLength,
+            label: 'Product name',
+          ),
+          const SizedBox(height: 8),
+          AppTextField(
+            key: const ValueKey('catalog-management-edit-sku'),
+            controller: _sku,
+            maxLength: maximumCatalogSkuLength,
+            label: 'Code (SKU or barcode)',
+            leading: Icons.tag,
+            helper:
+                'What the till matches a scan against. No spaces. The old '
+                'code stops finding this product.',
+          ),
+          if (widget.canChangeMoney) ...[
             const SizedBox(height: 8),
             AppTextField(
-              key: const ValueKey('catalog-management-edit-sku'),
-              controller: _sku,
-              maxLength: maximumCatalogSkuLength,
-              label: 'Code (SKU or barcode)',
-              leading: Icons.tag,
+              key: const ValueKey('catalog-management-edit-price'),
+              controller: _price,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              label: 'Unit price',
+              leading: Icons.payments_outlined,
               helper:
-                  'What the till matches a scan against. No spaces. The old '
-                  'code stops finding this product.',
+                  'Applies to the next sale. Sales already recorded keep '
+                  'the price they were sold at.',
             ),
-            if (widget.canChangeMoney) ...[
-              const SizedBox(height: 8),
-              AppTextField(
-                key: const ValueKey('catalog-management-edit-price'),
-                controller: _price,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                label: 'Unit price',
-                leading: Icons.payments_outlined,
-                helper:
-                    'Applies to the next sale. Sales already recorded keep '
-                    'the price they were sold at.',
-              ),
-              const SizedBox(height: 8),
-              AppTextField(
-                key: const ValueKey('catalog-management-edit-cost'),
-                controller: _cost,
-                enabled: !_clearCost,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                label: 'Unit cost',
-                leading: Icons.payments_outlined,
-                helper: widget.product.cost == null
-                    ? 'No unit cost is recorded. Enter one to start recording '
-                          'it; leave it blank to keep reporting no profit for '
-                          'this product.'
-                    : 'Leaving this blank keeps the recorded cost as it is. '
-                          'Removing it is a separate act, below.',
-              ),
-              if (widget.product.cost != null)
-                CheckboxListTile(
-                  key: const ValueKey('catalog-management-edit-clear-cost'),
-                  value: _clearCost,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Remove the recorded unit cost'),
-                  subtitle: const Text(
-                    'Its sales then report no profit and are counted as '
-                    'missing cost data, rather than reporting the whole price '
-                    'as profit.',
-                  ),
-                  onChanged: (value) =>
-                      setState(() => _clearCost = value ?? false),
-                ),
-            ] else ...[
-              const SizedBox(height: 12),
-              // A role notice, at `info` for the reason every other one on this
-              // route is: two of the five fields are not offered, and the other
-              // three are - nothing has failed and nothing is hidden.
-              const Callout(
-                key: ValueKey('catalog-management-edit-money-hidden'),
-                status: AppStatus.info,
-                message:
-                    'Only an owner or administrator may change what this '
-                    'product is priced at or what it costs, so neither is '
-                    'offered here.',
-              ),
-            ],
-            const SizedBox(height: 12),
-            Text('Category', style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          )),
             const SizedBox(height: 8),
-            FilterChipBar<String>(
-              semanticLabel: 'The category this product is filed under',
-              selected: _categoryId,
-              onSelected: (value) =>
-                  setState(() => _categoryId = value ?? _categoryId),
-              options: <FilterChipOption<String>>[
-                for (final category in widget.categories)
-                  FilterChipOption<String>(
-                    key: ValueKey(
-                      'catalog-management-edit-category-${category.id}',
-                    ),
-                    value: category.id,
-                    label: category.name,
-                  ),
-              ],
+            AppTextField(
+              key: const ValueKey('catalog-management-edit-cost'),
+              controller: _cost,
+              enabled: !_clearCost,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              label: 'Unit cost',
+              leading: Icons.payments_outlined,
+              helper: widget.product.cost == null
+                  ? 'No unit cost is recorded. Enter one to start recording '
+                        'it; leave it blank to keep reporting no profit for '
+                        'this product.'
+                  : 'Leaving this blank keeps the recorded cost as it is. '
+                        'Removing it is a separate act, below.',
             ),
-            if (!_categoryOffered)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  key: const ValueKey('catalog-management-edit-category-off'),
-                  'This product is filed under $unlistedTenantCategoryPhrase. '
-                  'Leaving it there is fine; choosing one above moves it.',
-                  style: tokens.typography.caption.copyWith(
-                    color: tokens.colors.text.tertiary,
-                  ),
+            if (widget.product.cost != null)
+              CheckboxListTile(
+                key: const ValueKey('catalog-management-edit-clear-cost'),
+                value: _clearCost,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Remove the recorded unit cost'),
+                subtitle: const Text(
+                  'Its sales then report no profit and are counted as '
+                  'missing cost data, rather than reporting the whole price '
+                  'as profit.',
                 ),
-              )
-            else if (widget.moreCategories)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  key: const ValueKey('catalog-management-edit-more-categories'),
-                  'More categories exist than are shown here. A product can '
-                  'only be moved into one of those above.',
-                  style: tokens.typography.caption.copyWith(
-                    color: tokens.colors.text.tertiary,
+                onChanged: (value) =>
+                    setState(() => _clearCost = value ?? false),
+              ),
+          ] else ...[
+            const SizedBox(height: 12),
+            // A role notice, at `info` for the reason every other one on this
+            // route is: two of the five fields are not offered, and the other
+            // three are - nothing has failed and nothing is hidden.
+            const Callout(
+              key: ValueKey('catalog-management-edit-money-hidden'),
+              status: AppStatus.info,
+              message:
+                  'Only an owner or administrator may change what this '
+                  'product is priced at or what it costs, so neither is '
+                  'offered here.',
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'Category',
+            style: tokens.typography.titleMedium.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          FilterChipBar<String>(
+            semanticLabel: 'The category this product is filed under',
+            selected: _categoryId,
+            onSelected: (value) =>
+                setState(() => _categoryId = value ?? _categoryId),
+            options: <FilterChipOption<String>>[
+              for (final category in widget.categories)
+                FilterChipOption<String>(
+                  key: ValueKey(
+                    'catalog-management-edit-category-${category.id}',
                   ),
+                  value: category.id,
+                  label: category.name,
+                ),
+            ],
+          ),
+          if (!_categoryOffered)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                key: const ValueKey('catalog-management-edit-category-off'),
+                'This product is filed under $unlistedTenantCategoryPhrase. '
+                'Leaving it there is fine; choosing one above moves it.',
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.tertiary,
                 ),
               ),
-          ],
-        ),
+            )
+          else if (widget.moreCategories)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                key: const ValueKey('catalog-management-edit-more-categories'),
+                'More categories exist than are shown here. A product can '
+                'only be moved into one of those above.',
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.tertiary,
+                ),
+              ),
+            ),
+        ],
       ),
       actions: [
         AppButton(

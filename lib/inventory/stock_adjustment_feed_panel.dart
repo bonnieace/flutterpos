@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../ui/buttons.dart';
+import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -33,7 +33,7 @@ final class TenantStockAdjustmentFeedScreen extends StatelessWidget {
     title: product == null
         ? 'Stock adjustments'
         : 'Adjustments: ${product!.name}',
-contentWidth: AppContentWidth.records,
+    contentWidth: AppContentWidth.records,
     body: TenantStockAdjustmentFeedPanel(reader: reader, product: product),
   );
 }
@@ -234,26 +234,15 @@ final class _AdjustmentFeedContents extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 16),
-      Wrap(
-        spacing: 12,
-        children: [
-          if (pageIndex > 0)
-            AppButton(
-              key: const ValueKey('stock-adjustments-previous'),
-              label: 'Previous page',
-              onPressed: onPreviousPage,
-            ),
-          if (page.hasMore)
-            AppButton(
-              key: const ValueKey('stock-adjustments-next'),
-              label: 'Next page',
-              onPressed: onNextPage,
-            ),
-        ],
+      Pagination(
+        pageNumber: pageIndex + 1,
+        previousKey: const ValueKey('stock-adjustments-previous'),
+        nextKey: const ValueKey('stock-adjustments-next'),
+        onPrevious: pageIndex > 0 ? onPreviousPage : null,
+        onNext: page.hasMore ? onNextPage : null,
       ),
     ],
   );
-
 }
 
 /// Opens the feed under the caller's own session scope, so a tenant switch
@@ -269,7 +258,10 @@ void openTenantStockAdjustmentFeed(
     AppPageRoute<void>(
       builder: (_) => TenantSessionScope(
         controller: controller,
-        child: TenantStockAdjustmentFeedScreen(reader: reader, product: product),
+        child: TenantStockAdjustmentFeedScreen(
+          reader: reader,
+          product: product,
+        ),
       ),
     ),
   );

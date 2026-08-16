@@ -7,6 +7,7 @@ import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
+import '../ui/pagination.dart';
 import '../ui/scaffold.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
@@ -598,23 +599,12 @@ final class _ReconciliationContents extends StatelessWidget {
           onPressed: onOpenAnomalies,
         ),
         SizedBox(height: tokens.spacing.s16),
-        Wrap(
-          spacing: tokens.spacing.s12,
-          children: [
-            if (pageIndex > 0)
-              AppButton(
-                key: const ValueKey('reconciliation-status-previous'),
-                label: 'Previous page',
-                onPressed: onPreviousPage,
-              ),
-            if (day.runs.hasMore)
-              AppButton(
-                key: const ValueKey('reconciliation-status-next'),
-                label: 'Next page',
-                tier: AppButtonTier.primary,
-                onPressed: onNextPage,
-              ),
-          ],
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('reconciliation-status-previous'),
+          nextKey: const ValueKey('reconciliation-status-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: day.runs.hasMore ? onNextPage : null,
         ),
       ],
     );

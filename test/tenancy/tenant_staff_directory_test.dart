@@ -352,7 +352,7 @@ void main() {
         _staffApp(controller: controller, reader: reader),
       );
 
-      expect(find.text('Tenant access unavailable.'), findsOneWidget);
+      expect(find.text('You do not have access to this page.'), findsOneWidget);
       expect(reader.documentPaths, isEmpty);
       expect(reader.queries, isEmpty);
     });

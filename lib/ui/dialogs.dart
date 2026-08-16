@@ -41,6 +41,190 @@ import 'package:flutter/material.dart';
 import 'buttons.dart';
 import 'tokens.dart';
 
+/// One dialog surface, worn by both components in this file.
+///
+/// **Extracted rather than copied, and that is §1's own complaint.** The four
+/// values below - `surface.overlay`, `radius.lg`, `space.24`, and the trailing
+/// `Wrap` of actions - were about to be written a second time for [AppDialog],
+/// which is how a system ends up with two dialogs that differ by four pixels
+/// nobody chose. `ConfirmDialog`'s rendering is unchanged by this: it passes
+/// no [maximumWidth] and the arithmetic above it is identical.
+final class _DialogFrame extends StatelessWidget {
+  const _DialogFrame({
+    required this.content,
+    required this.actions,
+    this.title,
+    this.maximumWidth,
+    this.scrollable = true,
+  });
+
+  final String? title;
+  final Widget content;
+  final List<Widget> actions;
+
+  /// Null means "as wide as `AlertDialog` would make it", which is what
+  /// `ConfirmDialog` has always been.
+  final double? maximumWidth;
+
+  final bool scrollable;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    Widget body = content;
+    if (scrollable) body = SingleChildScrollView(child: body);
+    if (maximumWidth case final limit?) {
+      body = ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: limit),
+        child: body,
+      );
+    }
+    return AlertDialog(
+      // §2.1: "dialogs, menus, bottom sheets". The theme already paints
+      // `dialogTheme` this colour; naming it here is what makes the component
+      // independent of a theme that may not be this app's - a dialog is pushed
+      // onto a route with its own context, which is exactly where a token read
+      // through `componentOf` earns its fallback.
+      backgroundColor: tokens.colors.surface.overlay,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        // §2.3's row for "dialogs, bottom sheets".
+        borderRadius: BorderRadius.circular(tokens.radius.lg),
+      ),
+      insetPadding: EdgeInsets.all(tokens.spacing.s24),
+      titlePadding: EdgeInsets.fromLTRB(
+        tokens.spacing.s24,
+        tokens.spacing.s24,
+        tokens.spacing.s24,
+        tokens.spacing.s12,
+      ),
+      contentPadding: EdgeInsets.symmetric(horizontal: tokens.spacing.s24),
+      actionsPadding: EdgeInsets.all(tokens.spacing.s24),
+      title: title == null
+          ? null
+          : Text(
+              title!,
+              style: tokens.typography.titleMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
+            ),
+      content: body,
+      // **A `Wrap`, not a `Row`**, and for the reason the staff forms already
+      // recorded: two 48-high pills with verb phrases on them do not fit a
+      // phone beside each other, and a `Row` answers that by overflowing.
+      // `end` alignment keeps the confirm at the trailing edge on one line and
+      // puts it on top when they stack, which is the order a person reads them
+      // in.
+      actions: actions.isEmpty
+          ? null
+          : <Widget>[
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: tokens.spacing.s12,
+                runSpacing: tokens.spacing.s8,
+                children: actions,
+              ),
+            ],
+    );
+  }
+}
+
+/// A dialog that holds something other than a question.
+///
+/// **§5.1 does not list this component and that is recorded rather than worked
+/// around.** `DESIGN-PROPOSAL-COMPONENTS.md` §1 split it out deliberately:
+/// *"`ConfirmDialog` refuses children — it takes strings and two actions — and
+/// the three form-bearing dialogs stay `AlertDialog` until somebody specifies
+/// `AppDialog`. Flagging this rather than quietly widening the component is the
+/// whole point of writing it down first."* This is that specification, and
+/// every value in it is read off a row `design.md` already has.
+///
+/// **The one measurement that had to be derived is the width, and §4.3 supplies
+/// it.** That section's `Form` row is "single column, **720 max**" and §4.2
+/// gives "reading and forms" the same 720, so a dialog holding a form takes
+/// [AppLayout.reading] rather than a number of its own. What it replaces is a
+/// hardcoded `SizedBox(width: 440)` in the business switcher — the only width
+/// any of these dialogs ever stated, chosen by one call site for itself.
+///
+/// **Its scrim is not dismissible by default**, which is the other half of the
+/// decision `ConfirmDialog` records. A stray tap outside a *question* lands on
+/// cancel, which is safe; a stray tap outside a **form** throws away everything
+/// typed into it. `DESIGN-PROPOSAL-COMPONENTS.md` §1's open question 1 proposed
+/// exactly this split and it is applied here.
+///
+/// **The state matrix is the child's.** A container for a form has no `hover`,
+/// `pressed`, `loading` or `error` of its own — every one of those belongs to
+/// the fields and buttons inside it, which are `AppTextField`s and `AppButton`s
+/// and arrive with their own. What this component varies is whether it has a
+/// title and whether it has actions, and the harness photographs both.
+final class AppDialog extends StatelessWidget {
+  const AppDialog({
+    super.key,
+    required this.content,
+    this.title,
+    this.actions = const <Widget>[],
+    this.scrollable = true,
+  });
+
+  /// The verb, matching the control that opened it. §8 rule 4.
+  ///
+  /// Optional, because one of the four dialogs this replaces is a form that
+  /// carries its own heading and would otherwise say the same word twice —
+  /// which is §7's "title appears once" arriving in a dialog.
+  final String? title;
+
+  /// The form, the list, or whatever else is not a sentence.
+  ///
+  /// **Named `content` rather than `child`, which is not a style choice.**
+  /// `sort_child_properties_last` requires a `child` argument to be written
+  /// last, and on these call sites the child is a hundred-line form with two
+  /// buttons after it - so the lint would push [actions] above a block nobody
+  /// scrolls past. `AlertDialog` calls the same slot `content` for the same
+  /// reason.
+  final Widget content;
+
+  /// Laid out exactly as `ConfirmDialog`'s are. Empty where the child owns its
+  /// own controls, which is the set-default form's arrangement.
+  final List<Widget> actions;
+
+  /// Whether this component scrolls the child.
+  ///
+  /// **True by default, so a call site deletes its own `SingleChildScrollView`
+  /// rather than nesting one.** A form in a dialog on a phone is taller than
+  /// the window more often than not, and two scroll views inside each other is
+  /// an unbounded-height error rather than a cosmetic problem.
+  final bool scrollable;
+
+  /// §4.3's `Form` row - "single column, 720 max" - which is also §4.2's row
+  /// for "reading and forms". Not a number this component chose.
+  static double get maximumWidth => AppLayout.contract.reading;
+
+  @override
+  Widget build(BuildContext context) => _DialogFrame(
+    title: title,
+    content: content,
+    actions: actions,
+    maximumWidth: maximumWidth,
+    scrollable: scrollable,
+  );
+}
+
+/// Opens [builder] as a dialog, with this system's scrim behind it.
+///
+/// **The scrim is the reason this exists rather than a bare `showDialog`.**
+/// §2.1 has a `surface.scrim` role and Material's default is `black54`; four
+/// call sites were each getting the second one by saying nothing.
+Future<T?> showAppDialog<T>(
+  BuildContext context, {
+  required WidgetBuilder builder,
+  bool barrierDismissible = false,
+}) => showDialog<T>(
+  context: context,
+  barrierDismissible: barrierDismissible,
+  barrierColor: AppTokens.componentOf(context).colors.surface.scrim,
+  builder: builder,
+);
+
 /// A question with two answers, one of which does something.
 ///
 /// Built by [showConfirmDialog] rather than by a call site, so the route, the
@@ -117,88 +301,49 @@ final class ConfirmDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return AlertDialog(
-      // §2.1: "dialogs, menus, bottom sheets". The theme already paints
-      // `dialogTheme` this colour; naming it here is what makes the component
-      // independent of a theme that may not be this app's - a dialog is pushed
-      // onto a route with its own context, which is exactly where a token read
-      // through `componentOf` earns its fallback.
-      backgroundColor: tokens.colors.surface.overlay,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        // §2.3's row for "dialogs, bottom sheets".
-        borderRadius: BorderRadius.circular(tokens.radius.lg),
-      ),
-      insetPadding: EdgeInsets.all(tokens.spacing.s24),
-      titlePadding: EdgeInsets.fromLTRB(
-        tokens.spacing.s24,
-        tokens.spacing.s24,
-        tokens.spacing.s24,
-        tokens.spacing.s12,
-      ),
-      contentPadding: EdgeInsets.symmetric(horizontal: tokens.spacing.s24),
-      actionsPadding: EdgeInsets.all(tokens.spacing.s24),
-      title: Text(
-        title,
-        style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        ),
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
+    return _DialogFrame(
+      title: title,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            consequence,
+            style: tokens.typography.bodyLarge.copyWith(
+              color: tokens.colors.text.secondary,
+            ),
+          ),
+          if (stillTrue case final reassurance?) ...<Widget>[
+            SizedBox(height: tokens.spacing.s12),
             Text(
-              consequence,
-              style: tokens.typography.bodyLarge.copyWith(
-                color: tokens.colors.text.secondary,
+              reassurance,
+              style: tokens.typography.bodyMedium.copyWith(
+                color: tokens.colors.text.tertiary,
               ),
             ),
-            if (stillTrue case final reassurance?) ...<Widget>[
-              SizedBox(height: tokens.spacing.s12),
-              Text(
-                reassurance,
-                style: tokens.typography.bodyMedium.copyWith(
-                  color: tokens.colors.text.tertiary,
-                ),
-              ),
-            ],
           ],
-        ),
+        ],
       ),
-      // **A `Wrap`, not a `Row`**, and for the reason the staff forms already
-      // recorded: two 48-high pills with verb phrases on them do not fit a phone
-      // beside each other, and a `Row` answers that by overflowing. `end`
-      // alignment keeps the confirm at the trailing edge on one line and puts it
-      // on top when they stack, which is the order a person reads them in.
       actions: <Widget>[
-        Wrap(
-          alignment: WrapAlignment.end,
-          spacing: tokens.spacing.s12,
-          runSpacing: tokens.spacing.s8,
-          children: <Widget>[
-            AppButton(
-              key: cancelKey ?? const ValueKey('confirm-dialog-cancel'),
-              label: cancelLabel,
-              // **`tertiary`, which is what all eight of the dialogs this
-              // replaces already used** - not `secondary`, which §2.1 calls "the
-              // ordinary case" and which a first reading of the row suggests.
-              // The tree had one answer at eight sites and it is the better one:
-              // a cancel is the *absence* of the action, and giving it an outline
-              // makes a dialog read as two choices of equal weight when only one
-              // of them does anything.
-              tier: AppButtonTier.tertiary,
-              onPressed: loading ? null : onCancel,
-            ),
-            AppButton(
-              key: confirmKey ?? const ValueKey('confirm-dialog-confirm'),
-              label: confirmLabel,
-              tier: tier,
-              loading: loading,
-              onPressed: onConfirm,
-            ),
-          ],
+        AppButton(
+          key: cancelKey ?? const ValueKey('confirm-dialog-cancel'),
+          label: cancelLabel,
+          // **`tertiary`, which is what all eight of the dialogs this
+          // replaces already used** - not `secondary`, which §2.1 calls "the
+          // ordinary case" and which a first reading of the row suggests.
+          // The tree had one answer at eight sites and it is the better one:
+          // a cancel is the *absence* of the action, and giving it an outline
+          // makes a dialog read as two choices of equal weight when only one
+          // of them does anything.
+          tier: AppButtonTier.tertiary,
+          onPressed: loading ? null : onCancel,
+        ),
+        AppButton(
+          key: confirmKey ?? const ValueKey('confirm-dialog-confirm'),
+          label: confirmLabel,
+          tier: tier,
+          loading: loading,
+          onPressed: onConfirm,
         ),
       ],
     );
