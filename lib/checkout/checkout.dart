@@ -11,10 +11,12 @@ export 'checkout_outbox.dart';
 // `_unsupported` implementations are resolved by its conditional import, and
 // exporting either here would pull `dart:io` into a web build.
 export 'checkout_print_configuration.dart';
+export 'checkout_print_dispatch.dart';
 export 'checkout_print_failures.dart';
 export 'checkout_print_jobs.dart';
 export 'checkout_print_transport.dart';
 export 'checkout_receipt.dart';
+export 'checkout_receipt_body.dart';
 export 'checkout_recovery.dart';
 export 'checkout_refusal.dart';
 export 'checkout_sale.dart';
