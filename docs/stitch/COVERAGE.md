@@ -1,0 +1,240 @@
+# Redesign coverage ledger
+
+Status meanings:
+
+- `EVIDENCED` - supported by active code and local rendered evidence.
+- `STITCHED` - represented in Stitch, but not necessarily correct.
+- `MISSING` - product capability exists but no verified Stitch screen covers it.
+- `CONFLICT` - a Stitch screen depicts unsupported or contradictory behavior.
+- `INFERENCE` - plausible relationship that still needs verification.
+- `DEFERRED` - intentionally outside the current redesign scope.
+- `NORMALIZED / REVIEW` - corrected in Stitch, with fresh visual confirmation still required.
+
+## Coverage summary
+
+| Area | Code/screenshot | Stitch | Status | Required disposition |
+|---|---|---|---|---|
+| Sign-in and entry failures | Yes | Desktop/mobile state suites created | NORMALIZED / REVIEW | Default, refused, unreachable, caps-lock, and busy states are covered; desktop correction artifact remains stale. |
+| Tenant selection and entry | Yes | Desktop/mobile state suites created | NORMALIZED / REVIEW | Choose/default, verify, request, no-business, invite, account failure, and routing split are covered; mobile correction artifact and canvas linkage need review. |
+| Platform operations | Yes | No verified screen | MISSING | Create only in dedicated platform phase. |
+| Owner/admin/manager/cashier home | Yes | Desktop/mobile role-aware suites corrected | NORMALIZED / REVIEW | ST-032/ST-033 encode exact route differences, shift-first mobile flow, device-local evidence, and switch states; final corrected renders remain to review. |
+| Staff directory | Yes | Desktop corrected; mobile reference | NORMALIZED / REVIEW | Exact roles/write split applied; desktop active-route render needs review. |
+| New sale | Yes | Desktop/tablet/mobile corrected | NORMALIZED / REVIEW | ST-035 is visually reviewed; mobile browse/cart successors need fresh canvas review and mobile-browse ID recovery. No tax, draft, verified-payment, stock-blocking, or print-rollback behavior remains in the working direction. |
+| Currency setting | Yes | Focused owner/admin desktop | NORMALIZED / REVIEW | ST-024 retains currency and printer linkage only; input behavior still needs product review. |
+| Business settings | Minimal branding/currency evidence | Focused desktop plus untouched broad original | PARTIAL | ST-024 corrected; ST-003 remains a non-canonical conflicting reference. |
+| Catalog | Yes | Desktop/mobile/tablet route suites corrected | NORMALIZED / REVIEW | ST-039/ST-040 separate Cashier read-only, Manager operational, and Owner/Administrator money/retire capability; bulk delimited-text preview/commit and failure states are covered. Final renders need review. |
+| Stock corrections/movements/ledger | Yes | Desktop/mobile/tablet route suites corrected | NORMALIZED / REVIEW | Recorded stock, permanent reasoned adjustments, manual-only adjustment feed, all-source movement feed, product ledger, provenance, negative-stock truth, and responsive records are covered; final renders need review. |
+| Daily metrics and totals | Yes | Desktop/mobile suites corrected | NORMALIZED / REVIEW | ST-041/ST-043 retain exact supported totals and a direct-label two-day comparison without derived change. Final filter/scope copy mutation completed; fresh artifacts require review. Export remains unsupported. |
+| Reconciliation | Yes | Desktop/mobile suites corrected | NORMALIZED / REVIEW | ST-041/ST-043 distinguish matched, unusable-line, and different states and include request/run/amendment evidence. Final action/provenance copy mutation completed; retrieval is stale/invalid and one expected-value label is non-canonical. |
+| Profit/margin completeness | Yes | Desktop/mobile complete/refusal specimens | NORMALIZED / REVIEW | ST-041/ST-043 show owner/admin profit only when complete, suppress incomplete figures, and omit Manager profit. |
+| Receipt lookup | Yes | ST-048 mobile / ST-050 desktop | NORMALIZED / REVIEW | Full lookup evidence is present. Mobile truth correction completed in the mutation log but its artifact is stale; desktop is freshly reviewed. |
+| Shift history and sale detail | Yes | ST-048 mobile / ST-050 desktop | NORMALIZED / REVIEW | Core routes and sale evidence are present. The final ST-050 DOM correction adds `Cash over` and desktop `No closing summary` and raises all Section 03-05 controls to at least 48px; current render still needs canvas review. |
+| Returns | Yes | ST-048 mobile / ST-050 desktop | NORMALIZED / REVIEW | Request/verification separation, failure matrix, confirmations, and tablet transformation are covered. Mobile forbidden-content removal needs fresh canvas review. |
+| Activity log | Yes | No | MISSING | Create owner/admin view. |
+| Printer configuration | Yes | Three desktop drafts; ST-010 corrected | NORMALIZED / REVIEW | ST-010 is canonical candidate; ST-004 and ST-017 remain untouched references. |
+| Print queue/retry | Yes | Not verified | MISSING | Create waiting/unreadable/retry states. |
+| Responsive component states | Yes, groups 90-99 | No inventory | MISSING | Establish after workflow compositions stabilize. |
+
+## Confirmed product capabilities
+
+### Identity, tenancy, and access
+
+- Sign in, verification, invitation acceptance/failure, business selection/request/no-access states.
+- Multiple memberships and default/current business selection.
+- Active canonical membership required for tenant access.
+- Four tenant roles only: owner, admin, manager, cashier.
+- Separate platform superAdmin admission/archive/global-user workflows.
+
+### Sale and offline operation
+
+- Browse cached catalog, build cart, choose/assert tender, and durably save a sale.
+- Offline outbox, reconnect recovery/submission, evidence counts, and catalog refresh.
+- Stock shortage is informational and does not block sale.
+- Payment method is recorded, not externally verified.
+- Receipt number allocation and post-durability printing.
+- Failed printing queues immutable receipt bytes for retry.
+
+### Catalog, stock, and reporting
+
+- Read-only catalog for all active members.
+- Product/category management, bulk delimited-text preview/commit, and narrowed money/retire actions.
+- Recorded stock, corrections, movement feed, and per-product ledger.
+- Daily metrics, sales totals, reconciliation status/anomalies/run, shift amendments, and profit/margin
+  with cost-completeness safeguards.
+- Receipt lookup, shift sales, returns, and activity/audit history.
+
+## Unsupported content currently visible in Stitch
+
+| Draft content | Finding | Rule for correction |
+|---|---|---|
+| “Kijani POS” and “Operational Hub” | Wrong or unapproved branding | Use Chilltent POS and task-specific page language. |
+| VAT 16%, VAT rate, prices include tax | No active tax capability found | Remove; do not imply tax calculation or configuration. |
+| “Pay now” / processed-payment implication | App records asserted tender only | Use language such as record/save sale; never claim verification. |
+| Save draft button | No corresponding checkout UI action evidenced | Remove unless a code-backed workflow is identified. |
+| Dashboard terminals/cloud/local DB telemetry | No active data source or route found | Remove invented metrics and connectivity claims. |
+| Reorder points and low-stock thresholds | No threshold model found | Show recorded quantities/differences only. |
+| Granular staff permissions | Authorization is fixed role-list based | Replace with exact role selection and role-derived capability copy. |
+| Senior Cashier / Inventory Clerk | Roles do not exist | Use Owner, Administrator, Manager, Cashier only. |
+| Staff scheduling/last shift controls | Not supported in staff management | Remove or explicitly scope a future product feature. |
+| Registration/location/contact/support fields | Not found in active settings capability | Remove from canonical settings. |
+| Sync interval and language controls | Not found | Remove. Connectivity behavior is automatic. |
+| Export CSV | No active export surface found | Remove unless product and implementation scope explicitly add it. |
+| Category charts/payment breakdown visualizations | Underlying data may partly exist; the current presentation is not a constraint | Visualizations are permitted when derived entirely from supported underlying metrics. The visualization itself may be new; the underlying data and calculation must be evidenced. |
+
+## Required state coverage
+
+Every canonical workflow should account for applicable loading, populated, empty, validation error,
+remote error, offline/stale, permission/read-only, disabled/busy, success, and partial-success states.
+The following product-specific states are mandatory:
+
+- Sale saved locally versus server-confirmed.
+- Sale saved but receipt not printed.
+- Printer unconfigured, unreachable, waiting queue, retrying, and unreadable queue record.
+- Shift closed/open, cash count, close pending, reconciliation matched/different/unusable lines.
+- Catalog stale/offline, no products, stock difference, adjustment validation.
+- Profit complete versus unavailable because one or more sale lines lack cost.
+- Tenant switch available versus blocked by local state/offline.
+- Staff administrator edit versus manager read-only.
+
+## Phase 01 coverage result
+
+- Sign-in default, refused credentials, unreachable service, caps-lock, and busy states are represented
+  on desktop and mobile with visible labels and 48 px targets.
+- Email verification uses out-of-band `Send verification email` / `I have verified` behavior; no code
+  entry or password-reset flow is depicted in the corrected working set.
+- Choose business, request business and confirmation, no-business, valid/invalid invitation, and
+  account-open failure states are represented responsively.
+- Tenant membership and platform admission remain separate. The platform-routing note requires both
+  root `platform_admin` account type and the separate `platformRole=superAdmin` claim; Phase 01 does
+  not include platform operational screens.
+- ST-030 is a recorded non-canonical intermediate conflict. ST-027 and ST-029 need fresh render review;
+  ST-028 through ST-031 also need project-canvas linkage review.
+
+## Phase 02 coverage result
+
+- Owner and Administrator retain the shared common routes plus Manage catalog, View daily summary,
+  Checkout settings, Printer, View activity log, and View staff directory.
+- Manager retains common routes plus Manage catalog, View daily summary, and read-only staff directory;
+  restricted settings, printer, audit, profit, and write actions are absent rather than disabled.
+- Cashier is intentionally narrow: New sale, Receipts waiting, View read-only catalog, Find a receipt,
+  eligible tenant controls, own shift content, and Sign out.
+- Own shift is home content, not a navigation destination. The working set covers no-shift, open,
+  unfinished cash-count, and offline/unconfirmed wording with one forward action per state.
+- Checkout evidence is a read-only device-local readout with Saved offline, Submitting, Awaiting
+  confirmation, Needs attention, and Confirmed. Receipts waiting remains a separate print fact.
+- Tenant switching is represented as available, blocked by unfinished cash count/shift close, and
+  unavailable offline. Switching never bypasses state inspection or online target revalidation.
+- ST-032 and ST-033 require fresh corrected-render and canvas-link review; no Phase 02 screen is approved.
+
+## Phase 03 coverage result
+
+- Desktop uses a dense browse/cart composition with legible products, quantities, KES prices and
+  total, tender assertion, and one `Save sale` action. The same working screen includes the required
+  labeled 834px two-region tablet specimen.
+- Mobile remains staged: product browse/search/filter with a sticky cart summary, followed by a
+  separate cart/review surface with quantity editing, removal, KES 135.00 total, tender assertion,
+  and `Save sale`.
+- Stock shortage is informational and does not disable the product or block saving. Tender records
+  what the cashier asserts and never claims external verification.
+- Local durability, later server confirmation, and receipt-print failure are separate facts. The
+  durable receipt remains successful when printing fails; recovery points the cashier to Receipts
+  waiting from the business home without inventing a direct checkout action.
+- The first desktop successor used an invented connection-specific save error and omitted the tablet
+  specimen. ST-035 corrected both with the active generic refusal text and a visible 834px layout.
+- ST-035 was freshly retrieved and visually reviewed. ST-036 and the mobile-browse successor remain
+  render-review items because retrieval became invalid/stale; the browse successor ID must be
+  recovered from the Stitch UI rather than regenerated.
+
+## Phase 04 coverage result
+
+- Cashier receives a read-only catalog with product, category, code, recorded stock, and unit price;
+  catalog-write and stock-route actions are absent.
+- Manager receives category/product creation, operational name/code/category correction, pasted-text
+  bulk work, stock adjustment, movements, and ledgers. Existing-price correction, cost, cost removal,
+  and retirement are omitted; the required first price remains available when creating a product.
+- Owner/Administrator additionally receives existing unit-price/unit-cost correction, recorded-cost
+  removal, and retirement. Retirement preserves sales and ledger history and moves no stock.
+- Bulk work is comma/tab/semicolon-delimited pasted text with row-by-row preview, row errors, explicit
+  apply/create commit, and committed results. `.xlsx` and file-upload behavior remain excluded.
+- Recorded stock may be negative and never blocks a sale. Adjustments require type, direction where
+  applicable, units, and a free-text reason; they are permanent and corrected by another adjustment.
+- Manual adjustment feed, all-source movement feed, and one-product ledger retain signed delta,
+  before/after, type, reason/source, actor, and recorded UTC time. Lists do not imply chronological
+  order.
+- Desktop includes a deliberate 834px tablet transformation; mobile uses stacked record cards rather
+  than horizontal table truncation. Loading, empty, read-error, and offline-write states are included.
+- The first successors ST-037/ST-038 were rejected for compressed/unsupported navigation and missing
+  evidence. ST-039/ST-040 are the corrected working set. ST-039's core layout was visually reviewed,
+  but its final audit-record correction serves a stale artifact; ST-040 retrieval is invalid. Both
+  remain `NORMALIZED / REVIEW`.
+
+## Phase 05 coverage result
+
+- The analytical question is resolved narrowly: exact-value bars materially help compare the two
+  evidenced daily sales totals and tender amounts; reconciliation, anomaly, run, and amendment data
+  remain clearer as status cards, statistics, provenance rows, and tables. No derived trend,
+  percentage, forecast, or unsupported dimension is allowed.
+- ST-041 includes exact daily sales/transaction/shift values, owner/admin complete profit, a missing-
+  cost refusal with no profit/margin figures, exact sales totals and tender buckets, server-held scope
+  language, and the cashier-recorded-payment disclaimer.
+- ST-041 separates matched, unusable-line, and different reconciliation specimens; includes the
+  owner/admin request action, run `rj_000001`, and amendment `sm_a1b2c3`; and includes a read-only
+  Manager history specimen. Its shift-correction action does not use the required exact label, and
+  dense provenance rows still need full-size canvas review.
+- ST-042 was not an acceptable responsive counterpart. An approved mobile remediation produced
+  ST-043, a fresh 780x7794 single-column successor with supported daily/tender figures, profit
+  refusal, Manager summary, matched/unusable/different states, all seven anomaly kinds, request/run/
+  correction actions, and Manager amendment history. ST-042 is superseded.
+- A final copy-only mutation reports successful restoration of Last 7/30/90 days, named-colleague
+  scope, oldest-first processing, `system:sale_trigger`, counted cash, server-derived replacement
+  totals, non-chronological ordering, and Manager history provenance. It also reports the exact ST-041
+  correction-action label.
+- Post-mutation retrieval is stale for ST-041 and invalid for ST-043. The mutation log additionally
+  shows `Expected: 12` incorrectly relabelled as `Expectation ID: 12`; that label is not product truth.
+- Phase 05 is `COMPLETED / RENDER REVIEW`: scope execution is closed, while neither screen is canonical
+  until the current canvas render and anomaly label are reviewed. No Flutter or Firebase code changed.
+
+## Phase 06 coverage result — completed, render review required
+
+- The authorized CREATE operation returned desktop/tablet ST-044 and mobile ST-045 using the retained
+  Profound Verdant asset.
+- ST-044 cannot support any acceptance claim: its downloadable screenshot is blank, its HTML is only
+  a 224-byte shell, and individual retrieval returns invalid argument.
+- ST-045 is freshly retrievable and visually reviewed, but it stops after receipt lookup, adds an
+  unsupported generic bottom bar, and omits sale detail, shift history, shift sales, returns,
+  confirmations, role separation, tablet behavior, and most required state specimens.
+- The approved CORRECT operation on ST-044/ST-045 returned derived successors ST-046/ST-047.
+- ST-046 is retrievable but is still a 2048px receipt-only fragment, contains conflicting `Kijani POS`
+  branding, and omits sale/shift/return/tablet/state coverage. It is non-canonical.
+- ST-047 is a 780x7452 long-form mobile successor. It removes generic bottom navigation and includes
+  the core lookup, immutable sale, shift, return, and confirmation trail. It remains partial: artifact
+  inspection does not find not-found/remote lookup, historical discount, no-closing-summary, the full
+  failure matrix, or immutable stock-restoration ID evidence; individual retrieval is invalid.
+- The approved final correction on ST-046/ST-047 returned ST-049 desktop and ST-048 mobile.
+- ST-049 reports 14000px but its HTML ends after Section 02. Shift history, returns, confirmations,
+  failure matrix, and the tablet specimen are absent.
+- ST-048 is long-form and includes missing labels, but invents `Ceramic Mug - Green`, `Tax (16%)`, and
+  `Amount to refund: KES 850.00`. These contradict active data and explicit exclusions.
+- The approved surgical correction updated ST-048 in place and returned derived desktop ST-050 from
+  ST-049. ST-048's DOM log removes the invented mug, tax, and refund content, but retrieval remains on
+  its pre-edit artifact. ST-050 freshly rendered Sections 03-05 and contained no forbidden content.
+- The final approved in-place ST-050 correction appends `Cash over` and desktop `No closing summary`
+  cards. Its DOM-operation log also raises the shift filters/actions/pagination and both return-dialog
+  action groups to at least 48px; Section 05 contains no interactive controls.
+- Direct canvas-code copies proved the first final edits had not persisted. The approved exact-ID
+  reapplications completed with concrete DOM operations for both screens; mobile retrieval remains
+  cached and desktop retrieval is invalid.
+- Phase 06 remains `COMPLETED / RENDER REVIEW`: required scope execution is closed, while fresh
+  canvas-code inspection is required before canonical promotion or any additional edit.
+- No Flutter, Firebase, schema, rule, deployment, or design-system change was made.
+
+## Scope exclusions for the design audit
+
+- No Flutter implementation changes.
+- No server schema, callable, rule, index, deployment, or seed changes.
+- No invented subscription/billing surface; backend schema is absent.
+- No `.xlsx` import; current bulk flow is delimited text.
+- No backfill of historical missing product costs.
+- No new discount entry workflow. Discount data may exist historically, but the current checkout UI
+  intentionally does not expose one.
+- No archive/delete/move/group action in Stitch during this audit.

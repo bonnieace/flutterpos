@@ -5,12 +5,15 @@ on every turn, and length here costs context on every task.
 
 ## The design system
 
-`DESIGN.md` in the repo root is the source of truth for all visual work. Read it before
-any change to a widget, a colour, a size, or a layout. Do not summarise it into the code
-and do not work from memory of it — open it.
+The current redesign is coordinated from `docs/stitch/README.md`. Read it and the selected
+phase brief before any visual work. `docs/stitch/DESIGN_RULES.md` is the visual guardrail;
+active code and `docs/stitch/RBAC_MATRIX.md` remain the authority for behavior and access.
 
-If a task requires a value that `DESIGN.md` does not define, stop and say so. Do not
-invent a token. The correct outcome is a question, not a plausible hex code.
+Root `DESIGN.md` documents the previous Flutter-led system. It is implementation history,
+not visual authority for new Stitch compositions, and its layout contract must not constrain
+the redesign. Preserve reusable semantic theming: approved tokens must flow through the theme
+layer rather than becoming hardcoded widget values. If the Stitch rules and product evidence do
+not define a decision, record it in `docs/stitch/OPEN_QUESTIONS.md` instead of inventing one.
 
 ## Hard rules
 
@@ -21,14 +24,8 @@ invent a token. The correct outcome is a question, not a plausible hex code.
    spring comes from the token layer. A literal hex or a magic number in a widget is a
    defect regardless of whether it looks right.
 3. **Do not touch `lib/pos/**` or `lib/screens/**`.** Legacy, read-only, out of scope.
-4. **One step per branch.** The migration order in `DESIGN.md` §11 is numbered. Do one
-   number. Do not begin the next because it seems related.
-   **Exception, granted 2026-08-12 for the composition layer only:** steps **4, 5a, 6 and 8**
-   may ship as one chunk. They build on finished atoms rather than defining new ones, and they
-   touch overlapping screens, so one screenshot regeneration covers all four. The rule stands
-   everywhere else — step 7 (the sale path), step 9, step 10, and steps 11–12 are still one
-   number each, and 5b (the navigation model) is a behaviour change that is not in this
-   exception at all.
+4. **One phase per branch.** Use the numbered briefs under `docs/stitch/phases/`. Do one
+   phase and stop; a completed Stitch design is not permission to begin Flutter implementation.
 5. **Every component ships with its full state matrix** — enabled, hover, focus-visible,
    pressed, disabled, loading, error, read-only, empty, whichever apply — and each state
    appears in the screenshot harness. A component missing a state is not done.
@@ -37,21 +34,19 @@ invent a token. The correct outcome is a question, not a plausible hex code.
 
 ## Workflow for any visual change
 
-1. Read the relevant sections of `DESIGN.md`.
-2. State the plan and the file list before writing code. Wait for confirmation.
-3. Implement.
-4. Regenerate the screenshots and report which images changed.
-5. Report anything you had to deviate from, and why.
+1. Read `docs/stitch/README.md`, the relevant control documents, and one phase brief.
+2. State the plan, exact Stitch operation/IDs or code file list, and exclusions. Wait for confirmation.
+3. Perform only the approved design operation or implementation phase.
+4. Re-read affected Stitch screens and/or regenerate the local screenshots as applicable.
+5. Update the Stitch index/coverage/audit trail and report deviations.
 
 Do not skip step 2, and do not batch steps 3 and 4 into a single unreviewable change.
 
 ## Screenshot harness
 
-<!-- Fill in the actual command from screenshots/README.md -->
-
 ```
-# regenerate:
-# diff:
+flutter test tool/screenshots
+dart run tool/screenshots/build_index.dart
 ```
 
 The harness rasterises the widget tree. It does **not** prove the app runs, and it cannot
@@ -60,7 +55,7 @@ say what the screenshots prove and what still needs a device.
 
 ## Motion
 
-`DESIGN.md` §6. Two rules that are easy to get wrong:
+Two product motion rules that carry forward independently of the retired layout system:
 
 - Anything spatial uses a spring and must be interruptible from its current position and
   velocity. Never `AnimationController.forward()` from zero on a retrigger.
