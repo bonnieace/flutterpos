@@ -750,6 +750,75 @@ void main() {
       expect(snapshot.productById('p2')!.cost, isNull);
     });
   });
+
+  group('the receipt hook', () {
+    test('is called after the draft is durable, never before', () async {
+      // §6.3 applied to printing: the sale is recorded first and the receipt is
+      // produced over committed state. The record is already in the outbox by
+      // the time the hook runs, which is the whole of the ordering guarantee.
+      final seen = <String>[];
+      final saved = await _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+        onSaved: (record, session) async {
+          seen.add(record.checkoutId);
+          return null;
+        },
+      ).saveDraft(_request());
+
+      expect(seen.single, saved.checkoutId);
+      expect(saved.receiptPrintFailure, isNull);
+    });
+
+    test('a printing failure is carried back, not swallowed', () async {
+      final saved = await _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+        onSaved: (record, session) async => 'printer_unreachable',
+      ).saveDraft(_request());
+
+      expect(saved.receiptPrintFailure, 'printer_unreachable');
+      // And the sale still happened, which is the point of carrying the reason
+      // back rather than throwing it.
+      expect(saved.checkoutId, isNotEmpty);
+      expect(saved.receiptNumber, isNotNull);
+    });
+
+    test('a hook that throws never un-writes the sale', () async {
+      // Anything reaching the catch is a malformed durable print record or a
+      // programming error, and neither may lose a sale that is already durable.
+      final saved = await _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+        onSaved: (record, session) async => throw StateError('box is broken'),
+      ).saveDraft(_request());
+
+      expect(saved.receiptPrintFailure, 'receipt_not_queued');
+      expect(saved.receiptNumber, isNotNull);
+    });
+
+    test('a build with no hook reports no printing failure', () async {
+      final saved = await _service(
+        sessions,
+        cache,
+        outbox,
+        receipts,
+        clock,
+      ).saveDraft(_request());
+
+      expect(saved.receiptPrintFailure, isNull);
+    });
+  });
+
 }
 
 CheckoutDraftRequest _request({int quantity = 1}) => CheckoutDraftRequest(
@@ -765,6 +834,7 @@ CheckoutDraftService _service(
   _Clock clock, {
   CheckoutIdFactory? checkoutIdFactory,
   CheckoutShiftBinder? shiftBinder,
+  CheckoutDraftReceiptHook? onSaved,
 }) => CheckoutDraftService(
   sessionController: sessions,
   cache: cache,
@@ -773,6 +843,7 @@ CheckoutDraftService _service(
   shiftBinder: shiftBinder ?? _Binder(receipts: receipts, clock: clock),
   clock: clock.call,
   checkoutIdFactory: checkoutIdFactory,
+  onSaved: onSaved,
 );
 
 /// A stand-in for the guarded shift lifecycle that supplies the bound shift.

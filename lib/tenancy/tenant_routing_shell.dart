@@ -94,6 +94,10 @@ final class TenantRoutingShell extends StatefulWidget {
     this.checkoutRoute,
     this.checkoutConfigurationRoute,
     this.checkoutConfigurationRoles = const <TenantRole>[],
+    this.printerConfigurationRoute,
+    this.printerConfigurationRoles = const <TenantRole>[],
+    this.printQueueRoute,
+    this.printQueueStatus,
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
@@ -201,6 +205,31 @@ final class TenantRoutingShell extends StatefulWidget {
   /// The roles that route is offered to, decided by the checkout domain. It is
   /// deliberately narrower than the roles that may sell.
   final List<TenantRole> checkoutConfigurationRoles;
+
+  /// Optional guarded printer settings route, injected for the same reason.
+  ///
+  /// It is the only surface that can say where this business prints, and
+  /// `docs/printer_transport.md` §6 forbids guessing an address — so until it
+  /// has been used once, every receipt queues with `printer_not_configured`.
+  final Widget Function(TenantDataReader reader)? printerConfigurationRoute;
+
+  /// The roles that route is offered to, decided by the checkout domain. Owner
+  /// and administrator: a manager runs a till, but deciding what hardware the
+  /// business owns is not an operational act.
+  final List<TenantRole> printerConfigurationRoles;
+
+  /// Optional route onto this device's unsent receipts.
+  ///
+  /// **No role list, for the same reason [checkoutRoute] carries none.** The
+  /// queue is device-local, and the person who needs to know a receipt did not
+  /// come out is whoever is standing at the till.
+  final Widget Function()? printQueueRoute;
+
+  /// This device's queue depth, in words, for the destination card. §4.4: *"a
+  /// card states its own condition ... queue depth"*, and one that carries none
+  /// is a button. Null draws no line, which is the honest rendering when
+  /// nothing is waiting.
+  final String? Function()? printQueueStatus;
 
   /// Optional guarded catalog-management route, injected for the same reason.
   ///
@@ -536,6 +565,14 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       mounted && _uid == uid && _flowToken == token;
 
   void _showFailure(Object error) {
+    // **Logged, never shown.** The screen states a sentence this app wrote and
+    // deliberately prints no exception at a shopkeeper - §8 rule 1. That left a
+    // device run with nothing to read at all, and on 2026-08-18 six distinct
+    // faults in a row - a cleartext refusal, a missing functions emulator, an
+    // App Check token, a short HMAC secret, a stale session - every one of them
+    // rendered as the same "check your connection". One line in the log costs
+    // nothing and is the difference between a diagnosis and a guess.
+    debugPrint('Tenant bootstrap failed: ${error.runtimeType}: $error');
     if (!mounted) return;
     setState(() {
       _phase = _RoutingPhase.failure;
@@ -776,6 +813,10 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       checkoutRoute: widget.checkoutRoute,
       checkoutConfigurationRoute: widget.checkoutConfigurationRoute,
       checkoutConfigurationRoles: widget.checkoutConfigurationRoles,
+      printerConfigurationRoute: widget.printerConfigurationRoute,
+      printerConfigurationRoles: widget.printerConfigurationRoles,
+      printQueueRoute: widget.printQueueRoute,
+      printQueueStatus: widget.printQueueStatus,
       catalogManagementRoute: widget.catalogManagementRoute,
       catalogManagementRoles: widget.catalogManagementRoles,
       pendingCheckoutPanel: widget.pendingCheckoutPanel,
@@ -1393,6 +1434,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.checkoutRoute,
     this.checkoutConfigurationRoute,
     this.checkoutConfigurationRoles = const <TenantRole>[],
+    this.printerConfigurationRoute,
+    this.printerConfigurationRoles = const <TenantRole>[],
+    this.printQueueRoute,
+    this.printQueueStatus,
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
@@ -1439,6 +1484,20 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// The roles that route is offered to, decided by the checkout domain. It is
   /// deliberately narrower than the roles that may sell.
   final List<TenantRole> checkoutConfigurationRoles;
+
+  /// Optional guarded printer settings route, supplied by the composition root.
+  /// See `TenantRoutingShell.printerConfigurationRoute`.
+  final Widget Function(TenantDataReader reader)? printerConfigurationRoute;
+
+  /// The roles that route is offered to. Owner and administrator only.
+  final List<TenantRole> printerConfigurationRoles;
+
+  /// Optional route onto this device's unsent receipts, carrying no role list.
+  final Widget Function()? printQueueRoute;
+
+  /// This device's queue depth, in words. See
+  /// `TenantRoutingShell.printQueueStatus`.
+  final String? Function()? printQueueStatus;
 
   /// Optional guarded catalog-management route, supplied by the composition
   /// root. It is the one surface that can put a product in the catalog, which
@@ -1647,6 +1706,27 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               );
             },
           ),
+        // Beside the till rather than beside the settings, and carrying no
+        // role list: a receipt that did not come out is discovered by whoever
+        // is standing at the counter, and the queue is this device's own.
+        if (printQueueRoute != null)
+          HomeDestination(
+            destinationKey: const ValueKey('receipts-waiting'),
+            label: 'Receipts waiting',
+            icon: Icons.receipt_long_outlined,
+            status: printQueueStatus?.call(),
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: printQueueRoute!(),
+                  ),
+                ),
+              );
+            },
+          ),
         HomeDestination(
           label: 'View read-only catalog',
           icon: Icons.inventory_2_outlined,
@@ -1750,6 +1830,27 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                   builder: (_) => TenantSessionScope(
                     controller: controller,
                     child: checkoutConfigurationRoute!(reader),
+                  ),
+                ),
+              );
+            },
+          ),
+        // Beside the checkout settings it sits next to in Firestore, and
+        // guarded by the same roles: both decide something about the business
+        // rather than about a sale, and neither is an operational act.
+        if (printerConfigurationRoute != null &&
+            membership.role.canAccess(printerConfigurationRoles))
+          HomeDestination(
+            destinationKey: const ValueKey('printer-configuration'),
+            label: 'Printer',
+            icon: Icons.print_outlined,
+            onPressed: () {
+              final controller = TenantSessionScope.of(context);
+              Navigator.of(context).push(
+                AppPageRoute<void>(
+                  builder: (_) => TenantSessionScope(
+                    controller: controller,
+                    child: printerConfigurationRoute!(reader),
                   ),
                 ),
               );

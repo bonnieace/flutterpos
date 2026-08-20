@@ -67,5 +67,14 @@
 				</array>
 			</dict>
 		</array>
+		<!-- iOS 14 and later refuse a connection to another device on the local
+		     network until the person allows it, and the prompt is only shown if this
+		     key is present. Without it a receipt sent to a printer on the shop's own
+		     Wi-Fi fails as an ordinary socket error, which reads as "the printer did
+		     not answer" and sends a shopkeeper to check a machine that is switched on
+		     and working. `docs/printer_transport.md` §4 lists iOS as a Phase 1
+		     target, so this is that target's one platform requirement. -->
+		<key>NSLocalNetworkUsageDescription</key>
+		<string>This app connects to your receipt printer on this Wi-Fi network to print receipts.</string>
 	</dict>
 </plist>

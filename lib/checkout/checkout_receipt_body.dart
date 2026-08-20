@@ -257,21 +257,83 @@ final class CheckoutReceiptBody {
   /// be one.
   static const int _feedLinesWithoutCutter = 3;
 
+  /// The roll's width in characters, and the only geometry this class uses.
+  ///
+  /// **Every line is padded to exactly this many characters and nothing is
+  /// positioned by dot**, which is the fix for a defect found on a real 80mm
+  /// printer on 2026-08-18: amounts lost their last digit and a product name
+  /// merged with its own price.
+  ///
+  /// **The cause was in the package, and it is worth writing down.**
+  /// `Generator.row` places each column at an absolute dot position derived from
+  /// `PaperSize.width`, which `flutter_esc_pos_utils` reports as **558** for an
+  /// 80mm roll while treating that same roll as **48 characters** - and 48
+  /// characters of Font A is **576** dots. Its own two numbers disagree by a
+  /// character and a half. `Generator.text` is worse for this purpose: it emits
+  /// an absolute position **and** a justification command for the same line, so
+  /// a right-aligned amount is told both *start at dot 0* and *right-align*, and
+  /// each printer resolves that contradiction however it likes.
+  ///
+  /// Spaces are unambiguous, and the roll's character count is a figure a person
+  /// can verify with `tool/printer_width_ruler.dart`. That is the whole contract:
+  /// **a line is [_columns] characters, or it is a defect.**
+  int get _columns => configuration.paperWidth.columns;
+
+  /// [label] on the left, [value] hard against the right, in one full line.
+  ///
+  /// The label is truncated rather than the value: a value is a receipt number,
+  /// a date or money, and half of any of those is worse than a shortened word.
+  /// At least one space always separates them.
+  String _pair(String label, String value) {
+    if (value.length >= _columns) return value.substring(0, _columns);
+    final room = _columns - value.length;
+    final left = label.length > room - 1 ? label.substring(0, room - 1) : label;
+    return left.padRight(room) + value;
+  }
+
+  /// [value] hard against the right of a full line.
+  String _right(String value) => value.length >= _columns
+      ? value.substring(0, _columns)
+      : value.padLeft(_columns);
+
+  /// [text] centred in a line of [_columns] characters, at [scale] times normal
+  /// glyph width.
+  ///
+  /// **Only the left padding is emitted.** A centred line padded on both sides is
+  /// exactly full, and a printer that wraps at its last column would turn those
+  /// trailing spaces into an empty line.
+  String _centred(String text, {int scale = 1}) {
+    final room = _columns ~/ scale;
+    if (text.length >= room) return text.substring(0, room);
+    return ' ' * ((room - text.length) ~/ 2) + text;
+  }
+
+  /// A full-width rule.
+  ///
+  /// **Padded here rather than `generator.hr()`**, so every line on the receipt
+  /// is built the same way and a rule cannot disagree with the rows it separates.
+  List<int> _rule(Generator generator) => generator.text('-' * _columns);
+
   List<int> _heading(Generator generator, String? businessName) => <int>[
     ...generator.text(
-      ReceiptText.forPrinter(
-        businessName?.trim().isNotEmpty ?? false
-            ? businessName!.trim()
-            : ReceiptWords.unnamedBusiness,
+      // Centred by padding at double width, so the name sits over the middle of
+      // the paper rather than wherever the printer decides `ESC a 1` means when
+      // an absolute position has also been set on the same line.
+      _centred(
+        ReceiptText.forPrinter(
+          businessName?.trim().isNotEmpty ?? false
+              ? businessName!.trim()
+              : ReceiptWords.unnamedBusiness,
+        ),
+        scale: 2,
       ),
       styles: const PosStyles(
-        align: PosAlign.center,
         bold: true,
         height: PosTextSize.size2,
         width: PosTextSize.size2,
       ),
     ),
-    ...generator.hr(),
+    ..._rule(generator),
   ];
 
   List<int> _provenance(
@@ -283,20 +345,23 @@ final class CheckoutReceiptBody {
     // first and it is emphasised. It is also the queue's idempotency key, which
     // means the paper and the durable record cannot disagree about which sale
     // this is.
-    ..._labelled(
-      generator,
-      ReceiptWords.receiptLabel,
-      sale.receiptNumber,
-      valueStyles: const PosStyles(bold: true),
+    //
+    // **The whole row is bold, not just the number.** Emphasising one half of a
+    // line needs two writes to that line, and two writes to one line is exactly
+    // what was mis-positioning them.
+    ...generator.text(
+      _pair(ReceiptWords.receiptLabel, sale.receiptNumber),
+      styles: const PosStyles(bold: true),
     ),
-    ..._labelled(generator, ReceiptWords.dateLabel, sale.businessDate),
+    ...generator.text(_pair(ReceiptWords.dateLabel, sale.businessDate)),
     if (servedBy != null && servedBy.trim().isNotEmpty)
-      ..._labelled(
-        generator,
-        ReceiptWords.servedByLabel,
-        ReceiptText.forPrinter(servedBy.trim()),
+      ...generator.text(
+        _pair(
+          ReceiptWords.servedByLabel,
+          ReceiptText.forPrinter(servedBy.trim()),
+        ),
       ),
-    ...generator.hr(),
+    ..._rule(generator),
   ];
 
   /// One line per sale line, over two printed rows.
@@ -308,6 +373,10 @@ final class CheckoutReceiptBody {
   /// amount is right-aligned under it. At 48 columns there is room for one row,
   /// but it stays two: a receipt whose shape changes with the roll is two
   /// layouts to reason about, and nobody is comparing them side by side.
+  ///
+  /// **They were arriving on one line anyway**, which was the clearest symptom
+  /// of the positioning defect: two `text()` calls, each with its own line feed,
+  /// printed as a single row with the price sliced.
   List<int> _lines(Generator generator, CheckoutSalePayload sale) {
     final bytes = <int>[];
     for (final line in sale.lines) {
@@ -317,13 +386,10 @@ final class CheckoutReceiptBody {
         ),
       );
       bytes.addAll(
-        generator.text(
-          _money(sale.currency, line.lineTotalMinor),
-          styles: const PosStyles(align: PosAlign.right),
-        ),
+        generator.text(_right(_money(sale.currency, line.lineTotalMinor))),
       );
     }
-    bytes.addAll(generator.hr());
+    bytes.addAll(_rule(generator));
     return bytes;
   }
 
@@ -339,6 +405,8 @@ final class CheckoutReceiptBody {
         sale,
         sale.discountMinor,
       ),
+    // Double height applies to the whole row. It changes the glyphs' height and
+    // not their width, so the padding above is unaffected by it.
     ..._amount(
       generator,
       ReceiptWords.totalLabel,
@@ -346,51 +414,28 @@ final class CheckoutReceiptBody {
       sale.totalMinor,
       styles: const PosStyles(bold: true, height: PosTextSize.size2),
     ),
-    ...generator.hr(),
+    ..._rule(generator),
   ];
 
   List<int> _footer(Generator generator, CheckoutSalePayload sale) => <int>[
-    ..._labelled(
-      generator,
-      ReceiptWords.paidByLabel,
-      ReceiptWords.tender(sale.tender),
+    ...generator.text(
+      _pair(ReceiptWords.paidByLabel, ReceiptWords.tender(sale.tender)),
     ),
     ...generator.emptyLines(1),
-    ...generator.text(
-      ReceiptText.forPrinter(ReceiptWords.footer),
-      styles: const PosStyles(align: PosAlign.center),
-    ),
+    ...generator.text(_centred(ReceiptText.forPrinter(ReceiptWords.footer))),
   ];
 
-  /// A label on the left and a value on the right, in one printed row.
-  List<int> _labelled(
-    Generator generator,
-    String label,
-    String value, {
-    PosStyles valueStyles = const PosStyles(),
-  }) => generator.row(<PosColumn>[
-    PosColumn(text: label, width: 4),
-    PosColumn(
-      text: ReceiptText.forPrinter(value),
-      width: 8,
-      styles: valueStyles.copyWith(align: PosAlign.right),
-    ),
-  ]);
-
+  /// A label and a money amount, in one full line.
   List<int> _amount(
     Generator generator,
     String label,
     CheckoutSalePayload sale,
     int minor, {
     PosStyles styles = const PosStyles(),
-  }) => generator.row(<PosColumn>[
-    PosColumn(text: label, width: 5, styles: styles),
-    PosColumn(
-      text: _money(sale.currency, minor),
-      width: 7,
-      styles: styles.copyWith(align: PosAlign.right),
-    ),
-  ]);
+  }) => generator.text(
+    _pair(label, _money(sale.currency, minor)),
+    styles: styles,
+  );
 
   /// §8 rule 8: money always carries a currency code.
   ///

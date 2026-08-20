@@ -94,6 +94,33 @@ void main() {
     },
   );
 
+  // The state this composition root's wiring made reachable: the sale is
+  // durable and the receipt is not on paper, said as two notices because two
+  // different things happened.
+  screenshotCase(
+    '15b-sale-saved-but-not-printed',
+    build: () => inSession(
+      TenantCheckoutScreen(
+        cache: FakeCatalogSource(),
+        drafts: FakeDraftSink(printFailure: PrinterTransportCode.unreachable),
+      ),
+      controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+    ),
+    afterPump: (tester) async {
+      await _press(tester, 'checkout-product-pd-bread-white');
+      // On a phone the tender chips and the save live in the cart sheet, so it
+      // has to be opened before either can be pressed. On a desktop the cart is
+      // the second pane and the control is not there at all.
+      final openCart = find.byKey(const ValueKey('checkout-open-cart'));
+      if (openCart.evaluate().isNotEmpty) {
+        await tester.tap(openCart);
+        await tester.pumpAndSettle();
+      }
+      await _press(tester, 'checkout-tender-cash');
+      await _press(tester, 'checkout-save');
+    },
+  );
+
   screenshotCase(
     '16-checkout-settings',
     build: () => inSession(

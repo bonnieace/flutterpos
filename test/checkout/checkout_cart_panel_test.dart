@@ -1064,6 +1064,63 @@ void main() {
       expect(_status(tester, 'checkout-saved'), AppStatus.attention);
     });
 
+    testWidgets('a receipt that did not print is stated beside the sale', (
+      tester,
+    ) async {
+      // **Two notices, because two different things happened.** The sale is
+      // durable and the receipt is not on paper, and folding those into one
+      // sentence would make a printer fault read as a lost sale.
+      drafts.printFailure = PrinterTransportCode.unreachable;
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(_status(tester, 'checkout-saved'), AppStatus.ok);
+      expect(_status(tester, 'checkout-receipt-print'), AppStatus.problem);
+      // The sentence is `checkout_print_failures.dart`'s, not this screen's.
+      expect(
+        _notice(tester, 'checkout-receipt-print'),
+        PrinterFailureNotice.of(PrinterTransportCode.unreachable).message,
+      );
+    });
+
+    testWidgets('a stalled printer is attention rather than a problem', (
+      tester,
+    ) async {
+      // The one code where the receipt may still come out of the machine, so
+      // §2.1's `attention` rather than `problem`. Colour is not carrying this
+      // on its own - the sentence names the jam and the cover.
+      drafts.printFailure = PrinterTransportCode.writeTimeout;
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(_status(tester, 'checkout-receipt-print'), AppStatus.attention);
+    });
+
+    testWidgets('a receipt that printed adds no second notice', (
+      tester,
+    ) async {
+      // **Null is ambiguous by contract** - it means sent, and it also means a
+      // build that queues no receipts at all - so the till draws nothing. Where
+      // it printed, the paper is the proof and a green box is noise.
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(find.byKey(const ValueKey('checkout-saved')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('checkout-receipt-print')),
+        findsNothing,
+      );
+    });
+
     testWidgets('a till that cannot save says so as information', (
       tester,
     ) async {
@@ -1557,6 +1614,10 @@ final class _Drafts implements CheckoutDraftSink {
 
   /// Stands in for a payload that somehow carried no receipt number.
   bool omitReceiptNumber = false;
+
+  /// A `PrinterTransportCode` the sale comes back carrying, or null for a
+  /// receipt that reached the printer.
+  String? printFailure;
   int _sequence = 0;
 
   @override
@@ -1574,6 +1635,7 @@ final class _Drafts implements CheckoutDraftSink {
       receiptNumber: omitReceiptNumber
           ? null
           : 'CT-A7F-20260731-${_sequence.toString().padLeft(4, '0')}',
+      receiptPrintFailure: printFailure,
     );
   }
 }

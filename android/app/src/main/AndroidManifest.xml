@@ -1,4 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      **Declared here, not only in the debug source set.** `src/debug` has
+      carried this since the Flutter template, for hot reload - so every debug
+      build had it and no release build was ever checked. Nothing this app
+      depends on declares it either: of every plugin in the pub cache only
+      `google_mobile_ads` does, and that is not a dependency of this project.
+
+      The app cannot work without it. Firebase, and since 2026-08-17 a receipt
+      dialled straight at a printer's socket on the shop LAN, are both network.
+      A permission the app fundamentally needs belongs in the manifest that
+      ships rather than inherited by luck from a transitive AAR.
+    -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="ChillTentPOS"
         android:name="${applicationName}"

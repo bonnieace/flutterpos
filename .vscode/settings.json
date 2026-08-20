@@ -1,4 +1,10 @@
 {
-    "cmake.sourceDirectory": "D:/flutter_application_1/windows",
-    "dart.flutterSdkPath": "C:\\tools\\flutter"
+    "cmake.sourceDirectory": "D:/flutterpos/windows",
+    "dart.flutterSdkPath": "C:\\Users\\BonifaceMasota\\develop\\flutter",
+    "terminal.integrated.env.windows": {
+        "JAVA_HOME": "C:\\Users\\BonifaceMasota\\develop\\jdk-17",
+        "ANDROID_HOME": "C:\\Users\\BonifaceMasota\\develop\\android-sdk",
+        "ANDROID_SDK_ROOT": "C:\\Users\\BonifaceMasota\\develop\\android-sdk",
+        "PATH": "C:\\Users\\BonifaceMasota\\develop\\flutter\\bin;C:\\Users\\BonifaceMasota\\develop\\jdk-17\\bin;C:\\Users\\BonifaceMasota\\develop\\android-sdk\\platform-tools;C:\\Users\\BonifaceMasota\\develop\\android-sdk\\cmdline-tools\\latest\\bin;${env:PATH}"
+    }
 }

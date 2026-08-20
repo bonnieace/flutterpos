@@ -51,7 +51,7 @@ void main() {
       final second = await enqueue();
 
       expect(second.createdAt, first.createdAt);
-      expect(queue.pending(), hasLength(1));
+      expect(queue.pending().jobs, hasLength(1));
       expect(box.keys, contains(_receipt));
     });
 
@@ -365,7 +365,43 @@ void main() {
 
       final pending = queue.pending();
 
-      expect(pending.map((job) => job.receiptNumber), <String>[_otherReceipt]);
+      expect(
+        pending.jobs.map((job) => job.receiptNumber),
+        <String>[_otherReceipt],
+      );
+      expect(pending.unreadable, 0);
+      expect(pending.isEmpty, isFalse);
+    });
+
+    test('counts an unreadable record instead of hiding the readable ones', () async {
+      // **The question this answers was open until the queue screen needed
+      // it.** Throwing would have made one corrupt record look like an empty
+      // queue on the only screen that could act on the rest; skipping it
+      // silently is the `catch (_)` the design document refuses. So both are
+      // reported, the way the profit display reports the lines it could not
+      // use.
+      await enqueue();
+      await box.put('CT-A7F-20260729-0044', <String, Object?>{
+        'schemaVersion': 1,
+      });
+
+      final pending = queue.pending();
+
+      expect(pending.jobs.map((job) => job.receiptNumber), <String>[_receipt]);
+      expect(pending.unreadable, 1);
+    });
+
+    test('an empty queue is empty, and a queue of only rubbish is not', () async {
+      expect(queue.pending().isEmpty, isTrue);
+
+      await box.put('CT-A7F-20260729-0044', <String, Object?>{
+        'schemaVersion': 1,
+      });
+
+      // Nothing to show and something to say, which is not the same as nothing
+      // at all.
+      expect(queue.pending().isEmpty, isFalse);
+      expect(queue.pending().jobs, isEmpty);
     });
   });
 }

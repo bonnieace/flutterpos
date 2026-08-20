@@ -232,6 +232,24 @@ const Map<PrintJobState, Set<PrintJobState>> _legalMoves =
       PrintJobState.needsAttention: <PrintJobState>{PrintJobState.queued},
     };
 
+/// What a queue screen is given: the jobs it can show, and the count it cannot.
+///
+/// **The count is not decoration.** A screen that showed only [jobs] would
+/// render an empty queue for a box holding one corrupt record and nine good
+/// ones, which is the failure this type exists to make impossible to write.
+final class PrintJobListing {
+  const PrintJobListing({required this.jobs, required this.unreadable});
+
+  /// Unfinished jobs, oldest first.
+  final List<PrintJobRecord> jobs;
+
+  /// How many durable records could not be parsed. **Say this out loud** — see
+  /// [HivePrintJobQueue.pending].
+  final int unreadable;
+
+  bool get isEmpty => jobs.isEmpty && unreadable == 0;
+}
+
 /// The durable queue.
 final class HivePrintJobQueue {
   HivePrintJobQueue._(this._box, this._clock);
@@ -314,28 +332,43 @@ final class HivePrintJobQueue {
   /// answering null for a record it cannot trust.
   PrintJobRecord? read(String receiptNumber) => _read(receiptNumber);
 
-  /// Every job that is not finished, oldest first.
+  /// Every job that is not finished, oldest first, **and how many could not be
+  /// read at all**.
   ///
-  /// **One malformed record throws for the whole listing, and that is the
-  /// fail-closed rule rather than an oversight — but it is the one place the
-  /// rule is uncomfortable.** Skipping the bad record silently is the `catch
-  /// (_)` `docs/printer_transport.md` §2 refuses; throwing means one unreadable
-  /// job hides every readable one from the surface that would show them.
-  /// **The chunk that builds that surface should decide deliberately**, and if
-  /// it wants a third answer the honest one is a listing that returns the good
-  /// records *and* the count of unreadable ones, the way the profit display
-  /// already states how many lines it could not use.
-  List<PrintJobRecord> pending() {
+  /// **This is the third answer, and it was an open question until the surface
+  /// that needed it was built.** Two obvious options were both wrong. Skipping
+  /// a malformed record silently is the `catch (_)`
+  /// `docs/printer_transport.md` §2 refuses outright. Throwing — which this did
+  /// first — is the fail-closed rule applied where it does harm: **one
+  /// unreadable job would hide every readable one** from the only screen that
+  /// could act on them, so a single corrupt record would look like an empty
+  /// queue.
+  ///
+  /// So the listing carries both, and the surface states both. It is exactly
+  /// the shape the profit display already uses: a figure, plus the count of the
+  /// lines it could not use, and never a figure that quietly excludes them.
+  PrintJobListing pending() {
     final records = <PrintJobRecord>[];
+    var unreadable = 0;
     for (final key in _box.keys) {
       if (key is! String) continue;
-      final record = _read(key);
+      final PrintJobRecord? record;
+      try {
+        record = _read(key);
+      } on PrintJobException {
+        // Counted, never repaired by guessing, and never silently dropped.
+        unreadable++;
+        continue;
+      }
       if (record == null) continue;
       if (record.state == PrintJobState.printed) continue;
       records.add(record);
     }
     records.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    return List<PrintJobRecord>.unmodifiable(records);
+    return PrintJobListing(
+      jobs: List<PrintJobRecord>.unmodifiable(records),
+      unreadable: unreadable,
+    );
   }
 
   /// Sends one queued job through [transport], moving it to `printed` or to

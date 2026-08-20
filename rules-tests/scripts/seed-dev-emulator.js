@@ -168,6 +168,18 @@ async function seedFirestore(firestore, uid) {
     updatedAt: now,
   });
 
+  // The shop's own name, which is what a receipt prints at the top and what the
+  // home titles itself with. Without it `TenantBrandingRepository.load` returns
+  // null, the home falls back to the membership's tenant name, and the receipt
+  // falls back to `ReceiptWords.unnamedBusiness` - "Sales receipt". That is
+  // correct behaviour and it looks like a bug on paper, which is why a business
+  // that can ring up a sale should also be able to name itself.
+  await tenant.collection("configuration").doc("branding").set({
+    companyName: TENANT_NAME,
+    slogan: "Everything the corner needs",
+    updatedAt: now,
+  });
+
   await tenant.set({
     name: TENANT_NAME,
     slug: TENANT_SLUG,

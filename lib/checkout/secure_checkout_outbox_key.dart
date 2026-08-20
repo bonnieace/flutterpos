@@ -52,6 +52,15 @@ final class SecureCheckoutOutboxEncryptionKeyProvider
   /// evidence, so the two boxes deliberately never share one key.
   static const catalogCacheStorageKey = 'checkout-catalog-cache-aes-key-v1';
 
+  /// Versioned secure-storage name of the durable print job key.
+  ///
+  /// **Its own key for the same reason the catalog cache has one.** A print job
+  /// is derived data: the bytes are rebuilt from a sale that is already durable,
+  /// and the job is keyed on the receipt number that sale carries, so losing
+  /// this key costs a re-queue rather than a record of a sale. Sharing the
+  /// outbox's key would tie evidence's fate to a receipt's.
+  static const printJobsStorageKey = 'checkout-print-jobs-aes-key-v1';
+
   final CheckoutOutboxSecureValueStore _storage;
   final Random _random;
   final String _storageKey;

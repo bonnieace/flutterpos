@@ -1,15 +1,19 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'login_screen.dart';
 import 'tenancy/tenancy.dart';
 import 'theme.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart'
+    show CapabilityProfile;
 
 import 'audit/audit.dart';
 import 'checkout/checkout.dart';
@@ -37,6 +41,27 @@ Future<void> main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      // **A callable will not leave the device without an App Check provider,
+      // and that is what this line is for.** `FirebaseContextProvider` in the
+      // Android callable SDK fetches an auth token and an App Check token as one
+      // pair; with no provider installed the second throws *No AppCheckProvider
+      // installed* and the pair fails as *1 out of 2 underlying tasks failed* —
+      // so `listMyTenants` never reaches the wire and the routing shell reports
+      // "We could not open your business account", naming a connection that is
+      // in fact fine.
+      //
+      // **Debug builds only, and the debug provider.** It mints a local token
+      // that the emulator suite does not verify, which is exactly what a local
+      // run needs. A release build is deliberately left as it was: real
+      // attestation is Play Integrity plus a registered app in the console, and
+      // turning that on here without either would swap one silent failure for
+      // another.
+      if (kDebugMode) {
+        await FirebaseAppCheck.instance.activate(
+          providerAndroid: const AndroidDebugProvider(),
+          providerApple: const AppleDebugProvider(),
+        );
+      }
       await Hive.initFlutter();
       final tenantSelectionBox = await Hive.openBox<String>(
         HiveTenantSelectionStore.boxName,
@@ -69,6 +94,25 @@ Future<void> main() async {
           storage: secureValueStore,
         ),
       );
+      // The printing slice's durable half, and the last piece it was missing.
+      // Its own key, for the reason `printJobsStorageKey` gives.
+      final checkoutPrintJobs = await HivePrintJobQueue.open(
+        keyProvider: SecureCheckoutOutboxEncryptionKeyProvider(
+          storage: secureValueStore,
+          storageKey:
+              SecureCheckoutOutboxEncryptionKeyProvider.printJobsStorageKey,
+        ),
+      );
+      // **Loaded once, here, because it reads an asset.**
+      // `CheckoutReceiptBody` takes a *loaded* profile precisely so that a
+      // formatter invoked from wherever a sale happens to be committed never
+      // does I/O. This is the composition root that owes it one.
+      final printerCapabilityProfile = await CapabilityProfile.load();
+      // The compile-time platform seam: `dart:io` sockets on mobile and
+      // desktop, the loud unsupported stub on web. Built once — the transport
+      // holds no mutable state and opens a connection per job.
+      final printerTransport = createPrinterTransport();
+
       // The installation identity is resolved once at startup so every shift
       // and receipt this device records names the same device.
       final deviceId = await checkoutReceiptCounters.resolveDeviceId();
@@ -120,6 +164,9 @@ Future<void> main() async {
             checkoutOutbox: checkoutOutbox,
             checkoutCatalogCache: checkoutCatalogCache,
             checkoutReceiptCounters: checkoutReceiptCounters,
+            checkoutPrintJobs: checkoutPrintJobs,
+            printerCapabilityProfile: printerCapabilityProfile,
+            printerTransport: printerTransport,
             tenantShiftState: tenantShiftState,
             deviceId: deviceId,
             connectivity: connectivity,
@@ -133,6 +180,48 @@ Future<void> main() async {
   );
 }
 
+/// This device's queue depth, in words, or null when there is nothing to say.
+///
+/// The wording is `PrinterFailureNotice.queueDepth`; what is here is the read,
+/// and the decision that a queue which cannot be listed is not a queue that is
+/// empty.
+String? _printQueueStatus(HivePrintJobQueue queue) {
+  final PrintJobListing listing;
+  try {
+    listing = queue.pending();
+  } catch (_) {
+    // A queue that cannot be listed is not a queue that is empty, but the home
+    // is not the surface to explain it on — the route itself states it.
+    return 'Could not be read';
+  }
+  return PrinterFailureNotice.queueDepth(
+    waiting: listing.jobs.length,
+    unreadable: listing.unreadable,
+  );
+}
+
+/// The shop's own name for the top of a receipt, or null.
+///
+/// **A branding read that fails must not cost a receipt.** The name is a
+/// heading; `CheckoutReceiptBody` already falls back to its own wording when it
+/// is absent, so anything that goes wrong reading it is swallowed here rather
+/// than propagating into the print hook, where it would be reported as
+/// `receipt_not_queued` and the paper would never come out.
+Future<String?> _receiptBusinessName(
+  TenantSession session,
+  TenantDataReader reader,
+) async {
+  try {
+    final branding = await TenantBrandingRepository(
+      session: session,
+      reader: reader,
+    ).load();
+    return branding?.companyName;
+  } catch (_) {
+    return null;
+  }
+}
+
 class SpiritPOSApp extends StatelessWidget {
   const SpiritPOSApp({
     super.key,
@@ -140,6 +229,9 @@ class SpiritPOSApp extends StatelessWidget {
     required this.checkoutOutbox,
     required this.checkoutCatalogCache,
     required this.checkoutReceiptCounters,
+    required this.checkoutPrintJobs,
+    required this.printerCapabilityProfile,
+    required this.printerTransport,
     required this.tenantShiftState,
     required this.deviceId,
     required this.connectivity,
@@ -152,6 +244,14 @@ class SpiritPOSApp extends StatelessWidget {
   final HiveCheckoutOutbox checkoutOutbox;
   final HiveCheckoutCatalogCache checkoutCatalogCache;
   final HiveCheckoutReceiptCounters checkoutReceiptCounters;
+
+  /// The durable print queue, the loaded ESC/POS profile, and the platform
+  /// transport. Three fields rather than a pre-built dispatcher because the
+  /// dispatcher is cheap and the queue is not: the box is opened once at
+  /// startup, and a dispatcher is composed per route from it.
+  final HivePrintJobQueue checkoutPrintJobs;
+  final CapabilityProfile printerCapabilityProfile;
+  final PrinterTransport printerTransport;
   final HiveTenantShiftState tenantShiftState;
   final String deviceId;
   final Connectivity connectivity;
@@ -164,6 +264,40 @@ class SpiritPOSApp extends StatelessWidget {
     Future<bool> isOnline() async =>
         await connectivity.checkConnectivity() != ConnectivityResult.none;
     final tenantDataReader = FirebaseTenantDocumentReader();
+    // The one call that turns a committed sale into a receipt on its way to
+    // paper. Composed here because this is the only place holding all four
+    // pieces at once: the durable queue, the platform transport, the loaded
+    // ESC/POS profile, and a reader that can say where this business prints.
+    final printDispatcher = CheckoutPrintDispatcher(
+      queue: checkoutPrintJobs,
+      transport: printerTransport,
+      profile: printerCapabilityProfile,
+    );
+    // **Runs after the sale is durable, and can never un-write one.** §6.3
+    // applied to printing: the record is written first, the receipt is produced
+    // over committed state, and a printer that is off becomes a stated reason
+    // rather than a refused sale. `CheckoutPrintDispatcher.dispatch` never
+    // throws for a printing reason, so what comes back here is a code or null.
+    Future<String?> printReceipt(
+      CheckoutOutboxRecord record,
+      TenantSession session,
+    ) async {
+      final printer = await TenantPrinterConfigurationRepository(
+        session: session,
+        reader: tenantDataReader,
+      ).load();
+      final result = await printDispatcher.dispatch(
+        CheckoutSalePayload.fromOutboxRecord(record, session: session),
+        printer: printer,
+        // The same value and the same fallback the home's title uses, so the
+        // paper and the app name the business identically.
+        businessName: await _receiptBusinessName(session, tenantDataReader),
+        servedBy: FirebaseAuth.instance.currentUser?.displayName,
+      );
+      return result.outcome == CheckoutPrintOutcome.sent
+          ? null
+          : result.reasonCode;
+    }
     // Recording a pending return changes no stock and is open to every active
     // member; restoring it is management-only and runs through the callable, so
     // the two stay a deliberate two-person control. The same actions reach the
@@ -387,6 +521,9 @@ class SpiritPOSApp extends StatelessWidget {
               // second business while another still holds an open shift on this
               // device is enforced here, not by the screen.
               shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
+              // The seam that was built and never connected: without it a sale
+              // commits and no bytes are ever generated.
+              onSaved: printReceipt,
             ),
           ),
         ),
@@ -412,6 +549,38 @@ class SpiritPOSApp extends StatelessWidget {
             ),
         checkoutConfigurationRoles:
             TenantCheckoutConfigurationPublisher.allowedRoles,
+        // Where this business prints. The last surface printing was missing:
+        // `docs/printer_transport.md` §6 forbids guessing an address, so until
+        // this has been used once every receipt queues with
+        // `printer_not_configured` and no paper comes out.
+        //
+        // `probe` is the transport's own connect-and-close, handed over so
+        // *Test this printer* answers "is it reachable?" against what is typed,
+        // before it is saved and without wasting a roll.
+        printerConfigurationRoute: (reader) => TenantPrinterConfigurationScreen(
+          reader: reader,
+          writer: FirebaseTenantConfigurationDocumentWriter(
+            firestore: FirebaseFirestore.instance,
+            isOnline: isOnline,
+          ),
+          probe: printerTransport.probe,
+        ),
+        printerConfigurationRoles:
+            TenantPrinterConfigurationPublisher.allowedRoles,
+        // This device's unsent receipts, and the one control that can move one:
+        // *Send again*. It rebuilds nothing — the bytes on the job are the ones
+        // the sale produced, so a receipt retried after a price change still
+        // prints what was charged.
+        printQueueRoute: () => TenantPrintQueueScreen(
+          queue: checkoutPrintJobs,
+          onRetry: (receiptNumber) async {
+            final result = await printDispatcher.retry(receiptNumber);
+            return result.outcome == CheckoutPrintOutcome.sent
+                ? null
+                : result.reasonCode;
+          },
+        ),
+        printQueueStatus: () => _printQueueStatus(checkoutPrintJobs),
         // The only path in the app that puts a product in the catalog, and the
         // last capability every other operational surface here already assumed.
         // Creating and retiring are direct Firestore writes, because the rules

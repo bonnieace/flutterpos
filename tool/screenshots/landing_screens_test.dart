@@ -26,12 +26,30 @@ void main() {
   late Directory directory;
   late HiveTenantShiftState shiftState;
   late FakeShiftServer shiftServer;
+  late HivePrintJobQueue printJobs;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('pos-screenshots-');
     Hive.init(directory.path);
     shiftState = await openMemoryShiftState();
     shiftServer = FakeShiftServer();
+    // Two receipts this device has not managed to send, so the home's card
+    // states a condition rather than being a button. §4.4 names queue depth as
+    // the example.
+    printJobs = HivePrintJobQueue.fromBox(
+      await Hive.openBox<dynamic>(HivePrintJobQueue.boxName),
+    );
+    for (final receipt in const <String>[
+      'CT-A7F-20260818-0042',
+      'CT-A7F-20260818-0043',
+    ]) {
+      await printJobs.enqueue(
+        tenantId: seedTenantId,
+        receiptNumber: receipt,
+        endpoint: PrinterEndpoint(host: '192.168.1.50', port: 9100),
+        bytes: const <int>[27, 64],
+      );
+    }
   });
 
   tearDown(() async {
@@ -80,6 +98,18 @@ void main() {
             TenantCheckoutConfigurationScreen(reader: reader),
         checkoutConfigurationRoles:
             TenantCheckoutConfigurationPublisher.allowedRoles,
+        printerConfigurationRoute: (reader) =>
+            TenantPrinterConfigurationScreen(reader: reader),
+        printerConfigurationRoles:
+            TenantPrinterConfigurationPublisher.allowedRoles,
+        printQueueRoute: () => TenantPrintQueueScreen(queue: printJobs),
+        printQueueStatus: () {
+          final listing = printJobs.pending();
+          return PrinterFailureNotice.queueDepth(
+            waiting: listing.jobs.length,
+            unreadable: listing.unreadable,
+          );
+        },
         catalogManagementRoute: (reader) =>
             TenantCatalogManagementScreen(reader: reader),
         catalogManagementRoles: TenantCatalogManagementRepository.allowedRoles,

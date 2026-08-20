@@ -120,6 +120,34 @@ const Map<String, String> captions = <String, String>{
   '34-returns-on-a-sale':
       'Returns against one sale: a pending one awaiting verification, and the '
       'form that records another.',
+  '15b-sale-saved-but-not-printed':
+      'A sale that saved and whose receipt did not reach the printer. Two '
+      'notices, because two different things happened: the sale is durable and '
+      'the paper is not there.',
+  '36a-printer-not-set-up':
+      'Printer settings before a business has one. There is no default address '
+      'and never will be, so until this is filled in every receipt queues.',
+  '36b-printer-configured':
+      'A configured printer, with the reachability test that connects and '
+      'closes without wasting a roll.',
+  '36c-printer-settings-read-only':
+      'The same route in a build with no writer and no transport: neither Save '
+      'nor Test this printer is drawn, because a control that cannot work is '
+      'worse than a missing one.',
+  '36d-printer-settings-not-read':
+      'A printer document this build cannot parse. Deliberately not reported '
+      'as "no printer configured", which would invite setting up one that '
+      'already exists.',
+  '37a-no-receipts-waiting': 'The device queue with nothing in it.',
+  '37b-receipts-waiting':
+      'One receipt the printer did not answer for and one still waiting its '
+      'turn. Send again is offered only on the first.',
+  '37c-receipts-waiting-read-only':
+      'The queue with no retry injected: a statement of what is waiting, and '
+      'no control that would fail.',
+  '37d-receipts-some-unreadable':
+      'A queue holding a durable record this build cannot parse. The count is '
+      'stated rather than the record being silently dropped.',
   '35-activity-log':
       'The business’s own event trail, including the changes the platform '
       'made to it.',

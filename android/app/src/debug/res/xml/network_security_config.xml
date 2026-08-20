@@ -30,5 +30,20 @@
         <!-- The loopback every other target resolves to. -->
         <domain includeSubdomains="false">127.0.0.1</domain>
         <domain includeSubdomains="false">localhost</domain>
+        <!--
+          A physical handset, reaching this machine's emulator suite over the
+          LAN via the FIREBASE_EMULATOR_HOST define. Added 2026-08-18 for a
+          device run against 192.168.100.5.
+
+          **It is not derived and nothing tests for it**, which is the whole
+          difference between this entry and the three above: those are exactly
+          what `derivedEmulatorHost` can return, and the drift test asserts each
+          one. This is a machine's DHCP lease. It is safe to delete, and it will
+          simply stop working when that lease changes - the symptom being a
+          sign-in that fails with "Sign-in could not be completed", because
+          Android refuses the cleartext call and the SDK returns a code this app
+          does not name.
+        -->
+        <domain includeSubdomains="false">192.168.100.5</domain>
     </domain-config>
 </network-security-config>

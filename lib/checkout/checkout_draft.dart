@@ -136,14 +136,40 @@ final class CheckoutDraftRequest {
 /// can read a lease, an attempt count, or a payload hash, and no surface can be
 /// tempted to act on a state the sync and recovery workers own.
 final class CheckoutSavedDraft {
-  const CheckoutSavedDraft({required this.checkoutId, required this.receiptNumber});
+  const CheckoutSavedDraft({
+    required this.checkoutId,
+    required this.receiptNumber,
+    this.receiptPrintFailure,
+  });
 
   /// The immutable checkout identity the sale will be written under.
   final String checkoutId;
 
   /// The customer-facing receipt, absent only if the payload somehow lacks one.
   final String? receiptNumber;
+
+  /// Why the receipt did not reach the printer, or null.
+  ///
+  /// **A `PrinterTransportCode`, carried back rather than swallowed.** The sale
+  /// is committed before the receipt is queued and a printer is never allowed
+  /// to un-write it — but a receipt that silently did not print is exactly the
+  /// failure `docs/printer_transport.md` §2 objects to, so the reason travels
+  /// with the answer and the till states it. Null means the receipt was sent,
+  /// **or** that this build queues no receipts at all.
+  final String? receiptPrintFailure;
 }
+
+/// Queues a receipt for a draft that is already durable.
+///
+/// **Called after the sale is written, never before**, which is §6.3 applied to
+/// printing: the sale is recorded first and the receipt is produced over
+/// committed state. Returns a `PrinterTransportCode` when the receipt did not
+/// reach the printer, or null when it did.
+typedef CheckoutDraftReceiptHook =
+    Future<String?> Function(
+      CheckoutOutboxRecord record,
+      TenantSession session,
+    );
 
 /// The single action a checkout surface may take: save one offline draft.
 ///
@@ -165,7 +191,9 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     CheckoutIdFactory? checkoutIdFactory,
     CheckoutDraftClock? clock,
     CheckoutBusinessDateResolver? businessDateResolver,
-  }) : _sessionController = sessionController,
+    CheckoutDraftReceiptHook? onSaved,
+  }) : _onSaved = onSaved,
+       _sessionController = sessionController,
        _cache = cache,
        _outbox = outbox,
        _receipts = receipts,
@@ -182,6 +210,11 @@ final class CheckoutDraftService implements CheckoutDraftSink {
   final CheckoutIdFactory _checkoutIdFactory;
   final CheckoutDraftClock _clock;
   final CheckoutBusinessDateResolver _businessDateResolver;
+
+  /// Absent in every build that does not print, which is what keeps this
+  /// service free of any dependency on the printing slice.
+  final CheckoutDraftReceiptHook? _onSaved;
+
   Future<void> _tail = Future<void>.value();
 
   /// Saves one deterministic offline checkout for the selected session.
@@ -197,7 +230,36 @@ final class CheckoutDraftService implements CheckoutDraftSink {
     return CheckoutSavedDraft(
       checkoutId: record.checkoutId,
       receiptNumber: receiptNumber is String ? receiptNumber : null,
+      receiptPrintFailure: await _queueReceipt(record),
     );
+  }
+
+  /// Hands the committed draft to the receipt hook, if there is one.
+  ///
+  /// **The `catch` here is the one place in this slice where swallowing is
+  /// right, and it is not silent.** `CheckoutPrintDispatcher` never throws for a
+  /// printing reason by contract, so anything arriving here is a malformed
+  /// durable print record or a programming error — and neither may un-write a
+  /// sale that is already durable. The reason is carried back to the till
+  /// instead of being dropped, which is the difference between this and the
+  /// `catch (_)` `docs/printer_transport.md` §2 objects to.
+  ///
+  /// **A receipt not queued is not a receipt lost.** The job key is the receipt
+  /// number the sale already carries, so queueing it later from the sale
+  /// produces the same job rather than a second delivery.
+  Future<String?> _queueReceipt(CheckoutOutboxRecord record) async {
+    final hook = _onSaved;
+    if (hook == null) return null;
+    // The session is re-read rather than captured: a tenant switch between the
+    // write and this line means the receipt belongs to a business this device
+    // has left, and queueing it would be worse than not.
+    final session = _sessionController.session;
+    if (session == null || !session.canAccess()) return null;
+    try {
+      return await hook(record, session);
+    } catch (_) {
+      return 'receipt_not_queued';
+    }
   }
 
   Future<CheckoutOutboxRecord> createDraft(CheckoutDraftRequest request) {

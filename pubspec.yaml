@@ -70,7 +70,12 @@ dependencies:
 
   #pdf_viewer_plugin: ^2.0.1 
   cloud_firestore: ^6.1.0
-  cloud_functions: ^6.0.5
+  cloud_functions: ^6.3.6
+  # Installs an App Check provider. Without one the Android callable SDK
+  # fails before it sends: `FirebaseContextProvider` gathers an auth token
+  # and an App Check token together, and "No AppCheckProvider installed"
+  # makes that pair fail as "1 out of 2 underlying tasks failed".
+  firebase_app_check: ^0.4.0
   # flutter_typeahead: ^4.8.0
   flutter_launcher_icons: ^0.14.4
 

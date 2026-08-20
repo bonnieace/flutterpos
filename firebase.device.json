@@ -1,0 +1,51 @@
+{
+  "_comment": [
+    "The emulator suite, bound so a physical phone on the same Wi-Fi can reach it.",
+    "A copy of firebase.json's emulator block with one difference: host 0.0.0.0",
+    "instead of the default 127.0.0.1. The default is correct for everything that",
+    "runs on this machine and useless for a device, which sees loopback as itself.",
+    "",
+    "A separate file rather than an edit to firebase.json, following the",
+    "firebase.invitation-test.json precedent: the checked-in default should stay",
+    "the safe one, and binding an unauthenticated emulator to every interface is",
+    "not a thing to turn on for everybody by default.",
+    "",
+    "  npx firebase-tools@13.35.1 emulators:exec --config firebase.device.json \\",
+    "    --only auth,firestore --project multitenant-pos-b8326 \\",
+    "    \"node scripts/seed-dev-emulator.js --hold\"",
+    "",
+    "firebase-tools 13 rather than 15 because 15 requires JDK 21 and this machine",
+    "has 17."
+  ],
+  "emulators": {
+    "auth": {
+      "port": 9099,
+      "host": "0.0.0.0"
+    },
+    "firestore": {
+      "port": 8080,
+      "host": "0.0.0.0"
+    },
+    "functions": {
+      "port": 5001,
+      "host": "0.0.0.0"
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000,
+      "host": "0.0.0.0"
+    },
+    "singleProjectMode": true
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": ["node_modules", ".git", "firebase-debug.log", "*.local"]
+    }
+  ]
+}

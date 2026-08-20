@@ -17,144 +17,147 @@ out, and which failures cost a debugging cycle. Each standing decision in
 Every session, newest last, with the line it starts on. Read the one a standing decision points at; never the file.
 
 - **13** — Sessions
-- **166** — Implementation handoff - 2026-07-29
-- **400** — Frontend implementation handoff - 2026-07-29
-- **445** — Authentication-to-tenant routing handoff - 2026-07-29
-- **505** — Route-guard and tenant repository foundation handoff - 2026-07-29
-- **567** — Read-only tenant catalog handoff - 2026-07-29
-- **660** — Read-only tenant staff-directory handoff - 2026-07-29
-- **760** — Typed staff invitation handoff - 2026-07-29
-- **863** — Typed staff update handoff - 2026-07-29
-- **959** — Typed staff status handoff - 2026-07-29
-- **1058** — Typed staff invitation resend handoff - 2026-07-29
-- **1160** — Typed staff invitation cancellation handoff - 2026-07-29
-- **1267** — Typed staff invitation email replacement handoff - 2026-07-30
-- **1374** — Typed visible invitation acceptance handoff - 2026-07-30
-- **1471** — Typed email-link invitation acceptance handoff - 2026-07-30
-- **1569** — Invitation emulator contract handoff - 2026-07-30
-- **1655** — Typed default tenant selection handoff - 2026-07-30
-- **1756** — Typed tenant request handoff - 2026-07-30
-- **1869** — Platform pending-tenant review handoff - 2026-07-30
-- **1987** — Platform tenant suspension/reactivation handoff - 2026-07-30
-- **2096** — Platform rejected-tenant archival handoff - 2026-07-30
-- **2214** — Platform exact-UID global-user status handoff - 2026-07-30
-- **2333** — Guarded platform-admin grant CLI handoff - 2026-07-31
-- **2443** — Guarded platform-admin revocation CLI handoff - 2026-07-31
-- **2655** — Tenant-switch safety coordinator handoff - 2026-07-31
-- **2782** — Encrypted Hive checkout-outbox foundation handoff - 2026-07-31
-- **2932** — Confirmation-safe checkout restart recovery handoff - 2026-07-31
-- **3077** — Deterministic checkout submission worker handoff - 2026-07-31
-- **3235** — Offline catalog cache and checkout draft handoff - 2026-07-31
-- **3408** — Per-device receipt numbering and checkout configuration handoff - 2026-07-31
-- **3596** — Guarded tenant shift lifecycle handoff - 2026-07-31
-- **3812** — Shift-scoped sale attribution and closing summary handoff - 2026-07-31
-- **4028** — Guarded shift-history read surface handoff - 2026-08-01
-- **4228** — Guarded sale-history read surface handoff - 2026-08-01
-- **4382** — Guarded staff-name resolution handoff - 2026-08-01
-- **4529** — Guarded daily summary handoff - 2026-08-01
-- **4686** — Guarded returns read surface handoff - 2026-08-01
-- **4850** — Guarded return creation handoff - 2026-08-01
-- **5018** — Guarded return verification handoff - 2026-08-01
-- **5151** — Guarded receipt lookup handoff - 2026-08-01
-- **5291** — Guarded stock adjustment surface handoff - 2026-08-01
-- **5507** — Guarded business-wide stock adjustment feed handoff - 2026-08-01
-- **5703** — Guarded tenant activity log handoff - 2026-08-01
-- **5914** — Guarded business-wide stock movement feed handoff - 2026-08-01
-- **6149** — Guarded reconciliation status surface handoff - 2026-08-01
-- **6386** — Guarded account verification entry point handoff - 2026-08-01
-- **6541** — Guarded email delivery-status handoff - 2026-08-01
-- **6668** — Checkout tender contract - payload v2 handoff - 2026-08-02
-- **6886** — Reachable point-of-sale till handoff - 2026-08-02
-- **7071** — Usable till handoff - search, quantity, stock, receipt - 2026-08-02
-- **7216** — Reconciliation can be asked for - 2026-08-02
-- **7423** — A till that holds a real catalog - 2026-08-02
-- **7541** — What a business has taken today - 2026-08-02
-- **7710** — Which category is actually selling - 2026-08-02
-- **7853** — Every reported figure now names its currency - 2026-08-02
-- **7989** — Who sold what - 2026-08-02
-- **8249** — The app can reach the emulators - 2026-08-02
-- **8410** — The totals panel, split - 2026-08-02
-- **8497** — What the business was paid with - 2026-08-02
-- **8688** — The first real run, and what it found - 2026-08-02
-- **8962** — A saved sale reaches the server while the till stays open - 2026-08-02
-- **9078** — Which differences reconciliation found - 2026-08-02
-- **9276** — A closed shift may be corrected to what its sales prove - 2026-08-04
-- **9519** — The correction is reachable from the row that reports it - 2026-08-04
-- **9730** — The first run that corrected a real shift - 2026-08-04
-- **10009** — The sentinel audit, and a guard that keeps it done - 2026-08-04
-- **10209** — The harness that would have caught it - 2026-08-04
-- **10408** — The corrections a business can finally see - 2026-08-04
-- **10607** — The two defects the real run left alone - 2026-08-04
-- **10835** — The shift half of the pipeline, proved end to end - 2026-08-04
-- **11027** — One shift's correction, reachable from the shift itself - 2026-08-05
-- **11221** — The stock half of the runner, entered for the first time - 2026-08-05
-- **11452** — The same narrowing, from the other side - 2026-08-05
-- **11623** — A stock difference, where the correction is made - 2026-08-05
-- **11841** — The kind that could never be recorded - 2026-08-05
-- **12042** — One decision, in one place, with tests - 2026-08-05
-- **12216** — The last thing the stock phase can conclude - 2026-08-05
-- **12401** — Saying there is more, after looking at it - 2026-08-05
-- **12592** — What the pinned buttons cost, measured - 2026-08-05
-- **12759** — A defect that was not there - 2026-08-05
-- **12899** — The narrowing that was not worth having - 2026-08-05
-- **13125** — The run behind the difference, finished - 2026-08-05
-- **13363** — The largest module's first unit tests - 2026-08-06
-- **13633** — A hook with no producer, and three bounds nothing had counted - 2026-08-07
-- **13996** — Nine months of `flutter test` paths, and who may run a job's next page - 2026-08-07
-- **14313** — PLAN.md split into current state and history - 2026-08-07
-- **14395** — A business can set what it sells in - 2026-08-07
-- **14620** — A shop can stock itself - 2026-08-07
-- **14840** — The trigger every reconciliation job comes from - 2026-08-07
-- **15071** — The sweep that decides who is reconciled tonight - 2026-08-07
-- **15362** — The callable that corrects a price - 2026-08-07
-- **15592** — The flake was the test's own clock - 2026-08-07
-- **15751** — A product records what it cost, and a sale freezes it - 2026-08-07
-- **15911** — The status board moved accounts - 2026-08-08
-- **15989** — Bulk catalog and return scoring are scoped as rewrites - 2026-08-08
-- **16111** — A price is corrected from the app - 2026-08-08
-- **16333** — Many products at once, previewed before they change - 2026-08-08
-- **16634** — Products imported from a spreadsheet, previewed before they exist - 2026-08-08
-- **16960** — Both bulk halves reach a person - 2026-08-08
-- **17219** — Profit is shown, or refused, and never overstated - 2026-08-08
-- **17462** — The password-reset worker runs against real Auth and real Firestore - 2026-08-08
-- **17661** — The app is driven on Android against the emulators - 2026-08-08
-- **17866** — The sign-in screen says something true - 2026-08-08
-- **18044** — A refused invitation says what will actually work - 2026-08-08
-- **18259** — The design system's token layer, wired to nothing - 2026-08-11
-- **18565** — A category is named, and never shown as a document ID - 2026-08-11
-- **18789** — The ripple dies at the theme - 2026-08-11
-- **18998** — The working tree is emptied into the repository - 2026-08-11
-- **19113** — `AppButton`, and the spring substrate under it - 2026-08-11
-- **19348** — Every remaining button becomes an `AppButton` - 2026-08-11
-- **19496** — A route arrives on a spring - 2026-08-12
-- **19723** — One field, everywhere - 2026-08-12
-- **19904** — Five statuses, two notices, and prose that folds away - 2026-08-12
-- **20089** — A screen title stops being chrome - 2026-08-12
-- **20313** — Every page gets a maximum width, and 768 stops being declared three times - 2026-08-12
-- **20592** — A record list becomes one component, and §4.3's middle band gets its first picture - 2026-08-13
-- **20842** — The staff directory becomes a `RecordList`, and a record gets somewhere to open a form - 2026-08-13
-- **21069** — The catalog becomes a `RecordList`, and a product that cannot be sold says so - 2026-08-13
-- **21274** — The stock family becomes one record, and a screen stops describing it three ways - 2026-08-13
-- **21470** — The shift family becomes a `RecordList`, and step 6's sweep is finished - 2026-08-13
-- **21710** — The reconciliation family gets one vocabulary, and step 4's sweep begins - 2026-08-14
-- **21984** — The catalog family folds its prose, and a bulk report gets its first picture - 2026-08-14
-- **22239** — A figure becomes a component, and the money screens stop writing numbers into sentences - 2026-08-14
-- **22483** — A difference states its figures, and step 8 is finished - 2026-08-15
-- **22716** — A notice says which answer it is, and four of them were never refusals - 2026-08-15
-- **22889** — A title appears once, and one page was telling everybody it was read-only - 2026-08-15
-- **23057** — A table stops guessing how wide its columns are - 2026-08-15
-- **23274** — The front door stops having a palette of its own - 2026-08-15
-- **23534** — An input is a pill again, and a keypad learns lower case - 2026-08-15
-- **23729** — A record says its standing in words, and §8 rule 1's own example was still on screen - 2026-08-15
-- **23940** — The home stops being eleven identical pills - 2026-08-16
-- **24082** — The menu leaves the page and becomes the frame's - 2026-08-16
-- **24271** — Ten chunks in, the till has had none of it - 2026-08-16
-- **24359** — The till gets the redesign, and seventeen answers stop being a colour - 2026-08-16
-- **24506** — Two contradictions closed, and five components written down before anyone builds them - 2026-08-16
-- **24574** — Five components, seven decisions, and the reskin runs out of things it can do alone - 2026-08-16
-- **24771** — Three states, a dialog that holds a form, and a page bar that stops moving - 2026-08-16
-- **25130** — Printing gets its plumbing, and the exclusion that blocked it was five days stale - 2026-08-17
-- **25302** — A receipt gets a body, and a shop name with a macron stops crashing the sale - 2026-08-17
+- **169** — Implementation handoff - 2026-07-29
+- **403** — Frontend implementation handoff - 2026-07-29
+- **448** — Authentication-to-tenant routing handoff - 2026-07-29
+- **508** — Route-guard and tenant repository foundation handoff - 2026-07-29
+- **570** — Read-only tenant catalog handoff - 2026-07-29
+- **663** — Read-only tenant staff-directory handoff - 2026-07-29
+- **763** — Typed staff invitation handoff - 2026-07-29
+- **866** — Typed staff update handoff - 2026-07-29
+- **962** — Typed staff status handoff - 2026-07-29
+- **1061** — Typed staff invitation resend handoff - 2026-07-29
+- **1163** — Typed staff invitation cancellation handoff - 2026-07-29
+- **1270** — Typed staff invitation email replacement handoff - 2026-07-30
+- **1377** — Typed visible invitation acceptance handoff - 2026-07-30
+- **1474** — Typed email-link invitation acceptance handoff - 2026-07-30
+- **1572** — Invitation emulator contract handoff - 2026-07-30
+- **1658** — Typed default tenant selection handoff - 2026-07-30
+- **1759** — Typed tenant request handoff - 2026-07-30
+- **1872** — Platform pending-tenant review handoff - 2026-07-30
+- **1990** — Platform tenant suspension/reactivation handoff - 2026-07-30
+- **2099** — Platform rejected-tenant archival handoff - 2026-07-30
+- **2217** — Platform exact-UID global-user status handoff - 2026-07-30
+- **2336** — Guarded platform-admin grant CLI handoff - 2026-07-31
+- **2446** — Guarded platform-admin revocation CLI handoff - 2026-07-31
+- **2658** — Tenant-switch safety coordinator handoff - 2026-07-31
+- **2785** — Encrypted Hive checkout-outbox foundation handoff - 2026-07-31
+- **2935** — Confirmation-safe checkout restart recovery handoff - 2026-07-31
+- **3080** — Deterministic checkout submission worker handoff - 2026-07-31
+- **3238** — Offline catalog cache and checkout draft handoff - 2026-07-31
+- **3411** — Per-device receipt numbering and checkout configuration handoff - 2026-07-31
+- **3599** — Guarded tenant shift lifecycle handoff - 2026-07-31
+- **3815** — Shift-scoped sale attribution and closing summary handoff - 2026-07-31
+- **4031** — Guarded shift-history read surface handoff - 2026-08-01
+- **4231** — Guarded sale-history read surface handoff - 2026-08-01
+- **4385** — Guarded staff-name resolution handoff - 2026-08-01
+- **4532** — Guarded daily summary handoff - 2026-08-01
+- **4689** — Guarded returns read surface handoff - 2026-08-01
+- **4853** — Guarded return creation handoff - 2026-08-01
+- **5021** — Guarded return verification handoff - 2026-08-01
+- **5154** — Guarded receipt lookup handoff - 2026-08-01
+- **5294** — Guarded stock adjustment surface handoff - 2026-08-01
+- **5510** — Guarded business-wide stock adjustment feed handoff - 2026-08-01
+- **5706** — Guarded tenant activity log handoff - 2026-08-01
+- **5917** — Guarded business-wide stock movement feed handoff - 2026-08-01
+- **6152** — Guarded reconciliation status surface handoff - 2026-08-01
+- **6389** — Guarded account verification entry point handoff - 2026-08-01
+- **6544** — Guarded email delivery-status handoff - 2026-08-01
+- **6671** — Checkout tender contract - payload v2 handoff - 2026-08-02
+- **6889** — Reachable point-of-sale till handoff - 2026-08-02
+- **7074** — Usable till handoff - search, quantity, stock, receipt - 2026-08-02
+- **7219** — Reconciliation can be asked for - 2026-08-02
+- **7426** — A till that holds a real catalog - 2026-08-02
+- **7544** — What a business has taken today - 2026-08-02
+- **7713** — Which category is actually selling - 2026-08-02
+- **7856** — Every reported figure now names its currency - 2026-08-02
+- **7992** — Who sold what - 2026-08-02
+- **8252** — The app can reach the emulators - 2026-08-02
+- **8413** — The totals panel, split - 2026-08-02
+- **8500** — What the business was paid with - 2026-08-02
+- **8691** — The first real run, and what it found - 2026-08-02
+- **8965** — A saved sale reaches the server while the till stays open - 2026-08-02
+- **9081** — Which differences reconciliation found - 2026-08-02
+- **9279** — A closed shift may be corrected to what its sales prove - 2026-08-04
+- **9522** — The correction is reachable from the row that reports it - 2026-08-04
+- **9733** — The first run that corrected a real shift - 2026-08-04
+- **10012** — The sentinel audit, and a guard that keeps it done - 2026-08-04
+- **10212** — The harness that would have caught it - 2026-08-04
+- **10411** — The corrections a business can finally see - 2026-08-04
+- **10610** — The two defects the real run left alone - 2026-08-04
+- **10838** — The shift half of the pipeline, proved end to end - 2026-08-04
+- **11030** — One shift's correction, reachable from the shift itself - 2026-08-05
+- **11224** — The stock half of the runner, entered for the first time - 2026-08-05
+- **11455** — The same narrowing, from the other side - 2026-08-05
+- **11626** — A stock difference, where the correction is made - 2026-08-05
+- **11844** — The kind that could never be recorded - 2026-08-05
+- **12045** — One decision, in one place, with tests - 2026-08-05
+- **12219** — The last thing the stock phase can conclude - 2026-08-05
+- **12404** — Saying there is more, after looking at it - 2026-08-05
+- **12595** — What the pinned buttons cost, measured - 2026-08-05
+- **12762** — A defect that was not there - 2026-08-05
+- **12902** — The narrowing that was not worth having - 2026-08-05
+- **13128** — The run behind the difference, finished - 2026-08-05
+- **13366** — The largest module's first unit tests - 2026-08-06
+- **13636** — A hook with no producer, and three bounds nothing had counted - 2026-08-07
+- **13999** — Nine months of `flutter test` paths, and who may run a job's next page - 2026-08-07
+- **14316** — PLAN.md split into current state and history - 2026-08-07
+- **14398** — A business can set what it sells in - 2026-08-07
+- **14623** — A shop can stock itself - 2026-08-07
+- **14843** — The trigger every reconciliation job comes from - 2026-08-07
+- **15074** — The sweep that decides who is reconciled tonight - 2026-08-07
+- **15365** — The callable that corrects a price - 2026-08-07
+- **15595** — The flake was the test's own clock - 2026-08-07
+- **15754** — A product records what it cost, and a sale freezes it - 2026-08-07
+- **15914** — The status board moved accounts - 2026-08-08
+- **15992** — Bulk catalog and return scoring are scoped as rewrites - 2026-08-08
+- **16114** — A price is corrected from the app - 2026-08-08
+- **16336** — Many products at once, previewed before they change - 2026-08-08
+- **16637** — Products imported from a spreadsheet, previewed before they exist - 2026-08-08
+- **16963** — Both bulk halves reach a person - 2026-08-08
+- **17222** — Profit is shown, or refused, and never overstated - 2026-08-08
+- **17465** — The password-reset worker runs against real Auth and real Firestore - 2026-08-08
+- **17664** — The app is driven on Android against the emulators - 2026-08-08
+- **17869** — The sign-in screen says something true - 2026-08-08
+- **18047** — A refused invitation says what will actually work - 2026-08-08
+- **18262** — The design system's token layer, wired to nothing - 2026-08-11
+- **18568** — A category is named, and never shown as a document ID - 2026-08-11
+- **18792** — The ripple dies at the theme - 2026-08-11
+- **19001** — The working tree is emptied into the repository - 2026-08-11
+- **19116** — `AppButton`, and the spring substrate under it - 2026-08-11
+- **19351** — Every remaining button becomes an `AppButton` - 2026-08-11
+- **19499** — A route arrives on a spring - 2026-08-12
+- **19726** — One field, everywhere - 2026-08-12
+- **19907** — Five statuses, two notices, and prose that folds away - 2026-08-12
+- **20092** — A screen title stops being chrome - 2026-08-12
+- **20316** — Every page gets a maximum width, and 768 stops being declared three times - 2026-08-12
+- **20595** — A record list becomes one component, and §4.3's middle band gets its first picture - 2026-08-13
+- **20845** — The staff directory becomes a `RecordList`, and a record gets somewhere to open a form - 2026-08-13
+- **21072** — The catalog becomes a `RecordList`, and a product that cannot be sold says so - 2026-08-13
+- **21277** — The stock family becomes one record, and a screen stops describing it three ways - 2026-08-13
+- **21473** — The shift family becomes a `RecordList`, and step 6's sweep is finished - 2026-08-13
+- **21713** — The reconciliation family gets one vocabulary, and step 4's sweep begins - 2026-08-14
+- **21987** — The catalog family folds its prose, and a bulk report gets its first picture - 2026-08-14
+- **22242** — A figure becomes a component, and the money screens stop writing numbers into sentences - 2026-08-14
+- **22486** — A difference states its figures, and step 8 is finished - 2026-08-15
+- **22719** — A notice says which answer it is, and four of them were never refusals - 2026-08-15
+- **22892** — A title appears once, and one page was telling everybody it was read-only - 2026-08-15
+- **23060** — A table stops guessing how wide its columns are - 2026-08-15
+- **23277** — The front door stops having a palette of its own - 2026-08-15
+- **23537** — An input is a pill again, and a keypad learns lower case - 2026-08-15
+- **23732** — A record says its standing in words, and §8 rule 1's own example was still on screen - 2026-08-15
+- **23943** — The home stops being eleven identical pills - 2026-08-16
+- **24085** — The menu leaves the page and becomes the frame's - 2026-08-16
+- **24274** — Ten chunks in, the till has had none of it - 2026-08-16
+- **24362** — The till gets the redesign, and seventeen answers stop being a colour - 2026-08-16
+- **24509** — Two contradictions closed, and five components written down before anyone builds them - 2026-08-16
+- **24577** — Five components, seven decisions, and the reskin runs out of things it can do alone - 2026-08-16
+- **24774** — Three states, a dialog that holds a form, and a page bar that stops moving - 2026-08-16
+- **25133** — Printing gets its plumbing, and the exclusion that blocked it was five days stale - 2026-08-17
+- **25305** — A receipt gets a body, and a shop name with a macron stops crashing the sale - 2026-08-17
+- **25461** — Printing reaches paper, and six faults wearing one sentence - 2026-08-18
+- **25571** — A receipt that lost its last digit, and a package whose two numbers disagree - 2026-08-18
+- **25664** — The printing working tree becomes one checkpoint before the next prompt - 2026-08-20
 
 <!-- index:end -->
 
@@ -25454,3 +25457,258 @@ payload does not exist: `CheckoutSalePayload` refuses it outright with *"tender 
 recorded payment methods"*. So the branch is defensive, the assertion moved onto the mapping itself,
 and the comment says which. **A test that cannot construct its own premise is testing the wrong
 thing.**
+
+## Printing reaches paper, and six faults wearing one sentence - 2026-08-18
+
+**What shipped is the composition, not the engine.** Everything under printing had been built and
+tested since 2026-08-17 and **nothing called any of it**. This session wired it: `main.dart` opens
+the encrypted job box under its own key, loads `CapabilityProfile` once because a formatter must not
+do I/O, builds the platform transport and `CheckoutPrintDispatcher`, and hands `CheckoutDraftService`
+the `onSaved` hook it was written for. The routing shell gained two routes — **Printer**, owner and
+admin, and **Receipts waiting**, which carries no role list because the person who discovers a
+receipt did not come out is whoever is standing at the till. The queue card states its own depth,
+which is §4.4's *"a card states its own condition"* and the one example that section names.
+
+**The till now says when a receipt did not print, and that is the defect worth recording.**
+`CheckoutSavedDraft.receiptPrintFailure` was produced by the draft service, asserted in four tests,
+returned to the screen and **discarded there**. A cashier whose printer was off saw a sale that
+looked perfect. It is a second `Callout` rather than a sentence folded into the first, because a
+printer fault must never read as a lost sale — and **only a failure is drawn**: `null` means *sent*
+and also means *this build queues no receipts*, so a confirmation would assert something the till
+cannot distinguish. Where it printed, the paper is the proof.
+
+**A real printer was dialled for the first time.** `192.168.100.20:9100`, a live ESC/POS unit on the
+shop LAN. Everything below the app worked on the first attempt — the transport, the queue, the
+formatter, the dispatcher — and a receipt came out, rung up through the till's own UI by
+`tool/printer_till_smoke.dart`, which taps a product tile, taps a tender, taps *Save*, and prints
+what that press produced through `createPrinterTransport()` and `CheckoutReceiptBody`.
+
+### Six faults, one sentence, and that is the finding
+
+Reaching that printer took six unrelated failures. **Five were environmental and every one of them
+reported to the person as the same words.** In order:
+
+1. **A Fortinet VPN kill-switch ate the entire LAN.** ARP resolved, routing was correct, binding the
+   socket to the Wi-Fi source changed nothing — and the gateway did not answer either, while the
+   internet did. It was also killing `flutter test`'s own loopback channel, so every suite had been
+   dying with `Connection closed before test suite loaded` and a VM stack dump. One cause, two
+   symptoms that looked nothing alike.
+2. **The system drive was full** — 50 MB free of 173 GB — which crashed the Dart compiler mid-suite
+   with `errno 112` and stalled the Firestore emulator download. Two Flutter commands at once was
+   enough to exhaust it.
+3. **Android refused cleartext** to a LAN address the debug allowlist did not name. The allowlist
+   already predicted this case in its own comment.
+4. **The functions emulator never started** because it was waiting on an interactive prompt for
+   `EMAIL_SENDER_ADDRESS`, which nothing surfaced.
+5. **`cloud_functions` 6.0.5 treats an unavailable App Check token as fatal**, so no callable could
+   leave the device at all.
+6. **A 26-byte HMAC placeholder** where `cursorSecret()` demands 32.
+
+**Every one of these rendered as "We could not open your business account. Check your connection."**
+The screen states a sentence this app wrote and deliberately prints no exception at a shopkeeper,
+which is right — and it left a device run with nothing whatever to read. `_showFailure` now
+`debugPrint`s the error it is about to hide. One line, debug only, and it is the difference between
+a diagnosis and six hours of guessing.
+
+### Two platform defects, neither of them a printing defect
+
+- **`INTERNET` was declared only in `src/debug`**, where the Flutter template puts it for hot reload.
+  Every debug build had it; no release build had ever been checked. Nothing this app depends on
+  declares it either. It is now in the manifest that ships.
+- **iOS had no `NSLocalNetworkUsageDescription`.** iOS 14 and later refuse a connection to another
+  device on the local network without it, and the refusal arrives as an ordinary socket error — so a
+  printer that is switched on and working would have reported *"the printer did not answer"*.
+
+### The Firebase upgrade, and why it is defensible
+
+Resolving `cloud_functions` to 6.3.6 moved **19 packages**, including `firebase_core` 4.3.0 → 4.13.0.
+The whole data layer moved. It is defensible for exactly one reason: the full suite went **2172 →
+2213 with not one existing assertion changed**. The constraint was never widened — the pubspec's own
+`^6.0.5` already permitted 6.3.6 and pub had simply not been asked.
+
+### What this leaves behind, recorded rather than fixed
+
+- **A print job is never deleted.** The box grows without bound and `pending()` scans every key on
+  each home build. A retention policy is a decision, not an implementation detail.
+- **The queue panel truncates its reason to one line**, hiding the half that says what to do. That is
+  `RecordList`'s contract rather than the panel's, so it ripples.
+- **App Check is disabled on project 299444269776.** A release build installs no provider at all, so
+  the callable path that 6.3.6 now tolerates is tolerating a permanent absence.
+- **`Print a receipt` is amber, not green.** A phone configured the printer through the new route and
+  rang up sales; nobody has yet watched paper come out of it in the running app.
+
+### Files changed
+
+```text
+lib/main.dart                                   queue box, profile, transport, dispatcher,
+                                                onSaved hook, two routes, App Check (debug only)
+lib/tenancy/tenant_routing_shell.dart           two route params + roles, two HomeDestinations,
+                                                bootstrap failure now logged
+lib/checkout/checkout_cart_panel.dart           the till states a failed receipt
+lib/checkout/checkout_print_failures.dart       queueDepth(), so the card's words live with the rest
+lib/checkout/secure_checkout_outbox_key.dart    printJobsStorageKey
+android/app/src/main/AndroidManifest.xml        INTERNET, in the manifest that ships
+android/app/src/debug/res/xml/network_security_config.xml   a LAN address, for a device run
+ios/Runner/Info.plist                           NSLocalNetworkUsageDescription
+pubspec.yaml                                    firebase_app_check; cloud_functions ^6.3.6
+functions/.env.local                            new — emulator-only params, all secrets >= 32 bytes
+firebase.device.json                            new — emulators bound for a device on the LAN
+
+tool/printer_smoke.dart                         probe only
+tool/printer_receipt_smoke.dart                 one fabricated receipt
+tool/printer_till_smoke.dart                    new — a sale rung up through the till's UI
+tool/screenshots/print_screens_test.dart        new — both panels, eight states
+tool/screenshots/operations_screens_test.dart   15b, a sale whose receipt did not print
+tool/screenshots/landing_screens_test.dart      the two new destinations on the home
+tool/screenshots/fakes.dart                     FakeConfigurationDocumentWriter, print failure
+test/checkout/checkout_cart_panel_test.dart     +3, the till's printing notice
+test/checkout/zz_bisect_temp_test.dart          deleted — hung the suite forever
+```
+
+Nothing under `functions/src`, `firestore.rules` or `rules-tests/` was touched, so the four server
+suites did not need to run and did not.
+
+## A receipt that lost its last digit, and a package whose two numbers disagree - 2026-08-18
+
+**Printing went green, and the hour between amber and green is the whole of this entry.** The wiring
+landed earlier the same day; a phone then configured its printer through the new **Printer** route,
+rang up sales, and paper came out. The paper was wrong. Every right-aligned value had lost its final
+character — `KES 271.0`, `CT-8F8-20260818-004`, `Wanjik`, `Cas` — and each product name was sharing a
+line with its own price, which the formatter deliberately puts on the line below.
+
+### Four wrong theories, and what each one cost
+
+**This is recorded because the diagnosis was the expensive part, not the fix.**
+
+1. **"The roll is 58mm and the layout is 48."** Wrong, and it cost a bad instruction: the setting was
+   changed to 32 columns, which made it worse. The correction came from the operator noticing the
+   dashed rules had gone *short* — a rule is drawn left-to-right from the margin, so its length
+   measures the paper. **The rules were the instrument all along.**
+2. **"It is a 42-column 80mm mechanism."** 80mm rolls exist at 576 dots and at 512, which is 48
+   columns and 42. Ruled out by printing a ruler: markers of exactly 32, 42 and 48 characters, each
+   ending in its own number. `48` printed whole.
+3. **"The printer reserves a right margin the generator does not know about."** Ruled out by printing
+   `KES 271.00` three times — flush to column 48, one short, two short. **All three printed whole.**
+   The paper was never the constraint.
+4. **"The line is 49 characters."** Ruled out by measuring the payload instead of the paper — and the
+   first version of that tool reported an off-by-one that belonged to **the tool**, because it skipped
+   `ESC $ nL nH` as three bytes rather than four. A diagnostic that guesses a control sequence's
+   length invents the defect it is looking for.
+
+### What it actually was
+
+`flutter_esc_pos_utils` reports `PaperSize.mm80.width` as **558 dots** while treating that same roll
+as **48 characters** — and 48 characters of Font A is **576** dots. **The package's own two numbers
+disagree by a character and a half.** On top of that, `Generator.text` emits an absolute print
+position *and* a justification command for the same line, so a right-aligned amount is told both
+*start at dot 0* and *right-align*. Each printer resolves that contradiction its own way; this one
+slid the text to its edge and sliced it, and swallowed a line feed while doing it — which is why the
+name and the price arrived together.
+
+Dumping the byte stream with a correct skip table made it plain, because the positions are visible:
+
+```text
+<@0>Receipt<@320>CT-8F8-20260818-0042
+<@0>KES 271.00            <- position 0, and also told to right-align
+```
+
+### The fix, and why it is padding rather than arithmetic
+
+`CheckoutReceiptBody` now pads every line to the roll's character count and **positions nothing**.
+`_pair` puts a label left and a value hard right; `_right` right-aligns money; `_centred` centres the
+heading at double width; `_rule` replaces `generator.hr()` so that even the rules are built the same
+way as the rows they separate. Emphasis moved from half a line to the whole line — the receipt number
+row and the TOTAL row are bold outright — because emphasising one half of a line requires two writes
+to it, and two writes to one line is precisely what was mis-positioning them.
+
+The only geometry left is *"this roll is N characters"*, and N is a figure a person can verify with
+`tool/printer_width_ruler.dart`.
+
+### The tests were green throughout, and that is the finding
+
+`checkout_receipt_body_test.dart` had **14 passing tests while the defect was on the paper**, because
+every one of them asserted on the decoded *text* and the fault was in the *geometry*. It is now **22**.
+The eight new ones assert the contract that was missing: no line exceeds the roll, a rule fills it
+exactly, every money line ends at the last column, and a price is never on its name's line.
+
+**A suite that reads the words cannot see the shape.** That is the transferable lesson, and it is why
+these tests parse the control sequences by their real lengths rather than stripping them.
+
+### Two other things the evening found
+
+- **The receipt showed no business name.** Not a layout fault: there was no `configuration/branding`
+  document, so `TenantBrandingRepository.load` returned null and the heading correctly fell back to
+  `ReceiptWords.unnamedBusiness` — *"Sales receipt"*. The dev seed now writes one.
+- **A queued print job stores its bytes, not its sale.** Changing the paper width does not re-lay-out
+  anything already in *Receipts waiting*, so a retry after a width change reprints the old width. That
+  is deliberate — a receipt reprinted after a price change must still say what was charged — but it
+  made the width experiments read as though nothing had changed.
+
+### Files changed
+
+```text
+lib/checkout/checkout_receipt_body.dart      _columns, _pair, _right, _centred, _rule;
+                                             row() and PosColumn no longer used
+test/checkout/checkout_receipt_body_test.dart  14 -> 22, the width contract
+rules-tests/scripts/seed-dev-emulator.js     a branding document, so a shop can name itself
+PLAN.md                                      Print a receipt: red -> green
+
+tool/printer_width_ruler.dart                new - measures the roll, and the right margin
+tool/printer_payload_dump.dart               new - measures the payload, with a correct skip table
+tool/printer_row_probe.dart                  new - measures the generator's primitives alone
+```
+
+Nothing under `functions/src`, `firestore.rules` or `rules-tests/test` was touched; the seed script is
+a development fixture and no rule or handler moved, so the four server suites did not need to run.
+
+## The printing working tree becomes one checkpoint before the next prompt - 2026-08-20
+
+This was a repository-state handoff, not another implementation chunk. The product owner explicitly
+asked for **all unstaged changes** to be committed, for `PLAN.md` and `HISTORY.md` to be made current,
+and for the next product step to remain unchosen until a follow-up prompt. The commit therefore
+collects the two 2026-08-18 printing sessions above with the Phase 1 work they complete: printer
+configuration and queue surfaces, the composition-root and sale-path wiring, device/emulator
+configuration, the receipt geometry correction, focused diagnostics, and their tests and screenshot
+states.
+
+`PLAN.md` had two contradictions after that work. Its capability row and headline said printing was
+green, while "Where the last chunk left it" still called it an engine with no surface and its chunk
+index stopped on 2026-08-17. The current-state prose now says the routes and call site are reachable,
+the index has both 2026-08-18 chunks, and the board remains **29 rows - 25 green, 3 red, 1 amber**.
+This checkpoint moves no row of its own. The next chunk is deliberately still unselected.
+
+### The broad commit scope was deliberate
+
+Earlier sessions had preserved several owner- or machine-local paths as unrelated. The instruction
+to commit all unstaged work superseded that carry list, so this checkpoint also includes
+`.vscode/settings.json`, `android/gradle.properties`, `prompt.md`, `tool/doc_index.dart`, the owner-home
+proposal screenshot test, `firebase.device.json`, `receipt_photo.jpg`, and `screenshots (2).zip`.
+The ZIP was inspected before staging and contains the generated `screenshots/` gallery. No remote was
+pushed and no deployment was performed.
+
+The required index pass found one Windows-only defect in the previously untracked generator:
+splitting only on `\n` left `\r` on `PLAN.md`'s marker lines, so it reported that visible markers did
+not exist. `tool/doc_index.dart` now accepts LF and CRLF input, and both document indexes were then
+regenerated from their actual headings.
+
+### Validation
+
+```text
+flutter test --no-pub --concurrency=1 --reporter=failures-only \
+  test/checkout/checkout_cart_panel_test.dart \
+  test/checkout/checkout_draft_test.dart \
+  test/checkout/checkout_print_configuration_panel_test.dart \
+  test/checkout/checkout_print_jobs_test.dart \
+  test/checkout/checkout_print_queue_panel_test.dart \
+  test/checkout/checkout_receipt_body_test.dart
+  183 passed
+
+flutter test --no-pub --concurrency=1 --reporter=failures-only \
+  tool/screenshots/print_screens_test.dart \
+  tool/screenshots/owner_home_proposal_test.dart
+  18 passed
+```
+
+A fresh full Flutter run reached **416** before the Windows host failed to create `DartWorker`
+(`error 22`) and then the Flutter tester exhausted memory. Those were process-start/load failures,
+not failed assertions; the last complete full-suite baseline remains **2221** from 2026-08-18.

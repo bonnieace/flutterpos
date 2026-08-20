@@ -1146,6 +1146,18 @@ final class FakeCheckoutConfigurationWriter
   ) async => const TenantCheckoutConfigurationWriteResult.committed();
 }
 
+/// The generic configuration-document write boundary, which the printer
+/// settings route depends on. Committing is what makes the route draw its
+/// *Save* control; a screenshot never reaches Firestore.
+final class FakeConfigurationDocumentWriter
+    implements TenantConfigurationDocumentWriter {
+  @override
+  Future<TenantConfigurationWriteResult> merge({
+    required String path,
+    required Map<String, Object?> data,
+  }) async => const TenantConfigurationWriteResult.committed();
+}
+
 /// Both reconciliation actions, so the surfaces that offer them draw them.
 TenantReconciliationActions fakeReconciliationActions() =>
     TenantReconciliationActions(
@@ -1582,7 +1594,13 @@ final class FakeEvidenceSource implements CheckoutEvidenceSource {
 /// A draft sink that accepts every save, so the till renders its "saved"
 /// confirmation rather than a refusal.
 final class FakeDraftSink implements CheckoutDraftSink {
+  FakeDraftSink({this.printFailure});
+
   final List<CheckoutDraftRequest> requests = <CheckoutDraftRequest>[];
+
+  /// A `PrinterTransportCode` the saved sale comes back carrying, or null for
+  /// a receipt that reached the printer.
+  final String? printFailure;
   int _sequence = 0;
 
   @override
@@ -1596,6 +1614,7 @@ final class FakeDraftSink implements CheckoutDraftSink {
         businessDate: seedBusinessDate(),
         sequence: _sequence,
       ),
+      receiptPrintFailure: printFailure,
     );
   }
 }

@@ -83,6 +83,29 @@ abstract final class PrinterFailureNotice {
     'Receipt queued. It is sent as soon as the printer is free.',
   );
 
+  /// This device's queue depth, in words, or null when there is nothing to say.
+  ///
+  /// **Here rather than at the composition root**, because it is a sentence and
+  /// this is the file that holds them. The home's destination card and the
+  /// screenshot harness would otherwise word the same fact twice.
+  ///
+  /// §4.4: *"a card states its own condition ... queue depth"*, and one that
+  /// carries none is a button. Null when nothing is waiting, because a card
+  /// reading *0 waiting to send* is noise — §8 rule 2 asks a surface to state
+  /// what is true, not what is available.
+  ///
+  /// **[unreadable] is stated separately and never folded into [waiting]**, for
+  /// the reason `HivePrintJobQueue.pending` gives: a figure that quietly
+  /// excluded the records it could not parse would under-report exactly the
+  /// queue that most needs attention.
+  static String? queueDepth({required int waiting, required int unreadable}) {
+    final parts = <String>[
+      if (waiting > 0) '$waiting waiting to send',
+      if (unreadable > 0) '$unreadable could not be read',
+    ];
+    return parts.isEmpty ? null : parts.join(', ');
+  }
+
   /// Whether [code] describes something the person can act on right now.
   ///
   /// `notConfigured` and `unsupported` are the two that a retry cannot fix:

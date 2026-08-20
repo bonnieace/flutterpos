@@ -166,6 +166,118 @@ void main() {
     });
   });
 
+  group('every line is the width of the roll', () {
+    // **The contract this group exists to hold, and the one nothing checked.**
+    // On 2026-08-18 a real 80mm printer sliced the last digit off every amount
+    // and printed a product name on the same line as its own price. The suite
+    // was green throughout, because it asserted on the decoded *text* and the
+    // defect was in the *geometry*: `Generator.row` positions columns at
+    // absolute dot offsets derived from `PaperSize.width`, which the package
+    // reports as 558 for a roll it simultaneously treats as 48 characters -
+    // and 48 characters of Font A is 576 dots.
+    //
+    // `CheckoutReceiptBody` now pads every line to the roll's character count
+    // and positions nothing. These tests are the reason it cannot quietly stop.
+
+    /// The visible characters of each printed line.
+    ///
+    /// Control sequences are skipped by their real lengths, read off
+    /// `flutter_esc_pos_utils/src/commands.dart`: `ESC @` is two bytes,
+    /// `ESC $ nL nH` is four, `FS &` and `FS .` are two, everything else this
+    /// class emits is three. A parser that guesses reports an off-by-one that
+    /// belongs to the parser.
+    List<String> printedLines(List<int> bytes) {
+      final lines = <String>[];
+      final current = StringBuffer();
+      var i = 0;
+      while (i < bytes.length) {
+        final byte = bytes[i];
+        if (byte == 0x0A) {
+          lines.add(current.toString());
+          current.clear();
+          i++;
+        } else if (byte == 0x1B) {
+          final command = i + 1 < bytes.length ? bytes[i + 1] : 0;
+          i += switch (command) {
+            0x40 => 2, // ESC @  initialise
+            0x24 => 4, // ESC $  absolute position, nL nH
+            0x32 => 2, // ESC 2  default line spacing
+            _ => 3, //   ESC a/E/M/d/t/!/- plus one parameter
+          };
+        } else if (byte == 0x1D) {
+          i += 3; // GS !/V/B plus one parameter
+        } else if (byte == 0x1C) {
+          i += 2; // FS &/.
+        } else if (byte < 0x20) {
+          i++;
+        } else {
+          current.writeCharCode(byte);
+          i++;
+        }
+      }
+      if (current.isNotEmpty) lines.add(current.toString());
+      return lines;
+    }
+
+    for (final width in PrinterPaperWidth.values) {
+      test('${width.columns} columns: no line is wider than the roll', () {
+        final lines = printedLines(
+          body(width: width).build(_sale(), servedBy: 'Wanjiku'),
+        );
+        expect(lines, isNotEmpty);
+        for (final line in lines) {
+          expect(
+            line.length,
+            lessThanOrEqualTo(width.columns),
+            reason:
+                'a line of ${line.length} characters on a ${width.columns} '
+                'column roll overflows, and the overflow is what slices the '
+                'last digit off an amount: |$line|',
+          );
+        }
+      });
+
+      test('${width.columns} columns: a rule fills the roll exactly', () {
+        final lines = printedLines(
+          body(width: width).build(_sale(), servedBy: 'Wanjiku'),
+        );
+        final rules = lines.where((line) => line.startsWith('---')).toList();
+        // Heading, provenance, lines and totals each close with one.
+        expect(rules, hasLength(4));
+        for (final rule in rules) {
+          expect(rule.length, width.columns);
+        }
+      });
+
+      test('${width.columns} columns: money ends at the last column', () {
+        final lines = printedLines(
+          body(width: width).build(_sale(), servedBy: 'Wanjiku'),
+        );
+        // **The whole defect, as one assertion.** Every money line must reach
+        // the right edge and stop there - not one character past it, which is
+        // what the printer cannot draw, and not short of it either.
+        final money = lines.where((line) => line.contains('KES ')).toList();
+        expect(money, isNotEmpty);
+        for (final line in money) {
+          expect(line.length, width.columns, reason: '|$line|');
+          expect(line.endsWith('0'), isTrue, reason: '|$line|');
+        }
+      });
+
+      test('${width.columns} columns: a price is never on its name line', () {
+        final lines = printedLines(
+          body(width: width).build(_sale(), servedBy: 'Wanjiku'),
+        );
+        // §"One line per sale line, over two printed rows". The two arrived as
+        // one on paper, which is how the positioning defect first showed.
+        final merged = lines.where(
+          (line) => line.contains(' x ') && line.contains('KES '),
+        );
+        expect(merged, isEmpty, reason: 'a name and its price shared a line');
+      });
+    }
+  });
+
   group('the roll and the cutter', () {
     test('cuts only where the printer has a cutter', () {
       // A cut command to a printer without one is ignored by some models and

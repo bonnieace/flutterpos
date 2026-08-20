@@ -263,3 +263,150 @@ final class TenantPrinterConfigurationRepository extends TenantReadRepository {
     }
   }
 }
+
+/// Raised when a printer change is refused before anything is written.
+final class TenantPrinterConfigurationException implements Exception {
+  const TenantPrinterConfigurationException(this.code);
+
+  final String code;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TenantPrinterConfigurationException && other.code == code;
+
+  @override
+  int get hashCode => code.hashCode;
+
+  @override
+  String toString() => 'TenantPrinterConfigurationException($code)';
+}
+
+/// A validated instruction to configure exactly one tenant's printer.
+///
+/// **Only [TenantPrinterConfigurationPublisher] can build one**, so no caller
+/// can name an arbitrary Firestore path or an unvalidated address. The
+/// server-owned `updatedAt` is deliberately not part of the data: the writer
+/// adds it, so a device clock cannot decide when a business changed its
+/// printer.
+final class TenantPrinterUpdateIntent {
+  const TenantPrinterUpdateIntent._({
+    required this.path,
+    required this.tenantId,
+    required this.configuration,
+    required this.updatedBy,
+    required this.replaces,
+  });
+
+  final String path;
+  final String tenantId;
+  final TenantPrinterConfiguration configuration;
+  final String updatedBy;
+
+  /// The state this change replaces, read immediately before it was built.
+  final TenantConfiguredPrinter replaces;
+
+  /// Whether a working printer is being pointed somewhere else.
+  ///
+  /// The one case a confirmation has something to warn about: receipts already
+  /// queued carry their **own** address, so they still go to the old printer.
+  bool get movesAWorkingPrinter =>
+      replaces.canPrint &&
+      replaces.configuration!.endpoint != configuration.endpoint;
+
+  /// Exactly the keys this client writes, and nothing else.
+  ///
+  /// `updatedBy` is provenance: nothing reads it and the strict read model
+  /// ignores it, but it is the only record of who last decided where this
+  /// business prints.
+  Map<String, Object?> documentData() => <String, Object?>{
+    ...configuration.toCacheEntry(),
+    'updatedBy': updatedBy,
+  };
+}
+
+/// Guarded intent boundary for configuring one tenant's printer.
+///
+/// **A second class rather than a method on the repository**, for the reason
+/// `TenantCheckoutConfigurationPublisher` gives: every active member *reads*
+/// this document - a till cannot send a receipt without it - and only an owner
+/// or administrator may change it, so the two capabilities do not share a
+/// boundary.
+final class TenantPrinterConfigurationPublisher extends TenantReadRepository {
+  TenantPrinterConfigurationPublisher({
+    required super.session,
+    required super.reader,
+  });
+
+  /// Owner and administrator, which is what the existing
+  /// `configuration/{documentId}` rule already allows. A manager runs a till
+  /// and corrects stock; deciding what hardware the business owns is not an
+  /// operational act.
+  static const List<TenantRole> allowedRoles =
+      TenantPrinterConfigurationRepository.writeRoles;
+
+  /// Reads what this business has configured, degrading a malformed document
+  /// into a state rather than a failure. See
+  /// [TenantPrinterConfigurationRepository.load].
+  Future<TenantConfiguredPrinter> loadConfigured() =>
+      TenantPrinterConfigurationRepository(
+        session: session,
+        reader: reader,
+      ).load();
+
+  /// Builds the one instruction these values describe.
+  ///
+  /// **Every refusal happens here, before anything is confirmed or sent.** The
+  /// host and the port go through `PrinterEndpoint`, which is the same
+  /// validation the transport and the durable job record use - so an address
+  /// this app would not dial cannot be stored, and the refusal a person reads
+  /// is the refusal the socket would have given.
+  TenantPrinterUpdateIntent buildUpdateIntent({
+    required PrinterTransportKind transport,
+    required String host,
+    required String port,
+    required PrinterPaperWidth paperWidth,
+    required bool hasCutter,
+    String? bridgeToken,
+    required TenantConfiguredPrinter configured,
+  }) {
+    if (!session.canAccess(allowedRoles: allowedRoles)) {
+      throw const TenantPrinterConfigurationException('printer_forbidden');
+    }
+    final parsedPort = int.tryParse(port.trim());
+    if (parsedPort == null) {
+      throw const TenantPrinterConfigurationException('invalid_port');
+    }
+    final PrinterEndpoint endpoint;
+    try {
+      endpoint = PrinterEndpoint(host: host.trim(), port: parsedPort);
+    } on ArgumentError {
+      throw const TenantPrinterConfigurationException('invalid_address');
+    }
+    final token = bridgeToken?.trim();
+    final configuration = TenantPrinterConfiguration(
+      transport: transport,
+      endpoint: endpoint,
+      paperWidth: paperWidth,
+      hasCutter: hasCutter,
+      bridgeToken: token == null || token.isEmpty ? null : token,
+    );
+    // **Re-saving the identical document is refused**, for the reason the
+    // currency publisher gives: it would rewrite the provenance fields and ask
+    // every device to re-read a setting that cannot have changed. An absent or
+    // malformed document is never "unchanged" - that is exactly the state this
+    // surface exists to leave.
+    if (configured.canPrint && configured.configuration == configuration) {
+      throw const TenantPrinterConfigurationException('printer_unchanged');
+    }
+    return TenantPrinterUpdateIntent._(
+      path: paths.configurationDocument(
+        TenantPrinterConfigurationRepository.documentId,
+      ),
+      tenantId: session.tenantId,
+      configuration: configuration,
+      updatedBy: session.uid,
+      replaces: configured,
+    );
+  }
+}

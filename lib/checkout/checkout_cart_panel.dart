@@ -60,6 +60,7 @@ import '../ui/stepper.dart';
 import '../ui/tokens.dart';
 import 'checkout_catalog_cache.dart';
 import 'checkout_draft.dart';
+import 'checkout_print_failures.dart';
 import 'checkout_refusal.dart';
 import 'checkout_sale.dart';
 import 'checkout_tender.dart';
@@ -815,6 +816,23 @@ final class _CartEditorState extends State<_CartEditor> {
             'nothing else to press. This stays here until you close it, so '
             'the number can be written down.',
           );
+    // **The receipt's own fate, stated apart from the sale's.** A printer that
+    // did not answer must never read as a sale that did not save, so this is a
+    // second `Callout` below rather than a sentence folded into the first — the
+    // two differ by whether anything needs doing.
+    //
+    // **Only a failure is drawn, and that is deliberate.**
+    // `CheckoutSavedDraft.receiptPrintFailure` is null when the receipt was
+    // sent **and** when the build queues no receipts at all, so a confirmation
+    // here would be the till asserting something it cannot distinguish. Where
+    // it did print, the paper is the proof and a second green box is noise.
+    final printFailure = saved.receiptPrintFailure;
+    // Every sentence comes from `checkout_print_failures.dart`, which is the
+    // one place in the printing slice that contains English. This screen
+    // invents none of its own.
+    final printNotice = printFailure == null
+        ? null
+        : PrinterFailureNotice.of(printFailure);
     return <Widget>[
       Callout(
         key: const ValueKey('checkout-saved'),
@@ -848,6 +866,14 @@ final class _CartEditorState extends State<_CartEditor> {
           ],
         ),
       ),
+      if (printNotice != null) ...<Widget>[
+        SizedBox(height: tokens.spacing.s12),
+        Callout(
+          key: const ValueKey('checkout-receipt-print'),
+          status: printNotice.status,
+          message: printNotice.message,
+        ),
+      ],
       SizedBox(height: tokens.spacing.s20),
     ];
   }
