@@ -1139,6 +1139,14 @@ void main() {
         _notice(tester, 'checkout-receipt-print'),
         PrinterFailureNotice.of(PrinterTransportCode.unreachable).message,
       );
+      // **And where the receipt went, which that sentence cannot say.** Those
+      // messages are read by the print queue panel too, so the route belongs to
+      // this surface rather than to the shared copy. `OPEN_QUESTIONS.md`'s
+      // Phase 03 item 4 is the product decision it states.
+      expect(
+        _text(tester, 'checkout-receipt-print-route'),
+        'After closing, open Receipts waiting from the business home.',
+      );
     });
 
     testWidgets('a stalled printer is attention rather than a problem', (
@@ -1170,6 +1178,12 @@ void main() {
       expect(find.byKey(const ValueKey('checkout-saved')), findsOneWidget);
       expect(
         find.byKey(const ValueKey('checkout-receipt-print')),
+        findsNothing,
+      );
+      // The route line belongs to the failure, not to the sale, so a receipt
+      // that reached the printer must not send anybody to the queue.
+      expect(
+        find.byKey(const ValueKey('checkout-receipt-print-route')),
         findsNothing,
       );
     });

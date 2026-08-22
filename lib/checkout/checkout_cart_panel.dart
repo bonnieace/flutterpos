@@ -1182,6 +1182,27 @@ final class _CartEditorState extends State<_CartEditor> {
           status: printNotice.status,
           message: printNotice.message,
         ),
+        SizedBox(height: tokens.spacing.s4),
+        // **Where the receipt went, which the notice above cannot say.**
+        // `checkout_print_failures.dart` is the one place in the printing slice
+        // that holds English, and its sentences are read by the print queue
+        // panel too - telling somebody already standing in that queue to open
+        // it would be nonsense. So the route is stated here, at the surface that
+        // needs it, in the "say what is still true" shape §8 rule 6 asks for and
+        // the refusal below already uses.
+        //
+        // **It names a destination and does not become one.** `Receipts
+        // waiting` is a real entry on the business home
+        // (`tenant_routing_shell.dart`), and `OPEN_QUESTIONS.md`'s Phase 03 item
+        // 4 says the cashier reaches it from there. A button here would be a
+        // routing condition, which hard rule 1 keeps out of a visual change.
+        Text(
+          key: const ValueKey('checkout-receipt-print-route'),
+          'After closing, open Receipts waiting from the business home.',
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
       ],
       SizedBox(height: tokens.spacing.s20),
     ];
