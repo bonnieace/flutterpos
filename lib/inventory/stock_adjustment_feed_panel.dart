@@ -183,66 +183,69 @@ final class _AdjustmentFeedContents extends StatelessWidget {
   TenantStockAdjustmentRecordPage get page => view.page;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('stock-adjustments'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // §7's "Title appears once": the `AppScaffold` above says `Stock
-      // adjustments`, or names the product when the feed is narrowed to one,
-      // and this said the unnarrowed version again directly under it — so on a
-      // product-scoped feed the page read `Adjustments: Milk 500ml` over
-      // `Recorded stock adjustments`, which is the defect at its worst.
-      const SizedBox(height: 4),
-      Text(
-        key: const ValueKey('stock-adjustments-scope'),
-        page.isProductScoped
-            ? 'Every manual correction recorded against product '
-                  '${page.productId}. Sales and verified returns are not '
-                  'adjustments and are not listed here.'
-            : 'Every manual correction recorded across this business. Sales '
-                  'and verified returns move stock too, but they are not '
-                  'adjustments and are not listed here.',
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        'An adjustment is permanent: correcting one means recording another. '
-        'This page is listed by record ID, which is not time order; each '
-        'entry states when it was recorded.',
-      ),
-      const SizedBox(height: 16),
-      // §4.3's responsive contract: stacked cards on a phone, two-column cards
-      // on a tablet, and a table on a desktop window. A correction used to be a
-      // `Card` of four unlabelled lines - the product, the figures, the reason
-      // and the attribution - which is the shape §5.2 replaces with key-value
-      // attributes and a provenance line.
-      RecordList(
-        identityLabel: 'Adjustment',
-        items: <RecordItem>[
-          for (final record in page.items)
-            stockAdjustmentRecord(
-              record,
-              keyPrefix: 'stock-adjustments',
-              names: view.names,
-              selfUid: selfUid,
-            ),
-        ],
-        empty: Text(
-          key: const ValueKey('stock-adjustments-empty'),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('stock-adjustments'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // §7's "Title appears once": the `AppScaffold` above says `Stock
+        // adjustments`, or names the product when the feed is narrowed to one,
+        // and this said the unnarrowed version again directly under it — so on a
+        // product-scoped feed the page read `Adjustments: Milk 500ml` over
+        // `Recorded stock adjustments`, which is the defect at its worst.
+        SizedBox(height: tokens.spacing.s4),
+        Text(
+          key: const ValueKey('stock-adjustments-scope'),
           page.isProductScoped
-              ? 'No manual adjustment has been recorded for this product.'
-              : 'No manual adjustment has been recorded in this business.',
+              ? 'Every manual correction recorded against product '
+                    '${page.productId}. Sales and verified returns are not '
+                    'adjustments and are not listed here.'
+              : 'Every manual correction recorded across this business. Sales '
+                    'and verified returns move stock too, but they are not '
+                    'adjustments and are not listed here.',
         ),
-      ),
-      const SizedBox(height: 16),
-      Pagination(
-        pageNumber: pageIndex + 1,
-        previousKey: const ValueKey('stock-adjustments-previous'),
-        nextKey: const ValueKey('stock-adjustments-next'),
-        onPrevious: pageIndex > 0 ? onPreviousPage : null,
-        onNext: page.hasMore ? onNextPage : null,
-      ),
-    ],
-  );
+        SizedBox(height: tokens.spacing.s4),
+        const Text(
+          'An adjustment is permanent: correcting one means recording another. '
+          'This page is listed by record ID, which is not time order; each '
+          'entry states when it was recorded.',
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        // §4.3's responsive contract: stacked cards on a phone, two-column cards
+        // on a tablet, and a table on a desktop window. A correction used to be a
+        // `Card` of four unlabelled lines - the product, the figures, the reason
+        // and the attribution - which is the shape §5.2 replaces with key-value
+        // attributes and a provenance line.
+        RecordList(
+          identityLabel: 'Adjustment',
+          items: <RecordItem>[
+            for (final record in page.items)
+              stockAdjustmentRecord(
+                record,
+                keyPrefix: 'stock-adjustments',
+                names: view.names,
+                selfUid: selfUid,
+              ),
+          ],
+          empty: Text(
+            key: const ValueKey('stock-adjustments-empty'),
+            page.isProductScoped
+                ? 'No manual adjustment has been recorded for this product.'
+                : 'No manual adjustment has been recorded in this business.',
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('stock-adjustments-previous'),
+          nextKey: const ValueKey('stock-adjustments-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
+        ),
+      ],
+    );
+  }
 }
 
 /// Opens the feed under the caller's own session scope, so a tenant switch

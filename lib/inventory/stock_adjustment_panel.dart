@@ -473,15 +473,15 @@ final class _ProductStockContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return ListView(
       key: const ValueKey('product-stock'),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
         // §7's "Title appears once", and this was the example `design.md` names
         // in its own words: `web/21-product-stock` read *White bread loaf* in
         // `display` and *White bread loaf* again directly under it. The
         // `AppScaffold` title is this same `product.name`.
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         Text('SKU ${product.sku}'),
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         // The headline figures. `product-stock-quantity` now keys the number
         // itself rather than a sentence containing it, because the caption is
         // the card's own label - the fact it states is unchanged.
@@ -512,7 +512,7 @@ final class _ProductStockContents extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         // The last unfolded permanent paragraph above the fold on this screen.
         // Step 4 put the adjustment explanation behind a `Disclosure` further down
         // and left this one and the ledger's own note as loose body text, so the
@@ -537,7 +537,7 @@ final class _ProductStockContents extends StatelessWidget {
         // it, which is the sharpest case in the family for a notice carrying its
         // own status.
         if (notice case final answer?) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('product-stock-notice'),
             status: answer.status,
@@ -545,14 +545,14 @@ final class _ProductStockContents extends StatelessWidget {
           ),
         ],
         ..._differencesSection(context),
-        const SizedBox(height: 24),
+        SizedBox(height: tokens.spacing.s24),
         Text(
           'Stock ledger',
           style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         const Disclosure(
           key: ValueKey('product-stock-ledger-disclosure'),
           summary: 'What the ledger holds',
@@ -563,7 +563,7 @@ final class _ProductStockContents extends StatelessWidget {
             'time order; each entry states when it was recorded.',
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         // §4.3's responsive contract, in the same record vocabulary the two feeds
         // beside it use. This screen used to describe the same document three
         // ways - its own source label, its own figures sentence, its own
@@ -586,7 +586,7 @@ final class _ProductStockContents extends StatelessWidget {
             'No stock movements have been recorded for this product.',
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         // **Pagination is secondary, and it used to be a primary.** §2.1
         // permits exactly one primary per screen region and on this route that
         // is `Adjust stock`; "Next page" competing with it for the eye is the
@@ -600,7 +600,7 @@ final class _ProductStockContents extends StatelessWidget {
           onPrevious: pageIndex > 0 ? onPreviousPage : null,
           onNext: page.hasMore ? onNextPage : null,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         // **Out of the page bar it was sharing, and that is the migration
         // finding on this screen.** It is not pagination: it opens another
         // route. It sat in the same `Wrap` only because the `Wrap` was where
@@ -619,9 +619,9 @@ final class _ProductStockContents extends StatelessWidget {
           ),
         ),
         if (canAdjust) ...[
-          const SizedBox(height: 24),
+          SizedBox(height: tokens.spacing.s24),
           const Divider(),
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           _AdjustStockForm(
             key: const ValueKey('product-stock-form'),
             quantity: product.quantity,
@@ -644,7 +644,7 @@ final class _ProductStockContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     if (!differences.readable) {
       return <Widget>[
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         // **`info` rather than `problem`, and the deciding word is "refused".**
         // §2.1 does give "unreadable" to `problem`, which reads like the obvious
         // home for a read that failed - but this same sentence is what a session
@@ -667,14 +667,14 @@ final class _ProductStockContents extends StatelessWidget {
     }
     if (differences.items.isEmpty) return const <Widget>[];
     return <Widget>[
-      const SizedBox(height: 24),
+      SizedBox(height: tokens.spacing.s24),
       Text(
         'Reconciliation found',
         style: tokens.typography.titleMedium.copyWith(
           color: tokens.colors.text.primary,
         ),
       ),
-      const SizedBox(height: 4),
+      SizedBox(height: tokens.spacing.s4),
       // A permanent helper paragraph: it is true of every difference this screen
       // will ever show, so it folds. The distinction it draws is what keeps the
       // section honest - a shift correction deletes the difference it resolved;
@@ -692,7 +692,7 @@ final class _ProductStockContents extends StatelessWidget {
         ),
       ),
       if (differences.hasMore) ...<Widget>[
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         // A notice about this page rather than a standing explanation - it is
         // here only because this particular product holds more than the page
         // read - so it does not fold. `info`: the page is complete, it is the
@@ -706,10 +706,10 @@ final class _ProductStockContents extends StatelessWidget {
               'recent ones.',
         ),
       ],
-      const SizedBox(height: 12),
+      SizedBox(height: tokens.spacing.s12),
       for (final anomaly in differences.items) ...<Widget>[
         _difference(anomaly),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
       ],
     ];
   }
@@ -848,7 +848,7 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         // §5.2 names the stock-adjustment explanation as prose to keep and move
         // inside a `Disclosure`. The words are unchanged; the summary above them
         // is new because the component requires one.
@@ -860,7 +860,7 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
             'deleted. Correcting a mistake means recording another adjustment.',
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         AppSelect<TenantStockAdjustmentType>(
           key: const ValueKey('product-stock-type'),
           value: _type,
@@ -874,7 +874,7 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
           ],
           onChanged: widget.busy ? null : _changeType,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         if (_type.direction == TenantStockAdjustmentDirection.either)
           SegmentedButton<bool>(
             key: const ValueKey('product-stock-direction'),
@@ -894,7 +894,7 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
                 ? 'This type always adds stock.'
                 : 'This type always removes stock.',
           ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         AppTextField(
           key: const ValueKey('product-stock-units'),
           controller: _units,
@@ -903,7 +903,7 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
           label: 'Units',
           leading: Icons.numbers,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         AppTextField(
           key: const ValueKey('product-stock-reason'),
           controller: _reason,
@@ -911,7 +911,7 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
           onChanged: (_) => setState(() {}),
           label: 'Reason for this adjustment',
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         AppButton(
           key: const ValueKey('product-stock-submit'),
           label: 'Adjust stock',

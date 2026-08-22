@@ -780,7 +780,7 @@ final class _CatalogManagementContents extends StatelessWidget {
     final categoryNames = tenantCategoryNames(view.categories.items);
     final selected = _selected;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
         Text(
           'Catalog',
@@ -788,7 +788,7 @@ final class _CatalogManagementContents extends StatelessWidget {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         // A permanent **helper** paragraph in §5.1's sense - always the same,
         // true of every product this route will ever hold, read once - so it
         // folds. The words are unchanged in both branches; only the summary
@@ -814,7 +814,7 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ),
         if (!canWrite) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           // A **notice** rather than a helper: it is about the state of this
           // build, so it does not fold. §2.1 gives `info` the meaning
           // "offline, read-only, informational" and this is the read-only case
@@ -832,21 +832,21 @@ final class _CatalogManagementContents extends StatelessWidget {
         // "Product added" and "Only an owner may retire a product" looked
         // identical until read. The `AppNotice` carries which it is.
         if (notice case final answer?) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           Callout(
             key: const ValueKey('catalog-management-notice'),
             status: answer.status,
             message: answer.message,
           ),
         ],
-        const SizedBox(height: 24),
+        SizedBox(height: tokens.spacing.s24),
         Text(
           'Categories',
           style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         if (view.categories.items.isEmpty)
           const Text(
             key: ValueKey('catalog-management-no-categories'),
@@ -879,16 +879,16 @@ final class _CatalogManagementContents extends StatelessWidget {
         // and it sits directly under the list it qualifies, which is §5.2's
         // helper-text position.
         if (view.categories.hasMore)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
+          Padding(
+            padding: EdgeInsets.only(top: tokens.spacing.s8),
+            child: const Text(
               key: ValueKey('catalog-management-more-categories'),
               'More categories exist than are shown here. A product can only be '
               'filed under one of the categories above.',
             ),
           ),
         if (canWrite) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           AppTextField(
             key: const ValueKey('catalog-management-category-name'),
             controller: categoryName,
@@ -898,7 +898,7 @@ final class _CatalogManagementContents extends StatelessWidget {
             label: 'New category name',
             helper: 'Such as Bakery, Drinks, or Household.',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           AppButton(
             key: const ValueKey('catalog-management-add-category'),
             label: 'Add category',
@@ -906,14 +906,14 @@ final class _CatalogManagementContents extends StatelessWidget {
             onPressed: _canSubmitCategory ? onAddCategory : null,
           ),
         ],
-        const SizedBox(height: 28),
+        SizedBox(height: tokens.spacing.s24),
         Text(
           'Add a product',
           style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         if (!canWrite)
           // The second of this build's two read-only notices, and both are
           // rendered because they answer different questions: the one above
@@ -933,7 +933,7 @@ final class _CatalogManagementContents extends StatelessWidget {
             onChanged: (_) => onFormChanged(),
             label: 'Product name',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           AppTextField(
             key: const ValueKey('catalog-management-product-sku'),
             controller: productSku,
@@ -944,7 +944,7 @@ final class _CatalogManagementContents extends StatelessWidget {
             leading: Icons.tag,
             helper: 'What the till matches a scan against. No spaces.',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           AppTextField(
             key: const ValueKey('catalog-management-product-price'),
             controller: productPrice,
@@ -959,7 +959,7 @@ final class _CatalogManagementContents extends StatelessWidget {
                 'refused here rather than at the till.',
           ),
           if (canRecordCost) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: tokens.spacing.s8),
             AppTextField(
               key: const ValueKey('catalog-management-product-cost'),
               controller: productCost,
@@ -984,14 +984,14 @@ final class _CatalogManagementContents extends StatelessWidget {
           // different ways. The keys and the callback are the ones the row
           // above used to carry; nothing about what a tap does has changed.
           if (view.categories.items.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: tokens.spacing.s12),
             Text(
               'Category',
               style: tokens.typography.labelMedium.copyWith(
                 color: tokens.colors.text.secondary,
               ),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: tokens.spacing.s4),
             FilterChipBar<String>(
               semanticLabel: 'The category the new product is filed under',
               selected: _selected,
@@ -1008,7 +1008,7 @@ final class _CatalogManagementContents extends StatelessWidget {
               ],
             ),
           ],
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           Text(
             key: const ValueKey('catalog-management-selected-category'),
             selected == null
@@ -1018,7 +1018,7 @@ final class _CatalogManagementContents extends StatelessWidget {
                 : 'Filed under '
                       '${tenantCategoryPhrase(selected, names: categoryNames)}.',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           // The one primary on this route: §2.1 permits exactly one per screen
           // region, and putting a product in is what the route exists for.
           AppButton(
@@ -1030,14 +1030,14 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ],
         if (onBulk case final onBulk?) ...[
-          const SizedBox(height: 28),
+          SizedBox(height: tokens.spacing.s24),
           Text(
             'Many products at once',
             style: tokens.typography.titleMedium.copyWith(
               color: tokens.colors.text.primary,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           // §5.2 names this paragraph by name as prose that should be kept and
           // moved inside a `Disclosure`. The words are unchanged; only the
           // summary line above them is new, and it is new because the component
@@ -1052,7 +1052,7 @@ final class _CatalogManagementContents extends StatelessWidget {
               'row by row before anything is written.',
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           AppButton(
             key: const ValueKey('catalog-management-bulk'),
             label: 'Bulk changes and import',
@@ -1060,7 +1060,7 @@ final class _CatalogManagementContents extends StatelessWidget {
             onPressed: busy ? null : onBulk,
           ),
         ],
-        const SizedBox(height: 28),
+        SizedBox(height: tokens.spacing.s24),
         Text(
           'Products',
           style: tokens.typography.titleMedium.copyWith(
@@ -1098,7 +1098,7 @@ final class _CatalogManagementContents extends StatelessWidget {
           ),
         ),
         if (!canRetire) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           // The same shape as the reconciliation day page's forbidden notice
           // and at the same status, for the same reason: `info` rather than
           // `problem` because nothing has failed and nothing is hidden - the
@@ -1109,7 +1109,7 @@ final class _CatalogManagementContents extends StatelessWidget {
             message: 'Only an owner or administrator may retire a product.',
           ),
         ],
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         Pagination(
           pageNumber: pageIndex + 1,
           previousKey: const ValueKey('catalog-management-previous-page'),
@@ -1505,14 +1505,14 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
               'leaves a different field unreadable is refused outright.',
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           AppTextField(
             key: const ValueKey('catalog-management-edit-name'),
             controller: _name,
             maxLength: maximumCatalogNameLength,
             label: 'Product name',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           AppTextField(
             key: const ValueKey('catalog-management-edit-sku'),
             controller: _sku,
@@ -1524,7 +1524,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                 'code stops finding this product.',
           ),
           if (widget.canChangeMoney) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: tokens.spacing.s8),
             AppTextField(
               key: const ValueKey('catalog-management-edit-price'),
               controller: _price,
@@ -1537,7 +1537,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                   'Applies to the next sale. Sales already recorded keep '
                   'the price they were sold at.',
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: tokens.spacing.s8),
             AppTextField(
               key: const ValueKey('catalog-management-edit-cost'),
               controller: _cost,
@@ -1569,7 +1569,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                     setState(() => _clearCost = value ?? false),
               ),
           ] else ...[
-            const SizedBox(height: 12),
+            SizedBox(height: tokens.spacing.s12),
             // A role notice, at `info` for the reason every other one on this
             // route is: two of the five fields are not offered, and the other
             // three are - nothing has failed and nothing is hidden.
@@ -1582,14 +1582,14 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
                   'offered here.',
             ),
           ],
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Text(
             'Category',
             style: tokens.typography.titleMedium.copyWith(
               color: tokens.colors.text.primary,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           FilterChipBar<String>(
             semanticLabel: 'The category this product is filed under',
             selected: _categoryId,
@@ -1608,7 +1608,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
           ),
           if (!_categoryOffered)
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: EdgeInsets.only(top: tokens.spacing.s8),
               child: Text(
                 key: const ValueKey('catalog-management-edit-category-off'),
                 'This product is filed under $unlistedTenantCategoryPhrase. '
@@ -1620,7 +1620,7 @@ final class _EditProductDialogState extends State<_EditProductDialog> {
             )
           else if (widget.moreCategories)
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: EdgeInsets.only(top: tokens.spacing.s8),
               child: Text(
                 key: const ValueKey('catalog-management-edit-more-categories'),
                 'More categories exist than are shown here. A product can '

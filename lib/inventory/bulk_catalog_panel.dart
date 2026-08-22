@@ -680,7 +680,7 @@ final class _BulkCatalogContents extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
         Text(
           'Many products at once',
@@ -688,7 +688,7 @@ final class _BulkCatalogContents extends StatelessWidget {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         // A helper rather than a notice, and the call is worth stating because
         // it could have gone the other way. §5.2 names this route's prose by
         // name as `Disclosure` material, and this paragraph is true of every
@@ -708,7 +708,7 @@ final class _BulkCatalogContents extends StatelessWidget {
             'several requests and the report says which of them landed.',
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         FilterChipBar<_BulkTask>(
           semanticLabel: 'Which bulk change this is',
           selected: task,
@@ -726,7 +726,7 @@ final class _BulkCatalogContents extends StatelessWidget {
           ],
         ),
         if (!_offered) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           // A notice about this build, so it does not fold. `info` is §2.1's
           // own row for it: the half that is missing was never injected, which
           // is not a failure and hides nothing.
@@ -746,19 +746,19 @@ final class _BulkCatalogContents extends StatelessWidget {
         // a reader can see instead of one they have to trace the assignments
         // to establish.
         if (notice case final answer?) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           Callout(
             key: const ValueKey('bulk-catalog-notice'),
             status: answer.status,
             message: answer.message,
           ),
         ],
-        const SizedBox(height: 24),
+        SizedBox(height: tokens.spacing.s24),
         if (task == _BulkTask.correct)
           ..._correctionForm(context)
         else
           ..._importForm(context),
-        const SizedBox(height: 20),
+        SizedBox(height: tokens.spacing.s20),
         // **A `Wrap` because this route had never been laid out narrow.** It was
         // a `Row`, and the first test to drive it at §4.1's `compact` band
         // overflowed by 73 pixels on a single button: "Preview, writing
@@ -807,7 +807,7 @@ final class _BulkCatalogContents extends StatelessWidget {
           color: tokens.colors.text.primary,
         ),
       ),
-      const SizedBox(height: 8),
+      SizedBox(height: tokens.spacing.s8),
       // **The one bar whose selection is a pair rather than a value.** Which
       // field moves and whether a cost is being *removed* are two variables in
       // this panel, and three of the four chips answer both at once - so the
@@ -836,7 +836,7 @@ final class _BulkCatalogContents extends StatelessWidget {
         ],
       ),
       if (!canChangeMoney) ...[
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         // A role notice at `info`, matching every other one in the catalog
         // family: three of the four corrections are offered and one is not.
         const Callout(
@@ -848,7 +848,7 @@ final class _BulkCatalogContents extends StatelessWidget {
               'same request, so neither is offered here.',
         ),
       ],
-      const SizedBox(height: 12),
+      SizedBox(height: tokens.spacing.s12),
       if (field == TenantProductField.categoryId) ...[
         if (view.categories.items.isEmpty)
           const Text(
@@ -897,7 +897,7 @@ final class _BulkCatalogContents extends StatelessWidget {
           'then report no profit and are counted as missing cost data, rather '
           'than reporting the whole price as profit.',
         ),
-      const SizedBox(height: 20),
+      SizedBox(height: tokens.spacing.s20),
       // **The second `Row` on this route that had only ever been laid out
       // wide**, and unlike the first this one is wrong in a picture rather than
       // only in a widget test: at §4.1's `compact` band the count is squeezed
@@ -955,7 +955,7 @@ final class _BulkCatalogContents extends StatelessWidget {
               '${product.cost == null ? '' : ' • costs ${product.cost!.toStringAsFixed(2)}'}',
             ),
           ),
-      const SizedBox(height: 12),
+      SizedBox(height: tokens.spacing.s12),
       Pagination(
         pageNumber: pageIndex + 1,
         previousKey: const ValueKey('bulk-catalog-previous-page'),
@@ -976,7 +976,7 @@ final class _BulkCatalogContents extends StatelessWidget {
           color: tokens.colors.text.primary,
         ),
       ),
-      const SizedBox(height: 8),
+      SizedBox(height: tokens.spacing.s8),
       // Three paragraphs of permanent helper prose behind one fold - §5.1's own
       // description of what `Disclosure` replaces, and the tallest single block
       // in the catalog family. It is true of every sheet this route will ever
@@ -1001,7 +1001,7 @@ final class _BulkCatalogContents extends StatelessWidget {
           'origin.',
         ),
       ),
-      const SizedBox(height: 12),
+      SizedBox(height: tokens.spacing.s12),
       AppTextField(
         key: const ValueKey('bulk-catalog-sheet'),
         controller: sheet,
@@ -1013,7 +1013,7 @@ final class _BulkCatalogContents extends StatelessWidget {
         placeholder: 'name,sku,price,quantity,category',
       ),
       if (!canChangeMoney) ...[
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         const Callout(
           key: ValueKey('bulk-catalog-import-cost-hidden'),
           status: AppStatus.info,
@@ -1032,17 +1032,17 @@ final class _BulkCatalogContents extends StatelessWidget {
   ) {
     final tokens = AppTokens.componentOf(context);
     return <Widget>[
-      const SizedBox(height: 24),
+      SizedBox(height: tokens.spacing.s24),
       Text(
         'What this does',
         style: tokens.typography.titleMedium.copyWith(
           color: tokens.colors.text.primary,
         ),
       ),
-      const SizedBox(height: 8),
+      SizedBox(height: tokens.spacing.s8),
       Text(key: const ValueKey('bulk-catalog-summary'), _summary(report, task)),
       if (report.failure case final failure?) ...[
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         // The one `problem` in the catalog family, and it is the only notice in
         // it that reports a failure: a chain that stopped. Every value of
         // [TenantBulkCatalogFailure] means the same thing at this scale - the
@@ -1057,7 +1057,7 @@ final class _BulkCatalogContents extends StatelessWidget {
           message: _failureNotice(failure, report),
         ),
       ],
-      const SizedBox(height: 12),
+      SizedBox(height: tokens.spacing.s12),
       // Every row, never a count. The server names every broken row at once, and
       // collapsing that into "12 rows failed" would throw away the reason both
       // callables report per row.
@@ -1073,7 +1073,7 @@ final class _BulkCatalogContents extends StatelessWidget {
         Card(
           key: ValueKey('bulk-catalog-row-${row.position}'),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(tokens.spacing.s12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1091,7 +1091,7 @@ final class _BulkCatalogContents extends StatelessWidget {
                         '${_rowLabel(row.status, report.mode).toLowerCase()}',
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: tokens.spacing.s8),
                 Text(
                   key: ValueKey('bulk-catalog-row-subject-${row.position}'),
                   row.subject,
@@ -1108,7 +1108,7 @@ final class _BulkCatalogContents extends StatelessWidget {
             ),
           ),
         ),
-      const SizedBox(height: 16),
+      SizedBox(height: tokens.spacing.s16),
       if (report.mode == TenantBulkCatalogMode.preview)
         AppButton(
           key: const ValueKey('bulk-catalog-commit'),

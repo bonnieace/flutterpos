@@ -244,80 +244,83 @@ final class _MovementFeedContents extends StatelessWidget {
   TenantStockMovementFeedPage get page => view.page;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('stock-movements-feed'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // §7's "Title appears once": the `AppScaffold` above says `Stock
-      // movements`, and this said the same thing at greater length under it.
-      const SizedBox(height: 4),
-      Text(
-        key: const ValueKey('stock-movements-feed-scope'),
-        page.isSourceScoped
-            ? 'Every "${page.source!.label}" entry recorded against this '
-                  'business\'s products. Other movements are not listed on '
-                  'this page.'
-            : 'Every entry recorded against this business\'s products: sales, '
-                  'verified returns, and manual corrections alike.',
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        'The ledger is permanent and cannot be edited from this app. It is '
-        'listed by product and then by record ID, which is not time order; '
-        'each entry states when it was recorded.',
-      ),
-      const SizedBox(height: 16),
-      AppSelect<TenantStockMovementSource?>(
-        key: const ValueKey('stock-movements-feed-filter'),
-        value: page.source,
-        label: 'Show',
-        leading: Icons.filter_list,
-        items: <AppSelectItem<TenantStockMovementSource?>>[
-          const AppSelectItem<TenantStockMovementSource?>(
-            value: null,
-            label: 'All movements',
-          ),
-          // `other` carries no wire value, so it is deliberately absent: an
-          // unmodelled source cannot be filtered for and is only ever reached
-          // through the unnarrowed page above.
-          for (final source in TenantStockMovementSource.values)
-            if (source != TenantStockMovementSource.other)
-              AppSelectItem<TenantStockMovementSource?>(
-                value: source,
-                label: source.label,
-              ),
-        ],
-        onChanged: onSelectSource,
-      ),
-      const SizedBox(height: 16),
-      // §4.3's responsive contract. This is the one movement surface whose
-      // records are about *different* products, so the product is the record's
-      // second identifying line - §5.2's identity row admits "an address, a
-      // code, a category" - and opening its ledger is an action rather than a
-      // link on that line.
-      RecordList(
-        identityLabel: 'Movement',
-        items: <RecordItem>[
-          for (final movement in page.items) _record(context, movement),
-        ],
-        empty: Text(
-          key: const ValueKey('stock-movements-feed-empty'),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('stock-movements-feed'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // §7's "Title appears once": the `AppScaffold` above says `Stock
+        // movements`, and this said the same thing at greater length under it.
+        SizedBox(height: tokens.spacing.s4),
+        Text(
+          key: const ValueKey('stock-movements-feed-scope'),
           page.isSourceScoped
-              ? 'No "${page.source!.label}" entry has been recorded for this '
-                    'business.'
-              : 'No stock movement has been recorded for this business.',
+              ? 'Every "${page.source!.label}" entry recorded against this '
+                    'business\'s products. Other movements are not listed on '
+                    'this page.'
+              : 'Every entry recorded against this business\'s products: sales, '
+                    'verified returns, and manual corrections alike.',
         ),
-      ),
-      const SizedBox(height: 16),
-      Pagination(
-        pageNumber: pageIndex + 1,
-        previousKey: const ValueKey('stock-movements-feed-previous'),
-        nextKey: const ValueKey('stock-movements-feed-next'),
-        onPrevious: pageIndex > 0 ? onPreviousPage : null,
-        onNext: page.hasMore ? onNextPage : null,
-      ),
-    ],
-  );
+        SizedBox(height: tokens.spacing.s4),
+        const Text(
+          'The ledger is permanent and cannot be edited from this app. It is '
+          'listed by product and then by record ID, which is not time order; '
+          'each entry states when it was recorded.',
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        AppSelect<TenantStockMovementSource?>(
+          key: const ValueKey('stock-movements-feed-filter'),
+          value: page.source,
+          label: 'Show',
+          leading: Icons.filter_list,
+          items: <AppSelectItem<TenantStockMovementSource?>>[
+            const AppSelectItem<TenantStockMovementSource?>(
+              value: null,
+              label: 'All movements',
+            ),
+            // `other` carries no wire value, so it is deliberately absent: an
+            // unmodelled source cannot be filtered for and is only ever reached
+            // through the unnarrowed page above.
+            for (final source in TenantStockMovementSource.values)
+              if (source != TenantStockMovementSource.other)
+                AppSelectItem<TenantStockMovementSource?>(
+                  value: source,
+                  label: source.label,
+                ),
+          ],
+          onChanged: onSelectSource,
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        // §4.3's responsive contract. This is the one movement surface whose
+        // records are about *different* products, so the product is the record's
+        // second identifying line - §5.2's identity row admits "an address, a
+        // code, a category" - and opening its ledger is an action rather than a
+        // link on that line.
+        RecordList(
+          identityLabel: 'Movement',
+          items: <RecordItem>[
+            for (final movement in page.items) _record(context, movement),
+          ],
+          empty: Text(
+            key: const ValueKey('stock-movements-feed-empty'),
+            page.isSourceScoped
+                ? 'No "${page.source!.label}" entry has been recorded for this '
+                      'business.'
+                : 'No stock movement has been recorded for this business.',
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('stock-movements-feed-previous'),
+          nextKey: const ValueKey('stock-movements-feed-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
+        ),
+      ],
+    );
+  }
 
   /// One movement as §5.2's rows.
   ///

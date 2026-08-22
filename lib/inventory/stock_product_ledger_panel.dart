@@ -194,7 +194,7 @@ final class _LedgerContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return ListView(
       key: const ValueKey('product-ledger'),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
         // **The one of the fourteen §7 sites that stays, and it is not a
         // duplicate.** The `AppScaffold` title is `Product stock ledger` and this
@@ -214,12 +214,12 @@ final class _LedgerContents extends StatelessWidget {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         Text(
           key: const ValueKey('product-ledger-identity'),
           'Product ${ledger.productId}',
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         if (ledger.product case final product?)
           Text(
             key: const ValueKey('product-ledger-quantity'),
@@ -236,13 +236,13 @@ final class _LedgerContents extends StatelessWidget {
             'permanently and is listed below; nothing here can be corrected, '
             'because there is no product left to correct.',
           ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         const Text(
           'The ledger is permanent and cannot be edited from this app. It is '
           'listed by record ID, which is not time order; each entry states when '
           'it was recorded.',
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         // §4.3's responsive contract. Every entry is stated in the shared record
         // vocabulary, so this surface and the business-wide feed cannot describe
         // the same document differently - which is what `stock_movement_labels`
@@ -264,7 +264,7 @@ final class _LedgerContents extends StatelessWidget {
             'No stock movement has been recorded against this product.',
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         Pagination(
           pageNumber: pageIndex + 1,
           previousKey: const ValueKey('product-ledger-previous'),
