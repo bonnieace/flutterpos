@@ -991,7 +991,12 @@ void main() {
       await _tap(tester, 'checkout-product-product-b');
 
       // The number the customer is waiting for is never behind a tap.
-      expect(_text(tester, 'checkout-cart-bar-total'), 'Total: KES 14.00');
+      //
+      // **The word left this string in Phase 03.** The browse render's bar sets
+      // `Total` as a label and the amount as money, and one `Text` cannot carry
+      // two roles - so the bar is a label over a figure, and this key is on the
+      // figure.
+      expect(_text(tester, 'checkout-cart-bar-total'), 'KES 14.00');
       expect(
         tester
             .widget<Badge>(find.byKey(const ValueKey('checkout-cart-badge')))

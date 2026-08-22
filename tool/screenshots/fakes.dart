@@ -1597,17 +1597,29 @@ final class FakeEvidenceSource implements CheckoutEvidenceSource {
 /// A draft sink that accepts every save, so the till renders its "saved"
 /// confirmation rather than a refusal.
 final class FakeDraftSink implements CheckoutDraftSink {
-  FakeDraftSink({this.printFailure});
+  FakeDraftSink({this.printFailure, this.refusalCode});
 
   final List<CheckoutDraftRequest> requests = <CheckoutDraftRequest>[];
 
   /// A `PrinterTransportCode` the saved sale comes back carrying, or null for
   /// a receipt that reached the printer.
   final String? printFailure;
+
+  /// A `CheckoutDraftException` code every save throws, or null for a sink that
+  /// keeps what it is given.
+  ///
+  /// **The one state of the till nothing photographed.** Hard rule 5 asks for a
+  /// component's whole matrix in the harness, and the sale path's error branch -
+  /// a sale that was *not* written - existed only in the widget tests. It is the
+  /// branch ST-036 gets wrong, so it is the one a reviewer needs a picture of.
+  final String? refusalCode;
   int _sequence = 0;
 
   @override
   Future<CheckoutSavedDraft> saveDraft(CheckoutDraftRequest request) async {
+    if (refusalCode case final code?) {
+      throw CheckoutDraftException(code);
+    }
     requests.add(request);
     _sequence++;
     return CheckoutSavedDraft(

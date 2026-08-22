@@ -52,9 +52,9 @@ import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/press.dart';
 import '../ui/records.dart';
+import '../ui/rolling_number.dart';
 import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
-import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/stepper.dart';
 import '../ui/tokens.dart';
@@ -796,6 +796,23 @@ final class _CartEditorState extends State<_CartEditor> {
   }
 
   /// Everything a cashier needs once the items are chosen.
+  ///
+  /// **A head, a scrolling middle and a foot, which is what both served designs
+  /// draw and what this used to be one long `ListView` of.** ST-035's cart is a
+  /// fixed header with the sale's name and its destructive action, a
+  /// `flex-1 overflow-y-auto` list of lines, and a footer holding the total, the
+  /// tender and the save. What that buys on a phone is the whole point: the save
+  /// was the last thing in a scroll, so a cashier with six items had to scroll
+  /// past all of them to press it, and the total went off the top of the sheet
+  /// while they did.
+  ///
+  /// **The three regions are separated by hairlines rather than by a surface
+  /// step**, which is where this diverges from ST-035's `surface-container`
+  /// header and footer. This same pane renders inside `AppSheet`, whose ground is
+  /// §2.1's `surface.overlay` - a step *above* `raised` - so painting the head
+  /// and foot `raised` there would draw them recessed into the sheet and invert
+  /// the depth §2.1 is built on. A hairline reads the same on both grounds, and
+  /// it is what `_CartBar` and the browse head already use.
   Widget _cartPane(
     BuildContext context,
     String currency,
@@ -803,29 +820,242 @@ final class _CartEditorState extends State<_CartEditor> {
     ScrollController? controller,
   }) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
+    final inset = AppScaffold.horizontalInset(tokens.spacing);
+    return Column(
       key: const ValueKey('checkout-cart-pane'),
-      controller: controller,
-      padding: EdgeInsets.all(AppScaffold.horizontalInset(tokens.spacing)),
-      children: [
-        ..._receiptSection(context, tokens),
-        ..._saleSection(context, tokens, currency, total),
-        ..._tenderSection(context, tokens),
-        ..._saveSection(context, tokens, total),
-        SizedBox(height: tokens.spacing.s16),
-        // **§7's "Long copy" pattern, and this is policy rather than state.**
-        // "Anything over two lines that explains *policy* rather than *the
-        // current state* goes in a `Disclosure`" - and what a saved sale does
-        // afterwards is the policy this panel's own class comment spends four
-        // paragraphs on. It was permanent body text at the foot of every cart.
-        const Disclosure(
-          key: ValueKey('checkout-submission-disclosure'),
-          // 30 characters, inside `Disclosure.summaryCharacterBudget`.
-          summary: 'What happens to a saved sale',
-          child: Text(
-            key: ValueKey('checkout-submission-policy'),
-            'A saved sale is submitted and confirmed automatically. It cannot '
-            'be edited, retried, or deleted here.',
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _cartHead(context, tokens, inset),
+        Expanded(
+          child: ListView(
+            // The sheet hands this controller down and the scrollable it is
+            // given is what couples the drag to the content. It goes to the
+            // middle region, because that is the one that scrolls.
+            controller: controller,
+            padding: EdgeInsets.symmetric(
+              horizontal: inset,
+              vertical: tokens.spacing.s12,
+            ),
+            children: <Widget>[
+              ..._receiptSection(context, tokens),
+              ..._saleLines(context, tokens, currency),
+              SizedBox(height: tokens.spacing.s16),
+              // **§7's "Long copy" pattern, and this is policy rather than
+              // state.** "Anything over two lines that explains *policy* rather
+              // than *the current state* goes in a `Disclosure`" - and what a
+              // saved sale does afterwards is the policy this panel's own class
+              // comment spends four paragraphs on. It was permanent body text at
+              // the foot of every cart.
+              const Disclosure(
+                key: ValueKey('checkout-submission-disclosure'),
+                // 30 characters, inside `Disclosure.summaryCharacterBudget`.
+                summary: 'What happens to a saved sale',
+                child: Text(
+                  key: ValueKey('checkout-submission-policy'),
+                  'A saved sale is submitted and confirmed automatically. It '
+                  'cannot be edited, retried, or deleted here.',
+                ),
+              ),
+            ],
+          ),
+        ),
+        _cartFoot(context, tokens, currency, total, inset),
+      ],
+    );
+  }
+
+  /// The sale's name, and the one action that abandons it.
+  ///
+  /// **The clear moved up here from under the total**, which is ST-035's own
+  /// arrangement and closes the last of §2.1's worked example: the destructive
+  /// action and the primary one are now at opposite ends of the pane rather than
+  /// adjacent, so a thumb reaching for the save cannot land on the clear.
+  Widget _cartHead(
+    BuildContext context,
+    AppTokens tokens,
+    double inset,
+  ) => DecoratedBox(
+    decoration: BoxDecoration(
+      border: Border(
+        bottom: BorderSide(color: tokens.colors.surface.borderSubtle),
+      ),
+    ),
+    child: Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: inset,
+        vertical: tokens.spacing.s8,
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              'This sale',
+              style: tokens.typography.titleMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
+            ),
+          ),
+          // Offered only when there is something to abandon, and never for a
+          // saved sale: nothing here is persisted, so this destroys no
+          // record.
+          //
+          // **§2.1's own worked example, closed.** "Clear this sale is
+          // `destructive`, Save sale is `primary`. Today the destructive
+          // action is the more prominent of the two." It was an
+          // `OutlinedButton` wearing the theme's mint outline directly above
+          // a `FilledButton`; it is §2.1's destructive tier now - red label,
+          // red border, transparent container - and the primary one is the
+          // save, at the other end of the pane.
+          if (_quantities.isNotEmpty)
+            AppButton(
+              key: const ValueKey('checkout-clear-sale'),
+              label: 'Clear this sale',
+              icon: Icons.delete_outline,
+              tier: AppButtonTier.destructive,
+              size: AppButtonSize.sm,
+              onPressed: _saving ? null : () => _confirmClearSale(context),
+            ),
+        ],
+      ),
+    ),
+  );
+
+  /// The lines themselves, or the sentence that says there are none.
+  List<Widget> _saleLines(
+    BuildContext context,
+    AppTokens tokens,
+    String currency,
+  ) => <Widget>[
+    if (_quantities.isEmpty)
+      Text(
+        key: const ValueKey('checkout-cart-empty'),
+        'No items yet. Add a product to start the sale.',
+        style: tokens.density
+            .body(tokens.typography)
+            .copyWith(color: tokens.colors.text.secondary),
+      )
+    else
+      for (final entry in _quantities.entries)
+        _CartLine(
+          key: ValueKey('checkout-line-${entry.key}'),
+          product: _snapshot.productById(entry.key),
+          productId: entry.key,
+          quantity: entry.value,
+          quantityUnusable: _unusableQuantities.contains(entry.key),
+          currency: currency,
+          onQuantityChanged: (raw) => _setQuantity(entry.key, raw),
+          onIncrement: () {
+            final product = _snapshot.productById(entry.key);
+            if (product != null) _add(product);
+          },
+          onDecrement: () => _decrement(entry.key),
+          onRemove: () => _remove(entry.key),
+        ),
+  ];
+
+  /// What the customer is waiting for: the figure, the assertion, the save.
+  ///
+  /// It does not scroll. Everything in it is either the answer to *how much* or
+  /// the control that ends the sale, and neither may be below a fold.
+  Widget _cartFoot(
+    BuildContext context,
+    AppTokens tokens,
+    String currency,
+    int? total,
+    double inset,
+  ) => DecoratedBox(
+    decoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: tokens.colors.surface.borderStrong),
+      ),
+    ),
+    child: Padding(
+      padding: EdgeInsets.fromLTRB(
+        inset,
+        tokens.spacing.s12,
+        inset,
+        tokens.spacing.s16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _totalLine(tokens, currency, total),
+          SizedBox(height: tokens.spacing.s12),
+          ..._tenderSection(context, tokens),
+          ..._saveSection(context, tokens, total),
+        ],
+      ),
+    ),
+  );
+
+  /// The one figure a customer is waiting to hear.
+  ///
+  /// **A line rather than a card, which is what both served designs draw.** It
+  /// was a `StatTile` - a bordered box with a label above a figure - and §2.2's
+  /// "the one figure a stat tile exists for" is what put it there. Both designs
+  /// put the word and the figure at opposite ends of one line above the tender,
+  /// and a card inside a footer that is already a bordered region is a box in a
+  /// box. The role is unchanged: `numeric.hero`, tabular, and now in
+  /// [AppTextRoles.money] - the pair `OPEN_QUESTIONS.md` decision 23 chose for
+  /// this surface.
+  ///
+  /// **The untotalled branch is not a figure at all**, because there is none:
+  /// §2.1's `problem` says "difference found, **unreadable**", and a price this
+  /// till cannot record exactly is a record it cannot read.
+  Widget _totalLine(AppTokens tokens, String currency, int? total) {
+    if (total == null) {
+      return Callout(
+        key: const ValueKey('checkout-total-unavailable'),
+        status: AppStatus.problem,
+        message:
+            'This sale cannot be totalled because one item has a price the '
+            'till cannot record exactly.',
+      );
+    }
+    // **The word takes its own width and the figure takes the rest**, which is
+    // the opposite of the obvious arrangement and is the one that does not
+    // throw. `numeric.hero` is 30, and `maximumCheckoutMinorAmount` admits a
+    // seventeen-character figure - a total this till refuses but must still
+    // draw while it says so. Given half a 411 phone that overflows, and a
+    // `Row` that overflows throws. The label is four glyphs and never needs
+    // protecting; the figure is what may have to ellipsise, and only in the
+    // branch `_blocker` is already explaining.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: <Widget>[
+        Text(
+          'Total',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        // §6.2's "Total recalculates - digits roll; only changed digits move,
+        // `spring.smooth`, no haptic". The one figure in this app that changes
+        // while a person is looking at it.
+        //
+        // **§6.3 is why this is safe on the sale path**: the string is formatted
+        // from `total`, which is already computed, and the roll plays over it.
+        // Nothing here sits between an input and its record.
+        //
+        // **`numeric.hero` and not `mono`**, which is the one place decision 23
+        // stops short of the design. ST-035 sets this figure in `data-mono` and
+        // ST-036 sets it in the interface face, so the two disagree - and
+        // `RollingNumber` asserts a tabular style for a reason a mono face does
+        // not satisfy by being fixed-width: the assertion is what stops every
+        // digit position shifting mid-roll. The colour, which both designs agree
+        // on, moves; the face, which they do not, stays.
+        Expanded(
+          child: Align(
+            alignment: Alignment.bottomRight,
+            child: RollingNumber(
+              value: '$currency ${_money(total)}',
+              textKey: const ValueKey('checkout-total'),
+              style: tokens.typography.numericHero.copyWith(
+                color: tokens.colors.text.money,
+              ),
+            ),
           ),
         ),
       ],
@@ -1200,100 +1430,6 @@ final class _CartEditorState extends State<_CartEditor> {
         SizedBox(height: tokens.spacing.s20),
       ],
     );
-  }
-
-  List<Widget> _saleSection(
-    BuildContext context,
-    AppTokens tokens,
-    String currency,
-    int? total,
-  ) {
-    return <Widget>[
-      Text(
-        'This sale',
-        style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        ),
-      ),
-      SizedBox(height: tokens.spacing.s4),
-      if (_quantities.isEmpty)
-        Text(
-          key: const ValueKey('checkout-cart-empty'),
-          'No items yet. Add a product to start the sale.',
-          style: tokens.density
-              .body(tokens.typography)
-              .copyWith(color: tokens.colors.text.secondary),
-        )
-      else
-        for (final entry in _quantities.entries)
-          _CartLine(
-            key: ValueKey('checkout-line-${entry.key}'),
-            product: _snapshot.productById(entry.key),
-            productId: entry.key,
-            quantity: entry.value,
-            quantityUnusable: _unusableQuantities.contains(entry.key),
-            currency: currency,
-            onQuantityChanged: (raw) => _setQuantity(entry.key, raw),
-            onIncrement: () {
-              final product = _snapshot.productById(entry.key);
-              if (product != null) _add(product);
-            },
-            onDecrement: () => _decrement(entry.key),
-            onRemove: () => _remove(entry.key),
-          ),
-      SizedBox(height: tokens.spacing.s12),
-      // **§2.2's "the one figure a stat tile exists for", and on this screen it
-      // is not a figurative claim.** The total is the number a customer is
-      // waiting to hear, and it was `titleMedium` inside the sentence "Total:
-      // KES 248.00" - proportional figures in a label, which is the exact
-      // complaint §2.2 makes about the daily summary. It is `numeric.hero`,
-      // tabular, with the word beside it rather than in front of it.
-      //
-      // **The untotalled branch is not a tile**, because there is no figure:
-      // §2.1's `problem` says "difference found, **unreadable**", and a price
-      // this till cannot record exactly is a record it cannot read.
-      if (total == null)
-        Callout(
-          key: const ValueKey('checkout-total-unavailable'),
-          status: AppStatus.problem,
-          message:
-              'This sale cannot be totalled because one item has a price the '
-              'till cannot record exactly.',
-        )
-      else
-        StatTile(
-          label: 'Total',
-          value: '$currency ${_money(total)}',
-          valueKey: const ValueKey('checkout-total'),
-          // §6.2's "Total recalculates - digits roll; only changed digits
-          // move, `spring.smooth`, no haptic". The one figure in this app that
-          // changes while a person is looking at it.
-          //
-          // **§6.3 is why this is safe on the sale path**: the string is
-          // formatted from `total`, which is already computed, and the roll
-          // plays over it. Nothing here sits between an input and its record.
-          rolling: true,
-        ),
-      // Offered only when there is something to abandon, and never for a saved
-      // sale: nothing here is persisted, so this destroys no record.
-      //
-      // **§2.1's own worked example, closed.** "Clear this sale is
-      // `destructive`, Save sale is `primary`. Today the destructive action is
-      // the more prominent of the two." It was an `OutlinedButton` wearing the
-      // theme's mint outline, directly above a `FilledButton`; it is
-      // §2.1's destructive tier now - red label, red border, transparent
-      // container - and the primary one is the save.
-      if (_quantities.isNotEmpty) ...[
-        SizedBox(height: tokens.spacing.s8),
-        AppButton(
-          key: const ValueKey('checkout-clear-sale'),
-          label: 'Clear this sale',
-          tier: AppButtonTier.destructive,
-          onPressed: _saving ? null : () => _confirmClearSale(context),
-        ),
-      ],
-      SizedBox(height: tokens.spacing.s20),
-    ];
   }
 
   /// **§7's destructive pattern, in an `AlertDialog` on purpose.**
@@ -1791,6 +1927,7 @@ final class _CartBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final accent = tokens.colors.action.primary;
+    final unavailable = total == null;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: tokens.colors.surface.raised,
@@ -1810,33 +1947,44 @@ final class _CartBar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              // §2.2's `numeric.body` - "money and counts **in flow**" - rather
-              // than the hero role the cart pane's own total takes, and rather
-              // than the `titleMedium` it was, which is a title role carrying
-              // proportional figures.
+              // **The word and the figure are two texts as of Phase 03, and the
+              // browse render is why.** Its bar sets `Total:` as a label and the
+              // amount as money - which is the whole of `OPEN_QUESTIONS.md`
+              // decision 23 - and `Total: KES 130.00` in one string cannot carry
+              // two roles. `numeric.body` was the right role for a sentence and
+              // is the wrong one for a figure that is the point of the bar.
               //
-              // **A `StatLine` here and it overflowed at 411, which is worth
-              // recording rather than quietly reverting.** That component is a
-              // label column and a right-aligned figure column, sized for a
-              // card where several of them stack; this strip has one figure and
-              // about 200 logical pixels to put it in beside the control, so
-              // the label column and the figure column fought over the same
-              // room. §2.2's complaint about figures inside sentences is about
-              // a *column* of them not lining up - a lone figure on a bar has
-              // no column to line up with, and the role is what matters here.
+              // **A `StatLine` here overflowed at 411, which is worth recording
+              // rather than quietly reverting.** That component is a label
+              // column and a right-aligned figure column, sized for a card where
+              // several of them stack; this strip has one figure and about 200
+              // logical pixels to put it in beside the control, so the label
+              // column and the figure column fought over the same room.
               Expanded(
-                child: Text(
-                  key: const ValueKey('checkout-cart-bar-total'),
-                  total == null
-                      ? 'Total unavailable'
-                      : 'Total: $currency ${_money(total!)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: tokens.typography.numericBody.copyWith(
-                    color: total == null
-                        ? tokens.colors.status.problem.fg
-                        : tokens.colors.text.primary,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Total',
+                      style: tokens.typography.labelMedium.copyWith(
+                        color: tokens.colors.text.secondary,
+                      ),
+                    ),
+                    Text(
+                      key: const ValueKey('checkout-cart-bar-total'),
+                      unavailable
+                          ? 'Unavailable'
+                          : '$currency ${_money(total!)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.typography.mono.copyWith(
+                        color: unavailable
+                            ? tokens.colors.status.problem.fg
+                            : tokens.colors.text.money,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               SizedBox(width: tokens.spacing.s12),
@@ -1857,7 +2005,13 @@ final class _CartBar extends StatelessWidget {
                   // where it goes rather than the verb for what it does - and
                   // §11 step 11's copy pass could not reach this screen,
                   // because the whole file was step 7's.
+                  //
+                  // **`primary`, which the browse render draws and this did
+                  // not.** §2.1 allows one primary per screen *region*; the bar
+                  // is a region of its own on the one layout where the save is
+                  // not on screen at all, so nothing here competes with it.
                   label: 'Open the cart',
+                  tier: AppButtonTier.primary,
                   icon: Icons.shopping_cart_outlined,
                   onPressed: onOpen,
                 ),
@@ -1919,7 +2073,7 @@ final class _CartLine extends StatelessWidget {
         // A `Card` painted Material's own surface and elevation. §2.1 is blunt
         // that "depth is expressed by surface step, never by drop shadow", and
         // a raised surface with a hairline is what a card is everywhere else in
-        // this app - `StatTile` and `Callout` are both made of these two rows.
+        // this app - `Callout` is made of the same two rows.
         decoration: BoxDecoration(
           color: tokens.colors.surface.raised,
           border: Border.all(color: tokens.colors.surface.borderSubtle),
@@ -1927,90 +2081,128 @@ final class _CartLine extends StatelessWidget {
         ),
         child: Padding(
           padding: EdgeInsets.all(tokens.spacing.s12),
+          // **Three rows rather than one, which is ST-036's card.** The name
+          // and the removal share the top row, what the line comes to is on its
+          // own beneath, and the stepper is under that. It was all one row, so
+          // the name had about 130 logical pixels of a 420 pane and the controls
+          // had the rest.
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          resolved?.name ?? 'Unavailable product',
-                          style: tokens.typography.titleMedium.copyWith(
-                            color: tokens.colors.text.primary,
-                          ),
-                        ),
-                        Text(
-                          key: ValueKey('checkout-line-amount-$productId'),
-                          minor == null
-                              ? 'This item cannot be priced on this device.'
-                              : '$quantity x $currency ${_money(minor)}'
-                                    ' = $currency ${_money(minor * quantity)}',
-                          // §2.2's `numeric.body`, which is the row for "money
-                          // and counts in flow" and carries tabular figures -
-                          // so a column of line amounts stops being ragged.
-                          style: tokens.typography.numericBody.copyWith(
-                            color: tokens.colors.text.secondary,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      resolved?.name ?? 'Unavailable product',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.typography.titleMedium.copyWith(
+                        color: tokens.colors.text.primary,
+                      ),
                     ),
                   ),
                   SizedBox(width: tokens.spacing.s8),
-                  // **§5.1's priority 1, and the plus is the whole of it.** That
-                  // row's "Replaces" column reads "minus + delete, no plus", so
-                  // a cashier who rang up one loaf and needed two had to leave
-                  // the cart, find the tile in the grid and press it again.
+                  // **The removal sits with the name, which is ST-036's own
+                  // arrangement.** §5.1's complaint names "delete" as part of
+                  // the stepper's defect, and what was wrong with it is that it
+                  // sat *inside* the count control - one press away from a
+                  // decrement, doing something a decrement cannot be undone
+                  // from. Removing a line is a record action, so it sits with
+                  // the record's name.
                   //
-                  // **The minus still does exactly what it did**, including
-                  // removing the line at one: that is state logic and
-                  // `claude.md` hard rule 1 keeps it out of a visual change.
-                  // Whether a stepper should *disable* at one instead is a
-                  // behaviour question and is in `PLAN.md`, not decided here.
-                  QuantityStepper(
-                    key: ValueKey('checkout-line-quantity-$productId'),
-                    // **No visible label, and that is the component's own
-                    // note.** Sixteen lines each saying *Quantity* over a minus,
-                    // a number and a plus is the word repeated at a control that
-                    // names itself - and it cost enough height to push the save
-                    // off a phone. A screen reader still hears it.
-                    quantity: quantity,
-                    maximum: maximumCheckoutLineQuantity,
-                    onChanged: onQuantityChanged,
-                    // Null where the cached catalog no longer holds the
-                    // product: there is nothing to add another of.
-                    onIncrement: product == null ? null : onIncrement,
-                    onDecrement: onDecrement,
-                    error: quantityUnusable
-                        ? 'Not a quantity this till can sell. This line still '
-                              'has $quantity.'
-                        : null,
-                  ),
-                  SizedBox(width: tokens.spacing.s8),
-                  // **The bin leaves the stepper and stays on the row.** §5.1's
-                  // complaint names "delete" as part of the defect, and what is
-                  // wrong with it is that it sat *inside* the count control -
-                  // one press away from a decrement, doing something a
-                  // decrement cannot be undone from. Removing a line is a
-                  // record action, so it sits with the record.
-                  IconButton(
+                  // **It shared the stepper's row until it did not fit.** A
+                  // stepper is 188 wide at its widest bound and a labelled
+                  // button about 150; a 411 phone leaves 347 inside the card,
+                  // and a `Row` that does not fit throws rather than shrinking.
+                  // Splitting them gives each its own width, and it is the
+                  // served design's layout rather than a workaround for one.
+                  //
+                  // **A destructive `AppButton` rather than a bare
+                  // `IconButton`**, which is ST-035's `✕ Remove` and §2.1's
+                  // tier for "removes or reverses". A tooltip is not a label: a
+                  // glyph alone on the one control that discards a line is the
+                  // thing §9 asks a word for.
+                  AppButton(
                     key: ValueKey('checkout-line-remove-$productId'),
+                    label: 'Remove',
+                    icon: Icons.close,
+                    tier: AppButtonTier.destructive,
+                    size: AppButtonSize.sm,
                     onPressed: onRemove,
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Remove item',
                   ),
                 ],
+              ),
+              Text(
+                key: ValueKey('checkout-line-amount-$productId'),
+                minor == null
+                    ? 'This item cannot be priced on this device.'
+                    : '$quantity x $currency ${_money(minor)}'
+                          ' = $currency ${_money(minor * quantity)}',
+                // **`mono` in `text.money`, which is `OPEN_QUESTIONS.md`
+                // decision 23 for this surface.** It was `numeric.body` in
+                // `text.secondary` - the right role for money inside a sentence
+                // and the wrong one for the figure the customer is being
+                // charged. Both served designs set a line amount in `data-mono`
+                // and `currency-kes`.
+                //
+                // **The unit price stays in the string, where both designs drop
+                // it.** They show only what the line comes to, because their
+                // stepper carries the count; this keeps `2 x KES 20.00 = KES
+                // 40.00` because *how much is one* is the question a cashier is
+                // asked across a counter, and the app's own answer to it should
+                // not need arithmetic. A line that cannot be priced is not money
+                // and takes `problem` instead.
+                style: tokens.typography.mono.copyWith(
+                  color: minor == null
+                      ? tokens.colors.status.problem.fg
+                      : tokens.colors.text.money,
+                ),
+              ),
+              SizedBox(height: tokens.spacing.s8),
+              // **§5.1's priority 1, and the plus is the whole of it.** That
+              // row's "Replaces" column reads "minus + delete, no plus", so a
+              // cashier who rang up one loaf and needed two had to leave the
+              // cart, find the tile in the grid and press it again.
+              //
+              // **The minus still does exactly what it did**, including removing
+              // the line at one: that is state logic and `claude.md` hard rule 1
+              // keeps it out of a visual change. Whether a stepper should
+              // *disable* at one instead is a behaviour question and is in
+              // `PLAN.md`, not decided here.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: QuantityStepper(
+                  key: ValueKey('checkout-line-quantity-$productId'),
+                  // **No visible label, and that is the component's own note.**
+                  // Sixteen lines each saying *Quantity* over a minus, a number
+                  // and a plus is the word repeated at a control that names
+                  // itself - and it cost enough height to push the save off a
+                  // phone. A screen reader still hears it.
+                  quantity: quantity,
+                  maximum: maximumCheckoutLineQuantity,
+                  onChanged: onQuantityChanged,
+                  // Null where the cached catalog no longer holds the product:
+                  // there is nothing to add another of.
+                  onIncrement: product == null ? null : onIncrement,
+                  onDecrement: onDecrement,
+                  error: quantityUnusable
+                      ? 'Not a quantity this till can sell. This line still '
+                            'has $quantity.'
+                      : null,
+                ),
               ),
               // Stated, never enforced: the cached figure is what this device
               // last saw, and the server permits stock to go negative.
               if (resolved != null && quantity > resolved.quantity)
-                Text(
-                  key: ValueKey('checkout-line-stock-$productId'),
-                  'This device last saw ${resolved.quantity} in stock. The '
-                  'sale is not blocked by that count.',
-                  style: note,
+                Padding(
+                  padding: EdgeInsets.only(top: tokens.spacing.s4),
+                  child: Text(
+                    key: ValueKey('checkout-line-stock-$productId'),
+                    'This device last saw ${resolved.quantity} in stock. The '
+                    'sale is not blocked by that count.',
+                    style: note,
+                  ),
                 ),
             ],
           ),

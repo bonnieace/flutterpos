@@ -136,6 +136,10 @@ const Map<String, String> captions = <String, String>{
       'A sale that saved and whose receipt did not reach the printer. Two '
       'notices, because two different things happened: the sale is durable and '
       'the paper is not there.',
+  '15c-sale-refused':
+      'A save that did not happen. The sale is still in the cart, every line '
+      'kept, and the sentence names no cause it cannot know - which is the '
+      'defect the served mobile cart has and this does not.',
   '36a-printer-not-set-up':
       'Printer settings before a business has one. There is no default address '
       'and never will be, so until this is filled in every receipt queues.',

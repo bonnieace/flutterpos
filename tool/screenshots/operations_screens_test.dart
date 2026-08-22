@@ -148,6 +148,34 @@ void main() {
     },
   );
 
+  // **The sale that was not written, which is the till state no image held.**
+  // Hard rule 5 asks for a component's whole matrix in the harness; `15` is the
+  // cart before a save, `15b` is a sale that saved, and the refusal branch - the
+  // one ST-036 invents a cause for - was reachable only from a widget test. The
+  // code is one this build does not model, so `CheckoutRefusal` falls to its
+  // generic sentence, which is the exact copy `LIVE_PHASE_HANDOFF.md` says
+  // ST-036 should have used.
+  screenshotCase(
+    '15c-sale-refused',
+    build: () => inSession(
+      TenantCheckoutScreen(
+        cache: FakeCatalogSource(),
+        drafts: FakeDraftSink(refusalCode: 'storage_unavailable'),
+      ),
+      controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+    ),
+    afterPump: (tester) async {
+      await _press(tester, 'checkout-product-pd-bread-white');
+      final openCart = find.byKey(const ValueKey('checkout-open-cart'));
+      if (openCart.evaluate().isNotEmpty) {
+        await tester.tap(openCart);
+        await tester.pumpAndSettle();
+      }
+      await _press(tester, 'checkout-tender-cash');
+      await _press(tester, 'checkout-save');
+    },
+  );
+
   screenshotCase(
     '16-checkout-settings',
     build: () => inSession(
