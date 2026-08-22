@@ -185,8 +185,7 @@ String invitationAcceptanceSafeError(
     'unauthenticated' => 'Sign in again to accept this invitation.',
     'resource-exhausted' =>
       'Too many attempts from this device. Wait a few minutes and try again.',
-    'unavailable' ||
-    'deadline-exceeded' =>
+    'unavailable' || 'deadline-exceeded' =>
       'This device could not reach the server. Check the connection and try '
           'again.',
     _ => _unknownFailure,

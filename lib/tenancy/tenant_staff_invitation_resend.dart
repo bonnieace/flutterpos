@@ -171,7 +171,9 @@ final class TenantStaffInvitationResendGateway {
     }
     final requestId = _requestIdFactory();
     if (!_resendRequestIdPattern.hasMatch(requestId)) {
-      throw StateError('The invitation resend request ID generator is invalid.');
+      throw StateError(
+        'The invitation resend request ID generator is invalid.',
+      );
     }
     return TenantStaffInvitationResendIntent._(
       targetUid: _target.uid,
@@ -424,6 +426,4 @@ String _secureResendRequestId() {
   return 'resend-${base64Url.encode(bytes).replaceAll('=', '')}';
 }
 
-final _resendRequestIdPattern = RegExp(
-  r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$',
-);
+final _resendRequestIdPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$');

@@ -391,13 +391,13 @@ final class _StaffContentsState extends State<_StaffContents> {
         Align(
           alignment: Alignment.centerLeft,
           child: AppButton(
-                   key: const ValueKey('invite-staff-open'),
-                   label: _showInvitationForm ? 'Close invitation' : 'Invite staff',
-                   icon: Icons.person_add_alt_1_outlined,
-                   tier: AppButtonTier.primary,
-                   onPressed: () =>
+            key: const ValueKey('invite-staff-open'),
+            label: _showInvitationForm ? 'Close invitation' : 'Invite staff',
+            icon: Icons.person_add_alt_1_outlined,
+            tier: AppButtonTier.primary,
+            onPressed: () =>
                 setState(() => _showInvitationForm = !_showInvitationForm),
-                 ),
+          ),
         ),
         if (_showInvitationForm) ...[
           const SizedBox(height: 16),
@@ -468,7 +468,9 @@ final class _StaffContentsState extends State<_StaffContents> {
               staff.role == TenantRole.admin,
         )
         .length;
-    final page = widget.page.hasMore ? 'on this page, more to load' : 'on this page';
+    final page = widget.page.hasMore
+        ? 'on this page, more to load'
+        : 'on this page';
     return StatRow(
       tiles: [
         StatTile(
