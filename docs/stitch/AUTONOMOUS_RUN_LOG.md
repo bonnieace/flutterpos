@@ -621,3 +621,170 @@ components and contracts.
   the thing `ConfirmDialog` and `EmptyState` were both left alone for.
 - The two empty states in the grid stay prose rather than becoming `EmptyState`, which is the decision
   step 9 already took for screen 08 and this phase did not reopen.
+
+# Phase 04 — catalog and stock, photographed and corrected
+
+**Four commits, `f8a4095` to `1efe758`**, on the same branch. Nothing pushed, no PR. Three of the
+brief's four slices are done; the fourth is recorded as a derivation and one route inside it is
+deliberately not started.
+
+## The one sentence worth reading first
+
+**Slice 1 changed no Dart and found the phase's only real defect.** Photographing the thirteen routes
+at the two widths nobody had photographed, and at the two roles nobody had rendered, is what turned up
+a red `Out of stock` badge on a cashier's read-only catalog — the exact thing acceptance criterion 2
+exists to catch. The handover predicted slice 1 would be the cheapest way to find out how much of
+Phase 04 was already right; it was, and the answer was "most of it, except this".
+
+## `f8a4095` — photograph the width and the roles
+
+- Decision: **`responsiveViewports` on all thirteen catalog and stock captures.** They rendered at 1440
+  and 411 only, so `twoColumnCards` — the middle of `RecordList.formFor`'s three forms, and the one
+  ST-039 section 8 draws an 834px specimen of — appeared in no picture of any real route. The
+  component's own matrix covered it (`tablet/96-record-list*`); its use on a page of six columns and
+  two actions did not.
+- Decision: **three new role captures**, because the branch this phase is *about* had never been
+  rendered. `17b-read-only-catalog-cashier`, `18d-manage-catalog-manager`,
+  `19b-correct-a-product-manager`. Everything from `17` to `20c` ran under `seedSession()`, which is
+  owner; `21`–`24` run as manager but the stock routes' role lists do not differ.
+- **No route overflows or truncates at 834 or 1024.** That was the finding slice 1 was told to look
+  for and it is a negative one: 108 capture tests pass, and an overflow throws.
+- **The manager's correction form states its own narrowing in a notice that is very nearly ST-039's own
+  sentence** — `catalog-management-edit-money-hidden`, "Only an owner or administrator may change what
+  this product is priced at or what it costs, so neither is offered here" — and it had never been
+  rasterised. Neither had the list notice, "Only an owner or administrator may retire a product."
+- **The cashier's catalog withholds all three stock routes and every row action**, from the same build
+  that offers them to an owner. That is the screen deciding, which is what makes the capture evidence.
+- **The one open fixture question in the handover is closed.** `23-stock-movements` contains both
+  evidenced examples the handoff names: the `+24` manual adjustment with reason `Morning delivery
+  received`, and the `-2` sale with source `co-1`, side by side in one picture.
+- 71 new images, **0 moved, 0 removed** — the measurement that says a no-Dart slice only added coverage.
+
+## `06472ad` — the badge that told a cashier not to sell
+
+- **The defect, and it is criterion 2's exactly.** `tenantProductStanding` gave every product at or
+  below zero a `problem` badge reading `Out of stock`, on both catalog surfaces, with nothing on either
+  page to qualify it. `Milk 500ml` at `-3` and `Water 1L` at `0` both wore it. Recorded stock may be
+  negative and never blocks a sale — Phase 04 item 4, `audits/phase-04.md`, and Phase 03's own refusal
+  of these two words at `checkout_cart_panel.dart:1670`.
+- Decision: **the label is the quantity and the page carries ST-039's sentence.** `OPEN_QUESTIONS.md`
+  **decision 24** has the argument, the reason `problem` is kept, and the one thing it does not settle.
+- Decision: **the sentence is a page line, not a per-row warning**, where ST-039 draws it inline. The
+  till's precedent, and `RecordItem` has no warning slot that is not `provenance` — which this phase's
+  own handover forbids quietening.
+- **Two copy assertions moved and neither is behaviour.** A third test broke on *layout*: the caption
+  line pushed `View stock` to y=640 on an 800x600 surface, and `tap` warns rather than fails when it
+  misses, so what failed was the assertion after it. It scrolls first now, the way its own sibling in
+  the same file already did.
+- 49 images moved, 0 new, 0 removed, **all 49 screens 17 to 19**. The bulk and stock routes did not
+  move, which is what says the change is contained.
+- **Deviation from the handover's formatter convention, stated plainly.** `dart format` on the two
+  touched test files reflowed ~200 lines that have nothing to do with this change, and the handover's
+  instruction was to commit that reflow alone first. This commit carries both. The split was attempted
+  and the `git reset` it needed was declined, so it stands as one commit: read its two test files
+  knowing most of their diff is reflow.
+
+## `0c18437` — the token debt, counted and cleared
+
+- **97 literal spacings in `lib/inventory/`, against two in `lib/ui/`.** All 97 gone; 94 of them are
+  the same value the token names and moved no pixel, which is the point.
+- Decision: **three off-scale gaps take `s24`.** `catalog_management_panel.dart` separated its four
+  section headings at two values — one 24 and three 28 — and 28 is not on `AppSpacing.all` at all, which
+  is documented as *every* permitted value. `s24` is the value already doing that job in the same file
+  and in `reconciliation_status_panel.dart` one directory over.
+- Two feed panels had expression-bodied builds with no `tokens` in scope and now read it as every other
+  panel does. One `const Padding` became a `Padding` around a `const Text`: a token is not a
+  compile-time constant.
+- **40 of the 484 images moved and all 40 are the six management-catalog screens** — the one file the
+  three off-scale gaps were in. Nothing else in the app moved a pixel, which is the measurement that
+  says the other 94 repoints were value for value.
+- **Corrected in place, per the handover's own instruction to re-measure.** The handover says
+  `lib/checkout/` holds seven literals and *"all seven of those are in
+  `checkout_configuration_panel.dart`"*. The count is right and the attribution is not: six are there
+  and the seventh is `checkout_evidence.dart:311`, which is Phase 02's checkout-evidence surface rather
+  than screen 16's. It is a real hard-rule-2 site with no phase claiming it.
+
+## `1efe758` — slice 3, and the answer was to keep all four
+
+- **Finding: none of the four raw Material sites should change.** Every one is themed and reads the
+  token layer — `chipTheme`, `checkboxTheme`, `cardTheme`, and `SegmentedButton` reached three ways at
+  `theme.dart:257` and `:322`. `lib/theme.dart`'s `chipTheme` note names the catalog's raw category
+  list as the site it was written for, so the handover's "none; this one is bare" is true of the call
+  site and not of the repository. §5.2 specifies neither a segmented control nor a checkbox, so
+  building one is a component with a full state matrix — which is what Phase 03 declined for the tender
+  chooser.
+- **The one thing that needed measuring was §9, and the guess was wrong.** The direction control looked
+  like a 48dp defect: Material draws a segmented button at 40 by default and `lib/theme.dart` has no
+  `segmentedButtonTheme`, so nothing in the token layer was holding it up. It draws at **48.0**.
+- Decision: **keep the measurement as an assertion.** `test/ui/tokens_test.dart` asserts §9's floor for
+  the three button themes that have a `minimumSize` to read and is silent on every widget family that
+  does not, so nothing would notice a later `segmentedButtonTheme` arriving under the floor. One test,
+  and §9 is pass/fail rather than optional — the same justification Phase 03 used for its only test.
+
+## Slice 4 — derived, recorded, and one route not started
+
+- `OPEN_QUESTIONS.md` **decision 25**: Phase 04's mobile records are `RecordList`'s responsive contract,
+  recorded as a derivation because ST-040 is 9,218 bytes and one section of nine. The derivation is
+  ST-039's own section 8 rendered through the contract that specimen draws, and it is now photographed
+  at all four widths rather than asserted.
+- **Screen 20, `20b` and `20c` were not migrated and are the phase's unfinished route.** Their rows are
+  `CheckboxListTile`s with a bullet-separated subtitle — the pre-migration shape §5.2 replaces — and the
+  report rows below them are raw `Card`s. The note already at `bulk_catalog_panel.dart` reaches the same
+  conclusion: this is step 6's twelve-screen migration, not a Phase 04 slice. Cut deliberately, per §7.
+
+## The four ST-039 defects — all four, the app was already right
+
+Checked against the app at `7d54e28`, which is what the handover asked rather than taken from its table.
+
+| ST-039 defect | The app |
+|---|---|
+| Collapses adjustments, movements and ledger into one table | Three separate routes and three panels |
+| Says `Before/After` | `stockBeforeAndAfterLabel = 'Before and after'`, one constant, two call sites |
+| Lacks exact provenance | Both record builders set `provenance:` with actor and recorded time |
+| Supplier-oriented reason placeholder | The reason field has no placeholder at all |
+
+**Four for four, and the same shape Phases 02 and 03 found twice each: the app is right where the
+design is wrong.** No code was written for any of them.
+
+## Testing, and what it proves
+
+- **2,316 tests pass**, from 2,315. One test added, and it is the §9 case.
+- **No behaviour test moved.** Three assertions changed: two are copy that followed the badge label, and
+  one is a `tap` that now scrolls first because the page grew by a caption line. `test/inventory/` is
+  9,345 lines and all 272 of its tests pass unchanged.
+- **The harness writes 484 images, from 413.** 71 new across four commits, 89 moved, 0 removed — and
+  every moved image is a screen between 17 and 19, which is what says the two Dart changes were
+  contained to the surfaces they were about.
+- **158 screens in the index, from 155.**
+
+## What still needs a device
+
+- **The screenshots prove the raster and nothing else.** They do not prove the app runs and cannot show
+  motion at all.
+- **Nothing in this phase touched motion**, so the sale path's rule is where Phase 03 left it. That is
+  *unchanged*, not *verified*.
+- The catalog's new caption line and the relabelled badge have never been read on a physical screen. The
+  badge is a `StatusBadge` inside a `RecordList` row at three forms; the raster is right at all four
+  widths and a device is what would show whether the sentence reads as standing context or as noise.
+- The web target still does not run, for the two pre-existing bootstrap bugs. Deliberately unfixed.
+
+## Every pixel that is still provisional
+
+- **All of Phase 04.** ST-039 is `NORMALIZED / RENDER REVIEW` *and* the export is its pre-correction
+  render, so no part of this implementation has been compared against an approved artifact by a person.
+  ST-040 does not meaningfully exist. Nothing here is pixel-approved and none of it should be read as
+  approved.
+- **Decision 24's badge wording is this run's, not the design's.** ST-039 shows `Below zero. A sale is
+  never blocked by a stock count.` inline under a product name; this is the quantity in a badge plus the
+  sentence once per page. The clause is the design's and the arrangement is not.
+- Screens 20, 20b and 20c keep their pre-migration rows.
+- Whether zero should carry a softer status than below-zero is open — decision 24 says so.
+
+## The commits, in order
+
+| | |
+|---|---|
+| `f8a4095` | Photograph the catalog at the width and the roles it changes shape at |
+| `06472ad` | Stop the catalog telling a cashier a product cannot be sold |
+| `0c18437` | Put lib/inventory's spacing back on the token scale |
+| `1efe758` | Measure the 48dp floor on the Material controls nothing was asserting |

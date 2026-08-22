@@ -560,6 +560,88 @@ Whether the back office follows. Phases 04, 05 and 06 each have surfaces full of
 free to take this pair, to take the colour alone, or to keep `numericBody`. This section is the
 precedent, not the rule.
 
+## Decision 24 — a stock badge states the figure, never `Out of stock`, 2026-08-22
+
+**Phase 04's second acceptance criterion is that stock display does not imply sales are blocked by
+availability, and both catalog surfaces failed it.** `tenantProductStanding` gave any product at or
+below zero a `problem` badge reading `Out of stock`, and neither screen 17 nor screen 18 said
+anything to qualify it.
+
+**Decision: the badge label is the quantity — `-3 in stock`, `0 in stock` — and each catalog surface
+states ST-039's non-blocking sentence once, under its product heading. `AppStatus.problem` is kept.**
+
+### Why the old label was wrong rather than merely blunt
+
+`Out of stock` asserts that the product cannot be sold. This product never blocks a sale on a stock
+count: Firestore Rules permit signed stock deliberately, Phase 04 resolved item 4 as *"may be
+negative, and never blocks a sale"*, and `audits/phase-04.md` records the same fact. Phase 03 had
+already refused these exact two words one file over — `checkout_cart_panel.dart:1670` reasons that
+*"`0 in stock` says what `Out of stock` says; `-3 in stock` says something it cannot"* — so the app
+was saying two different things about one product fact on two screens.
+
+The catalog is where it mattered most, for two reasons the till does not have. It lists **every**
+product, so the badge is the page's only summary of a zero figure; and it is the one catalog surface a
+**cashier** sees, read-only, where a red badge is exactly what would stop somebody selling.
+
+### Why `problem` is kept and the words carry the meaning
+
+§2.1 names *"out of stock"* among `problem`'s three meanings, and ST-039 draws this same row in
+`text-error` on `bg-error-container/10`. The colour is not the defect — a figure at or below zero is
+worth a correction. The defect was the claim. §9 is satisfied because the words rather than the colour
+carry it, and the words are now true.
+
+### The sentence, and why it is a page line rather than a per-row one
+
+`tenantCatalogStockNeverBlocks` is *"A sale is never blocked by a stock count. A product whose
+recorded quantity has reached or passed zero can still be sold."* Its first clause is ST-039's own,
+which `audits/phase-04.md` calls "the exact non-blocking stock sentence"; the app already ended two
+other sentences with it (`checkout_cart_panel.dart:1282`, `stock_adjustment_panel.dart:528`), so this
+is one constant reaching the two screens that were missing it rather than a third copy.
+
+ST-039 draws it inline under the product name. It is a page line here for the reason the till puts its
+own version in one freshness strip rather than on every tile: on a phone a 100-character warning
+repeated down six cards is the loudest thing on the screen, and `RecordItem` has no warning slot that
+is not `provenance` — which Phase 04's own handover forbids quietening. Stated unconditionally, because
+a conditional section invisible in every capture is not covered.
+
+### What this does not settle
+
+Whether zero deserves a softer status than below-zero. They are arguably different facts — zero is a
+shop that sold out, below zero is a record that disagrees with itself — and ST-039 shows only the
+below-zero row, so the design defines nothing for zero. One status is kept because splitting it is a
+second judgement the evidence does not force.
+
+## Decision 25 — Phase 04's mobile records are derived from §4.3, because ST-040 does not exist
+
+**ST-040 is one ninth of a design.** Its served HTML is 9,218 bytes and stops after
+`1. Cashier — Product catalog`; `EXPORT_MAP.md` uses that byte count as a freshness fingerprint, so
+the truncation is the artifact rather than a failed download. There is no Stitch connector in this
+session and mutation needs human authorisation, so the missing eight sections cannot be generated.
+
+**Decision: the mobile composition for every Phase 04 route except screen 20 is `RecordList`'s own
+responsive contract, and it is recorded as a derivation rather than as a design implemented.**
+
+The derivation is not an invention. `RecordList.formFor` already decides what a table becomes at each
+band — `stackedCards` below 768, `twoColumnCards` to 1023, `table` at 1024 — and ST-039's section 8 is
+a labelled 834px specimen of exactly that transformation. So the derived screens are ST-039's accepted
+structures rendered through the contract its own specimen draws.
+
+**What changed is the evidence, not the composition.** All thirteen catalog and stock routes were
+photographed at 1440 and 411 only, so `twoColumnCards` appeared in no picture of any real route; they
+now render at all four of `responsiveViewports`. The transformation holds: at 834 the movement feed
+draws two cards carrying the delta, three attributes, the provenance line and the `Open ledger`
+action, and at 411 the same record stacks with nothing dropped. Criterion 4 is met on evidence.
+
+### The one route this does not cover
+
+**Screen 20 and its two report states are not derived from the contract and were not migrated.** Their
+rows are `CheckboxListTile`s whose subtitle is a bullet-separated sentence — `Household ▪ 5901234123457
+▪ 145.00 ▪ costs 112.00` — which is the pre-migration shape §5.2 replaces with key-value attributes,
+and the report rows below them are raw `Card`s. The note already at `bulk_catalog_panel.dart` argues
+the same thing this decision concludes: migrating screen 20 to `RecordList` is the work step 6 did for
+twelve screens and is larger than a Phase 04 slice. It is recorded as the phase's unfinished route
+rather than half-done.
+
 ## Non-blocking audit limitations
 
 - The built-in Stitch connector in this chat retained an unauthenticated transport. Read-only audit
