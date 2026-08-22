@@ -92,3 +92,121 @@ and after.
   "Roboto and the Material icon font" and that two glyphs render as tofu for that reason. Both
   statements predate the typography repoint at `71f26c2` and are now wrong. Left alone because
   correcting generated prose is a different reason to move text and belongs in its own commit.
+
+## `a77e95c` — the Wave 0 component audit, written before anything was built
+
+Order-of-work item 2, first part. No Dart file changed.
+
+- Decision: **four of the six named components need nothing built.** disabled is a state on six
+  controls, all photographed; busy is `AppButton.loading` plus `LoadingState`, two treatments for two
+  facts; confirmation is `ConfirmDialog`, which has the widest matrix of the six; offline is three
+  treatments because `DESIGN_RULES.md` asks for three facts to stay separate. Evidence: greps over
+  `lib/` plus the case list in `tool/screenshots/`, both recorded in
+  `audits/2026-08-22-wave-0-components.md`. Building all six would have stood four competing systems
+  next to working ones, which `prompt.md`'s working discipline forbids by name.
+- Decision: **no page-level "everything is disabled" wrapper.** `RBAC_MATRIX.md`'s design implications
+  rule it out directly — *"A cashier home should remain intentionally narrow, not appear as a
+  disabled manager dashboard"* — and `11-business-home-cashier`'s own caption already records the
+  app obeying it: four of the owner's buttons are absent rather than disabled.
+- Decision: **read-only gets a corrected site and a scan, not a `ReadOnlyNotice` component.** `Callout`
+  already is the component and already has a photographed matrix; a wrapper would add a name, a second
+  matrix and six migrated call sites in order to choose `AppStatus.info`. The repository's own habit
+  for a cross-file invariant is a source scan, and there are three already.
+- Decision: **provenance is the one component to build**, because it cannot be pinned by a scan:
+  `caption` with `text.tertiary` appears 29 times in `lib/` and only seven are provenance, so the style
+  is not the identifying feature and the concept needs a name.
+- Provisional: nothing. An audit.
+- Two claims were wrong on the first pass and are corrected in place rather than quietly fixed:
+  `record_list.dart:921` is a width measurement in the column allocator, not a seventh provenance
+  rendering; and the read-only notice appears in only three captures, not six.
+
+## `19317d7` — read-only says read-only, at the sixth site and in a scan
+
+- Decision: **the two-tier pattern is what five sites already agreed on**, so it is written down rather
+  than invented: a **titled** `info` `Callout` states the standing of a whole page, an **untitled** one
+  states that a single control is unavailable in this build. `catalog-read-only` and
+  `staff-directory-read-only` carry titles; the three build-gated notices do not.
+  `checkout-configuration-read-only` was a bare `Text` and now matches its four siblings.
+- Decision: **photograph the branch as well as fix it.** Three of the six notices appeared in no
+  capture, because every capture reaching a build-gated site injects the writer — which is how a bare
+  `Text` survived beside four callouts. `16b-checkout-settings-read-only` and
+  `18c-manage-catalog-read-only` are those surfaces with no writer. Rule 5 was nearly true here and is
+  now true.
+- Decision: **the print queue stays silent and stays outside the scan.** It renders nothing at all when
+  no retry is injected, which `37c-receipts-waiting-read-only`'s caption records as deliberate. It
+  carries no `-read-only` key so the scan does not reach it.
+- Decision: **role read-only and build read-only must not be merged.** `staff-directory-read-only`
+  fires on `session.canAccess` and names the roles that can act; the other five fire because a build
+  has no writer and say "this build". `RBAC_MATRIX.md` has exactly one role-based read-only row, so
+  that is the only site allowed to speak in role terms. A component that merged them would claim a
+  permission boundary where there is only a missing dependency.
+- Provisional: nothing moved. 6 new images, none of the existing 395 changed — which is itself the
+  finding: the branch had never been in a picture.
+
+## `ab04fff` — four component-theme text styles had no font family at all
+
+**This is the one the owner should read first.** It is a defect the run found rather than a task the
+handover set, and it had been visible in `screenshots/` for nine days.
+
+- Finding: `chipTheme.labelStyle`, `chipTheme.secondaryLabelStyle`,
+  `listTileTheme.subtitleTextStyle` and `snackBarTheme.contentTextStyle` were written as
+  `TextStyle(color: ...)` inline. A component theme's text style **replaces** the text theme's rather
+  than merging onto it, so all four reached the engine with a **null family, null size and null
+  weight** — `ThemeData.fontFamily` does not rescue them. `prompt.md` and `lib/theme.dart` both said
+  naming the family on every role "is what reaches the component themes below"; it reaches the ones
+  that *read* a role, and these four did not.
+- Evidence: a probe that resolves each component under the real theme and reads back what the engine
+  is handed, plus two pictures. `screenshots/web-full/18-manage-catalog.png` drew the `Categories` row
+  as filled bars and the category picker below it as words — raw Material `Chip` versus
+  `FilterChipBar`, on one screen. Worse, `02-choose-business` — the second screen in the app — drew
+  every membership's *Owner — Accessible* line as an unreadable bar, because it is a `ListTile`
+  **subtitle** and `ListTile.title` was always fine.
+- Decision: `chipTheme` takes **`label.md`** because that is the role `FilterChipBar` already uses, so
+  the app's chip and Material's chip cannot disagree. `listTile`'s subtitle takes **`body.md`**: its
+  old 13 is on no scale at all §2.2 has 12 and 14 and nothing between — and 14 is both Material's
+  own default role for a subtitle and the role a record subtitle resolves to at compact density.
+  `snackBar` takes `body.md` for the same reason.
+- Decision: the tripwire **resolves the component rather than reading the theme**, so a correct
+  `ChipThemeData` wrapped by something that drops it still fails. `SnackBar` is included because no
+  capture drives one, so no picture will ever cover it. `InputDecoration` is asserted although it was
+  already correct, because `lib/theme.dart` names it among the components the trap applies to.
+- 46 of 401 images moved: the catalog surfaces 17-20c, the business selector 02-04, printer settings
+  36a/36b/36d. Nothing else moved.
+
+## `af81a2d` — the last three type literals in the theme
+
+- Finding: the three `TextTheme` slots `lib/theme.dart` sets by hand each carried a size §2.2 does not
+  have. `headlineLarge` 40 against a 32 ceiling; `bodyMedium` a bare `fontSize: 16` inheriting
+  Material's 20/14 leading where §2.2 states 16 / 24; `labelLarge` 15 / 600 against the design's
+  *measured* `.btn-primary` at 14 / 700, which `AppButton` already renders.
+- Decision: **`headlineLarge` is repointed rather than deleted**, though it has zero readers and moves
+  no pixel. The slot exists whether this app reads it or not, and a slot that says 40 when the
+  design's ceiling is 32 is a figure somebody will eventually believe.
+- Decision: **`bodyMedium` takes `body.lg`, not `body.md`.** `AppDensity.comfortable` reads
+  `AppBodyRole.large`, so 16 was already the right size and only the leading was wrong. Taking
+  `body.md` would have shrunk every bare `Text` in the app to 14, which is the compact density's
+  answer and not the default one.
+- Decision: **a source scan over the file rather than three equality assertions alone**, because the
+  fourth slot somebody writes next month would pass all three. It forbids any `fontSize`,
+  `fontWeight`, `letterSpacing`, `height` or `wordSpacing` written as a number in `lib/theme.dart`,
+  with comments stripped so the file can still explain the figures it removed. After the change there
+  are no offenders at all.
+- Correction taken during the work: "left without a colour" cannot be asserted as `color == null`,
+  because `ThemeData` applies its body and display colours to every slot. The assertion and the
+  comment both now state the observable thing — that the label arrives carrying the same ink as the
+  text beside it.
+- Provisional: nothing invented. **122 of 401 images moved**, all of them surfaces with bare `Text`,
+  which is the 1.14px per line the corrected leading buys. `93-status` and `96-record-list-empty` are
+  the only component matrices in the set, because a `Callout`'s message and an `EmptyState`'s prose are
+  bare `Text`.
+- Still open in the same file, deliberately: `inputDecorationTheme`'s `hintStyle` and `labelStyle` are
+  colour-only inline styles. The probe shows both resolve correctly, because `InputDecorator` merges
+  onto the text theme rather than replacing it, which is why they were never part of this defect.
+
+### What these two commits mean for the handover's own claims
+
+`AUTONOMOUS_HANDOVER.md` §2 says **"The token layer is finished"** and lists typography as landed in
+both halves. That was true of `AppTokens` and false of `spiritTheme`: seven of the theme's styles were
+not reading it. Both are now, and two scans hold the line. The claim is worth re-reading rather than
+re-asserting — the trap section in the same file predicted this exact failure and named three of the
+four components it happened to.
