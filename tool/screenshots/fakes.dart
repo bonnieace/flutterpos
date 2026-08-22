@@ -86,15 +86,15 @@ TenantSessionController seedSession({
   TenantRole role = TenantRole.owner,
   String uid = ownerUid,
 }) => TenantSessionController()
-  ..open(uid: uid, membership: seedMembership(role: role));
+  ..open(
+    uid: uid,
+    membership: seedMembership(role: role),
+  );
 
 /// Puts [child] under a live session, which is what every guarded surface reads
 /// its business and role from.
 Widget inSession(Widget child, {TenantSessionController? controller}) =>
-    TenantSessionScope(
-      controller: controller ?? seedSession(),
-      child: child,
-    );
+    TenantSessionScope(controller: controller ?? seedSession(), child: child);
 
 // ---------------------------------------------------------------------------
 // Catalog
@@ -256,6 +256,7 @@ Map<String, String> seedStaffNames() => <String, String>{
 
 Map<String, Map<String, Object?>> seedSales() {
   final businessDate = seedBusinessDate();
+
   /// The figures are derived from the lines rather than stated beside them.
   ///
   /// The sale read model refuses a document whose subtotal does not equal the
@@ -380,7 +381,8 @@ Map<String, Map<String, Object?>> seedSales() {
   };
 }
 
-Map<String, Map<String, Object?>> seedShifts() => <String, Map<String, Object?>>{
+Map<String, Map<String, Object?>>
+seedShifts() => <String, Map<String, Object?>>{
   'shift-evening': <String, Object?>{
     'shiftId': 'shift-evening',
     'tenantId': seedTenantId,
@@ -820,14 +822,13 @@ final class FakeTenantReader
           'slogan': 'Everything the corner needs',
         },
         for (var offset = 0; offset < 7; offset++)
-          '$root/daily_metrics/${seedBusinessDate(offset)}':
-              seedDailyMetrics(
-                businessDate: seedBusinessDate(offset),
-                sales: offset == 0 ? 910.0 : 1180.0 + offset * 45,
-                profit: offset == 0 ? 274.0 : 331.0 + offset * 12,
-                transactions: offset == 0 ? 3 : 9 + offset,
-                incompleteCostLineCount: offset > 3 ? 4 + offset : 0,
-              ),
+          '$root/daily_metrics/${seedBusinessDate(offset)}': seedDailyMetrics(
+            businessDate: seedBusinessDate(offset),
+            sales: offset == 0 ? 910.0 : 1180.0 + offset * 45,
+            profit: offset == 0 ? 274.0 : 331.0 + offset * 12,
+            transactions: offset == 0 ? 3 : 9 + offset,
+            incompleteCostLineCount: offset > 3 ? 4 + offset : 0,
+          ),
         '$root/reconciliation_dirty_days/$today': seedReconciliationIntake(
           businessDate: today,
         ),
@@ -873,9 +874,7 @@ final class FakeTenantReader
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
     final data = documents[path];
-    return data == null
-        ? null
-        : TenantDocumentSnapshot(path: path, data: data);
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
   @override
@@ -1284,7 +1283,9 @@ final class FakeTenancyCallable
         SetDefaultTenantCallable,
         SetGlobalUserStatusCallable,
         SetTenantLifecycleCallable {
-  FakeTenancyCallable([this.answer = const <String, Object?>{'accepted': true}]);
+  FakeTenancyCallable([
+    this.answer = const <String, Object?>{'accepted': true},
+  ]);
 
   final Map<String, Object?> answer;
 
@@ -1302,8 +1303,10 @@ final class FakeStaffCallable
         SetStaffStatusCallable,
         UpdateStaffUserCallable {
   @override
-  Future<Object?> call(Map<String, Object?> payload) async =>
-      <String, Object?>{'tenantId': seedTenantId, ...payload};
+  Future<Object?> call(Map<String, Object?> payload) async => <String, Object?>{
+    'tenantId': seedTenantId,
+    ...payload,
+  };
 }
 
 /// A return writer a screenshot never reaches: the landing route passes the
