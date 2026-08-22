@@ -50,6 +50,13 @@ Branch `stitch-wave-0-tokens`, as of 2026-08-22. **Do not re-decide or redo any 
 | `displayCompact` added for `headline-lg-mobile`; thirteen roles now | `lib/ui/tokens.dart` |
 | The screenshot harness no longer injects a font family | `tool/screenshots/harness.dart` |
 | The width axis has a viewport in **all five** of its regions, and a tripwire that says so | `harness.dart`, `test/ui/tokens_test.dart` |
+| Wave 0's six unaudited components audited; four need nothing built | `audits/2026-08-22-wave-0-components.md` |
+| read-only rendered as `info` `Callout` at all six sites, plus a scan and the two missing captures | `test/ui/status_test.dart` |
+| `ProvenanceLine` built, seven renderings migrated, matrix photographed | `lib/ui/states.dart` |
+| **`spiritTheme` now reads `AppTokens` for every text style**, and two scans hold it | `lib/theme.dart`, `test/theme_test.dart` |
+| RBAC guards checked against `RBAC_MATRIX.md`: **all 31 role lists agree** | `test/tenancy/rbac_matrix_test.dart` |
+| Fixtures checked and clean; eight forbidden tokens scanned for | `test/dev/product_vocabulary_test.dart` |
+| The ten locations `lib/main.dart` reaches from nothing, recorded and pinned | `test/dev/reachable_lib_test.dart` |
 
 **The token work is done.** Typography landed on 2026-08-22 and closed item 20. Hanken Grotesk
 (400/500/600/700) and JetBrains Mono (400/500) are bundled from the upstream OFL repositories, and
@@ -94,9 +101,24 @@ four widths are not three bands, and `test/ui/tokens_test.dart` scans the harnes
 region loses its viewport. 34 new images; **none of the existing 361 moved**. `AppLayout.salePane` is
 excluded from the boundaries deliberately — it is a pane inside a page, not a page maximum.
 
-**Then:** the unaudited half of Wave 0 — disabled, read-only, offline, busy, confirmation and
-provenance components; RBAC guards against `RBAC_MATRIX.md`; test fixtures — and Phases 01 and 02
-structurally.
+**Wave 0 is now complete, and one of its claims above was wrong.** The six components were audited
+rather than built: **four needed nothing** and the audit says where each already lives. read-only needed
+one site corrected and two captures added; provenance was the one component genuinely absent and is
+built. The RBAC guards were checked against `RBAC_MATRIX.md` and **all 31 role lists agreed**. The
+fixtures were checked and are clean.
+
+⛔ **"The token layer is finished" was true of `AppTokens` and false of `spiritTheme`.** Seven of the
+theme's text styles were not reading it: four component-theme styles reached the engine with **no font
+family at all** — `chipTheme.labelStyle`, its `secondaryLabelStyle`, `listTileTheme.subtitleTextStyle`
+and `snackBarTheme.contentTextStyle` — and three `TextTheme` slots carried type sizes §2.2 does not
+have (40, 16 with Material's leading, 15/600 against the measured 14/700). The consequence was in
+`screenshots/` for nine days: `02-choose-business` drew every membership's role line as an unreadable
+bar, because a `ListTile` **subtitle** is taken as given where its title merges. This is the trap
+`AUTONOMOUS_HANDOVER.md` §8 predicted, in three of the five components it names. Both halves are fixed;
+`lib/theme.dart` now names no type metric of its own at all, and two scans in `test/theme_test.dart`
+hold the line.
+
+**Then:** Phases 01 and 02 structurally, then Wave 1.
 
 **The web target does not run, and it is not the redesign's fault.** Two independent pre-existing bugs,
 both in the bootstrap, both unfixed because they are behaviour changes needing explicit authorization:
@@ -222,9 +244,18 @@ The integration owner validates or establishes:
 - authenticated identity, tenant selection, platform separation, and RBAC route guards;
 - role-aware tenant navigation and the distinction between common routes and role-specific routes;
 - reusable loading, empty, error, disabled, read-only, offline, busy, confirmation, and provenance
-  components. `EmptyState`, `LoadingState`, and `ErrorState` exist in `lib/ui/states.dart`; the other
-  six are unaudited;
-- test fixtures/builders that use supported Chilltent facts instead of invented examples.
+  components. **Done, and the answer was not six components.** `audits/2026-08-22-wave-0-components.md`
+  records that **four of the six need nothing built** — disabled is a state on six controls, busy is
+  `AppButton.loading` plus `LoadingState`, confirmation is `ConfirmDialog`, offline is three treatments
+  because it is three facts. read-only needed one site corrected (a bare `Text` where five siblings are
+  `info` callouts) plus the two captures that had never contained the branch. **provenance was the one
+  genuinely absent**, and `ProvenanceLine` in `lib/ui/states.dart` replaces seven hand-written
+  renderings with zero pixels moved;
+- test fixtures/builders that use supported Chilltent facts instead of invented examples. **Checked and
+  clean:** no forbidden branding, invented role, tax, refund or reorder threshold anywhere in `test/`
+  or `tool/`, and the screen captures use the seed script's own catalog exactly.
+  `test/dev/product_vocabulary_test.dart` keeps it that way for the waves that implement the screens
+  whose designs carry those facts.
 
 Implement Phases 01 and 02 structurally during this wave because every tenant workflow depends on
 their routing and permission contracts. Keep their documented visual debt explicit and bounded.

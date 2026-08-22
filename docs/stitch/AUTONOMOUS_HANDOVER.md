@@ -58,12 +58,25 @@ Verified at `71f26c2`:
 | Breakpoints settled 768/1024; till on `mediumFloor` | `AppLayout`, `checkout_cart_panel.dart:220` |
 | 48dp enforced by a source-scanning tripwire | `test/ui/tokens_test.dart` |
 | A viewport in all five width regions, plus its tripwire — **added by this run**, `7509dcc` | `tool/screenshots/harness.dart` |
+| Every `spiritTheme` text style reads a role — **fixed by this run**, `ab04fff` and `af81a2d` | `lib/theme.dart` |
+| Wave 0's components audited, read-only corrected, `ProvenanceLine` built — **this run** | `lib/ui/states.dart` |
+| RBAC guards asserted against the matrix; fixtures scanned — **this run** | `test/tenancy/`, `test/dev/` |
 | Typography — both families bundled, all 13 roles, full metric repoint | `pubspec.yaml`, `AppTypeRoles` |
 | All 22 `OPEN_QUESTIONS.md` items answered | that file |
 
-**The token layer is finished.** Six files in `lib/` have been touched by the whole reskin so far.
-**No screen has been recomposed yet** — what ships today is the app's existing layout wearing the
-new tokens. That is the work you are picking up.
+~~**The token layer is finished.**~~ **Corrected 2026-08-22 by this run.** It was finished in
+`lib/ui/tokens.dart` and not in `lib/theme.dart`: seven of the theme's text styles were built inline
+rather than from a role, four of them reaching the engine with **no family, no size and no weight**. A
+component theme's text style *replaces* the text theme's rather than merging onto it, which is §8's own
+trap — and it was live in three of the five components §8 names. `screenshots/` had been showing it
+for nine days. It is finished now, and `test/theme_test.dart` fails if any component this theme
+restyles renders in a family that is not one of the app's two, or if `lib/theme.dart` writes a type
+metric as a number.
+
+**No screen has been recomposed yet** — what ships today is the app's existing layout wearing the new
+tokens. That is the work you are picking up.
+
+**The testing figures in §4 below have moved twice.** They are current as of `246fdfd`.
 
 ---
 
@@ -79,10 +92,13 @@ files; never for editing.
    harness had three. `desktopNarrowViewport` (1024) and `compactWideViewport` (767) close both, and a
    tripwire in `test/ui/tokens_test.dart` keeps them closed. 34 new images, none of the existing 361
    moved. Later phases inherit the coverage.
-2. **Wave 0 remainder.** The six unaudited components — disabled, read-only, offline, busy,
-   confirmation, provenance. `EmptyState`, `LoadingState`, `ErrorState` already exist in
-   `lib/ui/states.dart`; follow their shape. Then RBAC guards against `RBAC_MATRIX.md`, then test
-   fixtures built from supported Chilltent facts rather than invented examples.
+2. ~~**Wave 0 remainder.**~~ **Done, `a77e95c` to `246fdfd`.** The six components were audited before
+   any was built and **four needed nothing** — see `audits/2026-08-22-wave-0-components.md`.
+   read-only needed one site corrected and two captures added; `ProvenanceLine` was the one component
+   genuinely absent. The RBAC guards agree with `RBAC_MATRIX.md` on all 31 role lists, now as a test.
+   The fixtures are clean, now as a scan. **And the token layer was not finished after all** — seven
+   of `spiritTheme`'s text styles were not reading `AppTokens`, four of them with no font family at
+   all, which is §8's own trap in three of the five components it names.
 3. **Phases 01 and 02**, structurally. Every tenant workflow depends on their routing and
    permission contracts.
 4. **Wave 1:** Phase 03 (sale/checkout), 04 (catalog/stock), 07 (staff/access), 09 (platform ops).
@@ -96,9 +112,9 @@ Take the phase brief under `phases/`, its audit under `audits/`, and its row in
 
 ## 4. Testing policy — this is the anti-overtesting contract
 
-The full Flutter suite is **2,250 tests and about 2m00s**. The screenshot harness is **325 tests,
-395 images, about 40s**. Running either per screen is the main way this run wastes time.
-(Was 2,249 / 296 / 361 when this file was written; `7509dcc` added one test and 34 images.)
+The full Flutter suite is **2,314 tests and about 2m10s**. The screenshot harness is **333 tests,
+405 images, about 40s**. Running either per screen is the main way this run wastes time.
+(Was 2,249 / 296 / 361 when this file was written. Wave 0's remainder added 65 tests and 44 images.)
 
 **Per screen or component slice:**
 
@@ -124,7 +140,12 @@ failure before retrying; do not re-run hoping.
 **Verifying pixels:** `screenshots/` is **gitignored**, so `git status` reports nothing whatever the
 files contain. Hash before and after — `find screenshots -name "*.png" -print0 | sort -z | xargs -0
 sha256sum` into a scratch file, regenerate, hash again, and `comm` the two. Report how many of the
-395 moved, and how many are new. A count is evidence; "screenshots regenerated" is not.
+405 moved, and how many are new. A count is evidence; "screenshots regenerated" is not.
+
+**And `dart format` the files you changed, not the tree they live in.** Most of `test/` has drifted
+from the current formatter — a whole-tree run rewrites about ninety files — so `dart format test/`
+buries a small change in unrelated reflow. This run made that mistake once and reverted it; where a
+touched file does need reflowing, that is its own commit.
 
 **Screenshots prove the raster and nothing else.** They do not prove the app runs and cannot show
 motion at all. Never call a change verified on screenshots alone.

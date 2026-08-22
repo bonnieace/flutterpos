@@ -210,3 +210,129 @@ both halves. That was true of `AppTokens` and false of `spiritTheme`: seven of t
 not reading it. Both are now, and two scans hold the line. The claim is worth re-reading rather than
 re-asserting — the trap section in the same file predicted this exact failure and named three of the
 four components it happened to.
+
+## `4b1b0da` — a formatter-only pass, separated on purpose
+
+- Decision: **`dart format` over exactly the fifteen files the next commit touches, as its own
+  commit.** Most of `test/` has drifted from the current `dart format` — a whole-tree run rewrites
+  about ninety files — so any commit that edits one either carries that file's reflow as noise or
+  leaves the file unformatted. The provenance commit is 28 assertions and one component; with the
+  reflow folded in it read as six hundred lines.
+- Deviation from the charter's letter, and the reason: §4 says format the changed files only, which I
+  first read as "run `dart format test/`". That produced 90 files of churn and was reverted. The
+  instruction means *do not leave your own new code unformatted*, not *reflow everything the formatter
+  now disagrees with*.
+- Decision: **the other seventy-five drifted files are left alone.** Reformatting them is a decision
+  about the repository rather than about this slice, and not this run's to take.
+
+## `9df70c5` — `ProvenanceLine`, the one component the audit said to build
+
+- Decision: **a widget rather than a scan**, which is the opposite of the read-only call two commits
+  earlier and for a stated reason: `caption` with `text.tertiary` appears **29 times** in `lib/` and
+  only seven are provenance. The style is not the identifying feature, so a scan over it would have
+  flagged 22 correct lines. The concept needed a name.
+- Decision: **`ProvenanceLine.styleOf` is public for one real caller and it is not a test.**
+  `RecordList`'s narrow-loss allocator *measures* provenance to size the identity column, so the
+  allocator and the renderer each named `typography.caption` independently and a repoint of one would
+  have allocated the table's columns against a style nothing paints.
+- Decision: **density does not move it.** §5.2 states `caption` flat and `AppDensity` swaps only the
+  body role, so `96-provenance-comfortable` and `-compact` are two pictures of the same line with its
+  neighbours at 16 and 14. A test asserts the invariance, so making provenance density-aware becomes a
+  decision rather than a drift.
+- Decision: **`stock_adjustment_panel.dart:737` is left as it is.** It folds provenance into a
+  `Callout.message` after a newline, two type roles from where §5.2 puts it. Correcting it would be
+  recomposing a `Callout` rather than naming a style, and that is a Phase 04 composition call.
+- Consequence paid rather than avoided: `RecordItem.provenanceKey` now names the component, so 28
+  assertions across eleven files stopped being `Text` casts. They ask `test/support/text.dart`'s
+  `textAt` instead; the eleven local `_text` helpers are untouched, because "the `Text` at this key" is
+  still what they want everywhere else.
+- **0 of 401 existing images moved**, which is the proof the migration is faithful rather than
+  approximately faithful.
+
+## `2bc89a6` — the RBAC matrix becomes a test
+
+- Result: **every row agreed.** All 31 named role lists in `lib/` hold exactly what `RBAC_MATRIX.md`
+  gives them. Nothing in `lib/` needed changing, which is the outcome the run wanted and not the one
+  it was prepared for.
+- Decision: **two maps, not one.** One reads the app's constants so a failure names the symbol; the
+  other is authored from the matrix so the comparison means something. A single map would assert that
+  a list equals itself.
+- Decision: **a completeness scan is the assertion worth having.** Everything else checks guards that
+  exist; a capability added next month with a list of its own would pass all of them by not appearing,
+  and appear in no row of the matrix either.
+- Decision: **route offering is deliberately not asserted.** `lib/main.dart` feeds each role-gated
+  navigation slot the repository's own constant, twelve of them, so the list the landing route hides
+  by and the list the repository refuses by are the **same object**. A test would pass for the wrong
+  reason: what makes it safe is that there is one list, not that two agree.
+- Two rows gate a **scope** rather than a route, and the matrix now says so: a cashier opens shift
+  history and sees their own shifts, with the scope control hidden behind the same predicate the
+  repository enforces; a manager reaches the staff directory with `_readOnly` true exactly when
+  neither write gateway is present.
+- The platform separation is structural: the `superAdmin` claim is read once, reaches the shell as one
+  callback, and is consumed only by a routing phase carrying a `PlatformReviewIdentity` rather than a
+  `TenantMembership`. No `TenantRole` can reach a platform surface.
+- **Not proven, and said so in the test's own header:** the server. `firestore.rules` and the
+  callables are the real boundary and `rules-tests/` is where that is shown.
+
+## `eeb7608` — eight dead locations hard rule 3 does not name
+
+- Finding: **`CLAUDE.md` hard rule 3 names two dead directories and there are ten.** `lib/pos/**` and
+  `lib/screens/**` are 52 unreachable files and are called out. **Twenty-seven more, 4,627 lines
+  across eight more locations, are equally unreachable from `lib/main.dart` and named by nothing.**
+- Why it matters to this work specifically, rather than being tidiness: `lib/widgets/` is a **pill**
+  component set and decision 19 is that the design has no pills, so a session grepping `pill` finds
+  three files that look like the thing it was told does not exist. `lib/constants/colors.dart` and
+  `lib/component/colors.dart` are two more colour systems and `constants/sizes.dart` a rival size
+  scale — the "competing local design system" the prompt forbids **creating** is already there three
+  times over. `lib/model/` holds supplier, customer and invoice models for capabilities the product
+  does not have. `lib/config.dart` is 1,178 lines of which **zero** are live code.
+- Decision: **record and pin, do not delete.** Deleting 27 files is a substantial unrequested change
+  and `lib/pos/**` is explicitly kept for its flow. The test makes the set *stable* instead, so a file
+  joining or leaving it is a decision somebody took.
+- Decision: **`CLAUDE.md` gains three lines rather than a list**, because that file loads on every turn
+  and its own first instruction is to stay short. Editing it at all was a judgement: rule 3 is
+  incomplete in a way that costs this exact work, and the tie-breaker prefers the change that leaves
+  behaviour untouched.
+- Cost paid once: the first version of the closure read only the first URI of each directive and called
+  `checkout_print_transport_io.dart` dead. It is reached through `if (dart.library.io)` on a
+  continuation line. There is now a test for that specific mistake.
+
+## `246fdfd` — the fixtures, and the words the app must not say
+
+- Result: **the fixtures are clean.** A sweep of `test/` and `tool/` for forbidden branding, invented
+  roles, tax, refunds and reorder thresholds found nothing. Screen captures use the seed script's own
+  catalog and categories exactly. The component matrices use a second plausible vocabulary of their
+  own — *Fresh whole milk 500ml*, *Dairy and chilled* — which is an established convention across
+  three files and implies no capability the app lacks.
+- Decision: **so the deliverable is keeping them correct, not correcting them.** Wave 1 and Wave 2
+  compose the exact screens whose designs carry the invented facts, and a fixture copied out of a
+  mockup is the ordinary way one enters an app.
+- Decision: **eight tokens, and the list stays short because half the candidates are unscannable.**
+  The app already says *"the payment itself is not verified"* and *"the payment is unverified"*, and
+  calls *Cancel cash count* a reversal. A scan for `verified payment` or `reversal` would flag four
+  sentences that are right, and a tripwire that cries wolf teaches the next person to route around it.
+  Those rules stay prose in `DESIGN_RULES.md`.
+- Decision: **the ten unreachable locations are out of scope for the scan**, which is the point rather
+  than a loophole: `fraud_detection_service.dart` genuinely says `refund` and `Ksh` and none of it
+  runs. `eeb7608`'s test is what stops that set growing; this one asks only that nothing live joins it.
+- The file excludes itself, which the first run made unmissable: it holds the words as string literals
+  rather than comments, so the scan reported eight offences and every one was its own.
+
+---
+
+## Wave 0 is complete, and two of its findings were not on the list
+
+Order-of-work items 1 and 2 are done. The six unaudited components are audited and the two that needed
+work have it; the RBAC guards are checked against the matrix and every row agreed; the fixtures are
+checked and clean. **2,314 tests pass, up from 2,249.** 405 screenshots, up from 361.
+
+**What was not on the list, and is the part worth the owner's attention:** the handover's §2 says *"The
+token layer is finished"* and it was not. Seven of `spiritTheme`'s text styles were not reading
+`AppTokens` — four with no font family at all, three with type sizes §2.2 does not have — and the
+consequence was visible in `screenshots/` for nine days, most legibly on `02-choose-business`, where
+every membership's role line was an unreadable bar. The trap section of the same handover predicted
+that exact failure and named three of the four components it happened to. Both halves are fixed and
+two scans hold the line.
+
+The second was found while checking fixtures: **27 files in `lib/` that nothing runs and nothing
+names**, including a pill component set and two rival colour systems. Recorded, pinned, not deleted.
