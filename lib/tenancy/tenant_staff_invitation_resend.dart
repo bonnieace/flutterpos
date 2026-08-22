@@ -358,10 +358,10 @@ final class _TenantStaffInvitationResendFormState
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         Text('A new invitation will be queued for ${widget.target.email}.'),
         if (_safeError != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('resend-staff-invitation-error'),
             // A refusal, named as one rather than painted red: the write
@@ -371,7 +371,7 @@ final class _TenantStaffInvitationResendFormState
             message: _safeError!,
           ),
         ],
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
         // form is laid out inside a record now, and a record at §4.1's `medium`
         // band is half a page wide.

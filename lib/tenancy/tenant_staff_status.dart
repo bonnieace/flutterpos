@@ -306,14 +306,14 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         Text(
           _targetStatus == MembershipStatus.active
               ? 'This restores the staff member\'s access to this business.'
               : 'This removes the staff member\'s access to this business.',
         ),
         if (_safeError != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('set-staff-status-error'),
             // A refusal, named as one rather than painted red: the write
@@ -323,7 +323,7 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
             message: _safeError!,
           ),
         ],
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         // A `Wrap` rather than a `Row`, because this form is now laid out
         // inside a record - and a record at §4.1's `medium` band is half a
         // page wide. Two 48-high pills with verb phrases on them do not fit

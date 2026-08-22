@@ -404,10 +404,10 @@ final class _TenantVisibleInvitationAcceptanceFormState
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         Text('Invited role: ${tenantRoleLabel(widget.membership.role)}'),
         if (_safeError != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('accept-visible-invitation-error'),
             // A refusal, named as one rather than painted red: the write
@@ -417,7 +417,7 @@ final class _TenantVisibleInvitationAcceptanceFormState
             message: _safeError!,
           ),
         ],
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -427,7 +427,7 @@ final class _TenantVisibleInvitationAcceptanceFormState
               tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: tokens.spacing.s8),
             AppButton(
               key: const ValueKey('accept-visible-invitation-confirm'),
               label: 'Accept invitation',

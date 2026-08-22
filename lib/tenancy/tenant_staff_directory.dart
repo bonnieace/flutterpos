@@ -357,95 +357,98 @@ final class _StaffContentsState extends State<_StaffContents> {
       );
 
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(20),
-    children: [
-      // **§7's "Title appears once", and the survey found this one was also
-      // saying something false.** The heading read `Read-only staff directory`
-      // *unconditionally*, under an `AppScaffold` titled `Staff directory` — so
-      // an owner was told the page was read-only and then offered `Invite
-      // staff` two lines below it. A page's standing is §2.1's, not a heading's,
-      // and `info` is "offline, read-only, informational" in the document's own
-      // words. This is the same repair the read-only catalog already carries,
-      // reached from the other direction: there the fact was true and stated
-      // twice; here it was stated once and true only sometimes.
-      if (_readOnly) ...[
-        const Callout(
-          key: ValueKey('staff-directory-read-only'),
-          status: AppStatus.info,
-          title: 'Read-only staff directory',
-          message:
-              'Inviting somebody, correcting a member, and deactivating one '
-              'are available to owners and administrators. Nothing here is '
-              'hidden from you except those.',
-        ),
-        const SizedBox(height: 12),
-      ],
-      Text('Business: ${widget.session.tenantId}'),
-      const SizedBox(height: 20),
-      _staffStrip(context),
-      const SizedBox(height: 20),
-      if (widget.session.canAccess(
-        allowedRoles: TenantStaffInvitationGateway.allowedRoles,
-      )) ...[
-        Align(
-          alignment: Alignment.centerLeft,
-          child: AppButton(
-            key: const ValueKey('invite-staff-open'),
-            label: _showInvitationForm ? 'Close invitation' : 'Invite staff',
-            icon: Icons.person_add_alt_1_outlined,
-            tier: AppButtonTier.primary,
-            onPressed: () =>
-                setState(() => _showInvitationForm = !_showInvitationForm),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // **§7's "Title appears once", and the survey found this one was also
+        // saying something false.** The heading read `Read-only staff directory`
+        // *unconditionally*, under an `AppScaffold` titled `Staff directory` — so
+        // an owner was told the page was read-only and then offered `Invite
+        // staff` two lines below it. A page's standing is §2.1's, not a heading's,
+        // and `info` is "offline, read-only, informational" in the document's own
+        // words. This is the same repair the read-only catalog already carries,
+        // reached from the other direction: there the fact was true and stated
+        // twice; here it was stated once and true only sometimes.
+        if (_readOnly) ...[
+          const Callout(
+            key: ValueKey('staff-directory-read-only'),
+            status: AppStatus.info,
+            title: 'Read-only staff directory',
+            message:
+                'Inviting somebody, correcting a member, and deactivating one '
+                'are available to owners and administrators. Nothing here is '
+                'hidden from you except those.',
           ),
-        ),
-        if (_showInvitationForm) ...[
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: TenantStaffInvitationForm(
-                session: widget.session,
-                callable:
-                    widget.inviteCallable ?? FirebaseInviteStaffCallable(),
-                requestIdFactory: widget.requestIdFactory,
-                onSuccess: widget.onMutationSuccess,
-              ),
+          SizedBox(height: tokens.spacing.s12),
+        ],
+        Text('Business: ${widget.session.tenantId}'),
+        SizedBox(height: tokens.spacing.s20),
+        _staffStrip(context),
+        SizedBox(height: tokens.spacing.s20),
+        if (widget.session.canAccess(
+          allowedRoles: TenantStaffInvitationGateway.allowedRoles,
+        )) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: AppButton(
+              key: const ValueKey('invite-staff-open'),
+              label: _showInvitationForm ? 'Close invitation' : 'Invite staff',
+              icon: Icons.person_add_alt_1_outlined,
+              tier: AppButtonTier.primary,
+              onPressed: () =>
+                  setState(() => _showInvitationForm = !_showInvitationForm),
             ),
           ),
-          const SizedBox(height: 16),
+          if (_showInvitationForm) ...[
+            SizedBox(height: tokens.spacing.s16),
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(tokens.spacing.s16),
+                child: TenantStaffInvitationForm(
+                  session: widget.session,
+                  callable:
+                      widget.inviteCallable ?? FirebaseInviteStaffCallable(),
+                  requestIdFactory: widget.requestIdFactory,
+                  onSuccess: widget.onMutationSuccess,
+                ),
+              ),
+            ),
+            SizedBox(height: tokens.spacing.s16),
+          ],
         ],
+        // §4.3's responsive contract. This screen used to *make* that choice
+        // itself - a `Builder` reading `AppLayout.contract` and two entirely
+        // separate builders under it, which presented different information to
+        // the two bands - and §4.3 says in as many words that a screen cannot opt
+        // out of the form. So the choice moves into `RecordList`, which knows
+        // three renderings rather than two, and this screen states its records
+        // once.
+        RecordList(
+          identityLabel: 'Member',
+          items: <RecordItem>[
+            for (final staff in widget.page.items) _record(staff),
+          ],
+          // §7's Empty pattern. Inviting somebody is the action that would end
+          // this, and it already sits above the list on this screen - offering it
+          // twice would make the emptier page the one with more controls on it.
+          empty: const EmptyState(
+            key: ValueKey('staff-directory-empty'),
+            title: 'No staff yet',
+            hint: 'Invite somebody to give them access to this business.',
+          ),
+        ),
+        if (widget.page.hasMore)
+          Padding(
+            padding: EdgeInsets.only(top: tokens.spacing.s8),
+            child: const Text('More staff memberships are available.'),
+          ),
+        SizedBox(height: tokens.spacing.s12),
+        const Text('Invitation acceptance routes remain unavailable.'),
       ],
-      // §4.3's responsive contract. This screen used to *make* that choice
-      // itself - a `Builder` reading `AppLayout.contract` and two entirely
-      // separate builders under it, which presented different information to
-      // the two bands - and §4.3 says in as many words that a screen cannot opt
-      // out of the form. So the choice moves into `RecordList`, which knows
-      // three renderings rather than two, and this screen states its records
-      // once.
-      RecordList(
-        identityLabel: 'Member',
-        items: <RecordItem>[
-          for (final staff in widget.page.items) _record(staff),
-        ],
-        // §7's Empty pattern. Inviting somebody is the action that would end
-        // this, and it already sits above the list on this screen - offering it
-        // twice would make the emptier page the one with more controls on it.
-        empty: const EmptyState(
-          key: ValueKey('staff-directory-empty'),
-          title: 'No staff yet',
-          hint: 'Invite somebody to give them access to this business.',
-        ),
-      ),
-      if (widget.page.hasMore)
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('More staff memberships are available.'),
-        ),
-      const SizedBox(height: 12),
-      const Text('Invitation acceptance routes remain unavailable.'),
-    ],
-  );
+    );
+  }
 
   /// The headline figures for this page of the directory.
   ///

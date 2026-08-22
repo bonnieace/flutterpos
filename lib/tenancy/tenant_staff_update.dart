@@ -345,7 +345,7 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
               color: tokens.colors.text.primary,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           AppTextField(
             key: const ValueKey('update-staff-name'),
             controller: _nameController,
@@ -377,7 +377,7 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
               }
             },
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           AppSelect<TenantRole>(
             key: const ValueKey('update-staff-role'),
             value: _role,
@@ -409,7 +409,7 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
                   },
           ),
           if (_safeError != null) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: tokens.spacing.s12),
             Callout(
               key: const ValueKey('update-staff-error'),
               // A refusal, named as one rather than painted red: the write
@@ -419,7 +419,7 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
               message: _safeError!,
             ),
           ],
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
           // form is laid out inside a record now, and a record at §4.1's `medium`
           // band is half a page wide.

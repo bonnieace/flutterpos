@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'tenant_id.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_session.dart';
@@ -311,108 +312,111 @@ final class _TenantStaffInvitationFormState
   }
 
   @override
-  Widget build(BuildContext context) => Form(
-    key: _formKey,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AppTextField(
-          key: const ValueKey('invite-staff-email'),
-          controller: _emailController,
-          enabled: !_submitting,
-          keyboardType: TextInputType.emailAddress,
-          label: 'Email',
-          leading: Icons.email_outlined,
-          onChanged: (_) => _markIntentChanged(),
-          validator: (value) {
-            try {
-              normalizeTenantStaffInviteEmail(value ?? '');
-              return null;
-            } on FormatException {
-              return 'Enter a valid email address.';
-            }
-          },
-        ),
-        AppTextField(
-          key: const ValueKey('invite-staff-name'),
-          controller: _nameController,
-          enabled: !_submitting,
-          label: 'Name',
-          onChanged: (_) => _markIntentChanged(),
-          validator: (value) {
-            try {
-              normalizeTenantStaffInviteName(value ?? '');
-              return null;
-            } on FormatException {
-              return 'Enter a name of 100 characters or fewer.';
-            }
-          },
-        ),
-        AppTextField(
-          key: const ValueKey('invite-staff-phone'),
-          controller: _phoneController,
-          enabled: !_submitting,
-          keyboardType: TextInputType.phone,
-          label: 'Phone (optional)',
-          leading: Icons.phone_outlined,
-          onChanged: (_) => _markIntentChanged(),
-          validator: (value) {
-            try {
-              normalizeTenantStaffInvitePhone(value ?? '');
-              return null;
-            } on FormatException {
-              return 'Enter a phone number of 32 characters or fewer.';
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        AppSelect<TenantRole>(
-          key: const ValueKey('invite-staff-role'),
-          value: _role,
-          label: 'Role',
-          items:
-              const [TenantRole.admin, TenantRole.manager, TenantRole.cashier]
-                  .map(
-                    (role) => AppSelectItem<TenantRole>(
-                      value: role,
-                      label: tenantRoleLabel(role),
-                    ),
-                  )
-                  .toList(),
-          onChanged: _submitting
-              ? null
-              : (role) {
-                  if (role == null || role == _role) return;
-                  setState(() {
-                    _role = role;
-                    _intent = null;
-                    _safeError = null;
-                  });
-                },
-        ),
-        if (_safeError != null) ...[
-          const SizedBox(height: 12),
-          Callout(
-            key: const ValueKey('invite-staff-error'),
-            // A refusal, named as one rather than painted red: the write
-            // was attempted and nothing changed. Before this the whole of
-            // the status was the colour, which is the case §9 rules out.
-            status: AppNotice.refused(_safeError!).status,
-            message: _safeError!,
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppTextField(
+            key: const ValueKey('invite-staff-email'),
+            controller: _emailController,
+            enabled: !_submitting,
+            keyboardType: TextInputType.emailAddress,
+            label: 'Email',
+            leading: Icons.email_outlined,
+            onChanged: (_) => _markIntentChanged(),
+            validator: (value) {
+              try {
+                normalizeTenantStaffInviteEmail(value ?? '');
+                return null;
+              } on FormatException {
+                return 'Enter a valid email address.';
+              }
+            },
+          ),
+          AppTextField(
+            key: const ValueKey('invite-staff-name'),
+            controller: _nameController,
+            enabled: !_submitting,
+            label: 'Name',
+            onChanged: (_) => _markIntentChanged(),
+            validator: (value) {
+              try {
+                normalizeTenantStaffInviteName(value ?? '');
+                return null;
+              } on FormatException {
+                return 'Enter a name of 100 characters or fewer.';
+              }
+            },
+          ),
+          AppTextField(
+            key: const ValueKey('invite-staff-phone'),
+            controller: _phoneController,
+            enabled: !_submitting,
+            keyboardType: TextInputType.phone,
+            label: 'Phone (optional)',
+            leading: Icons.phone_outlined,
+            onChanged: (_) => _markIntentChanged(),
+            validator: (value) {
+              try {
+                normalizeTenantStaffInvitePhone(value ?? '');
+                return null;
+              } on FormatException {
+                return 'Enter a phone number of 32 characters or fewer.';
+              }
+            },
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          AppSelect<TenantRole>(
+            key: const ValueKey('invite-staff-role'),
+            value: _role,
+            label: 'Role',
+            items:
+                const [TenantRole.admin, TenantRole.manager, TenantRole.cashier]
+                    .map(
+                      (role) => AppSelectItem<TenantRole>(
+                        value: role,
+                        label: tenantRoleLabel(role),
+                      ),
+                    )
+                    .toList(),
+            onChanged: _submitting
+                ? null
+                : (role) {
+                    if (role == null || role == _role) return;
+                    setState(() {
+                      _role = role;
+                      _intent = null;
+                      _safeError = null;
+                    });
+                  },
+          ),
+          if (_safeError != null) ...[
+            SizedBox(height: tokens.spacing.s12),
+            Callout(
+              key: const ValueKey('invite-staff-error'),
+              // A refusal, named as one rather than painted red: the write
+              // was attempted and nothing changed. Before this the whole of
+              // the status was the colour, which is the case §9 rules out.
+              status: AppNotice.refused(_safeError!).status,
+              message: _safeError!,
+            ),
+          ],
+          SizedBox(height: tokens.spacing.s16),
+          AppButton(
+            key: const ValueKey('invite-staff-submit'),
+            label: 'Send invitation',
+            icon: Icons.person_add_alt_1_outlined,
+            tier: AppButtonTier.primary,
+            loading: _submitting,
+            onPressed: _submit,
           ),
         ],
-        const SizedBox(height: 16),
-        AppButton(
-          key: const ValueKey('invite-staff-submit'),
-          label: 'Send invitation',
-          icon: Icons.person_add_alt_1_outlined,
-          tier: AppButtonTier.primary,
-          loading: _submitting,
-          onPressed: _submit,
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 String normalizeTenantStaffInviteEmail(String value) {
