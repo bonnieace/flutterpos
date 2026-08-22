@@ -37,3 +37,10 @@ Executed as `CREATE` in project `7478406619239162026` with Profound Verdant asse
 `assets/4c1cc58b4aed4b1693e6f8113ba1009a` retained unchanged. The working set is ST-027 through ST-029 and
 ST-031. ST-030 is a superseded intermediate variant. See `../audits/phase-01.md` for exact mutation,
 verification, stale-retrieval, and canvas-link findings. Phase 02 was not started.
+
+## Live follow-up — 2026-08-21
+
+Read-only retrieval found persisted/stale-content discrepancies, and a bounded mobile correction
+produced successor `f852fbf76f1d403295e87c500f0ba12b`. Phase 01 is frozen at `PARTIAL / HOLD FOR
+REVIEW`; do not broadly regenerate it. See `../audits/2026-08-21-phase-01-live-handoff.md` for the
+exact lineage, remaining bounded copy/layout issues, and no-go instructions for the next agent.

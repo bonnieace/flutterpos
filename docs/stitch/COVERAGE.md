@@ -16,12 +16,12 @@ Status meanings:
 |---|---|---|---|---|
 | Sign-in and entry failures | Yes | Desktop/mobile state suites created | NORMALIZED / REVIEW | Default, refused, unreachable, caps-lock, and busy states are covered; desktop correction artifact remains stale. |
 | Tenant selection and entry | Yes | Desktop/mobile state suites created | NORMALIZED / REVIEW | Choose/default, verify, request, no-business, invite, account failure, and routing split are covered; mobile correction artifact and canvas linkage need review. |
-| Platform operations | Yes | No verified screen | MISSING | Create only in dedicated platform phase. |
+| Platform operations | Yes | Desktop ST-073 and mobile ST-070 | CANONICAL CANDIDATE / VISUAL REVIEWED | Fresh exact-ID HTML/screenshots verify the distinct shell, admission, lifecycle, archive, exact-UID global status, consequence/state evidence, responsive composition, and 48px controls. ST-071/ST-072 remain superseded/rejected history. |
 | Owner/admin/manager/cashier home | Yes | Desktop/mobile role-aware suites corrected | NORMALIZED / REVIEW | ST-032/ST-033 encode exact route differences, shift-first mobile flow, device-local evidence, and switch states; final corrected renders remain to review. |
-| Staff directory | Yes | Desktop corrected; mobile reference | NORMALIZED / REVIEW | Exact roles/write split applied; desktop active-route render needs review. |
+| Staff directory | Yes | Desktop/tablet and mobile lifecycle suites | CANONICAL CANDIDATE / VISUAL REVIEWED | ST-055/ST-056 verify exact roles, Owner/Administrator write, Manager zero-write composition, invite/edit/status/email/resend/cancel actions, confirmations, validation/failure states, and responsive behavior. |
 | New sale | Yes | Desktop/tablet/mobile corrected | NORMALIZED / REVIEW | ST-035 is visually reviewed; mobile browse/cart successors need fresh canvas review and mobile-browse ID recovery. No tax, draft, verified-payment, stock-blocking, or print-rollback behavior remains in the working direction. |
-| Currency setting | Yes | Focused owner/admin desktop | NORMALIZED / REVIEW | ST-024 retains currency and printer linkage only; input behavior still needs product review. |
-| Business settings | Minimal branding/currency evidence | Focused desktop plus untouched broad original | PARTIAL | ST-024 corrected; ST-003 remains a non-canonical conflicting reference. |
+| Currency setting | Yes | Desktop/mobile Phase 08 suites | NORMALIZED / RENDER REVIEW | ST-061/ST-062 mutation logs cover the one persisted ISO 4217 code and its read/write lifecycle; served artifacts predate the final operations. |
+| Business settings | Currency only in active UI | Phase 08 desktop/mobile suites plus conflicting originals | NORMALIZED / RENDER REVIEW | ST-061/ST-062 retain only supported currency/printer configuration. ST-003/ST-024 remain historical; branding/profile/tax/location/contact/language/sync settings are not canonical. |
 | Catalog | Yes | Desktop/mobile/tablet route suites corrected | NORMALIZED / REVIEW | ST-039/ST-040 separate Cashier read-only, Manager operational, and Owner/Administrator money/retire capability; bulk delimited-text preview/commit and failure states are covered. Final renders need review. |
 | Stock corrections/movements/ledger | Yes | Desktop/mobile/tablet route suites corrected | NORMALIZED / REVIEW | Recorded stock, permanent reasoned adjustments, manual-only adjustment feed, all-source movement feed, product ledger, provenance, negative-stock truth, and responsive records are covered; final renders need review. |
 | Daily metrics and totals | Yes | Desktop/mobile suites corrected | NORMALIZED / REVIEW | ST-041/ST-043 retain exact supported totals and a direct-label two-day comparison without derived change. Final filter/scope copy mutation completed; fresh artifacts require review. Export remains unsupported. |
@@ -31,8 +31,8 @@ Status meanings:
 | Shift history and sale detail | Yes | ST-048 mobile / ST-050 desktop | NORMALIZED / REVIEW | Core routes and sale evidence are present. The final ST-050 DOM correction adds `Cash over` and desktop `No closing summary` and raises all Section 03-05 controls to at least 48px; current render still needs canvas review. |
 | Returns | Yes | ST-048 mobile / ST-050 desktop | NORMALIZED / REVIEW | Request/verification separation, failure matrix, confirmations, and tablet transformation are covered. Mobile forbidden-content removal needs fresh canvas review. |
 | Activity log | Yes | No | MISSING | Create owner/admin view. |
-| Printer configuration | Yes | Three desktop drafts; ST-010 corrected | NORMALIZED / REVIEW | ST-010 is canonical candidate; ST-004 and ST-017 remain untouched references. |
-| Print queue/retry | Yes | Not verified | MISSING | Create waiting/unreadable/retry states. |
+| Printer configuration | Yes | Desktop/mobile Phase 08 suites | NORMALIZED / RENDER REVIEW | ST-061/ST-062 correction logs use only direct-TCP host, port, 32/48 columns, cutter, save, and endpoint-probe concepts and cover read/write/test outcomes. Fresh final renders remain pending. |
+| Print queue/retry | Yes | Desktop/mobile Phase 08 suites | NORMALIZED / RENDER REVIEW | ST-061/ST-062 logs cover device-local empty/populated/unreadable/sending/success/setup/browser/read-only/retry-failure states and preserve sale durability. Fresh final renders remain pending. |
 | Responsive component states | Yes, groups 90-99 | No inventory | MISSING | Establish after workflow compositions stabilize. |
 
 ## Confirmed product capabilities
@@ -227,6 +227,90 @@ The following product-specific states are mandatory:
 - Phase 06 remains `COMPLETED / RENDER REVIEW`: required scope execution is closed, while fresh
   canvas-code inspection is required before canonical promotion or any additional edit.
 - No Flutter, Firebase, schema, rule, deployment, or design-system change was made.
+
+## Phase 07 coverage result — completed and visually reviewed
+
+- The authorized `REPLACE` operation created desktop ST-051 and mobile ST-052. Artifact inspection
+  rejected them because the desktop stopped after its directory and invented access-management
+  routes, while mobile rendered two records, used `Admin`, and added unsupported navigation.
+- The first approved correction produced ST-053/ST-054. ST-053 rendered the principal directory,
+  Manager read-only composition, forms, five confirmations, failure states, and tablet frame, but
+  retained bounded copy/tablet gaps. ST-054 ended after Manager read-only and kept icon-only actions.
+- The final approved correction produced ST-055/ST-056. Fresh retrieval reports desktop
+  2560x10764 and mobile 780x12822; both downloadable HTML files and full-height screenshots were
+  inspected.
+- ST-055/ST-056 use only Owner, Administrator, Manager, and Cashier. Owner/Administrator receive
+  code-backed invitation, correction, activation/deactivation, resend, cancellation, and email-
+  replacement actions; Manager sections contain zero buttons or inputs; Cashier has no directory
+  route.
+- Canonical rows keep membership and invitation progress distinct. Invalid/expired link recovery is
+  outside the directory, has no Accept/Retry action, and directs the invitee to continue without the
+  link or ask the inviter for a new invitation.
+- Both suites include labeled forms, validation, busy, safe remote failure, success evidence, and all
+  five person-specific consequence confirmations. Mobile actions are text-labeled; desktop and
+  mobile controls resolve to at least 48px.
+- The 834px tablet frame contains both Owner/Administrator write and Manager zero-write specimens
+  without horizontal overflow. Unsupported permission models, roles, scheduling, last-shift/PIN,
+  owner transfer, staff deletion, and unrelated navigation are absent.
+- Phase 07 is `COMPLETED / VISUAL REVIEWED`. No Flutter, Firebase, schema, rule, deployment, or
+  design-system change was made.
+
+## Phase 08 coverage result — completed, render review
+
+- The authorized `REPLACE` operation created desktop ST-057 and mobile ST-058. Artifact inspection
+  rejected them because the desktop stopped after currency and mobile stopped after a minimal queue.
+- Device-specific bounded corrections produced ST-059 and ST-060. Their downloadable HTML and
+  full-height screenshots were inspected rather than accepting the generation summaries.
+- Both successors limit checkout settings to the ISO 4217 currency code and printer settings to
+  direct-TCP address, port, 32/48-column paper, and cutter behavior. Unsupported business, tax,
+  branding, locale, synchronization, transport-selection, bridge-token, and receipt-preview controls
+  are absent from the visible artifacts.
+- Both state that the queue is device-local, preserve sale success independently of print outcome,
+  use `sent` rather than claiming paper printed, and disclose unreadable durable records.
+- Later bounded corrections produced ST-061/ST-062. Their successful DOM-operation logs add the
+  printer read/write/test matrix, queue empty/read-only/busy/success/failure recovery, desktop 834px
+  tablet specimen, and explicit interaction ledgers. The final mobile micro-correction records the
+  missing failure endpoint and disabled loading semantics.
+- Individual retrieval still serves the pre-operation ST-061/ST-062 HTML/screenshot files. The
+  corrected pair is therefore mutation-reviewed and requires fresh canvas-code/render inspection.
+- Fresh fallback generations ST-063/ST-064 were downloaded and rejected: mobile ends during Printer
+  configuration, while desktop contains only one currency form, one printer form, and one queue row.
+- Phase 08 is `COMPLETED / RENDER REVIEW`, not canonical approval. No Flutter, Firebase, schema,
+  rule, deployment, or design-system change was made.
+
+## Phase 09 coverage result — completed, mixed visual and mutation review
+
+- The authorized `CREATE` operation returned incomplete desktop ST-065 and mobile ST-066; both were
+  rejected after direct artifact inspection.
+- Approved bounded corrections produced desktop ST-067 and mobile successor chain ST-068, ST-069,
+  and final ST-070.
+- ST-070 was freshly downloaded and inspected as HTML and a full-height screenshot. It contains all
+  seven sections: distinct platform authority, pending admission, active/suspended lifecycle,
+  rejected archive, exact-UID global user status, consequence matrix, and mobile interaction ledger.
+- The mobile route specimens cover loading, empty, validation, busy, success evidence, conflict,
+  permission loss, missing records, and remote failure. All interactive controls resolve to at least
+  48px, including the partial-operation retry.
+- Admission and tenant lifecycle use `setTenantLifecycle` with only pending→active/rejected,
+  active↔suspended, and rejected→archived. Global disable/reactivation uses
+  `setGlobalUserStatus`, one exact Firebase Auth UID, reason/confirmation guards, operation evidence,
+  tenant impact warnings, and safe same-operation retry.
+- User-copied current ST-067 canvas code confirmed that its reported corrections did not persist.
+  A fresh correction produced ST-071, whose directly inspected HTML/screenshot verify the complete
+  shell and primary product truth but retain bounded consequence, archived-warning, retry-help, and
+  global busy/success defects. Its exact micro-correction event `356c191b` also did not persist.
+- The explicitly authorized last fresh variant ST-072 fixes every bounded ST-071 defect and retains
+  the correct callables and 48px controls, but incorrectly repeats the retry-operation help beneath
+  unrelated invalid, permission, failure, self-disable, and archived-status chips. Direct exact-ID
+  retrieval is invalid; the returned HTML and screenshot were inspected and rejected.
+- A subsequent explicitly authorized cleanup produced desktop ST-073. Direct exact-ID retrieval
+  succeeds and serves fresh HTML/screenshot files. Inspection verifies that retry help appears once
+  visibly beneath its correct button, no paragraph is nested inside a span, all lifecycle/state
+  corrections remain present, both real callables have the exact 5/2 row split, and all 48
+  interactive elements meet the 48px minimum.
+- No tenant-role authority, billing, portfolio management, owner transfer, bulk user action, role
+  grant/revoke control, or invented callable is present in the final direction.
+- Phase 09 is `COMPLETED / VISUAL REVIEWED`: desktop ST-073 and mobile ST-070 are canonical
+  candidates. No Flutter, Firebase, schema, rule, deployment, or design-system change was made.
 
 ## Scope exclusions for the design audit
 
