@@ -199,39 +199,37 @@ final class SpiritScrollBehavior extends MaterialScrollBehavior {
 /// arrives at a call site when that call site is migrated, not before, and
 /// until then the theme is holding the line rather than delivering the design.
 ///
-/// ~~**No `fontFamily` is named here, deliberately.**~~ **Named as of 2026-08-16,
-/// and the fonts are bundled**, which is `design.md` **v0.7** and the close of the
-/// oldest untrue sentence in this file.
+/// **The families are Profound Verdant's as of 2026-08-22**: Hanken Grotesk for
+/// interface text, JetBrains Mono for figures and identifiers, repointed from
+/// Roboto and Roboto Mono under `docs/stitch/OPEN_QUESTIONS.md` decision 20.
+/// Both are bundled at the weights the roles read, because the exported design
+/// links them from `fonts.googleapis.com` and a till cannot depend on that.
 ///
-/// The note this replaces was honest about the symptom and wrong about the
-/// remedy: it said naming nothing was "the honest version of what already
-/// happens", and left an app whose §2.2 claims - one family, and monospace for
-/// record IDs - were true of no rendering anywhere. `fonts/` now holds Roboto at
-/// four faces under its Apache 2.0 licence, `pubspec.yaml` declares them, and
-/// this names the family.
+/// **This line is the fallback, not the mechanism.** Every role in
+/// [AppTypeRoles.standard] names its own family, which is what reaches the
+/// component themes below - a component theme's text style *replaces* the text
+/// theme's rather than merging onto it, so naming a family only here would
+/// leave `ListTile`, `Chip`, `InputDecoration` and the rest with none. This
+/// catches whatever is built from neither: a bare `Text` under
+/// `DefaultTextStyle`, or a Material default this file does not restyle.
 ///
-/// **Every screenshot in `screenshots/` was already showing this.**
-/// `tool/screenshots/harness.dart` injects Roboto itself, precisely because a
-/// test face renders every glyph as a filled box - so the captures have always
-/// been of a more branded app than the one that shipped. Naming the family here
-/// makes the app match its own pictures rather than the other way round, and is
-/// why this change moves almost no image.
+/// **Unlike the 2026-08-16 change, this one moves images.** That one named the
+/// face the screenshot harness was already injecting, so almost nothing
+/// shifted. This one changes the face itself, in the app *and* in the harness,
+/// which no longer injects anything - so every string in `screenshots/` is
+/// redrawn in a face the captures have never shown.
 ///
-/// **`mono` names Roboto Mono as of the same day**, and the file is bundled -
-/// so `AppTypeRoles.mono` is the one role in the twelve that names a family,
-/// and it is the only one whose family is load-bearing rather than inherited.
-///
-/// **What is still not delivered is a *reader*.** `AppTypeRoles.mono` has zero
-/// call sites: the role is defined, has metrics, now has a face, and no screen
-/// applies it - so §2.2's "record identifiers are monospace" is still true of
-/// nothing. Bundling the font made the role possible rather than applied.
-/// Recorded in `PLAN.md`; the sweep is a chunk of its own, because which
-/// strings are identifiers is a judgement per screen rather than a grep.
+/// **What is still not delivered is a *reader* for `mono`.**
+/// `AppTypeRoles.mono` has zero call sites: the role is defined, has metrics,
+/// has a face, and no screen applies it - so §2.2's "record identifiers are
+/// monospace" is still true of nothing. Recorded in `PLAN.md`; the sweep is a
+/// chunk of its own, because which strings are identifiers is a judgement per
+/// screen rather than a grep.
 final ThemeData spiritTheme = ThemeData(
   brightness: Brightness.dark,
-  // §2.2's "one family". See the note above for why this was absent for so long
-  // and what is still missing.
-  fontFamily: 'Roboto',
+  // The fallback face. Every type role names this family itself; see the note
+  // above for why naming it in both places is not redundant.
+  fontFamily: AppTypeRoles.interfaceFamily,
   scaffoldBackgroundColor: _surface.base,
   extensions: const <ThemeExtension<dynamic>>[_palette],
   // `design.md` §2.4: no ink ripples. One line reaches every button,

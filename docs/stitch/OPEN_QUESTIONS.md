@@ -188,7 +188,7 @@ descriptions are kept below as the rationale for each decision. The theme repoin
 | 17 | No scrim | Scrim stays `rgba(0,0,0,0.6)`. The `0.5` in the prose describes a drop shadow, not a scrim |
 | 18 | Focus ring width | Stays **2px** wide at 2px offset; colour repoints to `primary` `#4BE277` |
 | 19 | Radius scales collide | **Superseded 2026-08-22 — see the correction below.** `AppRadii` keeps its four names, but the values are `sm` 8→**2**, `md` 12→**8**, `lg` 20→**12**, and `pill` stays 999 while buttons, wells and chips move off it |
-| 20 | Families not bundled | **Bundle Hanken Grotesk and JetBrains Mono**, declaring only the weights the seven type roles use (400/500/600/700, mono 500). Offline-first, so bundled assets rather than a runtime fetch |
+| 20 | Families not bundled | **Bundle Hanken Grotesk and JetBrains Mono**, declaring only the weights the seven type roles use (400/500/600/700, mono 500). Offline-first, so bundled assets rather than a runtime fetch. **DONE 2026-08-22 — see the note below; mono 400 was declared as well, and why is recorded there** |
 | 21 | Sale responsive contract | Profound Verdant governs the bands. Two panes from **768** up; the desktop 3-column `Categories \| Items \| Cart` view is **deferred** and categories stay a `FilterChipBar` |
 
 Density, from `audits/2026-08-22-wave-0-foundations.md` Finding 2: any density resolver **must take the
@@ -217,6 +217,17 @@ two regions.
 This is a layout change with real pixel consequences across three bands. It lands as its own
 reviewable commit with the roughly fifteen assertions that pin 1024 updated, and with a harness
 viewport added in the 1024-1279 range, which nothing currently covers.
+
+> **Correction, 2026-08-22 — step 2 was not taken, and will not be.** Read this paragraph, not the two
+> numbered steps above it. Step 1 landed: `TenantCheckoutPanel.showsTwoPanes` reads `mediumFloor` and
+> the cart appears from 768 up. **Step 2 did not**, and `AppLayout.expandedFloor` stays at 1024, which
+> `TOKEN_RECONCILIATION.md` item 6 records as a deliberate deviation: a table at 1194 is denser and
+> faster to scan than stacked cards, and there is no reason to take that width away from the record
+> surfaces. Because step 1 removed the till's dependency on that floor, the coupling the section is
+> named for no longer exists and the two questions are independent. The fifteen assertions pinning
+> 1024 therefore stand unchanged. **The harness viewport in 1024-1279 is still missing and is still
+> worth adding** — that half of the paragraph was right for a different reason, since four surfaces
+> flip in that band and nothing photographs them.
 
 ### Original gap descriptions
 
@@ -341,6 +352,140 @@ Profound Verdant.
 Effect measured: 332 of 359 renders changed. On the sale screen only **0.7%** of pixels moved, but by a
 mean of 45/255 against the palette repoint's 10 — far fewer pixels, moving much further. Pixel count is
 a poor proxy for how large a change reads, because a corner is structural and a tonal shift is not.
+
+## Typography metrics — RESOLVED 2026-08-22, same day it was raised
+
+**Decision 20 is done and this is what it left behind.** Bundling the families settled *which faces*
+render; it settled nothing about *what size, weight, tracking or line height* each role asks them for.
+
+> **Answered by the product owner on 2026-08-22, hours after it was raised.** Read the decision
+> below the original text. The three sub-questions were taken as: adopt all seven and derive the
+> other five; map by size; add a sibling compact role.
+
+The original question follows, and the metric table in it is the *before* state.
+
+22. **Profound Verdant's seven type roles do not map onto `AppTypeRoles`' twelve, and where they do
+    meet, the metrics differ.** `TOKEN_RECONCILIATION.md` §Typography has the full table. The
+    disagreements, role by role:
+
+    | Design role | Design metrics | Nearest app role | App metrics | Delta |
+    |---|---|---|---|---|
+    | `headline-lg` | 32 / 700 / 1.2, tracking -0.02em | `display` | 32 / 700 / 1.25, no tracking | line height, tracking |
+    | `headline-lg-mobile` | 28 / 700 / 1.2 | *none* | — | the app has no breakpoint-aware type role |
+    | `section-title` | 22 / 600 / 1.4 | `titleMedium` per the reconciliation, but 22 is `titleLarge`'s size | 18 / 500 / 1.33, or 22 / 500 / 1.27 | **which role it even is** |
+    | `body-md` | 16 / 400 / 1.5 | `bodyLarge` | 16 / 400 / 1.5 | **agree** |
+    | `body-sm` | 14 / 400 / 1.5 | `bodyMedium` | 14 / 400 / 1.43 | line height |
+    | `label-caps` | 12 / 700 / 1.0, tracking +0.05em | `labelEyebrow` | 11 / 700 / 1.45, tracking +0.8 | size, line height, tracking |
+    | `data-mono` | 14 / 500 / 1.0, tracking -0.01em | `mono` | 13 / 400 / 1.38 | size, weight, line height, tracking |
+
+    Five app roles — `labelLarge`, `labelMedium`, `caption`, `numericHero`, `numericBody` — have no
+    design counterpart at all, so a wholesale repoint would leave them stranded on a scale nothing
+    else uses. That count is `TOKEN_RECONCILIATION.md`'s and it depends on two mappings that are
+    themselves unsettled: it pairs `headline-lg` with "`display` **or** `titleLarge`" without choosing,
+    and pairs `section-title` with `titleMedium` when the size matches `titleLarge`. Resolve those two
+    first — the count of stranded roles moves with them.
+
+    Three questions, and they are not independent:
+
+    - Do the five uncounterparted roles stay on §2.2's scale while the seven move, giving one file two
+      systems? Or does the whole scale move and the five are derived?
+    - `headline-lg-mobile` needs a breakpoint-aware type role, which the token layer does not have.
+      That is a structural addition, not a value change.
+    - Tracking is stated in `em` throughout and `AppTypeRoles` stores `letterSpacing` in logical
+      pixels. -0.02em at 32 is -0.64; +0.05em at 12 is +0.6 against the current +0.8. Converting is
+      arithmetic, but it means every tracked role's stored number stops matching the source document.
+
+    **Nothing here was guessed at on 2026-08-22.** The families changed and every metric stayed put,
+    so the type scale is still exactly `design.md` §2.2 and still internally consistent. Choosing
+    otherwise needs the product owner, because it is the same class of question as the radius scale
+    and that one turned on evidence rather than on the frontmatter.
+
+### Decision on question 22, 2026-08-22
+
+**The evidence first, because it is the reason this could be answered the same day.** Normalising
+the served Tailwind `fontSize` config across all 76 exported screens collapses 31 apparent variants
+to whitespace and quoting: **75 of 76 are value-identical, and they agree with the `DESIGN.md`
+frontmatter.** One outlier states `data-mono` 13 / 1.2 and `section-title` 20, and is outvoted 75 to
+1. That is the opposite of the radius situation, where the served artifact contradicted both
+frontmatter and prose — so here the frontmatter could be trusted, having been corroborated rather
+than assumed.
+
+Three answers:
+
+1. **Adopt all seven, derive the other five.** The design's real scale is wider than its seven named
+   roles: stock Tailwind sizes appear **1,028 times** alongside them (`text-sm` 475, `text-xs` 316,
+   `text-lg` 78, `text-xl` 54, `text-3xl` 44, `text-2xl` 41). The five app roles with no named
+   counterpart are derived from those rather than left on §2.2, so the file carries one scale.
+2. **Map by size.** `headline-lg` 32 → `display` 32; `section-title` 22 → `titleLarge` 22. This
+   file previously hedged the first and paired the second with `titleMedium` at 18. Size is the
+   unambiguous property, and it leaves `titleMedium` free for the design's `text-lg` 18.
+3. **Add a sibling compact role.** `displayCompact` at 28 for `headline-lg-mobile`, chosen by
+   `AppLayout` band at the call site — not a token that silently resolves to two values.
+
+The scale as it now stands, with the source of each row:
+
+| Role | Value | Source |
+|---|---|---|
+| `display` | 32 / 1.2 / 700 / -0.64 | `headline-lg` |
+| `displayCompact` | 28 / 1.2 / 700, untracked | `headline-lg-mobile` |
+| `titleLarge` | 22 / 1.4 / 600 | `section-title` |
+| `titleMedium` | 18 / 28 / 500 | derived, `text-lg` |
+| `bodyLarge` | 16 / 1.5 / 400 | `body-md` — the one row the two scales already agreed on |
+| `bodyMedium` | 14 / 1.5 / 400 | `body-sm` |
+| `labelLarge` | 14 / 20 / 700 / +0.7 | **`.btn-primary`, measured** |
+| `labelMedium` | 14 / 20 / 600 | derived, `text-sm` |
+| `labelEyebrow` | 12 / 1.0 / 700 / +0.6 | `label-caps` |
+| `caption` | 12 / 16 / 400 | derived, `text-xs` — unchanged, §2.2 already matched |
+| `numericHero` | 30 / 36 / 700 | derived, `text-3xl` |
+| `numericBody` | 14 / 20 / 500 | unchanged |
+| `mono` | 14 / 1.0 / 500 / -0.14 | `data-mono` |
+
+**Two findings that changed an answer.** The preview this decision was taken against proposed
+`labelLarge` at 16 / 600 from the stock `text-base`. It is wrong: the design **measures** the button
+directly, and `.btn-primary` reads `font-size: 14px; font-weight: 700; letter-spacing: 0.05em` at
+`height: 48px`. Measured beats inferred, so `labelLarge` is 14 / 700 / +0.7. That CSS rule is also
+where §9's 48dp target turns up in the design's own source rather than only in this app's rules.
+
+The second: **the design sets money in `data-mono`**, not in a tabular interface face — 65 of the
+places a `currency-kes` colour appears also carry `text-data-mono`. `numericBody` was **left in the
+interface family** anyway, because moving every price in the app into the mono face is a composition
+decision rather than a metric one. **That is the one piece of question 22 still open**, and it is a
+per-surface judgement like the `mono` reader sweep rather than a token value.
+
+Tracking is stated in `em` by the design and in logical pixels by `TextStyle`, which has no `em`.
+Every converted figure is the design's `em` times that role's own size, and the test asserts the
+arithmetic rather than the result. Four roles are tracked, not the three the frontmatter names — the
+fourth is the button.
+
+**Blast radius, measured rather than estimated.** 346 of 361 screenshots changed; 15 did not. Two
+assertions outside the token tests moved and both are recorded where they sit: `AppButton`'s label
+size 15 → 14, and the safe-landing scrollable 551 → 548, the latter because `section-title`'s 1.4
+line height grows the page header's title line from 28 to 30.8 and the body loses the difference.
+A third moved inside them: a compact row's content is now **37** of its 40 minimum rather than 36,
+which still fits and is now the tighter of the two measurements holding §3's "12 / 8" reading.
+
+### Note on decision 20 as implemented, 2026-08-22
+
+Three details worth recording, because each is a place the decision as written and the decision as
+built differ or could be misread.
+
+1. **Neither family existed anywhere.** Not in `fonts/`, not in the 18 MB export. The export links
+   both from `fonts.googleapis.com`, which is the thing an offline-first till cannot do and the reason
+   the decision says bundle. The faces came from the upstream OFL repositories — `marcologous/hanken-grotesk`
+   and `JetBrains/JetBrainsMono` — because `google/fonts` ships only variable masters and a variable
+   font would need `fontVariations` on every style, which `copyWith(fontWeight:)` would then silently
+   ignore. Static instances keep the ordinary Flutter weight mechanism working. Both licences ship as
+   `fonts/HankenGrotesk-OFL.txt` and `fonts/JetBrainsMono-OFL.txt`.
+2. **JetBrains Mono is declared at 400 *and* 500, where the decision says 500.** `AppTypeRoles.mono`
+   reads weight 400 and this change moved no metric. Declaring 500 alone would not have failed — the
+   engine picks the nearest declared face — so the role would have claimed 400 and rendered 500, with
+   nothing anywhere saying so. Bundling both keeps the token honest and costs one file, and means the
+   `data-mono` repoint in question 22 needs no download when it is taken.
+3. **The family is named on every role, not only on `ThemeData.fontFamily`.** A component theme's text
+   style *replaces* the text theme's rather than merging onto it, so `ListTile`, `Chip`,
+   `InputDecoration`, `SnackBar` and `Dialog` reach the engine with whatever the role names and
+   nothing else. `spiritTheme.fontFamily` had named Roboto since 2026-08-16 and was never reaching
+   those five. It is kept as the fallback for widgets built from no role at all.
 
 ## Non-blocking audit limitations
 

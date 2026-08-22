@@ -127,34 +127,39 @@ flutter:
     # of what makes an authored asset survive a palette change.
     - assets/lottie/
 
-  # design.md §2.2. **The app bundled no font at all until 2026-08-16**, so every
-  # string rendered in whatever face the device happened to default to, and the
-  # `mono` role - record IDs, SKUs, receipt numbers - carried its metrics while
-  # naming no family, which meant the one place §2.2 asks for monospace rendered
-  # proportionally.
+  # Profound Verdant §typography, and `docs/stitch/OPEN_QUESTIONS.md` decision 20.
+  # **The families changed on 2026-08-22**, from Roboto/Roboto Mono to Hanken
+  # Grotesk and JetBrains Mono. The design names both, and the exported screens
+  # link them from `fonts.googleapis.com` - which is exactly the thing an
+  # offline-first till cannot do, so they are bundled rather than fetched.
   #
-  # Roboto and Roboto Mono are the same type design at two widths, which is the
-  # reading of §2.2's "one family" that survives contact with its own `mono` row.
-  # Both are Apache 2.0; `fonts/roboto_license.txt` is the copy that ships.
+  # Only the weights the type roles actually read are declared. `AppTypeRoles`
+  # asks for 400, 500, 600 and 700 of the interface face and 400 of the mono
+  # face; 500 of the mono face is declared as well because Profound Verdant's
+  # `data-mono` row is 500 and that repoint is the next question rather than
+  # this change. No italic is declared, because no role asks for one.
+  #
+  # Both families are SIL OFL 1.1 and ship with their licences:
+  # `fonts/HankenGrotesk-OFL.txt` and `fonts/JetBrainsMono-OFL.txt`. The Roboto
+  # faces stay in `fonts/` undeclared - an undeclared file is not in the app,
+  # and the screenshot harness no longer needs them either.
   fonts:
-    - family: Roboto
+    - family: Hanken Grotesk
       fonts:
-        - asset: fonts/roboto-regular.ttf
-        - asset: fonts/roboto-medium.ttf
+        - asset: fonts/HankenGrotesk-Regular.ttf
+          weight: 400
+        - asset: fonts/HankenGrotesk-Medium.ttf
           weight: 500
-        - asset: fonts/roboto-bold.ttf
+        - asset: fonts/HankenGrotesk-SemiBold.ttf
+          weight: 600
+        - asset: fonts/HankenGrotesk-Bold.ttf
           weight: 700
-        - asset: fonts/roboto-italic.ttf
-          style: italic
-    # **One face, and that is the whole of what §2.2 asks for.** The `mono` row
-    # is 13 / 18 at weight 400 and names no other weight, so declaring the
-    # fifteen other faces that ship in the Google Fonts download would bundle
-    # about 1.3MB to serve a role that uses one of them. The rest are left in
-    # `fonts/` unreferenced rather than deleted - they are the product owner's
-    # download, and an undeclared file is not in the app.
-    - family: Roboto Mono
+    - family: JetBrains Mono
       fonts:
-        - asset: fonts/RobotoMono-Regular.ttf
+        - asset: fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: fonts/JetBrainsMono-Medium.ttf
+          weight: 500
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

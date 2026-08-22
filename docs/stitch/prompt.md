@@ -41,18 +41,49 @@ Branch `stitch-wave-0-tokens`, as of 2026-08-22. **Do not re-decide or redo any 
 | Status roles carry alpha tints; amber and blue carried forward as additions | `AppStatusRoles.profoundVerdant` |
 | Breakpoints **decided and unchanged** at 768/1024; the till moved to `mediumFloor` | `OPEN_QUESTIONS.md` item 21 |
 | 48dp guarantee enforced by a source-scanning tripwire | `test/ui/tokens_test.dart` |
-| Every question in `OPEN_QUESTIONS.md` answered | all sections read `RESOLVED` |
+| Every question in `OPEN_QUESTIONS.md` answered | items 1-22; 22 raised and resolved 2026-08-22 |
+| Typography **live end to end** — families bundled and the whole scale repointed to Profound Verdant | `pubspec.yaml`, `AppTypeRoles` |
+| `displayCompact` added for `headline-lg-mobile`; thirteen roles now | `lib/ui/tokens.dart` |
+| The screenshot harness no longer injects a font family | `tool/screenshots/harness.dart` |
 
-**What is left of the token work:** typography only — `OPEN_QUESTIONS.md` item 20, bundling Hanken
-Grotesk and JetBrains Mono. It has a dependency that is not obvious: `tool/screenshots/harness.dart`
-**overrides the font family to Roboto** and loads it from the SDK cache, because a component theme's
-text style replaces rather than merges, so an unnamed family reaches the engine as nothing and renders
-as filled rectangles. Add the families to `pubspec.yaml` alone and every screenshot will still show
-Roboto.
+**The token work is done.** Typography landed on 2026-08-22 and closed item 20. Hanken Grotesk
+(400/500/600/700) and JetBrains Mono (400/500) are bundled from the upstream OFL repositories, and
+**all twelve `AppTypeRoles` name a family** rather than only `mono`. That second half is the part
+worth remembering: a *component* theme's text style replaces the text theme's rather than merging onto
+it, so `spiritTheme.fontFamily` — which had said `Roboto` since 2026-08-16 — was never reaching
+`ListTile`, `Chip`, `InputDecoration`, `SnackBar` or `Dialog`. The harness had been hiding that by
+re-applying a family to nine component themes by hand; naming it on the roles fixed it at the source,
+so `screenshotTheme()` now returns `spiritTheme` unmodified and a capture is evidence again.
 
-**Then:** the unaudited half of Wave 0 — disabled, read-only, offline, busy, confirmation and
-provenance components; RBAC guards against `RBAC_MATRIX.md`; test fixtures — and Phases 01 and 02
-structurally.
+**The metrics followed the same day, as question 22.** The whole scale is Profound Verdant's now,
+not `design.md` §2.2's. It could be decided that fast because the evidence was decisive: normalising
+the served `fontSize` config across all 76 screens collapses 31 apparent variants to whitespace, and
+**75 of 76 are value-identical and agree with the frontmatter**. That is the *opposite* of the radius
+finding — so the lesson is not "never trust the frontmatter", it is "check it against the artifact
+every time", and here it passed.
+
+Seven roles take the design's values, five are derived from the stock Tailwind sizes those same
+screens use 1,028 times alongside them, and `numericBody` is unchanged. Two things worth carrying
+forward: `labelLarge` is **measured**, not derived — `.btn-primary` reads 14 / 700 / +0.05em at
+`height: 48px`, which is also where §9's 48dp target appears in the design's own CSS. And **the
+design sets money in `data-mono`** (65 occurrences beside `currency-kes`), where `numericBody`
+deliberately stayed in the interface face; moving every price into the mono face is a composition
+decision nobody has taken, and it is the one fragment of question 22 still open.
+
+Blast radius: **346 of 361 screenshots moved.** Three assertions outside the token tests moved with
+it and each says why where it sits — `AppButton` 15 → 14, safe-landing scrollable 551 → 548, and a
+compact row's content 36 → 37 of its 40 minimum.
+
+**One stale instruction was corrected while verifying.** `OPEN_QUESTIONS.md`'s "coupled consequence of
+decision 21" still told the reader to move `AppLayout.expandedFloor` from 1024 to 1280 as a mandatory
+second step. That step was never taken and will not be — 1024 is the deliberate deviation — so the
+section now carries a dated correction. Its other half stands: **no harness viewport covers 1024 to
+1279**, and the four behaviours that flip there (`record_list.formFor`, `home_navigation.showsMenu`,
+`PageHeader.showsDisplayTitle`, `routes._isExpanded`) are still rendered by nothing.
+
+**Then:** the 1024-1279 harness viewport, which is additive and changes no existing pixel. Then the
+unaudited half of Wave 0 — disabled, read-only, offline, busy, confirmation and provenance components;
+RBAC guards against `RBAC_MATRIX.md`; test fixtures — and Phases 01 and 02 structurally.
 
 **The web target does not run, and it is not the redesign's fault.** Two independent pre-existing bugs,
 both in the bootstrap, both unfixed because they are behaviour changes needing explicit authorization:
@@ -82,10 +113,12 @@ Read these sources in order:
    instructions.
 4. `docs/stitch/README.md` and `docs/stitch/DESIGN_RULES.md`.
 5. `docs/stitch/RBAC_MATRIX.md`.
-6. `docs/stitch/OPEN_QUESTIONS.md` — **mandatory, not optional.** Every question in it is now
-   answered, so read it as the decision record rather than a list of blockers: it says which values
-   were chosen, which were carried forward because the design defines none, and why. Item 19 carries a
-   dated correction; read the correction, not the original row.
+6. `docs/stitch/OPEN_QUESTIONS.md` — **mandatory, not optional.** All 22 items are answered, so read
+   it as the decision record rather than a list of blockers: it says which values were chosen, which
+   were carried forward because the design defines none, and why. **Three sections carry dated
+   answers or corrections that reverse the text above them** — item 19 on the radius scale, the
+   "coupled consequence of decision 21" on `expandedFloor`, and question 22 on typography metrics.
+   Read the correction, never the row above it.
 7. `docs/stitch/TOKEN_RECONCILIATION.md` — how Profound Verdant maps onto `lib/ui/tokens.dart`, and
    which roles have no source value at all.
 8. `docs/stitch/SCREEN_INDEX.md` and `COVERAGE.md` as needed.
@@ -119,10 +152,10 @@ Inspect Git status before editing and preserve all existing unrelated changes.
   source value, record it in `OPEN_QUESTIONS.md`; do not pick a plausible hex.
 - The most important provisional areas are Phase 04 mobile and Phase 08 completion matrices. Phase 02
   checkout evidence and the two Phase 06 shift cards also lack persisted final pixels.
-- **The colour and radius repoints have landed.** `lib/theme.dart` registers
+- **The colour, radius and typography repoints have landed.** `lib/theme.dart` registers
   `AppTokens.profoundVerdant`; `AppTokens.dark` is kept as the record of the shipped palette and must
-  come out of any change unedited, which a test asserts. Typography is the only token family still on
-  the old values.
+  come out of any change unedited, which a test asserts. **No token family is still on the old
+  values**, metrics included.
 - **The design system's frontmatter is not automatically the authority.** It was for colour, where it
   agreed with the served screens. It was **wrong** for radii: the frontmatter declares `full: 9999px`
   and the prose promises a pill, while every one of the 76 served screens inlines `full: 0.75rem` and
@@ -159,8 +192,9 @@ not construction. Read `audits/2026-08-22-wave-0-foundations.md` before deciding
 The integration owner validates or establishes:
 
 - Profound Verdant semantic tokens, typography, spacing, shapes, status treatments, and 48px target
-  primitives. **Colour, radii and status treatments are done; spacing already agreed; typography is
-  what remains** — see the Current state section for its harness dependency. 48px is now enforced by a
+  primitives. **All of it is done** as of 2026-08-22: colour, radii, status treatments, spacing, and
+  typography in both halves — families and metrics. Nothing in the token layer is outstanding. 48px
+  is now enforced by a
   test that fails if `lib/` ever applies `AppDensity.compact`, whose targets are 32x32; when a density
   resolver is written it must take the pointer/touch kind, not just a width, and refuse compact on
   touch;

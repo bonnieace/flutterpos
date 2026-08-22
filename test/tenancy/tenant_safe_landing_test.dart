@@ -108,7 +108,9 @@ void main() {
     final destination = tester.getRect(
       find.byKey(const ValueKey('make-default-tenant')),
     );
-    final panel = tester.getRect(find.byKey(const ValueKey('landing-test-panel')));
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('landing-test-panel')),
+    );
 
     expect(destination.right, lessThanOrEqualTo(panel.left));
     // Drawn once rather than twice: §4.4 says the home "keeps its content and
@@ -163,10 +165,17 @@ void main() {
     // `Signed in as {role}` at the density's body role, plus `space.4` above
     // it. 579 less 28 is 551. The queue counts left the body in the same change
     // - they are a badged button in the toolbar now - so the body lost a
-    // section and gained a line, and this figure is the net.
+    // section and gained a line, and this figure was the net.
+    //
+    // **548 since 2026-08-22, and the three pixels are the type repoint.**
+    // Profound Verdant's `section-title` states a 1.4 line height where §2.2
+    // gave 28/22, so the header's title line grew from 28 to 30.8 and the body
+    // lost the difference. Nothing in the frame's arithmetic changed; one of
+    // its inputs did. This is the assertion that will move again if `title.lg`
+    // does, which is the reason it is written as a measurement.
     await _pumpLanding(tester, panelHeight: 900);
 
-    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 551);
+    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 548);
   });
 
   testWidgets('the title leaves the toolbar and the action stays in it', (

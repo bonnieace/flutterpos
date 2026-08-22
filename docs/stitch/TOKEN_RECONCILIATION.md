@@ -142,32 +142,46 @@ Three findings:
 
 ## Typography
 
-| Profound Verdant role | Family, size, weight, line height | Nearest `AppTypeRoles` field |
+**Reconciled 2026-08-22.** The mapping column below is now the decision, not a suggestion; the two
+rows this table used to hedge were settled by size. `OPEN_QUESTIONS.md` question 22 carries the
+reasoning and the evidence.
+
+| Profound Verdant role | Family, size, weight, line height | `AppTypeRoles` field |
 |---|---|---|
-| `headline-lg` | Hanken Grotesk 32 / 700 / 1.2, tracking -0.02em | `display` or `titleLarge` |
-| `headline-lg-mobile` | Hanken Grotesk 28 / 700 / 1.2 | no responsive type role exists |
-| `section-title` | Hanken Grotesk 22 / 600 / 1.4 | `titleMedium` |
+| `headline-lg` | Hanken Grotesk 32 / 700 / 1.2, tracking -0.02em | `display` |
+| `headline-lg-mobile` | Hanken Grotesk 28 / 700 / 1.2 | **`displayCompact`, added for it** |
+| `section-title` | Hanken Grotesk 22 / 600 / 1.4 | `titleLarge` (22 matches; was hedged to `titleMedium`) |
 | `body-md` | Hanken Grotesk 16 / 400 / 1.5 | `bodyLarge` |
 | `body-sm` | Hanken Grotesk 14 / 400 / 1.5 | `bodyMedium` |
 | `label-caps` | Hanken Grotesk 12 / 700 / 1.0, tracking 0.05em | `labelEyebrow` |
 | `data-mono` | JetBrains Mono 14 / 500 / 1.0, tracking -0.01em | `mono` |
+| **`.btn-primary`, measured not named** | Hanken Grotesk 14 / 700, tracking 0.05em, `height: 48px` | `labelLarge` |
 
-Profound Verdant defines **7** type roles; `AppTypeRoles` has **12** (`display`, `titleLarge`,
-`titleMedium`, `bodyLarge`, `bodyMedium`, `labelLarge`, `labelMedium`, `labelEyebrow`, `caption`,
-`numericHero`, `numericBody`, `mono`). Five current roles — `labelLarge`, `labelMedium`, `caption`,
-`numericHero`, `numericBody` — have no Profound Verdant counterpart, and `headline-lg-mobile` has no
-counterpart in the other direction because the current type roles are not breakpoint-aware.
+The five with no named counterpart are derived from the stock Tailwind sizes the same screens use
+**1,028 times** alongside the seven: `titleMedium` ← `text-lg` 18/28, `labelMedium` ← `text-sm`
+14/20, `caption` ← `text-xs` 12/16, `numericHero` ← `text-3xl` 30/36. `numericBody` is unchanged.
+
+Profound Verdant names **7** type roles; `AppTypeRoles` now has **13**, having gained
+`displayCompact`. The count of "stranded" roles this section used to give as five is down to four
+and then to none: `labelLarge` turned out to be measured on `.btn-primary` after all, and the rest
+are derived from the design's stock sizes rather than left on §2.2. `headline-lg-mobile` no longer
+lacks a counterpart in the other direction either.
 
 Two structural notes:
 
 - **Profound Verdant answers an open question the current system deliberately left open.**
-  `lib/ui/tokens.dart` records that no type role names a family, and that the family behind
+  `lib/ui/tokens.dart` recorded that no type role names a family, and that the family behind
   `AppTypeRoles.mono` was undecided. Profound Verdant decides both: **Hanken Grotesk** for interface
-  text and **JetBrains Mono** for figures and identifiers.
-- **Neither family is bundled.** `pubspec.yaml` declares only `Roboto` and one `Roboto Mono` face, and
-  neither "Hanken" nor "JetBrains" appears anywhere in the repository. Adopting Profound Verdant
-  typography requires adding font assets, which is a `pubspec.yaml` change and therefore
-  integration-owner work, not a token edit.
+  text and **JetBrains Mono** for figures and identifiers. Both landed on 2026-08-22.
+
+- **The frontmatter is corroborated here, unlike the radii.** Normalising the served `fontSize`
+  config across all 76 screens collapses 31 apparent variants to whitespace: **75 are
+  value-identical and agree with the frontmatter**, and the single outlier states `data-mono` 13
+  and `section-title` 20. That is why the metric repoint could trust the same source the radius
+  repoint had to reject — the check, not the source, is what differed.
+- ~~**Neither family is bundled.**~~ **Both are, as of 2026-08-22** — see item 5 below. The families
+  are settled; the table above is not. Read it as the list of metric deltas still outstanding, which
+  is `OPEN_QUESTIONS.md` question 22, and not as a list of things nothing has been done about.
 
 ## Radii — a genuine conflict
 
@@ -313,8 +327,25 @@ change. Suggested sequence, each step its own reviewable commit:
    moved 98.7% of pixels by a mean of 10/255, and the radii moved **0.7% by a mean of 45**. Far fewer
    pixels, much further — and the radii read as the bigger change, because a corner is structural.
    **Pixel count is a poor proxy for how large a change looks.**
-5. **Font assets and `AppTypeRoles` families** (decision 20). A `pubspec.yaml` change, integration
-   owner only.
+5. ~~**Font assets and `AppTypeRoles` families** (decision 20).~~ **DONE 2026-08-22, and it was
+   three files rather than one.** `pubspec.yaml` declares Hanken Grotesk at 400/500/600/700 and
+   JetBrains Mono at 400/500, both bundled under SIL OFL 1.1 from the upstream repositories — the
+   `google/fonts` mirror carries only variable masters, and a variable font needs `fontVariations`
+   on every style, which `copyWith(fontWeight:)` would then silently ignore.
+
+   **The `AppTypeRoles` half is the one that mattered.** All twelve roles now name a family, not just
+   `mono`. `spiritTheme` had carried `fontFamily: 'Roboto'` since 2026-08-16, and that was never
+   reaching `ListTile`, `Chip`, `InputDecoration`, `SnackBar` or `Dialog`: a **component** theme's
+   text style *replaces* the text theme's rather than merging onto it, so a role naming nothing
+   arrives at the engine with nothing however `ThemeData` is configured. `tool/screenshots/harness.dart`
+   had been papering over exactly this by re-applying a family to nine component themes by hand;
+   naming it on the roles fixed it at the source and the harness override is gone, so a capture is
+   now the app's theme unmodified.
+
+   **Families only. Every metric stayed put**, so the scale is still `design.md` §2.2 and the
+   §Typography table above is still an unreconciled list. It is now `OPEN_QUESTIONS.md` question 22.
+   A test pins each role's family against what `pubspec.yaml` declares, weight included, because the
+   engine substitutes the nearest declared face rather than failing when a weight is missing.
 6. ~~**The responsive contract** (decision 21).~~ **DONE 2026-08-22, and it turned out to be half the
    change.** `showsTwoPanes` moved to `mediumFloor`, so the cart is visible on a tablet from 768 up.
    `AppLayout.expandedFloor` **stays at 1024** — Profound Verdant's 1280 is a recorded deviation, on

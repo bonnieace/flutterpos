@@ -113,10 +113,7 @@ void main() {
         _labelStyle(tester, 'Retire this product').color,
         _actions.destructive.label,
       );
-      expect(
-        _container(tester).border?.top.color,
-        _actions.destructive.border,
-      );
+      expect(_container(tester).border?.top.color, _actions.destructive.border);
     });
 
     testWidgets('disabled follows §2.1\'s two different rules', (tester) async {
@@ -247,37 +244,33 @@ void main() {
       expect(_actions.loadingIndicatorSize, 16);
     });
 
-    testWidgets('the width is frozen, so the button does not resize mid-press', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _app(
-          AppButton(
-            label: 'Submit this correction',
-            onPressed: () {},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final resting = _paintedSize(tester);
+    testWidgets(
+      'the width is frozen, so the button does not resize mid-press',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(AppButton(label: 'Submit this correction', onPressed: () {})),
+        );
+        await tester.pumpAndSettle();
+        final resting = _paintedSize(tester);
 
-      await tester.pumpWidget(
-        _app(
-          AppButton(
-            label: 'Submit this correction',
-            loading: true,
-            onPressed: () {},
+        await tester.pumpWidget(
+          _app(
+            AppButton(
+              label: 'Submit this correction',
+              loading: true,
+              onPressed: () {},
+            ),
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      expect(
-        _paintedSize(tester),
-        resting,
-        reason: 'the label is still laid out, just not painted',
-      );
-    });
+        expect(
+          _paintedSize(tester),
+          resting,
+          reason: 'the label is still laid out, just not painted',
+        );
+      },
+    );
 
     testWidgets('and it cannot be pressed twice', (tester) async {
       var presses = 0;
@@ -298,9 +291,7 @@ void main() {
     testWidgets('a screen reader is told it is working', (tester) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
-        _app(
-          AppButton(label: 'Save sale', loading: true, onPressed: () {}),
-        ),
+        _app(AppButton(label: 'Save sale', loading: true, onPressed: () {})),
       );
       await tester.pump();
       expect(
@@ -327,7 +318,12 @@ void main() {
         expect(style.fontWeight, _tokens.typography.labelLarge.fontWeight);
         expect(style.height, _tokens.typography.labelLarge.height);
       }
-      expect(_tokens.typography.labelLarge.fontSize, 15);
+      // **14 since 2026-08-22, was 15.** The design measures this one directly
+      // rather than naming it: `.btn-primary` is `font-size: 14px;
+      // font-weight: 700; letter-spacing: 0.05em` at `height: 48px`. The
+      // weight moved with it, 600 to 700.
+      expect(_tokens.typography.labelLarge.fontSize, 14);
+      expect(_tokens.typography.labelLarge.fontWeight, FontWeight.w700);
     });
 
     testWidgets('a leading icon is 18px and takes the label colour', (
@@ -474,23 +470,24 @@ void main() {
   });
 
   group('layout', () {
-    testWidgets('it shrink-wraps by default, so a Wrap is not one button wide', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _app(
-          Wrap(
-            children: <Widget>[
-              AppButton(label: 'One', onPressed: () {}),
-              AppButton(label: 'Two', onPressed: () {}),
-            ],
+    testWidgets(
+      'it shrink-wraps by default, so a Wrap is not one button wide',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(
+            Wrap(
+              children: <Widget>[
+                AppButton(label: 'One', onPressed: () {}),
+                AppButton(label: 'Two', onPressed: () {}),
+              ],
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final first = tester.getSize(find.byType(AppButton).first);
-      expect(first.width, lessThan(200));
-    });
+        );
+        await tester.pumpAndSettle();
+        final first = tester.getSize(find.byType(AppButton).first);
+        expect(first.width, lessThan(200));
+      },
+    );
 
     testWidgets('expand fills the width it is offered', (tester) async {
       await tester.pumpWidget(
@@ -632,10 +629,7 @@ void main() {
       await tester.pumpWidget(
         _app(AppButton(label: 'Find a receipt', onPressed: () {})),
       );
-      expect(
-        find.bySemanticsLabel('Find a receipt'),
-        findsOneWidget,
-      );
+      expect(find.bySemanticsLabel('Find a receipt'), findsOneWidget);
       expect(
         tester.getSemantics(find.byType(AppButton)),
         matchesSemantics(

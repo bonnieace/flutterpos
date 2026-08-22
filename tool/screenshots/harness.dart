@@ -9,11 +9,18 @@
 /// person can read, and both are done here once:
 ///
 /// 1. **Real fonts.** `flutter test` ships a metrics-only test face, so every
-///    string renders as a filled rectangle. The Flutter SDK already carries
-///    Roboto and the Material icon font for exactly this reason, and both are
-///    loaded from its cache. The app's theme names no family at all - see the
-///    note in `lib/theme.dart` - so the family is applied to the text theme
-///    here rather than guessed at by the engine.
+///    string renders as a filled rectangle. The app's own bundled faces are
+///    loaded from `fonts/` - Hanken Grotesk and JetBrains Mono, the two
+///    families `pubspec.yaml` declares - so a capture shows the typography the
+///    app actually ships. The Material icon font still comes from the SDK
+///    cache, because it is the SDK's asset rather than the app's.
+///
+///    **This harness used to inject Roboto over the app's theme**, and worse,
+///    over nine component themes one at a time, because no type role named a
+///    family and a component theme's text style replaces rather than merges.
+///    `AppTypeRoles` names the family on every role as of 2026-08-22, so the
+///    injection has no job left and is gone. A capture is now the app's theme
+///    unmodified, which is the property that makes it evidence.
 /// 2. **A repaint boundary at the root**, so the whole view including the app
 ///    bar can be rasterized. `toImage` is asynchronous work the test binding
 ///    will not run on its own, which is why every capture goes through
@@ -34,6 +41,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_application_1/theme.dart';
+import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Where the PNGs land, relative to the repository root.
@@ -112,86 +120,72 @@ const List<ScreenshotViewport> everyBandViewports = <ScreenshotViewport>[
 
 final GlobalKey _rootKey = GlobalKey();
 
-/// The theme every screenshot is taken under: the app's own, with a font
-/// family named so the strings are legible.
+/// The theme every screenshot is taken under: the app's own, unmodified.
 ///
-/// `spiritTheme` names no family, which on a device means "whatever the
-/// platform's default face is" and in a widget test means the test face. Naming
-/// Roboto here is the closest honest stand-in: it is the default face on
-/// Android and the one Flutter bundles for exactly this purpose.
+/// **It returns `spiritTheme` and nothing else, and that is the point.** This
+/// function used to rebuild nine component themes to force a font family into
+/// them, because `AppTypeRoles` named none and a component theme's text style
+/// *replaces* the text theme's rather than merging onto it - so `ListTile`,
+/// `Chip`, `InputDecoration`, `SnackBar` and `Dialog` each arrived at the
+/// engine with no family and rendered as filled rectangles.
 ///
-/// The text theme is not enough on its own. A **component** theme's text style
-/// *replaces* the text theme's rather than merging onto it - `ListTile` picks
-/// `listTileTheme.subtitleTextStyle` outright when it is set - so a style this
-/// app names without a family arrives at the engine with none, and renders as
-/// filled rectangles. Every style the theme names is therefore given the family
-/// here, which is the same thing a real platform does for all of them at once.
-ThemeData screenshotTheme() {
-  const family = 'Roboto';
-  TextStyle? named(TextStyle? style) => style?.copyWith(fontFamily: family);
-  final base = spiritTheme;
-  final listTile = base.listTileTheme;
-  final chip = base.chipTheme;
-  final input = base.inputDecorationTheme;
-  final snackBar = base.snackBarTheme;
-  final dialog = base.dialogTheme;
-  return base.copyWith(
-    textTheme: base.textTheme.apply(fontFamily: family),
-    primaryTextTheme: base.primaryTextTheme.apply(fontFamily: family),
-    listTileTheme: listTile.copyWith(
-      titleTextStyle: named(listTile.titleTextStyle),
-      subtitleTextStyle: named(listTile.subtitleTextStyle),
-      leadingAndTrailingTextStyle: named(
-        listTile.leadingAndTrailingTextStyle,
-      ),
-    ),
-    chipTheme: chip.copyWith(
-      labelStyle: named(chip.labelStyle),
-      secondaryLabelStyle: named(chip.secondaryLabelStyle),
-    ),
-    inputDecorationTheme: input.copyWith(
-      hintStyle: named(input.hintStyle),
-      labelStyle: named(input.labelStyle),
-      floatingLabelStyle: named(input.floatingLabelStyle),
-      helperStyle: named(input.helperStyle),
-      errorStyle: named(input.errorStyle),
-      prefixStyle: named(input.prefixStyle),
-      suffixStyle: named(input.suffixStyle),
-      counterStyle: named(input.counterStyle),
-    ),
-    snackBarTheme: snackBar.copyWith(
-      contentTextStyle: named(snackBar.contentTextStyle),
-    ),
-    dialogTheme: dialog.copyWith(
-      titleTextStyle: named(dialog.titleTextStyle),
-      contentTextStyle: named(dialog.contentTextStyle),
-    ),
-  );
-}
+/// Naming the family on the roles themselves fixed that at the source, in the
+/// app rather than in the harness. The function is kept rather than inlined so
+/// that every capture still routes through one named place if a future
+/// difference between shipped and photographed is ever justified - but the
+/// honest state today is that there is no difference at all.
+ThemeData screenshotTheme() => spiritTheme;
 
 bool _fontsLoaded = false;
 
-/// Loads Roboto and the Material icon font out of the Flutter SDK's cache.
+/// Loads the app's bundled faces from `fonts/`, and the Material icon font
+/// from the Flutter SDK's cache.
+///
+/// The two families and the six faces below are exactly what `pubspec.yaml`
+/// declares. They are listed again here rather than parsed out of the manifest
+/// because a test binary has no asset bundle to read: `flutter test` does not
+/// build one, which is the same reason the icon font has to be fetched by path.
+/// A face added to `pubspec.yaml` and not to this list will render in the
+/// engine's fallback, so the two lists move together.
 ///
 /// The SDK root is read from `FLUTTER_ROOT`, which the `flutter` tool sets for
 /// the process it spawns, and derived from the running Dart executable if it is
 /// absent - `dart-sdk/bin/dart` sits four levels below the SDK root.
 Future<void> loadScreenshotFonts() async {
   if (_fontsLoaded) return;
-  final fonts = _materialFontsDirectory();
-  final roboto = FontLoader('Roboto');
-  for (final face in const <String>[
-    'roboto-regular.ttf',
-    'roboto-medium.ttf',
-    'roboto-bold.ttf',
-    'roboto-italic.ttf',
-  ]) {
-    roboto.addFont(_fontBytes(fonts, face));
+  final appFonts = Directory('fonts');
+  if (!appFonts.existsSync()) {
+    throw StateError(
+      'The `fonts/` directory of this app was not found. Screenshots must be '
+      'run from the repository root, because the faces are loaded by relative '
+      'path.',
+    );
   }
-  await roboto.load();
+
+  final interface = FontLoader(AppTypeRoles.interfaceFamily);
+  for (final face in const <String>[
+    'HankenGrotesk-Regular.ttf',
+    'HankenGrotesk-Medium.ttf',
+    'HankenGrotesk-SemiBold.ttf',
+    'HankenGrotesk-Bold.ttf',
+  ]) {
+    interface.addFont(_fontBytes(appFonts, face));
+  }
+  await interface.load();
+
+  final mono = FontLoader(AppTypeRoles.monoFamily);
+  for (final face in const <String>[
+    'JetBrainsMono-Regular.ttf',
+    'JetBrainsMono-Medium.ttf',
+  ]) {
+    mono.addFont(_fontBytes(appFonts, face));
+  }
+  await mono.load();
 
   final icons = FontLoader('MaterialIcons')
-    ..addFont(_fontBytes(fonts, 'materialicons-regular.otf'));
+    ..addFont(
+      _fontBytes(_materialFontsDirectory(), 'materialicons-regular.otf'),
+    );
   await icons.load();
   _fontsLoaded = true;
 }
@@ -379,13 +373,9 @@ Future<void> _write(
   final directory = Directory(
     '$screenshotDirectory${Platform.pathSeparator}${viewport.name}',
   )..createSync(recursive: true);
-  final file = File(
-    '${directory.path}${Platform.pathSeparator}$name.png',
-  );
+  final file = File('${directory.path}${Platform.pathSeparator}$name.png');
   await tester.runAsync(() async {
-    final image = await boundary.toImage(
-      pixelRatio: viewport.devicePixelRatio,
-    );
+    final image = await boundary.toImage(pixelRatio: viewport.devicePixelRatio);
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     if (data == null) {
@@ -399,8 +389,7 @@ Future<void> _write(
 final Set<String> _captured = <String>{};
 
 /// Every file this run wrote, for the summary a run prints at the end.
-Iterable<String> get capturedScreenshots =>
-    _captured.toList()..sort();
+Iterable<String> get capturedScreenshots => _captured.toList()..sort();
 
 /// Declares one screen at every viewport, as a group of tests.
 ///

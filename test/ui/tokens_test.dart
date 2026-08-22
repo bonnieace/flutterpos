@@ -72,8 +72,7 @@ void main() {
       // §2.1's ordering, which v0.4 states outright: sunken -> base -> raised ->
       // overlay -> field. A well sits *on* the page. `surface.sunken` keeps the
       // two uses that genuinely are recessed, a table header and a code block.
-      double lightness(Color colour) =>
-          HSLColor.fromColor(colour).lightness;
+      double lightness(Color colour) => HSLColor.fromColor(colour).lightness;
       final ordered = <Color>[
         surface.sunken,
         surface.base,
@@ -171,34 +170,37 @@ void main() {
       );
     });
 
-    test('text.tertiary does not clear AA on surface.field, and §5.2 knows', () {
-      // **The one place `text.tertiary` is not the floor**, found when v0.4
-      // moved the input well off `surface.sunken` on 2026-08-15. It measures
-      // 5.9 on the page and 4.29 on the new well, against §9's 4.5 - so a
-      // placeholder inside a well is `text.secondary`, and §5.2 records the
-      // figure rather than leaving the next person to rediscover it.
-      //
-      // Asserted as a *fact about the palette* rather than folded into the
-      // all-surfaces sweep above, because hiding it there would mean either a
-      // silent failure or a quietly widened tolerance.
-      expect(
-        contrastRatio(colors.text.tertiary, surface.field),
-        closeTo(4.29, 0.05),
-      );
-      expect(
-        contrastRatio(colors.text.tertiary, surface.field),
-        lessThan(bodyTextContrast),
-      );
-      // What §5.2 uses instead, and what a typed value is, both clear it.
-      expect(
-        contrastRatio(colors.text.secondary, surface.field),
-        greaterThanOrEqualTo(bodyTextContrast),
-      );
-      expect(
-        contrastRatio(colors.text.primary, surface.field),
-        greaterThanOrEqualTo(bodyTextContrast),
-      );
-    });
+    test(
+      'text.tertiary does not clear AA on surface.field, and §5.2 knows',
+      () {
+        // **The one place `text.tertiary` is not the floor**, found when v0.4
+        // moved the input well off `surface.sunken` on 2026-08-15. It measures
+        // 5.9 on the page and 4.29 on the new well, against §9's 4.5 - so a
+        // placeholder inside a well is `text.secondary`, and §5.2 records the
+        // figure rather than leaving the next person to rediscover it.
+        //
+        // Asserted as a *fact about the palette* rather than folded into the
+        // all-surfaces sweep above, because hiding it there would mean either a
+        // silent failure or a quietly widened tolerance.
+        expect(
+          contrastRatio(colors.text.tertiary, surface.field),
+          closeTo(4.29, 0.05),
+        );
+        expect(
+          contrastRatio(colors.text.tertiary, surface.field),
+          lessThan(bodyTextContrast),
+        );
+        // What §5.2 uses instead, and what a typed value is, both clear it.
+        expect(
+          contrastRatio(colors.text.secondary, surface.field),
+          greaterThanOrEqualTo(bodyTextContrast),
+        );
+        expect(
+          contrastRatio(colors.text.primary, surface.field),
+          greaterThanOrEqualTo(bodyTextContrast),
+        );
+      },
+    );
 
     test('helper text is unaffected, because it sits outside the well', () {
       // §5.2 puts the helper and the counter under the field, on the page. The
@@ -418,10 +420,14 @@ void main() {
   });
 
   group('type roles - design.md §2.2', () {
-    test('all twelve roles exist under their specification names', () {
-      expect(type.all, hasLength(12));
+    test('all thirteen roles exist under their specification names', () {
+      // Twelve until 2026-08-22, when `display.compact` was added for Profound
+      // Verdant's `headline-lg-mobile` - the first breakpoint-aware type value
+      // any source this app has had actually states.
+      expect(type.all, hasLength(13));
       expect(type.all.keys, <String>[
         'display',
+        'display.compact',
         'title.lg',
         'title.md',
         'body.lg',
@@ -437,20 +443,25 @@ void main() {
     });
 
     test('each carries the size, line height and weight §2.2 gives it', () {
-      // size / line / weight, straight off the table.
+      // size / line / weight. **Repointed to Profound Verdant on 2026-08-22**;
+      // the §2.2 figures this replaces are in `OPEN_QUESTIONS.md` question 22.
+      // The seven named roles are the design's served Tailwind config, which 75
+      // of 76 screens carry identically. The five marked `derived` are the
+      // stock Tailwind sizes those same screens use alongside the seven.
       final table = <String, (double, double, FontWeight)>{
-        'display': (32, 40, FontWeight.w700),
-        'title.lg': (22, 28, FontWeight.w500),
-        'title.md': (18, 24, FontWeight.w500),
-        'body.lg': (16, 24, FontWeight.w400),
-        'body.md': (14, 20, FontWeight.w400),
-        'label.lg': (15, 20, FontWeight.w600),
-        'label.md': (13, 16, FontWeight.w600),
-        'label.eyebrow': (11, 16, FontWeight.w700),
-        'caption': (12, 16, FontWeight.w400),
-        'numeric.hero': (28, 32, FontWeight.w700),
-        'numeric.body': (14, 20, FontWeight.w500),
-        'mono': (13, 18, FontWeight.w400),
+        'display': (32, 38.4, FontWeight.w700), // headline-lg
+        'display.compact': (28, 33.6, FontWeight.w700), // headline-lg-mobile
+        'title.lg': (22, 30.8, FontWeight.w600), // section-title
+        'title.md': (18, 28, FontWeight.w500), // derived, text-lg
+        'body.lg': (16, 24, FontWeight.w400), // body-md
+        'body.md': (14, 21, FontWeight.w400), // body-sm
+        'label.lg': (14, 20, FontWeight.w700), // .btn-primary, measured
+        'label.md': (14, 20, FontWeight.w600), // derived, text-sm
+        'label.eyebrow': (12, 12, FontWeight.w700), // label-caps
+        'caption': (12, 16, FontWeight.w400), // derived, text-xs
+        'numeric.hero': (30, 36, FontWeight.w700), // derived, text-3xl
+        'numeric.body': (14, 20, FontWeight.w500), // unchanged
+        'mono': (14, 14, FontWeight.w500), // data-mono
       };
       for (final entry in table.entries) {
         final style = type.all[entry.key]!;
@@ -480,14 +491,31 @@ void main() {
       }
     });
 
-    test('label.eyebrow is the only tracked role, at +0.8', () {
+    test('the four tracked roles are the four the design tracks', () {
+      // **Was "label.eyebrow is the only tracked role, at +0.8".** Profound
+      // Verdant tracks three of its seven and measures a fourth on
+      // `.btn-primary`, stating each in `em` where a
+      // `TextStyle` has only logical pixels - so every figure here is the
+      // design's `em` times the role's own size, and the arithmetic is the
+      // assertion rather than a comment.
+      const tracked = <String, (double, double)>{
+        'display': (-0.02, 32), // headline-lg
+        'label.lg': (0.05, 14), // .btn-primary, measured rather than named
+        'label.eyebrow': (0.05, 12), // label-caps
+        'mono': (-0.01, 14), // data-mono
+      };
       for (final entry in type.all.entries) {
+        final source = tracked[entry.key];
         expect(
           entry.value.letterSpacing,
-          entry.key == 'label.eyebrow' ? 0.8 : isNull,
+          source == null ? isNull : closeTo(source.$1 * source.$2, 0.0001),
           reason: '${entry.key} letter spacing',
         );
       }
+      // `headline-lg-mobile` states no tracking where `headline-lg` states
+      // -0.02em. That asymmetry is the design's and is pinned here so it is not
+      // "corrected" into consistency later.
+      expect(type.all['display.compact']!.letterSpacing, isNull);
     });
 
     test('no type role carries a colour', () {
@@ -495,26 +523,84 @@ void main() {
       // role holding a colour would be a second place a colour is decided,
       // and the second place is the one that drifts.
       for (final entry in type.all.entries) {
-        expect(entry.value.color, isNull, reason: '${entry.key} names a colour');
+        expect(
+          entry.value.color,
+          isNull,
+          reason: '${entry.key} names a colour',
+        );
       }
     });
 
-    test('only mono names a family, and it names Roboto Mono', () {
-      // **This assertion was written to fail on the day the family was
-      // settled, and it did.** It used to read "no type role names a family,
-      // including mono", because §2.2's opening line says "One family - Roboto"
-      // while its last row says "monospace", the app bundled no font at all,
-      // and a monospace family here would have been a value nobody chose.
+    test('every role names a family, and mono names the mono one', () {
+      // **Third value this assertion has held, and each move is recorded.** It
+      // began as "no type role names a family": §2.2's opening line said "One
+      // family - Roboto" while its last row said "monospace", and the app
+      // bundled no font at all. `design.md` v0.7 gave `mono` Roboto Mono on
+      // 2026-08-16 and left the other eleven inheriting the theme.
       //
-      // `design.md` v0.7 chose it on 2026-08-16: Roboto and Roboto Mono, the
-      // same type design at two widths, both bundled. The eleven other roles
-      // still name nothing and inherit `lib/theme.dart`'s `fontFamily`, which
-      // is how "one family" stays true of them.
+      // Profound Verdant names both families, and `OPEN_QUESTIONS.md` decision
+      // 20 bundles them. The eleven stopped inheriting at the same time, and
+      // that half is the load-bearing one: a **component** theme's text style
+      // replaces the text theme's rather than merging onto it, so a role that
+      // names nothing reaches the engine with nothing however `ThemeData`
+      // is configured. Inheritance was never actually reaching `ListTile`.
       for (final entry in type.all.entries) {
         expect(
           entry.value.fontFamily,
-          entry.key == 'mono' ? 'Roboto Mono' : isNull,
+          entry.key == 'mono'
+              ? AppTypeRoles.monoFamily
+              : AppTypeRoles.interfaceFamily,
           reason: '${entry.key} names the wrong family',
+        );
+      }
+    });
+
+    test('pubspec declares every family and weight the roles read', () {
+      // A source scan, because the failure this catches is a *mismatch between
+      // two files* and neither one is wrong on its own. A role repointed to a
+      // weight nobody bundled does not throw: the engine picks the nearest
+      // declared face and renders something plausible, so a 600 silently
+      // becomes a 500 and only a person holding both files notices.
+      //
+      // `tool/screenshots/harness.dart` carries the same list a third time and
+      // cannot read it from here - a test binary has no asset bundle - so its
+      // own doc comment says the lists move together. This pins two of the
+      // three; the harness is pinned by every screenshot going rectangular.
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      final declared = <String, Set<int>>{};
+      String? family;
+      for (final line in pubspec.split('\n')) {
+        final familyMatch = RegExp(
+          r'^\s*- family:\s*(.+?)\s*$',
+        ).firstMatch(line);
+        if (familyMatch != null) {
+          family = familyMatch.group(1);
+          declared[family!] = <int>{};
+          continue;
+        }
+        final weightMatch = RegExp(r'^\s*weight:\s*(\d+)\s*$').firstMatch(line);
+        if (weightMatch != null && family != null) {
+          declared[family]!.add(int.parse(weightMatch.group(1)!));
+        }
+      }
+
+      for (final entry in type.all.entries) {
+        final wanted = entry.value.fontFamily!;
+        final weight = entry.value.fontWeight!.value;
+        expect(
+          declared.keys,
+          contains(wanted),
+          reason:
+              '${entry.key} is set in "$wanted", which pubspec.yaml does not '
+              'declare. Bundle the family or repoint the role.',
+        );
+        expect(
+          declared[wanted],
+          contains(weight),
+          reason:
+              '${entry.key} asks "$wanted" for weight $weight, which '
+              'pubspec.yaml does not declare. The engine will silently render '
+              'the nearest weight it has instead of failing.',
         );
       }
     });
@@ -770,15 +856,21 @@ void main() {
 
     test('a compact row fits its own body line inside its own height', () {
       // This is the arithmetic that decided which way round §3's "12 / 8"
-      // reads, because the document never says. Vertical 8 leaves 36 of the 40
-      // minimum; vertical 12 would need 44 and could not fit at all.
+      // reads, because the document never says. Vertical 8 leaves **37** of the
+      // 40 minimum; vertical 12 would need 45 and could not fit at all.
+      //
+      // **Was 36 until 2026-08-22.** Profound Verdant's `body-sm` states a 1.5
+      // line height where §2.2 gave 20/14, so a compact row's content grew by
+      // one pixel and the headroom fell from 4 to 3. The reading it decided is
+      // unchanged, and this is now the tighter of the two measurements that
+      // keep it - worth knowing if a later type change moves `body.md` again.
       const density = AppDensity.compact;
       final line = density.body(type).fontSize! * density.body(type).height!;
       expect(
         density.rowPadding.vertical + line,
         lessThanOrEqualTo(density.minimumRowHeight),
       );
-      expect(density.rowPadding.vertical + line, closeTo(36, 0.001));
+      expect(density.rowPadding.vertical + line, closeTo(37, 0.001));
       // The rejected reading, kept as a measurement rather than a comment.
       expect(24 + line, greaterThan(density.minimumRowHeight));
     });
@@ -1093,7 +1185,10 @@ void main() {
       // Which is why registering the token layer moves no pixel and why
       // comfortable is the root density: `bodyMedium` is already 16, and
       // `body.lg` is 16.
-      expect(type.bodyLarge.fontSize, spiritTheme.textTheme.bodyMedium!.fontSize);
+      expect(
+        type.bodyLarge.fontSize,
+        spiritTheme.textTheme.bodyMedium!.fontSize,
+      );
       expect(AppDensity.comfortable.body(type), type.bodyLarge);
     });
 
@@ -1116,7 +1211,8 @@ void main() {
         spiritTheme.outlinedButtonTheme.style!.foregroundColor!.resolve(
           <WidgetState>{},
         ),
-        reason: 'the ordinary action stopped being mint, which is §2.1\'s point',
+        reason:
+            'the ordinary action stopped being mint, which is §2.1\'s point',
       );
       expect(
         action.secondary.border,
@@ -1310,9 +1406,15 @@ void main() {
     });
 
     test('decision 15: the disabled trio is carried from dark', () {
-      expect(pv.action.disabledContainer, AppColorRoles.dark.action.disabledContainer);
+      expect(
+        pv.action.disabledContainer,
+        AppColorRoles.dark.action.disabledContainer,
+      );
       expect(pv.action.disabledLabel, AppColorRoles.dark.action.disabledLabel);
-      expect(pv.action.disabledBorder, AppColorRoles.dark.action.disabledBorder);
+      expect(
+        pv.action.disabledBorder,
+        AppColorRoles.dark.action.disabledBorder,
+      );
     });
 
     test('decision 18: the focus ring keeps its geometry, gains a colour', () {
@@ -1340,7 +1442,11 @@ void main() {
         pv.status.info,
       ]) {
         expect(role.bg.a, lessThan(1.0), reason: 'a status bg is a tint');
-        expect(role.border.a, lessThan(1.0), reason: 'a status border is a tint');
+        expect(
+          role.border.a,
+          lessThan(1.0),
+          reason: 'a status border is a tint',
+        );
         expect(role.fg.a, 1.0, reason: 'the content is never translucent');
       }
       // Neutral's background is a surface tier, so there is no hue to be 10% of.
@@ -1350,7 +1456,12 @@ void main() {
     });
 
     test('every tint is its base at the percentage the export measures', () {
-      expectTint(pv.status.ok.bg, pv.status.ok.fg, 0.10, reason: 'bg-primary/10');
+      expectTint(
+        pv.status.ok.bg,
+        pv.status.ok.fg,
+        0.10,
+        reason: 'bg-primary/10',
+      );
       expectTint(
         pv.status.ok.border,
         pv.status.ok.fg,
@@ -1393,10 +1504,19 @@ void main() {
       // `bg-error-container/20`, 128 uses. The one status whose background is
       // not a wash of its foreground, so it gets its own assertion.
       final bg = pv.status.problem.bg;
-      expectTint(bg, const Color(0xFF93000A), 0.20, reason: 'error-container/20');
+      expectTint(
+        bg,
+        const Color(0xFF93000A),
+        0.20,
+        reason: 'error-container/20',
+      );
       expect(
         (bg.r, bg.g, bg.b),
-        isNot((pv.status.problem.fg.r, pv.status.problem.fg.g, pv.status.problem.fg.b)),
+        isNot((
+          pv.status.problem.fg.r,
+          pv.status.problem.fg.g,
+          pv.status.problem.fg.b,
+        )),
         reason: 'error-container is a different red from status-critical',
       );
     });
@@ -1496,7 +1616,10 @@ void main() {
       expect(spiritTheme.textTheme.headlineLarge!.color, text.primary);
       expect(spiritTheme.textTheme.bodyMedium!.color, text.secondary);
       expect(spiritTheme.listTileTheme.textColor, text.primary);
-      expect(spiritTheme.listTileTheme.subtitleTextStyle!.color, text.secondary);
+      expect(
+        spiritTheme.listTileTheme.subtitleTextStyle!.color,
+        text.secondary,
+      );
       expect(spiritTheme.inputDecorationTheme.hintStyle!.color, text.secondary);
       expect(spiritTheme.snackBarTheme.contentTextStyle!.color, text.primary);
     });

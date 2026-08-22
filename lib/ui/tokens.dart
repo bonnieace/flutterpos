@@ -910,7 +910,8 @@ final class AppColorRoles {
 // Type roles - design.md §2.2
 // ---------------------------------------------------------------------------
 
-/// The twelve type roles of `design.md` §2.2.
+/// The thirteen type roles: Profound Verdant's seven, five derived from the
+/// stock sizes its screens use alongside them, and [numericBody].
 ///
 /// **Three properties of this class are deliberate and each prevents a class of
 /// defect.**
@@ -920,11 +921,20 @@ final class AppColorRoles {
 /// for a colour to be decided, and the tests assert every one of these is
 /// null.
 ///
-/// **No role names a family.** `lib/theme.dart` names none either, and the note
-/// there says why: this app asked for `Inter` for years and no `Inter` was ever
-/// bundled. §2.2 says "One family - Roboto", which is currently true only in
-/// the screenshot harness, which injects it. Naming nothing is the honest
-/// version of what a device already does.
+/// ~~**No role names a family.**~~ **Every role names one as of 2026-08-22**,
+/// and the two families are [interfaceFamily] and [monoFamily]. Profound
+/// Verdant names Hanken Grotesk for interface text and JetBrains Mono for
+/// figures and identifiers, and `docs/stitch/OPEN_QUESTIONS.md` decision 20
+/// bundles both rather than fetching them, because the exported screens link
+/// them from `fonts.googleapis.com` and a till is offline-first.
+///
+/// **The family belongs on the role, not only on `ThemeData.fontFamily`.** A
+/// **component** theme's text style *replaces* the text theme's rather than
+/// merging onto it - `ListTile` takes `listTileTheme.subtitleTextStyle`
+/// outright when it is set - so a role that names no family reaches the engine
+/// with none no matter what the theme's own `fontFamily` says. That is the
+/// whole reason `tool/screenshots/harness.dart` used to re-apply a family to
+/// nine component themes by hand. It no longer has to.
 ///
 /// **Line height is written as the division `design.md` states it**, `40 / 32`
 /// rather than `1.25`, because the document gives size and line height as a
@@ -934,6 +944,7 @@ final class AppColorRoles {
 final class AppTypeRoles {
   const AppTypeRoles({
     required this.display,
+    required this.displayCompact,
     required this.titleLarge,
     required this.titleMedium,
     required this.bodyLarge,
@@ -947,8 +958,32 @@ final class AppTypeRoles {
     required this.mono,
   });
 
-  /// `display` 32 / 40, 700. Screen title, expanded only.
+  /// `headline-lg` 32 / 1.2, 700, -0.64 tracking. Screen title, expanded only.
+  ///
+  /// **Repointed 2026-08-22 from `design.md` §2.2's 32 / 40 with no tracking.**
+  /// Profound Verdant states 1.2 rather than 1.25 and -0.02em rather than
+  /// nothing; -0.02em at 32 is -0.64 logical pixels, which is the conversion
+  /// every tracked role below uses because a `TextStyle` has no `em`.
   final TextStyle display;
+
+  /// `headline-lg-mobile` 28 / 1.2, 700. [display]'s compact sibling.
+  ///
+  /// **New on 2026-08-22, and the only structural addition the typography
+  /// repoint made.** Profound Verdant is the first source this app has had that
+  /// states a *breakpoint-aware* type value: 32 on desktop, 28 on mobile, and
+  /// it bothers to name the second one separately in 42 places.
+  ///
+  /// **It is a sibling role, not a resolver.** The caller picks by
+  /// [AppLayout] band the way every other compact/comfortable choice in this
+  /// file is made. A single `display` whose size depended on the band would be
+  /// one token silently meaning two things, which is the failure mode
+  /// [AppSpacing]'s note argues against at length.
+  ///
+  /// Note it carries **no tracking** where [display] carries -0.64. That is the
+  /// design's own asymmetry, not an oversight here - `headline-lg` states
+  /// `letterSpacing: -0.02em` and `headline-lg-mobile` states none, in all 75
+  /// screens that agree.
+  final TextStyle displayCompact;
 
   /// `title.lg` 22 / 28, 500. Screen title on compact, section head.
   final TextStyle titleLarge;
@@ -1000,102 +1035,186 @@ final class AppTypeRoles {
   /// `mono` 13 / 18, 400, monospace. Record IDs and SKUs - strings a person
   /// compares character by character, not prose.
   ///
-  /// ~~**The metrics are the document's; the family is not decided anywhere.**~~
-  /// **Answered by `design.md` v0.7 on 2026-08-16: the family is Roboto Mono,
-  /// and it is bundled.** The note this replaces was true and was the oldest
-  /// hole in the token layer - §2.2 said "One family - Roboto" in its opening
-  /// line and "monospace" in this row, the app bundled no font at all, and so
-  /// the one role whose entire job is character-by-character comparison
-  /// rendered in the platform's proportional default.
+  /// **The family is [monoFamily] as of 2026-08-22**, repointed from Roboto
+  /// Mono when Profound Verdant's `data-mono` row named JetBrains Mono. It was
+  /// undecided until 2026-08-16 and Roboto Mono until this change; both earlier
+  /// notes are kept in `docs/stitch/TOKEN_RECONCILIATION.md` rather than here.
   ///
-  /// **Two files, one type design**, which is the reading of "one family" that
-  /// survives contact with this row: Roboto and Roboto Mono are the same design
-  /// at two widths, so `rj_000001` sits beside body copy without looking
-  /// borrowed, and `rj_00OOO1` stops being ambiguous. This is the only role in
-  /// the twelve that names a family, and it names one because it is the only
-  /// one whose family is load-bearing rather than inherited.
+  /// This role is no longer the only one that names a family - every role does
+  /// now - but it is still the only one whose family is *load-bearing* rather
+  /// than inherited. `rj_00OOO1` has to be unambiguous, and JetBrains Mono
+  /// slashes its zero, which is the property the role exists for.
+  ///
+  /// **Now 14 / 1.0 / 500 with -0.14 tracking**, which is `data-mono` exactly.
+  /// It was 13 / 400 until the metric repoint later the same day; both mono
+  /// faces were already bundled, so the move cost no download.
+  ///
+  /// **The design sets money in this role**, not in [numericBody]: 65 of the
+  /// places a `currency-kes` colour appears also carry `text-data-mono`.
+  /// [numericBody] is deliberately left in the interface face with tabular
+  /// figures, because moving every price in the app into the mono face is a
+  /// composition decision rather than a metric one and nothing has taken it.
   final TextStyle mono;
+
+  /// Hanken Grotesk, the interface face every role but [mono] is set in.
+  ///
+  /// Named here rather than only on `ThemeData.fontFamily` so that component
+  /// themes carry it too - see the note on this class for why that distinction
+  /// has teeth. Declared in `pubspec.yaml` at 400, 500, 600 and 700, which is
+  /// exactly the set the roles below read.
+  static const String interfaceFamily = 'Hanken Grotesk';
+
+  /// JetBrains Mono, the face [mono] is set in.
+  ///
+  /// Declared at 400 and 500. The role reads 400; 500 is bundled because
+  /// Profound Verdant's `data-mono` row asks for it and that repoint is a
+  /// pending question rather than part of the family change.
+  static const String monoFamily = 'JetBrains Mono';
 
   static const List<FontFeature> _tabular = <FontFeature>[
     FontFeature.tabularFigures(),
   ];
 
   /// The scale as `design.md` §2.2 states it.
+  /// The scale as Profound Verdant states it, repointed 2026-08-22.
+  ///
+  /// **Every value below is the design's served Tailwind config**, which 75 of
+  /// the 76 exported screens carry byte-identically and which agrees with the
+  /// `DESIGN.md` frontmatter. That agreement is why this repoint trusted the
+  /// frontmatter where the radius repoint could not: there the served artifact
+  /// contradicted it, here the two match. The one outlier screen states
+  /// `data-mono` 13 / 1.2 and `section-title` 20, and is outvoted 75 to 1.
+  ///
+  /// Line heights are written as the division of the two numbers the design
+  /// pairs, so a reader can check a token against the source without
+  /// arithmetic. Tracking is stated in `em` there and in logical pixels here,
+  /// because a `TextStyle` has no `em`; each conversion is the design's figure
+  /// times the role's own size.
   static const AppTypeRoles standard = AppTypeRoles(
+    // headline-lg: 32px / 1.2 / 700 / -0.02em
     display: TextStyle(
+      fontFamily: interfaceFamily,
       fontSize: 32,
-      height: 40 / 32,
+      height: 38.4 / 32,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.64,
+    ),
+    // headline-lg-mobile: 28px / 1.2 / 700, and no tracking - see the field.
+    displayCompact: TextStyle(
+      fontFamily: interfaceFamily,
+      fontSize: 28,
+      height: 33.6 / 28,
       fontWeight: FontWeight.w700,
     ),
+    // section-title: 22px / 1.4 / 600. Mapped here rather than onto
+    // [titleMedium] because 22 is this role's size exactly; see the note on
+    // the class.
     titleLarge: TextStyle(
+      fontFamily: interfaceFamily,
       fontSize: 22,
-      height: 28 / 22,
-      fontWeight: FontWeight.w500,
+      height: 30.8 / 22,
+      fontWeight: FontWeight.w600,
     ),
+    // Derived: the design's `text-lg`, 18 / 28, which it uses 78 times for the
+    // tier below a section title. Weight is the app's own - the design states
+    // none for this size.
     titleMedium: TextStyle(
+      fontFamily: interfaceFamily,
       fontSize: 18,
-      height: 24 / 18,
+      height: 28 / 18,
       fontWeight: FontWeight.w500,
     ),
+    // body-md: 16px / 1.5 / 400. The one role the two scales already agreed on.
     bodyLarge: TextStyle(
+      fontFamily: interfaceFamily,
       fontSize: 16,
       height: 24 / 16,
       fontWeight: FontWeight.w400,
     ),
+    // body-sm: 14px / 1.5 / 400. Only the line height moved, 20 to 21.
     bodyMedium: TextStyle(
+      fontFamily: interfaceFamily,
       fontSize: 14,
-      height: 20 / 14,
+      height: 21 / 14,
       fontWeight: FontWeight.w400,
     ),
+    // **The design measures this one directly.** `.btn-primary` is
+    // `font-size: 14px; font-weight: 700; letter-spacing: 0.05em` at
+    // `height: 48px` - which is also where §9's 48dp target turns up in the
+    // design's own CSS rather than in this app's rules. No line height is
+    // stated, so the app's own is kept rather than invented.
     labelLarge: TextStyle(
-      fontSize: 15,
-      height: 20 / 15,
-      fontWeight: FontWeight.w600,
-    ),
-    labelMedium: TextStyle(
-      fontSize: 13,
-      height: 16 / 13,
-      fontWeight: FontWeight.w600,
-    ),
-    labelEyebrow: TextStyle(
-      fontSize: 11,
-      height: 16 / 11,
+      fontFamily: interfaceFamily,
+      fontSize: 14,
+      height: 20 / 14,
       fontWeight: FontWeight.w700,
-      letterSpacing: 0.8,
+      letterSpacing: 0.7,
     ),
+    // Derived: the design's `text-sm`, 14 / 20, its most-used stock size at 475
+    // occurrences. Sits at the same size as [labelLarge] and one weight below
+    // it, which is the relationship the design draws between a button and a
+    // chip.
+    labelMedium: TextStyle(
+      fontFamily: interfaceFamily,
+      fontSize: 14,
+      height: 20 / 14,
+      fontWeight: FontWeight.w600,
+    ),
+    // label-caps: 12px / 1.0 / 700 / +0.05em. The design's own small-label
+    // role, used 1,037 times and the most frequent of the seven.
+    labelEyebrow: TextStyle(
+      fontFamily: interfaceFamily,
+      fontSize: 12,
+      height: 12 / 12,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.6,
+    ),
+    // Derived: the design's `text-xs`, 12 / 16, 316 occurrences. Unchanged from
+    // §2.2, which had already landed on the same pair.
     caption: TextStyle(
+      fontFamily: interfaceFamily,
       fontSize: 12,
       height: 16 / 12,
       fontWeight: FontWeight.w400,
     ),
+    // Derived: the design's `text-3xl`, 30 / 36, 44 occurrences and the size it
+    // reaches for when a figure is the point of a card.
     numericHero: TextStyle(
-      fontSize: 28,
-      height: 32 / 28,
+      fontFamily: interfaceFamily,
+      fontSize: 30,
+      height: 36 / 30,
       fontWeight: FontWeight.w700,
       fontFeatures: _tabular,
     ),
+    // Unchanged. §2.2's 14 / 500 already matches `data-mono`'s size and weight;
+    // what it does not take is the mono *face*, deliberately - see the class
+    // note on where the design sets money in [mono] instead.
     numericBody: TextStyle(
+      fontFamily: interfaceFamily,
       fontSize: 14,
       height: 20 / 14,
       fontWeight: FontWeight.w500,
       fontFeatures: _tabular,
     ),
+    // data-mono: 14px / 1.0 / 500 / -0.01em, in the one family that is not
+    // Hanken Grotesk. See the field's own note.
     mono: TextStyle(
-      fontSize: 13,
-      height: 18 / 13,
-      fontWeight: FontWeight.w400,
-      // The one family named in this file. See the field's own note.
-      fontFamily: 'Roboto Mono',
+      fontFamily: monoFamily,
+      fontSize: 14,
+      height: 14 / 14,
+      fontWeight: FontWeight.w500,
+      letterSpacing: -0.14,
     ),
   );
 
   /// Every role by its `design.md` name, so a test can measure the set rather
-  /// than the twelve it was told about one at a time. `test/theme_test.dart`
+  /// than the thirteen it was told about one at a time. `test/theme_test.dart`
   /// enumerates `TextTheme`'s fifteen slots the same way, and four of these -
   /// both numeric roles, [mono] and [labelEyebrow] - have no slot there to be
   /// enumerated in, which is the gap this map closes.
   Map<String, TextStyle> get all => <String, TextStyle>{
     'display': display,
+    'display.compact': displayCompact,
     'title.lg': titleLarge,
     'title.md': titleMedium,
     'body.lg': bodyLarge,
@@ -1112,6 +1231,7 @@ final class AppTypeRoles {
   static AppTypeRoles lerp(AppTypeRoles a, AppTypeRoles b, double t) =>
       AppTypeRoles(
         display: TextStyle.lerp(a.display, b.display, t)!,
+        displayCompact: TextStyle.lerp(a.displayCompact, b.displayCompact, t)!,
         titleLarge: TextStyle.lerp(a.titleLarge, b.titleLarge, t)!,
         titleMedium: TextStyle.lerp(a.titleMedium, b.titleMedium, t)!,
         bodyLarge: TextStyle.lerp(a.bodyLarge, b.bodyLarge, t)!,
@@ -1404,11 +1524,10 @@ enum AppBodyRole {
   medium;
 
   /// This role, resolved against a type scale.
-  TextStyle of(AppTypeRoles type) =>
-      switch (this) {
-        AppBodyRole.large => type.bodyLarge,
-        AppBodyRole.medium => type.bodyMedium,
-      };
+  TextStyle of(AppTypeRoles type) => switch (this) {
+    AppBodyRole.large => type.bodyLarge,
+    AppBodyRole.medium => type.bodyMedium,
+  };
 }
 
 /// One of the two densities of `design.md` §3.
@@ -1785,7 +1904,8 @@ final class AppTokens extends ThemeExtension<AppTokens> {
   /// silently here. That is exactly the fault [of] was written to catch, which
   /// is why [of] still exists and why the widget that resolves density must use
   /// it.
-  static AppTokens componentOf(BuildContext context) => maybeOf(context) ?? dark;
+  static AppTokens componentOf(BuildContext context) =>
+      maybeOf(context) ?? dark;
 
   /// The same tokens at another density, for the nested `Theme` a back-office
   /// screen wraps itself in.
