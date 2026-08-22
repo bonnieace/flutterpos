@@ -642,6 +642,80 @@ the same thing this decision concludes: migrating screen 20 to `RecordList` is t
 twelve screens and is larger than a Phase 04 slice. It is recorded as the phase's unfinished route
 rather than half-done.
 
+## Decision 26 — three shapes the product owner chose, over the design's evidence, 2026-08-23
+
+**These are owner directions rather than readings of the design, and they are recorded that way on
+purpose.** Every other decision in this file argues from the export, `DESIGN_RULES.md` or active
+code. These three do not, and two of them reverse a decision that did. A shape is the owner's to
+choose; what this section owes a later reader is the evidence it overrides, so nobody re-derives the
+old answer and calls it a regression.
+
+### 26a. Buttons, chips and input wells are `radius.pill` again
+
+**The evidence points the other way and the notes this replaces were right about it.** Profound
+Verdant's own CSS gives `.btn-primary` and its inputs `borderRadius.xl`; its status chips carry a
+bare `rounded` — `0.125rem` — in 78 of the 82 places one appears; and its rendered screens are
+square-cornered throughout. That is what moved buttons to `md`, chips to `sm` and wells to `md` on
+2026-08-22.
+
+**What takes the pill:** `AppButton`, `FilterChipBar`'s chip, the `AppTextField` well, the three
+Material button themes, `chipTheme`, and the theme's `InputDecoration` border.
+
+**What deliberately does not:** cards, rows, dialogs, sheets, banners, stat tiles, the snack bar, and
+`StatusBadge`. A badge is read rather than pressed and was never a pill; and a fully round corner on
+a wide surface is not a pill but a mistake — Flutter clamps a radius to half the shorter side, so 999
+on a card would draw a lozenge.
+
+**The token values did not move.** `sm` is still 2, `md` 8, `lg` 12, `pill` 999. This changes only
+which component reads which role, which is the line `AppRadii`'s scale test and the component tests
+already divide between them.
+
+For the input well this is the third move of one value: v0.4 made it a pill at the owner's request on
+2026-08-15, 2026-08-22 took it back to the design's corner, and this restores it. **417 of 536 images
+moved**, which is the correct blast radius for a token change reaching every button, chip and field in
+the app.
+
+### 26b. More than one filter on a surface means dropdowns, not chip strips
+
+**Decision: where a surface carries more than one filter, its filters are `AppSelect`. A single
+filter stays a `FilterChipBar`.**
+
+Sales totals is the surface this is about and the only one in the app with three filters open at
+once. As chip strips their height grew with the business — one chip per colleague and one per
+category — so a shop with twelve staff and nine categories pushed the figures the page exists for off
+the bottom of a phone. A dropdown is a fixed height whatever the business holds, and the three
+figures now sit on the first screen.
+
+The other half of the rule matters as much: **one strip stays a strip.** A single chip row shows its
+options without a tap, which is what `FilterChipBar` is for, and turning it into a dropdown would hide
+information to no benefit. The till's category chooser and
+`reconciliation_anomalies_panel.dart`'s filter keep theirs.
+
+`AppSelectItem` gained a `key` for this. `FilterChipBar` keys every option and `DropdownMenuItem` had
+none, so moving a filter between them would otherwise drop every option-level contract the surface
+had. All nine option keys on the sales-totals surface are unchanged.
+
+**One cost, stated rather than discovered later: a dropdown's options are not in a screenshot.** A
+closed `DropdownButton` builds only the selected option, so hard rule 5's "every state appears in the
+harness" is weaker for a dropdown filter than it was for a chip strip, where every option was always
+rendered. A capture would have to open the menu, and an open Material menu is an overlay route. No
+capture does this today and none did before either — the chip strips were photographed with their
+options showing, which is the coverage this trades away.
+
+### 26c. The password field shows asterisks
+
+The field carried no placeholder at all from step 9 until now, on the reasoning that §5.2 forbids a
+placeholder that restates its label — which was right about `Enter Password`, the string it deleted,
+and wrong to conclude the field could therefore carry nothing.
+
+**Decision: the placeholder is `********`, and `obscuringCharacter` is `*` to match.** Asterisks are
+the permitted kind of placeholder: they are what the box will look like once somebody types in it,
+which is an example rather than a second copy of the label. The two settings travel together for a
+reason worth keeping — a placeholder showing asterisks over a field that types Flutter's default
+bullets is a box that appears to change character set the moment it is touched. `AppTextField` gained
+`obscuringCharacter` for this, defaulting to `*` for every obscured field in the app rather than only
+this one.
+
 ## Non-blocking audit limitations
 
 - The built-in Stitch connector in this chat retained an unauthenticated transport. Read-only audit
