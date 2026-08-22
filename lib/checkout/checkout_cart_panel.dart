@@ -750,10 +750,30 @@ final class _CartEditorState extends State<_CartEditor> {
         // §2.1's hairline, which is what separates two regions everywhere else
         // in this app. `VerticalDivider` paints `dividerColor`, and the theme's
         // is the same role - this reads it by name rather than by inheritance.
-        Container(width: 1, color: tokens.colors.surface.borderSubtle),
+        //
+        // **`border.strong`, not `border.subtle`.** This is the boundary between
+        // the catalog and the sale, and §9's 3:1 row applies "where a person
+        // must perceive a boundary" - which is the argument `_CartBar` already
+        // makes for its own top edge on a phone. A subtle hairline is for
+        // separating rows inside one region.
+        Container(width: 1, color: tokens.colors.surface.borderStrong),
         SizedBox(
           width: tokens.layout.salePane,
-          child: _cartPane(context, currency, total),
+          // **The surface steps are the whole of ST-035's two-region
+          // composition, and they are wide-only.** That design gives the cart
+          // `surface-container-low` with its header and footer a step up at
+          // `surface-container` and its list of lines a step *down* at
+          // `surface` - three levels, so the pane reads as a place rather than
+          // as the right-hand end of the products. In this app's roles that is
+          // the page ground, `raised`, and `sunken`.
+          //
+          // They are not passed to the sheet. A sheet's own ground is §2.1's
+          // `overlay`, a step above `raised`, so a `raised` header inside one
+          // draws recessed and a `sunken` list draws two steps down - which is
+          // the depth inversion §2.1 exists to prevent. The sheet keeps the
+          // hairlines, and `_cartPane` takes the difference as an argument
+          // rather than guessing it from whether a controller arrived.
+          child: _cartPane(context, currency, total, stepped: true),
         ),
       ],
     );
@@ -818,49 +838,59 @@ final class _CartEditorState extends State<_CartEditor> {
     String currency,
     int? total, {
     ScrollController? controller,
+    bool stepped = false,
   }) {
     final tokens = AppTokens.componentOf(context);
     final inset = AppScaffold.horizontalInset(tokens.spacing);
-    return Column(
-      key: const ValueKey('checkout-cart-pane'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        _cartHead(context, tokens, inset),
-        Expanded(
-          child: ListView(
-            // The sheet hands this controller down and the scrollable it is
-            // given is what couples the drag to the content. It goes to the
-            // middle region, because that is the one that scrolls.
-            controller: controller,
-            padding: EdgeInsets.symmetric(
-              horizontal: inset,
-              vertical: tokens.spacing.s12,
-            ),
-            children: <Widget>[
-              ..._receiptSection(context, tokens),
-              ..._saleLines(context, tokens, currency),
-              SizedBox(height: tokens.spacing.s16),
-              // **§7's "Long copy" pattern, and this is policy rather than
-              // state.** "Anything over two lines that explains *policy* rather
-              // than *the current state* goes in a `Disclosure`" - and what a
-              // saved sale does afterwards is the policy this panel's own class
-              // comment spends four paragraphs on. It was permanent body text at
-              // the foot of every cart.
-              const Disclosure(
-                key: ValueKey('checkout-submission-disclosure'),
-                // 30 characters, inside `Disclosure.summaryCharacterBudget`.
-                summary: 'What happens to a saved sale',
-                child: Text(
-                  key: ValueKey('checkout-submission-policy'),
-                  'A saved sale is submitted and confirmed automatically. It '
-                  'cannot be edited, retried, or deleted here.',
+    return ColoredBox(
+      color: stepped ? tokens.colors.surface.base : Colors.transparent,
+      child: Column(
+        key: const ValueKey('checkout-cart-pane'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _cartHead(context, tokens, inset, stepped: stepped),
+          Expanded(
+            child: ColoredBox(
+              color: stepped
+                  ? tokens.colors.surface.sunken
+                  : Colors.transparent,
+              child: ListView(
+                // The sheet hands this controller down and the scrollable it
+                // is given is what couples the drag to the content. It goes to
+                // the middle region, because that is the one that scrolls.
+                controller: controller,
+                padding: EdgeInsets.symmetric(
+                  horizontal: inset,
+                  vertical: tokens.spacing.s12,
                 ),
+                children: <Widget>[
+                  ..._receiptSection(context, tokens),
+                  ..._saleLines(context, tokens, currency),
+                  SizedBox(height: tokens.spacing.s16),
+                  // **§7's "Long copy" pattern, and this is policy rather than
+                  // state.** "Anything over two lines that explains *policy*
+                  // rather than *the current state* goes in a `Disclosure`" -
+                  // and what a saved sale does afterwards is the policy this
+                  // panel's own class comment spends four paragraphs on. It was
+                  // permanent body text at the foot of every cart.
+                  const Disclosure(
+                    key: ValueKey('checkout-submission-disclosure'),
+                    // 30 characters, inside
+                    // `Disclosure.summaryCharacterBudget`.
+                    summary: 'What happens to a saved sale',
+                    child: Text(
+                      key: ValueKey('checkout-submission-policy'),
+                      'A saved sale is submitted and confirmed automatically. '
+                      'It cannot be edited, retried, or deleted here.',
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-        _cartFoot(context, tokens, currency, total, inset),
-      ],
+          _cartFoot(context, tokens, currency, total, inset, stepped: stepped),
+        ],
+      ),
     );
   }
 
@@ -873,9 +903,11 @@ final class _CartEditorState extends State<_CartEditor> {
   Widget _cartHead(
     BuildContext context,
     AppTokens tokens,
-    double inset,
-  ) => DecoratedBox(
+    double inset, {
+    required bool stepped,
+  }) => DecoratedBox(
     decoration: BoxDecoration(
+      color: stepped ? tokens.colors.surface.raised : null,
       border: Border(
         bottom: BorderSide(color: tokens.colors.surface.borderSubtle),
       ),
@@ -962,9 +994,11 @@ final class _CartEditorState extends State<_CartEditor> {
     AppTokens tokens,
     String currency,
     int? total,
-    double inset,
-  ) => DecoratedBox(
+    double inset, {
+    required bool stepped,
+  }) => DecoratedBox(
     decoration: BoxDecoration(
+      color: stepped ? tokens.colors.surface.raised : null,
       border: Border(
         top: BorderSide(color: tokens.colors.surface.borderStrong),
       ),
