@@ -394,10 +394,21 @@ final class AppSelect<T> extends StatefulWidget {
 /// One row of an [AppSelect].
 @immutable
 final class AppSelectItem<T> {
-  const AppSelectItem({required this.value, required this.label});
+  const AppSelectItem({required this.value, required this.label, this.key});
 
   final T value;
   final String label;
+
+  /// Addresses this one row, for a test or a capture that has to reach an
+  /// option rather than the control holding it.
+  ///
+  /// **Offered because a dropdown can stand where a chip strip stood.** A
+  /// `FilterChipBar` gives every option a key and a `DropdownMenuItem` had
+  /// none, so moving a filter from one to the other silently dropped every
+  /// option-level contract the surface had. The key belongs to the option
+  /// rather than to the menu, so it survives the menu being closed and
+  /// reopened.
+  final Key? key;
 }
 
 class _AppSelectState<T> extends State<AppSelect<T>> {
@@ -446,6 +457,7 @@ class _AppSelectState<T> extends State<AppSelect<T>> {
             items: <DropdownMenuItem<T>>[
               for (final item in widget.items)
                 DropdownMenuItem<T>(
+                  key: item.key,
                   value: item.value,
                   child: Text(
                     item.label,

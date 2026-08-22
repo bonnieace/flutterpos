@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_application_1/ui/stats.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,6 +35,42 @@ Future<void> _open(WidgetTester tester, String summary) async {
   await tester.pumpAndSettle();
 }
 
+/// Chooses one option from an [AppSelect], opening it first.
+///
+/// **The three sales-totals filters became dropdowns on 2026-08-23**, at the
+/// product owner's direction that a surface carrying more than one filter uses
+/// them. Every option kept the key its chip had, through `AppSelectItem.key`, so
+/// what changed for these tests is only that an option has to be *reached*: a
+/// closed `DropdownButton` builds every item into itself to display the selected
+/// one, so the key resolves while the menu is shut and the widget behind it is
+/// not hit-testable. That is the same shape as the trap above - a tap that lands
+/// on nothing without failing - which is why this opens the control first and
+/// takes the overlay's copy of the key rather than the button's.
+Future<void> _choose(WidgetTester tester, String select, String option) async {
+  final control = find.byKey(ValueKey(select));
+  await tester.ensureVisible(control);
+  await tester.pumpAndSettle();
+  await tester.tap(control);
+  await tester.pumpAndSettle();
+  // **Tap the option's own `Text`, not the `DropdownMenuItem`.** A closed
+  // `DropdownButton` keeps a copy of the *selected* item so it can display
+  // it, and that copy is offstage - so a bare `.last` on the key sometimes
+  // picked the button's copy over the menu's, and tapping an offstage widget
+  // warns instead of failing, which left the test asserting against a filter
+  // nobody had changed. `hitTestable()` does not help: the menu item is not
+  // its own hit target. The `Text` inside it is what the menu's `InkWell`
+  // wraps, and `.last` on that is the menu's copy rather than the button's.
+  await tester.tap(
+    find
+        .descendant(
+          of: find.byKey(ValueKey(option)),
+          matching: find.byType(Text),
+        )
+        .last,
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('design.md §11 step 8: the money surface', () {
     testWidgets('the screen\'s title is the header\'s and is not drawn twice', (
@@ -44,9 +81,11 @@ void main() {
       // is the exact defect §7 names. The panel now draws none - and this test
       // pumps the panel *without* its screen, so a title found here is a second
       // one by construction.
-      await _pump(tester, _controller(TenantRole.manager), _Callable(<Object?>[
-        _response(),
-      ]));
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Callable(<Object?>[_response()]),
+      );
 
       expect(find.text('Sales totals'), findsNothing);
     });
@@ -80,9 +119,11 @@ void main() {
     testWidgets('the unpublished-currency notice is a §2.1 status', (
       tester,
     ) async {
-      await _pump(tester, _controller(TenantRole.manager), _Callable(<Object?>[
-        _response(),
-      ]));
+      await _pump(
+        tester,
+        _controller(TenantRole.manager),
+        _Callable(<Object?>[_response()]),
+      );
 
       final callout = tester.widget<Callout>(
         find.byKey(const ValueKey('sales-totals-currency-unknown')),
@@ -186,8 +227,10 @@ void main() {
     ]);
 
     await _pump(tester, _controller(TenantRole.owner), callable);
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-period-last30Days')),
+    await _choose(
+      tester,
+      'sales-totals-period',
+      'sales-totals-period-last30Days',
     );
     await tester.pump();
     await tester.pump();
@@ -207,7 +250,7 @@ void main() {
     final callable = _Callable(<Object?>[_response(), _response()]);
 
     await _pump(tester, _controller(TenantRole.manager), callable);
-    await tester.tap(find.byKey(const ValueKey('sales-totals-member-self')));
+    await _choose(tester, 'sales-totals-member', 'sales-totals-member-self');
     await tester.pump();
     await tester.pump();
     await tester.pump();
@@ -239,8 +282,10 @@ void main() {
         },
       ),
     );
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-member-cashier-b')),
+    await _choose(
+      tester,
+      'sales-totals-member',
+      'sales-totals-member-cashier-b',
     );
     await tester.pump();
     await tester.pump();
@@ -257,10 +302,18 @@ void main() {
     // **Read off the rendering rather than off the widget**: the chips are a
     // `FilterChipBar` as of §11 step 7, whose chip is private, and what this
     // test is about is the word a person sees either way.
-    expect(_chipLabel(tester, 'sales-totals-member-self'), 'You (The Manager)');
+    final members = _optionLabels(tester, 'sales-totals-member');
     expect(
-      find.byKey(const ValueKey('sales-totals-member-user-a')),
-      findsNothing,
+      members[const ValueKey('sales-totals-member-self')],
+      'You (The Manager)',
+    );
+    // The signed-in member is offered once, as itself. It must not also
+    // appear among the colleagues under its own UID - which is a claim about
+    // the option list and is asserted against the list, because an
+    // unselected option is absent from a closed dropdown's tree either way.
+    expect(
+      members.keys,
+      isNot(contains(const ValueKey('sales-totals-member-user-a'))),
     );
   });
 
@@ -280,7 +333,12 @@ void main() {
 
     // A staff record also carries an email and a phone number, and a report
     // label is not the place to disclose either.
-    expect(_chipLabel(tester, 'sales-totals-member-cashier-b'), 'cashier-b');
+    expect(
+      _optionLabels(tester, 'sales-totals-member')[const ValueKey(
+        'sales-totals-member-cashier-b',
+      )],
+      'cashier-b',
+    );
     expect(find.textContaining('@example.test'), findsNothing);
   });
 
@@ -303,7 +361,7 @@ void main() {
     // "Only mine" is answerable from the session alone, so no read can take it
     // away - and the whole-business figure is untouched.
     expect(find.byKey(const ValueKey('sales-totals-amount')), findsOne);
-    await tester.tap(find.byKey(const ValueKey('sales-totals-member-self')));
+    await _choose(tester, 'sales-totals-member', 'sales-totals-member-self');
     await tester.pump();
     await tester.pump();
     await tester.pump();
@@ -314,7 +372,11 @@ void main() {
   testWidgets('a member this business does not have is never sent', (
     tester,
   ) async {
-    final callable = _Callable(<Object?>[_response(), _response(), _response()]);
+    final callable = _Callable(<Object?>[
+      _response(),
+      _response(),
+      _response(),
+    ]);
     final reader = _Reader(
       staff: const <String, Map<String, String?>>{
         'tenant-a': <String, String?>{'cashier-b': 'Otieno'},
@@ -325,8 +387,10 @@ void main() {
     final controller = _controller(TenantRole.manager);
 
     await _pump(tester, controller, callable, reader: reader);
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-member-cashier-b')),
+    await _choose(
+      tester,
+      'sales-totals-member',
+      'sales-totals-member-cashier-b',
     );
     await tester.pump();
     await tester.pump();
@@ -395,8 +459,10 @@ void main() {
       callable,
       reader: reader,
     );
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-period-last7Days')),
+    await _choose(
+      tester,
+      'sales-totals-period',
+      'sales-totals-period-last7Days',
     );
     await tester.pump();
     await tester.pump();
@@ -443,7 +509,7 @@ void main() {
     );
     // The whole point of that sentence is that a shorter period can be picked,
     // so the chooser must survive the refusal.
-    await tester.tap(find.byKey(const ValueKey('sales-totals-period-today')));
+    await _choose(tester, 'sales-totals-period', 'sales-totals-period-today');
     await tester.pump();
     await tester.pump();
 
@@ -478,9 +544,7 @@ void main() {
     // Word for word the daily summary's sentence: the same fact about the same
     // sale lines over a different stretch of days.
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-cost')))
-          .data,
+      tester.widget<Text>(find.byKey(const ValueKey('sales-totals-cost'))).data,
       '96 sale lines have no cost recorded.',
     );
     expect(find.textContaining('Profit'), findsNothing);
@@ -497,9 +561,7 @@ void main() {
     await _pump(tester, _controller(TenantRole.manager), callable);
 
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('sales-totals-cost')))
-          .data,
+      tester.widget<Text>(find.byKey(const ValueKey('sales-totals-cost'))).data,
       '1 sale line has no cost recorded.',
     );
   });
@@ -596,8 +658,10 @@ void main() {
         },
       ),
     );
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-category-drinks')),
+    await _choose(
+      tester,
+      'sales-totals-category',
+      'sales-totals-category-drinks',
     );
     await tester.pump();
     await tester.pump();
@@ -608,10 +672,7 @@ void main() {
     // what the takings themselves are.
     expect(_figure(tester, 'sales-totals-profit'), 'KES 100.00');
     expect(_figure(tester, 'sales-totals-margin'), '25.0%');
-    expect(
-      find.byKey(const ValueKey('sales-totals-category-basis')),
-      findsOne,
-    );
+    expect(find.byKey(const ValueKey('sales-totals-category-basis')), findsOne);
   });
 
   testWidgets('the takings are split by how they were paid for', (
@@ -682,7 +743,10 @@ void main() {
 
     expect(find.byKey(const ValueKey('sales-totals-tender-cash')), findsOne);
     expect(find.byKey(const ValueKey('sales-totals-tender-mpesa')), findsOne);
-    expect(find.byKey(const ValueKey('sales-totals-tender-card')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sales-totals-tender-card')),
+      findsNothing,
+    );
     expect(
       find.byKey(const ValueKey('sales-totals-tender-unrecorded')),
       findsNothing,
@@ -694,9 +758,7 @@ void main() {
     // No unrecorded sales means no note about them either - and the fold itself
     // is absent, not merely its contents.
     expect(
-      find.byKey(
-        const ValueKey('sales-totals-tender-unrecorded-disclosure'),
-      ),
+      find.byKey(const ValueKey('sales-totals-tender-unrecorded-disclosure')),
       findsNothing,
     );
     expect(
@@ -739,9 +801,7 @@ void main() {
     expect(
       tester
           .widget<Text>(
-            find.byKey(
-              const ValueKey('sales-totals-tender-unrecorded-note'),
-            ),
+            find.byKey(const ValueKey('sales-totals-tender-unrecorded-note')),
           )
           .data,
       'Sales recorded before payment methods were captured name none, so they '
@@ -756,9 +816,7 @@ void main() {
     );
   });
 
-  testWidgets('an unrecognised method is reported, not hidden', (
-    tester,
-  ) async {
+  testWidgets('an unrecognised method is reported, not hidden', (tester) async {
     final callable = _Callable(<Object?>[_response(byTender: _byTender())]);
 
     await _pump(tester, _controller(TenantRole.owner), callable);
@@ -834,22 +892,25 @@ void main() {
   ) async {
     final callable = _Callable(<Object?>[
       _response(),
-      _response(overrides: <String, Object?>{
-        'sales': 812.0,
-        'transactions': 12,
-      }),
+      _response(
+        overrides: <String, Object?>{'sales': 812.0, 'transactions': 12},
+      ),
     ]);
 
     await _pump(
       tester,
       _controller(TenantRole.manager),
       callable,
-      reader: _Reader(categories: <String, List<String>>{
-        'tenant-a': <String>['drinks', 'bread'],
-      }),
+      reader: _Reader(
+        categories: <String, List<String>>{
+          'tenant-a': <String>['drinks', 'bread'],
+        },
+      ),
     );
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-category-drinks')),
+    await _choose(
+      tester,
+      'sales-totals-category',
+      'sales-totals-category-drinks',
     );
     await tester.pump();
     await tester.pump();
@@ -870,7 +931,9 @@ void main() {
     );
   });
 
-  testWidgets('a single sale read is described in the singular', (tester) async {
+  testWidgets('a single sale read is described in the singular', (
+    tester,
+  ) async {
     final callable = _Callable(<Object?>[
       _response(
         overrides: <String, Object?>{'transactions': 1},
@@ -882,12 +945,16 @@ void main() {
       tester,
       _controller(TenantRole.manager),
       callable,
-      reader: _Reader(categories: <String, List<String>>{
-        'tenant-a': <String>['drinks'],
-      }),
+      reader: _Reader(
+        categories: <String, List<String>>{
+          'tenant-a': <String>['drinks'],
+        },
+      ),
     );
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-category-drinks')),
+    await _choose(
+      tester,
+      'sales-totals-category',
+      'sales-totals-category-drinks',
     );
     await tester.pump();
     await tester.pump();
@@ -907,9 +974,11 @@ void main() {
       tester,
       _controller(TenantRole.manager),
       callable,
-      reader: _Reader(categories: <String, List<String>>{
-        'tenant-a': <String>['drinks'],
-      }),
+      reader: _Reader(
+        categories: <String, List<String>>{
+          'tenant-a': <String>['drinks'],
+        },
+      ),
     );
 
     expect(
@@ -930,17 +999,23 @@ void main() {
       tester,
       _controller(TenantRole.owner),
       callable,
-      reader: _Reader(categories: <String, List<String>>{
-        'tenant-a': <String>['drinks'],
-      }),
+      reader: _Reader(
+        categories: <String, List<String>>{
+          'tenant-a': <String>['drinks'],
+        },
+      ),
     );
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-category-drinks')),
+    await _choose(
+      tester,
+      'sales-totals-category',
+      'sales-totals-category-drinks',
     );
     await tester.pump();
     await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-period-last7Days')),
+    await _choose(
+      tester,
+      'sales-totals-period',
+      'sales-totals-period-last7Days',
     );
     await tester.pump();
     await tester.pump();
@@ -1026,8 +1101,10 @@ void main() {
     final controller = _controller(TenantRole.manager);
 
     await _pump(tester, controller, callable, reader: reader);
-    await tester.tap(
-      find.byKey(const ValueKey('sales-totals-category-drinks')),
+    await _choose(
+      tester,
+      'sales-totals-category',
+      'sales-totals-category-drinks',
     );
     await tester.pump();
     await tester.pump();
@@ -1227,29 +1304,29 @@ final class _Reader implements TenantDataReader {
     // repository proves it, so the fake has to answer in that order too.
     if (isStaff) {
       final uids = _roster(tenantId).keys.toList()..sort();
-      return Future<List<TenantQueryDocumentSnapshot>>.value(<
-        TenantQueryDocumentSnapshot
-      >[
-        for (final uid in uids.take(query.limit))
-          TenantQueryDocumentSnapshot(
-            path: '${query.collectionPath}/$uid',
-            data: _staffData(tenantId, uid),
-          ),
-      ]);
+      return Future<List<TenantQueryDocumentSnapshot>>.value(
+        <TenantQueryDocumentSnapshot>[
+          for (final uid in uids.take(query.limit))
+            TenantQueryDocumentSnapshot(
+              path: '${query.collectionPath}/$uid',
+              data: _staffData(tenantId, uid),
+            ),
+        ],
+      );
     }
     final ids = <String>[...?categories[tenantId]]..sort();
     final collectionPath = answersOutsideTenant
         ? 'tenants/tenant-z/categories'
         : query.collectionPath;
-    return Future<List<TenantQueryDocumentSnapshot>>.value(<
-      TenantQueryDocumentSnapshot
-    >[
-      for (final id in ids.take(query.limit))
-        TenantQueryDocumentSnapshot(
-          path: '$collectionPath/$id',
-          data: <String, Object?>{'name': '$id shelf'},
-        ),
-    ]);
+    return Future<List<TenantQueryDocumentSnapshot>>.value(
+      <TenantQueryDocumentSnapshot>[
+        for (final id in ids.take(query.limit))
+          TenantQueryDocumentSnapshot(
+            path: '$collectionPath/$id',
+            data: <String, Object?>{'name': '$id shelf'},
+          ),
+      ],
+    );
   }
 }
 
@@ -1344,9 +1421,8 @@ final class _Callable implements SalesTotalsCallable {
     pending.removeAt(0).complete(_next());
   }
 
-  Object? _next() => _outcomes[_index < _outcomes.length
-      ? _index++
-      : _outcomes.length - 1];
+  Object? _next() =>
+      _outcomes[_index < _outcomes.length ? _index++ : _outcomes.length - 1];
 
   @override
   Future<Object?> call(Map<String, Object?> payload) {
@@ -1364,8 +1440,20 @@ final class _Callable implements SalesTotalsCallable {
 }
 
 /// The word a filter chip is drawing, addressed by the key its screen gave it.
-String _chipLabel(WidgetTester tester, String key) => tester
-    .widget<Text>(
-      find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)),
-    )
-    .data!;
+/// The options one of the member/category dropdowns is offering, by key.
+///
+/// **Read off the widget rather than off the rendering, which is the reverse
+/// of what this file used to do and for the same underlying reason.** While
+/// the filters were a `FilterChipBar` the chip was private, so the only way
+/// to see a label was to find its `Text`. As dropdowns the model is public -
+/// `AppSelect.items` is a list of `AppSelectItem` - and the rendering is the
+/// part that is now unavailable: a closed `DropdownButton` builds only the
+/// selected option, so an unselected one has no `Text` in the tree at all.
+/// Reading the model also means these assertions no longer depend on whether
+/// a menu happens to be open.
+Map<Key?, String> _optionLabels(WidgetTester tester, String select) {
+  final control = tester.widget<AppSelect<String?>>(
+    find.byKey(ValueKey(select)),
+  );
+  return <Key?, String>{for (final item in control.items) item.key: item.label};
+}
