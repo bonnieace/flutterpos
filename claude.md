@@ -24,6 +24,9 @@ not define a decision, record it in `docs/stitch/OPEN_QUESTIONS.md` instead of i
    spring comes from the token layer. A literal hex or a magic number in a widget is a
    defect regardless of whether it looks right.
 3. **Do not touch `lib/pos/**` or `lib/screens/**`.** Legacy, read-only, out of scope.
+   **Eight more locations are equally unreachable and equally out of scope** — including a
+   `pill` component set and two rival colour systems. `test/dev/reachable_lib_test.dart` holds
+   the list and fails if it changes; read it before restyling anything outside `lib/ui/`.
 4. **One phase per branch.** Use the numbered briefs under `docs/stitch/phases/`. Do one
    phase and stop; a completed Stitch design is not permission to begin Flutter implementation.
 5. **Every component ships with its full state matrix** — enabled, hover, focus-visible,
