@@ -1,3 +1,4 @@
+import 'dart:io' show Directory, File;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -661,6 +662,59 @@ void main() {
       expect(density.minimumTapTarget, const Size(32, 32));
       expect(density.sectionGap, 16);
       expect(density.pointerOnly, isTrue);
+    });
+
+    test('nothing in lib/ applies the 32dp density, and that is the guard', () {
+      // **The tripwire for the decision in `OPEN_QUESTIONS.md`, Finding 2 of
+      // `audits/2026-08-22-wave-0-foundations.md`: a density resolver must take
+      // the input kind, not just a width, and must refuse `compact` on touch.**
+      //
+      // That resolver does not exist yet, and `pointerOnly` is read nowhere in
+      // `lib/` - so today the 48dp guarantee holds only because `compact` was
+      // never wired up, which is luck rather than enforcement. This test turns
+      // the luck into a tripwire: the moment production code reaches for the
+      // 32dp density, it fails, and whoever is adding the first dense surface
+      // has to answer the pointer question in the same change.
+      //
+      // A source scan rather than a widget test, because what is being asserted
+      // is the *absence* of a call. There is no screen to pump.
+      final offenders = <String>[];
+      for (final entity in Directory('lib').listSync(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.dart')) continue;
+        final path = entity.path.replaceAll(r'\', '/');
+        // `lib/pos/**` and `lib/screens/**` are legacy and read-only under
+        // `claude.md` hard rule 3, and `tokens.dart` is where `compact` is
+        // declared.
+        if (path.contains('lib/pos/') ||
+            path.contains('lib/screens/') ||
+            path.endsWith('lib/ui/tokens.dart')) {
+          continue;
+        }
+        // **Comments are stripped before the check, deliberately.** A doc
+        // comment that explains why a surface does *not* take the dense density
+        // is exactly the sort of note this codebase writes, and failing on it
+        // would train the next reader to delete the explanation rather than
+        // answer the question.
+        final code = entity
+            .readAsLinesSync()
+            .map((line) {
+              final comment = line.indexOf('//');
+              return comment == -1 ? line : line.substring(0, comment);
+            })
+            .join('\n');
+        if (code.contains('AppDensity.compact')) offenders.add(path);
+      }
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'Production code now applies AppDensity.compact, whose targets are '
+            '32x32. DESIGN_RULES.md makes 48dp pass/fail and AppDensity.compact '
+            'carries pointerOnly: true, which nothing enforces. Before wiring '
+            'this, give the resolver the pointer/touch kind - not just a width - '
+            'and refuse compact on touch. Then replace this test with one that '
+            'asserts the resolver refuses it.',
+      );
     });
 
     test('comfortable honours §9\'s 48dp touch target', () {
