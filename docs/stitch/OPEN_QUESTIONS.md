@@ -225,9 +225,17 @@ viewport added in the 1024-1279 range, which nothing currently covers.
 > faster to scan than stacked cards, and there is no reason to take that width away from the record
 > surfaces. Because step 1 removed the till's dependency on that floor, the coupling the section is
 > named for no longer exists and the two questions are independent. The fifteen assertions pinning
-> 1024 therefore stand unchanged. **The harness viewport in 1024-1279 is still missing and is still
-> worth adding** — that half of the paragraph was right for a different reason, since four surfaces
+> 1024 therefore stand unchanged. ~~**The harness viewport in 1024-1279 is still missing and is still
+> worth adding**~~ — that half of the paragraph was right for a different reason, since four surfaces
 > flip in that band and nothing photographs them.
+>
+> **Second correction, same day, at `7509dcc`: that viewport exists.** `desktopNarrowViewport` is
+> 1024 x 768 and the width matrices render at it, so the four surfaces are photographed at the floor
+> where they flip. It turned out to be two gaps rather than one — §4.1's band floors and §4.2's page
+> maxima interleave into five width regions and the harness had three, so `compactWideViewport`
+> (767 x 1000) closes 720-767 as well, and a scan in `test/ui/tokens_test.dart` fails if a region
+> loses its viewport. **Nothing else in this decision moved**: the floor is still 1024, still
+> deliberate, and the fifteen assertions still stand.
 
 ### Original gap descriptions
 
@@ -306,6 +314,15 @@ viewport added in the 1024-1279 range, which nothing currently covers.
     was covered by nothing**, which is why the boundary could sit wrong without anyone seeing it. A
     test also pins 768 exactly, the tightest case the new boundary admits: the cart pane is a fixed
     420, so the products get 347, and a `Row` that does not fit overflows and throws.
+
+    **Extended at `7509dcc`, and it lands on this decision's own deferred half.** That list is
+    `responsiveViewports` now, four wide rather than three, because §4.1's band floors and §4.2's
+    page maxima interleave into five width regions and the harness had viewports in three of them. So
+    the till is captured at **1024** as well — `screenshots/desktop-narrow/14-new-sale.png` and
+    `15-new-sale-with-a-cart.png`. That width sits inside the 1024-1279 band this decision created,
+    which is exactly where Profound Verdant asks for three columns and this app draws two. The
+    deferral is unchanged and still deliberate; what changed is that the debt is now in a picture
+    rather than only in this paragraph.
 
     See `audits/2026-08-22-wave-0-foundations.md` Finding 1 for the per-band table and the original
     blast-radius analysis.

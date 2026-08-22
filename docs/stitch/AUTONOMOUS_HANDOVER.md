@@ -57,6 +57,7 @@ Verified at `71f26c2`:
 | Status roles with alpha tints; amber and blue as documented additions | `AppStatusRoles.profoundVerdant` |
 | Breakpoints settled 768/1024; till on `mediumFloor` | `AppLayout`, `checkout_cart_panel.dart:220` |
 | 48dp enforced by a source-scanning tripwire | `test/ui/tokens_test.dart` |
+| A viewport in all five width regions, plus its tripwire — **added by this run**, `7509dcc` | `tool/screenshots/harness.dart` |
 | Typography — both families bundled, all 13 roles, full metric repoint | `pubspec.yaml`, `AppTypeRoles` |
 | All 22 `OPEN_QUESTIONS.md` items answered | that file |
 
@@ -73,10 +74,11 @@ the files parallel streams would collide on, and the coordination cost is not re
 unsupervised run. Use a read-only subagent for broad searches if it genuinely saves you reading ten
 files; never for editing.
 
-1. **1024-1279 harness viewport.** Cheap, additive, changes no existing pixel. Four behaviours flip
-   in that band and nothing photographs them: `record_list.formFor`, `home_navigation.showsMenu`,
-   `PageHeader.showsDisplayTitle`, `routes._isExpanded`. Do this first — later phases inherit the
-   coverage.
+1. ~~**1024-1279 harness viewport.**~~ **Done at `7509dcc`.** It was two regions rather than one:
+   §4.1's band floors and §4.2's page maxima interleave, so the width axis has five regions and the
+   harness had three. `desktopNarrowViewport` (1024) and `compactWideViewport` (767) close both, and a
+   tripwire in `test/ui/tokens_test.dart` keeps them closed. 34 new images, none of the existing 361
+   moved. Later phases inherit the coverage.
 2. **Wave 0 remainder.** The six unaudited components — disabled, read-only, offline, busy,
    confirmation, provenance. `EmptyState`, `LoadingState`, `ErrorState` already exist in
    `lib/ui/states.dart`; follow their shape. Then RBAC guards against `RBAC_MATRIX.md`, then test
@@ -94,8 +96,9 @@ Take the phase brief under `phases/`, its audit under `audits/`, and its row in
 
 ## 4. Testing policy — this is the anti-overtesting contract
 
-The full Flutter suite is **2,249 tests and about 2m30s**. The screenshot harness is **296 tests,
-361 images, about 35s**. Running either per screen is the main way this run wastes time.
+The full Flutter suite is **2,250 tests and about 2m00s**. The screenshot harness is **325 tests,
+395 images, about 40s**. Running either per screen is the main way this run wastes time.
+(Was 2,249 / 296 / 361 when this file was written; `7509dcc` added one test and 34 images.)
 
 **Per screen or component slice:**
 
@@ -121,7 +124,7 @@ failure before retrying; do not re-run hoping.
 **Verifying pixels:** `screenshots/` is **gitignored**, so `git status` reports nothing whatever the
 files contain. Hash before and after — `find screenshots -name "*.png" -print0 | sort -z | xargs -0
 sha256sum` into a scratch file, regenerate, hash again, and `comm` the two. Report how many of the
-361 moved. A count is evidence; "screenshots regenerated" is not.
+395 moved, and how many are new. A count is evidence; "screenshots regenerated" is not.
 
 **Screenshots prove the raster and nothing else.** They do not prove the app runs and cannot show
 motion at all. Never call a change verified on screenshots alone.

@@ -49,6 +49,7 @@ Branch `stitch-wave-0-tokens`, as of 2026-08-22. **Do not re-decide or redo any 
 | Typography **live end to end** — families bundled and the whole scale repointed to Profound Verdant | `pubspec.yaml`, `AppTypeRoles` |
 | `displayCompact` added for `headline-lg-mobile`; thirteen roles now | `lib/ui/tokens.dart` |
 | The screenshot harness no longer injects a font family | `tool/screenshots/harness.dart` |
+| The width axis has a viewport in **all five** of its regions, and a tripwire that says so | `harness.dart`, `test/ui/tokens_test.dart` |
 
 **The token work is done.** Typography landed on 2026-08-22 and closed item 20. Hanken Grotesk
 (400/500/600/700) and JetBrains Mono (400/500) are bundled from the upstream OFL repositories, and
@@ -81,13 +82,21 @@ compact row's content 36 → 37 of its 40 minimum.
 **One stale instruction was corrected while verifying.** `OPEN_QUESTIONS.md`'s "coupled consequence of
 decision 21" still told the reader to move `AppLayout.expandedFloor` from 1024 to 1280 as a mandatory
 second step. That step was never taken and will not be — 1024 is the deliberate deviation — so the
-section now carries a dated correction. Its other half stands: **no harness viewport covers 1024 to
-1279**, and the four behaviours that flip there (`record_list.formFor`, `home_navigation.showsMenu`,
-`PageHeader.showsDisplayTitle`, `routes._isExpanded`) are still rendered by nothing.
+section now carries a dated correction.
 
-**Then:** the 1024-1279 harness viewport, which is additive and changes no existing pixel. Then the
-unaudited half of Wave 0 — disabled, read-only, offline, busy, confirmation and provenance components;
-RBAC guards against `RBAC_MATRIX.md`; test fixtures — and Phases 01 and 02 structurally.
+**Its other half is now closed, at `7509dcc`.** It said no harness viewport covered 1024 to 1279 and
+that the four behaviours flipping there were rendered by nothing. Both true. Deriving the boundaries
+rather than taking the number found a **second** uncovered region: §4.1's two band floors (768, 1024)
+and §4.2's two page maxima (720 `reading`, 1200 `records`) interleave on one axis, so it is cut into
+**five** regions and the harness had viewports in three. `desktopNarrowViewport` (1024x768) and
+`compactWideViewport` (767x1000) close both, `everyBandViewports` is now `responsiveViewports` because
+four widths are not three bands, and `test/ui/tokens_test.dart` scans the harness and fails if any
+region loses its viewport. 34 new images; **none of the existing 361 moved**. `AppLayout.salePane` is
+excluded from the boundaries deliberately — it is a pane inside a page, not a page maximum.
+
+**Then:** the unaudited half of Wave 0 — disabled, read-only, offline, busy, confirmation and
+provenance components; RBAC guards against `RBAC_MATRIX.md`; test fixtures — and Phases 01 and 02
+structurally.
 
 **The web target does not run, and it is not the redesign's fault.** Two independent pre-existing bugs,
 both in the bootstrap, both unfixed because they are behaviour changes needing explicit authorization:
@@ -204,10 +213,12 @@ The integration owner validates or establishes:
   touch;
 - responsive desktop/tablet/mobile scaffolds. These exist and the breakpoint floors are **settled** at
   768/1024 as a deliberate deviation from Profound Verdant's 1280 — a table at 1194 beats stacked
-  cards on an operational surface. Still true: **no harness viewport covers 1024 to 1279**, so the
-  four behaviours that flip there (`record_list.formFor`, `home_navigation.showsMenu`,
-  `PageHeader.showsDisplayTitle`, `routes._isExpanded`) are rendered by nothing. Adding one is cheap,
-  zero-pixel, and pays off for typography too;
+  cards on an operational surface. **Done at `7509dcc`:** the harness now declares a viewport in every
+  one of the width axis's five regions, so the four behaviours that flip at 1024
+  (`record_list.formFor`, `home_navigation.showsMenu`, `PageHeader.showsDisplayTitle`,
+  `routes._isExpanded`) are photographed at the floor where they flip, and 720-767 — compact band,
+  reading maximum already firing — is photographed too. A tripwire in `test/ui/tokens_test.dart` fails
+  if a region loses its viewport;
 - authenticated identity, tenant selection, platform separation, and RBAC route guards;
 - role-aware tenant navigation and the distinction between common routes and role-specific routes;
 - reusable loading, empty, error, disabled, read-only, offline, busy, confirmation, and provenance
@@ -315,7 +326,8 @@ Before editing, provide a short execution brief containing:
   table above. That table was accurate when written and this prompt has already gone stale once, so
   check the claims that matter to your first chunk: what `_palette` points at, what `AppRadii` holds,
   and whether `OPEN_QUESTIONS.md` still reads resolved;
-- the bounded chunk you will implement first, from what the Current state section says is left;
+- the bounded chunk you will implement first, from what the Current state section says is left. The
+  harness viewport work is **done** as of `7509dcc`, so the next chunk is the unaudited half of Wave 0;
 - the proposed later agent streams and non-overlapping ownership boundaries;
 - the known design debts that will remain provisional — including the deliberate deviations, which are
   not debt: 768/1024 breakpoints, `pill` as an app-only value, and the deferred 3-column desktop till;

@@ -40,9 +40,28 @@ tablet and ask for a two-region layout rather than the full three-region desktop
 surface specifically, Profound Verdant says tablet is a "2-column split (Items + Cart)" and desktop is
 the "Full 3-column operational view", so this band currently gets one column too many.
 
-**The band is untested.** The screenshot harness captures 1440, 834, and 411 px. Nothing between 1024
+~~**The band is untested.** The screenshot harness captures 1440, 834, and 411 px. Nothing between 1024
 and 1279 is exercised, so no existing golden or widget test would catch the discrepancy in either
-direction.
+direction.~~
+
+**Corrected 2026-08-22 at `7509dcc`. It is photographed now, and there was a second untested band
+beside it.** The harness declares `desktopNarrowViewport` at 1024 x 768, so the width matrices render
+the four surviving behaviours in this table at the exact floor where they flip, and the till at
+`screenshots/desktop-narrow/14-new-sale.png` shows the two-pane composition this finding is about.
+
+Deriving the boundaries rather than taking the number is what showed the second gap. §4.1's two band
+floors (768, 1024) and §4.2's two page maxima (720 `reading`, 1200 `records`) are four boundaries on
+**one** axis and they interleave, so the axis is cut into **five** regions rather than three: 1440,
+834 and 411 straddle all four boundaries at once, which puts them in the outermost two regions of
+five. **720-767** — `compact`, so stacked cards, but already over the reading maximum, so a capped
+centred column — was dark for the same reason and is now `compactWideViewport` at 767 x 1000.
+
+Two things this correction does **not** change. The floor is still 1024 and still a deliberate
+deviation; nothing about the recommendation below moved. And a picture still only proves the raster:
+no screen overflows or truncates at either new width, which is what a widget test detects, but it says
+nothing about whether two panes is the *right* composition for this band. That stays a Phase 03
+question. A source scan in `test/ui/tokens_test.dart` now fails, naming the interval, if any of the
+five regions loses its viewport.
 
 ### Moving the floor alone is the wrong fix, and it regresses the sale path
 

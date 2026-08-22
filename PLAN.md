@@ -27,106 +27,106 @@ Every section of this file, with the line it starts on. Read the one you need.
   - **534** — Found by using the app
   - **666** — Rollout position
   - **688** — Test baselines
-- **1339** — Corrections made in the 2026-08-07 PLAN/HISTORY split
-- **1370** — Standing decisions and unreachable capabilities
-  - **1378** — A sale records how it was paid for, chosen manually
-  - **1396** — A business publishes its own currency, and it converts nothing
-  - **1414** — A shop stocks itself, and a retired product keeps its history
-  - **1437** — A price is corrected on the server, and never a quantity
-  - **1470** — A product records what it cost, and a sale freezes it
-  - **1495** — A profit figure is complete or it is not shown
-  - **1518** — Bulk catalog work is a rewrite, and the old code is not the starting point
-  - **1548** — A spreadsheet becomes products, and its stock has an origin
-  - **1588** — One screen reaches both bulk callables, and it previews before it writes
-  - **1617** — A suspicious return is scored on the server, after the first deployment
-  - **1641** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
-  - **1660** — A refused invitation names what will work, and only a transient failure invites a retry
-  - **1687** — The token layer is additive, and a density is a nested `Theme`
-  - **1723** — The ripple dies at the theme, and the press arrives with the button
-  - **1750** — A button is a component, and a spring is the substrate under it
-  - **1775** — Every button is an `AppButton`, and the tier is a decision per site
-  - **1797** — Five statuses, and three components two of which have no specification
-  - **1829** — One field, everywhere - and an audit finding that was false
-  - **1856** — A route arrives on a spring, and one parallax is deliberately missing
-  - **1888** — A category is named, and a document ID is not a name
-  - **1910** — A screen title is content, and the toolbar keeps only the way back
-  - **1945** — One boundary, one variable, and a maximum width on every page
-  - **1973** — One record model, three renderings, and the loss the caller owns
-  - **2002** — The staff directory stops choosing its own form, and a record gets a form slot
-  - **2025** — A product states its facts as facts, and only one that cannot be sold has a standing
-  - **2051** — One ledger entry, one vocabulary, and a screen that had three
-  - **2080** — A shift has a standing, and two paragraphs were never about a record
-  - **2108** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
-  - **2139** — A page's standing is a status, and a report row's reads the mode it was written in
-  - **2166** — A figure is a component, and a row of them measures what it holds
-  - **2202** — A figure is evidence on these three, and one document is read two ways on purpose
-  - **2225** — A notice says which answer it is, and four of them were never refusals
-  - **2253** — A title appears once, and the page that said it was read-only was not
-  - **2278** — A column asks for what it holds, and a share is a guess about content
-  - **2311** — A boundary is a measurement, and the front door had a second palette
-  - **2349** — An input is a pill again, and the specification moved first
-  - **2388** — The till draws the token layer, and a status is never a colour on its own
-  - **2421** — Thirteen components exist, and what is left of §5.1 is one that does and one that should not
-  - **2475** — A printer is dialled behind a seam, and a receipt number is the idempotency key
-  - **2538** — A read has three answers, a dialog may hold a form, and a page bar does not move
-  - **2579** — Built, tested, and still unreachable
-  - **2620** — The home is cards below 1024 and a side menu above it, and the till is pushed
-- **2677** — Open decisions
-  - **2679** — One printer per device, or several — and it decides the shape of a durable record
-  - **2700** — §5.1 gives `LedgerEntry` a row and §4.3 took every screen it names
-  - **2716** — A form dialog cannot be escaped by its scrim, and two dialogs changed behaviour
-  - **2732** — `AppDialog` is 720 wide because §4.3's `Form` row is, and no section states a dialog's maximum
-  - **2749** — ~~§7 wants a filled destructive confirm~~ — resolved 2026-08-16: §7 gave up the word
-  - **2769** — ~~§2.2 gives a section head `title.lg`~~ — resolved 2026-08-16: it gives it `title.md`
-  - **2794** — §4.4's home top bar needs two facts the home is not given, and fetching them is not a restyle
-  - **2831** — §4.4 wants the side menu on every route, and every route reaches it by a push
-  - **2867** — Public password reset needs App Check, which this app has none of
-  - **2974** — `Callout` has no specification, and three glyph sizes were borrowed
-  - **2998** — Every string is painted 0.25px per character wider than its token style says
-  - **3019** — ~~A chip is the only thing §2.3's pill argument still guards~~ — resolved 2026-08-16: the chip is a pill
-  - **3047** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
-  - **3071** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
-  - **3092** — Three run counts are decoded on every read and displayed by nothing
-  - **3109** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
-  - **3144** — `design.md` states no page padding, and `AppScaffold` had to pick one
-  - **3163** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
-  - **3188** — `AppSheet` has no specification, and step 7 opens a sheet
-  - **3211** — The app teaches by folding prose, and nobody has decided whether folding is teaching
-  - **3234** — The invitation email names no business, and no step reaches an email
-  - **3256** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
-  - **3295** — Three design-system questions the redesign has refused to answer
-  - **3339** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
-  - **3350** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
-  - **3420** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
-- **3486** — Identity, Tenancy, and Public Interfaces
-  - **3488** — Environments
-  - **3495** — Root model
-  - **3527** — Tenant path contract
-  - **3537** — Tenant routing and limits
-  - **3554** — Shared authorization
-  - **3571** — Public callable interfaces
-  - **3605** — Full export surface
-- **3635** — Platform, Ownership, and Membership Integrity
-- **3691** — Invitations and Email
-- **3755** — Offline Operations, Stock, and Receipts
-- **3804** — Reconciliation, Rules, and Testing
-  - **3806** — Reconciliation
-  - **3870** — Rules
-  - **3896** — Required tests
-- **3914** — Working on this repository
-  - **3916** — The emulator prelude is not optional
-  - **3931** — Standing traps
-  - **4347** — Repository state
-- **4522** — Next bounded chunk
-  - **4699** — What it builds, and the first two are one item
-  - **4722** — What it must not do
-  - **4737** — What it owes
-  - **4765** — What it builds, in the order that section prescribes
-  - **4784** — The one decision this chunk must have answered before item 3
-  - **4792** — What it must not do
-  - **4809** — What this chunk owes on top of the work
-  - **4816** — Behind it
-  - **4824** — ~~The reskin tail's own five items, its exclusions and its size estimate~~ — retired 2026-08-16
+- **1367** — Corrections made in the 2026-08-07 PLAN/HISTORY split
+- **1398** — Standing decisions and unreachable capabilities
+  - **1406** — A sale records how it was paid for, chosen manually
+  - **1424** — A business publishes its own currency, and it converts nothing
+  - **1442** — A shop stocks itself, and a retired product keeps its history
+  - **1465** — A price is corrected on the server, and never a quantity
+  - **1498** — A product records what it cost, and a sale freezes it
+  - **1523** — A profit figure is complete or it is not shown
+  - **1546** — Bulk catalog work is a rewrite, and the old code is not the starting point
+  - **1576** — A spreadsheet becomes products, and its stock has an origin
+  - **1616** — One screen reaches both bulk callables, and it previews before it writes
+  - **1645** — A suspicious return is scored on the server, after the first deployment
+  - **1669** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
+  - **1688** — A refused invitation names what will work, and only a transient failure invites a retry
+  - **1715** — The token layer is additive, and a density is a nested `Theme`
+  - **1751** — The ripple dies at the theme, and the press arrives with the button
+  - **1778** — A button is a component, and a spring is the substrate under it
+  - **1803** — Every button is an `AppButton`, and the tier is a decision per site
+  - **1825** — Five statuses, and three components two of which have no specification
+  - **1857** — One field, everywhere - and an audit finding that was false
+  - **1884** — A route arrives on a spring, and one parallax is deliberately missing
+  - **1916** — A category is named, and a document ID is not a name
+  - **1938** — A screen title is content, and the toolbar keeps only the way back
+  - **1973** — One boundary, one variable, and a maximum width on every page
+  - **2001** — One record model, three renderings, and the loss the caller owns
+  - **2030** — The staff directory stops choosing its own form, and a record gets a form slot
+  - **2053** — A product states its facts as facts, and only one that cannot be sold has a standing
+  - **2079** — One ledger entry, one vocabulary, and a screen that had three
+  - **2108** — A shift has a standing, and two paragraphs were never about a record
+  - **2136** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
+  - **2167** — A page's standing is a status, and a report row's reads the mode it was written in
+  - **2194** — A figure is a component, and a row of them measures what it holds
+  - **2230** — A figure is evidence on these three, and one document is read two ways on purpose
+  - **2253** — A notice says which answer it is, and four of them were never refusals
+  - **2281** — A title appears once, and the page that said it was read-only was not
+  - **2306** — A column asks for what it holds, and a share is a guess about content
+  - **2339** — A boundary is a measurement, and the front door had a second palette
+  - **2377** — An input is a pill again, and the specification moved first
+  - **2416** — The till draws the token layer, and a status is never a colour on its own
+  - **2449** — Thirteen components exist, and what is left of §5.1 is one that does and one that should not
+  - **2503** — A printer is dialled behind a seam, and a receipt number is the idempotency key
+  - **2566** — A read has three answers, a dialog may hold a form, and a page bar does not move
+  - **2607** — Built, tested, and still unreachable
+  - **2648** — The home is cards below 1024 and a side menu above it, and the till is pushed
+- **2705** — Open decisions
+  - **2707** — One printer per device, or several — and it decides the shape of a durable record
+  - **2728** — §5.1 gives `LedgerEntry` a row and §4.3 took every screen it names
+  - **2744** — A form dialog cannot be escaped by its scrim, and two dialogs changed behaviour
+  - **2760** — `AppDialog` is 720 wide because §4.3's `Form` row is, and no section states a dialog's maximum
+  - **2777** — ~~§7 wants a filled destructive confirm~~ — resolved 2026-08-16: §7 gave up the word
+  - **2797** — ~~§2.2 gives a section head `title.lg`~~ — resolved 2026-08-16: it gives it `title.md`
+  - **2822** — §4.4's home top bar needs two facts the home is not given, and fetching them is not a restyle
+  - **2859** — §4.4 wants the side menu on every route, and every route reaches it by a push
+  - **2895** — Public password reset needs App Check, which this app has none of
+  - **3002** — `Callout` has no specification, and three glyph sizes were borrowed
+  - **3026** — Every string is painted 0.25px per character wider than its token style says
+  - **3047** — ~~A chip is the only thing §2.3's pill argument still guards~~ — resolved 2026-08-16: the chip is a pill
+  - **3075** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
+  - **3099** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
+  - **3120** — Three run counts are decoded on every read and displayed by nothing
+  - **3137** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
+  - **3172** — `design.md` states no page padding, and `AppScaffold` had to pick one
+  - **3191** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
+  - **3216** — `AppSheet` has no specification, and step 7 opens a sheet
+  - **3239** — The app teaches by folding prose, and nobody has decided whether folding is teaching
+  - **3262** — The invitation email names no business, and no step reaches an email
+  - **3284** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
+  - **3323** — Three design-system questions the redesign has refused to answer
+  - **3367** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
+  - **3378** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
+  - **3448** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
+- **3514** — Identity, Tenancy, and Public Interfaces
+  - **3516** — Environments
+  - **3523** — Root model
+  - **3555** — Tenant path contract
+  - **3565** — Tenant routing and limits
+  - **3582** — Shared authorization
+  - **3599** — Public callable interfaces
+  - **3633** — Full export surface
+- **3663** — Platform, Ownership, and Membership Integrity
+- **3719** — Invitations and Email
+- **3783** — Offline Operations, Stock, and Receipts
+- **3832** — Reconciliation, Rules, and Testing
+  - **3834** — Reconciliation
+  - **3898** — Rules
+  - **3924** — Required tests
+- **3942** — Working on this repository
+  - **3944** — The emulator prelude is not optional
+  - **3959** — Standing traps
+  - **4375** — Repository state
+- **4550** — Next bounded chunk
+  - **4727** — What it builds, and the first two are one item
+  - **4750** — What it must not do
+  - **4765** — What it owes
+  - **4793** — What it builds, in the order that section prescribes
+  - **4812** — The one decision this chunk must have answered before item 3
+  - **4820** — What it must not do
+  - **4837** — What this chunk owes on top of the work
+  - **4844** — Behind it
+  - **4852** — ~~The reskin tail's own five items, its exclusions and its size estimate~~ — retired 2026-08-16
 
 <!-- index:end -->
 
@@ -689,7 +689,7 @@ The fifteen frozen steps, with what is actually true:
 
 | Suite | Command | Count |
 | --- | --- | --- |
-| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **2249** ✅ measured 2026-08-22 after the typography repoint, a full `flutter test test/` in ~2m27s with no worker failure. Was **2221** on 2026-08-18 after the receipt geometry fix; the +28 is the four Stitch token chunks, of which this one contributed **+1** (the `pubspec.yaml` family/weight scan). The 2026-08-20 host failure did not recur. Screenshot harness passes **296** separately, and is not counted in the baseline |
+| Flutter | `flutter test --no-pub --concurrency=1 --reporter=failures-only` | **2250** ✅ measured 2026-08-22 after the harness-viewport chunk, a full `flutter test test/` in ~2m00s with no worker failure. Was **2249** earlier the same day after the typography repoint and **2221** on 2026-08-18 after the receipt geometry fix; the +29 is the four Stitch token chunks and this one, which contributed **+1** (the harness width-region scan). The 2026-08-20 host failure did not recur. Screenshot harness passes **325** separately, and is not counted in the baseline |
 | Functions | `npm --prefix functions test` | **409** ✅ measured on 2026-08-17 (~42 s), twice on 2026-08-16 (~32–36 s), six times on 2026-08-15 (~29–39 s), three times on 2026-08-14 (~79 s), five times on 2026-08-13, three times on 2026-08-12 |
 | Rules | `npm --prefix rules-tests run test:emulator` | **161** ✅ measured on 2026-08-17 (~142 s), twice on 2026-08-16, seven times on 2026-08-15 (~68–186 s), four times on 2026-08-14 (~109–138 s) and five times on 2026-08-13 (~64–78 s) |
 | Reconciliation integration | `npm --prefix rules-tests run test:emulator:reconciliation` | **10** ✅ measured twice on 2026-08-17 (~105 s, then re-run for its `pass` count), twice on 2026-08-16, six times on 2026-08-15 (~78–214 s), four times on 2026-08-14 (~84–150 s) and five times on 2026-08-13 (~60 s) |
@@ -902,11 +902,22 @@ procedure three sections away is the file's own defect**, and the trap has been 
 the procedure instead of at a missing JDK.
 
 There is a sixth figure deliberately not in this table:
-`flutter test --no-pub --concurrency=1 tool/screenshots` runs **194 captures** writing **253**
-images, and it asserts nothing, which is why it is not counted here. Step 9 added three capture
-cases and six images; `design.md` v0.4 added one of each — `01e-sign-in-caps-locked`, `web` only,
-because the keypad does not appear below 1264 and a phone capture would be the form again; step 5b's
-first half added four cases at all three bands, which is the 182 → 194 and the 241 → 253.
+`flutter test --no-pub --concurrency=1 tool/screenshots` runs **325 captures** writing **395**
+images, and it asserts nothing, which is why it is not counted here.
+
+**That figure was 194 / 253 for two chunks longer than it was true, and the correction is the
+ordinary shape of this file's screenshot arithmetic going stale**: the typography repoint moved the
+table above to 296 and left this paragraph alone. The harness-viewport chunk on 2026-08-22 is
+296 → 325 and 361 → 395, and both halves are measured — the run reports its own count, and the
+images were hashed before and after because `screenshots/` is gitignored and `git status` reports
+nothing whatever it holds. **All 34 are new; none of the 361 moved and none disappeared.** 23 in
+`desktop-narrow/`, 5 in `desktop-narrow-full/`, 3 in `compact-wide/`, and 3 in `tablet/`, which the
+content-width matrix had not been capturing.
+
+Earlier movements, kept for the record: step 9 added three capture cases and six images;
+`design.md` v0.4 added one of each — `01e-sign-in-caps-locked`, `web` only, because the keypad does
+not appear below 1264 and a phone capture would be the form again; step 5b's first half added four
+cases at all three bands, which is the 182 → 194 and the 241 → 253.
 
 **The stale set is empty for the first time since it was noticed.** Measured 2026-08-16 after step
 5b's second half: **253 written, 253 on disk, 0 stale.** Seven files were deleted — the four this
@@ -1002,7 +1013,8 @@ form, which is the point of keeping both renderings.
 
 **It was 166 and 221 before that. The 2026-08-14 step-8 chunk added 4
 capture cases and 13 images**: the `97-stat-*` matrix at **all three bands**, which is the second
-matrix after `96-record-details` to ask for `everyBandViewports` and the first to do it because of
+matrix after `96-record-details` to ask for `responsiveViewports` (`everyBandViewports` until
+`7509dcc` renamed it) and the first to do it because of
 the 2026-08-14 lesson rather than in spite of it — a stat row's whole behaviour is how many tiles it
 puts across a width, so a picture of it at one width is a picture of none of it. The thirteenth image
 is `web-full/26-sales-totals`, which is **new rather than changed** because that page crossed the fold
@@ -1066,8 +1078,24 @@ maximum firing or not firing, and 1440 and 411 straddle every one of them — so
 the whole contract. `RecordList` is the first component with a rendering of its own in the middle
 band. **It is deliberately not in `screenshotViewports`**: rendering all 80 screens a third time
 would add 128 images to a diff in which almost every one would be indistinguishable from the phone,
-so a case that has a `medium` form asks for `everyBandViewports` by name. `build_index.dart` skips a
+so a case that has a `medium` form asks for the shared list by name. `build_index.dart` skips a
 missing file, which is what makes that safe.
+
+⛔ **"1440 and 411 straddle every one of them" is true and was read as coverage for nine days.**
+Corrected at `7509dcc`. §4.1's two band floors (768, 1024) and §4.2's two page maxima (720
+`reading`, 1200 `records`) are four boundaries on **one** axis and they **interleave**, so the axis is
+cut into **five** regions rather than three — a width can cross a maximum without changing band, and
+change band without crossing a maximum. Straddling four boundaries puts you in the outermost two
+regions of five. The two that nothing photographed were **1024-1199**, where §4.3's table is drawn
+with no maximum above it and so fills the window, and **720-767**, where a `compact` layout already
+has a capped centred column. `desktopNarrowViewport` (1024 x 768) and `compactWideViewport`
+(767 x 1000) close them, `everyBandViewports` became **`responsiveViewports`** because four widths
+are not three bands, and `everyRegionViewports` names all five for the content-width matrix, which
+went from 6 pictures to 15. `AppLayout.salePane` is deliberately not a boundary: it is the fixed width
+of a pane inside a page, not a maximum applied to the page. A source scan in
+`test/ui/tokens_test.dart` derives the regions from `AppLayout` and fails naming the interval if one
+loses its viewport — verified by deleting a viewport and watching it fail. **Reasoning and the
+finding it produced: `HISTORY.md` — "Five regions on one axis, and the harness had three of them".**
 
 **The Flutter figure did not move across the call-site sweep, and that is the right outcome rather
 than a gap.** A migration that adds no behaviour and no component should add no test; what it
@@ -5160,7 +5188,9 @@ that drive anything.
 phone, and a truncated summary shipped and survived two days. `claude.md` hard rule 5 says every state
 appears in the harness; it does not say at which width, and the states most likely to break are the ones
 a narrow screen creates. When a component gains a narrow-band behaviour, its matrix wants
-`everyBandViewports` the way `96-record-details` has it. **Step 8 took that instruction the same day**:
+`responsiveViewports` the way `96-record-details` has it — `everyBandViewports` until `7509dcc`
+renamed it, and five entries wide as `everyRegionViewports` where the subject is width itself.
+**Step 8 took that instruction the same day**:
 `97-stat-*` is at all three bands from its first commit, and the four pictures at 411 are what showed
 that a fixed minimum tile width would truncate money.
 
