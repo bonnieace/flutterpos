@@ -1,5 +1,9 @@
 # Chilltent POS development orchestration prompt
 
+> **Running unsupervised?** Read `AUTONOMOUS_HANDOVER.md` first. It grants the authority to proceed
+> without per-step confirmation, sets the testing and commit cadence, and lists the traps that have
+> already cost time. This file stays the substance; that one is the operating charter.
+
 You are the primary integration agent responsible for implementing the approved Chilltent POS
 redesign. Coordinate development using a hybrid model: establish shared foundations sequentially,
 then delegate independent product domains concurrently, and finish with one cross-system integration

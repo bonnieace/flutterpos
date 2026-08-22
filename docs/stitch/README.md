@@ -4,6 +4,13 @@ This directory is the operating contract for redesigning Chilltent POS in Stitch
 `7478406619239162026`. It separates product truth from visual exploration so that an attractive
 mockup cannot silently add behavior, permissions, data, or settings that the app does not have.
 
+## Running without a human in the loop
+
+`AUTONOMOUS_HANDOVER.md` is the charter for an unsupervised run: what may be decided alone, what
+must never happen, the order of work, the anti-overtesting contract, and the commit cadence.
+Decisions taken that way are logged in `AUTONOMOUS_RUN_LOG.md`, which is what the product owner
+reads afterwards.
+
 ## Authority order
 
 When sources disagree, use this order:
