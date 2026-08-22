@@ -28,6 +28,47 @@ Two consequences worth stating plainly:
   and does add logic. It is a separate later slice with its own design pass, and it does not enter
   Phase 08.
 
+## Current state — read this before planning anything
+
+Branch `stitch-wave-0-tokens`, as of 2026-08-22. **Do not re-decide or redo any of this.**
+
+| Landed | Where |
+|---|---|
+| Design source is a local export, mapped to all 73 logical IDs | `EXPORT_MAP.md` |
+| Palette resolved and **live** — `_palette = AppTokens.profoundVerdant` in `lib/theme.dart` | `TOKEN_RECONCILIATION.md` |
+| `spiritTheme` reads roles for every colour and radius; no literals, no `StadiumBorder` | `lib/theme.dart` |
+| Radii repointed: `sm` 2, `md` 8, `lg` 12; buttons, wells and chips off `pill` | `lib/ui/tokens.dart` |
+| Status roles carry alpha tints; amber and blue carried forward as additions | `AppStatusRoles.profoundVerdant` |
+| Breakpoints **decided and unchanged** at 768/1024; the till moved to `mediumFloor` | `OPEN_QUESTIONS.md` item 21 |
+| 48dp guarantee enforced by a source-scanning tripwire | `test/ui/tokens_test.dart` |
+| Every question in `OPEN_QUESTIONS.md` answered | all sections read `RESOLVED` |
+
+**What is left of the token work:** typography only — `OPEN_QUESTIONS.md` item 20, bundling Hanken
+Grotesk and JetBrains Mono. It has a dependency that is not obvious: `tool/screenshots/harness.dart`
+**overrides the font family to Roboto** and loads it from the SDK cache, because a component theme's
+text style replaces rather than merges, so an unnamed family reaches the engine as nothing and renders
+as filled rectangles. Add the families to `pubspec.yaml` alone and every screenshot will still show
+Roboto.
+
+**Then:** the unaudited half of Wave 0 — disabled, read-only, offline, busy, confirmation and
+provenance components; RBAC guards against `RBAC_MATRIX.md`; test fixtures — and Phases 01 and 02
+structurally.
+
+**The web target does not run, and it is not the redesign's fault.** Two independent pre-existing bugs,
+both in the bootstrap, both unfixed because they are behaviour changes needing explicit authorization:
+
+- `lib/main.dart:60` — `FirebaseAppCheck.instance.activate()` passes only `providerAndroid` and
+  `providerApple`, so on web the JS side dereferences a null web provider and debug boot throws
+  `Cannot read properties of null (reading 'initialize')`. `kDebugMode` gates the block, so release
+  web is unaffected. Guarding with `!kIsWeb` fixes it.
+- `web/index.html:108` defines `removeSplashFromWeb()` and **nothing calls it** — `flutter_native_splash`
+  is a dependency no file in `lib/` imports. The engine mounts and paints (`<flutter-view>` and
+  `flt-glass-pane` are in the DOM, no JS errors) behind a permanent full-screen splash.
+
+Verified working: web **compiles** in debug and release, and **Windows desktop is a connected device
+with neither problem** — use it if you need to see the app actually run. Nothing in the remaining
+Stitch work depends on a running app.
+
 ## Read before changing code
 
 Read these sources in order:
@@ -41,9 +82,10 @@ Read these sources in order:
    instructions.
 4. `docs/stitch/README.md` and `docs/stitch/DESIGN_RULES.md`.
 5. `docs/stitch/RBAC_MATRIX.md`.
-6. `docs/stitch/OPEN_QUESTIONS.md` — **mandatory, not optional.** Items 10 to 20 are unresolved
-   design-system gaps that block the theme layer. Implementing against them means inventing design
-   decisions.
+6. `docs/stitch/OPEN_QUESTIONS.md` — **mandatory, not optional.** Every question in it is now
+   answered, so read it as the decision record rather than a list of blockers: it says which values
+   were chosen, which were carried forward because the design defines none, and why. Item 19 carries a
+   dated correction; read the correction, not the original row.
 7. `docs/stitch/TOKEN_RECONCILIATION.md` — how Profound Verdant maps onto `lib/ui/tokens.dart`, and
    which roles have no source value at all.
 8. `docs/stitch/SCREEN_INDEX.md` and `COVERAGE.md` as needed.
@@ -71,13 +113,21 @@ Inspect Git status before editing and preserve all existing unrelated changes.
 - Resolve ordinary visual gaps from the established Profound Verdant system **only where it actually
   defines a value.** It is incomplete in specific, documented ways — most importantly it has no
   warning colour and no info colour, and its status chips are specified as an alpha mechanism rather
-  than as opaque values. Consult `TOKEN_RECONCILIATION.md` before assuming a role exists. Where it
-  does not, record the gap in `OPEN_QUESTIONS.md`; do not pick a plausible hex.
+  than as opaque values. Consult `TOKEN_RECONCILIATION.md` before assuming a role exists. The gaps
+  named above are already answered — amber and blue carry forward as documented additions, and the
+  chips became alpha tints — so this rule is for the **next** gap, not those. Where a role has no
+  source value, record it in `OPEN_QUESTIONS.md`; do not pick a plausible hex.
 - The most important provisional areas are Phase 04 mobile and Phase 08 completion matrices. Phase 02
   checkout evidence and the two Phase 06 shift cards also lack persisted final pixels.
-- Eleven colour roles, the radius scale, and both type families are unresolved (`OPEN_QUESTIONS.md`
-  items 10 to 20). Until they are answered, `AppTokens.dark` stays pointed at `AppColorRoles.dark`
-  and no theme repoint is in scope.
+- **The colour and radius repoints have landed.** `lib/theme.dart` registers
+  `AppTokens.profoundVerdant`; `AppTokens.dark` is kept as the record of the shipped palette and must
+  come out of any change unedited, which a test asserts. Typography is the only token family still on
+  the old values.
+- **The design system's frontmatter is not automatically the authority.** It was for colour, where it
+  agreed with the served screens. It was **wrong** for radii: the frontmatter declares `full: 9999px`
+  and the prose promises a pill, while every one of the 76 served screens inlines `full: 0.75rem` and
+  renders square-cornered buttons. When frontmatter, prose and artifact disagree, **the artifact
+  decides** — and check the artifact before trusting either of the other two.
 
 ## Coordination model
 
@@ -109,12 +159,17 @@ not construction. Read `audits/2026-08-22-wave-0-foundations.md` before deciding
 The integration owner validates or establishes:
 
 - Profound Verdant semantic tokens, typography, spacing, shapes, status treatments, and 48px target
-  primitives. **The colour, radius, and typography repoint is blocked** on `OPEN_QUESTIONS.md` items
-  10 to 20 and is not available to pick up. Spacing already agrees. 48px holds today only because
-  `AppDensity.compact` was never wired up — `pointerOnly` has no enforcement point in `lib/`, so any
-  density resolver must take the input kind, not just a width;
-- responsive desktop/tablet/mobile scaffolds. These exist; the breakpoint floors are the live
-  question, and no harness viewport covers 1024 to 1279;
+  primitives. **Colour, radii and status treatments are done; spacing already agreed; typography is
+  what remains** — see the Current state section for its harness dependency. 48px is now enforced by a
+  test that fails if `lib/` ever applies `AppDensity.compact`, whose targets are 32x32; when a density
+  resolver is written it must take the pointer/touch kind, not just a width, and refuse compact on
+  touch;
+- responsive desktop/tablet/mobile scaffolds. These exist and the breakpoint floors are **settled** at
+  768/1024 as a deliberate deviation from Profound Verdant's 1280 — a table at 1194 beats stacked
+  cards on an operational surface. Still true: **no harness viewport covers 1024 to 1279**, so the
+  four behaviours that flip there (`record_list.formFor`, `home_navigation.showsMenu`,
+  `PageHeader.showsDisplayTitle`, `routes._isExpanded`) are rendered by nothing. Adding one is cheap,
+  zero-pixel, and pays off for typography too;
 - authenticated identity, tenant selection, platform separation, and RBAC route guards;
 - role-aware tenant navigation and the distinction between common routes and role-specific routes;
 - reusable loading, empty, error, disabled, read-only, offline, busy, confirmation, and provenance
@@ -218,10 +273,17 @@ specific external action. Continue through safe in-scope implementation while us
 
 Before editing, provide a short execution brief containing:
 
-- the current foundation status discovered from the repository;
-- the Wave 0 bounded chunk you will implement first;
+- the current foundation status **verified against the repository**, not copied from the Current state
+  table above. That table was accurate when written and this prompt has already gone stale once, so
+  check the claims that matter to your first chunk: what `_palette` points at, what `AppRadii` holds,
+  and whether `OPEN_QUESTIONS.md` still reads resolved;
+- the bounded chunk you will implement first, from what the Current state section says is left;
 - the proposed later agent streams and non-overlapping ownership boundaries;
-- the known design debts that will remain provisional;
-- the focused validation plan.
+- the known design debts that will remain provisional — including the deliberate deviations, which are
+  not debt: 768/1024 breakpoints, `pill` as an app-only value, and the deferred 3-column desktop till;
+- the focused validation plan. Verify pixel claims by hashing `screenshots/` before and after, never
+  with `git status` — that directory is gitignored, so it reports nothing whatever the files contain.
 
-Then implement Wave 0. Do not stop after merely restating this prompt.
+Then implement. Do not stop after merely restating this prompt, and **update this section and the
+Current state table when you finish a step** — the previous session patched this file and then made
+four more commits that invalidated the patch.

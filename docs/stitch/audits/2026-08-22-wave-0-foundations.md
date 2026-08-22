@@ -164,6 +164,55 @@ The coupling to the retired system is in the *value* 1024, not in the access mec
 One inconsistency is worth tidying when Finding 1 is actioned: `lib/ui/home_navigation.dart` reads the
 contract both ways in the same file — statically at line 179 and through the theme at line 189.
 
+## Finding 3 — the web target does not run, and never has
+
+Added 2026-08-22 after the first attempt to run the app rather than rasterise it. Two independent
+pre-existing bugs, both in the bootstrap, **neither caused by the redesign.**
+
+**1. Debug web throws before the first frame.** `lib/main.dart:60` calls
+`FirebaseAppCheck.instance.activate()` with only `providerAndroid` and `providerApple`. On web the JS
+side has no provider to initialise and dereferences null:
+
+```
+TypeError: Cannot read properties of null (reading 'initialize')
+  firebase-app-check.js  _activate -> initializeAppCheck
+  package:flutter_application_1/main.dart 60:41
+```
+
+The block's own comment explains it was written for Play Integrity and Apple attestation; web was never
+in scope. `kDebugMode` gates it, so **release web is unaffected**. Guarding with `!kIsWeb` produced a
+clean boot with zero exceptions — verified, then reverted, because it is a behaviour change to the
+bootstrap.
+
+**2. Release web boots and is invisible.** `web/index.html:108` defines `removeSplashFromWeb()` and
+nothing ever calls it. `flutter_native_splash` is in `pubspec.yaml` but no file in `lib/` imports it, so
+`FlutterNativeSplash.remove()` never runs and the full-screen `<picture id="splash">` overlay stays up
+permanently. The engine underneath is fine: the DOM contains `<flutter-view>` and `flt-glass-pane` with
+no JS errors. Flutter mounts and paints behind a logo.
+
+### Why nothing caught either
+
+Every test in this repository runs on the Flutter test VM, and the screenshot harness rasterises widget
+trees. Neither compiles for web, and neither executes `main()`. So the entire bootstrap — Firebase,
+App Check, Hive, secure storage, emulator wiring — is exercised by nothing at all, on any platform.
+That is a coverage gap of a different kind from the 1024-1279 one: not a missing viewport, a missing
+category of test.
+
+### What is verified
+
+- Web **compiles**, debug and release. That was itself new information.
+- **Windows desktop is a connected device with neither problem.** If a running app is needed, use it.
+- Nothing in the remaining Stitch work depends on a running app, so this blocks the redesign at no
+  point. It only removes the cheap route to a visual check, leaving the device look — which the harness
+  cannot substitute for, since it shows no motion, no hover, no focus-visible, and nothing about how
+  deep surfaces read on real hardware.
+
+### Fixes, unmade
+
+Both are one line and both change behaviour, so they want an explicit decision rather than folding into
+design commits: guard the App Check block with `!kIsWeb`, and call `FlutterNativeSplash.remove()` after
+bootstrap.
+
 ## What remains unvalidated in Wave 0
 
 - Disabled, read-only, offline, busy, confirmation, and provenance components — whether they exist as
