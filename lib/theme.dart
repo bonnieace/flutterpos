@@ -92,6 +92,27 @@ final AppTextRoles _text = _palette.colors.text;
 /// four and `AppStatusBadge` carries them instead.
 final AppStatusRoles _status = _palette.colors.status;
 
+/// The type roles, read once for the same reason [_action] is.
+///
+/// **This alias exists because four component themes below were not reading
+/// one**, and the note on [spiritTheme] claimed they were. A component theme's
+/// text style *replaces* the text theme's rather than merging onto it, so a
+/// `TextStyle(color: ...)` written inline reaches the engine with **no family,
+/// no size and no weight** - and `ThemeData.fontFamily` does not rescue it. Four
+/// of them were exactly that, and a raw Material `Chip` under this theme
+/// resolved to a null family for as long as they were: in the screenshot harness
+/// it drew filled boxes instead of words, which is what
+/// `screenshots/web-full/18-manage-catalog.png` had been showing since the type
+/// repoint landed, in the `Categories` row above a second chip row that read
+/// correctly because `FilterChipBar` names a role itself.
+///
+/// So the mechanism is unchanged and the claim was half true: naming the family
+/// on the roles fixes everything that *reads* a role. What it cannot fix is a
+/// style built from neither a role nor the text theme, and the only defence
+/// against writing another one is that `test/theme_test.dart` now resolves each
+/// of these components and fails when a family comes back null.
+final AppTypeRoles _type = _palette.typography;
+
 /// One slot of the field outline every unmigrated `TextField` still reads.
 ///
 /// `design.md` §2.3 v0.4: an input is a pill. `AppFieldWell` draws its own and
@@ -388,8 +409,22 @@ final ThemeData spiritTheme = ThemeData(
     backgroundColor: _surface.raised,
     selectedColor: _surface.field,
     side: BorderSide(color: _surface.borderSubtle),
-    labelStyle: TextStyle(color: _text.secondary),
-    secondaryLabelStyle: TextStyle(color: _action.primary.container),
+    // **`label.md`, because that is what the app's own chip already uses.**
+    // `FilterChipBar` builds its label with `typography.labelMedium`
+    // (`lib/ui/chips.dart`), so a Material `Chip` reading anything else would
+    // make two chip rows on one screen disagree - which they did:
+    // `catalog_management_panel.dart` draws the category *list* as raw `Chip`s
+    // and the category *picker* below it as a `FilterChipBar`, and only the
+    // second one had a face.
+    //
+    // These two were `TextStyle(color: ...)` and nothing else, so they arrived
+    // at the engine with a null family, a null size and a null weight. Not a
+    // colour drift - a chip label rendered in whatever face the platform
+    // happened to fall back to, and in the harness in none at all.
+    labelStyle: _type.labelMedium.copyWith(color: _text.secondary),
+    secondaryLabelStyle: _type.labelMedium.copyWith(
+      color: _action.primary.container,
+    ),
     checkmarkColor: _action.primary.container,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(_palette.radius.sm),
@@ -421,7 +456,17 @@ final ThemeData spiritTheme = ThemeData(
   listTileTheme: ListTileThemeData(
     iconColor: _action.primary.container,
     textColor: _text.primary,
-    subtitleTextStyle: TextStyle(color: _text.secondary, fontSize: 13),
+    // **`body.md`, and 13 was on no scale at all.** §2.2 has 12 and 14 and
+    // nothing between them, so the old figure was a literal in the sense hard
+    // rule 2 means: it looked right and belonged to nothing. 14 is Material's
+    // own intent for a `ListTile` subtitle - its M3 default is `bodyMedium` -
+    // and it is the role a record's subtitle resolves to at compact density.
+    //
+    // `ListTile.title` was never affected, which is why this was easy to miss:
+    // `ListTile` uses `titleTextStyle` merged onto the text theme and falls
+    // through to `Hanken Grotesk` 16, while `subtitleTextStyle` is taken as
+    // given. One half of one component, in the app's own face and out of it.
+    subtitleTextStyle: _type.bodyMedium.copyWith(color: _text.secondary),
   ),
   iconTheme: IconThemeData(color: _action.primary.container),
   // The splash screen's spinner was stock Material purple on a green-black
@@ -431,7 +476,11 @@ final ThemeData spiritTheme = ThemeData(
   ),
   snackBarTheme: SnackBarThemeData(
     backgroundColor: _surface.field,
-    contentTextStyle: TextStyle(color: _text.primary),
+    // `body.md`, which is Material's own default role here and §2.2's body
+    // size. Was a colour and nothing else, so a snack bar's sentence had no
+    // family - and no capture in the harness drives one, so no picture would
+    // ever have shown it. `test/theme_test.dart` resolves one for that reason.
+    contentTextStyle: _type.bodyMedium.copyWith(color: _text.primary),
     behavior: SnackBarBehavior.floating,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(_palette.radius.md),

@@ -74,8 +74,10 @@ void main() {
   group('no ink ripple survives, and a press is the overlay of its tier', () {
     // The palette the theme registers, not a named one: this group is about the
     // overlay *mechanism*, which is the same rule whichever palette is active.
-    final AppActionRoles action =
-        spiritTheme.extension<AppTokens>()!.colors.action;
+    final AppActionRoles action = spiritTheme
+        .extension<AppTokens>()!
+        .colors
+        .action;
 
     test('the ripple is killed at the theme, and Material 3 is stated', () {
       expect(spiritTheme.splashFactory, NoSplash.splashFactory);
@@ -240,12 +242,150 @@ void main() {
     });
   });
 
+  // **The half of the 2026-08-22 type repoint that was still open, and the one
+  // no assertion could have caught.** `spiritTheme`'s own note said naming a
+  // family on every `AppTypeRoles` role "is what reaches the component themes
+  // below". It reaches the ones that *read a role*. Four of them did not: they
+  // were written as `TextStyle(color: ...)` inline, and a component theme's text
+  // style **replaces** the text theme's rather than merging onto it - so those
+  // four arrived at the engine with a null family, a null size and a null
+  // weight, whatever `ThemeData.fontFamily` said.
+  //
+  // Nothing in the repository would have said so. The type tests measure
+  // `AppTypeRoles` and `TextTheme`, and all fifteen `TextTheme` slots were
+  // correct; these four are neither. What said so was a picture:
+  // `screenshots/web-full/18-manage-catalog.png` drew the `Categories` row as
+  // filled boxes and the category picker four inches below it as words, because
+  // the first is a raw Material `Chip` reading `chipTheme.labelStyle` and the
+  // second is a `FilterChipBar` naming `typography.labelMedium` itself.
+  //
+  // **These resolve the component rather than reading the theme**, which is the
+  // property that makes them worth having: a future `ChipThemeData` written
+  // correctly and then wrapped by something that drops it would still fail here.
+  // `SnackBar` is included because no capture in the harness drives one, so a
+  // picture will never cover it.
+  group('every component this theme restyles renders in one of its families', () {
+    const families = <String>[
+      AppTypeRoles.interfaceFamily,
+      AppTypeRoles.monoFamily,
+    ];
+
+    /// The style the engine is actually handed for [label], after the component,
+    /// its theme, and the text theme have all had their say.
+    TextStyle resolvedStyle(WidgetTester tester, String label) {
+      final rich = tester.widget<RichText>(
+        find.descendant(of: find.text(label), matching: find.byType(RichText)),
+      );
+      return rich.text.style!;
+    }
+
+    Future<void> pump(WidgetTester tester, Widget child) => tester.pumpWidget(
+      MaterialApp(
+        theme: spiritTheme,
+        home: Scaffold(body: Center(child: child)),
+      ),
+    );
+
+    void expectNamedFamily(TextStyle style, String what) {
+      expect(
+        style.fontFamily,
+        isIn(families),
+        reason:
+            '$what reached the engine in "${style.fontFamily}". A component '
+            'theme text style REPLACES the text theme\'s rather than merging '
+            'onto it, so a `TextStyle(color: ...)` written inline in '
+            '`lib/theme.dart` carries no family at all - and '
+            '`ThemeData.fontFamily` does not rescue it. Point the style at an '
+            '`AppTypeRoles` role and `copyWith` the colour onto it.',
+      );
+      expect(
+        style.fontSize,
+        isNotNull,
+        reason:
+            '$what has no size, so it takes a Material default rather '
+            'than a §2.2 role.',
+      );
+    }
+
+    testWidgets('a raw Chip label', (tester) async {
+      // Two active sites: the category list in `catalog_management_panel.dart`
+      // and the one in `tenant_catalog.dart`. Both are photographed, and both
+      // were faceless.
+      await pump(tester, const Chip(label: Text('Bakery')));
+      expectNamedFamily(resolvedStyle(tester, 'Bakery'), 'Chip.label');
+    });
+
+    testWidgets('a ListTile subtitle, which is not its title', (tester) async {
+      await pump(
+        tester,
+        const ListTile(title: Text('Milk 500ml'), subtitle: Text('Drinks')),
+      );
+      // Both, deliberately: the title was always right and the subtitle was
+      // always wrong, which is exactly why one assertion over the component
+      // would have passed.
+      expectNamedFamily(resolvedStyle(tester, 'Milk 500ml'), 'ListTile.title');
+      expectNamedFamily(resolvedStyle(tester, 'Drinks'), 'ListTile.subtitle');
+    });
+
+    testWidgets('an InputDecoration label', (tester) async {
+      await pump(
+        tester,
+        const TextField(decoration: InputDecoration(labelText: 'Currency')),
+      );
+      // This one turned out already correct - `InputDecorator` merges onto the
+      // text theme - and it is asserted anyway, because the note in
+      // `lib/theme.dart` names it among the components the trap applies to and
+      // an inline style here would be as invisible as the other four were.
+      expectNamedFamily(
+        resolvedStyle(tester, 'Currency'),
+        'InputDecoration.labelStyle',
+      );
+    });
+
+    testWidgets('a SnackBar sentence', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: spiritTheme,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Details updated.')),
+                ),
+                child: const Text('Show'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      expectNamedFamily(
+        resolvedStyle(tester, 'Details updated.'),
+        'SnackBar.contentTextStyle',
+      );
+    });
+
+    testWidgets('a bare Text, which is the fallback path', (tester) async {
+      // `ThemeData.fontFamily` covers whatever is built from neither a role nor
+      // a component theme, and `lib/theme.dart` says so. This is that claim.
+      await pump(tester, const Text('Business: dev-corner-shop'));
+      expectNamedFamily(
+        resolvedStyle(tester, 'Business: dev-corner-shop'),
+        'a bare Text under DefaultTextStyle',
+      );
+    });
+  });
+
   test('the theme is a dark one, because the scaffold is', () {
     // Stated directly as well as measured. The measurements above would also
     // pass if somebody hand-coloured fifteen styles; this is the reason they
     // do not have to.
     expect(spiritTheme.brightness, Brightness.dark);
     expect(spiritTheme.colorScheme.brightness, Brightness.dark);
-    expect(spiritTheme.scaffoldBackgroundColor.computeLuminance(), lessThan(0.1));
+    expect(
+      spiritTheme.scaffoldBackgroundColor.computeLuminance(),
+      lessThan(0.1),
+    );
   });
 }
