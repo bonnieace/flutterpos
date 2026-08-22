@@ -377,6 +377,55 @@ void main() {
         'a bare Text under DefaultTextStyle',
       );
     });
+
+    // **The raw Material controls Phase 04's screens press, measured rather
+    // than assumed.** §9 makes 48dp pass/fail, and `test/ui/tokens_test.dart`
+    // asserts it for `filledButtonTheme`, `elevatedButtonTheme` and
+    // `outlinedButtonTheme` - the three that have a `minimumSize` to read. The
+    // widget families below have no component theme in `lib/theme.dart` at all,
+    // so there is no style to assert against and nothing that would stop one
+    // being added later with a Material default under the floor. The only way
+    // to check them is to draw one, which is what this does.
+    //
+    // Phase 04 opened this because the stock route's Add stock / Remove stock
+    // control is a bare `SegmentedButton` and looked like a §9 defect. It is
+    // not - it draws at 48 - and the measurement is worth keeping precisely
+    // because the conclusion was the opposite of the guess.
+    testWidgets('§9\'s 48dp floor holds for the unthemed Material controls', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        SegmentedButton<bool>(
+          segments: const <ButtonSegment<bool>>[
+            ButtonSegment<bool>(value: true, label: Text('Add stock')),
+            ButtonSegment<bool>(value: false, label: Text('Remove stock')),
+          ],
+          selected: const <bool>{true},
+          onSelectionChanged: (_) {},
+        ),
+      );
+      expect(
+        tester.getSize(find.byType(SegmentedButton<bool>)).height,
+        greaterThanOrEqualTo(48),
+        reason:
+            'the stock route draws its direction chooser as a bare '
+            'SegmentedButton, and three routes in this app do. §9 makes the '
+            'touch target pass/fail.',
+      );
+
+      await pump(
+        tester,
+        Checkbox(value: true, onChanged: (_) {}),
+      );
+      expect(
+        tester.getSize(find.byType(Checkbox)).shortestSide,
+        greaterThanOrEqualTo(48),
+        reason:
+            'the correction form and the bulk selector both draw one, and '
+            '`checkboxTheme` sets colours without a target size.',
+      );
+    });
   });
 
   // **The three `TextTheme` slots this theme sets by hand, and the rule that
