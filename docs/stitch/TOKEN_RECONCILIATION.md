@@ -299,9 +299,20 @@ change. Suggested sequence, each step its own reviewable commit:
    not confused with palette changes.
 5. **Font assets and `AppTypeRoles` families** (decision 20). A `pubspec.yaml` change, integration
    owner only.
-6. **The responsive contract** (decision 21) — `showsTwoPanes` to `mediumFloor` **first**, then
-   `expandedFloor` to 1280, together, with the 1024-1279 harness viewport added. Taken in the other
-   order, or alone, the second half strips two panes from 1024-1279 and regresses the sale path.
+6. ~~**The responsive contract** (decision 21).~~ **DONE 2026-08-22, and it turned out to be half the
+   change.** `showsTwoPanes` moved to `mediumFloor`, so the cart is visible on a tablet from 768 up.
+   `AppLayout.expandedFloor` **stays at 1024** — Profound Verdant's 1280 is a recorded deviation, on
+   the grounds that a table at 1194 is denser and faster to scan than stacked cards and there is no
+   reason to take that width away from the record surfaces.
+
+   The coupling that made this look dangerous is gone as a side effect: the till no longer reads
+   `expandedFloor`, so the two questions are independent now. The four surfaces that floor gates were
+   never touched. The 3-column desktop till stays deferred.
+
+   The coverage gap was the real finding. The till had been rendered at 1440 and 411 only — the tablet
+   layout of the busiest screen in the product was covered by nothing at all, which is exactly how its
+   boundary could be wrong without showing up anywhere. Both till cases now capture all three bands,
+   and a test pins 768 exactly, where the fixed 420 cart pane leaves the products 347.
 
 Keeping 3, 4, 5 and 6 apart matters: each moves pixels for a different reason, and a combined diff
 makes every regression ambiguous.

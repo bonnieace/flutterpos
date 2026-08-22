@@ -870,8 +870,13 @@ void main() {
     const phone = Size(411, 900);
     const tillScreen = Size(1400, 900);
 
-    /// A tablet, which is `design.md` §4.1's `medium` band: at or above 768 and
-    /// below 1024. It used to get the two-pane till and §4.3 gives it a sheet.
+    /// A tablet: §4.1's `medium` band, at or above 768 and below 1024.
+    ///
+    /// **Its answer has now changed twice.** It got two panes originally, then a
+    /// sheet when the till moved to the `expanded` floor for `design.md` §4.3,
+    /// and two panes again since 2026-08-22 - Profound Verdant's tablet band is
+    /// a two-column Items + Cart split, and `CLAUDE.md` makes §4.3 history.
+    /// `docs/stitch/OPEN_QUESTIONS.md` item 21.
     const tablet = Size(900, 1000);
 
     testWidgets('puts the cart beside the products on a wide screen', (
@@ -887,26 +892,48 @@ void main() {
       expect(find.byKey(const ValueKey('checkout-open-cart')), findsNothing);
     });
 
-    testWidgets('gives the medium band a sheet, not two panes', (tester) async {
-      // **§4.3's `Sale` row: "products + cart sheet" at `compact` *and*
-      // `medium`, two panes only at `expanded`.** This band used to get the
-      // two-pane layout, because the split was this app's own inherited 768
-      // rather than anything §4.3 says.
+    testWidgets('gives the medium band two panes, not a sheet', (tester) async {
+      // **A cashier on a tablet sees the cart without tapping for it**, which is
+      // the whole of the decision in `OPEN_QUESTIONS.md` item 21. This test read
+      // the other way until 2026-08-22, on §4.3's authority; the assertions are
+      // inverted rather than retuned because what the band *should* do changed,
+      // not what it happens to measure.
       await _pumpAt(tester, sessions, catalog, drafts, tablet);
 
-      expect(find.byKey(const ValueKey('checkout-compact')), findsOne);
-      expect(find.byKey(const ValueKey('checkout-wide')), findsNothing);
-      expect(find.byKey(const ValueKey('checkout-open-cart')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-wide')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-compact')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-cart-pane')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-open-cart')), findsNothing);
+    });
+
+    testWidgets('the narrowest two-pane till still fits its own panes', (
+      tester,
+    ) async {
+      // **768 exactly, which is the tightest case the new boundary admits.**
+      // The cart pane is a fixed 420, so the products get 768 - 420 - 1 = 347 -
+      // narrower than the 411 phone this layout is not used on. That is the one
+      // number worth a test of its own: a `Row` whose children do not fit
+      // overflows, and an overflow throws here, so this passing *is* the
+      // assertion. If the cart pane ever grows, this is the test that says so.
+      await _pumpAt(tester, sessions, catalog, drafts, const Size(768, 1000));
+
+      expect(find.byKey(const ValueKey('checkout-wide')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-cart-pane')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-open-cart')), findsNothing);
     });
 
     testWidgets('asks the same question about a width that the widget does', (
       tester,
     ) async {
-      // The boundary is §4.1's `expanded` floor and not a figure this file
-      // repeats. 1023 is the last width that is not `expanded`.
+      // The boundary is §4.1's `medium` floor and not a figure this file
+      // repeats. 767 is the last width that is not `medium`.
+      expect(TenantCheckoutPanel.showsTwoPanes(768), isTrue);
+      expect(TenantCheckoutPanel.showsTwoPanes(767), isFalse);
+      expect(TenantCheckoutPanel.showsTwoPanes(411), isFalse);
+      // Still true above the `expanded` floor, which this no longer reads - the
+      // till is deliberately independent of it now.
       expect(TenantCheckoutPanel.showsTwoPanes(1024), isTrue);
-      expect(TenantCheckoutPanel.showsTwoPanes(1023), isFalse);
-      expect(TenantCheckoutPanel.showsTwoPanes(768), isFalse);
+      expect(TenantCheckoutPanel.showsTwoPanes(1400), isTrue);
     });
 
     testWidgets('gives the cart pane the width §4.2 states for it', (

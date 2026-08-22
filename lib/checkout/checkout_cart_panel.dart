@@ -189,13 +189,23 @@ final class TenantCheckoutPanel extends StatefulWidget {
 
   /// Whether [screenWidth] gets the two-pane till.
   ///
-  /// **§4.3's `Sale` row, and the boundary moved because of it.** That row
-  /// reads *products + cart sheet* at `compact` **and** at `medium`, and *two
-  /// panes* only at `expanded` - so the answer is §4.1's `expanded` floor and
-  /// not the `medium` one this file used to ask for. The figure it used to read
-  /// was 768, which was the previous app's own split and predates §4.3 saying
-  /// anything about a till; a 900-wide tablet was getting two panes that §4.3
-  /// gives a sheet.
+  /// **Back to `medium` on 2026-08-22, and back to the number it started on.**
+  /// This asked for `medium` originally - 768, the previous app's own split -
+  /// then moved to `expanded` because `design.md` §4.3's `Sale` row reads
+  /// *products + cart sheet* at `compact` **and** `medium`, with two panes only
+  /// at `expanded`. Profound Verdant reverses that row: its tablet band is a
+  /// "2-column split (Items + Cart)" from 768 up, and `CLAUDE.md` makes
+  /// `design.md` implementation history rather than visual authority. So the
+  /// figure returns to where it began, now for a stated reason rather than by
+  /// inheritance. `docs/stitch/OPEN_QUESTIONS.md` item 21 records the decision.
+  ///
+  /// **This is the whole of that decision, and it is deliberately not a
+  /// breakpoint change.** `AppLayout.expandedFloor` stays at 1024 rather than
+  /// moving to Profound Verdant's 1280: at 1194 - an 11-inch tablet held
+  /// sideways - a record table is denser and faster to scan than the stacked
+  /// cards the narrower band would give it, which is what an operational
+  /// surface wants. Asking `medium` here means the till no longer depends on
+  /// that floor either way.
   ///
   /// **The screen's width, not the panel's box**, which is the rule §4.1 states
   /// and `PageHeader.showsDisplayTitle` argues for at length: a band is a
@@ -208,7 +218,7 @@ final class TenantCheckoutPanel extends StatefulWidget {
   /// asserting a pixel width and hoping the two agree - the same reason
   /// `PageHeader` exposes its two.
   static bool showsTwoPanes(double screenWidth) =>
-      AppLayout.contract.isAtLeast(screenWidth, AppBreakpoint.expanded);
+      AppLayout.contract.isAtLeast(screenWidth, AppBreakpoint.medium);
 
   @override
   State<TenantCheckoutPanel> createState() => _TenantCheckoutPanelState();

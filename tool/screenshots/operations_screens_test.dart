@@ -53,6 +53,12 @@ void main() {
   // The till
   // -------------------------------------------------------------------------
 
+  // **The till is captured in all three bands, and the tablet one is why.**
+  // Until 2026-08-22 `showsTwoPanes` read §4.1's `expanded` floor, so the till
+  // hid its cart behind a button on every tablet - and no screenshot anywhere
+  // rendered it at a tablet width, so the one surface a cashier uses all day
+  // had its most-affected layout covered by nothing at all. `OPEN_QUESTIONS.md`
+  // item 21 moved the boundary to `medium`; this is what proves it.
   screenshotCase(
     '14-new-sale',
     build: () => inSession(
@@ -62,6 +68,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
     ),
+    viewports: everyBandViewports,
   );
 
   screenshotCase(
@@ -92,6 +99,7 @@ void main() {
         await tester.tap(openCart);
       }
     },
+    viewports: everyBandViewports,
   );
 
   // The state this composition root's wiring made reachable: the sale is

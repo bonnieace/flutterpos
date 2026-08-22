@@ -265,8 +265,39 @@ viewport added in the 1024-1279 range, which nothing currently covers.
       regressing the band against Profound Verdant — so the floor stays at 1024 until this is settled;
     - the 3-column desktop view does not exist. Categories are a horizontal `FilterChipBar`, not a
       column, so the desktop sale composition is unbuilt at any floor value.
-    Which source governs the sale surface, and does the desktop 3-column view enter scope? See
-    `audits/2026-08-22-wave-0-foundations.md` Finding 1 for the per-band table and the blast radius.
+    **Decided 2026-08-22, and it is two answers rather than one.**
+
+    **The breakpoints stay at 768 and 1024.** Profound Verdant's 1280 desktop floor is a documented
+    deviation, not unimplemented work. At 1194 — an 11-inch tablet held sideways — a record table is
+    denser and faster to scan than the stacked cards the narrower band would give it, which is what an
+    operational surface wants; there is no product argument for taking that width away from the
+    catalog, ledger, movements or receipt lists. `AppLayout.expandedFloor` is therefore **correct as
+    it stands**, and the four surfaces it gates — record lists, home navigation, page display titles,
+    route transitions — are left alone. Do not re-open this as a defect; it is a choice with a reason.
+
+    **The cart is visible on a tablet.** `TenantCheckoutPanel.showsTwoPanes` moved from the `expanded`
+    floor to the `medium` floor, so two panes now begin at 768. This is the part of Profound Verdant's
+    tablet row that was worth taking: a cashier on a tablet sees the cart beside the products instead
+    of tapping to open a sheet. It also returns the value to what the app shipped before `design.md`
+    §4.3 moved it, so this is a revert with a stated reason rather than a new invention.
+
+    Because the till now reads `medium`, the sale surface **no longer depends on `expandedFloor` at
+    all**, which removes the coupling that made the original question awkward. The two halves are
+    independent now.
+
+    **The 3-column desktop view stays deferred and unbuilt.** Categories remain a horizontal
+    `FilterChipBar`. Above 1280 the till is a two-pane layout where Profound Verdant asks for three
+    columns; that is provisional design debt, recorded rather than implied to be done.
+
+    Coverage taken with the change: the till is now captured at all three bands
+    (`viewports: everyBandViewports` in `tool/screenshots/operations_screens_test.dart`). Before this
+    it was rendered at 1440 and 411 only — **the tablet layout of the one screen a cashier uses all day
+    was covered by nothing**, which is why the boundary could sit wrong without anyone seeing it. A
+    test also pins 768 exactly, the tightest case the new boundary admits: the cart pane is a fixed
+    420, so the products get 347, and a `Row` that does not fit overflows and throws.
+
+    See `audits/2026-08-22-wave-0-foundations.md` Finding 1 for the per-band table and the original
+    blast-radius analysis.
 
 ## Non-blocking audit limitations
 

@@ -177,7 +177,19 @@ contract both ways in the same file — statically at line 179 and through the t
 Both findings were answered by the product owner on 2026-08-22. Full decision table in
 `OPEN_QUESTIONS.md`.
 
-1. **Finding 1 — Profound Verdant governs the bands, and the change is coupled.**
+1. **Finding 1 — SUPERSEDED 2026-08-22 by the decision in `OPEN_QUESTIONS.md` item 21.** The band
+   analysis below stands as the reasoning, but its conclusion changed once the two halves were
+   separated: `AppLayout.expandedFloor` **stays at 1024** as a deliberate deviation, and only
+   `showsTwoPanes` moved (to `mediumFloor`, so a tablet shows the cart). There is no coupled change and
+   no regression risk, because the till no longer reads that floor. The blast-radius table below
+   describes a change that was **not** made; read it as why it was not.
+
+   The finding's durable value is the coverage hole it exposed: the till was rendered at 1440 and 411
+   only, so its tablet layout — the busiest screen in the product — was covered by nothing. Both till
+   cases now capture all three bands.
+
+   *Original conclusion, kept for the record:*
+   **Profound Verdant governs the bands, and the change is coupled.**
    `TenantCheckoutPanel.showsTwoPanes` moves from `expandedFloor` to `mediumFloor` so two panes begin
    at 768; `AppLayout.expandedFloor` then moves 1024 → 1280. **Both together, in that order** — step
    two alone is the regression described above, and step one removes the sale surface's dependency on
