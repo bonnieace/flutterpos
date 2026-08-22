@@ -92,8 +92,10 @@ void main() {
             CheckoutEvidenceSummary(savedOffline: 2, confirmed: 11),
           ),
         ),
-        checkoutRoute: (_) =>
-            TenantCheckoutScreen(cache: FakeCatalogSource(), drafts: FakeDraftSink()),
+        checkoutRoute: (_) => TenantCheckoutScreen(
+          cache: FakeCatalogSource(),
+          drafts: FakeDraftSink(),
+        ),
         checkoutConfigurationRoute: (reader) =>
             TenantCheckoutConfigurationScreen(reader: reader),
         checkoutConfigurationRoles:
