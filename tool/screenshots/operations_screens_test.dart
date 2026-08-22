@@ -42,6 +42,39 @@ Future<void> _press(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
 }
 
+/// Opens the correction dialog on the seeded white bread, on whichever session
+/// the case is rendering under.
+///
+/// **Shared by `19` and `19b` rather than spelled twice**, because the two
+/// differ only in the session and the choreography below is the part with the
+/// traps in it.
+Future<void> _openProductCorrection(WidgetTester tester) async {
+  final edit = find.byKey(
+    const ValueKey('catalog-management-edit-pd-bread-white'),
+  );
+  // The route is one long `ListView`, so a row below the fold has not been
+  // built yet and `ensureVisible` has nothing to scroll to. Scrolling until it
+  // appears is the only way to reach it, which is also what a person does.
+  // The route's own list is named explicitly: the category strip inside it
+  // scrolls too, and `scrollUntilVisible` insists on exactly one candidate.
+  await tester.scrollUntilVisible(
+    edit,
+    300,
+    scrollable: find.byType(Scrollable).first,
+    maxScrolls: 30,
+  );
+  // **`scrollUntilVisible` stops when the widget is built, not when it is on
+  // screen**, so at 411 this tap was landing below the fold and missing: every
+  // `mobile/19-correct-a-product` capture ever taken photographed the list
+  // rather than the dialog the case exists for. Found 2026-08-14 by the catalog
+  // sweep, which hit the same thing in a widget test on the same route. The
+  // same class as the seeded-record trap - a capture case whose picture is not
+  // of the state it names.
+  await tester.ensureVisible(edit);
+  await tester.pumpAndSettle();
+  await tester.tap(edit);
+}
+
 /// One canonical sale, decoded the way every sales surface decodes one.
 TenantSale _sale(String saleId) => TenantSale.fromDocument(
   path: 'tenants/$seedTenantId/sales/$saleId',
@@ -227,6 +260,39 @@ void main() {
         ),
       );
     },
+    viewports: responsiveViewports,
+  );
+
+  // **The same route as a cashier, which is the session the brief actually
+  // names.** Phase 04's first required screen is the read-only catalog "for all
+  // active roles", and every capture of it ran as owner - so the one role whose
+  // catalog is *only* readable had no picture at all. The build is `17`'s
+  // unchanged, including all three stock routes and their role lists: what
+  // differs is the session, so the absence of the stock entries is the screen's
+  // own decision rather than a build that withheld them.
+  screenshotCase(
+    '17b-read-only-catalog-cashier',
+    build: () {
+      final reader = FakeTenantReader.business();
+      return inSession(
+        TenantCatalogScreen(
+          reader: reader,
+          productStockRoute: (product) =>
+              TenantProductStockScreen(reader: reader, product: product),
+          productStockRoles: TenantProductStockRepository.allowedRoles,
+          adjustmentFeedRoute: () =>
+              TenantStockAdjustmentFeedScreen(reader: reader),
+          adjustmentFeedRoles: TenantStockAdjustmentFeedRepository.allowedRoles,
+          movementFeedRoute: () => TenantStockMovementFeedScreen(
+            reader: reader,
+            groupReader: reader,
+          ),
+          movementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
+        ),
+        controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+      );
+    },
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -246,6 +312,7 @@ void main() {
         ),
       );
     },
+    viewports: responsiveViewports,
   );
 
   // **No picture had ever shown a notice on any screen.** Seven surfaces report
@@ -272,6 +339,7 @@ void main() {
     build: () => inSession(
       TenantCatalogManagementScreen(reader: FakeTenantReader.business()),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -321,6 +389,35 @@ void main() {
       // three seeded categories. That is the fixture rather than the screen, and
       // it is said here so nobody reads the image as a defect.
     },
+    viewports: responsiveViewports,
+  );
+
+  // **The management list as a manager, which is the one session on this route
+  // that sees a structurally different page.** `18`, `18b`, `18c` and `19` all
+  // run as owner, so the narrowing this phase's first acceptance criterion is
+  // about - `Retire` absent from every row, and the notice that says why -
+  // appeared in none of the 413 images. `canRetire` is owner and administrator
+  // only (`catalog_management.dart:338`) and the row actions read it at `:756`;
+  // this is the picture of the other side of that branch.
+  screenshotCase(
+    '18d-manage-catalog-manager',
+    build: () {
+      final reader = FakeTenantReader.business();
+      return inSession(
+        TenantCatalogManagementScreen(
+          reader: reader,
+          writer: FakeCatalogWriter(),
+          updateCallable: FakeCallable(),
+          bulkRoute: (_) => TenantBulkCatalogScreen(
+            reader: reader,
+            batchCallable: FakeCallable(),
+            importCallable: FakeCallable(),
+          ),
+        ),
+        controller: seedSession(role: TenantRole.manager, uid: managerUid),
+      );
+    },
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -332,33 +429,29 @@ void main() {
         updateCallable: FakeCallable(),
       ),
     ),
-    afterPump: (tester) async {
-      final edit = find.byKey(
-        const ValueKey('catalog-management-edit-pd-bread-white'),
-      );
-      // The route is one long `ListView`, so a row below the fold has not been
-      // built yet and `ensureVisible` has nothing to scroll to. Scrolling until
-      // it appears is the only way to reach it, which is also what a person
-      // does.
-      // The route's own list is named explicitly: the category strip inside it
-      // scrolls too, and `scrollUntilVisible` insists on exactly one candidate.
-      await tester.scrollUntilVisible(
-        edit,
-        300,
-        scrollable: find.byType(Scrollable).first,
-        maxScrolls: 30,
-      );
-      // **`scrollUntilVisible` stops when the widget is built, not when it is on
-      // screen**, so at 411 this tap was landing below the fold and missing:
-      // every `mobile/19-correct-a-product` capture ever taken photographed the
-      // list rather than the dialog the case exists for. Found 2026-08-14 by the
-      // catalog sweep, which hit the same thing in a widget test on the same
-      // route. The same class as the seeded-record trap - a capture case whose
-      // picture is not of the state it names.
-      await tester.ensureVisible(edit);
-      await tester.pumpAndSettle();
-      await tester.tap(edit);
-    },
+    afterPump: _openProductCorrection,
+    viewports: responsiveViewports,
+  );
+
+  // **The same form as a manager**, which is where owner and manager differ most
+  // on this route: `canChangeMoney` is `canRecordCostInSession`
+  // (`catalog_management_panel.dart:414`), so the price field, the cost field
+  // and the clear-cost act are all absent and a single `info` notice stands
+  // where they were. That notice - `catalog-management-edit-money-hidden` - is
+  // very nearly the sentence ST-039's own section 2 draws, and until this
+  // capture it had never been rendered into an image.
+  screenshotCase(
+    '19b-correct-a-product-manager',
+    build: () => inSession(
+      TenantCatalogManagementScreen(
+        reader: FakeTenantReader.business(),
+        writer: FakeCatalogWriter(),
+        updateCallable: FakeCallable(),
+      ),
+      controller: seedSession(role: TenantRole.manager, uid: managerUid),
+    ),
+    afterPump: _openProductCorrection,
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -370,6 +463,7 @@ void main() {
         importCallable: FakeCallable(),
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   // **The report, which nothing had ever photographed.** Its rows carry §2.1
@@ -410,6 +504,7 @@ void main() {
         await _press(tester, 'bulk-catalog-commit');
         await _press(tester, 'bulk-catalog-confirm');
       },
+      viewports: responsiveViewports,
     );
   }
 
@@ -423,6 +518,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   // **The exception report on 21 has never been in a picture.** The seeded stock
@@ -442,6 +538,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -450,6 +547,7 @@ void main() {
       TenantStockAdjustmentFeedScreen(reader: FakeTenantReader.business()),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -466,6 +564,7 @@ void main() {
         controller: seedSession(role: TenantRole.manager, uid: managerUid),
       );
     },
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -477,6 +576,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   // -------------------------------------------------------------------------

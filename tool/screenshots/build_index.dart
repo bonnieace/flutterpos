@@ -77,6 +77,10 @@ const Map<String, String> captions = <String, String>{
       'a bare sentence until 2026-08-22, because no capture had ever contained '
       'this branch.',
   '17-read-only-catalog': 'The catalog every active member may read.',
+  '17b-read-only-catalog-cashier':
+      'The same catalog as a cashier, which is the role the brief names and '
+      'no capture had. All three stock routes are offered to the build and '
+      'the screen withholds them, so the narrowing is the screen’s own.',
   '18-manage-catalog':
       'Adding a category, adding a product, and the product list a correction '
       'starts from.',
@@ -87,9 +91,17 @@ const Map<String, String> captions = <String, String>{
   '18b-catalog-notice':
       'What a write did, in place. The first picture of a notice on any '
       'screen: they appear only after a write, so no capture had one.',
+  '18d-manage-catalog-manager':
+      'Manage catalog as a manager. Every row offers Correct and none offers '
+      'Retire, and the notice under the list says why. Owner and '
+      'administrator only, from one role list.',
   '19-correct-a-product':
       'Correcting one product: all five editable fields at once, with clearing '
       'a recorded cost as its own act.',
+  '19b-correct-a-product-manager':
+      'The same correction form as a manager: three of the five fields, and '
+      'an info notice standing where the price, the cost and the clear-cost '
+      'act were.',
   '20-bulk-changes-and-import':
       'One field across many products, or a whole catalog from pasted rows. '
       'Both preview before they write.',
