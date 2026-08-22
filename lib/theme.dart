@@ -8,15 +8,12 @@ const Color bgMid = Color(0xFF132A1F);
 const Color accentGreen = Color(0xFF45F28D);
 const Color mutedGreen = Color(0xFF1E3A2B);
 
-/// Body text on either of the two grounds above.
-///
-/// Named because it is the [ColorScheme.onSurfaceVariant] as well as the
-/// `bodyMedium` colour, and the two drifting apart is how a caption ends up a
-/// different green from the paragraph beside it.
-const Color _bodyGreen = Color(0xFFB8D6C5);
-
-/// A refusal. Reserved, and never used for structure.
-const Color _criticalRed = Color(0xFFFF5C6C);
+// `_bodyGreen` (`#B8D6C5`) and `_criticalRed` (`#FF5C6C`) used to be declared
+// here and are gone: every slot that read them now reads `text.secondary` and
+// `status.problem.fg`, which hold those same two values. The four public
+// constants above are kept because `test/ui/tokens_test.dart` measures the token
+// roles against them - they are the record of what this app shipped, not live
+// paint.
 
 /// The interaction overlay one action tier paints, from `design.md` §2.1's
 /// state table.
@@ -45,17 +42,51 @@ WidgetStateProperty<Color?> _pressOverlay(AppActionRole role) =>
       return null;
     });
 
+/// **The one place this app names its palette.**
+///
+/// Before this existed, `AppTokens.dark` was written out in four places here -
+/// twice for the roles below, once for the field radius, and once in
+/// [spiritTheme]'s `extensions` - which meant a palette swap was four edits that
+/// had to agree, and three-quarters of a swap renders a theme painting new
+/// colours over old surfaces. Now it is one word.
+///
+/// **Still [AppTokens.dark], and the swap is blocked on the migration below.**
+/// Flipping this word today would repaint the four button themes, the input
+/// well and the checkbox in Profound Verdant while the scaffold, the cards, the
+/// app bar, the dialogs and every body-text colour stayed on the literals at the
+/// top of this file - new buttons on old surfaces, which is worse than either
+/// palette. `design.md` §11 steps 4 and 5 were meant to finish moving those
+/// literals onto roles and never ran; the note on [spiritTheme] lists what they
+/// left. That migration is zero-pixel by construction, because
+/// `test/ui/tokens_test.dart` already asserts each role holds the identical
+/// value, and it has to land before this word changes.
+const AppTokens _palette = AppTokens.dark;
+
 /// The action tiers this file paints with, read once rather than per button
 /// theme.
 ///
-/// `AppTokens.dark` is a canonicalized `const` instance, so this reads the same
-/// object every widget below the theme resolves. It is `final` rather than
-/// `const` because a property access is not a constant expression, which is a
-/// Dart rule about the expression and not about the value.
-final AppActionRoles _action = AppTokens.dark.colors.action;
+/// [_palette] is a canonicalized `const` instance, so this reads the same object
+/// every widget below the theme resolves. It is `final` rather than `const`
+/// because a property access is not a constant expression, which is a Dart rule
+/// about the expression and not about the value.
+final AppActionRoles _action = _palette.colors.action;
 
 /// The surface roles, read once for the same reason [_action] is.
-final AppSurfaceRoles _surface = AppTokens.dark.colors.surface;
+final AppSurfaceRoles _surface = _palette.colors.surface;
+
+/// The text roles, read once for the same reason [_action] is.
+///
+/// **The caption-versus-paragraph drift this file used to warn about is now
+/// structural.** `_bodyGreen` was one constant serving both
+/// [ColorScheme.onSurfaceVariant] and `bodyMedium`, and the comment on it said
+/// the two coming apart is how a caption ends up a different green from the
+/// paragraph beside it. Both now read [AppTextRoles.secondary], so they cannot.
+final AppTextRoles _text = _palette.colors.text;
+
+/// The status roles. Only `problem` is reached from here - it is the `error`
+/// slot and the error border - because a `ThemeData` has no slot for the other
+/// four and `AppStatusBadge` carries them instead.
+final AppStatusRoles _status = _palette.colors.status;
 
 /// One slot of the field outline every unmigrated `TextField` still reads.
 ///
@@ -65,7 +96,7 @@ final AppSurfaceRoles _surface = AppTokens.dark.colors.surface;
 /// left in the app.
 OutlineInputBorder _fieldBorder(Color colour, {double width = 1}) =>
     OutlineInputBorder(
-      borderRadius: BorderRadius.circular(AppTokens.dark.radius.pill),
+      borderRadius: BorderRadius.circular(_palette.radius.pill),
       borderSide: BorderSide(color: colour, width: width),
     );
 
@@ -197,8 +228,8 @@ final ThemeData spiritTheme = ThemeData(
   // §2.2's "one family". See the note above for why this was absent for so long
   // and what is still missing.
   fontFamily: 'Roboto',
-  scaffoldBackgroundColor: bgDark,
-  extensions: const <ThemeExtension<dynamic>>[AppTokens.dark],
+  scaffoldBackgroundColor: _surface.base,
+  extensions: const <ThemeExtension<dynamic>>[_palette],
   // `design.md` §2.4: no ink ripples. One line reaches every button,
   // `ListTile`, `ChoiceChip`, `IconButton` and `SegmentedButton` in the app,
   // because `InkResponse` falls back to `ThemeData.splashFactory` and the
@@ -212,7 +243,7 @@ final ThemeData spiritTheme = ThemeData(
   useMaterial3: true,
   splashFactory: NoSplash.splashFactory,
   colorScheme: ColorScheme.dark(
-    primary: accentGreen,
+    primary: _action.primary.container,
     // Dark ink on a bright accent, which is what the login screen's primary
     // button already does. White on `accentGreen` fails AA outright.
     //
@@ -223,48 +254,48 @@ final ThemeData spiritTheme = ThemeData(
     // is now an agreement, in the same change, which is what those rows were
     // written for.
     onPrimary: _action.primary.label,
-    primaryContainer: mutedGreen,
-    onPrimaryContainer: accentGreen,
-    secondary: accentGreen,
+    primaryContainer: _surface.field,
+    onPrimaryContainer: _action.primary.container,
+    secondary: _action.primary.container,
     // `secondary` is the same mint, so what sits on it is the same ink.
     onSecondary: _action.primary.label,
-    secondaryContainer: mutedGreen,
-    onSecondaryContainer: _bodyGreen,
-    error: _criticalRed,
-    onError: bgDark,
+    secondaryContainer: _surface.field,
+    onSecondaryContainer: _text.secondary,
+    error: _status.problem.fg,
+    onError: _surface.base,
     // Cards, dialogs, and sheets paint on this rather than on the scaffold.
-    surface: bgMid,
-    onSurface: Colors.white,
-    onSurfaceVariant: _bodyGreen,
-    outline: mutedGreen,
-    outlineVariant: mutedGreen,
+    surface: _surface.raised,
+    onSurface: _text.primary,
+    onSurfaceVariant: _text.secondary,
+    outline: _surface.borderSubtle,
+    outlineVariant: _surface.borderSubtle,
   ),
-  textTheme: const TextTheme(
+  textTheme: TextTheme(
     headlineLarge: TextStyle(
       fontSize: 40,
       fontWeight: FontWeight.w700,
-      color: Colors.white,
+      color: _text.primary,
     ),
-    bodyMedium: TextStyle(fontSize: 16, color: _bodyGreen),
+    bodyMedium: TextStyle(fontSize: 16, color: _text.secondary),
     // Every button label. Left without a colour or a family on purpose: it
     // merges onto the default style, so it inherits both and cannot drift
     // into a different face from the text beside it.
-    labelLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+    labelLarge: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
   ),
-  appBarTheme: const AppBarTheme(
-    backgroundColor: bgDark,
-    foregroundColor: Colors.white,
+  appBarTheme: AppBarTheme(
+    backgroundColor: _surface.base,
+    foregroundColor: _text.primary,
     elevation: 0,
     scrolledUnderElevation: 0,
     centerTitle: false,
   ),
   cardTheme: CardThemeData(
-    color: bgMid,
+    color: _surface.raised,
     elevation: 0,
     margin: const EdgeInsets.symmetric(vertical: 6),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
-      side: const BorderSide(color: mutedGreen),
+      side: BorderSide(color: _surface.borderSubtle),
     ),
   ),
   // Stadium buttons throughout, because the login screen's are stadium and it
@@ -335,52 +366,58 @@ final ThemeData spiritTheme = ThemeData(
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
     fillColor: _surface.field,
-    hintStyle: const TextStyle(color: _bodyGreen),
-    labelStyle: const TextStyle(color: _bodyGreen),
+    hintStyle: TextStyle(color: _text.secondary),
+    labelStyle: TextStyle(color: _text.secondary),
     border: _fieldBorder(_surface.borderStrong),
     enabledBorder: _fieldBorder(_surface.borderStrong),
     focusedBorder: _fieldBorder(
       _action.focusRing.color,
       width: _action.focusRing.width,
     ),
-    errorBorder: _fieldBorder(_criticalRed),
+    errorBorder: _fieldBorder(_status.problem.fg),
   ),
   chipTheme: ChipThemeData(
-    backgroundColor: bgMid,
-    selectedColor: mutedGreen,
-    side: const BorderSide(color: mutedGreen),
-    labelStyle: const TextStyle(color: _bodyGreen),
-    secondaryLabelStyle: const TextStyle(color: accentGreen),
-    checkmarkColor: accentGreen,
+    backgroundColor: _surface.raised,
+    selectedColor: _surface.field,
+    side: BorderSide(color: _surface.borderSubtle),
+    labelStyle: TextStyle(color: _text.secondary),
+    secondaryLabelStyle: TextStyle(color: _action.primary.container),
+    checkmarkColor: _action.primary.container,
     shape: const StadiumBorder(),
   ),
   dialogTheme: DialogThemeData(
-    backgroundColor: bgMid,
+    backgroundColor: _surface.raised,
     surfaceTintColor: Colors.transparent,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
   ),
   // Named now rather than by the till chunk that needs it, so the cart sheet
   // and every other sheet cannot disagree about what a sheet looks like.
-  bottomSheetTheme: const BottomSheetThemeData(
-    backgroundColor: bgMid,
+  bottomSheetTheme: BottomSheetThemeData(
+    backgroundColor: _surface.raised,
     surfaceTintColor: Colors.transparent,
-    shape: RoundedRectangleBorder(
+    shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
   ),
-  dividerTheme: const DividerThemeData(color: mutedGreen, space: 1, thickness: 1),
-  listTileTheme: const ListTileThemeData(
-    iconColor: accentGreen,
-    textColor: Colors.white,
-    subtitleTextStyle: TextStyle(color: _bodyGreen, fontSize: 13),
+  dividerTheme: DividerThemeData(
+    color: _surface.borderSubtle,
+    space: 1,
+    thickness: 1,
   ),
-  iconTheme: const IconThemeData(color: accentGreen),
+  listTileTheme: ListTileThemeData(
+    iconColor: _action.primary.container,
+    textColor: _text.primary,
+    subtitleTextStyle: TextStyle(color: _text.secondary, fontSize: 13),
+  ),
+  iconTheme: IconThemeData(color: _action.primary.container),
   // The splash screen's spinner was stock Material purple on a green-black
   // ground, which is the whole problem this file now fixes in miniature.
-  progressIndicatorTheme: const ProgressIndicatorThemeData(color: accentGreen),
+  progressIndicatorTheme: ProgressIndicatorThemeData(
+    color: _action.primary.container,
+  ),
   snackBarTheme: SnackBarThemeData(
-    backgroundColor: mutedGreen,
-    contentTextStyle: const TextStyle(color: Colors.white),
+    backgroundColor: _surface.field,
+    contentTextStyle: TextStyle(color: _text.primary),
     behavior: SnackBarBehavior.floating,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   ),
@@ -407,10 +444,12 @@ final ThemeData spiritTheme = ThemeData(
   ),
   switchTheme: SwitchThemeData(
     thumbColor: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.selected) ? bgDark : null,
+      (states) => states.contains(WidgetState.selected) ? _surface.base : null,
     ),
     trackColor: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.selected) ? accentGreen : null,
+      (states) => states.contains(WidgetState.selected)
+          ? _action.primary.container
+          : null,
     ),
   ),
 );

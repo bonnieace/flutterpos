@@ -27,6 +27,17 @@ void main() {
   final surface = colors.surface;
   final type = tokens.typography;
 
+  /// The set `lib/theme.dart` actually registers, whichever palette that is.
+  ///
+  /// **Read this, not [AppTokens.dark], for anything compared against
+  /// `spiritTheme`.** This file used to name `AppTokens.dark` for both jobs,
+  /// which was correct only while they were the same object. The day the theme
+  /// moved to Profound Verdant, every one of those assertions would have failed
+  /// for the wrong reason - not because the theme had stopped reading the token
+  /// layer, which is what they exist to check, but because it had started
+  /// reading a different palette, which is not their business.
+  final registered = spiritTheme.extension<AppTokens>()!;
+
   /// Every ground a widget paints text on.
   final grounds = <String, Color>{
     'surface.base': surface.base,
@@ -836,7 +847,13 @@ void main() {
 
   group('the extension itself', () {
     test('spiritTheme registers it, and it is the only extension', () {
-      expect(spiritTheme.extension<AppTokens>(), same(AppTokens.dark));
+      // `same`, not `equals`: the point is that the theme hands every widget the
+      // one canonicalised `const` instance rather than rebuilding it. *Which* of
+      // the two it is belongs to `lib/theme.dart`, so this accepts either.
+      expect(
+        registered,
+        anyOf(same(AppTokens.dark), same(AppTokens.profoundVerdant)),
+      );
       expect(spiritTheme.extensions, hasLength(1));
     });
 
@@ -982,15 +999,15 @@ void main() {
     // anything moves. Where they already agree, these assertions stop the two
     // drifting while both exist.
     test('the surfaces and the two wired text colours agree', () {
-      expect(surface.base, spiritTheme.scaffoldBackgroundColor);
+      // **The literals, not the live theme.** These four constants in
+      // `lib/theme.dart` are no longer painted by anything - every slot that
+      // read them reads a role now - so what they document is the palette this
+      // app shipped, and this test is what keeps `AppColorRoles.dark` an honest
+      // record of it. The live theme is checked against whatever it registers,
+      // in the group at the end of this file.
       expect(surface.base, bgDark);
-      expect(surface.raised, spiritTheme.colorScheme.surface);
       expect(surface.raised, bgMid);
-      expect(colors.text.primary, spiritTheme.colorScheme.onSurface);
-      expect(colors.text.secondary, spiritTheme.colorScheme.onSurfaceVariant);
-      expect(surface.borderSubtle, spiritTheme.colorScheme.outline);
       expect(surface.borderSubtle, mutedGreen);
-      expect(colors.action.primary.container, spiritTheme.colorScheme.primary);
       expect(colors.action.primary.container, accentGreen);
     });
 
@@ -1010,20 +1027,21 @@ void main() {
       // going unnoticed for a release. They are kept as agreements rather than
       // deleted, because what stopped them drifting apart while both existed is
       // the same thing that stops them drifting back.
+      final action = registered.colors.action;
       expect(
-        colors.action.primary.label,
+        action.primary.label,
         spiritTheme.colorScheme.onPrimary,
-        reason: 'a label on the primary container is §2.1\'s #0A0F0C',
+        reason: 'a label on the primary container is that tier\'s own ink',
       );
       expect(
-        colors.action.secondary.label,
+        action.secondary.label,
         spiritTheme.outlinedButtonTheme.style!.foregroundColor!.resolve(
           <WidgetState>{},
         ),
         reason: 'the ordinary action stopped being mint, which is §2.1\'s point',
       );
       expect(
-        colors.action.secondary.border,
+        action.secondary.border,
         spiritTheme.outlinedButtonTheme.style!.side!
             .resolve(<WidgetState>{})!
             .color,
@@ -1032,13 +1050,13 @@ void main() {
             'OutlinedButton and an AppButton in secondary cannot disagree',
       );
       expect(
-        colors.action.tertiary.label,
+        action.tertiary.label,
         spiritTheme.textButtonTheme.style!.foregroundColor!.resolve(
           <WidgetState>{},
         ),
       );
       expect(
-        colors.action.primary.container,
+        action.primary.container,
         spiritTheme.filledButtonTheme.style!.backgroundColor!.resolve(
           <WidgetState>{},
         ),
@@ -1059,7 +1077,7 @@ void main() {
           (spiritTheme.cardTheme.shape! as RoundedRectangleBorder).borderRadius
               as BorderRadius;
       expect(
-        tokens.radius.md,
+        registered.radius.md,
         isNot(cardRadius.topLeft.x),
         reason: 'cards are still 16; §2.3 wants 12',
       );
@@ -1067,7 +1085,7 @@ void main() {
           (spiritTheme.inputDecorationTheme.border! as OutlineInputBorder)
               .borderRadius;
       expect(
-        tokens.radius.sm,
+        registered.radius.sm,
         isNot(inputRadius.topLeft.x),
         reason: 'inputs are still 14; §2.3 wants 8',
       );
@@ -1124,15 +1142,24 @@ void main() {
       );
     }
 
-    test('nothing is wired to it yet, so no pixel has moved', () {
-      // The whole point of landing the palette before the swap: this instance
-      // exists and is checked, and `AppTokens.dark` still renders `dark`.
+    test('AppTokens.dark is left alone, whatever the theme registers', () {
+      // `dark` is the record of the shipped palette, so the swap must not have
+      // been done by editing it.
       expect(AppTokens.dark.colors, same(AppColorRoles.dark));
       expect(AppTokens.dark.colors, isNot(same(pv)));
-      expect(
-        spiritTheme.extension<AppTokens>()!.colors,
-        same(AppColorRoles.dark),
-      );
+      expect(AppTokens.profoundVerdant.colors, same(pv));
+    });
+
+    test('the swap is colour only - every other field is dark\'s', () {
+      // Items 19 and 20 are decided but land separately, so a roundness or type
+      // regression cannot arrive inside the palette's screenshot diff.
+      const swapped = AppTokens.profoundVerdant;
+      expect(swapped.radius, same(AppTokens.dark.radius));
+      expect(swapped.typography, same(AppTokens.dark.typography));
+      expect(swapped.spacing, same(AppTokens.dark.spacing));
+      expect(swapped.motion, same(AppTokens.dark.motion));
+      expect(swapped.density, same(AppTokens.dark.density));
+      expect(swapped.layout, same(AppTokens.dark.layout));
     });
 
     test('the surface ramp is the frontmatter, one tier down from dark', () {
@@ -1351,6 +1378,87 @@ void main() {
         contrastRatio(pv.action.primary.label, pv.action.primary.container),
         greaterThanOrEqualTo(4.5),
       );
+    });
+  });
+
+  /// The theme reads roles, and no longer reads a literal.
+  ///
+  /// **These assertions name no colour**, which is the entire point: they hold
+  /// whichever palette `lib/theme.dart` registers, so they prove the wiring
+  /// rather than the values. Before 2026-08-22 two thirds of `spiritTheme` was
+  /// painted from the four constants at the top of that file, which meant
+  /// swapping the palette would have repainted the buttons and the input well
+  /// while the scaffold, the cards, the app bar and every body-text colour stayed
+  /// behind. Each expectation below is one slot that used to be a literal.
+  group('spiritTheme paints from the registered palette', () {
+    test('the page, the raised surface and the borders are roles', () {
+      final surfaces = registered.colors.surface;
+      expect(spiritTheme.scaffoldBackgroundColor, surfaces.base);
+      expect(spiritTheme.colorScheme.surface, surfaces.raised);
+      expect(spiritTheme.colorScheme.outline, surfaces.borderSubtle);
+      expect(spiritTheme.colorScheme.outlineVariant, surfaces.borderSubtle);
+      expect(spiritTheme.appBarTheme.backgroundColor, surfaces.base);
+      expect(spiritTheme.cardTheme.color, surfaces.raised);
+      expect(spiritTheme.dialogTheme.backgroundColor, surfaces.raised);
+      expect(spiritTheme.bottomSheetTheme.backgroundColor, surfaces.raised);
+      expect(spiritTheme.dividerTheme.color, surfaces.borderSubtle);
+      expect(spiritTheme.inputDecorationTheme.fillColor, surfaces.field);
+    });
+
+    test('every text colour the theme names is a text role', () {
+      final text = registered.colors.text;
+      expect(spiritTheme.colorScheme.onSurface, text.primary);
+      expect(spiritTheme.colorScheme.onSurfaceVariant, text.secondary);
+      expect(spiritTheme.appBarTheme.foregroundColor, text.primary);
+      expect(spiritTheme.textTheme.headlineLarge!.color, text.primary);
+      expect(spiritTheme.textTheme.bodyMedium!.color, text.secondary);
+      expect(spiritTheme.listTileTheme.textColor, text.primary);
+      expect(spiritTheme.listTileTheme.subtitleTextStyle!.color, text.secondary);
+      expect(spiritTheme.inputDecorationTheme.hintStyle!.color, text.secondary);
+      expect(spiritTheme.snackBarTheme.contentTextStyle!.color, text.primary);
+    });
+
+    test('the accent slots are the primary action container', () {
+      final accent = registered.colors.action.primary.container;
+      expect(spiritTheme.colorScheme.primary, accent);
+      expect(spiritTheme.colorScheme.secondary, accent);
+      expect(spiritTheme.iconTheme.color, accent);
+      expect(spiritTheme.progressIndicatorTheme.color, accent);
+      expect(spiritTheme.listTileTheme.iconColor, accent);
+      expect(spiritTheme.chipTheme.checkmarkColor, accent);
+    });
+
+    test('the error slot is the problem status, not a spare red', () {
+      expect(
+        spiritTheme.colorScheme.error,
+        registered.colors.status.problem.fg,
+      );
+      expect(
+        (spiritTheme.inputDecorationTheme.errorBorder! as OutlineInputBorder)
+            .borderSide
+            .color,
+        registered.colors.status.problem.fg,
+      );
+    });
+
+    test('no slot is painted from the four legacy constants', () {
+      // The constants still exist as the record of the shipped palette. What
+      // this asserts is that the theme has stopped *reading* them - which, while
+      // `dark` is registered, is only visible as the roles agreeing with them,
+      // and after the swap becomes a real difference.
+      final painted = <Color?>[
+        spiritTheme.scaffoldBackgroundColor,
+        spiritTheme.colorScheme.surface,
+        spiritTheme.colorScheme.primary,
+        spiritTheme.colorScheme.outline,
+      ];
+      final roles = <Color>[
+        registered.colors.surface.base,
+        registered.colors.surface.raised,
+        registered.colors.action.primary.container,
+        registered.colors.surface.borderSubtle,
+      ];
+      expect(painted, roles);
     });
   });
 }
