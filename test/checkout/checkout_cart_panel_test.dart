@@ -216,7 +216,10 @@ void main() {
       _notice(tester, 'checkout-refusal'),
       'A sale needs between 1 and 16 items.',
     );
-    expect(find.byKey(const ValueKey('checkout-line-product-16')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('checkout-line-product-16')),
+      findsNothing,
+    );
   });
 
   testWidgets('removing the last item empties the cart', (tester) async {
@@ -355,7 +358,10 @@ void main() {
         findsOne,
       );
       // Not the same thing as a device holding no catalog at all.
-      expect(find.byKey(const ValueKey('checkout-catalog-empty')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('checkout-catalog-empty')),
+        findsNothing,
+      );
     });
 
     testWidgets('a category chip narrows the list and combines with search', (
@@ -372,7 +378,10 @@ void main() {
       await _enter(tester, 'checkout-search', 'cola');
 
       expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
-      expect(find.byKey(const ValueKey('checkout-product-water')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('checkout-product-water')),
+        findsNothing,
+      );
 
       await _tap(tester, 'checkout-category-all');
 
@@ -584,7 +593,11 @@ void main() {
         uid: 'user-a',
         tenantId: 'tenant-a',
         products: <TenantProduct>[
-          for (var index = 0; index < maximumRenderedCheckoutProducts + 5; index++)
+          for (
+            var index = 0;
+            index < maximumRenderedCheckoutProducts + 5;
+            index++
+          )
             _product(
               'tenant-a',
               'product-${index.toString().padLeft(3, '0')}',
@@ -704,7 +717,10 @@ void main() {
       await _tap(tester, 'checkout-clear-confirm');
 
       // The receipt describes a different, finished sale.
-      expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+      expect(
+        _notice(tester, 'checkout-saved'),
+        contains('CT-A7F-20260731-0001'),
+      );
     });
   });
 
@@ -887,7 +903,10 @@ void main() {
       expect(find.byKey(const ValueKey('checkout-wide')), findsOne);
       // Both halves are on screen at once, which is the whole point of the
       // split: nothing about the sale is behind a tap.
-      expect(find.byKey(const ValueKey('checkout-product-product-a')), findsOne);
+      expect(
+        find.byKey(const ValueKey('checkout-product-product-a')),
+        findsOne,
+      );
       expect(find.byKey(const ValueKey('checkout-cart-pane')), findsOne);
       expect(find.byKey(const ValueKey('checkout-open-cart')), findsNothing);
     });
@@ -953,7 +972,10 @@ void main() {
       await _pumpAt(tester, sessions, catalog, drafts, phone);
 
       expect(find.byKey(const ValueKey('checkout-compact')), findsOne);
-      expect(find.byKey(const ValueKey('checkout-product-product-a')), findsOne);
+      expect(
+        find.byKey(const ValueKey('checkout-product-product-a')),
+        findsOne,
+      );
       expect(find.byKey(const ValueKey('checkout-open-cart')), findsOne);
       // The cart is a route that has not been pushed, so none of it is built.
       expect(find.byKey(const ValueKey('checkout-cart-pane')), findsNothing);
@@ -971,7 +993,8 @@ void main() {
       // The number the customer is waiting for is never behind a tap.
       expect(_text(tester, 'checkout-cart-bar-total'), 'Total: KES 14.00');
       expect(
-        tester.widget<Badge>(find.byKey(const ValueKey('checkout-cart-badge')))
+        tester
+            .widget<Badge>(find.byKey(const ValueKey('checkout-cart-badge')))
             .isLabelVisible,
         isTrue,
       );
@@ -1129,9 +1152,7 @@ void main() {
       expect(_status(tester, 'checkout-receipt-print'), AppStatus.attention);
     });
 
-    testWidgets('a receipt that printed adds no second notice', (
-      tester,
-    ) async {
+    testWidgets('a receipt that printed adds no second notice', (tester) async {
       // **Null is ambiguous by contract** - it means sent, and it also means a
       // build that queues no receipts at all - so the till draws nothing. Where
       // it printed, the paper is the proof and a green box is noise.
@@ -1327,13 +1348,19 @@ void main() {
       await _tap(tester, 'checkout-product-product-a');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
-      expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+      expect(
+        _notice(tester, 'checkout-saved'),
+        contains('CT-A7F-20260731-0001'),
+      );
 
       // The cashier starts serving the next customer straight away. The number
       // describes a sale that is already finished, so it must not vanish.
       await _tap(tester, 'checkout-product-product-b');
 
-      expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+      expect(
+        _notice(tester, 'checkout-saved'),
+        contains('CT-A7F-20260731-0001'),
+      );
 
       await _tap(tester, 'checkout-dismiss-receipt');
 
@@ -1380,7 +1407,10 @@ void main() {
       await _tap(tester, 'checkout-tender-mpesa');
       await _tap(tester, 'checkout-save');
 
-      expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0002'));
+      expect(
+        _notice(tester, 'checkout-saved'),
+        contains('CT-A7F-20260731-0002'),
+      );
       expect(
         _notice(tester, 'checkout-saved'),
         isNot(contains('CT-A7F-20260731-0001')),
@@ -1403,7 +1433,10 @@ void main() {
 
       // An older number beside a refusal reads as if the refused sale saved.
       expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
-      expect(_notice(tester, 'checkout-refusal'), 'Open a shift before selling.');
+      expect(
+        _notice(tester, 'checkout-refusal'),
+        'Open a shift before selling.',
+      );
     });
 
     testWidgets('a save with no receipt number still says the sale is kept', (
@@ -1421,39 +1454,37 @@ void main() {
         _notice(tester, 'checkout-saved'),
         startsWith('Saved on this device, but it could not state a receipt'),
       );
-      expect(
-        find.byKey(const ValueKey('checkout-copy-receipt')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('checkout-copy-receipt')), findsNothing);
     });
   });
 
-  testWidgets('a business switch clears the cart, the search, and the receipt', (
-    tester,
-  ) async {
-    catalog.put(
-      uid: 'user-a',
-      tenantId: 'tenant-b',
-      products: <TenantProduct>[_product('tenant-b', 'product-a', price: 3)],
-    );
-    await _pump(tester, sessions, catalog, drafts);
+  testWidgets(
+    'a business switch clears the cart, the search, and the receipt',
+    (tester) async {
+      catalog.put(
+        uid: 'user-a',
+        tenantId: 'tenant-b',
+        products: <TenantProduct>[_product('tenant-b', 'product-a', price: 3)],
+      );
+      await _pump(tester, sessions, catalog, drafts);
 
-    await _enter(tester, 'checkout-search', 'product-a');
-    await _tap(tester, 'checkout-product-product-a');
-    await _tap(tester, 'checkout-tender-cash');
-    await _tap(tester, 'checkout-save');
-    expect(find.byKey(const ValueKey('checkout-saved')), findsOne);
+      await _enter(tester, 'checkout-search', 'product-a');
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+      expect(find.byKey(const ValueKey('checkout-saved')), findsOne);
 
-    sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
-    await _settle(tester);
+      sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
+      await _settle(tester);
 
-    // Nothing from the first business may be carried into the second: not a
-    // line, not a search term, and not a receipt number.
-    expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
-    expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-    expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
-    expect(_text(tester, 'checkout-total'), 'KES 0.00');
-  });
+      // Nothing from the first business may be carried into the second: not a
+      // line, not a search term, and not a receipt number.
+      expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
+      expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
+      expect(_text(tester, 'checkout-total'), 'KES 0.00');
+    },
+  );
 
   testWidgets('a business switch during a save never labels the new session', (
     tester,
