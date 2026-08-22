@@ -559,6 +559,17 @@ components and contracts.
 - It **names a destination and does not become one.** A button here would be a routing condition, and
   hard rule 1 keeps those out of a visual change.
 
+## Two figures in the handover that were wrong, and one that was right
+
+- `PHASE_03_HANDOVER.md` says `checkout_cart_panel.dart` is **2,941 lines**. It was **1,779** at
+  `6181ff2` and is **2,289** now. The conclusion it was drawn for still holds — this is the most
+  behaviour-coupled file on the sale path and three slices was the right split — but the measurement
+  is not, and a reader planning against it should re-measure.
+- The same file says the two ST-036 corrections are *"not fidelity targets"* and gives exact
+  replacement copy for one of them. Both were already satisfied; see `777db74` above.
+- **`test/checkout/` really is 10,981 lines and all of it really does pass unchanged.** That figure was
+  right, and it is the one the phase's safety argument rests on.
+
 ## Testing, and what it proves
 
 - **2,315 tests pass**, from 2,314. One test was added — the money role's value and its contrast on
