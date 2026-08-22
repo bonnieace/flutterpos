@@ -126,6 +126,28 @@ void main() {
       }
     });
 
+    test('text.money is currency-kes, and it is readable everywhere', () {
+      // **`OPEN_QUESTIONS.md` decision 23, as a value rather than a prose
+      // claim.** `currency-kes` `#45F28D` sat in `_ProfoundVerdant` wired to
+      // nothing for as long as the question of which surfaces set money apart
+      // was open; it is `AppTextRoles.money` now, and the till reads it. Both
+      // palettes carry the same hex - the previous system's accent and Profound
+      // Verdant's currency role are one colour - so this is the one row where a
+      // repoint changed nothing.
+      expect(colors.text.money, const Color(0xFF45F28D));
+      expect(registered.colors.text.money, const Color(0xFF45F28D));
+      // A figure a cashier reads aloud to a customer is text a person is
+      // expected to read, so §9 applies to it exactly as it applies to body
+      // copy. It is not exempted for being a number.
+      for (final ground in grounds.entries) {
+        expect(
+          contrastRatio(colors.text.money, ground.value),
+          greaterThanOrEqualTo(bodyTextContrast),
+          reason: 'text.money is unreadable on ${ground.key}',
+        );
+      }
+    });
+
     test('and each one measures what §2.1 publishes for it', () {
       // The document's own table, base then raised. A token that drifts from
       // the figure the specification advertises is the specification becoming

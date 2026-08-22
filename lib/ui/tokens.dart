@@ -183,13 +183,14 @@ final class _ProfoundVerdant {
   /// [blue300] at 30%.
   static const Color blueTint30 = Color(0x4D6FB7F2);
 
-  /// Money. Profound Verdant gives currency its own role, which this app's
-  /// token surface has no home for yet; 182 uses across the export.
+  /// Money. Profound Verdant gives currency its own role; 182 uses across the
+  /// export.
   ///
-  /// **Not wired to anything.** It is quoted here so the value is written down
-  /// once, and a currency text role is a later decision rather than a colour
-  /// this file may quietly attach to an existing role.
-  // ignore: unused_field
+  /// **It has a home as of 2026-08-22: [AppTextRoles.money].** It was quoted
+  /// here and deliberately wired to nothing while the question of *which*
+  /// surfaces set money apart was open. `OPEN_QUESTIONS.md` decision 23 answers
+  /// it for the till and leaves the rest of the app open, which is why this is a
+  /// role of its own rather than a value folded into [AppTextRoles.primary].
   static const Color currencyKes = Color(0xFF45F28D);
 
   // Carried forward. See the class doc: these are decisions, not quotations.
@@ -317,6 +318,7 @@ final class AppTextRoles {
     required this.secondary,
     required this.tertiary,
     required this.disabled,
+    required this.money,
   });
 
   /// Headings, figures, record titles.
@@ -334,11 +336,38 @@ final class AppTextRoles {
   /// disabled control, and §2.1 permits this colour nowhere else.
   final Color disabled;
 
+  /// An amount of money, on a surface that has decided to set money apart.
+  ///
+  /// **`currency-kes` `#45F28D`, and it is a role rather than a rule.** Profound
+  /// Verdant gives currency a colour of its own and uses it 182 times across the
+  /// export; 65 of those also carry `text-data-mono`, so the design's money is a
+  /// *pair* — this colour and [AppTypeRoles.mono]. `OPEN_QUESTIONS.md` question
+  /// 22 left that pair open on the ground that setting every price in the app in
+  /// the mono face is a composition judgement per surface rather than a metric.
+  ///
+  /// **Decision 23 takes it for the till and for nothing else.** The till is the
+  /// surface where a cashier reads a figure aloud to a customer while looking at
+  /// four other figures, and it is the only surface in this app where money is
+  /// the subject rather than a column. Every other price stays
+  /// [primary]/[secondary] in [AppTypeRoles.numericBody] until its own phase
+  /// decides otherwise — so this token existing is **not** permission to sweep
+  /// it through the back office.
+  ///
+  /// **Not applied to a figure that is unavailable or unrecordable.** A price
+  /// this till cannot state exactly is not money on this screen; those branches
+  /// keep [AppStatusRoles.problem], because a colour that means *this is the
+  /// amount* must not be worn by a thing that is not one.
+  final Color money;
+
   static const AppTextRoles dark = AppTextRoles(
     primary: _Primitive.white,
     secondary: _Primitive.sage050,
     tertiary: _Primitive.sage200,
     disabled: _Primitive.sageDisabled,
+    // The same hex the Profound Verdant instance carries, which is the one
+    // place the two palettes agree without being repointed: `currency-kes` is
+    // `_Primitive.mint400`, and the previous system's accent was too.
+    money: _Primitive.mint400,
   );
 
   /// The same four roles under Profound Verdant.
@@ -361,6 +390,7 @@ final class AppTextRoles {
     secondary: _ProfoundVerdant.onSurfaceVariant,
     tertiary: _ProfoundVerdant.outline,
     disabled: _ProfoundVerdant.sageDisabled,
+    money: _ProfoundVerdant.currencyKes,
   );
 
   static AppTextRoles lerp(AppTextRoles a, AppTextRoles b, double t) =>
@@ -369,6 +399,7 @@ final class AppTextRoles {
         secondary: Color.lerp(a.secondary, b.secondary, t)!,
         tertiary: Color.lerp(a.tertiary, b.tertiary, t)!,
         disabled: Color.lerp(a.disabled, b.disabled, t)!,
+        money: Color.lerp(a.money, b.money, t)!,
       );
 }
 
