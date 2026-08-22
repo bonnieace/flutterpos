@@ -389,7 +389,7 @@ class _Page extends StatelessWidget {
 void main() {
   screenshotCase(
     '96-record-list',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => _Page(
       title: 'Manage catalog',
       list: RecordList(identityLabel: 'Product', items: _catalog()),
@@ -398,7 +398,7 @@ void main() {
 
   screenshotCase(
     '96-record-list-narrow-loss',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => _Page(
       title: 'Manage catalog',
       list: RecordList(
@@ -410,7 +410,7 @@ void main() {
 
   screenshotCase(
     '96-record-actions',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => _Page(
       title: 'Staff directory',
       list: RecordList(
@@ -422,7 +422,7 @@ void main() {
 
   screenshotCase(
     '96-record-details',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => _Page(
       title: 'Staff directory',
       list: RecordList(identityLabel: 'Member', items: _withDetailsOpen()),
@@ -431,7 +431,7 @@ void main() {
 
   screenshotCase(
     '96-record-columns',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => _Page(
       title: 'Stock movements',
       list: RecordList(identityLabel: 'Movement', items: _ledger()),
@@ -440,7 +440,7 @@ void main() {
 
   screenshotCase(
     '96-record-list-empty',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _Page(
       title: 'Activity log',
       list: RecordList(

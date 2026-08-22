@@ -191,25 +191,25 @@ void main() {
   /// destinations would be a fourth implementation of one.
   screenshotCase(
     '95-home-navigation-empty',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _Page(destinations: <HomeDestination>[]),
   );
 
   screenshotCase(
     '95-home-navigation-owner',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => _Page(destinations: _owner()),
   );
 
   screenshotCase(
     '95-home-navigation-stateful',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => _Page(destinations: _stateful()),
   );
 
   screenshotCase(
     '95-home-navigation-cashier',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => _Page(destinations: _cashier()),
   );
 }

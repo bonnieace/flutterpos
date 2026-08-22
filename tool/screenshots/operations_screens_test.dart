@@ -68,7 +68,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
     ),
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -99,7 +99,7 @@ void main() {
         await tester.tap(openCart);
       }
     },
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
   );
 
   // The state this composition root's wiring made reachable: the sale is

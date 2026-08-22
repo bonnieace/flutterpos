@@ -989,6 +989,103 @@ void main() {
       expect(spiritTheme.extension<AppTokens>()!.layout, AppLayout.contract);
     });
 
+    test('the screenshot harness declares a viewport in every width region', () {
+      // A source scan of `tool/screenshots/harness.dart`, for the same reason
+      // the pubspec scan above is one: the failure this catches is a *mismatch
+      // between two files* and neither is wrong on its own. A test binary has no
+      // asset bundle and `tool/` is outside `lib/`, so the harness cannot be
+      // imported from here - it can only be read.
+      //
+      // **What it asserts is that the width axis has no dark region.** §4.1's
+      // two band floors and §4.2's two *page* maxima are four boundaries on one
+      // axis and they interleave, so they cut it into five regions rather than
+      // three: a width can cross a maximum without changing band, and change
+      // band without crossing a maximum. `AppLayout.salePane` is excluded
+      // deliberately - it is the fixed width of a pane inside a page rather
+      // than a maximum applied to the page, so nothing about a screen changes
+      // when the window crosses 420.
+      //
+      // The harness held three viewports for a long time, which is why this is
+      // worth pinning: 1440 and 411 straddle every boundary at once and reading
+      // "straddles" as "covers" is exactly the mistake that left 1024-1199
+      // rendered by nothing while four behaviours flipped there.
+      //
+      // **What it does not prove**: that any *case* is captured at every
+      // viewport, which is a per-matrix judgement and deliberately not uniform -
+      // most screens are indifferent to width and photographing them five times
+      // would be hundreds of images nobody reads.
+      final harness = File('tool/screenshots/harness.dart').readAsStringSync();
+
+      final widthOf = <String, double>{};
+      for (final match in RegExp(
+        r'const ScreenshotViewport (\w+) = ScreenshotViewport\(\s*'
+        r"name: '[^']+',\s*size: Size\(\s*(\d+(?:\.\d+)?)\s*,",
+      ).allMatches(harness)) {
+        widthOf[match.group(1)!] = double.parse(match.group(2)!);
+      }
+      expect(
+        widthOf,
+        isNotEmpty,
+        reason:
+            'No `ScreenshotViewport` declaration was recognised in '
+            'tool/screenshots/harness.dart. If its formatting changed, this '
+            'scan needs updating - it has not stopped being true.',
+      );
+
+      final list = RegExp(
+        r'const List<ScreenshotViewport> everyRegionViewports =\s*'
+        r'<ScreenshotViewport>\[([^\]]*)\]',
+      ).firstMatch(harness);
+      expect(
+        list,
+        isNotNull,
+        reason:
+            'tool/screenshots/harness.dart no longer declares '
+            '`everyRegionViewports`. It is the list a width matrix passes, and '
+            'the regions below are what it exists to cover.',
+      );
+      final named = list!
+          .group(1)!
+          .split(',')
+          .map((entry) => entry.trim())
+          .where((entry) => entry.isNotEmpty)
+          .toList();
+      final covered = <double>[];
+      for (final name in named) {
+        expect(
+          widthOf.keys,
+          contains(name),
+          reason:
+              '`everyRegionViewports` names $name, which is not a '
+              '`ScreenshotViewport` declared in the same file.',
+        );
+        covered.add(widthOf[name]!);
+      }
+
+      // Ascending, so a region is `[bound, nextBound)` and the last is open.
+      final bounds = <double>{
+        layout.reading,
+        layout.mediumFloor,
+        layout.expandedFloor,
+        layout.records,
+      }.toList()..sort();
+      expect(bounds, <double>[720, 768, 1024, 1200]);
+
+      for (var index = 0; index <= bounds.length; index++) {
+        final from = index == 0 ? 0.0 : bounds[index - 1];
+        final to = index == bounds.length ? double.infinity : bounds[index];
+        expect(
+          covered.where((width) => width >= from && width < to),
+          isNotEmpty,
+          reason:
+              'No screenshot viewport falls in [$from, $to). Every width in '
+              'that region renders the same arrangement of §4.1\'s bands and '
+              '§4.2\'s maxima, and no picture in the harness shows it. Add one '
+              'to `everyRegionViewports`, or move a boundary.',
+        );
+      }
+    });
+
     test('a theme mid-animation never moves a breakpoint', () {
       // Interpolating a boundary would change a screen's shape *during a
       // fade*, for no reason a person could name. Snapping is the same

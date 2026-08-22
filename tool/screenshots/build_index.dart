@@ -56,10 +56,10 @@ const Map<String, String> captions = <String, String>{
       'records are cards. Compare the two.',
   '13b-staff-directory-editing':
       'The same directory with one member’s form open, which is the state '
-          '`RecordItem.details` exists for.',
+      '`RecordItem.details` exists for.',
   '13c-staff-directory-read-only':
       'The same directory as a manager, who may read it and change nothing. '
-          'The only session its standing is true of.',
+      'The only session its standing is true of.',
   '14-new-sale':
       'The till. On a desktop the cart is a second pane; on a phone it is a '
       'sheet reached from a badge.',
@@ -74,7 +74,7 @@ const Map<String, String> captions = <String, String>{
       'starts from.',
   '18b-catalog-notice':
       'What a write did, in place. The first picture of a notice on any '
-          'screen: they appear only after a write, so no capture had one.',
+      'screen: they appear only after a write, so no capture had one.',
   '19-correct-a-product':
       'Correcting one product: all five editable fields at once, with clearing '
       'a recorded cost as its own act.',
@@ -105,7 +105,7 @@ const Map<String, String> captions = <String, String>{
       'runs behind them.',
   '27b-reconciliation-unusable-lines':
       'The same day with sale lines the server could not use, which is the '
-          'only state that draws a second stat tile.',
+      'only state that draws a second stat tile.',
   '28-reconciliation-differences':
       'The differences reconciliation found and could not resolve.',
   '29-one-reconciliation-run': 'One unit of server reconciliation work.',
@@ -153,15 +153,28 @@ const Map<String, String> captions = <String, String>{
       'made to it.',
 };
 
-/// The viewport directories, in the order a screen's figures are laid out.
+/// The viewport directories, in the order a screen's figures are laid out:
+/// widest first.
 ///
-/// **`tablet` is written by the `RecordList` matrix and by nothing else**, which
-/// is why the loop below skips a missing file rather than expecting one per
-/// screen. §4.1 has always had three bands; `medium` only became a band with a
-/// *rendering* of its own in step 6's second half, and photographing every
-/// screen a third time for a band almost all of them are indifferent to would
-/// be 128 images nobody reads.
-const List<String> viewports = <String>['web', 'tablet', 'mobile'];
+/// **Only `web` and `mobile` are written for every screen.** The other three are
+/// written by the matrices whose subject is width itself, which is why the loop
+/// below skips a missing file rather than expecting one per screen. §4.1 has
+/// always had three bands, but `medium` only became a band with a *rendering* of
+/// its own in step 6's second half, and photographing every screen at every
+/// width for bands almost all of them are indifferent to would be hundreds of
+/// images nobody reads.
+///
+/// `desktop-narrow` and `compact-wide` are the two regions §4.2's page maxima
+/// cut inside §4.1's bands - see their notes in `harness.dart`. They are listed
+/// beside the band they sit in rather than at the end, so a row of figures reads
+/// left to right as one continuous narrowing.
+const List<String> viewports = <String>[
+  'web',
+  'desktop-narrow',
+  'tablet',
+  'compact-wide',
+  'mobile',
+];
 
 void main() {
   final root = Directory('screenshots');
@@ -193,12 +206,16 @@ void main() {
     ..writeln('<h1>Every screen, large and small</h1>')
     ..writeln(
       '<p>${ordered.length} screens, each rendered at a desktop browser window '
-      '(1440&thinsp;&times;&thinsp;900) and a phone (411&thinsp;&times;&thinsp;891), '
-      'and the <code>RecordList</code> matrix at a tablet '
-      '(834&thinsp;&times;&thinsp;1000) as well, because '
-      '&sect;4.3&rsquo;s middle band is the one it has a rendering of its own '
-      'in. All are exact viewports: what you see is what a person sees on '
-      'arrival, before scrolling. Where a screen is taller than its window, '
+      '(1440&thinsp;&times;&thinsp;900) and a phone '
+      '(411&thinsp;&times;&thinsp;891). The matrices whose subject is width '
+      'itself are rendered at three more: a tablet '
+      '(834&thinsp;&times;&thinsp;1000), the floor of the desktop band '
+      '(1024&thinsp;&times;&thinsp;768), and the widest window that is still a '
+      'phone layout (767&thinsp;&times;&thinsp;1000). Those three are the '
+      'regions &sect;4.1&rsquo;s bands and &sect;4.2&rsquo;s content maxima cut '
+      'between them, and a screen indifferent to width has no figure there. All '
+      'are exact viewports: what you see is what a person sees on arrival, '
+      'before scrolling. Where a screen is taller than its window, '
       '<em>whole screen</em> opens the same render at full height.</p>',
     )
     ..writeln('</header>');
@@ -251,20 +268,32 @@ is `tool/screenshots/`.
 
 | Directory | Viewport | What it is |
 | --- | --- | --- |
-| `web/` | 1440 x 900 logical, 1x | A desktop browser window. `design.md` §4.1's `expanded` band, so the surfaces that have a table draw it. |
-| `tablet/` | 834 x 1000 logical, 1x | A tablet, or a half-screen desktop window. §4.1's `medium` band. **Written by the `RecordList` matrix only** - see below. |
-| `mobile/` | 411 x 891 logical, 2x | A phone. §4.1's `compact` band, so those surfaces draw cards instead. |
-| `web-full/`, `tablet-full/`, `mobile-full/` | Same width, full content height | Only for screens taller than their window. The viewport files above are what a person sees **on arrival**; these are the whole screen. |
+| `web/` | 1440 x 900 logical, 1x | A desktop browser window. `design.md` §4.1's `expanded` band, wider than every content maximum §4.2 states. **Every screen.** |
+| `desktop-narrow/` | 1024 x 768 logical, 1x | The **floor** of `expanded`, and under §4.2's 1200 records maximum - so a table fills the window instead of being capped. Written by the width matrices only. |
+| `tablet/` | 834 x 1000 logical, 1x | A tablet, or a half-screen desktop window. §4.1's `medium` band. Written by the width matrices only. |
+| `compact-wide/` | 767 x 1000 logical, 1x | The **widest** window that is still `compact`, and over §4.2's 720 reading maximum - a phone layout with a capped, centred column. Written by the content-width matrix only. |
+| `mobile/` | 411 x 891 logical, 2x | A phone. §4.1's `compact` band, narrower than every maximum, so those surfaces draw cards edge to edge. **Every screen.** |
+| `<viewport>-full/` | Same width, full content height | Only for screens taller than their window. The viewport files above are what a person sees **on arrival**; these are the whole screen. |
 
-**`medium` is photographed for one component and not for every screen**, and that
-is a decision rather than an omission. §4.1 has declared three bands since it was
-written, but until `design.md` §4.3 landed in step 6 there was nothing a screen
-*became* at `medium` that it did not also become at `compact` - the difference
-was a content maximum firing or not firing, and both of those show at the two
-widths above. `RecordList` is the first component with a rendering of its own in
-the middle band, so its matrix is captured at all three and every other screen
-stays at two. Rendering the whole app a third time would add 128 images to a diff
-in which almost all of them would be indistinguishable from the phone.
+**Three of the five are photographed for a handful of components and not for
+every screen**, and that is a decision rather than an omission. §4.1 has declared
+three bands since it was written, but until `design.md` §4.3 landed in step 6
+there was nothing a screen *became* at `medium` that it did not also become at
+`compact` - the difference was a content maximum firing or not firing, and both
+of those show at 1440 and 411. `RecordList` is the first component with a
+rendering of its own in the middle band, so its matrix is captured at every width
+and a screen indifferent to width stays at two. Rendering the whole app five
+times would add hundreds of images to a diff in which almost all of them would be
+indistinguishable from the phone.
+
+**Five regions rather than three, and that is the part worth reading twice.**
+§4.1's two band floors (768, 1024) and §4.2's two page maxima (720 reading, 1200
+records) are four boundaries on **one** axis, and they interleave. So a width can
+cross a maximum without changing band, and change band without crossing a
+maximum. `desktop-narrow` and `compact-wide` are the two regions that produces
+and that nothing used to photograph: a table laid out with no cap above it, and a
+phone layout with a cap already firing. `test/ui/tokens_test.dart` scans
+`harness.dart` and fails if any of the five is left without a viewport.
 
 Both boundaries are declared once, as `AppLayout` in
 [`lib/ui/tokens.dart`](../lib/ui/tokens.dart), and the two widths were chosen to
@@ -276,6 +305,7 @@ name at the same numbers.
 **1440 is above §4.2's widest content maximum (1200) and 411 is below its
 narrowest (720)**, which is why a `web/` image shows a centred column with ground
 either side and a `mobile/` image of the same screen shows content edge to edge.
+The other three sit between those two facts, one region each.
 
 ## Regenerating
 
@@ -383,7 +413,9 @@ const String _style = '''
   }
   figure { margin: 0; }
   figure.web { flex: 1 1 640px; min-width: 320px; }
+  figure.desktop-narrow { flex: 0 0 460px; }
   figure.tablet { flex: 0 0 380px; }
+  figure.compact-wide { flex: 0 0 340px; }
   figure.mobile { flex: 0 0 260px; }
   img {
     display: block;

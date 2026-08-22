@@ -121,7 +121,7 @@ class _LineMatrix extends StatelessWidget {
 void main() {
   screenshotCase(
     '97-stat-counts',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _StatMatrix(
       title: 'StatTile - counts',
       tiles: <StatTile>[
@@ -155,7 +155,7 @@ void main() {
 
   screenshotCase(
     '97-stat-money',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _StatMatrix(
       title: 'StatTile - money',
       tiles: <StatTile>[
@@ -177,7 +177,7 @@ void main() {
 
   screenshotCase(
     '97-stat-standing',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _StatMatrix(
       title: 'StatTile - a figure with a standing',
       tiles: <StatTile>[
@@ -201,7 +201,7 @@ void main() {
 
   screenshotCase(
     '97-stat-lines',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _LineMatrix(title: 'StatLine - money in flow'),
   );
 }

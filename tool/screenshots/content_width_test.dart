@@ -3,21 +3,39 @@
 /// **The matrix of a layout contract is not §5's nine states.** A max content
 /// width has no hover, no press and nothing to disable - it is not a control.
 /// What varies is the two dimensions the contract itself has: **which of §4.2's
-/// three rows a page declares**, and **which of §4.1's bands the window is in**.
-/// Each of the three rows is captured at both viewports, which is that matrix in
-/// full at six pictures.
+/// three rows a page declares**, and **where on the width axis the window sits**.
 ///
-/// **The mobile half is the more important one and is the easiest to skip.**
-/// 411 is narrower than every maximum §4.2 states, so all three rows must look
+/// **The second dimension has five values, not two, and this file used to
+/// capture two of them.** §4.1's floors and §4.2's maxima are boundaries on the
+/// same axis and they interleave - 720, 768, 1024, 1200 - so the axis is cut
+/// into five regions and a row can render differently in each. The three rows at
+/// [everyRegionViewports] is that matrix in full, at fifteen pictures. It was
+/// six, and six was the matrix of a two-value axis that does not exist.
+///
+/// **The narrowest is the most important and the easiest to skip.** 411 is
+/// narrower than every maximum §4.2 states, so all three rows must look
 /// *identical* there - a constraint that fires on a phone would be a constraint
 /// that had been written as a fixed width by mistake. The three mobile images
 /// being interchangeable is the evidence, and it is why `full` is captured at
 /// all rather than only described.
 ///
-/// **What the web half shows is the defect §4.2 was written about.** `full` is
-/// the app as it was before this step: a record row 1,400 pixels wide with its
+/// **767 is where the two dimensions come apart.** It is still `compact`, and
+/// `reading` is already capped, so `reading` and `records` stop being
+/// interchangeable one region below the band floor everyone reaches for. If
+/// those two images match, a maximum has been wired to a band by mistake.
+///
+/// **What the widest shows is the defect §4.2 was written about.** `full` is the
+/// app as it was before this step: a record row 1,400 pixels wide with its
 /// identity at one end and its actions at the other. `records` is the same rows
 /// at 1200, and `reading` is what a form gets.
+///
+/// **And `records` buys nothing until 1200.** Its image is byte-identical to
+/// `full`'s at 1024, 834, 767 and 411 and differs only at 1440, which is the
+/// arithmetic - a `ConstrainedBox` at 1200 constrains nothing narrower than
+/// itself - made visible rather than asserted. Worth having in pictures because
+/// it is the thing a reader assumes about the wrong boundary: the row shape
+/// changes at 1024 and the cap fires at 1200, and this app's `expanded` band
+/// starts in the 176 logical pixels between them.
 library;
 
 import 'package:flutter/material.dart';
@@ -159,6 +177,7 @@ class _Page extends StatelessWidget {
 void main() {
   screenshotCase(
     '95-content-width-reading',
+    viewports: everyRegionViewports,
     build: () => const _Page(
       title: 'Checkout settings',
       width: AppContentWidth.reading,
@@ -168,6 +187,7 @@ void main() {
 
   screenshotCase(
     '95-content-width-records',
+    viewports: everyRegionViewports,
     build: () => const _Page(
       title: 'Manage catalog',
       width: AppContentWidth.records,
@@ -181,6 +201,7 @@ void main() {
   // constraint changed.
   screenshotCase(
     '95-content-width-full',
+    viewports: everyRegionViewports,
     build: () => const _Page(
       title: 'Manage catalog',
       width: AppContentWidth.full,

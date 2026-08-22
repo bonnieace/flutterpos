@@ -32,6 +32,12 @@
 /// §4.2's content maxima in both directions - 1440 is wider than every one of
 /// them and 411 is narrower than every one - so the pair shows a page both
 /// constrained and unconstrained.
+///
+/// **Straddling a boundary is not covering the regions it makes.** Two band
+/// floors and two page maxima cut the width axis into five, and the default pair
+/// sits in the outermost two. [everyRegionViewports] names all five and
+/// [responsiveViewports] names the four a band-sensitive component needs; the
+/// note on each viewport below says which region it is there for.
 library;
 
 import 'dart:io';
@@ -105,16 +111,100 @@ const ScreenshotViewport tabletViewport = ScreenshotViewport(
   devicePixelRatio: 1,
 );
 
+/// A desktop window at the floor of §4.1's `expanded` band.
+///
+/// **The region the three viewports above leave dark.** §4.1's floors are not
+/// the only boundaries a width crosses - §4.2's page maxima are boundaries too,
+/// and the two sets interleave. `expanded` starts at 1024 and `content.records`
+/// caps at 1200, so every width from 1024 to 1199 draws §4.3's table with **no
+/// maximum constraining it**: the rows fill the window, which is the narrowest a
+/// table in this app is ever laid out. At 1440 that same table is 1200 wide with
+/// ground either side, and at 834 it is not a table at all, so neither of those
+/// pictures contains this arrangement.
+///
+/// **1024 rather than a width in the middle of the region**, because the floor
+/// is the load-bearing number. `AppLayout.isAtLeast` is inclusive, so 1024 is
+/// the *first* width at which `RecordList.formFor` returns a table,
+/// `HomeNavigation.showsMenu` draws the menu instead of the grid,
+/// `PageHeader.showsDisplayTitle` promotes the title to `display`, and
+/// `routes._isExpanded` swaps the slide for a fade. `test/ui/routes_test.dart`
+/// asserts that boundary in one of the four; this is where all four can be
+/// seen. It is also the tightest content column the app has - 1024 less
+/// `HomeNavigation.menuWidth` is 768.
+///
+/// **It is the region the 768/1024 deviation created.** Profound Verdant puts
+/// its desktop floor at 1280 and `OPEN_QUESTIONS.md` item 21 moved this app's to
+/// 1024 deliberately, on the grounds that a table at 1194 beats stacked cards on
+/// an operational surface. This is the picture that claim is answerable against.
+const ScreenshotViewport desktopNarrowViewport = ScreenshotViewport(
+  name: 'desktop-narrow',
+  size: Size(1024, 768),
+  devicePixelRatio: 1,
+);
+
+/// The widest window that is still §4.1's `compact`.
+///
+/// The mirror of the region above, at the other end of the axis:
+/// `content.reading` caps at 720 and `medium` starts at 768, so 720 to 767 is a
+/// **compact** layout whose reading column is nonetheless constrained and
+/// centred. Stacked cards, no menu, `title.lg` rather than `display` - and
+/// ground either side of a form. 411 shows the compact layout edge to edge and
+/// 834 shows a capped column in the middle band; nothing shows both facts at
+/// once, which is what makes band and maximum look like one axis when they are
+/// two.
+///
+/// 767 rather than a width in the middle, for the reason 1024 is preferred
+/// above: it is the *last* width that is still `compact`, so the picture is of
+/// the boundary rather than of a point near it.
+///
+/// **Only [everyRegionViewports] carries it.** For a component that varies by
+/// band and not by maximum, 767 is 411's rendering stretched, and twenty more
+/// images of that is the diff nobody reads - the same judgement
+/// [tabletViewport] records above.
+const ScreenshotViewport compactWideViewport = ScreenshotViewport(
+  name: 'compact-wide',
+  size: Size(767, 1000),
+  devicePixelRatio: 1,
+);
+
 const List<ScreenshotViewport> screenshotViewports = <ScreenshotViewport>[
   webViewport,
   mobileViewport,
 ];
 
-/// Every band §4.1 declares, for a capture whose subject is the responsive
-/// contract itself.
-const List<ScreenshotViewport> everyBandViewports = <ScreenshotViewport>[
+/// Every width at which a component that varies by §4.1's band renders
+/// differently, for a capture whose subject is the responsive contract itself.
+///
+/// **Was `everyBandViewports`, and three long.** §4.1's three bands were the
+/// whole story while the only thing that varied *inside* a band was a content
+/// maximum firing, which 1440 and 411 straddle between them. §4.3 ended that:
+/// once a band has a rendering of its own, the width at which that rendering is
+/// **unconstrained** is a case of its own, and [desktopNarrowViewport] is it.
+///
+/// [compactWideViewport] is deliberately absent - see its own note.
+const List<ScreenshotViewport> responsiveViewports = <ScreenshotViewport>[
   webViewport,
+  desktopNarrowViewport,
   tabletViewport,
+  mobileViewport,
+];
+
+/// Every region the responsive contract has, for the matrix whose subject is
+/// width itself.
+///
+/// §4.1's two band floors and §4.2's two page maxima are four boundaries on one
+/// axis, and they cut it into **five** regions rather than three.
+/// `AppLayout.salePane` is not among them: it is the fixed width of a pane
+/// inside a page rather than a maximum applied to the page, so nothing about it
+/// changes when the window crosses 420.
+///
+/// `test/ui/tokens_test.dart` scans this file and fails if any region is left
+/// with no viewport in it, so the gap this list closed cannot reopen quietly.
+const List<ScreenshotViewport> everyRegionViewports = <ScreenshotViewport>[
+  webViewport,
+  desktopNarrowViewport,
+  tabletViewport,
+  compactWideViewport,
   mobileViewport,
 ];
 

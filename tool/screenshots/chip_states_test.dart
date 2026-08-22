@@ -39,7 +39,7 @@ const _tenders = <FilterChipOption<String>>[
 void main() {
   screenshotCase(
     '95-filterchipbar-selected',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _Bar(
       title: 'FilterChipBar - a filter, narrowed',
       options: _categories,
@@ -50,7 +50,7 @@ void main() {
 
   screenshotCase(
     '95-filterchipbar-everything',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _Bar(
       title: 'FilterChipBar - a filter, unnarrowed',
       options: _categories,
@@ -61,7 +61,7 @@ void main() {
 
   screenshotCase(
     '95-filterchipbar-nothing-chosen',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _Bar(
       title: 'FilterChipBar - nothing observed yet (the tender chooser)',
       options: _tenders,
@@ -72,7 +72,7 @@ void main() {
 
   screenshotCase(
     '95-filterchipbar-disabled',
-    viewports: everyBandViewports,
+    viewports: responsiveViewports,
     build: () => const _Bar(
       title: 'FilterChipBar - disabled, while a write is in flight',
       options: _categories,
