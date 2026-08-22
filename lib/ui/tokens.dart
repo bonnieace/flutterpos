@@ -76,6 +76,129 @@ final class _Primitive {
   static const Color sageDisabled = Color(0xFF5D7468);
 }
 
+/// The raw values of **Profound Verdant**, the Stitch redesign's design system.
+///
+/// Quoted from the YAML frontmatter of
+/// `docs/stitch/stitch_chilltent_pos_redesign_system/profound_verdant/DESIGN.md`
+/// and corroborated against the token block inlined in all 76 exported
+/// `code.html` files. `docs/stitch/EXPORT_MAP.md` records the occurrence counts.
+///
+/// **The frontmatter is the authority and its own prose is not.** That file's
+/// prose names a background of `#0A1A14` and calls `#22C55E` the primary. Neither
+/// survives contact with the screens: `#0A1A14` is not a token and renders in
+/// zero of the 76, while `#4BE277` is `primary` in 75 and `#22C55E` is the
+/// separate `primary-container` role in 75. `docs/stitch/OPEN_QUESTIONS.md`
+/// item 1 records the resolution.
+///
+/// **Three of these already exist above under other names**, which is why the
+/// repoint is smaller than it looks: [surfaceElevated] is [_Primitive.green850],
+/// [surfaceCard] is [_Primitive.green900], and [currencyKes] is
+/// [_Primitive.mint400]. The same hex, a different role.
+///
+/// **Four values are carried forward rather than quoted**, because Profound
+/// Verdant does not define them and inventing one would be inventing a design
+/// decision. Each is a recorded product decision in `OPEN_QUESTIONS.md`:
+/// [amber400] and [blue300] are documented *additions* for the warning and info
+/// tiers the design system has no colour for at all (items 10 and 11), and
+/// [sageDisabled] and [green700] carry the disabled treatment forward (item 15).
+final class _ProfoundVerdant {
+  const _ProfoundVerdant._();
+
+  // Surfaces, darkest to lightest.
+  static const Color surfaceContainerLowest = Color(0xFF03110B);
+  static const Color surface = Color(0xFF071610);
+  static const Color surfaceCard = Color(0xFF0D1F16);
+  static const Color surfaceElevated = Color(0xFF132A1F);
+  static const Color surfaceContainerHighest = Color(0xFF283831);
+
+  // Content on those surfaces.
+  static const Color onSurface = Color(0xFFD4E7DD);
+  static const Color onSurfaceVariant = Color(0xFFBCCBB9);
+
+  // Outlines.
+  static const Color outline = Color(0xFF869585);
+  static const Color outlineVariant = Color(0xFF3D4A3D);
+
+  // The action greens. `primaryFixed` is brighter than `primary` and
+  // `primaryContainer` is darker, which is what makes them the hover and
+  // pressed pair in `OPEN_QUESTIONS.md` item 16.
+  static const Color primary = Color(0xFF4BE277);
+  static const Color primaryFixed = Color(0xFF6BFF8F);
+  static const Color primaryContainer = Color(0xFF22C55E);
+  static const Color onPrimary = Color(0xFF003915);
+  static const Color secondary = Color(0xFFB0CDBD);
+
+  /// Destructive and problem **content** - a label, a border, a foreground.
+  ///
+  /// `OPEN_QUESTIONS.md` item 13 settled which of the design system's two reds
+  /// this is. The screens decide it by composition rather than by prose:
+  /// `text-status-critical` appears 467 times against `text-error`'s 205, and
+  /// the pairing it appears in is this colour over an [errorContainer] tint.
+  static const Color statusCritical = Color(0xFFEF4444);
+
+  // -------------------------------------------------------------------------
+  // Status tints.
+  //
+  // **A `const` cannot compute an alpha, so each is written as a composited
+  // ARGB literal** - and because a literal can drift from the value it claims to
+  // be, `test/ui/tokens_test.dart` asserts every one of these against its base
+  // colour's RGB and its documented percentage. The arithmetic is checked by a
+  // test rather than trusted in a comment, which is the same bargain the type
+  // roles above make when they write a line height as a division.
+  //
+  // Percentages are the ones the exported screens measure, not the ones its
+  // prose describes: `/10` on a background and `/30` on a border. Alpha bytes
+  // are `0x1A` (10%), `0x33` (20%) and `0x4D` (30%).
+  // -------------------------------------------------------------------------
+
+  /// [primary] at 10% - the success chip background. `bg-primary/10`.
+  static const Color primaryTint10 = Color(0x1A4BE277);
+
+  /// [primary] at 30% - the success chip edge. `border-primary/30`.
+  static const Color primaryTint30 = Color(0x4D4BE277);
+
+  /// [amber400] at 10%, for the warning tier the design system has no colour for.
+  static const Color amberTint10 = Color(0x1AF2C14E);
+
+  /// [amber400] at 30%.
+  static const Color amberTint30 = Color(0x4DF2C14E);
+
+  /// [statusCritical] at 30% - the problem edge. `border-status-critical/30`,
+  /// the single most common status border in the export at 122 uses.
+  static const Color criticalTint30 = Color(0x4DEF4444);
+
+  /// The problem **background**: the design system's companion `error-container`
+  /// `#93000A` at 20%.
+  ///
+  /// **Not a tint of [statusCritical].** `OPEN_QUESTIONS.md` item 13 splits the
+  /// two reds by job - critical is the content, `error-container` is what sits
+  /// behind it - and the screens use `bg-error-container/20` in 128 places. The
+  /// opaque `#93000A` is never painted, so it is recorded here only as this
+  /// tint's base.
+  static const Color errorContainerTint20 = Color(0x3393000A);
+
+  /// [blue300] at 10%, for the info tier the design system has no colour for.
+  static const Color blueTint10 = Color(0x1A6FB7F2);
+
+  /// [blue300] at 30%.
+  static const Color blueTint30 = Color(0x4D6FB7F2);
+
+  /// Money. Profound Verdant gives currency its own role, which this app's
+  /// token surface has no home for yet; 182 uses across the export.
+  ///
+  /// **Not wired to anything.** It is quoted here so the value is written down
+  /// once, and a currency text role is a later decision rather than a colour
+  /// this file may quietly attach to an existing role.
+  // ignore: unused_field
+  static const Color currencyKes = Color(0xFF45F28D);
+
+  // Carried forward. See the class doc: these are decisions, not quotations.
+  static const Color amber400 = _Primitive.amber400;
+  static const Color blue300 = _Primitive.blue300;
+  static const Color sageDisabled = _Primitive.sageDisabled;
+  static const Color green700 = _Primitive.green700;
+}
+
 // ---------------------------------------------------------------------------
 // Colour roles - design.md §2.1
 // ---------------------------------------------------------------------------
@@ -142,6 +265,33 @@ final class AppSurfaceRoles {
     borderStrong: _Primitive.green600,
   );
 
+  /// The same eight roles under Profound Verdant.
+  ///
+  /// **Every surface moves down one tier, and that is the largest single visual
+  /// consequence of the repoint.** [dark] puts `#0D1F16` at [base]; here that
+  /// value is [raised] and [base] becomes the darker `#071610`. Nothing is
+  /// renamed and no widget changes - a widget asks for [base] either way.
+  ///
+  /// **[field] and [overlay] collapse to one value**, which is the design
+  /// system's own decision rather than a loss of information here: it assigns
+  /// `#132A1F` to input-field backgrounds ("recede into the UI") and to
+  /// popovers and modals ("Level 2") both. [dark] distinguished them.
+  ///
+  /// **[scrim] is carried from [dark]**, at `OPEN_QUESTIONS.md` item 17.
+  /// Profound Verdant states no scrim; the `0.5` in its prose is a drop shadow
+  /// for a modal, which is a different job, so borrowing it would be borrowing
+  /// a number written for something else.
+  static const AppSurfaceRoles profoundVerdant = AppSurfaceRoles(
+    base: _ProfoundVerdant.surface,
+    raised: _ProfoundVerdant.surfaceCard,
+    sunken: _ProfoundVerdant.surfaceContainerLowest,
+    field: _ProfoundVerdant.surfaceElevated,
+    overlay: _ProfoundVerdant.surfaceElevated,
+    scrim: Color.fromRGBO(0, 0, 0, 0.6),
+    borderSubtle: _ProfoundVerdant.outlineVariant,
+    borderStrong: _ProfoundVerdant.outline,
+  );
+
   static AppSurfaceRoles lerp(AppSurfaceRoles a, AppSurfaceRoles b, double t) =>
       AppSurfaceRoles(
         base: Color.lerp(a.base, b.base, t)!,
@@ -189,6 +339,28 @@ final class AppTextRoles {
     secondary: _Primitive.sage050,
     tertiary: _Primitive.sage200,
     disabled: _Primitive.sageDisabled,
+  );
+
+  /// The same four roles under Profound Verdant.
+  ///
+  /// **Body text stops being pure white.** [primary] moves from `#FFFFFF` to
+  /// `on-surface` `#D4E7DD`, which is faintly green and is what all 76 exported
+  /// screens render.
+  ///
+  /// **[tertiary] is derived, not quoted.** Profound Verdant names no third text
+  /// tier, so this reuses `outline` - the same value [AppSurfaceRoles.borderStrong]
+  /// carries. One value doing two jobs is worth noting; it is not a collision,
+  /// because a muted metadata label and a strong border are never compared to
+  /// one another.
+  ///
+  /// **[disabled] is carried from [dark]**, at `OPEN_QUESTIONS.md` item 15.
+  /// Profound Verdant defines nothing for it, and WCAG exempts disabled controls
+  /// from contrast, so there is no accessibility argument for deriving a new one.
+  static const AppTextRoles profoundVerdant = AppTextRoles(
+    primary: _ProfoundVerdant.onSurface,
+    secondary: _ProfoundVerdant.onSurfaceVariant,
+    tertiary: _ProfoundVerdant.outline,
+    disabled: _ProfoundVerdant.sageDisabled,
   );
 
   static AppTextRoles lerp(AppTextRoles a, AppTextRoles b, double t) =>
@@ -296,6 +468,20 @@ final class AppFocusRing {
     offset: 2,
   );
 
+  /// The same ring under Profound Verdant: a new colour, the same geometry.
+  ///
+  /// **The width deliberately does not follow the design system's prose**, at
+  /// `OPEN_QUESTIONS.md` item 18. That prose says a `1px` border glows primary
+  /// green on focus, but it says it about *input fields*, in a paragraph about
+  /// field borders. `DESIGN_RULES.md` §9 makes focus visibility pass/fail, and
+  /// halving the ring is the wrong direction to move a pass/fail requirement on
+  /// the strength of a sentence written about something else.
+  static const AppFocusRing profoundVerdant = AppFocusRing(
+    color: _ProfoundVerdant.primary,
+    width: 2,
+    offset: 2,
+  );
+
   static AppFocusRing lerp(AppFocusRing a, AppFocusRing b, double t) =>
       AppFocusRing(
         color: Color.lerp(a.color, b.color, t)!,
@@ -382,6 +568,59 @@ final class AppActionRoles {
     loadingIndicatorSize: 16,
   );
 
+  /// The same four action roles under Profound Verdant.
+  ///
+  /// **Hover and pressed use design-system values the design system never
+  /// assigned to a state.** `OPEN_QUESTIONS.md` item 16: Profound Verdant defines
+  /// `primary-fixed` `#6BFF8F` and `primary-container` `#22C55E` but never says
+  /// what either is *for*. One is brighter than [_ProfoundVerdant.primary] and
+  /// one is darker, so they become hover and pressed in the conventional
+  /// direction. That is a decision, recorded as one - but it invents no hex.
+  ///
+  /// **[destructive] is `status-critical`, not `error`**, at item 13. The design
+  /// system defines two reds and its prose names neither; the screens settle it,
+  /// using `text-status-critical` 467 times against `text-error`'s 205.
+  ///
+  /// **The disabled trio is carried from [dark]**, at item 15, for the same
+  /// reason [AppTextRoles.profoundVerdant] carries its disabled colour.
+  ///
+  /// The overlay opacities on the outlined roles are [dark]'s own mechanism and
+  /// not a new value: Profound Verdant states no hover treatment for a
+  /// transparent control either.
+  static const AppActionRoles profoundVerdant = AppActionRoles(
+    primary: AppActionRole(
+      container: _ProfoundVerdant.primary,
+      label: _ProfoundVerdant.onPrimary,
+      hoverContainer: _ProfoundVerdant.primaryFixed,
+      pressedContainer: _ProfoundVerdant.primaryContainer,
+    ),
+    secondary: AppActionRole(
+      container: Colors.transparent,
+      label: _ProfoundVerdant.secondary,
+      border: _ProfoundVerdant.outline,
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
+    ),
+    tertiary: AppActionRole(
+      container: Colors.transparent,
+      label: _ProfoundVerdant.primary,
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
+    ),
+    destructive: AppActionRole(
+      container: Colors.transparent,
+      label: _ProfoundVerdant.statusCritical,
+      border: _ProfoundVerdant.statusCritical,
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
+    ),
+    disabledContainer: _ProfoundVerdant.green700,
+    disabledLabel: _ProfoundVerdant.sageDisabled,
+    disabledBorder: _ProfoundVerdant.green700,
+    focusRing: AppFocusRing.profoundVerdant,
+    loadingIndicatorSize: 16,
+  );
+
   static AppActionRoles lerp(AppActionRoles a, AppActionRoles b, double t) =>
       AppActionRoles(
         primary: AppActionRole.lerp(a.primary, b.primary, t),
@@ -424,6 +663,24 @@ final class AppActionRoles {
 /// grounds and 4.5:1 on their own [bg]. `StatusBadge` in `lib/ui/status.dart`
 /// is the component that raised the question and the one that draws the
 /// container.
+/// **[bg] and [border] may carry alpha, and under Profound Verdant they do.**
+///
+/// `OPEN_QUESTIONS.md` item 12. The design system specifies a status chip as "a
+/// low-opacity background of the status color with high-opacity text" rather than
+/// as an opaque swatch, and the exported screens implement exactly that with
+/// Tailwind's alpha suffixes - `/10` on a background, `/30` on a border.
+///
+/// A translucent [Color] expresses that natively: Flutter composites it over
+/// whatever surface is behind, so the chip stays correct when a surface tier
+/// moves, which is the whole reason not to bake the composite into a literal.
+/// [AppStatusRoles.dark] keeps opaque values and is unaffected.
+///
+/// **This is only safe because every consumer is a flat decoration.** All three
+/// - `StatusBadge` and `StatusBlock` in `lib/ui/status.dart`, and the selected
+/// `FilterChip` in `lib/ui/chips.dart` - paint [bg] as a single
+/// `BoxDecoration.color` with [border] as its `Border.all`, none of them nested
+/// inside another status container. Stacking two translucent status boxes would
+/// double the tint; nothing does, and a new consumer must not.
 @immutable
 final class AppStatusRole {
   const AppStatusRole({
@@ -433,7 +690,12 @@ final class AppStatusRole {
   });
 
   final Color fg;
+
+  /// The container behind [fg]. Opaque in [AppStatusRoles.dark], translucent in
+  /// [AppStatusRoles.profoundVerdant] - see this class's doc.
   final Color bg;
+
+  /// The container's edge. Same alpha caveat as [bg].
   final Color border;
 
   static AppStatusRole lerp(AppStatusRole a, AppStatusRole b, double t) =>
@@ -500,6 +762,69 @@ final class AppStatusRoles {
     ),
   );
 
+  /// The same five statuses under Profound Verdant, as tints rather than swatches.
+  ///
+  /// **Backgrounds are the status colour at 10% and borders at 30%**, which is
+  /// what the export measures rather than what its prose says: across the 76
+  /// screens `bg-status-critical/10` appears 84 times and
+  /// `border-status-critical/30` 122, with `bg-primary/10` and
+  /// `border-primary/30` the same shape. `AppStatusRole`'s doc explains why a
+  /// translucent [Color] is the right way to hold that. Alpha bytes are `0x1A`
+  /// for 10% and `0x4D` for 30%.
+  ///
+  /// **[ok] is `primary`, not `tertiary`**, at `OPEN_QUESTIONS.md` item 14. Both
+  /// greens exist and the design system assigns neither to a success state, so
+  /// the screens decide: `text-primary` appears 1,106 times against
+  /// `text-tertiary`'s 31, and the export's success chip is literally
+  /// `text-primary bg-primary/10`. This means success and the primary action stay
+  /// the same green, exactly as they are in [dark] - and `FilterChip`'s note that
+  /// what disambiguates them is *the container* still holds.
+  ///
+  /// **[problem] is the one that does not tint its own foreground.** Item 13
+  /// splits the design system's two reds by job: `status-critical` is the
+  /// content, and `error-container` is the background beneath it. The screens use
+  /// `bg-error-container/20` in 128 places, so that is the value and the alpha
+  /// (`0x33`), rather than a 10% wash of the foreground red.
+  ///
+  /// **[attention] and [info] are additions, not quotations**, at items 10 and
+  /// 11. Profound Verdant contains no amber, yellow, orange, or blue token at
+  /// all; where the exported screens needed a warning they reached for raw
+  /// Tailwind `yellow-400`, nine times across three Phase 00-era screens, none of
+  /// them canonical. `DESIGN_RULES.md` still requires `reconciliation differs`
+  /// and `printer unavailable` to be distinguishable, so the two tiers carry
+  /// forward from [dark] and are tinted to match the others.
+  ///
+  /// **[neutral] alone stays opaque**, because its background is a surface tier
+  /// (`surface-container-highest`) rather than a tint of a status colour. There is
+  /// no status hue to be 10% of.
+  static const AppStatusRoles profoundVerdant = AppStatusRoles(
+    ok: AppStatusRole(
+      fg: _ProfoundVerdant.primary,
+      bg: _ProfoundVerdant.primaryTint10,
+      border: _ProfoundVerdant.primaryTint30,
+    ),
+    attention: AppStatusRole(
+      fg: _ProfoundVerdant.amber400,
+      bg: _ProfoundVerdant.amberTint10,
+      border: _ProfoundVerdant.amberTint30,
+    ),
+    problem: AppStatusRole(
+      fg: _ProfoundVerdant.statusCritical,
+      bg: _ProfoundVerdant.errorContainerTint20,
+      border: _ProfoundVerdant.criticalTint30,
+    ),
+    info: AppStatusRole(
+      fg: _ProfoundVerdant.blue300,
+      bg: _ProfoundVerdant.blueTint10,
+      border: _ProfoundVerdant.blueTint30,
+    ),
+    neutral: AppStatusRole(
+      fg: _ProfoundVerdant.onSurfaceVariant,
+      bg: _ProfoundVerdant.surfaceContainerHighest,
+      border: _ProfoundVerdant.outlineVariant,
+    ),
+  );
+
   /// Every status by its `design.md` name, for a caller that has to render all
   /// five - and for the tests, which measure the set rather than five colours
   /// they were told about one at a time.
@@ -548,6 +873,28 @@ final class AppColorRoles {
     text: AppTextRoles.dark,
     action: AppActionRoles.dark,
     status: AppStatusRoles.dark,
+  );
+
+  /// The Profound Verdant palette - the second instance this class's doc above
+  /// anticipated, arriving for the reason it names.
+  ///
+  /// **Nothing reads this yet, and that is deliberate.** [AppTokens.dark] still
+  /// carries [dark], so registering this moves not one pixel. It exists so every
+  /// value decided in `docs/stitch/OPEN_QUESTIONS.md` is written down in one
+  /// place and checked by `test/ui/tokens_test.dart` *before* the swap that makes
+  /// it visible. The swap is a one-line change in `lib/theme.dart` and its own
+  /// reviewable commit, because it is the one that moves every surface, the body
+  /// text, and the primary action at once.
+  ///
+  /// **This is colour only.** The radius repoint (item 19) and the typography
+  /// families (item 20) are decided but land separately, so that a roundness
+  /// regression and a palette regression cannot arrive in the same diff.
+  /// `docs/stitch/TOKEN_RECONCILIATION.md` records the landing order.
+  static const AppColorRoles profoundVerdant = AppColorRoles(
+    surface: AppSurfaceRoles.profoundVerdant,
+    text: AppTextRoles.profoundVerdant,
+    action: AppActionRoles.profoundVerdant,
+    status: AppStatusRoles.profoundVerdant,
   );
 
   static AppColorRoles lerp(AppColorRoles a, AppColorRoles b, double t) =>

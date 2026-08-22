@@ -66,3 +66,6 @@ screenshots.zip
 # individual command is approved, and accumulates verbatim one-off entries that
 # mean nothing on anyone else's machine.
 /.claude/settings.local.json
+
+# Stitch design export: 18 MB local design input, mapped by docs/stitch/EXPORT_MAP.md
+docs/stitch/stitch_chilltent_pos_redesign_system/

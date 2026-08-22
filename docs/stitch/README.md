@@ -21,6 +21,14 @@ and motion tokens should later map through Flutter theme extensions rather than 
 values. Existing `AppLayout.contract` values are not a Stitch constraint and may be replaced during
 implementation after design approval.
 
+**Reading item 3 without a Stitch connector.** Sessions that have no Stitch MCP server cannot fetch a
+screen by ID. The project export under `stitch_chilltent_pos_redesign_system/` (gitignored) is the
+local stand-in, and `EXPORT_MAP.md` joins every logical ID to its exported folder and records the
+evidence that the export matches what Stitch served during the 2026-08-21 live audit. The export is a
+design *input*, not an approval: a screen's status in `SCREEN_INDEX.md` and its pending work in
+`LIVE_PHASE_HANDOFF.md` still govern. The export cannot be refreshed from a connector-less session, so
+any screen change remains a Stitch mutation requiring explicit user authorization.
+
 ## Mandatory workflow
 
 Every phase follows this sequence:
@@ -124,8 +132,52 @@ successful DOM operations; mobile retrieval remains cached and desktop retrieval
 remains `COMPLETED / RENDER REVIEW`, pending fresh canvas-code inspection rather than another edit.
 See `audits/phase-06.md`.
 
+Phase 07 was authorized as a `REPLACE` operation for staff and access. Initial desktop/mobile
+replacements ST-051/ST-052 were rejected after artifact review found invented navigation and omitted
+lifecycle states. Two approved bounded corrections produced intermediate ST-053/ST-054 and final
+desktop/mobile successors ST-055/ST-056. Fresh retrieval and HTML/screenshot inspection verified the
+exact four roles, Owner/Administrator write versus Manager read-only composition, invitation and
+status actions, all five consequence confirmations, validation/busy/failure/link states, labeled
+mobile actions, and the 834px tablet transformation. Both final screens are `CANONICAL CANDIDATE /
+VISUAL REVIEWED`. The Profound Verdant asset was retained and no Flutter or Firebase code changed.
+See `audits/phase-07.md`.
+
+Phase 08 was authorized as a `REPLACE` operation for supported settings and printing. Initial
+desktop/mobile replacements ST-057/ST-058 were rejected after fresh artifact review showed that both
+stopped early. Device-specific bounded corrections produced ST-059 through ST-062. ST-061/ST-062 are
+the strongest working pair: their successful DOM-operation logs cover the supported ISO 4217 field,
+direct-TCP printer outcomes, device-local queue recovery, responsive evidence, and interaction-state
+ledgers without generic settings or receipt preview. Retrieval still serves their pre-operation
+files, so that completion is mutation-reviewed rather than visually approved. Fresh fallback
+generations ST-063/ST-064 were downloaded and rejected because they also stopped early. Phase 08 is
+closed as `COMPLETED / RENDER REVIEW`, not canonical approval. The Profound Verdant asset was retained
+and no Flutter or Firebase code changed. See `audits/phase-08.md`.
+
+Phase 09 was authorized as a `CREATE` operation for the distinct platform superAdmin operations
+area. Initial desktop/mobile sources ST-065/ST-066 stopped early and were rejected. Approved
+corrections produced ST-067 through ST-070. Fresh ST-070 HTML and full-height screenshot inspection
+verified the complete mobile authority, admission, lifecycle, archive, exact-UID global status,
+consequence, state, and 48px interaction scope. Current canvas evidence proved ST-067's desktop DOM
+corrections had not persisted; fresh desktop ST-071 then normalized the main scope but retained six
+bounded copy/state defects. Its micro-edit also did not persist. The authorized last fresh variant
+ST-072 fixed those defects but duplicated retry-help copy into unrelated status chips and was
+rejected. A final authorized surgical cleanup produced ST-073. Fresh exact-ID HTML and screenshot
+inspection verifies clean retry help, exact lifecycle/global-status truth, complete state evidence,
+the tablet composition, and 48px controls. Phase 09 is `COMPLETED / VISUAL REVIEWED`; desktop ST-073
+and mobile ST-070 are canonical candidates. The Profound Verdant asset was retained and no Flutter
+or Firebase code changed. See `audits/phase-09.md`.
+
 ## Document map
 
+- `LIVE_PHASE_HANDOFF.md` - live-fetched per-phase design debt, exact working lineage, and no-go notes
+  for the next agent.
+- `EXPORT_MAP.md` - the local Stitch project export: logical ID to export folder, freshness evidence,
+  and the resolved Profound Verdant palette. **Read this before citing any screen**, because sessions
+  without the Stitch connector cannot fetch a screen ID.
+- `TOKEN_RECONCILIATION.md` - Profound Verdant mapped role by role onto `lib/ui/tokens.dart`, with the
+  eleven gaps that block the theme repoint.
+- `prompt.md` - hybrid sequential/concurrent development orchestration prompt for implementation
+  agents.
 - `DESIGN_RULES.md` - portable design guardrails and token policy.
 - `REFERENCE_MAP.md` - current product domains, routes, screenshot evidence, and Stitch coverage.
 - `RBAC_MATRIX.md` - permissions derived from active code.

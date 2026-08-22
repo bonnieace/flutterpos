@@ -1086,4 +1086,271 @@ void main() {
       }
     });
   });
+
+  /// Profound Verdant, value by value, against the decisions that chose them.
+  ///
+  /// **Every expectation here has a decision number**, from
+  /// `docs/stitch/OPEN_QUESTIONS.md`. Where the design system supplied a value
+  /// the test quotes it; where it supplied none and a decision filled the gap,
+  /// the test says which decision, so a later reader can tell a quotation from a
+  /// choice without opening the design file.
+  ///
+  /// **The tint tests do the arithmetic the `const` could not.** A composited
+  /// ARGB literal cannot be derived in a `const` context, so `tokens.dart` writes
+  /// each one out and these tests check it against its base colour and its
+  /// documented percentage. That is the only thing standing between a tint and a
+  /// typo.
+  group('Profound Verdant - docs/stitch/OPEN_QUESTIONS.md', () {
+    const pv = AppColorRoles.profoundVerdant;
+
+    /// The alpha byte the design system's `/10`, `/20` and `/30` suffixes mean.
+    int alphaByte(double fraction) => (255 * fraction).round();
+
+    void expectTint(
+      Color tint,
+      Color base,
+      double fraction, {
+      required String reason,
+    }) {
+      expect(
+        (tint.r, tint.g, tint.b),
+        (base.r, base.g, base.b),
+        reason: 'the tint must be $reason with no hue shift',
+      );
+      expect(
+        (tint.a * 255).round(),
+        alphaByte(fraction),
+        reason: 'the tint must be $reason at ${(fraction * 100).round()}%',
+      );
+    }
+
+    test('nothing is wired to it yet, so no pixel has moved', () {
+      // The whole point of landing the palette before the swap: this instance
+      // exists and is checked, and `AppTokens.dark` still renders `dark`.
+      expect(AppTokens.dark.colors, same(AppColorRoles.dark));
+      expect(AppTokens.dark.colors, isNot(same(pv)));
+      expect(
+        spiritTheme.extension<AppTokens>()!.colors,
+        same(AppColorRoles.dark),
+      );
+    });
+
+    test('the surface ramp is the frontmatter, one tier down from dark', () {
+      expect(pv.surface.base, const Color(0xFF071610));
+      expect(pv.surface.raised, const Color(0xFF0D1F16));
+      expect(pv.surface.sunken, const Color(0xFF03110B));
+      // The move that every screenshot will show: `dark`'s base becomes
+      // `raised`, and base drops to the darker value.
+      expect(pv.surface.raised, AppColorRoles.dark.surface.base);
+      // The design system assigns `#132A1F` to fields and to popovers both.
+      expect(pv.surface.field, const Color(0xFF132A1F));
+      expect(pv.surface.overlay, pv.surface.field);
+      expect(pv.surface.borderSubtle, const Color(0xFF3D4A3D));
+      expect(pv.surface.borderStrong, const Color(0xFF869585));
+    });
+
+    test('decision 17: the scrim is carried, not taken from the prose', () {
+      expect(pv.surface.scrim, AppColorRoles.dark.surface.scrim);
+      expect(pv.surface.scrim.a, closeTo(0.6, 0.001));
+    });
+
+    test('text leaves pure white, and decision 15 carries disabled', () {
+      expect(pv.text.primary, const Color(0xFFD4E7DD));
+      expect(pv.text.primary, isNot(AppColorRoles.dark.text.primary));
+      expect(pv.text.secondary, const Color(0xFFBCCBB9));
+      // Derived, not quoted: no third text tier exists, so `outline` does both
+      // jobs. Worth asserting so the reuse is deliberate rather than accidental.
+      expect(pv.text.tertiary, pv.surface.borderStrong);
+      expect(pv.text.disabled, AppColorRoles.dark.text.disabled);
+    });
+
+    test('the primary action is the frontmatter primary, not its prose', () {
+      // `OPEN_QUESTIONS.md` item 1: the prose calls `#22C55E` the primary and
+      // renders it in zero screens as one. It is `primary-container` here.
+      expect(pv.action.primary.container, const Color(0xFF4BE277));
+      expect(pv.action.primary.label, const Color(0xFF003915));
+      expect(pv.action.primary.container, isNot(const Color(0xFF22C55E)));
+    });
+
+    test('decision 16: hover brightens, pressed darkens, nothing invented', () {
+      final primary = pv.action.primary;
+      expect(primary.hoverContainer, const Color(0xFF6BFF8F));
+      expect(primary.pressedContainer, const Color(0xFF22C55E));
+      // The direction is the decision. Both values are the design system's own,
+      // so this asserts the ordering rather than a taste.
+      expect(
+        primary.hoverContainer!.computeLuminance(),
+        greaterThan(primary.container.computeLuminance()),
+        reason: 'hover must be brighter than rest',
+      );
+      expect(
+        primary.pressedContainer!.computeLuminance(),
+        lessThan(primary.container.computeLuminance()),
+        reason: 'pressed must be darker than rest',
+      );
+    });
+
+    test('decision 13: destructive is status-critical, not error', () {
+      expect(pv.action.destructive.label, const Color(0xFFEF4444));
+      expect(pv.action.destructive.border, pv.action.destructive.label);
+      // The rejected candidate, asserted so a future edit cannot quietly swap
+      // the two reds back.
+      expect(pv.action.destructive.label, isNot(const Color(0xFFFFB4AB)));
+      expect(pv.status.problem.fg, pv.action.destructive.label);
+    });
+
+    test('decision 15: the disabled trio is carried from dark', () {
+      expect(pv.action.disabledContainer, AppColorRoles.dark.action.disabledContainer);
+      expect(pv.action.disabledLabel, AppColorRoles.dark.action.disabledLabel);
+      expect(pv.action.disabledBorder, AppColorRoles.dark.action.disabledBorder);
+    });
+
+    test('decision 18: the focus ring keeps its geometry, gains a colour', () {
+      final ring = pv.action.focusRing;
+      expect(ring.color, const Color(0xFF4BE277));
+      // The prose's 1px is about field borders. §9 is pass/fail, so the ring
+      // does not shrink.
+      expect(ring.width, AppColorRoles.dark.action.focusRing.width);
+      expect(ring.width, 2);
+      expect(ring.offset, 2);
+    });
+
+    test('decision 14: ok is primary, and it matches the action green', () {
+      expect(pv.status.ok.fg, const Color(0xFF4BE277));
+      expect(pv.status.ok.fg, pv.action.primary.container);
+      // The rejected candidate: `tertiary` `#2EE380`, 31 uses against 1,106.
+      expect(pv.status.ok.fg, isNot(const Color(0xFF2EE380)));
+    });
+
+    test('decision 12: four of five statuses tint, and neutral does not', () {
+      for (final role in <AppStatusRole>[
+        pv.status.ok,
+        pv.status.attention,
+        pv.status.problem,
+        pv.status.info,
+      ]) {
+        expect(role.bg.a, lessThan(1.0), reason: 'a status bg is a tint');
+        expect(role.border.a, lessThan(1.0), reason: 'a status border is a tint');
+        expect(role.fg.a, 1.0, reason: 'the content is never translucent');
+      }
+      // Neutral's background is a surface tier, so there is no hue to be 10% of.
+      expect(pv.status.neutral.bg.a, 1.0);
+      expect(pv.status.neutral.bg, const Color(0xFF283831));
+      expect(pv.status.neutral.border.a, 1.0);
+    });
+
+    test('every tint is its base at the percentage the export measures', () {
+      expectTint(pv.status.ok.bg, pv.status.ok.fg, 0.10, reason: 'bg-primary/10');
+      expectTint(
+        pv.status.ok.border,
+        pv.status.ok.fg,
+        0.30,
+        reason: 'border-primary/30',
+      );
+      expectTint(
+        pv.status.attention.bg,
+        pv.status.attention.fg,
+        0.10,
+        reason: 'the warning bg',
+      );
+      expectTint(
+        pv.status.attention.border,
+        pv.status.attention.fg,
+        0.30,
+        reason: 'the warning border',
+      );
+      expectTint(
+        pv.status.info.bg,
+        pv.status.info.fg,
+        0.10,
+        reason: 'the info bg',
+      );
+      expectTint(
+        pv.status.info.border,
+        pv.status.info.fg,
+        0.30,
+        reason: 'the info border',
+      );
+      expectTint(
+        pv.status.problem.border,
+        pv.status.problem.fg,
+        0.30,
+        reason: 'border-status-critical/30',
+      );
+    });
+
+    test('decision 13: problem alone tints a colour other than its own fg', () {
+      // `bg-error-container/20`, 128 uses. The one status whose background is
+      // not a wash of its foreground, so it gets its own assertion.
+      final bg = pv.status.problem.bg;
+      expectTint(bg, const Color(0xFF93000A), 0.20, reason: 'error-container/20');
+      expect(
+        (bg.r, bg.g, bg.b),
+        isNot((pv.status.problem.fg.r, pv.status.problem.fg.g, pv.status.problem.fg.b)),
+        reason: 'error-container is a different red from status-critical',
+      );
+    });
+
+    test('decisions 10 and 11: the two additions are the dark values', () {
+      // Profound Verdant has no amber and no blue at all, so these carry
+      // forward. Asserting the identity keeps them honest as *additions* rather
+      // than letting a later edit pass off a new hex as design-system truth.
+      expect(pv.status.attention.fg, AppColorRoles.dark.status.attention.fg);
+      expect(pv.status.attention.fg, const Color(0xFFF2C14E));
+      expect(pv.status.info.fg, AppColorRoles.dark.status.info.fg);
+      expect(pv.status.info.fg, const Color(0xFF6FB7F2));
+    });
+
+    test('the five statuses stay five distinct foregrounds', () {
+      final foregrounds = <Color>{
+        pv.status.ok.fg,
+        pv.status.attention.fg,
+        pv.status.problem.fg,
+        pv.status.info.fg,
+        pv.status.neutral.fg,
+      };
+      expect(
+        foregrounds,
+        hasLength(5),
+        reason: 'status is never conveyed by a shared colour - DESIGN_RULES §9',
+      );
+    });
+
+    test('every status foreground clears 4.5:1 on the new base surface', () {
+      // The tints are translucent, so the surface a chip sits on is what the
+      // content is actually read against. `base` moved a tier darker, which is
+      // the reason to re-measure rather than assume the dark ratios carried.
+      for (final entry in <String, Color>{
+        'ok': pv.status.ok.fg,
+        'attention': pv.status.attention.fg,
+        'problem': pv.status.problem.fg,
+        'info': pv.status.info.fg,
+        'neutral': pv.status.neutral.fg,
+      }.entries) {
+        expect(
+          contrastRatio(entry.value, pv.surface.base),
+          greaterThanOrEqualTo(4.5),
+          reason: '${entry.key} on base',
+        );
+      }
+    });
+
+    test('body and muted text clear 4.5:1 on the new base surface', () {
+      expect(
+        contrastRatio(pv.text.primary, pv.surface.base),
+        greaterThanOrEqualTo(4.5),
+      );
+      expect(
+        contrastRatio(pv.text.secondary, pv.surface.base),
+        greaterThanOrEqualTo(4.5),
+      );
+    });
+
+    test('the primary action label clears 4.5:1 on its own container', () {
+      expect(
+        contrastRatio(pv.action.primary.label, pv.action.primary.container),
+        greaterThanOrEqualTo(4.5),
+      );
+    });
+  });
 }
