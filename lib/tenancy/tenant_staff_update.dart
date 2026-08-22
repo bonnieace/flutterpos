@@ -327,8 +327,20 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // **§8 rule 4: the verb persists.** The action that opens this form
+          // says `Correct`, and this said `Edit` - one act named two ways on
+          // one screen, and the only one of this route's five forms that did
+          // it. The other four already carry the verb of the action that opened
+          // them: `Resend invitation to ...`, `Cancel invitation for ...`,
+          // `Replace invitation email for ...`, `Deactivate ...`.
+          //
+          // ST-055 writes this heading `Correct Staff: {name}`, so the design
+          // and the rule agree, and the words are the design's rather than a
+          // third phrasing chosen here. `Staff:` is doing work: this route also
+          // opens an *invitation* form, and correcting a person's details is
+          // not correcting their invitation.
           Text(
-            'Edit ${widget.target.displayName}',
+            'Correct Staff: ${widget.target.displayName}',
             style: tokens.typography.titleMedium.copyWith(
               color: tokens.colors.text.primary,
             ),
