@@ -33,7 +33,7 @@ void main() {
       await _pump(tester);
 
       final bar = tester.widget<TabBar>(find.byType(TabBar));
-      const tokens = AppTokens.dark;
+      final tokens = spiritTheme.extension<AppTokens>()!;
       expect(bar.labelColor, tokens.colors.text.primary);
       expect(bar.unselectedLabelColor, tokens.colors.text.secondary);
       expect(bar.indicatorColor, tokens.colors.action.primary.container);

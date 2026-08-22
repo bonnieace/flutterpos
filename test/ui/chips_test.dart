@@ -128,7 +128,7 @@ void main() {
     ) async {
       await _pump(tester, size: const Size(900, 800));
 
-      const tokens = AppTokens.dark;
+      final tokens = spiritTheme.extension<AppTokens>()!;
       final decorated = tester
           .widgetList<DecoratedBox>(find.byType(DecoratedBox))
           .map((box) => box.decoration)

@@ -59,7 +59,7 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      const tokens = AppTokens.dark;
+      final tokens = spiritTheme.extension<AppTokens>()!;
       final surface = tester
           .widgetList<DecoratedBox>(find.byType(DecoratedBox))
           .map((box) => box.decoration)

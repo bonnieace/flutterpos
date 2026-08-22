@@ -253,18 +253,46 @@ change. Suggested sequence, each step its own reviewable commit:
    that a future nested consumer would double the tint.
 2. ~~**`_ProfoundVerdant` primitives plus `AppColorRoles.profoundVerdant`**, unread.~~
    **DONE 2026-08-22.** Every decided value is now written down once in `lib/ui/tokens.dart` and pinned
-   by 18 new tests in `test/ui/tokens_test.dart`, each naming the decision that chose it. Verified
-   zero-pixel: `AppTokens.dark` still carries `AppColorRoles.dark` (asserted with `same()`), and all
-   359 harness screenshots regenerate byte-identical.
+   by 18 new tests in `test/ui/tokens_test.dart`, each naming the decision that chose it. Zero-pixel by
+   construction — the instance is declared and nothing selects it — and a test asserts `AppTokens.dark`
+   still carries `AppColorRoles.dark`.
+
+   > **How not to verify a screenshot claim.** `/screenshots/` is gitignored (`.gitignore` line 57 —
+   > it is generated output). So `git status --porcelain screenshots/` returns nothing **whatever the
+   > files contain**, and reading that as "no screenshot changed" is reading an ignore rule as a diff.
+   > Two claims in this document and in the commit messages were first made that way. The real check is
+   > a content hash: `find screenshots -name '*.png' | sort | xargs md5sum > before.txt`, regenerate,
+   > hash again, `comm`/`diff` the two. Every zero-pixel claim below was re-verified that way.
 
    Two things worth carrying into step 3. **The palette is already known accessible**: every one of the
    five status foregrounds, plus body and muted text, clears 4.5:1 on the new darker
    `#071610` base, and the primary label clears 4.5:1 on `#4BE277`. And **the tint arithmetic is
    test-checked rather than trusted** — a `const` cannot compute an alpha, so each tint is a composited
    ARGB literal whose RGB and alpha byte are asserted against its base colour and percentage.
-3. **Point `AppTokens.dark` at the new roles.** The first pixel-moving commit, and the one whose
-   screenshot diff needs real review: base surface drops a tier, body text leaves pure white, and the
-   primary action moves from `mint400` to `#4BE277`.
+3. ~~**Point `AppTokens.dark` at the new roles.**~~ **DONE 2026-08-22, in two commits rather than one.**
+
+   The swap could not be one line as planned, because **two thirds of `spiritTheme` had never been
+   migrated to the token layer at all.** The scaffold, the `ColorScheme` surfaces, every body-text
+   colour, cards, the app bar, dialogs, sheets, chips, dividers, list tiles, icons, the spinner and the
+   snackbar were all painted straight from the four literals at the top of `lib/theme.dart`; only the
+   four button themes, the input borders and the checkbox read roles, from `design.md` §11 step 3.
+   Steps 4 and 5 were meant to finish that and never ran. Flipping the extension alone would have put
+   new buttons on old surfaces.
+
+   So: **first** a zero-pixel migration moving every slot onto a role and reducing the palette to one
+   named place, **then** the flip. Verified by hash — 0 of 359 renders differ across the migration, and
+   **359 of 359 differ across the flip**, which is also the useful proof that no screen bypasses the
+   theme.
+
+   Where a literal served two jobs the roles now split it by meaning rather than by value: `mutedGreen`
+   was containers *and* lines, identical under the old palette and two different roles under this one,
+   so the choice is made where it can be read instead of falling out of a hex collision later. One such
+   collision was already load-bearing — `fields_test.dart` allowed the input well's colour only because
+   `surface.field` and `action.disabledBorder` were both `green.700`; Profound Verdant separates them
+   and the omission surfaced as a test failure.
+
+   Roughly forty tests pinned old-palette values. They now read whatever palette the theme registers,
+   so they check the wiring rather than the hues, and a future palette change will not break them.
 4. **`AppRadii` values** (decision 19). Independent of colour; separate diff so roundness changes are
    not confused with palette changes.
 5. **Font assets and `AppTypeRoles` families** (decision 20). A `pubspec.yaml` change, integration

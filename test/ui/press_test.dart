@@ -6,7 +6,7 @@ import 'package:flutter_application_1/ui/press.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const AppTokens _tokens = AppTokens.dark;
+final AppTokens _tokens = spiritTheme.extension<AppTokens>()!;
 final AppFocusRing _ring = _tokens.colors.action.focusRing;
 
 /// A press surface under the app's own theme.
@@ -252,7 +252,13 @@ void main() {
       expect(_hasRing(tester), isTrue);
       expect(_ring.width, 2);
       expect(_ring.offset, 2);
-      expect(_ring.color, const Color(0xFF45F28D));
+      // The ring's colour is the palette's; that it is *the ring's* colour and
+      // 2px at 2px is this test's. `OPEN_QUESTIONS.md` item 18 kept the geometry
+      // and moved the hue.
+      expect(
+        _ring.color,
+        spiritTheme.extension<AppTokens>()!.colors.action.focusRing.color,
+      );
     });
 
     testWidgets('a touch that happens to focus draws no ring', (tester) async {

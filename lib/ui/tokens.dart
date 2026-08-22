@@ -1678,6 +1678,29 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     layout: AppLayout.contract,
   );
 
+  /// The set `lib/theme.dart` actually registers: [dark] with the Profound
+  /// Verdant palette in place of its own.
+  ///
+  /// **Colour only, and every other field is deliberately [dark]'s.** The
+  /// radius repoint and the typography families are decided
+  /// (`docs/stitch/OPEN_QUESTIONS.md` items 19 and 20) and land as their own
+  /// commits, because a roundness regression and a palette regression arriving
+  /// in one screenshot diff is a diff nobody can review.
+  ///
+  /// **[dark] is kept rather than replaced.** It is the palette this app shipped,
+  /// `test/ui/tokens_test.dart` still measures its internal contrast and its
+  /// agreement with the legacy constants in `lib/theme.dart`, and holding both
+  /// means the swap is a one-word change here rather than an edit to every value.
+  static const AppTokens profoundVerdant = AppTokens(
+    colors: AppColorRoles.profoundVerdant,
+    typography: AppTypeRoles.standard,
+    spacing: AppSpacing.scale,
+    radius: AppRadii.scale,
+    motion: AppMotion.standard,
+    density: AppDensity.comfortable,
+    layout: AppLayout.contract,
+  );
+
   /// The tokens in scope at [context], or null where none are registered.
   static AppTokens? maybeOf(BuildContext context) =>
       Theme.of(context).extension<AppTokens>();

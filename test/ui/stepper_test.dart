@@ -92,7 +92,7 @@ void main() {
       // Sizing for what is on screen makes the row reflow when a quantity goes
       // from 9 to 10, which moves the two buttons under the finger reaching
       // for them.
-      const tokens = AppTokens.dark;
+      final tokens = spiritTheme.extension<AppTokens>()!;
       final narrow = QuantityStepper.wellWidth(tokens.spacing, maximum: 9);
       final wide = QuantityStepper.wellWidth(tokens.spacing, maximum: 9999);
       expect(wide, greaterThan(narrow));

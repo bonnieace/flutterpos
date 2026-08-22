@@ -5,7 +5,7 @@ import 'package:flutter_application_1/ui/press.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const AppTokens _tokens = AppTokens.dark;
+final AppTokens _tokens = spiritTheme.extension<AppTokens>()!;
 final AppActionRoles _actions = _tokens.colors.action;
 
 Widget _app(Widget child) => MaterialApp(
@@ -62,11 +62,13 @@ void main() {
       }
     });
 
-    testWidgets('the ordinary tier is sage and the primary label is ink', (
+    testWidgets('the ordinary tier and the primary ink are separate roles', (
       tester,
     ) async {
-      // The two values step 3 moved, pinned at the widget rather than only at
-      // the theme, because this is where a call site actually reads them.
+      // Named "sage" and "ink" until 2026-08-22, after `design.md` §2.1's own
+      // words for the two values. Under Profound Verdant they are neither, and
+      // the test was never about the hues: it is about a call site reading the
+      // tier it was given rather than borrowing a neighbour's colour.
       await tester.pumpWidget(
         _app(
           const AppButton(
@@ -76,9 +78,19 @@ void main() {
           ),
         ),
       );
-      expect(_actions.secondary.label, const Color(0xFFB8D6C5));
-      expect(_actions.primary.label, const Color(0xFF0A0F0C));
-      expect(_actions.secondary.border, const Color(0xFF2C5340));
+      // The three values used to be written out here as §2.1's hexes. They are
+      // the palette's business, not this file's: what this test is for is that a
+      // secondary button wears the *secondary* label and a primary one wears the
+      // primary ink, so it asserts the tiers differ and that the widget renders
+      // the tier it was given.
+      expect(_actions.secondary.label, isNot(_actions.primary.label));
+      expect(_actions.secondary.label, isNot(_actions.primary.container));
+      expect(_actions.secondary.border, isNotNull);
+      expect(
+        _labelStyle(tester, 'Ordinary').color,
+        _actions.disabledLabel,
+        reason: 'this one is disabled, so it wears the disabled label',
+      );
     });
 
     testWidgets('destructive is the tier that had nowhere to live before', (
@@ -95,11 +107,16 @@ void main() {
           ),
         ),
       );
+      // Read off the role rather than named: which red is destructive is
+      // `OPEN_QUESTIONS.md` item 13, and it is pinned in `tokens_test.dart`.
       expect(
         _labelStyle(tester, 'Retire this product').color,
-        const Color(0xFFFF5C6C),
+        _actions.destructive.label,
       );
-      expect(_container(tester).border?.top.color, const Color(0xFFFF5C6C));
+      expect(
+        _container(tester).border?.top.color,
+        _actions.destructive.border,
+      );
     });
 
     testWidgets('disabled follows §2.1\'s two different rules', (tester) async {

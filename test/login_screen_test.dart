@@ -597,7 +597,10 @@ void main() {
       await tester.tap(_capsKey());
       await tester.pumpAndSettle();
 
-      expect(_capsFill(tester), AppTokens.dark.colors.action.primary.container);
+      expect(
+        _capsFill(tester),
+        spiritTheme.extension<AppTokens>()!.colors.action.primary.container,
+      );
     });
   });
 }

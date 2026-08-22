@@ -242,7 +242,7 @@ void main() {
     ) async {
       await _pump(tester);
 
-      const tokens = AppTokens.dark;
+      final tokens = spiritTheme.extension<AppTokens>()!;
       final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
       // §2.1's row for "dialogs, menus, bottom sheets", and §2.3's for
       // "dialogs, bottom sheets". A dialog is pushed onto a route with its own

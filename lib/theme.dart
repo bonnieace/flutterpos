@@ -50,17 +50,21 @@ WidgetStateProperty<Color?> _pressOverlay(AppActionRole role) =>
 /// had to agree, and three-quarters of a swap renders a theme painting new
 /// colours over old surfaces. Now it is one word.
 ///
-/// **Still [AppTokens.dark], and the swap is blocked on the migration below.**
-/// Flipping this word today would repaint the four button themes, the input
-/// well and the checkbox in Profound Verdant while the scaffold, the cards, the
-/// app bar, the dialogs and every body-text colour stayed on the literals at the
-/// top of this file - new buttons on old surfaces, which is worse than either
-/// palette. `design.md` §11 steps 4 and 5 were meant to finish moving those
-/// literals onto roles and never ran; the note on [spiritTheme] lists what they
-/// left. That migration is zero-pixel by construction, because
-/// `test/ui/tokens_test.dart` already asserts each role holds the identical
-/// value, and it has to land before this word changes.
-const AppTokens _palette = AppTokens.dark;
+/// **[AppTokens.profoundVerdant] since 2026-08-22.** The Stitch redesign's
+/// palette, read out of the design system's own frontmatter, decided value by
+/// value in `docs/stitch/OPEN_QUESTIONS.md` where it defined nothing, and
+/// measured in `test/ui/tokens_test.dart` before it was wired to anything.
+///
+/// **The swap was one word only because two changes came first**: every slot in
+/// [spiritTheme] moved off the four literals at the top of this file and onto a
+/// role, and the palette stopped being named in four places. Before that,
+/// flipping this would have repainted the buttons and the input well while the
+/// scaffold, the cards and the text on them stayed behind.
+///
+/// [AppTokens.dark] is the palette this app shipped. It is kept, not deleted:
+/// `test/ui/tokens_test.dart` still measures its contrast and its agreement with
+/// those four constants, so what the app used to look like stays on the record.
+const AppTokens _palette = AppTokens.profoundVerdant;
 
 /// The action tiers this file paints with, read once rather than per button
 /// theme.

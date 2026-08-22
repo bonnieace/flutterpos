@@ -64,7 +64,7 @@ void main() {
     ) async {
       // §9's own failure list opens with "caption text at 3.4:1 and 3.7:1", so
       // the page statement takes `label.md` at `text.secondary` instead.
-      const tokens = AppTokens.dark;
+      final tokens = spiritTheme.extension<AppTokens>()!;
       expect(
         contrastRatio(
           tokens.colors.text.secondary,

@@ -5,7 +5,7 @@ import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _tokens = AppTokens.dark;
+final _tokens = spiritTheme.extension<AppTokens>()!;
 
 /// Mounts [child] under the app's own theme, optionally at compact density.
 Future<void> _pump(
@@ -671,7 +671,13 @@ void main() {
         helper: 'Such as Bakery.',
       ),
     );
+    // **`surface.field` is listed explicitly since 2026-08-22.** The well
+    // paints it, and this set passed for months without naming it because in the
+    // shipped palette `surface.field` and `action.disabledBorder` were the same
+    // `green.700`. Profound Verdant separates them, and the omission surfaced as
+    // a failure here - which is the set doing its job.
     final palette = <Color>{
+      _tokens.colors.surface.field,
       _tokens.colors.surface.sunken,
       _tokens.colors.surface.borderStrong,
       _tokens.colors.text.primary,

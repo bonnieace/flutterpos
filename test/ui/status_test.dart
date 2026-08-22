@@ -4,7 +4,7 @@ import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _tokens = AppTokens.dark;
+final _tokens = spiritTheme.extension<AppTokens>()!;
 
 /// Mounts [child] under the app's own theme, optionally at compact density.
 Future<void> _pump(

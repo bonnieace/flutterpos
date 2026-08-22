@@ -107,7 +107,7 @@ void main() {
       );
       expect(
         indicator.valueColor?.value,
-        AppTokens.dark.colors.action.primary.container,
+        spiritTheme.extension<AppTokens>()!.colors.action.primary.container,
       );
     });
   });

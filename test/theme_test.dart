@@ -72,7 +72,10 @@ void main() {
   // glow only mid-drag, so neither can appear in a screenshot and neither is
   // proved by one. These are what stand in for that until a device run.
   group('no ink ripple survives, and a press is the overlay of its tier', () {
-    final AppActionRoles action = AppTokens.dark.colors.action;
+    // The palette the theme registers, not a named one: this group is about the
+    // overlay *mechanism*, which is the same rule whichever palette is active.
+    final AppActionRoles action =
+        spiritTheme.extension<AppTokens>()!.colors.action;
 
     test('the ripple is killed at the theme, and Material 3 is stated', () {
       expect(spiritTheme.splashFactory, NoSplash.splashFactory);
@@ -155,9 +158,18 @@ void main() {
       // The primary tier moves its *container* to a named colour; the other
       // three wash their own *label* over a transparent one. A press overlay
       // that knew only one of those would be right about a quarter of the app.
-      expect(action.primary.pressedFill(), const Color(0xFF34B169));
-      expect(action.primary.hoverFill(), const Color(0xFF3DD47C));
+      // **Asserted as the rule, not as two hexes.** This used to name
+      // `#34B169` and `#3DD47C`, which were `design.md` §2.1's pressed and
+      // hovered greens, and it failed on the palette swap for the wrong reason:
+      // the mechanism was intact and only the colours had moved. The values
+      // themselves are pinned in `test/ui/tokens_test.dart`, against the
+      // decision that chose them.
+      expect(action.primary.pressedFill(), action.primary.pressedContainer);
+      expect(action.primary.hoverFill(), action.primary.hoverContainer);
+      // Opaque, because this tier replaces its container rather than washing
+      // something over it - which is the half of §2.1 the loop below is not.
       expect(action.primary.pressedFill().a, 1.0);
+      expect(action.primary.hoverFill().a, 1.0);
       for (final tier in <AppActionRole>[
         action.secondary,
         action.tertiary,

@@ -918,7 +918,10 @@ void main() {
           ),
         ),
       );
-      expect(seen, same(AppTokens.dark));
+      // What this proves is that a widget reaches the *registered* set through
+      // `of`, not that the set is any particular palette - which is why it reads
+      // `registered` rather than naming one.
+      expect(seen, same(registered));
     });
 
     testWidgets('a screen can hold its own density for its own subtree', (
