@@ -63,6 +63,10 @@ const Map<String, String> captions = <String, String>{
   '14-new-sale':
       'The till. On a desktop the cart is a second pane; on a phone it is a '
       'sheet reached from a badge.',
+  '14b-new-sale-browsing-with-a-cart':
+      'The staged browse flow mid-sale, at the two widths that have one. The '
+      'tile a cashier has rung up twice carries the count and the action '
+      'border; the bar carries the total the customer is waiting for.',
   '15-new-sale-with-a-cart':
       'Three products rung up, with the tender still to be chosen.',
   '16-checkout-settings':

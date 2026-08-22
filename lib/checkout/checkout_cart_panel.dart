@@ -74,20 +74,55 @@ import 'checkout_tender.dart';
 const int maximumRenderedCheckoutProducts = 60;
 
 /// The widest a product tile is allowed to grow before the grid takes another
-/// column, and how tall one is.
+/// column, and how tall one is in each of the two compositions.
 ///
 /// **Named rather than moved into the token layer, and that is the honest
 /// place for them.** `claude.md` hard rule 2 forbids a magic number in a
-/// widget; it does not turn every measurement into a token, and `design.md`
-/// states no product-tile geometry in §2.3 or anywhere else. Inventing
-/// `size.productTile` would be inventing a token, which the same file forbids
-/// one rule earlier. Both figures are what this grid already drew.
-const double _productTileExtent = 230;
-const double _productTileHeight = 116;
+/// widget; it does not turn every measurement into a token, and neither
+/// `design.md` §2.3 nor Profound Verdant states any product-tile geometry.
+/// Inventing `size.productTile` would be inventing a token, which the same file
+/// forbids one rule earlier.
+///
+/// **The extent is what picks the column count, and 260 is the figure that makes
+/// this app's counts the served designs' counts.** ST-035 asks for two columns at
+/// its base width, three at `lg` and four at `xl`; the browse render draws two on
+/// a phone. At 260 the grid takes two at a 411 phone and at an 834 tablet, three
+/// at a 1024 desktop, and four at a 1440 till - all four, from one number, with no
+/// second breakpoint deciding columns. It was 230, which took **five** at 1440 and
+/// squeezed the price line until it ellipsised.
+const double _productTileExtent = 260;
 
-/// The side of the square a product's picture, or its stand-in, is drawn in.
-/// Named for the same reason as the two figures above, and unchanged at 52.
-const double _thumbnailSize = 52;
+/// How tall a tile is where the cart is a pane on the same screen.
+///
+/// ST-035's desktop card is name, code, then the money and the cached figure,
+/// with no picture at all: a till screen shows the cart beside the grid, so the
+/// grid's job is density rather than recognition. 124 holds that stack with a
+/// name that takes both its lines. 128, measured the same way as the compact
+/// figure below and for the same reason: 124 overflows by 4.
+const double _wideProductTileHeight = 128;
+
+/// How tall a tile is where the cart is behind a tap.
+///
+/// The recovered mobile browse render leads with a picture band, because on a
+/// phone the grid is what a cashier is aiming at with a thumb and a name in
+/// 181 logical pixels is not. [_productThumbnailBandHeight] plus the same stack
+/// as above, less the code line the phone has no room for.
+///
+/// **210 is measured rather than added up, and it is the floor.** A `GridView`
+/// cell is a fixed box and a `Column` that does not fit one throws, so the
+/// figure was taken by letting it throw: 206 and 198 both overflow a two-line
+/// name, 210 does not. The arithmetic of the named parts predicts 202, and the
+/// difference is what the text stack's own line boxes measure rather than what
+/// their `height` multipliers say - which is exactly why this is not arithmetic
+/// in a comment. It is also the strict case: a widget test draws in the test
+/// font, which is square and wraps sooner than either shipped face.
+const double _compactProductTileHeight = 210;
+
+/// The height of the picture band across the top of a compact tile.
+///
+/// Named for the same reason as the three figures above. It is the browse
+/// render's own `h-24`.
+const double _productThumbnailBandHeight = 96;
 
 /// The value the category bar carries for "products whose category this device
 /// does not hold".
@@ -711,7 +746,7 @@ final class _CartEditorState extends State<_CartEditor> {
       key: const ValueKey('checkout-wide'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(child: _productsPane(context, currency)),
+        Expanded(child: _productsPane(context, currency, dense: true)),
         // §2.1's hairline, which is what separates two regions everywhere else
         // in this app. `VerticalDivider` paints `dividerColor`, and the theme's
         // is the same role - this reads it by name rather than by inheritance.
@@ -735,7 +770,7 @@ final class _CartEditorState extends State<_CartEditor> {
       Column(
         key: const ValueKey('checkout-compact'),
         children: [
-          Expanded(child: _productsPane(context, currency)),
+          Expanded(child: _productsPane(context, currency, dense: false)),
           _CartBar(
             currency: currency,
             total: total,
@@ -890,16 +925,182 @@ final class _CartEditorState extends State<_CartEditor> {
 
   /// The catalog: what is sellable, and how it is found.
   ///
+  /// **The pane is a fixed head over a scrolling grid, which is what both served
+  /// designs draw and what this used to be one long `ListView` of.** ST-035's
+  /// search row and category row are their own bars above a `flex-1
+  /// overflow-y-auto` grid, and the browse render's are sticky above one. What
+  /// that buys is not tidiness: a cashier who scrolls to the twentieth product
+  /// used to lose the search field and the category chips off the top of the
+  /// screen, and the fastest way to reach a product is to type its name.
+  ///
   /// The grid replaced a `Wrap` of buttons whose widths followed their labels,
   /// so a long product name made its own tile wider than its neighbours and
   /// nothing lined up. A cashier scans this by position, so the columns are
   /// fixed and the tiles are not.
-  Widget _productsPane(BuildContext context, String currency) {
+  Widget _productsPane(
+    BuildContext context,
+    String currency, {
+    required bool dense,
+  }) {
     final tokens = AppTokens.componentOf(context);
+    return Column(
+      key: const ValueKey('checkout-products-pane'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _browseHead(context, tokens),
+        Expanded(child: _productGrid(context, tokens, currency, dense: dense)),
+      ],
+    );
+  }
+
+  /// What stays on screen while the grid scrolls: where the catalog came from,
+  /// how to search it, and how to narrow it.
+  Widget _browseHead(BuildContext context, AppTokens tokens) {
     // §2.2's `caption` row - "timestamps, attribution" - in `text.tertiary`,
     // which §2.1 names the floor for anything a person is expected to read.
-    // This used to be `bodySmall` in `onSurfaceVariant`, which is Material's
-    // pair for the same intent and is not one of §2.2's twelve roles.
+    final quiet = tokens.typography.caption.copyWith(
+      color: tokens.colors.text.tertiary,
+    );
+    final inset = AppScaffold.horizontalInset(tokens.spacing);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        // §2.1's hairline under a fixed region, which is what separates a head
+        // from what it is the head of everywhere else in this app.
+        border: Border(
+          bottom: BorderSide(color: tokens.colors.surface.borderSubtle),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // **Both served designs put the freshness line in a band of its own**,
+          // full width and one step up from the page - ST-035 in the top bar,
+          // the browse render in an info strip under it. Quietened rather than
+          // deleted: it is true, and a cashier pricing from a stale device needs
+          // it, but it is standing context rather than the thing being looked
+          // at, so it no longer competes with the products for attention the way
+          // full-weight body text did.
+          Container(
+            color: tokens.colors.surface.raised,
+            padding: EdgeInsets.symmetric(
+              horizontal: inset,
+              vertical: tokens.spacing.s8,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  key: const ValueKey('checkout-catalog-freshness'),
+                  'Prices and stock come from this device, last synced '
+                  '${_instant(_snapshot.refreshedAt)}. A sale is never blocked '
+                  'by a stock count.',
+                  style: quiet,
+                ),
+                if (!_snapshot.complete)
+                  Text(
+                    key: const ValueKey('checkout-catalog-partial'),
+                    'This device holds only part of the product list for this '
+                    'business, so a product may be missing from it.',
+                    style: quiet,
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              inset,
+              tokens.spacing.s12,
+              inset,
+              tokens.spacing.s8,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                // §5.2's field, and the last two call sites of §11 step 3's
+                // sweep. The leading glyph is the "optional in the strong sense"
+                // case that section describes: a magnifier says *this one is
+                // searched*, which the label cannot say faster, and the till is
+                // where a cashier is not reading.
+                AppTextField(
+                  key: const ValueKey('checkout-search'),
+                  label: 'Search by name or code',
+                  leading: Icons.search,
+                  controller: _search,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) => setState(() => _codeNotice = null),
+                  onSubmitted: (_) => _submitSearch(),
+                  helper: 'Scan or enter a code and press enter to add it.',
+                ),
+                // **The eighth notice surface `AppNotice` has been waiting
+                // for.** All three sentences `_submitSearch` writes here are the
+                // same outcome - nothing was added - so this is one `refused`,
+                // not a status picked per branch. It was a bare `Text`, in the
+                // position a confirmation would also have taken.
+                if (_codeNotice case final notice?) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s8),
+                  Callout(
+                    key: const ValueKey('checkout-code-notice'),
+                    status: notice.status,
+                    message: notice.message,
+                  ),
+                ],
+                if (_snapshot.categories.isNotEmpty ||
+                    _hasUncachedCategories) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s8),
+                  // **The one bar whose selection is not simply a value**,
+                  // because "Other" is a *mode* - products naming a category
+                  // this device does not hold - and is tracked separately from
+                  // `_categoryId` rather than as a sentinel ID, since a real
+                  // category could legitimately be named anything. The sentinel
+                  // lives here, at the one call site that has the problem,
+                  // instead of in the component.
+                  FilterChipBar<String>(
+                    semanticLabel: 'Narrow the products by category',
+                    selected: _uncachedCategoriesOnly
+                        ? _uncachedSentinel
+                        : _categoryId,
+                    onSelected: (value) => value == _uncachedSentinel
+                        ? _selectCategory(uncachedOnly: true)
+                        : _selectCategory(categoryId: value),
+                    options: <FilterChipOption<String>>[
+                      const FilterChipOption<String>(
+                        key: ValueKey('checkout-category-all'),
+                        value: null,
+                        label: 'All',
+                      ),
+                      for (final category in _snapshot.categories)
+                        FilterChipOption<String>(
+                          key: ValueKey('checkout-category-${category.id}'),
+                          value: category.id,
+                          label: category.name,
+                        ),
+                      if (_hasUncachedCategories)
+                        const FilterChipOption<String>(
+                          key: ValueKey('checkout-category-other'),
+                          value: _uncachedSentinel,
+                          label: 'Other',
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The products themselves, and the three answers when there are none to draw.
+  Widget _productGrid(
+    BuildContext context,
+    AppTokens tokens,
+    String currency, {
+    required bool dense,
+  }) {
     final quiet = tokens.typography.caption.copyWith(
       color: tokens.colors.text.tertiary,
     );
@@ -914,103 +1115,11 @@ final class _CartEditorState extends State<_CartEditor> {
         ? matches.sublist(0, maximumRenderedCheckoutProducts)
         : matches;
     return ListView(
-      padding: EdgeInsets.all(AppScaffold.horizontalInset(tokens.spacing)),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppScaffold.horizontalInset(tokens.spacing),
+        vertical: tokens.spacing.s12,
+      ),
       children: <Widget>[
-        // **A section head is `title.md`**, which `design.md` **v0.6** settled on
-        // 2026-08-16 by moving the row rather than the eleven screens: §2.2 used
-        // to give a section head `title.lg`, which is also `PageHeader`'s screen
-        // title at §4.1's `compact` band, so a phone got two headings of equal
-        // weight and §7's "Title appears once" had nothing to stand on. It was
-        // `titleSmall` here, which is Material's scale and not one of §2.2's.
-        Text(
-          'Products',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        // Quietened rather than deleted. It is true, and a cashier pricing from
-        // a stale device needs it - but it is standing context, not the thing
-        // being looked at, so it no longer competes with the products for
-        // attention the way full-weight body text did.
-        Text(
-          key: const ValueKey('checkout-catalog-freshness'),
-          'Prices and stock come from this device, last synced '
-          '${_instant(_snapshot.refreshedAt)}. A sale is never blocked by a '
-          'stock count.',
-          style: quiet,
-        ),
-        if (!_snapshot.complete)
-          Text(
-            key: const ValueKey('checkout-catalog-partial'),
-            'This device holds only part of the product list for this business, '
-            'so a product may be missing from it.',
-            style: quiet,
-          ),
-        SizedBox(height: tokens.spacing.s8),
-        // §5.2's field, and the last two call sites of §11 step 3's sweep. The
-        // leading glyph is the "optional in the strong sense" case that section
-        // describes: a magnifier says *this one is searched*, which the label
-        // cannot say faster, and the till is where a cashier is not reading.
-        AppTextField(
-          key: const ValueKey('checkout-search'),
-          label: 'Search by name or code',
-          leading: Icons.search,
-          controller: _search,
-          textInputAction: TextInputAction.done,
-          onChanged: (_) => setState(() => _codeNotice = null),
-          onSubmitted: (_) => _submitSearch(),
-          helper: 'Scan or enter a code and press enter to add it.',
-        ),
-        // **The eighth notice surface `AppNotice` has been waiting for.** All
-        // three sentences `_submitSearch` writes here are the same outcome -
-        // nothing was added - so this is one `refused`, not a status picked per
-        // branch. It was a bare `Text`, in the position a confirmation would
-        // also have taken.
-        if (_codeNotice case final notice?) ...[
-          SizedBox(height: tokens.spacing.s8),
-          Callout(
-            key: const ValueKey('checkout-code-notice'),
-            status: notice.status,
-            message: notice.message,
-          ),
-        ],
-        if (_snapshot.categories.isNotEmpty || _hasUncachedCategories) ...[
-          SizedBox(height: tokens.spacing.s8),
-          // **The one bar whose selection is not simply a value**, because
-          // "Other" is a *mode* - products naming a category this device does not
-          // hold - and is tracked separately from `_categoryId` rather than as a
-          // sentinel ID, since a real category could legitimately be named
-          // anything. The sentinel lives here, at the one call site that has the
-          // problem, instead of in the component.
-          FilterChipBar<String>(
-            semanticLabel: 'Narrow the products by category',
-            selected: _uncachedCategoriesOnly ? _uncachedSentinel : _categoryId,
-            onSelected: (value) => value == _uncachedSentinel
-                ? _selectCategory(uncachedOnly: true)
-                : _selectCategory(categoryId: value),
-            options: <FilterChipOption<String>>[
-              const FilterChipOption<String>(
-                key: ValueKey('checkout-category-all'),
-                value: null,
-                label: 'All',
-              ),
-              for (final category in _snapshot.categories)
-                FilterChipOption<String>(
-                  key: ValueKey('checkout-category-${category.id}'),
-                  value: category.id,
-                  label: category.name,
-                ),
-              if (_hasUncachedCategories)
-                const FilterChipOption<String>(
-                  key: ValueKey('checkout-category-other'),
-                  value: _uncachedSentinel,
-                  label: 'Other',
-                ),
-            ],
-          ),
-        ],
-        SizedBox(height: tokens.spacing.s8),
         // **Two full-page-ish states that stay prose, deliberately.** §5.1 gives
         // `EmptyState` a row and §5.2 specifies it nowhere, and step 9 already
         // took this decision once for screen 08: giving one of the three missing
@@ -1031,8 +1140,8 @@ final class _CartEditorState extends State<_CartEditor> {
             'whole list.',
             style: body,
           )
-        else ...[
-          if (matches.length > visible.length) ...[
+        else ...<Widget>[
+          if (matches.length > visible.length) ...<Widget>[
             Text(
               key: const ValueKey('checkout-catalog-truncated'),
               'Showing ${visible.length} of ${matches.length} matching '
@@ -1052,23 +1161,37 @@ final class _CartEditorState extends State<_CartEditor> {
               // An extent rather than a column count, so one grid serves a phone
               // and a till screen without a second breakpoint deciding columns.
               //
-              // **The extent and the height are this component's own and are not
-              // §2.3's to supply.** A tile is not a spacing, a radius or a size
-              // token - `design.md` states no product-tile geometry anywhere -
-              // and 230 x 116 is what this grid already used. The two *gaps* are
-              // §2.3's, and were 8 by coincidence rather than by reference.
+              // **The extent and the two heights are this component's own and
+              // are not §2.3's to supply.** A tile is not a spacing, a radius or
+              // a size token - no source this app has stated any product-tile
+              // geometry - and the reasoning behind each figure is on the
+              // constant. The two *gaps* are §2.3's.
               maxCrossAxisExtent: _productTileExtent,
-              mainAxisExtent: _productTileHeight,
+              mainAxisExtent: dense
+                  ? _wideProductTileHeight
+                  : _compactProductTileHeight,
               crossAxisSpacing: tokens.spacing.s8,
               mainAxisSpacing: tokens.spacing.s8,
             ),
             itemCount: visible.length,
             itemBuilder: (context, index) {
               final product = visible[index];
+              final minor = checkoutMinorUnitsFromMajor(product.price);
               return _ProductTile(
                 key: ValueKey('checkout-product-${product.id}'),
                 product: product,
-                detail: _productDetail(product, currency),
+                // The panel words both figures, so one place decides how a
+                // cached number is stated - the same reason the single `detail`
+                // sentence this replaced was worded here. They are two strings
+                // now because the design sets them in two roles: money is
+                // `mono` in `text.money`, and the count is a caption.
+                price: minor == null
+                    ? 'Price unusable'
+                    : '$currency ${_money(minor)}',
+                priceUnusable: minor == null,
+                stock: '${product.quantity} in stock',
+                quantityInCart: _quantities[product.id] ?? 0,
+                dense: dense,
                 onTap: () => _add(product),
               );
             },
@@ -1077,14 +1200,6 @@ final class _CartEditorState extends State<_CartEditor> {
         SizedBox(height: tokens.spacing.s20),
       ],
     );
-  }
-
-  String _productDetail(TenantProduct product, String currency) {
-    final minor = checkoutMinorUnitsFromMajor(product.price);
-    final price = minor == null
-        ? 'Price unusable'
-        : '$currency ${_money(minor)}';
-    return '$price, ${product.quantity} in stock';
   }
 
   List<Widget> _saleSection(
@@ -1320,27 +1435,66 @@ final class _CartEditorState extends State<_CartEditor> {
   }
 }
 
-/// One sellable product in the grid.
+//// One sellable product in the grid.
 ///
 /// **A depleted product is marked and stays sellable.** The panel's own scope
 /// decision is that the cached figure never blocks a sale - it is what this
 /// device last saw, not what the shop holds - so this changes what a cashier
 /// can see at a glance and never what they can ring up. It is marked with a
-/// word and an icon rather than by colour alone, because colour alone is not
+/// glyph and a figure rather than by colour alone, because colour alone is not
 /// readable to everyone and does not survive a photocopied training sheet.
+///
+/// **Two compositions, chosen by §4.1's band, because the two served designs
+/// are two different tiles rather than one tile at two widths.** ST-035's till
+/// card is dense text - name, code, then price and the cached figure on one row
+/// - and carries no picture at all, because on that screen the cart is already
+/// beside the grid and the grid's job is to fit as many products as it can. The
+/// recovered mobile browse render leads with a picture band and drops the code,
+/// because on a phone the grid is the whole screen and a thumb is aiming at it.
+///
+/// **The count badge is compact-only, and that is the same argument.** It says
+/// how many of this product are already in the sale, which on a till screen the
+/// cart pane says better and in full. On a phone the cart is behind a tap, so
+/// the tile is the only place that fact can be.
 final class _ProductTile extends StatelessWidget {
   const _ProductTile({
     super.key,
     required this.product,
-    required this.detail,
+    required this.price,
+    required this.stock,
+    required this.priceUnusable,
+    required this.quantityInCart,
+    required this.dense,
     required this.onTap,
   });
 
   final TenantProduct product;
 
-  /// The price-and-stock sentence, worded by the panel so that one place
-  /// decides how a cached figure is stated.
-  final String detail;
+  /// The money, worded by the panel so that one place decides how a cached
+  /// figure is stated. `Price unusable` where this till cannot record it.
+  final String price;
+
+  /// The cached stock figure, stated verbatim and never rounded to a word.
+  ///
+  /// **`-3 in stock` rather than `Out of stock`, which is where this diverges
+  /// from both served designs.** They write the state; this writes the figure,
+  /// because the figure is the thing a cashier is checking and because a cached
+  /// count in this app can be *negative* - Firestore Rules permit signed stock
+  /// deliberately - and no word carries that. `0 in stock` says what `Out of
+  /// stock` says; `-3 in stock` says something it cannot.
+  final String stock;
+
+  /// Whether [price] is a refusal rather than an amount.
+  ///
+  /// [AppTextRoles.money] is for money. A price this till cannot record
+  /// exactly is not an amount, so it takes §2.1's `problem` instead.
+  final bool priceUnusable;
+
+  /// How many of this product the sale already holds. Zero for none.
+  final int quantityInCart;
+
+  /// Whether this is the till-screen card rather than the phone one.
+  final bool dense;
 
   final VoidCallback onTap;
 
@@ -1349,9 +1503,20 @@ final class _ProductTile extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final depleted = product.quantity <= 0;
     final problem = tokens.colors.status.problem;
-    // §2.3's row for "cards, rows, sheets". It was 14, which is not on §2.3's
-    // radius scale at all - the nearest named value is `radius.md`.
+    // §2.3's row for "cards, rows, sheets".
     final radius = BorderRadius.circular(tokens.radius.md);
+    // **A tile already in the sale is outlined in the action colour**, at the
+    // same one-pixel width every other border in this app is drawn at. Both
+    // served designs draw two; a second border width is a value §2.3 does not
+    // have, and the badge beside it carries the same fact as a figure.
+    final Color border;
+    if (depleted) {
+      border = problem.border;
+    } else if (quantityInCart > 0 && !dense) {
+      border = tokens.colors.action.primary.container;
+    } else {
+      border = tokens.colors.surface.borderSubtle;
+    }
     return PressSurface(
       // §2.4's press, and §5.1's own replacement for the `InkWell` this used to
       // be. The ripple was already dead at the theme since step 2; what was
@@ -1367,86 +1532,182 @@ final class _ProductTile extends StatelessWidget {
           color: tokens.colors.surface.raised,
           borderRadius: radius,
           // **A depleted tile keeps its red edge and never relies on it.** §9
-          // forbids status by hue alone, and the word and the glyph below are
+          // forbids status by hue alone, and the glyph and the figure below are
           // what carry it; the border is the same signal drawn again.
-          border: Border.all(
-            color: depleted
-                ? problem.border
-                : tokens.colors.surface.borderSubtle,
-          ),
+          border: Border.all(color: border),
         ),
-        child: Padding(
-          padding: EdgeInsets.all(tokens.spacing.s8),
-          // The picture and the name share a row; the price and stock run the
-          // full width beneath them. Beside the thumbnail there was room for
-          // "KES 65.00, 40 i..." and no more - and the figure that got cut was
-          // the stock, which is the one a cashier is checking.
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ProductThumbnail(product: product),
-                  SizedBox(width: tokens.spacing.s8),
-                  Expanded(
-                    child: Text(
-                      product.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      // §2.2's `title.md`: "card title, **record name**". It
-                      // was `titleSmall` with a hand-applied `w600`, which is
-                      // Material's scale plus a weight nobody wrote down.
-                      style: tokens.typography.titleMedium.copyWith(
-                        color: tokens.colors.text.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Text(
-                key: ValueKey('checkout-product-stock-${product.id}'),
-                detail,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: tokens.typography.caption.copyWith(
-                  color: tokens.colors.text.tertiary,
-                ),
-              ),
-              if (depleted)
-                Row(
-                  key: ValueKey('checkout-product-depleted-${product.id}'),
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      AppStatus.problem.defaultIcon,
-                      size: StatusBadge.iconSize,
-                      color: problem.fg,
-                    ),
-                    SizedBox(width: tokens.spacing.s4),
-                    Flexible(
-                      child: Text(
-                        'Out of stock',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: tokens.typography.labelMedium.copyWith(
-                          color: problem.fg,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
+        // The band bleeds to the card's own corners rather than sitting inside
+        // the padding, which is what the browse render draws and what stops a
+        // 96-pixel rectangle looking like a second, smaller card.
+        child: ClipRRect(
+          borderRadius: radius,
+          child: dense
+              ? _denseBody(tokens, problem)
+              : _bandedBody(tokens, problem),
         ),
       ),
     );
   }
+
+  /// ST-035's till card: no picture, and the code a scanner reads is on it.
+  ///
+  /// **`MainAxisSize.max`, which is what makes a grid of these a grid.**
+  /// `PressSurface.fillHeight` offers the whole cell but the constraints it
+  /// passes on are loose, so a `min` column shrink-wrapped its own text and sat
+  /// centred in the cell - a row of tiles with a one-line name beside a two-line
+  /// one drew two different card heights with ragged gaps between the rows. The
+  /// `Spacer` below was inert for the same reason: a flex child of a `min`
+  /// column gets no space to take.
+  ///
+  /// **The price and the cached figure take two lines here, where ST-035 puts
+  /// them on one.** That row works in the served design because its stock label
+  /// is set at ten pixels; §2.1 makes `caption` at twelve the floor for anything
+  /// a person is expected to read, and this app has no role below it. Two
+  /// figures at `mono` 14 and `caption` 12 do not both fit the 158 logical
+  /// pixels a three-column grid leaves at 1024 - the first attempt drew
+  /// `KES 145.…` - and an ellipsised price on a till is the one thing this
+  /// screen may not do. So they stack, which also makes the two tiles one
+  /// grammar: name, then money, then the figure.
+  Widget _denseBody(AppTokens tokens, AppStatusRole problem) => Padding(
+    padding: EdgeInsets.all(tokens.spacing.s8),
+    child: Column(
+      mainAxisSize: MainAxisSize.max,
+      // `stretch`, so the card fills the grid cell it was given rather than
+      // shrink-wrapping its longest line: `PressSurface.fillWidth` offers the
+      // whole cell but passes loose constraints on, so a `start` column drew
+      // four cards of four different widths with ragged gutters between them.
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _name(tokens),
+        // **§2.2's `mono` row - "record IDs and SKUs, strings a person compares
+        // character by character".** ST-035 puts the product's code under its
+        // name in `data-mono`, and this is the one surface where a cashier
+        // reads a code off the screen to check it against the one in their
+        // hand.
+        if (product.sku.isNotEmpty)
+          Text(
+            key: ValueKey('checkout-product-code-${product.id}'),
+            product.sku,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.typography.mono.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
+          ),
+        const Spacer(),
+        SizedBox(height: tokens.spacing.s4),
+        _price(tokens),
+        _stock(tokens, problem),
+      ],
+    ),
+  );
+
+  /// The browse render's phone card: a picture band, then the same facts.
+  ///
+  /// **The name is at the top and the money is at the bottom**, which is the
+  /// render's own `justify-between` and is what lets a cashier read down the
+  /// price column of a grid whose names are one line and two. See [_denseBody]
+  /// for why the columns are `max` rather than `min`.
+  Widget _bandedBody(AppTokens tokens, AppStatusRole problem) => Column(
+    mainAxisSize: MainAxisSize.max,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      // **The badge is Material's, painted from §2.1**, which is the decision
+      // `_CartBar` already took for the same figure: a count of items in a cart
+      // is not a problem and must not be drawn in the palette's critical
+      // colour.
+      //
+      // Inset by `space.4` on both axes rather than left on Material's default,
+      // which hangs the label over the corner - and this card clips to its own
+      // radius, so a hanging badge is a cut badge.
+      Badge(
+        key: ValueKey('checkout-product-count-${product.id}'),
+        isLabelVisible: quantityInCart > 0,
+        alignment: AlignmentDirectional.topEnd,
+        offset: Offset(-tokens.spacing.s4, tokens.spacing.s4),
+        backgroundColor: tokens.colors.action.primary.container,
+        textColor: tokens.colors.action.primary.label,
+        label: Text('$quantityInCart'),
+        child: _ProductThumbnail(product: product),
+      ),
+      Expanded(
+        child: Padding(
+          padding: EdgeInsets.all(tokens.spacing.s8),
+          child: Column(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _name(tokens),
+              const Spacer(),
+              SizedBox(height: tokens.spacing.s4),
+              _price(tokens),
+              _stock(tokens, problem),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+
+  /// §2.2's `title.md`: "card title, **record name**".
+  Widget _name(AppTokens tokens) => Text(
+    product.name,
+    maxLines: 2,
+    overflow: TextOverflow.ellipsis,
+    style: tokens.typography.titleMedium.copyWith(
+      color: tokens.colors.text.primary,
+    ),
+  );
+
+  /// The money, in the pair `docs/stitch/OPEN_QUESTIONS.md` decision 23 chose
+  /// for this surface: [AppTypeRoles.mono] and [AppTextRoles.money].
+  Widget _price(AppTokens tokens) => Text(
+    key: ValueKey('checkout-product-price-${product.id}'),
+    price,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: tokens.typography.mono.copyWith(
+      color: priceUnusable
+          ? tokens.colors.status.problem.fg
+          : tokens.colors.text.money,
+    ),
+  );
+
+  /// The cached figure, with §2.1's `problem` glyph on it where it is spent.
+  ///
+  /// **No coloured dot for the ordinary case.** Both served designs put a
+  /// six-pixel disc beside the figure; six is a size neither §2.3 nor Profound
+  /// Verdant has, and a dot that is present whatever the state signifies
+  /// nothing. The glyph slot carries the one case that means something.
+  Widget _stock(AppTokens tokens, AppStatusRole problem) {
+    final depleted = product.quantity <= 0;
+    final figure = Text(
+      key: ValueKey('checkout-product-stock-${product.id}'),
+      stock,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: tokens.typography.caption.copyWith(
+        color: depleted ? problem.fg : tokens.colors.text.tertiary,
+      ),
+    );
+    if (!depleted) return figure;
+    return Row(
+      key: ValueKey('checkout-product-depleted-${product.id}'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          AppStatus.problem.defaultIcon,
+          size: StatusBadge.iconSize,
+          color: problem.fg,
+        ),
+        SizedBox(width: tokens.spacing.s4),
+        Flexible(child: figure),
+      ],
+    );
+  }
 }
 
-/// The picture on a product tile, or a stand-in for it.
+/// The picture band across the top of a compact product tile, or a stand-in.
 ///
 /// **Nothing in this app can put a picture here yet, and that is deliberate
 /// rather than missing.** `TenantProduct` reads an optional HTTPS `image`, so a
@@ -1457,6 +1718,11 @@ final class _ProductTile extends StatelessWidget {
 /// deliberate mark rather than as a broken-image glyph: an initial on the
 /// surface's own tint, which is what the record cards elsewhere do for a person
 /// with no photograph.
+///
+/// **It is a full-width band as of Phase 03, where it was a 52-pixel square.**
+/// The browse render's `h-24` picture area is the first thing on its card, and
+/// a square beside a name is the arrangement that render replaced. It has one
+/// caller: the compact tile. The till card has no picture at all.
 final class _ProductThumbnail extends StatelessWidget {
   const _ProductThumbnail({required this.product});
 
@@ -1465,40 +1731,37 @@ final class _ProductThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = product.imageUrl;
-    final tokens = AppTokens.componentOf(context);
-    return ClipRRect(
-      // §2.3's smallest named radius. It was 10, which is not on the scale.
-      borderRadius: BorderRadius.circular(tokens.radius.sm),
-      child: SizedBox(
-        width: _thumbnailSize,
-        height: _thumbnailSize,
-        child: url == null
-            ? _placeholder(context)
-            : Image.network(
-                url.toString(),
-                fit: BoxFit.cover,
-                // A product whose picture cannot be fetched still has to be
-                // sellable, so a failed load falls back rather than throwing a
-                // broken glyph into the middle of the till.
-                errorBuilder: (context, _, _) => _placeholder(context),
-                loadingBuilder: (context, child, progress) =>
-                    progress == null ? child : _placeholder(context),
-              ),
-      ),
+    return SizedBox(
+      height: _productThumbnailBandHeight,
+      width: double.infinity,
+      child: url == null
+          ? _placeholder(context)
+          : Image.network(
+              url.toString(),
+              fit: BoxFit.cover,
+              // A product whose picture cannot be fetched still has to be
+              // sellable, so a failed load falls back rather than throwing a
+              // broken glyph into the middle of the till.
+              errorBuilder: (context, _, _) => _placeholder(context),
+              loadingBuilder: (context, child, progress) =>
+                  progress == null ? child : _placeholder(context),
+            ),
     );
   }
 
   Widget _placeholder(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     // §2.1's `overlay` is the step above a card, which is what a stand-in for a
-    // photograph on a raised tile should be. It was `primaryContainer`, which
-    // is Material's own pairing and had the initial in `onPrimaryContainer`.
+    // photograph on a raised tile should be.
     return Container(
       color: tokens.colors.surface.overlay,
       alignment: Alignment.center,
       child: Text(
         TenantInitialsAvatar.initialsOf(product.name),
-        style: tokens.typography.titleMedium.copyWith(
+        // A band four times the height of the square it replaced holds a
+        // heading rather than a card title; §2.2's `title.lg` is the section
+        // role and the largest one that is not a screen title.
+        style: tokens.typography.titleLarge.copyWith(
           color: tokens.colors.text.secondary,
         ),
       ),

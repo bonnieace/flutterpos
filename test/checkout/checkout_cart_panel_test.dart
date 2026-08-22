@@ -1242,10 +1242,14 @@ void main() {
         findsOne,
       );
       // The figure itself is still stated verbatim beside the mark.
-      expect(
-        _text(tester, 'checkout-product-stock-oversold'),
-        'KES 5.00, -3 in stock',
-      );
+      //
+      // **The price left this string in Phase 03 and did not leave the tile.**
+      // `OPEN_QUESTIONS.md` decision 23 sets money on this surface in `mono` and
+      // `text.money`, which cannot be done to half of a sentence, so the tile
+      // draws two texts where it drew one. `checkout-product-price-oversold` is
+      // the other half and is asserted below.
+      expect(_text(tester, 'checkout-product-stock-oversold'), '-3 in stock');
+      expect(_text(tester, 'checkout-product-price-oversold'), 'KES 5.00');
     });
 
     testWidgets('a stocked product carries no such mark', (tester) async {
@@ -1264,10 +1268,8 @@ void main() {
     ) async {
       await _pump(tester, sessions, catalog, drafts);
 
-      expect(
-        _text(tester, 'checkout-product-stock-product-b'),
-        'KES 7.00, 12 in stock',
-      );
+      expect(_text(tester, 'checkout-product-stock-product-b'), '12 in stock');
+      expect(_text(tester, 'checkout-product-price-product-b'), 'KES 7.00');
       expect(
         _text(tester, 'checkout-catalog-freshness'),
         'Prices and stock come from this device, last synced 2026-07-31 '
@@ -1311,10 +1313,7 @@ void main() {
       );
       await _pump(tester, sessions, catalog, drafts);
 
-      expect(
-        _text(tester, 'checkout-product-stock-oversold'),
-        'KES 5.00, -3 in stock',
-      );
+      expect(_text(tester, 'checkout-product-stock-oversold'), '-3 in stock');
 
       await _tap(tester, 'checkout-product-oversold');
       await _tap(tester, 'checkout-tender-cash');

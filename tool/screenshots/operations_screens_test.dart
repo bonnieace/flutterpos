@@ -96,6 +96,31 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // **The browse screen with a sale already going, which nothing photographed
+  // until Phase 03.** `15` opens the sheet on a phone, so the compact tile's
+  // count badge and its action-coloured border - the two things that say *this
+  // product is already in the sale* on the one layout where the cart is behind
+  // a tap - appeared in none of the 405 images. Compact widths only: on a till
+  // screen the cart pane states the same fact in full, and the tile does not
+  // draw a badge at all.
+  screenshotCase(
+    '14b-new-sale-browsing-with-a-cart',
+    build: () => inSession(
+      TenantCheckoutScreen(cache: FakeCatalogSource(), drafts: FakeDraftSink()),
+      controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+    ),
+    afterPump: (tester) async {
+      for (final id in const <String>['pd-bread-white', 'pd-bread-white']) {
+        final tile = find.byKey(ValueKey('checkout-product-$id'));
+        await tester.ensureVisible(tile);
+        await tester.pumpAndSettle();
+        await tester.tap(tile);
+        await tester.pumpAndSettle();
+      }
+    },
+    viewports: const <ScreenshotViewport>[compactWideViewport, mobileViewport],
+  );
+
   // The state this composition root's wiring made reachable: the sale is
   // durable and the receipt is not on paper, said as two notices because two
   // different things happened.
