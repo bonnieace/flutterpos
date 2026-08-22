@@ -100,7 +100,7 @@ final AppStatusRoles _status = _palette.colors.status;
 /// left in the app.
 OutlineInputBorder _fieldBorder(Color colour, {double width = 1}) =>
     OutlineInputBorder(
-      borderRadius: BorderRadius.circular(_palette.radius.pill),
+      borderRadius: BorderRadius.circular(_palette.radius.md),
       borderSide: BorderSide(color: colour, width: width),
     );
 
@@ -298,7 +298,7 @@ final ThemeData spiritTheme = ThemeData(
     elevation: 0,
     margin: const EdgeInsets.symmetric(vertical: 6),
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(_palette.radius.md),
       side: BorderSide(color: _surface.borderSubtle),
     ),
   ),
@@ -329,7 +329,9 @@ final ThemeData spiritTheme = ThemeData(
       foregroundColor: _action.primary.label,
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      shape: const StadiumBorder(),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_palette.radius.md),
+      ),
     ).copyWith(overlayColor: _pressOverlay(_action.primary)),
   ),
   elevatedButtonTheme: ElevatedButtonThemeData(
@@ -339,7 +341,9 @@ final ThemeData spiritTheme = ThemeData(
       elevation: 0,
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      shape: const StadiumBorder(),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_palette.radius.md),
+      ),
     ).copyWith(overlayColor: _pressOverlay(_action.primary)),
   ),
   outlinedButtonTheme: OutlinedButtonThemeData(
@@ -348,7 +352,9 @@ final ThemeData spiritTheme = ThemeData(
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 20),
       side: BorderSide(color: _action.secondary.border!),
-      shape: const StadiumBorder(),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_palette.radius.md),
+      ),
     ).copyWith(overlayColor: _pressOverlay(_action.secondary)),
   ),
   textButtonTheme: TextButtonThemeData(
@@ -387,20 +393,26 @@ final ThemeData spiritTheme = ThemeData(
     labelStyle: TextStyle(color: _text.secondary),
     secondaryLabelStyle: TextStyle(color: _action.primary.container),
     checkmarkColor: _action.primary.container,
-    shape: const StadiumBorder(),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(_palette.radius.sm),
+    ),
   ),
   dialogTheme: DialogThemeData(
     backgroundColor: _surface.raised,
     surfaceTintColor: Colors.transparent,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(_palette.radius.lg),
+    ),
   ),
   // Named now rather than by the till chunk that needs it, so the cart sheet
   // and every other sheet cannot disagree about what a sheet looks like.
   bottomSheetTheme: BottomSheetThemeData(
     backgroundColor: _surface.raised,
     surfaceTintColor: Colors.transparent,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(_palette.radius.lg),
+      ),
     ),
   ),
   dividerTheme: DividerThemeData(
@@ -423,7 +435,9 @@ final ThemeData spiritTheme = ThemeData(
     backgroundColor: _surface.field,
     contentTextStyle: TextStyle(color: _text.primary),
     behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(_palette.radius.md),
+    ),
   ),
   // **Step 9 pointed all three of these at §2.1 and none of them moved much**,
   // which is the point: a ticked box is the primary action tier's container with

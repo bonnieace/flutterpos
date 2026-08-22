@@ -295,8 +295,24 @@ change. Suggested sequence, each step its own reviewable commit:
    so they check the wiring rather than the hues, and a future palette change will not break them. The
    pattern that fixed them is below, and **steps 4 and 5 will need it again** — radius and type values
    are pinned in tests exactly the way colours were.
-4. **`AppRadii` values** (decision 19). Independent of colour; separate diff so roundness changes are
-   not confused with palette changes.
+4. ~~**`AppRadii` values** (decision 19).~~ **DONE 2026-08-22, and the decision had to be corrected
+   first.** Decision 19 was read out of `DESIGN.md`'s frontmatter, the way the palette was. That works
+   for colour, where the frontmatter and the served screens agree. For radii they do **not**: the served
+   config is `DEFAULT` 2, `lg` 4, `xl` 8, `full` 12 — four entries, and **no pill**. `rounded-full` is
+   used 484 times and resolves to 12px, so nothing wide is a stadium, and the rendered sign-in screen
+   has square-cornered buttons and inputs. The frontmatter's `full: 9999px` and the prose's
+   "Pill-shaped" search bar are both contradicted by the artifact.
+
+   So the values came from the design's own CSS instead: `sm` → 2 (chips and checkbox carry bare
+   `rounded`), `md` → 8 (`.btn-primary`, `input`, and cards all read `borderRadius.xl`), `lg` → 12.
+   Buttons, input wells and chips moved **off** `pill` onto those roles, which is where the visible
+   change is. `pill` stays at 999 for the things that are round on purpose — sheet handle, stepper,
+   sync badge, keypad — and is now recorded as an app value rather than a design one.
+
+   332 of 359 renders changed. Worth noting against the palette step: on the sale screen the palette
+   moved 98.7% of pixels by a mean of 10/255, and the radii moved **0.7% by a mean of 45**. Far fewer
+   pixels, much further — and the radii read as the bigger change, because a corner is structural.
+   **Pixel count is a poor proxy for how large a change looks.**
 5. **Font assets and `AppTypeRoles` families** (decision 20). A `pubspec.yaml` change, integration
    owner only.
 6. ~~**The responsive contract** (decision 21).~~ **DONE 2026-08-22, and it turned out to be half the

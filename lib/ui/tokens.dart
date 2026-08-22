@@ -1188,16 +1188,47 @@ final class AppRadii {
 
   static const AppRadii scale = AppRadii();
 
-  /// Chips, badges, inputs.
-  double get sm => 8;
+  /// Chips, badges, small containers. **2 since 2026-08-22**, was 8.
+  ///
+  /// The design's status chips carry its bare `rounded` - `borderRadius.DEFAULT`,
+  /// `0.125rem` - in 78 of the 82 places one appears, and its checkbox reads the
+  /// same token. Nearly square, which is what "disciplined" means in the
+  /// Profound Verdant shapes section.
+  double get sm => 2;
 
-  /// Cards, rows, sheets.
-  double get md => 12;
+  /// Cards, rows, sheets, **buttons and input wells**. **8 since 2026-08-22**,
+  /// was 12.
+  ///
+  /// The one radius the design measures for anything substantial. Its cards are
+  /// `rounded-xl`, and its own CSS gives `.btn-primary` and
+  /// `input[type=...]` `border-radius: theme('borderRadius.xl')` - all three the
+  /// same `0.5rem`. Buttons and fields moved onto this role from [pill] in the
+  /// same change, which is where most of the visible difference is.
+  double get md => 8;
 
-  /// Dialogs, bottom sheets.
-  double get lg => 20;
+  /// Dialogs, bottom sheets. **12 since 2026-08-22**, was 20.
+  ///
+  /// The largest radius Profound Verdant defines - its `full`, `0.75rem`. Note
+  /// that is `full`, not a pill: at 12 a wide surface is a rounded rectangle and
+  /// only something 24 or smaller comes out circular.
+  double get lg => 12;
 
-  /// Buttons only.
+  /// Genuine capsules and circles: the sheet handle, the quantity stepper, the
+  /// sync badge, the keypad keys.
+  ///
+  /// **Not buttons or fields any more, and no longer a design-system value.**
+  /// Profound Verdant has no pill: what its config calls `full` is `0.75rem`,
+  /// and the rendered screens show square-cornered buttons and inputs
+  /// throughout. Its prose claims a "Pill-shaped" search bar and is contradicted
+  /// by its own render, the same way its `#0A1A14` is contradicted by its own
+  /// frontmatter.
+  ///
+  /// **This stays at 999 because the things still reading it are round on
+  /// purpose**, and Flutter clamps a radius to half the shorter side - so the
+  /// 32x4 sheet handle is a capsule at any value above 2, and the stepper's
+  /// controls are circles. Where the design states a shape, the shape is a role
+  /// above. Where it states none, this is the app's own and is recorded as such
+  /// in `docs/stitch/OPEN_QUESTIONS.md`.
   double get pill => 999;
 }
 

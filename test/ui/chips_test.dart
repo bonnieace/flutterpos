@@ -134,9 +134,12 @@ void main() {
           .map((box) => box.decoration)
           .whereType<BoxDecoration>()
           .where((d) => d.borderRadius != null);
+      // `radius.sm` since 2026-08-22, reversing `design.md` v0.7's pill: the
+      // design's status chips carry its bare `rounded` in 78 of the 82 places
+      // one appears.
       expect(
         decorated.first.borderRadius,
-        BorderRadius.circular(tokens.radius.pill),
+        BorderRadius.circular(tokens.radius.sm),
       );
     });
   });

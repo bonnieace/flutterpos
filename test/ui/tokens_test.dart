@@ -545,20 +545,41 @@ void main() {
       }
     });
 
-    test('the radii are the specified four', () {
-      expect(tokens.radius.sm, 8);
-      expect(tokens.radius.md, 12);
-      expect(tokens.radius.lg, 20);
+    test('the radii are the four Profound Verdant measures', () {
+      // Repointed 2026-08-22 from §2.3's 8/12/20 to what the export renders.
+      // The design's config is `DEFAULT` 2, `lg` 4, `xl` 8, `full` 12, and its
+      // own CSS puts buttons, inputs and cards all on `xl`.
+      expect(tokens.radius.sm, 2, reason: 'chips and checkboxes: bare rounded');
+      expect(tokens.radius.md, 8, reason: 'cards, buttons, wells: xl');
+      expect(tokens.radius.lg, 12, reason: 'dialogs and sheets: full');
       expect(tokens.radius.pill, 999);
     });
 
-    test('pill is unmistakably a pill and nothing else is', () {
-      // §2.3: the shape is the signature and stays, but when everything is a
-      // pill the shape stops signifying. Chips and inputs drop to `sm`.
+    test('every radius the design states is inside its 4-8px claim', () {
+      // `DESIGN_RULES.md`: "Corners are compact (generally 4-8 px in the Stitch
+      // system)". The three surface radii bracket that, and the old scale did
+      // not - `lg` was 20.
+      expect(tokens.radius.sm, lessThan(4));
+      expect(tokens.radius.md, inInclusiveRange(4, 8));
+      expect(tokens.radius.lg, lessThanOrEqualTo(12));
+    });
+
+    test('pill is no longer a design value, and nothing large reads it', () {
+      // **Kept, but demoted.** Profound Verdant has no pill: what its config
+      // calls `full` is 12, and its rendered buttons and inputs are
+      // square-cornered. What still reads `pill` is round on purpose - the
+      // 32x4 sheet handle, the stepper's controls, the sync badge - and Flutter
+      // clamps a radius to half the shorter side, so those stay capsules at any
+      // value above about 2.
       expect(
         tokens.radius.pill,
         greaterThan(tokens.radius.lg * 10),
         reason: 'pill must be a stadium, not a large radius',
+      );
+      expect(
+        tokens.radius.md,
+        lessThan(tokens.radius.pill),
+        reason: 'a button is a corner now, not a stadium',
       );
     });
   });
@@ -1125,26 +1146,31 @@ void main() {
       // asserted as divergences on purpose**: when the step that closes one
       // lands, this test fails and the row moves into the agreement test above
       // in the same change.
+      // **All three rows closed on 2026-08-22, so they are agreements now.**
+      // This test spent months asserting divergences on purpose, so the step
+      // that closed one would fail here rather than pass quietly. That is what
+      // happened: the radius repoint made the card row an equality and this
+      // test failed, in the same change.
       expect(
-        surface.sunken,
-        isNot(spiritTheme.inputDecorationTheme.fillColor),
-        reason: 'the input well is still bgMid; §2.1 wants surface.sunken',
+        spiritTheme.inputDecorationTheme.fillColor,
+        registered.colors.surface.field,
+        reason: 'the well is a role, not the bgMid literal it used to be',
       );
       final cardRadius =
           (spiritTheme.cardTheme.shape! as RoundedRectangleBorder).borderRadius
               as BorderRadius;
       expect(
+        cardRadius.topLeft.x,
         registered.radius.md,
-        isNot(cardRadius.topLeft.x),
-        reason: 'cards are still 16; §2.3 wants 12',
+        reason: 'a card was 16 and is now the role, which is 8',
       );
       final inputRadius =
           (spiritTheme.inputDecorationTheme.border! as OutlineInputBorder)
               .borderRadius;
       expect(
-        registered.radius.sm,
-        isNot(inputRadius.topLeft.x),
-        reason: 'inputs are still 14; §2.3 wants 8',
+        inputRadius.topLeft.x,
+        registered.radius.md,
+        reason: 'an input was 14, then a pill, and is now the card corner',
       );
     });
 

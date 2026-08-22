@@ -193,7 +193,10 @@ final class _Chip<T> extends StatelessWidget {
       containerColor = Colors.transparent;
     }
     // §2.3's row for a control, as amended in v0.7.
-    final radius = BorderRadius.circular(tokens.radius.pill);
+    // **`radius.sm` since 2026-08-22**, reversing `design.md` v0.7's "a chip is
+    // a pill". Profound Verdant's status chips carry its bare `rounded` in 78 of
+    // the 82 places one appears, which is 2.
+    final radius = BorderRadius.circular(tokens.radius.sm);
 
     return Semantics(
       container: true,

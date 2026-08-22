@@ -217,7 +217,11 @@ final class AppButton extends StatelessWidget {
 
     final hasIcon = icon != null;
     final padding = size.horizontalPadding(tokens.spacing, hasIcon: hasIcon);
-    final radius = BorderRadius.circular(tokens.radius.pill);
+    // **`radius.md`, not `radius.pill`, since 2026-08-22.** Profound Verdant's
+    // own CSS gives `.btn-primary` `border-radius: theme('borderRadius.xl')`,
+    // and its rendered buttons are square-cornered. Its prose calls one
+    // element pill-shaped and its render disagrees; the render wins.
+    final radius = BorderRadius.circular(tokens.radius.md);
 
     final labelStyle = tokens.typography.labelLarge.copyWith(color: labelColor);
 

@@ -187,7 +187,7 @@ descriptions are kept below as the rationale for each decision. The theme repoin
 | 16 | No hover or pressed value | `action.primary` hover is `primary-fixed` `#6BFF8F`; pressed is `primary-container` `#22C55E` |
 | 17 | No scrim | Scrim stays `rgba(0,0,0,0.6)`. The `0.5` in the prose describes a drop shadow, not a scrim |
 | 18 | Focus ring width | Stays **2px** wide at 2px offset; colour repoints to `primary` `#4BE277` |
-| 19 | Radius scales collide | `AppRadii` keeps its four names and repoints the values: `sm` 8→**4**, `md` 12→**6**, `lg` 20→**8**, `pill` 999→**9999**. No call site changes |
+| 19 | Radius scales collide | **Superseded 2026-08-22 — see the correction below.** `AppRadii` keeps its four names, but the values are `sm` 8→**2**, `md` 12→**8**, `lg` 20→**12**, and `pill` stays 999 while buttons, wells and chips move off it |
 | 20 | Families not bundled | **Bundle Hanken Grotesk and JetBrains Mono**, declaring only the weights the seven type roles use (400/500/600/700, mono 500). Offline-first, so bundled assets rather than a runtime fetch |
 | 21 | Sale responsive contract | Profound Verdant governs the bands. Two panes from **768** up; the desktop 3-column `Categories \| Items \| Cart` view is **deferred** and categories stay a `FilterChipBar` |
 
@@ -298,6 +298,49 @@ viewport added in the 1024-1279 range, which nothing currently covers.
 
     See `audits/2026-08-22-wave-0-foundations.md` Finding 1 for the per-band table and the original
     blast-radius analysis.
+
+### Correction to decision 19 — the radius scale, 2026-08-22
+
+**Decision 19 was taken from the wrong source and is restated here.** It read the scale out of
+`profound_verdant/DESIGN.md`'s frontmatter, the way the palette was read. For colour that was right,
+because the frontmatter and the served screens agreed. For radii they do **not** agree, and the served
+config is a different scale under the same names:
+
+| Source | Scale |
+|---|---|
+| `DESIGN.md` frontmatter | `sm` 2, `DEFAULT` 4, `md` 6, `lg` 8, `xl` 12, `full` **9999** |
+| **Served config, identical in all 76 screens** | `DEFAULT` 2, `lg` 4, `xl` 8, `full` **12** — four entries |
+| App before this change | `sm` 8, `md` 12, `lg` 20, `pill` **999** |
+
+The consequence is not a rounding difference. **The design has no pill.** `rounded-full` is used 484
+times across the export and resolves to 12px, so nothing wide is a stadium, and the rendered sign-in
+screen shows square-cornered buttons and inputs throughout. `DESIGN.md`'s prose claims a "Pill-shaped"
+search bar twice and is contradicted by its own render — the same kind of drift as `#0A1A14`, except
+that here the frontmatter is wrong too, so the served artifact is the only reliable source.
+
+What the design actually measures, from its own CSS and class usage rather than from either scale:
+
+| Element | Design value | Evidence |
+|---|---|---|
+| Buttons | **8** | `.btn-primary { border-radius: theme('borderRadius.xl') }` |
+| Input fields | **8** | `input[type=…] { border-radius: theme('borderRadius.xl') }` |
+| Cards | **8** | state panels carry `rounded-xl` |
+| Status chips | **2** | bare `rounded` in 78 of the 82 places a chip appears |
+| Checkbox | **2** | `.checkbox { border-radius: theme('borderRadius.DEFAULT') }` |
+
+So the app's roles take the values their documented jobs call for: `sm` → 2 (chips, badges), `md` → 8
+(cards, rows — and now buttons and input wells), `lg` → 12 (dialogs, bottom sheets).
+
+**`pill` is kept at 999 and is now an app value, not a design one.** What still reads it is round on
+purpose — the 32×4 sheet handle, the quantity stepper's controls, the sync badge, the keypad keys — and
+Flutter clamps a radius to half the shorter side, so those stay capsules regardless. The keypad in
+particular has no counterpart in the design at all. Where the design states a shape, the shape is now a
+role; where it states none, `pill` is the app's own and is recorded as such rather than presented as
+Profound Verdant.
+
+Effect measured: 332 of 359 renders changed. On the sale screen only **0.7%** of pixels moved, but by a
+mean of 45/255 against the palette repoint's 10 — far fewer pixels, moving much further. Pixel count is
+a poor proxy for how large a change reads, because a corner is structural and a tonal shift is not.
 
 ## Non-blocking audit limitations
 

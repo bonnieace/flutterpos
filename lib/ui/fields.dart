@@ -532,7 +532,11 @@ final class AppFieldWell extends StatelessWidget {
     // §2.3 as amended in v0.4: an input is a pill. The shape is the product
     // owner's, and the reason it is not simply `AppButton`'s row is that §2.3
     // still restricts the pill to buttons *and inputs* - a chip does not get it.
-    final radius = BorderRadius.circular(tokens.radius.pill);
+    // **`radius.md` since 2026-08-22.** The design styles its inputs with the
+    // same `borderRadius.xl` as its buttons, so a well and the button under it
+    // are the same corner. This was the pill the product owner asked for in
+    // v0.4; the redesign takes it back.
+    final radius = BorderRadius.circular(tokens.radius.md);
     final gutter = ring.width + ring.offset;
 
     Widget well = DecoratedBox(

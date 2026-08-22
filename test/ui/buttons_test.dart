@@ -374,11 +374,16 @@ void main() {
       expect(with_ - without, 18 + _tokens.spacing.s8 - _tokens.spacing.s8);
     });
 
-    testWidgets('a pill, and pills are buttons only - §2.3', (tester) async {
+    testWidgets('the corner the design measures for a button', (tester) async {
+      // **Was 'a pill, and pills are buttons only' until 2026-08-22.** Profound
+      // Verdant's own CSS gives `.btn-primary` `borderRadius.xl`, and its
+      // rendered buttons are square-cornered - so a button is `radius.md`, the
+      // same corner as the card it sits on and the field beside it. The pill it
+      // used to assert is gone from the product, not merely from this test.
       await tester.pumpWidget(_app(AppButton(label: 'Go', onPressed: () {})));
       final radius = _container(tester).borderRadius! as BorderRadius;
-      expect(radius.topLeft.x, _tokens.radius.pill);
-      expect(_tokens.radius.pill, 999);
+      expect(radius.topLeft.x, _tokens.radius.md);
+      expect(radius.topLeft.x, isNot(_tokens.radius.pill));
     });
   });
 
