@@ -46,10 +46,7 @@ final class TenantBrandingRepository extends TenantReadRepository {
 /// **What is left is what was never the title**: the slogan, which is the one
 /// branding field with nowhere else to go, and the session's own standing.
 final class TenantBrandingPanel extends StatelessWidget {
-  const TenantBrandingPanel({
-    super.key,
-    required this.branding,
-  });
+  const TenantBrandingPanel({super.key, required this.branding});
 
   /// The resolved document, or null where the business has published none.
   final TenantBranding? branding;

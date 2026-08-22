@@ -88,8 +88,7 @@ final class TenantSalesTotalsPanel extends StatefulWidget {
   State<TenantSalesTotalsPanel> createState() => _TenantSalesTotalsPanelState();
 }
 
-final class _TenantSalesTotalsPanelState
-    extends State<TenantSalesTotalsPanel> {
+final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
   late TenantSalesPeriod _period = widget.period;
   String? _soldById;
   String? _categoryId;
@@ -433,10 +432,7 @@ final class _SalesTotalsContents extends StatelessWidget {
                   ],
                   if (answer.tenderBreakdown case final breakdown?) ...[
                     SizedBox(height: tokens.spacing.s12),
-                    _TenderBreakdown(
-                      breakdown: breakdown,
-                      currency: _currency,
-                    ),
+                    _TenderBreakdown(breakdown: breakdown, currency: _currency),
                   ],
                 ],
               ),

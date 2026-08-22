@@ -252,10 +252,10 @@ final class _ReceiptLookupResult extends StatelessWidget {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: AppButton(
-                             key: ValueKey('receipt-lookup-returns-${sale.id}'),
-                             label: 'View returns',
-                             onPressed: () => onOpenReturns(sale),
-                           ),
+                      key: ValueKey('receipt-lookup-returns-${sale.id}'),
+                      label: 'View returns',
+                      onPressed: () => onOpenReturns(sale),
+                    ),
                   ),
                 ],
               ),

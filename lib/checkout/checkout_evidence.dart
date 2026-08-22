@@ -155,12 +155,9 @@ final class _CheckoutPendingEvidencePanelState
   }
 
   void _subscribe() {
-    _subscription = widget.refreshSignals?.listen(
-      (_) {
-        if (mounted) setState(() => _generation++);
-      },
-      onError: (Object _, StackTrace _) {},
-    );
+    _subscription = widget.refreshSignals?.listen((_) {
+      if (mounted) setState(() => _generation++);
+    }, onError: (Object _, StackTrace _) {});
   }
 
   @override

@@ -260,7 +260,8 @@ final class _AccountVerificationPanelState
   /// and the server answers the same delivery instead of queuing another.
   AccountVerificationIntent? _intentFor(AccountVerificationGateway gateway) {
     final existing = _intent;
-    if (existing != null && existing.uid == widget.identity.uid) return existing;
+    if (existing != null && existing.uid == widget.identity.uid)
+      return existing;
     try {
       return _intent = gateway.createIntent();
     } catch (_) {
@@ -337,7 +338,8 @@ final class _AccountVerificationPanelState
     try {
       await widget.onReload();
     } catch (error) {
-      if (!mounted || widget.identity.uid != checkedUid || !_isCurrent()) return;
+      if (!mounted || widget.identity.uid != checkedUid || !_isCurrent())
+        return;
       setState(() {
         _reloading = false;
         _safeError = accountVerificationSafeError(error);
