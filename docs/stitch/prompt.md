@@ -57,6 +57,7 @@ Branch `stitch-wave-0-tokens`, as of 2026-08-22. **Do not re-decide or redo any 
 | RBAC guards checked against `RBAC_MATRIX.md`: **all 31 role lists agree** | `test/tenancy/rbac_matrix_test.dart` |
 | Fixtures checked and clean; eight forbidden tokens scanned for | `test/dev/product_vocabulary_test.dart` |
 | The ten locations `lib/main.dart` reaches from nothing, recorded and pinned | `test/dev/reachable_lib_test.dart` |
+| Phases 01 and 02 checked structurally; both contracts hold, no Dart change needed | `audits/2026-08-22-phases-01-02-structural.md` |
 
 **The token work is done.** Typography landed on 2026-08-22 and closed item 20. Hanken Grotesk
 (400/500/600/700) and JetBrains Mono (400/500) are bundled from the upstream OFL repositories, and
@@ -118,7 +119,14 @@ bar, because a `ListTile` **subtitle** is taken as given where its title merges.
 `lib/theme.dart` now names no type metric of its own at all, and two scans in `test/theme_test.dart`
 hold the line.
 
-**Then:** Phases 01 and 02 structurally, then Wave 1.
+**Phases 01 and 02 are checked structurally, at `06a24f9`, and needed no Dart change.** Every
+structural acceptance criterion of both was already met and four of the eight are now asserted by
+tests. See `audits/2026-08-22-phases-01-02-structural.md` for the two divergences kept — ST-028's
+refusal sentence and its mobile caps-lock hint — and for the two places the app is already right
+where the served design is wrong: `Own shift panel` is not a route here, and the local evidence is five
+**counts** rather than ST-033's `KES 4,200.00`.
+
+**Then: Wave 1.** No screen has been recomposed to a Stitch layout by any session yet.
 
 **The web target does not run, and it is not the redesign's fault.** Two independent pre-existing bugs,
 both in the bootstrap, both unfixed because they are behaviour changes needing explicit authorization:

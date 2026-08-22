@@ -336,3 +336,112 @@ two scans hold the line.
 
 The second was found while checking fixtures: **27 files in `lib/` that nothing runs and nothing
 names**, including a pill component set and two rival colour systems. Recorded, pinned, not deleted.
+
+## `1687709` and `06a24f9` — Wave 0 recorded, Phases 01 and 02 checked
+
+- Decision: **the handover's §2 is struck through rather than rewritten.** "The token layer is
+  finished" was true of `lib/ui/tokens.dart` and false of `lib/theme.dart`, and the reason it was wrong
+  is more useful to the next reader than a corrected sentence would be — it is §8's own trap, in
+  three of the five components §8 names.
+- Decision: **Phases 01 and 02 needed no Dart change, and the audit is the deliverable.** Every
+  structural acceptance criterion of both was already met, and four of the eight became assertions
+  earlier in this run. Adding a ninth test that re-asserted one of them through a different route would
+  be coverage theatre, and the audit says so rather than padding.
+- Decision: **ST-028's refusal sentence is not adopted.** The design says *"Check the email address and
+  password for this account."*; the app says *"That email address and password do not match an
+  account. Check both and try again."*, and says something different for six other codes. Evidence:
+  `sign_in.dart:183-233`. The app's states what happened before what to do, which is §8's rule, and
+  collapsing seven answers into one would lose a distinction the code already makes. Copy, not pixels;
+  no layout depends on it.
+- Decision: **ST-028's mobile caps-lock hint is recorded as design debt, not implemented.** The app
+  answers that need with the sign-in keypad's own caps state, and `01e-sign-in-caps-locked` is `web`
+  only because the keypad does not appear below 1264. A phone hint would mean detecting a *physical*
+  keyboard's lock state and rendering new state from it — new logic, which hard rule 1 forbids in a
+  visual change. If the product wants it, it is a behaviour slice with its own authorisation.
+- Finding, and the clearest case in the repository of *fidelity is not the goal where the design is
+  wrong*: **the app is already right where both Phase 02 artifacts are wrong.** They show `Own shift
+  panel` as a navigation destination and the app has no such route — the shift is a banner, and
+  §4.4's "never a destination" is asserted. ST-033 states the local evidence as `KES 4,200.00
+  confirmed` and the app states it as **counts**, in exactly the five states the handoff says the served
+  design does not show. Implementing ST-033 faithfully would replace a correct readout with an
+  incorrect one.
+- Provisional, named rather than implied: **nothing in either phase is pixel-approved.** Phase 01 is
+  frozen at `PARTIAL / HOLD FOR REVIEW`; ST-032 and ST-033 are `NORMALIZED / RENDER REVIEW`, which
+  means corrected and never visually confirmed.
+
+---
+
+# Run summary — what is done, what is not, and what to read
+
+**Fourteen commits, `7509dcc` to `06a24f9`.** Branch `stitch-wave-0-tokens`, nothing pushed, no PR.
+**2,314 tests pass** (from 2,249) and the harness writes **405 images** (from 361).
+
+## Implementation-complete against the §7 bars
+
+1. **Order-of-work item 1 — the harness width regions.** Two viewports rather than the one asked
+   for, plus a tripwire that derives the regions from `AppLayout` and fails naming the interval.
+2. **Order-of-work item 2 — Wave 0's remainder.** The six components audited (four needed nothing),
+   read-only corrected and photographed, `ProvenanceLine` built and seven renderings migrated with
+   **zero pixels moved**, the RBAC guards asserted against the matrix on all 31 role lists, the fixtures
+   checked and scanned.
+3. **Order-of-work item 3 — Phases 01 and 02, structurally.** Both contracts hold; the audit records
+   the two divergences kept and the two places the app is right where the design is wrong.
+
+**Plus two defects found rather than assigned**, both in the token layer the handover said was
+finished: four component-theme text styles reaching the engine with **no font family at all**, and
+three `TextTheme` slots carrying type sizes §2.2 does not have.
+
+## Not started
+
+**Waves 1, 2 and 3 — Phases 03 to 10.** No screen has been recomposed to a Stitch layout by this run
+or any before it. What ships is the app's existing layout wearing the new tokens, now with every text
+style actually reading them.
+
+## Every still-provisional pixel
+
+Nothing this run produced is provisional: the 44 new images are the app's current layout at widths or
+in branches nothing had rendered, and the 168 that moved are two font corrections whose before-pictures
+were unreadable bars. **What remains provisional is everything the run did not touch**, unchanged from
+the handover's own list: Phase 04 mobile, Phase 08 completion matrices, Phase 02 checkout evidence, the
+two Phase 06 shift cards, and every `NORMALIZED / REVIEW` screen. Phase 01 gains one item — ST-028's
+mobile caps-lock hint, recorded above.
+
+## What the tests prove, and what still needs a device
+
+They prove the raster, the token wiring and the authorisation lists. **No screen overflows or truncates**
+at any of the five width regions, `spiritTheme` hands every restyled Material component one of the
+app's two families, and all 31 role lists match `RBAC_MATRIX.md`.
+
+They do not prove the app runs — the web target still does not, for the two pre-existing bootstrap
+bugs, deliberately unfixed. They cannot show motion, and nothing here touches motion. And they say
+nothing about the server: `firestore.rules` and the callables are the real authorisation boundary and
+`rules-tests/` is where that is shown, which the RBAC test's own header states so a green run is not
+read as more than it is.
+
+## The commits, in order
+
+| | |
+|---|---|
+| `7509dcc` | Photograph the two width regions no viewport was in |
+| `b440c71` | Record the width-region chunk, and close the gap claims it falsified |
+| `a77e95c` | Audit the six unaudited components before building any of them |
+| `19317d7` | Say read-only the way the other five sites say it |
+| `ab04fff` | Give a chip, a subtitle and a snack bar the face the design chose |
+| `af81a2d` | Take the last three type literals out of the theme |
+| `b2f556e` | Log the four Wave 0 component commits while they are fresh |
+| `4b1b0da` | Run dart format over the files the next commit touches |
+| `9df70c5` | Give the provenance row a name, since a scan could not give it a rule |
+| `2bc89a6` | Make the RBAC matrix a test instead of a snapshot |
+| `eeb7608` | Name the eight dead locations hard rule 3 does not |
+| `246fdfd` | Scan the fixtures for facts the product does not have |
+| `1687709` | Record Wave 0 as complete, and the claim it falsified |
+| `06a24f9` | Check Phases 01 and 02 structurally, and change nothing |
+
+## The two things to read first
+
+1. **`ab04fff` and `af81a2d`.** The token layer was not finished, and the evidence had been sitting in
+   `screenshots/` for nine days: `02-choose-business` drew every membership's role line as an
+   unreadable bar. Seven of `spiritTheme`'s text styles were not reading `AppTokens`.
+2. **`a77e95c`.** Four of Wave 0's six named components needed nothing built. The most useful sentence
+   in that audit is a negative one, and the alternative was four competing systems next to working
+   ones.

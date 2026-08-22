@@ -99,8 +99,11 @@ files; never for editing.
    The fixtures are clean, now as a scan. **And the token layer was not finished after all** — seven
    of `spiritTheme`'s text styles were not reading `AppTokens`, four of them with no font family at
    all, which is §8's own trap in three of the five components it names.
-3. **Phases 01 and 02**, structurally. Every tenant workflow depends on their routing and
-   permission contracts.
+3. ~~**Phases 01 and 02**, structurally.~~ **Checked at `06a24f9`, and no Dart change was needed.**
+   Both contracts hold and four of the eight acceptance criteria are now asserted by tests. Two
+   divergences from ST-028 are kept deliberately and two of the served designs' facts are wrong where
+   the app is right — `audits/2026-08-22-phases-01-02-structural.md`. What both phases still need is
+   a visual pass, which is Wave 1's.
 4. **Wave 1:** Phase 03 (sale/checkout), 04 (catalog/stock), 07 (staff/access), 09 (platform ops).
 5. **Wave 2:** Phase 06 (sales/returns), 05 (reporting/reconciliation), 08 (printing/settings).
 6. **Wave 3:** Phase 10, one coherent cross-system pass. Single owner, no delegation.
