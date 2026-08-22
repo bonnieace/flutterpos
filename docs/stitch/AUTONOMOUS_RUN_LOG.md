@@ -788,3 +788,199 @@ design is wrong.** No code was written for any of them.
 | `06472ad` | Stop the catalog telling a cashier a product cannot be sold |
 | `0c18437` | Put lib/inventory's spacing back on the token scale |
 | `1efe758` | Measure the 48dp floor on the Material controls nothing was asserting |
+
+# Phase 07 and the owner's three shapes — 2026-08-23
+
+**Thirteen commits, `fd247c4` to `d0f54fa`.** Phase 07's evidence and token work are done and its
+composition slice is not started. Three product-owner directions landed across the whole app, and
+hard rule 2's spacing half is now discharged everywhere and held by a tripwire.
+
+## Phase 07 — staff and access
+
+### `8c38be0` — the five forms nothing had photographed
+
+- **The gap the handover measured was right and was the whole phase.** `tenant_staff_directory.dart`
+  offers six actions and one of them — `Correct` — had a capture. The family had three images in
+  total, against a brief asking for pending, active, disabled, expired/invalid, busy, validation and
+  failure states, and ST-055's fourth section draws a consequence dialog for every one of the five
+  with none.
+- **The behaviour was never the thin part.** Eleven test files, 5,501 lines, 122 tests, all passing.
+  What was missing was the raster, and with it any way to notice what the forms said.
+- Decision: **Faith Njeri is the subject of three of the five.** Resend, cancel and replace-email all
+  require a pending membership with an unaccepted invitation and she is the one seeded member who has
+  one. The status change targets **Brian Kimani rather than Peter Otieno**, whom ST-055 draws: Peter
+  is `adminUid` and therefore the acting session, and a person deactivating themselves is not the
+  picture that state is for.
+- **Finding, and it is why photographing one action is not photographing a route:** §4.3 folds a row's
+  actions into an overflow menu below 1024. `RecordActionSet.inlineCountFor` draws **no** action
+  inline on stacked cards once a record carries more than three, and three on two-column cards — so a
+  pending membership's four actions are all behind the menu at 411 and its fourth is behind it at 834.
+  `13b` never had to deal with that because an accepted membership carries two. The first attempt at
+  these captures failed at exactly those two widths.
+- No form overflows or truncates at any of the four widths. **52 new, 0 removed, 3 moved** — all three
+  `13b`, which now settles and frames the record through the shared helper rather than photographing
+  wherever the tap left the page.
+
+### `96c7401` — the verb that changed halfway
+
+- **The defect, found by photographing it.** The row action says `Correct` and the form it opened said
+  `Edit`. §8 rule 4 is the rule, in as many words: *"The verb persists. The button says Correct, the
+  dialog says Correct."* It was the only one of the route's five forms that broke it — the other four
+  already carry the verb of the action that opened them.
+- ST-055 writes the heading `Correct Staff: {name}`, so the design and the rule agree and the words
+  are the design's rather than a third phrasing invented to settle it.
+- **It had been in every `13b` image ever taken.** Nothing beside it to compare against until the
+  other five forms had pictures, four of which say it correctly. That is twice in two phases that
+  adding coverage rather than reading code is what surfaced the defect.
+- The confirmation is left alone: §8 rule 4's third clause asks for `Corrected`, ST-055 draws
+  `Staff details updated.`, the app already says exactly that, and `DESIGN.md` is implementation
+  history rather than visual authority for a Stitch composition.
+
+### `158f969` — the staff token debt, which moved nothing
+
+39 literal spacings across nine files and **every one already a value `AppSpacing` names**, so this
+moved zero pixels. Phase 04's equivalent had three off-scale values and moved 40 images. Hard rule 2
+is about where a widget reads its numbers from, not about what the numbers are.
+
+### `1ee6302` — the midnight-UTC trap, written down
+
+- **`seedBusinessDate` and `seedTimestamp` read the wall clock**, deliberately: the daily summary and
+  reconciliation compute the same string from `DateTime.now()` and read by exact path, so a hardcoded
+  fixture date renders them permanently empty.
+- **What nobody had written down is the consequence for how this project proves a change is
+  contained.** "N images moved" is the evidence and it is only valid inside one UTC day. This session
+  crossed midnight between a baseline hash and a re-measure, and a nine-file spacing repoint appeared
+  to move 36 reporting, shift, returns and receipt images it had not touched. Against a same-day
+  baseline it moved **zero**. It cost a bisect; the note now says what the tell is — the moved set is
+  all date-bearing screens and contains nothing you edited — and to re-baseline rather than hunt your
+  own diff.
+
+### What Phase 07 did not do
+
+**The composition slice is not started.** Slices 1 and 2 are done and slice 3 — the pass against
+ST-055 and ST-056 — is not. What the new captures show is that the app already matches ST-055 closely:
+every form names its person and consequence, the manager's read-only reading carries no write
+affordance at any width, and the tablet transformation holds. Two divergences are recorded and neither
+is a defect on its face: the app draws a four-tile stat strip ST-055 does not have, and it splits
+ST-055's combined `STATUS + MEMBERSHIP` column into a badge and an attribute.
+
+**One finding is left open rather than fixed, because the fix is a component change.** On stacked
+cards a record with more than three actions draws **no** label at all — just an unlabelled `⋮`. The
+`_staffActions` comment says these were once "a 40dp `IconButton` with the member's name in a tooltip
+and no visible label" and that §5.2's `ActionSet` fixed it; at the compact band it is still an
+icon-only control, and `13f-cancel-an-invitation @ mobile` is the picture. Fixing it means changing
+`RecordList`, which every record surface in the app reads, so it is a Wave 3 item rather than a
+Phase 07 slice.
+
+---
+
+## The product owner's three shapes — `OPEN_QUESTIONS.md` decision 26
+
+**These are owner directions, not readings of the design, and they are recorded that way.** Two of
+them reverse a decision that argued from evidence. A shape is the owner's to choose; what the record
+owes a later reader is the evidence it overrides, so nobody re-derives the old answer and files a
+regression.
+
+### `1a41c9a` and `3a4f2c2` — the pill is back
+
+- On `radius.pill`: `AppButton`, `FilterChipBar`'s chip, the `AppTextField` well, the three Material
+  button themes, `chipTheme`, and the theme's `InputDecoration` border.
+- **Deliberately not:** cards, rows, dialogs, sheets, banners, stat tiles, the snack bar and
+  `StatusBadge`. A badge is read rather than pressed and was never a pill; and Flutter clamps a radius
+  to half the shorter side, so 999 on a card draws a lozenge rather than a pill.
+- **The token values did not move at all** — `sm` 2, `md` 8, `lg` 12, `pill` 999. Only which component
+  reads which role, which is the line `AppRadii`'s scale test and the component tests already divide.
+- For the input well this is the third move of one value: v0.4 made it a pill at the owner's request,
+  2026-08-22 took it back to the design's corner, this restores it.
+- **417 of 536 images moved**, the correct blast radius for a token change reaching every button, chip
+  and field. Six assertions moved with it, each keeping the evidence it used to assert beside the
+  override.
+- **Recorded honestly:** `1a41c9a` was meant to be a formatter reflow alone and `git add -A` swept the
+  pill change in with it. The message was corrected to match the content rather than the history
+  rewritten; about 90 of its test-file lines are reflow.
+
+### `726e185` — dropdowns where a surface has more than one filter
+
+- Sales totals is the surface the direction is about and the only one with three filters open at once.
+  As chip strips their height **grew with the business** — one chip per colleague and one per category
+  — so twelve staff and nine categories pushed the figures the page exists for off the bottom of a
+  phone. The three figures now sit on the first screen.
+- **A single filter stays a chip strip**, which is the other half of the rule: one strip shows its
+  options without a tap. The till's category chooser and the anomalies filter keep theirs.
+- `AppSelectItem` gained a `key`, because `FilterChipBar` keys every option and `DropdownMenuItem` had
+  none — moving a filter between them would otherwise silently drop every option-level contract the
+  surface had. All nine option keys are unchanged.
+- **Two test mechanics were worth getting right rather than working around.** Choosing an option taps
+  the option's `Text`, not its `DropdownMenuItem`: a closed `DropdownButton` keeps an offstage copy of
+  the *selected* item, so `.last` on the key sometimes picked the button's copy over the menu's, and
+  tapping an offstage widget warns instead of failing — which left four tests asserting against a
+  filter nobody had changed. `hitTestable()` is no help; the menu item is not its own hit target. And
+  label assertions now read `AppSelect.items` rather than the rendering, the reverse of what that file
+  used to do and for the same underlying reason.
+- **One cost, stated rather than discovered later:** a dropdown's options are not in a screenshot. A
+  closed dropdown builds only the selected option, so hard rule 5's coverage is weaker here than for
+  the chip strip it replaced, where every option was always rendered.
+
+### `1a41c9a` — asterisks in the password field
+
+The field carried no placeholder from step 9 until now, on reasoning that was right about the string it
+deleted (`Enter Password` restates the label) and wrong to conclude the field could carry nothing.
+`********` is the permitted kind: it is what the box looks like once somebody types in it.
+`AppTextField` gained `obscuringCharacter`, defaulting to `*` for every obscured field — the two
+travel together because a placeholder showing asterisks over a field that types bullets is a box that
+appears to change character set the moment it is touched.
+
+---
+
+## `4ba7243` and `d0f54fa` — hard rule 2's spacing half, finished and held
+
+- **The last 92 literals across 41 files.** After Phases 03, 04 and 07 the debt was the surfaces no
+  phase had reached: the platform-admin family, the sales, returns, shift and audit histories, the
+  routing shell, and eight `lib/ui/` components. There are now **none** outside the token layer.
+- Three decisions: `SizedBox(height: 10)` takes `s8` (groups the error with its field);
+  `cardTheme`'s `vertical: 6` takes `s4` (equidistant from 4 and 8, and the margin doubles between two
+  cards); and `EdgeInsets.fromLTRB(20, 20, 20, 0)`'s zero **stays a literal zero**, because an inset of
+  nothing is not a spacing and `AppSpacing` rightly has no token for it.
+- Three deliberate non-moves: `lib/ui/tokens.dart` keeps its own literals because `AppDensity`'s
+  `rowPadding` values are the layer defining itself and are `const`; `lib/theme.dart` reads a new
+  `_spacing` off the registered palette rather than a `tokens` that has no meaning at top level; and
+  **comment lines are untouched throughout**, because several files document a spacing that used to be
+  there and rewriting the prose would be a lie about history.
+- It also closes `checkout_evidence.dart:311`, the hard-rule-2 site `PHASE_04_HANDOVER.md` flagged as
+  belonging to no phase. Its helper reads `State.context`, since it takes no `BuildContext` of its own.
+- **`test/dev/token_spacing_test.dart` is the tripwire, and it was verified by breaking it.** A planted
+  literal is reported with its file and line, and the message carries the scale, the rule for an
+  off-scale value, and the two mechanical traps this work paid for. The pattern is deliberately narrow:
+  one that also flagged `Size(48, 48)` and every `elevation: 0` would be a scan people silence rather
+  than obey. A second test asserts every exempt path still exists, because an exemption naming a
+  deleted file is a hole nobody can see.
+
+## Testing
+
+**2,318 tests pass**, from 2,316. Two added, both in the tripwire. The harness writes **536 images
+across 163 screens**, from 484 across 158 — 52 new, all of them staff captures.
+
+## The commits, in order
+
+| | |
+|---|---|
+| `fd247c4` | Run dart format over the staff capture file before Phase 07 touches it |
+| `8c38be0` | Photograph the five staff forms nothing had ever rendered |
+| `96c7401` | Make the staff correction form say the verb its own button says |
+| `3336f03` | Run dart format over the three staff files before Phase 07 repoints them |
+| `158f969` | Put the staff surfaces' spacing on the token scale |
+| `1ee6302` | Write down the midnight-UTC trap that cost Phase 07 a bisect |
+| `1a41c9a` | Put the pill back on buttons, chips and fields |
+| `3a4f2c2` | Move the corner and placeholder assertions onto the owner's shape |
+| `726e185` | Make the three sales-totals filters dropdowns instead of a wall of pills |
+| `733771e` | Record the owner's three shapes as overrides, with what they override |
+| `11472e1` | Run dart format over the five files the global repoint touches |
+| `4ba7243` | Put the whole reachable tree's spacing on the token scale |
+| `d0f54fa` | Make hard rule 2's spacing half a tripwire instead of a coincidence |
+
+## What is still not started
+
+**Phases 09, 06, 05 and 08 have had no composition pass, and Phase 10 has not been run.** Phases 01
+and 02 were checked structurally at `06a24f9` and still need their visual pass. Phase 07's own slice 3
+is not started. The token layer, the harness coverage and the three owner shapes now reach all of
+them, so none of that work will need redoing — but none of it is done, and the reskin is not finished.
