@@ -470,77 +470,80 @@ final class _SaleReturnsContents extends StatelessWidget {
   TenantReturnPage get page => view.page;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('sale-returns'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // §7's "Title appears once". This named *which* sale rather than
-      // repeating the title, so the receipt number moved to
-      // `PageHeader.subtitle`; the header reads `Returns` over the receipt
-      // where the page used to say `Returns` and then `Returns against …`.
-      const SizedBox(height: 4),
-      const Text(
-        'Stock is restored only when a return is verified. A pending return '
-        'has changed no stock yet.',
-      ),
-      if (notice case final answer?) ...[
-        const SizedBox(height: 12),
-        Callout(
-          key: const ValueKey('sale-returns-notice'),
-          status: answer.status,
-          message: answer.message,
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('sale-returns'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // §7's "Title appears once". This named *which* sale rather than
+        // repeating the title, so the receipt number moved to
+        // `PageHeader.subtitle`; the header reads `Returns` over the receipt
+        // where the page used to say `Returns` and then `Returns against …`.
+        SizedBox(height: tokens.spacing.s4),
+        const Text(
+          'Stock is restored only when a return is verified. A pending return '
+          'has changed no stock yet.',
         ),
-      ],
-      const SizedBox(height: 16),
-      if (page.items.isNotEmpty) ...[
-        Text(key: const ValueKey('sale-returns-counts'), _countsLabel(page)),
-        const SizedBox(height: 12),
-      ],
-      // §4.3's responsive contract.
-      RecordList(
-        identityLabel: 'Return',
-        items: <RecordItem>[
-          for (final record in page.items) _entry(context, record),
+        if (notice case final answer?) ...[
+          SizedBox(height: tokens.spacing.s12),
+          Callout(
+            key: const ValueKey('sale-returns-notice'),
+            status: answer.status,
+            message: answer.message,
+          ),
         ],
-        empty: const Text(
-          key: ValueKey('sale-returns-empty'),
-          'No returns were recorded against this sale.',
+        SizedBox(height: tokens.spacing.s16),
+        if (page.items.isNotEmpty) ...[
+          Text(key: const ValueKey('sale-returns-counts'), _countsLabel(page)),
+          SizedBox(height: tokens.spacing.s12),
+        ],
+        // §4.3's responsive contract.
+        RecordList(
+          identityLabel: 'Return',
+          items: <RecordItem>[
+            for (final record in page.items) _entry(context, record),
+          ],
+          empty: const Text(
+            key: ValueKey('sale-returns-empty'),
+            'No returns were recorded against this sale.',
+          ),
         ),
-      ),
-      const SizedBox(height: 16),
-      Pagination(
-        pageNumber: pageIndex + 1,
-        previousKey: const ValueKey('sale-returns-previous'),
-        nextKey: const ValueKey('sale-returns-next'),
-        onPrevious: pageIndex > 0 ? onPreviousPage : null,
-        onNext: page.hasMore ? onNextPage : null,
-      ),
-      if (canRecord) ...[
-        const SizedBox(height: 24),
-        const Divider(),
-        const SizedBox(height: 12),
-        if (view.returnable case final returnable?)
-          if (returnable.hasReturnableLines)
-            _RecordReturnForm(
-              key: const ValueKey('sale-returns-form'),
-              returnable: returnable,
-              busy: busy,
-              onRecord: onRecord,
-            )
+        SizedBox(height: tokens.spacing.s16),
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('sale-returns-previous'),
+          nextKey: const ValueKey('sale-returns-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
+        ),
+        if (canRecord) ...[
+          SizedBox(height: tokens.spacing.s24),
+          const Divider(),
+          SizedBox(height: tokens.spacing.s12),
+          if (view.returnable case final returnable?)
+            if (returnable.hasReturnableLines)
+              _RecordReturnForm(
+                key: const ValueKey('sale-returns-form'),
+                returnable: returnable,
+                busy: busy,
+                onRecord: onRecord,
+              )
+            else
+              const Text(
+                key: ValueKey('sale-returns-nothing-left'),
+                'Every unit on this sale has already been returned.',
+              )
           else
             const Text(
-              key: ValueKey('sale-returns-nothing-left'),
-              'Every unit on this sale has already been returned.',
-            )
-        else
-          const Text(
-            key: ValueKey('sale-returns-form-unavailable'),
-            'More returns exist than this page shows. Go back to the first '
-            'page to record another return against this sale.',
-          ),
+              key: ValueKey('sale-returns-form-unavailable'),
+              'More returns exist than this page shows. Go back to the first '
+              'page to record another return against this sale.',
+            ),
+        ],
       ],
-    ],
-  );
+    );
+  }
 
   /// One return as §5.2's rows.
   ///
@@ -713,15 +716,15 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         const Text(
           'Only what this sale still has available may be returned. Pending '
           'returns already count against it.',
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         for (final line in widget.returnable.lines)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: EdgeInsets.symmetric(vertical: tokens.spacing.s4),
             child: Row(
               children: [
                 Expanded(
@@ -752,7 +755,7 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
               ],
             ),
           ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         AppTextField(
           key: const ValueKey('sale-returns-reason'),
           controller: _reason,
@@ -760,7 +763,7 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
           onChanged: (_) => setState(() {}),
           label: 'Reason for this return',
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         AppButton(
           key: const ValueKey('sale-returns-submit'),
           label: 'Record return',

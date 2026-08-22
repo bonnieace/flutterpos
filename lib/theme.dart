@@ -78,6 +78,11 @@ final AppActionRoles _action = _palette.colors.action;
 /// The surface roles, read once for the same reason [_action] is.
 final AppSurfaceRoles _surface = _palette.colors.surface;
 
+/// §2.3's spacing scale, for the four component themes that set an inset of
+/// their own. Read from the same registered palette the colours are, so a theme
+/// cannot hold a spacing the token layer does not name.
+final AppSpacing _spacing = _palette.spacing;
+
 /// The text roles, read once for the same reason [_action] is.
 ///
 /// **The caption-versus-paragraph drift this file used to warn about is now
@@ -341,7 +346,7 @@ final ThemeData spiritTheme = ThemeData(
   cardTheme: CardThemeData(
     color: _surface.raised,
     elevation: 0,
-    margin: const EdgeInsets.symmetric(vertical: 6),
+    margin: EdgeInsets.symmetric(vertical: _spacing.s4),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(_palette.radius.md),
       side: BorderSide(color: _surface.borderSubtle),
@@ -373,7 +378,7 @@ final ThemeData spiritTheme = ThemeData(
       backgroundColor: _action.primary.container,
       foregroundColor: _action.primary.label,
       minimumSize: const Size(0, 48),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: EdgeInsets.symmetric(horizontal: _spacing.s24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(_palette.radius.pill),
       ),
@@ -385,7 +390,7 @@ final ThemeData spiritTheme = ThemeData(
       foregroundColor: _action.primary.label,
       elevation: 0,
       minimumSize: const Size(0, 48),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: EdgeInsets.symmetric(horizontal: _spacing.s24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(_palette.radius.pill),
       ),
@@ -395,7 +400,7 @@ final ThemeData spiritTheme = ThemeData(
     style: OutlinedButton.styleFrom(
       foregroundColor: _action.secondary.label,
       minimumSize: const Size(0, 48),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: _spacing.s20),
       side: BorderSide(color: _action.secondary.border!),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(_palette.radius.pill),

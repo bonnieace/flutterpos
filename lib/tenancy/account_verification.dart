@@ -360,7 +360,7 @@ final class _AccountVerificationPanelState
     return Card(
       key: const ValueKey('account-verification'),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(tokens.spacing.s20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -370,7 +370,7 @@ final class _AccountVerificationPanelState
                 color: tokens.colors.text.primary,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: tokens.spacing.s8),
             const Text(
               'Until this address is verified you cannot request a business or '
               'accept an invitation.',
@@ -382,7 +382,7 @@ final class _AccountVerificationPanelState
             // on a paragraph and neither carrying a container, a glyph or a
             // word. They are the same four outcomes `AppNotice` names.
             if (_accepted) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: tokens.spacing.s12),
               Callout(
                 key: const ValueKey('account-verification-accepted'),
                 // Deliberately not "we sent you an email". The server accepts
@@ -395,7 +395,7 @@ final class _AccountVerificationPanelState
               ),
             ],
             if (_deliveryStatus == EmailDeliveryStatus.unavailable) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: tokens.spacing.s12),
               Callout(
                 key: const ValueKey('account-verification-undeliverable'),
                 // The server gives one answer for four causes, so this names
@@ -406,7 +406,7 @@ final class _AccountVerificationPanelState
               ),
             ],
             if (_safeError != null) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: tokens.spacing.s12),
               Callout(
                 key: const ValueKey('account-verification-error'),
                 // A refusal, named as one rather than painted red: the write
@@ -416,7 +416,7 @@ final class _AccountVerificationPanelState
                 message: _safeError!,
               ),
             ],
-            const SizedBox(height: 16),
+            SizedBox(height: tokens.spacing.s16),
             Wrap(
               spacing: 12,
               runSpacing: 12,

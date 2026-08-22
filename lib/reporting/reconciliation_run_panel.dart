@@ -185,20 +185,20 @@ final class _RunContents extends StatelessWidget {
         // The day page next door has said the same kind of thing behind the same
         // component since step 4; this is that decision reaching the other three
         // surfaces in the family.
-        const Disclosure(
-          key: ValueKey('reconciliation-run-scope-disclosure'),
+        Disclosure(
+          key: const ValueKey('reconciliation-run-scope-disclosure'),
           summary: 'What this page cannot do',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text(
+              const Text(
                 key: ValueKey('reconciliation-run-scope'),
                 'The server does the work; this is its own record of one piece '
                 'of it. Nothing on this page can start, stop, or repeat a run.',
               ),
-              SizedBox(height: 8),
-              Text(
+              SizedBox(height: tokens.spacing.s8),
+              const Text(
                 key: ValueKey('reconciliation-run-outlives'),
                 'A difference a run found is about a product or a shift rather '
                 'than a day, so it stays listed until it is resolved even '

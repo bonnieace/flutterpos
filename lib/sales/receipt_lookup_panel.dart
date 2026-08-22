@@ -123,60 +123,63 @@ final class _TenantReceiptLookupPanelState
   }
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('receipt-lookup'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // §7's "Title appears once": the `AppScaffold` above carries this exact
-      // string in its `PageHeader`, and this drew it again directly under it.
-      const Text(
-        'Enter the receipt printed for the customer to open the sale it '
-        'describes.',
-      ),
-      const SizedBox(height: 16),
-      AppTextField(
-        key: const ValueKey('receipt-lookup-input'),
-        controller: _receipt,
-        autocorrect: false,
-        textCapitalization: TextCapitalization.characters,
-        onSubmitted: (_) => _submit(),
-        label: 'Receipt number',
-        leading: Icons.receipt_long_outlined,
-        placeholder: 'CT-A7F-20260731-0042',
-      ),
-      const SizedBox(height: 12),
-      AppButton(
-        key: const ValueKey('receipt-lookup-submit'),
-        label: 'Find receipt',
-        tier: AppButtonTier.primary,
-        onPressed: _submit,
-      ),
-      if (_rejection case final message?) ...[
-        const SizedBox(height: 16),
-        Text(key: const ValueKey('receipt-lookup-invalid'), message),
-      ],
-      if (_submitted case final receipt?) ...[
-        const SizedBox(height: 24),
-        TenantRouteGuard<TenantReceiptLookupResult>(
-          key: ValueKey('receipt:$receipt'),
-          allowedRoles: TenantReceiptLookupRepository.allowedRoles,
-          load: _loaderFor(receipt),
-          denied: const Text(
-            key: ValueKey('receipt-lookup-denied'),
-            'Receipt lookup is unavailable for this business.',
-          ),
-          failure: (context, error) => const Text(
-            key: ValueKey('receipt-lookup-failure'),
-            'That receipt could not be looked up.',
-          ),
-          builder: (context, session, result) => _ReceiptLookupResult(
-            result: result,
-            onOpenReturns: (sale) => _openReturns(context, sale),
-          ),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('receipt-lookup'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // §7's "Title appears once": the `AppScaffold` above carries this exact
+        // string in its `PageHeader`, and this drew it again directly under it.
+        const Text(
+          'Enter the receipt printed for the customer to open the sale it '
+          'describes.',
         ),
+        SizedBox(height: tokens.spacing.s16),
+        AppTextField(
+          key: const ValueKey('receipt-lookup-input'),
+          controller: _receipt,
+          autocorrect: false,
+          textCapitalization: TextCapitalization.characters,
+          onSubmitted: (_) => _submit(),
+          label: 'Receipt number',
+          leading: Icons.receipt_long_outlined,
+          placeholder: 'CT-A7F-20260731-0042',
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        AppButton(
+          key: const ValueKey('receipt-lookup-submit'),
+          label: 'Find receipt',
+          tier: AppButtonTier.primary,
+          onPressed: _submit,
+        ),
+        if (_rejection case final message?) ...[
+          SizedBox(height: tokens.spacing.s16),
+          Text(key: const ValueKey('receipt-lookup-invalid'), message),
+        ],
+        if (_submitted case final receipt?) ...[
+          SizedBox(height: tokens.spacing.s24),
+          TenantRouteGuard<TenantReceiptLookupResult>(
+            key: ValueKey('receipt:$receipt'),
+            allowedRoles: TenantReceiptLookupRepository.allowedRoles,
+            load: _loaderFor(receipt),
+            denied: const Text(
+              key: ValueKey('receipt-lookup-denied'),
+              'Receipt lookup is unavailable for this business.',
+            ),
+            failure: (context, error) => const Text(
+              key: ValueKey('receipt-lookup-failure'),
+              'That receipt could not be looked up.',
+            ),
+            builder: (context, session, result) => _ReceiptLookupResult(
+              result: result,
+              onOpenReturns: (sale) => _openReturns(context, sale),
+            ),
+          ),
+        ],
       ],
-    ],
-  );
+    );
+  }
 }
 
 final class _ReceiptLookupResult extends StatelessWidget {
@@ -215,7 +218,7 @@ final class _ReceiptLookupResult extends StatelessWidget {
           Card(
             key: ValueKey('receipt-lookup-sale-${sale.id}'),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(tokens.spacing.s16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -225,7 +228,7 @@ final class _ReceiptLookupResult extends StatelessWidget {
                       color: tokens.colors.text.primary,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: tokens.spacing.s8),
                   Text(
                     key: ValueKey('receipt-lookup-total-${sale.id}'),
                     'Total: ${sale.currency} ${_money(sale.totalMinor)}',
@@ -240,7 +243,7 @@ final class _ReceiptLookupResult extends StatelessWidget {
                     key: ValueKey('receipt-lookup-tender-${sale.id}'),
                     _tenderLabel(sale),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: tokens.spacing.s8),
                   Text(
                     key: ValueKey('receipt-lookup-recorded-${sale.id}'),
                     _recordedLabel(sale),
@@ -248,7 +251,7 @@ final class _ReceiptLookupResult extends StatelessWidget {
                       color: tokens.colors.text.tertiary,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: tokens.spacing.s8),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: AppButton(

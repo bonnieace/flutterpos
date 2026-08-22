@@ -439,7 +439,7 @@ final class _CatalogContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final categoryNames = tenantCategoryNames(snapshot.categories.items);
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
         // **A status, not a heading, and it used to be both and neither.** This
         // route's standing was a `headlineSmall` reading "Read-only catalog" at
@@ -460,10 +460,10 @@ final class _CatalogContents extends StatelessWidget {
                     'available here. Open a product to see and correct its '
                     'stock.',
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         Text('Business: $tenantId'),
         if (adjustmentFeedRoute != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           AppButton(
             key: const ValueKey('catalog-adjustment-feed'),
             label: 'View recorded stock adjustments',
@@ -472,7 +472,7 @@ final class _CatalogContents extends StatelessWidget {
           ),
         ],
         if (movementFeedRoute != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           AppButton(
             key: const ValueKey('catalog-movement-feed'),
             label: 'View every recorded stock movement',
@@ -480,14 +480,14 @@ final class _CatalogContents extends StatelessWidget {
             onPressed: () => _openMovementFeed(context),
           ),
         ],
-        const SizedBox(height: 20),
+        SizedBox(height: tokens.spacing.s20),
         Text(
           'Categories',
           style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         if (snapshot.categories.items.isEmpty)
           const EmptyState(
             key: ValueKey('catalog-categories-empty'),
@@ -503,11 +503,11 @@ final class _CatalogContents extends StatelessWidget {
             ],
           ),
         if (snapshot.categories.hasMore)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text('More categories are available.'),
+          Padding(
+            padding: EdgeInsets.only(top: tokens.spacing.s8),
+            child: const Text('More categories are available.'),
           ),
-        const SizedBox(height: 24),
+        SizedBox(height: tokens.spacing.s24),
         Text(
           'Products',
           style: tokens.typography.titleMedium.copyWith(
@@ -553,9 +553,9 @@ final class _CatalogContents extends StatelessWidget {
         // do, and its answer is the pager itself. The same decision was taken
         // for the two on the manage-catalog route.
         if (snapshot.products.hasMore)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text('More products are available.'),
+          Padding(
+            padding: EdgeInsets.only(top: tokens.spacing.s8),
+            child: const Text('More products are available.'),
           ),
       ],
     );

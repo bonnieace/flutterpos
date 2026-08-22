@@ -251,79 +251,82 @@ final class _SaleHistoryContents extends StatelessWidget {
   final ValueChanged<TenantSale> onViewReturns;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('sale-history'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // **§7's "Title appears once".** Both branches drew this route's name a
-      // second time under the `PageHeader` that carries it — `Recent sales`
-      // beneath `My recent sales`, and `Shift 2026-08-14` beneath `Shift sales`.
-      // The first was a duplicate and is gone; the second named *which* shift,
-      // which is what `PageHeader.subtitle` is for, and the screen supplies it
-      // from the same request this panel reads.
-      if (request case final TenantShiftSaleHistoryRequest shift) ...[
-        Text(
-          key: const ValueKey('sale-history-recorded'),
-          _recordedLabel(shift),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('sale-history'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // **§7's "Title appears once".** Both branches drew this route's name a
+        // second time under the `PageHeader` that carries it — `Recent sales`
+        // beneath `My recent sales`, and `Shift 2026-08-14` beneath `Shift sales`.
+        // The first was a duplicate and is gone; the second named *which* shift,
+        // which is what `PageHeader.subtitle` is for, and the screen supplies it
+        // from the same request this panel reads.
+        if (request case final TenantShiftSaleHistoryRequest shift) ...[
+          Text(
+            key: const ValueKey('sale-history-recorded'),
+            _recordedLabel(shift),
+          ),
+          SizedBox(height: tokens.spacing.s4),
+          const Text(
+            'These are the figures the shift recorded when it closed. Page '
+            'through the sales to inspect them; this screen calculates no '
+            'replacement total.',
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s16),
+        // §4.3's responsive contract.
+        RecordList(
+          identityLabel: 'Sale',
+          items: <RecordItem>[for (final sale in page.items) _record(sale)],
+          // §7's Empty pattern. No action: a sale is rung up at the till rather
+          // than from its own history, so there is nothing here for a person to
+          // press that would end the emptiness.
+          empty: const EmptyState(
+            key: ValueKey('sale-history-empty'),
+            title: 'No sales yet',
+            hint: 'A sale appears here once it has been confirmed.',
+          ),
         ),
-        const SizedBox(height: 4),
-        const Text(
-          'These are the figures the shift recorded when it closed. Page '
-          'through the sales to inspect them; this screen calculates no '
-          'replacement total.',
+        // **Said once under the list, in the words `sales_totals_panel.dart`
+        // already says them.** It rode on every row as the second half of "Paid
+        // by Cash. …", which at §5.2's key-value made the payment column three
+        // lines tall on every record and the tallest thing on the page - a
+        // seventy-character invariant repeated twenty times. It is a property of
+        // how a tender is captured rather than of any sale, and this screen still
+        // states it, which is what `sale_history.dart` requires of a surface that
+        // shows one.
+        if (page.items.any((sale) => sale.tender != null)) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Text(
+            key: ValueKey('sale-history-tender-disclaimer'),
+            checkoutTenderDisclaimer,
+          ),
+        ],
+        // Deliberately a different sentence from `checkoutTenderUnrecordedMessage`
+        // for the reason the totals page gives: that one says "This sale", which
+        // is a claim about one record and is wrong above a list of them. The fact
+        // is the same and is stated again rather than reused wrongly.
+        if (page.items.any((sale) => sale.tender == null)) ...[
+          SizedBox(height: tokens.spacing.s8),
+          const Text(
+            key: ValueKey('sale-history-tender-unrecorded-note'),
+            'A sale recorded before payment methods were captured names no '
+            'payment method, so its payment is stated as not recorded.',
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s16),
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('sale-history-previous'),
+          nextKey: const ValueKey('sale-history-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
         ),
       ],
-      const SizedBox(height: 16),
-      // §4.3's responsive contract.
-      RecordList(
-        identityLabel: 'Sale',
-        items: <RecordItem>[for (final sale in page.items) _record(sale)],
-        // §7's Empty pattern. No action: a sale is rung up at the till rather
-        // than from its own history, so there is nothing here for a person to
-        // press that would end the emptiness.
-        empty: const EmptyState(
-          key: ValueKey('sale-history-empty'),
-          title: 'No sales yet',
-          hint: 'A sale appears here once it has been confirmed.',
-        ),
-      ),
-      // **Said once under the list, in the words `sales_totals_panel.dart`
-      // already says them.** It rode on every row as the second half of "Paid
-      // by Cash. …", which at §5.2's key-value made the payment column three
-      // lines tall on every record and the tallest thing on the page - a
-      // seventy-character invariant repeated twenty times. It is a property of
-      // how a tender is captured rather than of any sale, and this screen still
-      // states it, which is what `sale_history.dart` requires of a surface that
-      // shows one.
-      if (page.items.any((sale) => sale.tender != null)) ...[
-        const SizedBox(height: 8),
-        const Text(
-          key: ValueKey('sale-history-tender-disclaimer'),
-          checkoutTenderDisclaimer,
-        ),
-      ],
-      // Deliberately a different sentence from `checkoutTenderUnrecordedMessage`
-      // for the reason the totals page gives: that one says "This sale", which
-      // is a claim about one record and is wrong above a list of them. The fact
-      // is the same and is stated again rather than reused wrongly.
-      if (page.items.any((sale) => sale.tender == null)) ...[
-        const SizedBox(height: 8),
-        const Text(
-          key: ValueKey('sale-history-tender-unrecorded-note'),
-          'A sale recorded before payment methods were captured names no '
-          'payment method, so its payment is stated as not recorded.',
-        ),
-      ],
-      const SizedBox(height: 16),
-      Pagination(
-        pageNumber: pageIndex + 1,
-        previousKey: const ValueKey('sale-history-previous'),
-        nextKey: const ValueKey('sale-history-next'),
-        onPrevious: pageIndex > 0 ? onPreviousPage : null,
-        onNext: page.hasMore ? onNextPage : null,
-      ),
-    ],
-  );
+    );
+  }
 
   /// One sale as §5.2's rows.
   ///

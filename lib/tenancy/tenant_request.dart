@@ -329,9 +329,9 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
               color: tokens.colors.text.primary,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           const Text('New businesses remain pending until platform review.'),
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           AppTextField(
             key: const ValueKey('tenant-request-name'),
             controller: _nameController,
@@ -341,7 +341,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
             onChanged: _fieldChanged,
             validator: (value) => _validateName(value ?? ''),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           AppTextField(
             key: const ValueKey('tenant-request-slug'),
             controller: _slugController,
@@ -354,14 +354,14 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
             validator: (value) => _validateSlug(value ?? ''),
           ),
           if (_confirming && _intent != null) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: tokens.spacing.s16),
             Text(
               'Submit ${_intent!.name} (${_intent!.slug}) for platform review?',
               key: const ValueKey('tenant-request-confirmation'),
             ),
           ],
           if (_safeError != null) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: tokens.spacing.s12),
             Callout(
               key: const ValueKey('tenant-request-error'),
               // A refusal, named as one rather than painted red: the write
@@ -371,7 +371,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
               message: _safeError!,
             ),
           ],
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -388,7 +388,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
                       })
                     : widget.onCancel,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: tokens.spacing.s8),
               AppButton(
                 key: ValueKey(
                   _confirming

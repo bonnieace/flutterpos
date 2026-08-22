@@ -270,12 +270,12 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         const Text(
           'This business will be preferred when no valid device selection exists.',
         ),
         if (_safeError != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('set-default-tenant-error'),
             // A refusal, named as one rather than painted red: the write
@@ -285,7 +285,7 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
             message: _safeError!,
           ),
         ],
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -295,7 +295,7 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
               tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: tokens.spacing.s8),
             AppButton(
               key: const ValueKey('set-default-tenant-confirm'),
               label: 'Make default',

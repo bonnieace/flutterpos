@@ -205,74 +205,77 @@ final class _AuditLogContents extends StatelessWidget {
   TenantAuditRecordPage get page => view.page;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('audit-log'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // §7's "Title appears once": the `AppScaffold` above says `Activity log`,
-      // and this said the same thing at greater length directly under it.
-      const SizedBox(height: 4),
-      Text(
-        key: const ValueKey('audit-log-scope'),
-        page.isEventScoped
-            ? 'Every "${page.eventType!.label}" event recorded for this '
-                  'business. Other events are not listed on this page.'
-            : 'Every event this business recorded, including the ones the '
-                  'platform caused. Individual sales are not events and are '
-                  'not listed here.',
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        'The log is permanent and cannot be edited from this app. It is '
-        'listed by record ID, which is not time order; each entry states when '
-        'it was recorded.',
-      ),
-      const SizedBox(height: 16),
-      AppSelect<TenantAuditEventType?>(
-        key: const ValueKey('audit-log-filter'),
-        value: page.eventType,
-        label: 'Show',
-        leading: Icons.filter_list,
-        items: <AppSelectItem<TenantAuditEventType?>>[
-          const AppSelectItem<TenantAuditEventType?>(
-            value: null,
-            label: 'All events',
-          ),
-          for (final type in TenantAuditEventType.values)
-            AppSelectItem<TenantAuditEventType?>(
-              value: type,
-              label: type.label,
-            ),
-        ],
-        onChanged: onSelectEvent,
-      ),
-      const SizedBox(height: 16),
-      // §4.3's responsive contract: stacked cards on a phone, two-column cards
-      // on a tablet, and a table on a desktop window - which this route never
-      // had before step 6, and which is the form an activity log is most
-      // legible in. Nothing about what an event says has changed; only what
-      // shape it is said in.
-      RecordList(
-        identityLabel: 'Event',
-        items: <RecordItem>[for (final record in page.items) _record(record)],
-        empty: Text(
-          key: const ValueKey('audit-log-empty'),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('audit-log'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // §7's "Title appears once": the `AppScaffold` above says `Activity log`,
+        // and this said the same thing at greater length directly under it.
+        SizedBox(height: tokens.spacing.s4),
+        Text(
+          key: const ValueKey('audit-log-scope'),
           page.isEventScoped
-              ? 'No "${page.eventType!.label}" event has been recorded for '
-                    'this business.'
-              : 'No event has been recorded for this business.',
+              ? 'Every "${page.eventType!.label}" event recorded for this '
+                    'business. Other events are not listed on this page.'
+              : 'Every event this business recorded, including the ones the '
+                    'platform caused. Individual sales are not events and are '
+                    'not listed here.',
         ),
-      ),
-      const SizedBox(height: 16),
-      Pagination(
-        pageNumber: pageIndex + 1,
-        previousKey: const ValueKey('audit-log-previous'),
-        nextKey: const ValueKey('audit-log-next'),
-        onPrevious: pageIndex > 0 ? onPreviousPage : null,
-        onNext: page.hasMore ? onNextPage : null,
-      ),
-    ],
-  );
+        SizedBox(height: tokens.spacing.s4),
+        const Text(
+          'The log is permanent and cannot be edited from this app. It is '
+          'listed by record ID, which is not time order; each entry states when '
+          'it was recorded.',
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        AppSelect<TenantAuditEventType?>(
+          key: const ValueKey('audit-log-filter'),
+          value: page.eventType,
+          label: 'Show',
+          leading: Icons.filter_list,
+          items: <AppSelectItem<TenantAuditEventType?>>[
+            const AppSelectItem<TenantAuditEventType?>(
+              value: null,
+              label: 'All events',
+            ),
+            for (final type in TenantAuditEventType.values)
+              AppSelectItem<TenantAuditEventType?>(
+                value: type,
+                label: type.label,
+              ),
+          ],
+          onChanged: onSelectEvent,
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        // §4.3's responsive contract: stacked cards on a phone, two-column cards
+        // on a tablet, and a table on a desktop window - which this route never
+        // had before step 6, and which is the form an activity log is most
+        // legible in. Nothing about what an event says has changed; only what
+        // shape it is said in.
+        RecordList(
+          identityLabel: 'Event',
+          items: <RecordItem>[for (final record in page.items) _record(record)],
+          empty: Text(
+            key: const ValueKey('audit-log-empty'),
+            page.isEventScoped
+                ? 'No "${page.eventType!.label}" event has been recorded for '
+                      'this business.'
+                : 'No event has been recorded for this business.',
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('audit-log-previous'),
+          nextKey: const ValueKey('audit-log-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
+        ),
+      ],
+    );
+  }
 
   /// One event as §5.2's five rows.
   ///

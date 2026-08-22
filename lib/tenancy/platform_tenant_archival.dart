@@ -514,12 +514,12 @@ final class _PlatformTenantArchivalFormState
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         const Text(
           'This permanently removes the business from active ownership counts. '
           'It cannot be reopened through tenant management.',
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         AppTextField(
           key: const ValueKey('platform-archival-reason'),
           controller: _reasonController,
@@ -531,7 +531,7 @@ final class _PlatformTenantArchivalFormState
           label: 'Archival reason',
         ),
         Text('Type ${widget.tenant.archiveConfirmation} to confirm.'),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         AppTextField(
           key: const ValueKey('platform-archival-confirmation'),
           controller: _confirmationController,
@@ -541,7 +541,7 @@ final class _PlatformTenantArchivalFormState
           label: 'Confirmation',
         ),
         if (_safeError != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('platform-archival-error'),
             // A refusal, named as one rather than painted red: the write
@@ -551,7 +551,7 @@ final class _PlatformTenantArchivalFormState
             message: _safeError!,
           ),
         ],
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -561,7 +561,7 @@ final class _PlatformTenantArchivalFormState
               tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: tokens.spacing.s8),
             // **`loading` rather than a hand-rolled spinner, and `onPressed` is
             // no longer nulled while it runs.** §2.1's loading row holds the
             // container and replaces the label; nulling the callback would paint
@@ -723,9 +723,9 @@ final class _PlatformRejectedTenantScreenState
     return RefreshIndicator(
       onRefresh: _reload,
       child: ListView.separated(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(tokens.spacing.s20),
         itemCount: _items.length + (_hasMore || _loading ? 1 : 0),
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        separatorBuilder: (_, _) => SizedBox(height: tokens.spacing.s12),
         itemBuilder: (context, index) {
           if (index == _items.length) {
             return Center(
@@ -744,7 +744,7 @@ final class _PlatformRejectedTenantScreenState
           return Card(
             key: ValueKey('platform-archival-tenant-${tenant.tenantId}'),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(tokens.spacing.s16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -754,14 +754,14 @@ final class _PlatformRejectedTenantScreenState
                       color: tokens.colors.text.primary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: tokens.spacing.s4),
                   Text(
                     '${tenant.slug} - ${tenant.owner.displayName ?? tenant.owner.uid}',
                   ),
                   Text('${tenant.owner.email} - rejected'),
                   if (!tenant.owner.globallyActive)
                     const Text('Owner account disabled'),
-                  const SizedBox(height: 12),
+                  SizedBox(height: tokens.spacing.s12),
                   if (!archiving)
                     Align(
                       alignment: Alignment.centerRight,

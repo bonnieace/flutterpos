@@ -742,47 +742,50 @@ final class _AmendShiftDialogState extends State<_AmendShiftDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AppDialog(
-    title: 'Correct this shift\'s totals?',
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // The two sentences that decide whether this is safe to agree to: the
-        // figure is not a choice, and the drawer count is untouched.
-        Text(
-          key: const ValueKey('reconciliation-amend-explanation'),
-          'Shift ${widget.anomaly.shiftId} will record the sales total the '
-          'server aggregated from the sales filed against it. You cannot '
-          'choose the figure, and the cash counted at close is not changed.',
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return AppDialog(
+      title: 'Correct this shift\'s totals?',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // The two sentences that decide whether this is safe to agree to: the
+          // figure is not a choice, and the drawer count is untouched.
+          Text(
+            key: const ValueKey('reconciliation-amend-explanation'),
+            'Shift ${widget.anomaly.shiftId} will record the sales total the '
+            'server aggregated from the sales filed against it. You cannot '
+            'choose the figure, and the cash counted at close is not changed.',
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          AppTextField(
+            key: const ValueKey('reconciliation-amend-reason'),
+            controller: _reason,
+            autofocus: true,
+            maxLength: 500,
+            maxLines: 2,
+            label: 'Why is this being corrected?',
+            helper: 'Kept in the business\'s record of the correction.',
+          ),
+        ],
+      ),
+      actions: [
+        AppButton(
+          key: const ValueKey('reconciliation-amend-cancel'),
+          label: 'Cancel',
+          tier: AppButtonTier.tertiary,
+          onPressed: () => Navigator.of(context).pop(),
         ),
-        const SizedBox(height: 12),
-        AppTextField(
-          key: const ValueKey('reconciliation-amend-reason'),
-          controller: _reason,
-          autofocus: true,
-          maxLength: 500,
-          maxLines: 2,
-          label: 'Why is this being corrected?',
-          helper: 'Kept in the business\'s record of the correction.',
+        AppButton(
+          key: const ValueKey('reconciliation-amend-confirm'),
+          label: 'Correct it',
+          tier: AppButtonTier.primary,
+          onPressed: () => Navigator.of(context).pop(_reason.text),
         ),
       ],
-    ),
-    actions: [
-      AppButton(
-        key: const ValueKey('reconciliation-amend-cancel'),
-        label: 'Cancel',
-        tier: AppButtonTier.tertiary,
-        onPressed: () => Navigator.of(context).pop(),
-      ),
-      AppButton(
-        key: const ValueKey('reconciliation-amend-confirm'),
-        label: 'Correct it',
-        tier: AppButtonTier.primary,
-        onPressed: () => Navigator.of(context).pop(_reason.text),
-      ),
-    ],
-  );
+    );
+  }
 }
 
 /// One chip per kind this client models, plus every kind.

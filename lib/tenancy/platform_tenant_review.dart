@@ -628,14 +628,14 @@ final class _PlatformTenantReviewFormState
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         Text(
           rejecting
               ? 'The business will remain inaccessible to its owner.'
               : 'The owner will gain operational access after approval.',
         ),
         if (rejecting) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           AppTextField(
             key: const ValueKey('platform-review-reason'),
             controller: _reasonController,
@@ -648,7 +648,7 @@ final class _PlatformTenantReviewFormState
           ),
         ],
         if (_safeError != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Callout(
             key: const ValueKey('platform-review-error'),
             // A refusal, named as one rather than painted red: the write
@@ -658,7 +658,7 @@ final class _PlatformTenantReviewFormState
             message: _safeError!,
           ),
         ],
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -668,7 +668,7 @@ final class _PlatformTenantReviewFormState
               tier: AppButtonTier.tertiary,
               onPressed: _submitting ? null : widget.onCancel,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: tokens.spacing.s8),
             AppButton(
               key: ValueKey(
                 rejecting
@@ -864,9 +864,9 @@ final class _PlatformPendingTenantReviewScreenState
       return const EmptyState(title: 'No pending business requests');
     }
     return ListView.separated(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       itemCount: _items.length + (_hasMore || _loading ? 1 : 0),
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => SizedBox(height: tokens.spacing.s12),
       itemBuilder: (context, index) {
         if (index == _items.length) {
           return Center(
@@ -885,7 +885,7 @@ final class _PlatformPendingTenantReviewScreenState
         return Card(
           key: ValueKey('platform-tenant-${tenant.tenantId}'),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(tokens.spacing.s16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -895,14 +895,14 @@ final class _PlatformPendingTenantReviewScreenState
                     color: tokens.colors.text.primary,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: tokens.spacing.s4),
                 Text(
                   '${tenant.slug} - ${tenant.owner.displayName ?? tenant.owner.uid}',
                 ),
                 Text(tenant.owner.email),
                 if (!tenant.owner.globallyActive)
                   const Text('Owner account disabled'),
-                const SizedBox(height: 12),
+                SizedBox(height: tokens.spacing.s12),
                 if (!reviewing)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -913,7 +913,7 @@ final class _PlatformPendingTenantReviewScreenState
                         onPressed: () =>
                             _review(tenant, PlatformTenantReviewAction.reject),
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: tokens.spacing.s8),
                       AppButton(
                         key: ValueKey('platform-approve-${tenant.tenantId}'),
                         label: 'Approve',

@@ -302,7 +302,7 @@ final class _SalesTotalsContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return ListView(
       key: const ValueKey('sales-totals'),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
         // The screen's title is the `PageHeader`'s and is not drawn twice; see
         // the same note on the daily summary. §7's order from here: optional

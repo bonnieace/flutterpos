@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/status.dart';
+import '../ui/tokens.dart';
 import 'tenant_paths.dart';
 import 'tenant_repository.dart';
 import 'tenant_types.dart';
@@ -52,40 +53,43 @@ final class TenantBrandingPanel extends StatelessWidget {
   final TenantBranding? branding;
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      const Icon(Icons.verified_user_outlined, size: 52),
-      const SizedBox(height: 16),
-      if (branding?.slogan case final slogan?) ...[
-        Text(slogan, textAlign: TextAlign.center),
-        const SizedBox(height: 8),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.verified_user_outlined, size: 52),
+        SizedBox(height: tokens.spacing.s16),
+        if (branding?.slogan case final slogan?) ...[
+          Text(slogan, textAlign: TextAlign.center),
+          SizedBox(height: tokens.spacing.s8),
+        ],
+        // **The role line left this panel on 2026-08-16 and did not lose a
+        // reader.** `design.md` v0.7 gives the home's top bar "the signed-in
+        // member and their role", so `AppScaffold.subtitle` states it one line
+        // under the business name - and the first picture of that showed
+        // "Signed in as Owner" twice on one screen, which is §7's "title appears
+        // once" failing for the identity rather than for the title.
+        //
+        // v0.7 predicted exactly this and said what to do: the panel "stops
+        // drawing the name, because a title appears once". The same argument
+        // reaches the role, one line down.
+        SizedBox(height: tokens.spacing.s16),
+        // §5.1 sends a permanent notice paragraph to a `Callout`, and this is
+        // one. It stayed a `Text` until now only because the landing route was
+        // step 5b's and step 4's notice sweep could not touch it; this is step
+        // 5b, so the container it was waiting for is no longer blocked.
+        //
+        // The wording is §8 rule 1's, settled by step 11 - the rule quotes the
+        // sentence this replaced as its own worked example of "a commit message
+        // on a production screen".
+        const Callout(
+          status: AppStatus.info,
+          message: "Some screens aren't available yet.",
+        ),
       ],
-      // **The role line left this panel on 2026-08-16 and did not lose a
-      // reader.** `design.md` v0.7 gives the home's top bar "the signed-in
-      // member and their role", so `AppScaffold.subtitle` states it one line
-      // under the business name - and the first picture of that showed
-      // "Signed in as Owner" twice on one screen, which is §7's "title appears
-      // once" failing for the identity rather than for the title.
-      //
-      // v0.7 predicted exactly this and said what to do: the panel "stops
-      // drawing the name, because a title appears once". The same argument
-      // reaches the role, one line down.
-      const SizedBox(height: 16),
-      // §5.1 sends a permanent notice paragraph to a `Callout`, and this is
-      // one. It stayed a `Text` until now only because the landing route was
-      // step 5b's and step 4's notice sweep could not touch it; this is step
-      // 5b, so the container it was waiting for is no longer blocked.
-      //
-      // The wording is §8 rule 1's, settled by step 11 - the rule quotes the
-      // sentence this replaced as its own worked example of "a commit message
-      // on a production screen".
-      const Callout(
-        status: AppStatus.info,
-        message: "Some screens aren't available yet.",
-      ),
-    ],
-  );
+    );
+  }
 }
 
 String _requiredString(Map<String, Object?> map, String field) {

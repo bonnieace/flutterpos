@@ -863,44 +863,47 @@ final class _TenantInvitationAcceptanceScreen extends StatelessWidget {
   final TenantInvitationAcceptanceCurrentCheck? isCurrent;
 
   @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'Business invitation',
-    contentWidth: AppContentWidth.reading,
-    actions: <Widget>[
-      AppButton(
-        label: 'Sign out',
-        tier: AppButtonTier.tertiary,
-        onPressed: onSignOut,
-      ),
-    ],
-    body: Center(
-      child: SingleChildScrollView(
-        // 24 until step 6; see the page inset's own note in `AppScaffold`.
-        padding: EdgeInsets.all(
-          AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return AppScaffold(
+      title: 'Business invitation',
+      contentWidth: AppContentWidth.reading,
+      actions: <Widget>[
+        AppButton(
+          label: 'Sign out',
+          tier: AppButtonTier.tertiary,
+          onPressed: onSignOut,
         ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: TenantInvitationAcceptanceForm(
-                currentUid: currentUid,
-                invitationLink: invitationLink,
-                callable: callable,
-                tenantName: tenantName,
-                invitedRole: invitedRole,
-                requestIdFactory: requestIdFactory,
-                isCurrent: isCurrent,
-                onSuccess: onSuccess,
-                onCancel: onCancel,
+      ],
+      body: Center(
+        child: SingleChildScrollView(
+          // 24 until step 6; see the page inset's own note in `AppScaffold`.
+          padding: EdgeInsets.all(
+            AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(tokens.spacing.s20),
+                child: TenantInvitationAcceptanceForm(
+                  currentUid: currentUid,
+                  invitationLink: invitationLink,
+                  callable: callable,
+                  tenantName: tenantName,
+                  invitedRole: invitedRole,
+                  requestIdFactory: requestIdFactory,
+                  isCurrent: isCurrent,
+                  onSuccess: onSuccess,
+                  onCancel: onCancel,
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 final class _InvalidTenantInvitationScreen extends StatelessWidget {
@@ -913,49 +916,52 @@ final class _InvalidTenantInvitationScreen extends StatelessWidget {
   final Future<void> Function() onSignOut;
 
   @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'Business invitation',
-    contentWidth: AppContentWidth.reading,
-    actions: <Widget>[
-      AppButton(
-        label: 'Sign out',
-        tier: AppButtonTier.tertiary,
-        onPressed: onSignOut,
-      ),
-    ],
-    body: Center(
-      child: Padding(
-        // 24 until step 6; see the page inset's own note in `AppScaffold`.
-        padding: EdgeInsets.all(
-          AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return AppScaffold(
+      title: 'Business invitation',
+      contentWidth: AppContentWidth.reading,
+      actions: <Widget>[
+        AppButton(
+          label: 'Sign out',
+          tier: AppButtonTier.tertiary,
+          onPressed: onSignOut,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.link_off_outlined, size: 48),
-            const SizedBox(height: 16),
-            // §8 rule 6 - say what is still true - and it is the shape the
-            // invitation refusal already took: name what will actually work
-            // rather than leave a person on a dead end with one button.
-            const Text(
-              'This invitation link is invalid or incomplete. Ask whoever '
-              'invited you to send it again.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            AppButton(
-              // §8 rule 3: a control names its effect. This one discards the
-              // link and goes on to whatever this identity can already reach,
-              // which `Continue` named not at all.
-              label: 'Continue without this invitation',
-              tier: AppButtonTier.primary,
-              onPressed: onContinue,
-            ),
-          ],
+      ],
+      body: Center(
+        child: Padding(
+          // 24 until step 6; see the page inset's own note in `AppScaffold`.
+          padding: EdgeInsets.all(
+            AppScaffold.horizontalInset(AppTokens.componentOf(context).spacing),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.link_off_outlined, size: 48),
+              SizedBox(height: tokens.spacing.s16),
+              // §8 rule 6 - say what is still true - and it is the shape the
+              // invitation refusal already took: name what will actually work
+              // rather than leave a person on a dead end with one button.
+              const Text(
+                'This invitation link is invalid or incomplete. Ask whoever '
+                'invited you to send it again.',
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: tokens.spacing.s16),
+              AppButton(
+                // §8 rule 3: a control names its effect. This one discards the
+                // link and goes on to whatever this identity can already reach,
+                // which `Continue` named not at all.
+                label: 'Continue without this invitation',
+                tier: AppButtonTier.primary,
+                onPressed: onContinue,
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// The shell's own waiting screen, one sentence per phase.
@@ -1073,6 +1079,7 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
     // The two transient panels above the list - verify your address, request a
     // business - used to be laid out at their natural height with the list
     // taking whatever was left. **Step 5a's page header costs this route 72
@@ -1089,7 +1096,12 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
       if (widget.verificationIdentity?.canSendVerification == true &&
           widget.onReloadIdentity != null)
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          padding: EdgeInsets.fromLTRB(
+            tokens.spacing.s20,
+            tokens.spacing.s20,
+            tokens.spacing.s20,
+            0,
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
             child: AccountVerificationPanel(
@@ -1106,12 +1118,17 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
         ),
       if (_requestingTenant && widget.requestIdentity != null)
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          padding: EdgeInsets.fromLTRB(
+            tokens.spacing.s20,
+            tokens.spacing.s20,
+            tokens.spacing.s20,
+            0,
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.all(tokens.spacing.s20),
                 child: TenantRequestForm(
                   identity: widget.requestIdentity!,
                   callable:
@@ -1158,9 +1175,10 @@ final class _TenantBusinessSelectorState extends State<TenantBusinessSelector> {
             child: widget.memberships.isEmpty
                 ? _EmptyBusinessList(onRetry: widget.onRetry)
                 : ListView.separated(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(tokens.spacing.s20),
                     itemCount: widget.memberships.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) =>
+                        SizedBox(height: tokens.spacing.s12),
                     itemBuilder: (context, index) {
                       final membership = widget.memberships[index];
                       final status = tenantMembershipDisplayStatus(membership);
@@ -1243,27 +1261,30 @@ final class _EmptyBusinessList extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.storefront_outlined, size: 48),
-            const SizedBox(height: 16),
-            const Text('No business memberships are available.'),
-            const SizedBox(height: 16),
-            AppButton(
-              label: 'Retry',
-              tier: AppButtonTier.primary,
-              onPressed: onRetry,
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return SingleChildScrollView(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(tokens.spacing.s24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.storefront_outlined, size: 48),
+              SizedBox(height: tokens.spacing.s16),
+              const Text('No business memberships are available.'),
+              SizedBox(height: tokens.spacing.s16),
+              AppButton(
+                label: 'Retry',
+                tier: AppButtonTier.primary,
+                onPressed: onRetry,
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 enum TenantMembershipDisplayStatus {
@@ -1646,7 +1667,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
             children: [
               TenantBrandingPanel(branding: branding),
               if (shiftPanel != null) ...[
-                const SizedBox(height: 24),
+                SizedBox(height: tokens.spacing.s24),
                 shiftPanel!,
               ],
 
@@ -1658,7 +1679,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               if (!HomeNavigation.showsMenu(
                 MediaQuery.sizeOf(context).width,
               )) ...[
-                const SizedBox(height: 24),
+                SizedBox(height: tokens.spacing.s24),
                 HomeNavigation.cards(destinations: destinations),
               ],
             ],

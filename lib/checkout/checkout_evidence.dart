@@ -6,6 +6,7 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/status.dart';
+import '../ui/tokens.dart';
 import '../ui/sync_indicator.dart';
 import '../ui/tokens.dart';
 import 'checkout_outbox.dart';
@@ -270,64 +271,72 @@ final class _EvidenceContentsState extends State<_EvidenceContents> {
     );
   }
 
-  Widget _panel(CheckoutEvidenceSummary summary) => SyncQueuePanel(
-    key: const ValueKey('pending-checkout-evidence-panel'),
-    title: 'Checkouts on this device',
-    onClose: () => setState(() => _open = false),
-    // **The empty sentence survives, inside the panel.** A device holding
-    // nothing draws no badge at all - §5.1's rule, and the reason the button is
-    // quiet when there is no news - so the one place left to say it is the
-    // readout somebody opened to ask.
-    emptyMessage: summary.total == 0
-        ? 'No checkouts are stored on this device.'
-        : null,
-    entries: <SyncQueueEntry>[
-      SyncQueueEntry(
-        label: 'Saved offline',
-        count: summary.savedOffline,
-        status: summary.savedOffline > 0 ? AppStatus.attention : null,
-      ),
-      SyncQueueEntry(label: 'Submitting', count: summary.submitting),
-      SyncQueueEntry(
-        label: 'Awaiting confirmation',
-        count: summary.awaitingConfirmation,
-      ),
-      SyncQueueEntry(
-        label: 'Needs attention',
-        count: summary.needsAttention,
-        status: summary.needsAttention > 0 ? AppStatus.problem : null,
-      ),
-      SyncQueueEntry(label: 'Confirmed', count: summary.confirmed),
-    ],
-    explanation: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        if (widget.rereading)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              key: const ValueKey('pending-checkout-evidence-rereading'),
-              'Re-reading the records on this device; these counts may be a '
-              'moment old.',
-              style: AppTokens.componentOf(context).typography.caption.copyWith(
-                color: AppTokens.componentOf(context).colors.text.tertiary,
+  Widget _panel(CheckoutEvidenceSummary summary) {
+    // `State.context`, because this helper takes no `BuildContext` of its
+    // own and does not need one: it is only ever called from `build`.
+    final tokens = AppTokens.componentOf(context);
+    return SyncQueuePanel(
+      key: const ValueKey('pending-checkout-evidence-panel'),
+      title: 'Checkouts on this device',
+      onClose: () => setState(() => _open = false),
+      // **The empty sentence survives, inside the panel.** A device holding
+      // nothing draws no badge at all - §5.1's rule, and the reason the button is
+      // quiet when there is no news - so the one place left to say it is the
+      // readout somebody opened to ask.
+      emptyMessage: summary.total == 0
+          ? 'No checkouts are stored on this device.'
+          : null,
+      entries: <SyncQueueEntry>[
+        SyncQueueEntry(
+          label: 'Saved offline',
+          count: summary.savedOffline,
+          status: summary.savedOffline > 0 ? AppStatus.attention : null,
+        ),
+        SyncQueueEntry(label: 'Submitting', count: summary.submitting),
+        SyncQueueEntry(
+          label: 'Awaiting confirmation',
+          count: summary.awaitingConfirmation,
+        ),
+        SyncQueueEntry(
+          label: 'Needs attention',
+          count: summary.needsAttention,
+          status: summary.needsAttention > 0 ? AppStatus.problem : null,
+        ),
+        SyncQueueEntry(label: 'Confirmed', count: summary.confirmed),
+      ],
+      explanation: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (widget.rereading)
+            Padding(
+              padding: EdgeInsets.only(bottom: tokens.spacing.s8),
+              child: Text(
+                key: const ValueKey('pending-checkout-evidence-rereading'),
+                'Re-reading the records on this device; these counts may be a '
+                'moment old.',
+                style: AppTokens.componentOf(context).typography.caption
+                    .copyWith(
+                      color: AppTokens.componentOf(
+                        context,
+                      ).colors.text.tertiary,
+                    ),
               ),
             ),
+          // §7's *Long copy*: this explains policy rather than the current
+          // state, so it folds. It was a permanent three-line paragraph.
+          const Disclosure(
+            key: ValueKey('pending-checkout-evidence-policy'),
+            summary: 'Why can I not send these?',
+            child: Text(
+              'This panel is read-only. Submission and confirmation remain '
+              'automatic; no checkout can be edited, retried, or deleted here.',
+            ),
           ),
-        // §7's *Long copy*: this explains policy rather than the current
-        // state, so it folds. It was a permanent three-line paragraph.
-        const Disclosure(
-          key: ValueKey('pending-checkout-evidence-policy'),
-          summary: 'Why can I not send these?',
-          child: Text(
-            'This panel is read-only. Submission and confirmation remain '
-            'automatic; no checkout can be edited, retried, or deleted here.',
-          ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
   /// How wide the panel hangs. Named for the reason `EmptyState.markSize` is:
   /// `design.md` states no panel width, and a readout of five counts wants

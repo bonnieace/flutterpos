@@ -197,7 +197,7 @@ final class _AmendmentContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return ListView(
       key: const ValueKey('shift-amendments'),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
         // §7's "Title appears once", in both of this route's two forms: unscoped
         // it repeated the `AppScaffold` title exactly, and scoped it named
@@ -212,7 +212,7 @@ final class _AmendmentContents extends StatelessWidget {
           'permanently, with the reason given and the person who asked. Nothing '
           'on this page can make, change, or remove one.',
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         const Text(
           key: ValueKey('shift-amendments-cash'),
           'No correction here changed a drawer count. The recorded sales and the '
@@ -220,14 +220,14 @@ final class _AmendmentContents extends StatelessWidget {
           'corrected this way - so a shift may still be reported short after one.',
         ),
         if (page.isShiftScoped) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           AppButton(
             key: const ValueKey('shift-amendments-show-all'),
             label: 'Show every shift',
             onPressed: onShowAllShifts,
           ),
         ],
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         // §4.3's responsive contract. A correction is the densest record in this
         // app - it states what moved, what disagreed, why, and where it was read
         // from - so what a column is worth was decided by what a person scans a
@@ -242,7 +242,7 @@ final class _AmendmentContents extends StatelessWidget {
                 : 'No shift summary has been corrected in this business.',
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s8),
         Text(
           'This list is not in time order: a record is addressed by the request '
           'that made it, not by when it was made. Each one states its own '
@@ -251,7 +251,7 @@ final class _AmendmentContents extends StatelessWidget {
             color: tokens.colors.text.tertiary,
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: tokens.spacing.s16),
         Pagination(
           pageNumber: pageIndex + 1,
           previousKey: const ValueKey('shift-amendments-previous'),

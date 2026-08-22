@@ -237,84 +237,87 @@ final class _ShiftHistoryContents extends StatelessWidget {
   final ValueChanged<String> onViewCorrections;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const ValueKey('shift-history'),
-    padding: const EdgeInsets.all(20),
-    children: [
-      // §7's "Title appears once": the `AppScaffold` above says `Shift
-      // history`, and this named the same list in different words under it.
-      const SizedBox(height: 4),
-      const Text(
-        key: ValueKey('shift-history-scope-note'),
-        'Counted cash and recorded sales are shown exactly as the server holds '
-        'them, and are never recomputed here. Reconciliation resolves any '
-        'difference. A shift whose recorded sales it corrected says so on its '
-        'own row: a correction rewrites the recorded sales to the total that '
-        'shift\'s own sales prove, and never the counted cash.',
-      ),
-      // Said once, above the list, because it is the same sentence on every
-      // corrected row and it is about this session rather than about any shift.
-      // It used to be repeated inside each corrected record, where §5.2 has a
-      // key-value line and no room for a paragraph.
-      if (!canReadCorrections &&
-          page.items.any((entry) => entry.amendment != null)) ...[
-        const SizedBox(height: 4),
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('shift-history'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: [
+        // §7's "Title appears once": the `AppScaffold` above says `Shift
+        // history`, and this named the same list in different words under it.
+        SizedBox(height: tokens.spacing.s4),
         const Text(
-          key: ValueKey('shift-history-corrections-denied'),
-          'The record of who corrected a shift, and why, is available to '
-          'managers, administrators, and owners.',
+          key: ValueKey('shift-history-scope-note'),
+          'Counted cash and recorded sales are shown exactly as the server holds '
+          'them, and are never recomputed here. Reconciliation resolves any '
+          'difference. A shift whose recorded sales it corrected says so on its '
+          'own row: a correction rewrites the recorded sales to the total that '
+          'shift\'s own sales prove, and never the counted cash.',
+        ),
+        // Said once, above the list, because it is the same sentence on every
+        // corrected row and it is about this session rather than about any shift.
+        // It used to be repeated inside each corrected record, where §5.2 has a
+        // key-value line and no room for a paragraph.
+        if (!canReadCorrections &&
+            page.items.any((entry) => entry.amendment != null)) ...[
+          SizedBox(height: tokens.spacing.s4),
+          const Text(
+            key: ValueKey('shift-history-corrections-denied'),
+            'The record of who corrected a shift, and why, is available to '
+            'managers, administrators, and owners.',
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s16),
+        if (TenantShiftHistoryRepository.canReadEveryCashier(session))
+          SegmentedButton<TenantShiftHistoryScope>(
+            key: const ValueKey('shift-history-scope'),
+            segments: const [
+              ButtonSegment<TenantShiftHistoryScope>(
+                value: TenantShiftHistoryScope.ownShifts,
+                label: Text('My shifts'),
+              ),
+              ButtonSegment<TenantShiftHistoryScope>(
+                value: TenantShiftHistoryScope.everyCashier,
+                label: Text('Every cashier'),
+              ),
+            ],
+            selected: <TenantShiftHistoryScope>{page.scope},
+            onSelectionChanged: (selection) => onScopeChanged(selection.single),
+          ),
+        SizedBox(height: tokens.spacing.s16),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AppButton(
+            key: const ValueKey('shift-history-own-sales'),
+            label: 'My recent sales',
+            icon: Icons.receipt_long_outlined,
+            onPressed: () => onViewSales(const TenantOwnSaleHistoryRequest()),
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        // §4.3's responsive contract.
+        RecordList(
+          identityLabel: 'Shift',
+          items: <RecordItem>[for (final entry in page.items) _entry(entry)],
+          // §7's Empty pattern. Closing a shift happens on the shift banner and
+          // not here, so this states what would be here and offers nothing.
+          empty: const EmptyState(
+            key: ValueKey('shift-history-empty'),
+            title: 'No closed shifts yet',
+            hint: 'A shift appears here once it has been closed.',
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        Pagination(
+          pageNumber: pageIndex + 1,
+          previousKey: const ValueKey('shift-history-previous'),
+          nextKey: const ValueKey('shift-history-next'),
+          onPrevious: pageIndex > 0 ? onPreviousPage : null,
+          onNext: page.hasMore ? onNextPage : null,
         ),
       ],
-      const SizedBox(height: 16),
-      if (TenantShiftHistoryRepository.canReadEveryCashier(session))
-        SegmentedButton<TenantShiftHistoryScope>(
-          key: const ValueKey('shift-history-scope'),
-          segments: const [
-            ButtonSegment<TenantShiftHistoryScope>(
-              value: TenantShiftHistoryScope.ownShifts,
-              label: Text('My shifts'),
-            ),
-            ButtonSegment<TenantShiftHistoryScope>(
-              value: TenantShiftHistoryScope.everyCashier,
-              label: Text('Every cashier'),
-            ),
-          ],
-          selected: <TenantShiftHistoryScope>{page.scope},
-          onSelectionChanged: (selection) => onScopeChanged(selection.single),
-        ),
-      const SizedBox(height: 16),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: AppButton(
-          key: const ValueKey('shift-history-own-sales'),
-          label: 'My recent sales',
-          icon: Icons.receipt_long_outlined,
-          onPressed: () => onViewSales(const TenantOwnSaleHistoryRequest()),
-        ),
-      ),
-      const SizedBox(height: 16),
-      // §4.3's responsive contract.
-      RecordList(
-        identityLabel: 'Shift',
-        items: <RecordItem>[for (final entry in page.items) _entry(entry)],
-        // §7's Empty pattern. Closing a shift happens on the shift banner and
-        // not here, so this states what would be here and offers nothing.
-        empty: const EmptyState(
-          key: ValueKey('shift-history-empty'),
-          title: 'No closed shifts yet',
-          hint: 'A shift appears here once it has been closed.',
-        ),
-      ),
-      const SizedBox(height: 16),
-      Pagination(
-        pageNumber: pageIndex + 1,
-        previousKey: const ValueKey('shift-history-previous'),
-        nextKey: const ValueKey('shift-history-next'),
-        onPrevious: pageIndex > 0 ? onPreviousPage : null,
-        onNext: page.hasMore ? onNextPage : null,
-      ),
-    ],
-  );
+    );
+  }
 
   /// One closed shift as §5.2's rows.
   ///

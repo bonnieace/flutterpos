@@ -320,7 +320,7 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: tokens.spacing.s4),
         Text(
           key: const ValueKey('checkout-configuration-current'),
           switch (published.state) {
@@ -335,7 +335,7 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
                   'replaces them.',
           },
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         const Text(
           key: ValueKey('checkout-configuration-scope'),
           'The code is recorded on every sale priced with it and labels every '
@@ -343,7 +343,7 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
           'rate, and no recorded sale is ever re-priced.',
         ),
         if (!widget.canPublish) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           // **A notice, not a sentence, and it was a sentence until 2026-08-22.**
           // This is the state of the build rather than a line of the page's
           // prose, and §2.1 gives `info` the meaning "offline, read-only,
@@ -365,7 +365,7 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
             message: 'This build cannot change the setting from here.',
           ),
         ] else ...[
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           AppTextField(
             key: const ValueKey('checkout-configuration-currency'),
             controller: _currency,
@@ -377,7 +377,7 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
             leading: Icons.payments_outlined,
             helper: 'Three letters, such as KES, UGX, or TZS.',
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           AppButton(
             key: const ValueKey('checkout-configuration-submit'),
             label: published.canSell ? 'Change currency' : 'Publish',
@@ -388,7 +388,7 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
           ),
         ],
         if (widget.notice case final answer?) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           Callout(
             key: const ValueKey('checkout-configuration-notice'),
             status: answer.status,

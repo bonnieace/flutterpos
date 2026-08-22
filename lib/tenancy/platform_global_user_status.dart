@@ -934,13 +934,13 @@ final class _PlatformGlobalUserStatusFormState
           ),
         ),
         if (disabling && widget.target.administrativeWarnings.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           Text(
             '${widget.target.administrativeWarnings.length} business warning(s) require operator follow-up.',
             key: const ValueKey('platform-global-status-impact-warning'),
           ),
         ],
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         AppTextField(
           key: const ValueKey('platform-global-status-reason'),
           controller: _reason,
@@ -949,9 +949,9 @@ final class _PlatformGlobalUserStatusFormState
           label: 'Reason',
         ),
         if (disabling) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.spacing.s12),
           Text('Type ${widget.target.user.uid} to confirm.'),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.s8),
           AppTextField(
             key: const ValueKey('platform-global-status-confirmation'),
             controller: _confirmation,
@@ -960,13 +960,13 @@ final class _PlatformGlobalUserStatusFormState
           ),
         ],
         if (_safeError != null) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: tokens.spacing.s8),
           Text(
             _safeError!,
             key: const ValueKey('platform-global-status-error'),
           ),
         ],
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         Wrap(
           spacing: 12,
           alignment: WrapAlignment.end,
@@ -1097,12 +1097,12 @@ final class _PlatformGlobalUserStatusScreenState
     final tokens = AppTokens.componentOf(context);
     final target = _target;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
         const Text(
           'Enter one exact Firebase Auth UID. General user search and bulk actions are unavailable.',
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.spacing.s12),
         Row(
           children: [
             Expanded(
@@ -1114,7 +1114,7 @@ final class _PlatformGlobalUserStatusScreenState
                 onSubmitted: (_) => _lookup(),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: tokens.spacing.s12),
             AppButton(
               key: const ValueKey('platform-global-user-lookup'),
               label: 'Load user',
@@ -1125,18 +1125,18 @@ final class _PlatformGlobalUserStatusScreenState
           ],
         ),
         if (_safeError != null) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.spacing.s16),
           Text(
             _safeError!,
             key: const ValueKey('platform-global-user-lookup-error'),
           ),
         ],
         if (target != null) ...[
-          const SizedBox(height: 20),
+          SizedBox(height: tokens.spacing.s20),
           Card(
             key: ValueKey('platform-global-user-${target.user.uid}'),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(tokens.spacing.s16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1151,7 +1151,7 @@ final class _PlatformGlobalUserStatusScreenState
                   Text(
                     '${target.user.accountType == RootAccountType.platformAdmin ? 'platform_admin' : 'tenant_user'} - ${target.user.status.name}',
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: tokens.spacing.s12),
                   Text(
                     '${target.affectedTenants.length} canonical tenant relationship(s)',
                   ),
@@ -1166,7 +1166,7 @@ final class _PlatformGlobalUserStatusScreenState
                           ? null
                           : const Icon(Icons.warning_amber_outlined),
                     ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: tokens.spacing.s12),
                   if (!_changing)
                     Align(
                       alignment: Alignment.centerRight,
