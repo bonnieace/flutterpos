@@ -11,6 +11,13 @@ must never happen, the order of work, the anti-overtesting contract, and the com
 Decisions taken that way are logged in `AUTONOMOUS_RUN_LOG.md`, which is what the product owner
 reads afterwards.
 
+**A phase being picked up gets a handover of its own**, written by the session that finished the one
+before it: the designs it composes against, the defects to check rather than assume, the measured
+baselines, and the traps that phase specifically has. `PHASE_03_HANDOVER.md` is done and is kept as
+the model for the shape. **`PHASE_04_HANDOVER.md` is the live one** — read it before
+`phases/04-catalog-stock.md`, because it says which of that brief's defects the app already
+satisfies and which two gaps no other document names.
+
 ## Authority order
 
 When sources disagree, use this order:
