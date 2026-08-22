@@ -1,0 +1,448 @@
+/// `docs/stitch/RBAC_MATRIX.md`, as an executable contract.
+///
+/// **The matrix is derived from this code and nothing checked that it stayed
+/// derived.** It says so in its own first line — *"This matrix is derived from
+/// active Dart authorization lists and route composition"* — which makes it a
+/// snapshot of a moment, and a snapshot of authorization is the kind of document
+/// that is quietly wrong for months. Wave 0's order of work asks for the guards
+/// to be checked against it; this is that check, written so it runs again every
+/// time rather than once.
+///
+/// **Three things it asserts, and the third is the one that matters.**
+///
+/// 1. Every role list in the app holds exactly the roles the matrix gives its
+///    row. Quoted per entry, so a disagreement names the row to go and read.
+/// 2. `owner` satisfies `admin` and nothing else satisfies anything — the matrix's
+///    *"Owner satisfies checks that allow administrator; there is no general role
+///    hierarchy"*, which is what makes `[admin]` mean owner-and-administrator and
+///    `[admin, manager]` mean three roles rather than two.
+/// 3. **The set of role lists in `lib/` is exactly the set below.** A source
+///    scan, because the failure this catches is a *new* guard rather than a
+///    changed one: a capability added next month with its own list would pass
+///    every assertion in 1 and appear in no row of the matrix. This is the only
+///    assertion here that a reader would not think to write.
+///
+/// **What it deliberately does not assert.** Whether a *route* is offered to a
+/// role, which is `tenant_routing_shell.dart`'s business and is already
+/// structurally safe — see the note on [_navigationIsFedFromTheGuards]. And
+/// whether the server agrees: `firestore.rules` and the callables are the real
+/// boundary, and `rules-tests/` is where that is proven. A client-side list that
+/// matched a matrix while the server disagreed would be exactly the false
+/// comfort `RBAC_MATRIX.md`'s last line warns about — *"visual hiding alone is
+/// never authorization"*.
+library;
+
+import 'dart:io' show Directory, File;
+
+import 'package:flutter_application_1/audit/audit_log.dart';
+import 'package:flutter_application_1/checkout/checkout_configuration.dart';
+import 'package:flutter_application_1/checkout/checkout_print_configuration.dart';
+import 'package:flutter_application_1/inventory/bulk_catalog.dart';
+import 'package:flutter_application_1/inventory/catalog_management.dart';
+import 'package:flutter_application_1/inventory/stock_adjustment.dart';
+import 'package:flutter_application_1/inventory/stock_adjustment_feed.dart';
+import 'package:flutter_application_1/inventory/stock_movement_feed.dart';
+import 'package:flutter_application_1/inventory/stock_movements.dart';
+import 'package:flutter_application_1/reporting/daily_metrics.dart';
+import 'package:flutter_application_1/reporting/profit_report.dart';
+import 'package:flutter_application_1/reporting/reconciliation_anomalies.dart';
+import 'package:flutter_application_1/reporting/reconciliation_request.dart';
+import 'package:flutter_application_1/reporting/reconciliation_status.dart';
+import 'package:flutter_application_1/reporting/sales_totals.dart';
+import 'package:flutter_application_1/reporting/shift_amendment.dart';
+import 'package:flutter_application_1/reporting/shift_amendment_feed.dart';
+import 'package:flutter_application_1/returns/return_request.dart';
+import 'package:flutter_application_1/returns/return_verification.dart';
+import 'package:flutter_application_1/sales/receipt_lookup.dart';
+import 'package:flutter_application_1/shift/shift_history.dart';
+import 'package:flutter_application_1/tenancy/tenant_staff_directory.dart';
+import 'package:flutter_application_1/tenancy/tenant_staff_invitation.dart';
+import 'package:flutter_application_1/tenancy/tenant_staff_invitation_cancellation.dart';
+import 'package:flutter_application_1/tenancy/tenant_staff_invitation_email_replacement.dart';
+import 'package:flutter_application_1/tenancy/tenant_staff_invitation_resend.dart';
+import 'package:flutter_application_1/tenancy/tenant_staff_status.dart';
+import 'package:flutter_application_1/tenancy/tenant_staff_update.dart';
+import 'package:flutter_application_1/tenancy/tenant_types.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// The four roles, spelled the way the matrix spells them.
+const _o = TenantRole.owner;
+const _a = TenantRole.admin;
+const _m = TenantRole.manager;
+const _c = TenantRole.cashier;
+
+/// The operational three, which is the commonest shape in the app.
+const _management = <TenantRole>[_o, _a, _m];
+
+/// Every named role list in the active app, against the matrix row that governs
+/// it.
+///
+/// Keyed by `Class.member` so a failure names the symbol, and ordered by the
+/// matrix rather than by file so the two can be read side by side.
+final Map<String, ({List<TenantRole> expected, String row})>
+_guards = <String, ({List<TenantRole> expected, String row})>{
+  // | Receipt lookup | Full | Full | Full | Full |
+  'TenantReceiptLookupRepository.allowedRoles': (
+    expected: TenantReceiptLookupRepository.allowedRoles,
+    row: 'Receipt lookup: every active member.',
+  ),
+  // | Record pending return | Full | Full | Full | Full |
+  'TenantReturnRequestRepository.allowedRoles': (
+    expected: TenantReturnRequestRepository.allowedRoles,
+    row: 'Record pending return: every active member. Verification differs.',
+  ),
+  // | View management shift history | Full | Full | Full | No |
+  //
+  // **The route is open to everyone and the *scope* is what this gates.** A
+  // cashier reads their own closed shifts; reading another cashier's is the
+  // management scope, and `shift_history_panel.dart` hides the scope toggle
+  // behind the same predicate the repository enforces.
+  'TenantShiftHistoryRepository.managementRoles': (
+    expected: TenantShiftHistoryRepository.managementRoles,
+    row: 'View management shift history: manager-or-above.',
+  ),
+  // | Manage catalog operational fields | Full | Full | Full | No |
+  'TenantCatalogManagementRepository.allowedRoles': (
+    expected: TenantCatalogManagementRepository.allowedRoles,
+    row: 'Manage catalog operational fields: owner/admin/manager.',
+  ),
+  // | Change price or cost | Full | Full | No | No |
+  'TenantCatalogManagementRepository.costRoles': (
+    expected: TenantCatalogManagementRepository.costRoles,
+    row: 'Change price or cost: money fields are narrower than the catalog.',
+  ),
+  // | Retire product | Full | Full | No | No |
+  'TenantCatalogManagementRepository.retireRoles': (
+    expected: TenantCatalogManagementRepository.retireRoles,
+    row: 'Retire product: retireRoles.',
+  ),
+  // | Bulk catalog changes/import | Full | Full | Full | No |
+  'TenantBulkCatalogRepository.allowedRoles': (
+    expected: TenantBulkCatalogRepository.allowedRoles,
+    row: 'Bulk catalog changes/import: the same management route boundary.',
+  ),
+  // | Product stock and ledger | Full | Full | Full | No |
+  'TenantProductStockRepository.allowedRoles': (
+    expected: TenantProductStockRepository.allowedRoles,
+    row: 'Product stock and ledger: dedicated stock routes.',
+  ),
+  // | Create stock correction | Full | Full | Full | No |
+  'TenantStockAdjustmentGateway.allowedRoles': (
+    expected: TenantStockAdjustmentGateway.allowedRoles,
+    row: 'Create stock correction: reasoned/manual adjustment.',
+  ),
+  // | View stock adjustment/movement feeds | Full | Full | Full | No |
+  'TenantStockAdjustmentFeedRepository.allowedRoles': (
+    expected: TenantStockAdjustmentFeedRepository.allowedRoles,
+    row: 'View stock adjustment feed.',
+  ),
+  'TenantStockMovementFeedRepository.allowedRoles': (
+    expected: TenantStockMovementFeedRepository.allowedRoles,
+    row: 'View stock movement feed, including the collection-group read.',
+  ),
+  // | Daily summary | Full | Full | Full | No |
+  'TenantDailyMetricsRepository.allowedRoles': (
+    expected: TenantDailyMetricsRepository.allowedRoles,
+    row: 'Daily summary: TenantDailyMetricsRepository.allowedRoles.',
+  ),
+  // | Sales totals | Full | Full | Full | No |
+  'TenantSalesTotalsGateway.allowedRoles': (
+    expected: TenantSalesTotalsGateway.allowedRoles,
+    row: 'Sales totals: management reporting.',
+  ),
+  // | Reconciliation status/anomalies | Full | Full | Full | No |
+  'TenantReconciliationStatusRepository.allowedRoles': (
+    expected: TenantReconciliationStatusRepository.allowedRoles,
+    row: 'Reconciliation status: read scope.',
+  ),
+  'TenantReconciliationAnomalyRepository.allowedRoles': (
+    expected: TenantReconciliationAnomalyRepository.allowedRoles,
+    row: 'Reconciliation anomalies: read scope.',
+  ),
+  // | Request reconciliation run | Full | Full | No | No |
+  'TenantReconciliationRequestGateway.allowedRoles': (
+    expected: TenantReconciliationRequestGateway.allowedRoles,
+    row: 'Request reconciliation run: write restricted to owner/admin.',
+  ),
+  // | Shift amendment/correction action | Full | Full | No | No |
+  //
+  // Two lists, and the matrix splits them in the same sentence: *"Amendment
+  // feed may be readable to manager."* The action is owner/admin; the record
+  // of who acted is management-wide.
+  'TenantShiftAmendmentGateway.allowedRoles': (
+    expected: TenantShiftAmendmentGateway.allowedRoles,
+    row: 'Shift amendment action: owner/admin.',
+  ),
+  'TenantShiftAmendmentFeedRepository.allowedRoles': (
+    expected: TenantShiftAmendmentFeedRepository.allowedRoles,
+    row: 'Shift amendment feed: readable to manager.',
+  ),
+  // | Profit/margin report | Full | Full | No | No |
+  'TenantProfitReport.allowedRoles': (
+    expected: TenantProfitReport.allowedRoles,
+    row: 'Profit/margin report: more restricted than the daily summary.',
+  ),
+  // | Staff directory | Full | Full | Read | No |
+  //
+  // **`[admin, manager]`, which is three roles and not two.** Owner
+  // satisfies admin, so this is owner/admin/manager and no cashier — and the
+  // *Read* in the matrix's manager column is the screen's own `_readOnly`,
+  // which is true exactly when the session holds neither the invitation nor
+  // the update gateway below.
+  'TenantStaffDirectoryScreen.allowedRoles': (
+    expected: TenantStaffDirectoryScreen.allowedRoles,
+    row: 'Staff directory: manager sees it read-only; cashier not at all.',
+  ),
+  // | Invite/edit/disable/resend/cancel staff | Full | Full | No | No |
+  'TenantStaffInvitationGateway.allowedRoles': (
+    expected: TenantStaffInvitationGateway.allowedRoles,
+    row: 'Invite staff: administrator capability, owner inherits it.',
+  ),
+  'TenantStaffUpdateGateway.allowedRoles': (
+    expected: TenantStaffUpdateGateway.allowedRoles,
+    row: 'Edit staff: administrator capability.',
+  ),
+  'TenantStaffStatusGateway.allowedRoles': (
+    expected: TenantStaffStatusGateway.allowedRoles,
+    row: 'Disable staff: administrator capability.',
+  ),
+  'TenantStaffInvitationResendGateway.allowedRoles': (
+    expected: TenantStaffInvitationResendGateway.allowedRoles,
+    row: 'Resend invitation: administrator capability.',
+  ),
+  'TenantStaffInvitationCancellationGateway.allowedRoles': (
+    expected: TenantStaffInvitationCancellationGateway.allowedRoles,
+    row: 'Cancel invitation: administrator capability.',
+  ),
+  'TenantStaffInvitationEmailReplacementGateway.allowedRoles': (
+    expected: TenantStaffInvitationEmailReplacementGateway.allowedRoles,
+    row: 'Replace a pending invitation email: administrator capability.',
+  ),
+  // | Checkout currency settings | Full | Full | No | No |
+  'TenantCheckoutConfigurationPublisher.allowedRoles': (
+    expected: TenantCheckoutConfigurationPublisher.allowedRoles,
+    row: 'Checkout currency settings: the only supported checkout setting.',
+  ),
+  // | Printer configuration/test | Full | Full | No | No |
+  'TenantPrinterConfigurationRepository.writeRoles': (
+    expected: TenantPrinterConfigurationRepository.writeRoles,
+    row: 'Printer configuration: configuration write roles.',
+  ),
+  'TenantPrinterConfigurationPublisher.allowedRoles': (
+    expected: TenantPrinterConfigurationPublisher.allowedRoles,
+    row: 'Printer configuration: the publisher reads writeRoles.',
+  ),
+  // | Activity log | Full | Full | No | No |
+  'TenantAuditLogRepository.allowedRoles': (
+    expected: TenantAuditLogRepository.allowedRoles,
+    row: 'Activity log: TenantAuditLogRepository.allowedRoles.',
+  ),
+  // | Verify return and restore stock | Full | Full | Full | No |
+  'TenantReturnVerificationGateway.allowedRoles': (
+    expected: TenantReturnVerificationGateway.allowedRoles,
+    row: 'Verify return and restore stock: management verification.',
+  ),
+};
+
+/// What each guard should hold, written out rather than read off the guard.
+///
+/// **The two halves of the map above and below are the whole point.** The map
+/// reads the app's own constants, which makes the failure message name the
+/// symbol; this one is authored from the matrix, which makes the assertion mean
+/// something. A single map would assert that a list equals itself.
+const Map<String, List<TenantRole>> _fromTheMatrix = <String, List<TenantRole>>{
+  'TenantReceiptLookupRepository.allowedRoles': <TenantRole>[_o, _a, _m, _c],
+  'TenantReturnRequestRepository.allowedRoles': <TenantRole>[_o, _a, _m, _c],
+  'TenantShiftHistoryRepository.managementRoles': _management,
+  'TenantCatalogManagementRepository.allowedRoles': _management,
+  'TenantCatalogManagementRepository.costRoles': <TenantRole>[_o, _a],
+  'TenantCatalogManagementRepository.retireRoles': <TenantRole>[_o, _a],
+  'TenantBulkCatalogRepository.allowedRoles': _management,
+  'TenantProductStockRepository.allowedRoles': _management,
+  'TenantStockAdjustmentGateway.allowedRoles': _management,
+  'TenantStockAdjustmentFeedRepository.allowedRoles': _management,
+  'TenantStockMovementFeedRepository.allowedRoles': _management,
+  'TenantDailyMetricsRepository.allowedRoles': _management,
+  'TenantSalesTotalsGateway.allowedRoles': _management,
+  'TenantReconciliationStatusRepository.allowedRoles': _management,
+  'TenantReconciliationAnomalyRepository.allowedRoles': _management,
+  'TenantReconciliationRequestGateway.allowedRoles': <TenantRole>[_o, _a],
+  'TenantShiftAmendmentGateway.allowedRoles': <TenantRole>[_o, _a],
+  'TenantShiftAmendmentFeedRepository.allowedRoles': _management,
+  'TenantProfitReport.allowedRoles': <TenantRole>[_o, _a],
+  // Owner is absent from the literal and present in the effect: owner satisfies
+  // admin. The assertion below on the hierarchy is what makes that safe to
+  // write here.
+  'TenantStaffDirectoryScreen.allowedRoles': <TenantRole>[_a, _m],
+  'TenantStaffInvitationGateway.allowedRoles': <TenantRole>[_a],
+  'TenantStaffUpdateGateway.allowedRoles': <TenantRole>[_a],
+  'TenantStaffStatusGateway.allowedRoles': <TenantRole>[_a],
+  'TenantStaffInvitationResendGateway.allowedRoles': <TenantRole>[_a],
+  'TenantStaffInvitationCancellationGateway.allowedRoles': <TenantRole>[_a],
+  'TenantStaffInvitationEmailReplacementGateway.allowedRoles': <TenantRole>[_a],
+  'TenantCheckoutConfigurationPublisher.allowedRoles': <TenantRole>[_o, _a],
+  'TenantPrinterConfigurationRepository.writeRoles': <TenantRole>[_o, _a],
+  'TenantPrinterConfigurationPublisher.allowedRoles': <TenantRole>[_o, _a],
+  'TenantAuditLogRepository.allowedRoles': <TenantRole>[_o, _a],
+  'TenantReturnVerificationGateway.allowedRoles': _management,
+};
+
+/// Why this file does not assert which routes a role is offered.
+///
+/// **Because the composition root makes it structurally impossible to drift.**
+/// `lib/main.dart` feeds every role-gated navigation slot from the guard's own
+/// constant — `dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles`,
+/// `auditLogRoles: TenantAuditLogRepository.allowedRoles`, and nine more of
+/// exactly that shape. So the list the landing route hides by and the list the
+/// repository refuses by are the *same object*, and `RBAC_MATRIX.md`'s
+/// *"Hidden actions must also be guarded in product code"* holds by construction
+/// rather than by review.
+///
+/// A test asserting it would have to reach into the shell's constructor
+/// arguments, and it would pass for the wrong reason: what makes this safe is
+/// that there is only one list, not that two lists agree.
+const String _navigationIsFedFromTheGuards = 'see lib/main.dart:428-626';
+
+void main() {
+  group('every guard holds the roles RBAC_MATRIX.md gives its row', () {
+    test('the two maps cover the same guards', () {
+      // A guard added to one map and not the other would otherwise be silently
+      // unchecked, which is the failure this whole file exists to prevent.
+      expect(_guards.keys.toSet(), _fromTheMatrix.keys.toSet());
+      expect(_navigationIsFedFromTheGuards, isNotEmpty);
+    });
+
+    for (final entry in _guards.entries) {
+      test(entry.key, () {
+        expect(
+          entry.value.expected,
+          _fromTheMatrix[entry.key],
+          reason:
+              '${entry.key} no longer holds what RBAC_MATRIX.md gives it. '
+              'The row: ${entry.value.row}\n'
+              'If the capability genuinely changed, the matrix is the document '
+              'to change first — it is the derived artifact, and a code change '
+              'that leaves it stale makes every later reading of it wrong.',
+        );
+      });
+    }
+  });
+
+  group('the hierarchy is one rule and not a ladder', () {
+    test('owner satisfies admin, and that is the whole of it', () {
+      // RBAC_MATRIX.md: "Owner satisfies checks that allow administrator; there
+      // is no general role hierarchy." Both halves, because the second is what
+      // makes `[admin, manager]` three roles and `[manager]` exactly one.
+      expect(TenantRole.owner.canAccess(<TenantRole>[_a]), isTrue);
+      expect(TenantRole.owner.canAccess(<TenantRole>[_o]), isTrue);
+      expect(TenantRole.admin.canAccess(<TenantRole>[_o]), isFalse);
+      expect(TenantRole.admin.canAccess(<TenantRole>[_m]), isFalse);
+      expect(TenantRole.manager.canAccess(<TenantRole>[_a]), isFalse);
+      expect(TenantRole.manager.canAccess(<TenantRole>[_c]), isFalse);
+      expect(TenantRole.cashier.canAccess(<TenantRole>[_m]), isFalse);
+      expect(TenantRole.owner.canAccess(<TenantRole>[_m]), isFalse);
+    });
+
+    test('a manager reaches the staff directory and no cashier does', () {
+      // The one row where the matrix says `Read` rather than Full or No, worked
+      // through the hierarchy rather than asserted as a literal.
+      const directory = TenantStaffDirectoryScreen.allowedRoles;
+      expect(TenantRole.owner.canAccess(directory), isTrue);
+      expect(TenantRole.admin.canAccess(directory), isTrue);
+      expect(TenantRole.manager.canAccess(directory), isTrue);
+      expect(TenantRole.cashier.canAccess(directory), isFalse);
+
+      // And the manager's *Read* is the absence of both write gateways, which is
+      // exactly the condition `tenant_staff_directory.dart` resolves `_readOnly`
+      // from. Asserted here so the two cannot come apart.
+      expect(
+        TenantRole.manager.canAccess(TenantStaffInvitationGateway.allowedRoles),
+        isFalse,
+      );
+      expect(
+        TenantRole.manager.canAccess(TenantStaffUpdateGateway.allowedRoles),
+        isFalse,
+      );
+    });
+
+    test('there are exactly four tenant roles', () {
+      // RBAC_MATRIX.md: "Do not invent roles such as 'Senior Cashier' or
+      // 'Inventory Clerk'." A fifth would make every row of the matrix a
+      // statement about an incomplete set.
+      expect(TenantRole.values, <TenantRole>[_o, _a, _m, _c]);
+      expect(TenantRole.values.map((role) => role.wireValue), <String>[
+        'owner',
+        'admin',
+        'manager',
+        'cashier',
+      ]);
+    });
+  });
+
+  test('no role list exists in lib/ that the matrix has no row for', () {
+    // **A source scan, and the only assertion here a reader would not think to
+    // write.** Everything above checks guards that already exist. What it cannot
+    // check is a capability added next month with a role list of its own: that
+    // would pass every test above by not appearing in them, and appear in no row
+    // of `RBAC_MATRIX.md` either.
+    //
+    // Three declaration shapes are in the app and all three are matched:
+    // `static const List<TenantRole> allowedRoles = <TenantRole>[...]`, the same
+    // with the type left off, and an alias to another class's list. `lib/pos/**`
+    // and `lib/screens/**` are excluded — legacy, read-only, and reachable from
+    // nothing that runs.
+    final declared = <String>{};
+    for (final file in Directory('lib').listSync(recursive: true)) {
+      if (file is! File || !file.path.endsWith('.dart')) continue;
+      final path = file.path.replaceAll(r'\', '/');
+      if (path.contains('/pos/') || path.contains('/screens/')) continue;
+
+      final source = file.readAsStringSync();
+      final classes = <(int, String)>[
+        for (final match in RegExp(
+          r'^(?:final\s+|abstract\s+|base\s+|sealed\s+)*class\s+(\w+)',
+          multiLine: true,
+        ).allMatches(source))
+          (match.start, match.group(1)!),
+      ];
+      String ownerAt(int at) {
+        var owner = '?';
+        for (final (start, name) in classes) {
+          if (start > at) break;
+          owner = name;
+        }
+        return owner;
+      }
+
+      for (final match in RegExp(
+        r'static\s+const\s+(?:List<TenantRole>\s+)?(\w*[Rr]oles)\s*=',
+      ).allMatches(source)) {
+        declared.add('${ownerAt(match.start)}.${match.group(1)}');
+      }
+    }
+
+    expect(
+      declared,
+      isNotEmpty,
+      reason:
+          'No role list was recognised anywhere in lib/. Either authorization '
+          'moved out of static constants, or this scan needs updating — it has '
+          'not stopped being needed.',
+    );
+    expect(
+      declared.difference(_guards.keys.toSet()),
+      isEmpty,
+      reason:
+          'A role list exists in lib/ that no row of RBAC_MATRIX.md governs. '
+          'Add the row to the matrix and the entry to this file, or say in the '
+          'matrix why the capability is deliberately outside it.',
+    );
+    expect(
+      _guards.keys.toSet().difference(declared),
+      isEmpty,
+      reason:
+          'This file names a role list that lib/ no longer declares. If the '
+          'capability was removed, its row leaves the matrix too.',
+    );
+  });
+}

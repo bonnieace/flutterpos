@@ -5,6 +5,29 @@ follow these exact tenant roles: `owner`, `admin`, `manager`, `cashier`. Owner s
 allow administrator; there is no general role hierarchy. Platform `superAdmin` is a separate Firebase
 custom claim and is not a fifth tenant role.
 
+> **Checked against the code on 2026-08-22, and now checked on every run.**
+> `test/tenancy/rbac_matrix_test.dart` holds one entry per row and asserts the guard behind it, so
+> this file stopped being a snapshot. **Every row agreed** {M} all 31 named role lists in `lib/` hold
+> exactly what the table below gives them, and the scan in that file also fails if a role list exists
+> anywhere in `lib/` that no row governs, so a capability cannot be added without a decision here.
+>
+> Two structural findings worth carrying, because they are why the agreement is not luck:
+>
+> - **The navigation is fed from the guards themselves.** `lib/main.dart` passes each role-gated slot
+>   the repository's own constant {M} `dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles`
+>   and eleven more of that shape. So the list the landing route hides by and the list the repository
+>   refuses by are the *same object*, and "hidden actions must also be guarded" below holds by
+>   construction rather than by review.
+> - **Two rows are a scope rather than a route.** *View management shift history* gates reading
+>   another cashier's shifts, not the route: a cashier opens shift history and sees their own, and
+>   `shift_history_panel.dart` hides the scope control behind the same predicate the repository
+>   enforces. *Staff directory* is the mirror {M} a manager reaches the route and the screen's own
+>   `_readOnly` resolves true exactly when the session holds neither write gateway.
+>
+> What is **not** checked here is the server. `firestore.rules` and the callables are the real
+> boundary and `rules-tests/` is where that is proven; a client list agreeing with this table while
+> the server disagreed is exactly the false comfort the last line of this file warns about.
+
 Legend: **Full** = view and normal action; **Read** = view only or narrower action; **Own** = own
 shift/session scope; **No** = no route/action.
 
@@ -45,6 +68,13 @@ The screenshot families `09a`-`09d` cover platform admission queue, tenant archi
 status. Those surfaces require the separate `platformRole == superAdmin` claim. A tenant owner or
 administrator is not automatically a platform operator. Stitch currently has no verified canonical
 platform-admin screen.
+
+**Verified 2026-08-22: the separation is structural, not a role check.** The claim is read in exactly
+one place {M} `lib/main.dart:409`, from the Firebase ID token {M} and reaches the shell as
+`hasPlatformSuperAdminClaim`. It is consumed only by `TenantBootstrapKind.platform`, which is a
+*different routing phase* from the tenant one and carries a `PlatformReviewIdentity` rather than a
+`TenantMembership`. So no value of `TenantRole` can reach a platform surface, and no platform claim
+grants a tenant capability. That is why the four role columns above have no platform row.
 
 ## Design implications
 
