@@ -41,23 +41,27 @@ void main() {
       );
       expect(
         TenantProduct.fromSnapshot(
-          _productSnapshot('tenant-a', 'p', data: _productData()..['cost'] = null),
+          _productSnapshot(
+            'tenant-a',
+            'p',
+            data: _productData()..['cost'] = null,
+          ),
         ).cost,
         isNull,
-      );
-      expect(
-        TenantProduct.fromSnapshot(
-          _productSnapshot('tenant-a', 'p', data: _productData()..['cost'] = 60),
-        ).cost,
-        60,
       );
       expect(
         TenantProduct.fromSnapshot(
           _productSnapshot(
             'tenant-a',
             'p',
-            data: _productData()..['cost'] = 0,
+            data: _productData()..['cost'] = 60,
           ),
+        ).cost,
+        60,
+      );
+      expect(
+        TenantProduct.fromSnapshot(
+          _productSnapshot('tenant-a', 'p', data: _productData()..['cost'] = 0),
         ).cost,
         0,
       );
@@ -155,38 +159,41 @@ void main() {
   });
 
   group('naming a category', () {
-    test('a category this surface read is named, and one it did not is not', () {
-      final names = tenantCategoryNames(<TenantCategory>[
-        TenantCategory.fromSnapshot(_categorySnapshot('tenant-a', 'drinks')),
-      ]);
+    test(
+      'a category this surface read is named, and one it did not is not',
+      () {
+        final names = tenantCategoryNames(<TenantCategory>[
+          TenantCategory.fromSnapshot(_categorySnapshot('tenant-a', 'drinks')),
+        ]);
 
-      expect(names, <String, String>{'drinks': 'Drinks'});
-      expect(tenantCategoryLabel('drinks', names: names), 'Drinks');
-      expect(tenantCategoryPhrase('drinks', names: names), 'Drinks');
-      // Two causes arrive here and neither is distinguishable from the other
-      // without reading the document: a business holding more categories than
-      // one page shows, and a product filed under a category that cannot be
-      // read at all. The ID answers neither question, and is not a name.
-      expect(
-        tenantCategoryLabel('cat-not-cached', names: names),
-        unlistedTenantCategoryLabel,
-      );
-      expect(
-        tenantCategoryPhrase('cat-not-cached', names: names),
-        unlistedTenantCategoryPhrase,
-      );
-      for (final wording in <String>[
-        unlistedTenantCategoryLabel,
-        unlistedTenantCategoryPhrase,
-      ]) {
-        expect(wording, isNot(contains('cat-not-cached')));
-      }
-      // Two wordings for one answer, because only one of them can be read in
-      // each place: "filed under Category not listed here" is not a sentence
-      // anybody wrote, and a list row does not open in lower case.
-      expect(unlistedTenantCategoryLabel, startsWith('Category'));
-      expect(unlistedTenantCategoryPhrase, startsWith('a category'));
-    });
+        expect(names, <String, String>{'drinks': 'Drinks'});
+        expect(tenantCategoryLabel('drinks', names: names), 'Drinks');
+        expect(tenantCategoryPhrase('drinks', names: names), 'Drinks');
+        // Two causes arrive here and neither is distinguishable from the other
+        // without reading the document: a business holding more categories than
+        // one page shows, and a product filed under a category that cannot be
+        // read at all. The ID answers neither question, and is not a name.
+        expect(
+          tenantCategoryLabel('cat-not-cached', names: names),
+          unlistedTenantCategoryLabel,
+        );
+        expect(
+          tenantCategoryPhrase('cat-not-cached', names: names),
+          unlistedTenantCategoryPhrase,
+        );
+        for (final wording in <String>[
+          unlistedTenantCategoryLabel,
+          unlistedTenantCategoryPhrase,
+        ]) {
+          expect(wording, isNot(contains('cat-not-cached')));
+        }
+        // Two wordings for one answer, because only one of them can be read in
+        // each place: "filed under Category not listed here" is not a sentence
+        // anybody wrote, and a list row does not open in lower case.
+        expect(unlistedTenantCategoryLabel, startsWith('Category'));
+        expect(unlistedTenantCategoryPhrase, startsWith('a category'));
+      },
+    );
   });
 
   group('a product as a record', () {
@@ -199,20 +206,33 @@ void main() {
           ),
         );
 
-    test('only a product that cannot be sold carries a standing', () {
-      // §2.1 gives `problem` three meanings and names "out of stock" as one of
-      // them, so the badge is a lookup. What is a judgement is the silence on
-      // every other product: a list where every row wears a badge has no signal
-      // in it, and being in stock is the ordinary case.
+    test('only a product at or below zero carries a standing', () {
+      // What is a judgement is the silence on every other product: a list where
+      // every row wears a badge has no signal in it, and an ordinary stock
+      // figure is the ordinary case.
       expect(tenantProductStanding(product(quantity: 40)), isNull);
       expect(tenantProductStanding(product(quantity: 1)), isNull);
 
-      for (final empty in <int>[0, -3]) {
-        final standing = tenantProductStanding(product(quantity: empty));
-        expect(standing, isNotNull, reason: 'quantity $empty cannot be sold');
+      // **The badge states the figure, never `Out of stock`.** That phrase
+      // asserts a sale is blocked, which this product never does - Phase 03
+      // refused it on the till for the same reason, and Phase 04's second
+      // acceptance criterion is exactly this. The label is checked against the
+      // phrase rather than only for its own text so that a later edit cannot
+      // reintroduce it quietly.
+      for (final MapEntry(key: quantity, value: label) in <int, String>{
+        0: '0 in stock',
+        -3: '-3 in stock',
+      }.entries) {
+        final standing = tenantProductStanding(product(quantity: quantity));
+        expect(
+          standing,
+          isNotNull,
+          reason: 'quantity $quantity has a standing',
+        );
         expect(standing!.status, AppStatus.problem);
-        // §9: never colour alone. The word is the whole point.
-        expect(standing.label, 'Out of stock');
+        // §9: never colour alone. The words are the whole point.
+        expect(standing.label, label);
+        expect(standing.label, isNot(contains('Out of stock')));
       }
     });
 
@@ -222,34 +242,27 @@ void main() {
         keyPrefix: 'somewhere',
       );
 
-      expect(
-        attributes.map((attribute) => attribute.label),
-        <String>['Code', 'In stock', 'Unit price'],
-      );
-      expect(
-        attributes.map((attribute) => attribute.value),
-        <String>['LAGER-001', '7', '120.50'],
-      );
+      expect(attributes.map((attribute) => attribute.label), <String>[
+        'Code',
+        'In stock',
+        'Unit price',
+      ]);
+      expect(attributes.map((attribute) => attribute.value), <String>[
+        'LAGER-001',
+        '7',
+        '120.50',
+      ]);
       // Nothing is marked out of the narrow form: `inNarrowForm` drops a fact
       // rather than shortening one, and three lines fit a card at every band.
-      expect(
-        attributes.every((attribute) => attribute.inNarrowForm),
-        isTrue,
-      );
+      expect(attributes.every((attribute) => attribute.inNarrowForm), isTrue);
       // A 13-digit barcode wrapped to two lines at an equal share, which is
       // what a string compared character by character must never do.
-      expect(
-        attributes.map((attribute) => attribute.flex),
-        <int>[2, 1, 1],
-      );
-      expect(
-        attributes.map((attribute) => attribute.valueKey),
-        <Key>[
-          const ValueKey('somewhere-code-product-a'),
-          const ValueKey('somewhere-stock-product-a'),
-          const ValueKey('somewhere-price-product-a'),
-        ],
-      );
+      expect(attributes.map((attribute) => attribute.flex), <int>[2, 1, 1]);
+      expect(attributes.map((attribute) => attribute.valueKey), <Key>[
+        const ValueKey('somewhere-code-product-a'),
+        const ValueKey('somewhere-stock-product-a'),
+        const ValueKey('somewhere-price-product-a'),
+      ]);
     });
   });
 
@@ -443,7 +456,7 @@ void main() {
               find.byKey(const ValueKey('product-stock-standing-product-a')),
             )
             .label,
-        'Out of stock',
+        '-2 in stock',
       );
       expect(
         find.byKey(const ValueKey('product-stock-standing-product-b')),
@@ -644,9 +657,17 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      await tester.tap(
-        find.byKey(const ValueKey('catalog-product-view-stock-product-a')),
+      // Scrolled to before it is tapped, the way the sibling test above already
+      // does it. The page grew by one caption line when the catalog gained the
+      // sentence saying a stock count never blocks a sale, which put this action
+      // at y=640 on an 800x600 test surface - and `tap` on an off-screen widget
+      // warns rather than fails, so what broke was the assertion after it.
+      final action = find.byKey(
+        const ValueKey('catalog-product-view-stock-product-a'),
       );
+      await tester.ensureVisible(action);
+      await tester.pumpAndSettle();
+      await tester.tap(action);
       await tester.pumpAndSettle();
       expect(find.text('stock route product-a'), findsOneWidget);
     });

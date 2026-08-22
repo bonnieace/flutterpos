@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -62,7 +62,11 @@ void main() {
     // `problem` would invent in colour a fault the words are careful not to
     // claim - the same reading the reconciliation day page made for its own
     // forbidden notice.
-    await _pump(tester, _controller(role: TenantRole.manager), _Reader.seeded());
+    await _pump(
+      tester,
+      _controller(role: TenantRole.manager),
+      _Reader.seeded(),
+    );
 
     for (final key in const <String>[
       'catalog-management-read-only',
@@ -71,7 +75,11 @@ void main() {
     ]) {
       final finder = find.byKey(ValueKey(key));
       await tester.ensureVisible(finder);
-      expect(tester.widget<Callout>(finder).status, AppStatus.info, reason: key);
+      expect(
+        tester.widget<Callout>(finder).status,
+        AppStatus.info,
+        reason: key,
+      );
     }
     expect(
       _callout(tester, 'catalog-management-retire-unavailable'),
@@ -437,7 +445,7 @@ void main() {
             find.byKey(const ValueKey('product-stock-standing-pd-1')),
           )
           .label,
-      'Out of stock',
+      '0 in stock',
     );
     expect(
       find.byKey(const ValueKey('product-stock-standing-pd-2')),
@@ -674,7 +682,10 @@ void main() {
   ) async {
     await _pump(tester, _controller(), _Reader.seeded(), writer: _Writer());
 
-    expect(find.byKey(const ValueKey('catalog-management-edit-pd-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('catalog-management-edit-pd-1')),
+      findsNothing,
+    );
     await _open(tester, 'catalog-management-scope-disclosure');
     expect(
       _text(tester, 'catalog-management-scope'),
@@ -762,8 +773,14 @@ void main() {
     // The callable reads its tier from the fields a payload names, so a form
     // that offered a price it knew would be refused would teach a manager only
     // that the app guesses.
-    expect(find.byKey(const ValueKey('catalog-management-edit-price')), findsNothing);
-    expect(find.byKey(const ValueKey('catalog-management-edit-cost')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('catalog-management-edit-price')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('catalog-management-edit-cost')),
+      findsNothing,
+    );
     // A role notice at `info` rather than a caption in `bodySmall`: three of
     // the five fields are offered and two are not, which is not a failure.
     expect(
@@ -802,7 +819,10 @@ void main() {
     );
     await _openCorrection(tester, 'pd-1');
 
-    expect(find.byKey(const ValueKey('catalog-management-edit-scope')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('catalog-management-edit-scope')),
+      findsNothing,
+    );
     final summary = tester
         .widget<Disclosure>(
           find.byKey(
@@ -832,7 +852,9 @@ void main() {
     tester,
   ) async {
     final callable = _Callable(
-      answer: <String, Object?>{'changedFields': <String>['cost']},
+      answer: <String, Object?>{
+        'changedFields': <String>['cost'],
+      },
     );
 
     await _pump(
@@ -855,7 +877,10 @@ void main() {
       find.textContaining('Unit cost: was 40.00, now not recorded'),
       findsOne,
     );
-    expect(find.textContaining('never changes a profit already reported'), findsOne);
+    expect(
+      find.textContaining('never changes a profit already reported'),
+      findsOne,
+    );
     await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pumpAndSettle();
 
@@ -924,7 +949,10 @@ void main() {
     // Refused before anything is confirmed: the server treats a request that
     // changes nothing as a caller defect, and reaching it would put an
     // idempotency record behind a request that does nothing.
-    expect(find.byKey(const ValueKey('catalog-management-confirm')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('catalog-management-confirm')),
+      findsNothing,
+    );
     expect(callable.payloads, isEmpty);
     expect(
       noticeMessage(tester, 'catalog-management-notice'),
@@ -1069,9 +1097,7 @@ void main() {
   ) async {
     final reader = _Reader.seeded();
     // A response describing a product this correction never named.
-    final callable = _Callable(
-      answer: <String, Object?>{'productId': 'pd-2'},
-    );
+    final callable = _Callable(answer: <String, Object?>{'productId': 'pd-2'});
 
     await _pump(
       tester,
@@ -1166,7 +1192,9 @@ Future<void> _openCorrection(WidgetTester tester, String productId) async {
 }
 
 Future<void> _review(WidgetTester tester) async {
-  await tester.tap(find.byKey(const ValueKey('catalog-management-edit-review')));
+  await tester.tap(
+    find.byKey(const ValueKey('catalog-management-edit-review')),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -1395,8 +1423,13 @@ final class _Callable implements UpdateProductCallable {
         'tenantId': payload['tenantId'],
         'productId': payload['productId'],
         'changedFields': <String>[
-          for (final field in <String>['name', 'sku', 'price', 'cost',
-            'categoryId'])
+          for (final field in <String>[
+            'name',
+            'sku',
+            'price',
+            'cost',
+            'categoryId',
+          ])
             if (payload.containsKey(field)) field,
         ],
         'name': payload['name'] ?? 'White bread loaf',

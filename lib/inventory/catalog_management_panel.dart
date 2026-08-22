@@ -1067,7 +1067,19 @@ final class _CatalogManagementContents extends StatelessWidget {
             color: tokens.colors.text.primary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.spacing.s4),
+        // The same line the read-only catalog carries, from the same constant:
+        // this is the other surface whose rows wear
+        // `tenantProductStanding`'s badge, and it was the other one saying
+        // nothing to qualify it.
+        Text(
+          key: const ValueKey('catalog-management-stock-never-blocks'),
+          tenantCatalogStockNeverBlocks,
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s8),
         // §4.3's responsive contract, on the screen §5.2 wrote its catalog
         // example against. The four facts that were one bullet-separated
         // subtitle are a category on the identity and three key-value

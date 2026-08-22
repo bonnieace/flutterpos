@@ -125,19 +125,29 @@ final class TenantProduct {
 
 /// A product's standing, as one of §2.1's five - or nothing at all.
 ///
-/// **Only a product that cannot be sold has a standing to state.** §2.1 gives
-/// `problem` three meanings and names *"out of stock"* as one of them, so the
-/// badge is a lookup rather than a judgement. What is a judgement is the silence
-/// on every other product: `RecordList`'s own rule is that a list where every
-/// row wears a badge is a list with no signal in it, and "this product is in
-/// stock" is the ordinary case rather than a standing.
+/// **Only a product whose recorded stock has reached or passed zero has a
+/// standing to state.** What is a judgement is the silence on every other
+/// product: `RecordList`'s own rule is that a list where every row wears a badge
+/// is a list with no signal in it, and an ordinary stock figure is the ordinary
+/// case rather than a standing.
 ///
-/// **A negative quantity is out of stock rather than a fourth status.** The read
-/// model accepts a signed integer deliberately - an oversold product is a real
-/// state this app records rather than refuses - and what it means at the till is
-/// the same thing zero means: the next customer cannot be served. The figure
-/// itself is still stated beside it, so nothing is hidden by the badge agreeing
-/// with the row above it.
+/// **The badge states the figure and not a verdict on selling, and that is the
+/// correction.** It read `Out of stock` until Phase 04, which is the phrase
+/// Phase 03 had already refused on the till one file over
+/// (`checkout_cart_panel.dart:1670`): this product never blocks a sale on a
+/// stock count, so "out of stock" asserts a state the app does not have. On the
+/// two surfaces that list every product it was the *only* thing said about a
+/// zero or negative figure, and a cashier reading a red badge on a catalog they
+/// may only read is exactly the person who would conclude they cannot sell.
+/// Phase 04's second acceptance criterion is that stock display does not imply
+/// sales are blocked by availability; ST-039 draws this same row as `Below zero.
+/// A sale is never blocked by a stock count.`
+///
+/// So the label is the quantity in Phase 03's own words - `-3 in stock`,
+/// `0 in stock` - and [tenantCatalogStockNeverBlocks] states the rest of the
+/// design's sentence once per page. §2.1's `problem` is kept: a figure at or
+/// below zero is worth a correction, and §9 is satisfied because the words
+/// carry the meaning rather than the colour.
 ///
 /// Shared by both catalog surfaces rather than written twice, for the reason
 /// [tenantCategoryLabel] is: five copies of one lookup is how two screens come
@@ -147,9 +157,29 @@ RecordStatus? tenantProductStanding(TenantProduct product) =>
     ? null
     : RecordStatus(
         status: AppStatus.problem,
-        label: 'Out of stock',
+        label: '${product.quantity} in stock',
         badgeKey: ValueKey('product-stock-standing-${product.id}'),
       );
+
+/// The sentence both catalog surfaces owe a person reading a stock figure.
+///
+/// **ST-039's own words, and the app already said the second half of them
+/// twice** - the till's freshness line (`checkout_cart_panel.dart:1282`) and the
+/// stock route's disclosure (`stock_adjustment_panel.dart:528`) both end "a sale
+/// is never blocked by a stock count". Neither catalog surface said it at all,
+/// which is what left [tenantProductStanding]'s badge standing unqualified on
+/// the two screens that list every product.
+///
+/// **Stated always, not only when a product is at or below zero.** A conditional
+/// section that is invisible in every capture is not covered - the trap this
+/// repository has now paid for three times - and the till states its own version
+/// unconditionally for the same reason.
+///
+/// It names no route: a cashier reading this line has no stock route to be sent
+/// to, and the two surfaces that do offer one already offer it per product.
+const String tenantCatalogStockNeverBlocks =
+    'A sale is never blocked by a stock count. A product whose recorded '
+    'quantity has reached or passed zero can still be sold.';
 
 /// The three facts both catalog surfaces state about a product, in the order
 /// §4.3's table draws them as columns.
@@ -451,9 +481,12 @@ final class _CatalogContents extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 20),
-        Text('Categories', style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        )),
+        Text(
+          'Categories',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
         const SizedBox(height: 8),
         if (snapshot.categories.items.isEmpty)
           const EmptyState(
@@ -475,10 +508,24 @@ final class _CatalogContents extends StatelessWidget {
             child: Text('More categories are available.'),
           ),
         const SizedBox(height: 24),
-        Text('Products', style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        )),
-        const SizedBox(height: 8),
+        Text(
+          'Products',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s4),
+        // §2.2's `caption` in `text.tertiary`, which is the weight the till
+        // gives the same fact: standing context a person needs beside a figure
+        // rather than the thing being looked at.
+        Text(
+          key: const ValueKey('catalog-stock-never-blocks'),
+          tenantCatalogStockNeverBlocks,
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s8),
         // §4.3's responsive contract. This list used to be a `Card` around a
         // `ListTile` whose subtitle carried three separate facts in one
         // bullet-separated sentence, which is the shape §5.2 replaces with
