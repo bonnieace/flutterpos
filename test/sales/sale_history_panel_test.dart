@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -28,31 +28,45 @@ void main() {
     await _pump(tester, _controller(), reader, _shiftRequest());
 
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-history-recorded'))).data,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-recorded')))
+          .data,
       'Recorded: 18.00 over 2 transactions. Counted cash was 20.00.',
     );
     expect(find.byKey(const ValueKey('sale-history-entry-co-2')), findsOne);
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-history-receipt-co-1'))).data,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-receipt-co-1')))
+          .data,
       isNotEmpty,
     );
     // The discount is its own column rather than a clause on the end of the
     // total: it is the fact a person scans a page of sales for, and nobody
     // scans the sixth word of another figure.
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-history-total-co-1'))).data,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-total-co-1')))
+          .data,
       'KES 9.00',
     );
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-history-discount-co-1'))).data,
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-history-discount-co-1')),
+          )
+          .data,
       '1.00',
     );
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-history-items-co-1'))).data,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-items-co-1')))
+          .data,
       '1',
     );
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-history-lines-co-1'))).data,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-lines-co-1')))
+          .data,
       '2 x Tusker',
     );
     // §2.1's five each mean one thing and "a sale was rung up" is not among
@@ -248,7 +262,9 @@ void main() {
     );
 
     expect(
-      tester.widget<Text>(find.byKey(const ValueKey('sale-history-recorded'))).data,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('sale-history-recorded')))
+          .data,
       'This shift closed without a recorded summary. Counted cash was 20.00.',
     );
     expect(find.byKey(const ValueKey('sale-history-empty')), findsOne);
@@ -466,7 +482,9 @@ void main() {
       find.byKey(const ValueKey('sale-history-returns-link-co-1')),
       120,
     );
-    await tester.tap(find.byKey(const ValueKey('sale-history-returns-link-co-1')));
+    await tester.tap(
+      find.byKey(const ValueKey('sale-history-returns-link-co-1')),
+    );
     await tester.pumpAndSettle();
 
     // The returns route derives its own page from the sale it was opened from.
@@ -563,8 +581,10 @@ TenantQueryDocumentSnapshot _colleagueSale(String saleId, {int sequence = 1}) =>
     );
 
 TenantSessionController _controller({TenantRole role = TenantRole.cashier}) =>
-    TenantSessionController()
-      ..open(uid: 'user-a', membership: _membership('tenant-a', role: role));
+    TenantSessionController()..open(
+      uid: 'user-a',
+      membership: _membership('tenant-a', role: role),
+    );
 
 TenantMembership _membership(
   String tenantId, {

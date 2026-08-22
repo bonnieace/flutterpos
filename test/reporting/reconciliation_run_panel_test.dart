@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -503,9 +503,7 @@ void main() {
       find.byKey(const ValueKey('reconciliation-run-scope')),
       findsNothing,
     );
-    await tester.tap(
-      find.text('What this page cannot do'),
-    );
+    await tester.tap(find.text('What this page cannot do'));
     await tester.pumpAndSettle();
     expect(
       _text(tester, 'reconciliation-run-scope'),

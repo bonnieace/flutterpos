@@ -440,7 +440,9 @@ final class _RecordOverflowMenu extends StatelessWidget {
       icon: Icon(Icons.more_vert, color: tokens.colors.text.secondary),
       // §9's target, and the same figure `AppButton` keeps whatever it paints.
       iconSize: RecordActionSet.glyphSize,
-      constraints: BoxConstraints(minHeight: tokens.density.minimumTapTarget.height),
+      constraints: BoxConstraints(
+        minHeight: tokens.density.minimumTapTarget.height,
+      ),
       color: tokens.colors.surface.overlay,
       onSelected: (action) => action.onPressed?.call(),
       itemBuilder: (context) => <PopupMenuEntry<RecordAction>>[
@@ -622,7 +624,9 @@ final class _TwoColumnCards extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Expanded(child: _RecordCard(item: items[row * 2], form: form)),
+                Expanded(
+                  child: _RecordCard(item: items[row * 2], form: form),
+                ),
                 SizedBox(width: gap),
                 Expanded(
                   child: row * 2 + 1 < items.length
@@ -916,10 +920,7 @@ final class RecordTableColumns {
         identity = math.max(identity, text(line, body));
       }
       if (item.provenance case final line?) {
-        identity = math.max(
-          identity,
-          text(line, tokens.typography.caption),
-        );
+        identity = math.max(identity, text(line, tokens.typography.caption));
       }
     }
     demands.add(identity);
@@ -1020,14 +1021,15 @@ final class RecordTableColumns {
     }
     var pool = cells - taken;
 
-    final wanting = <int>[
-      for (var index = 0; index < widths.length; index++)
-        if (demands[index] - widths[index] > 0) index,
-    ]..sort((a, b) {
-      final left = demands[a] - widths[a];
-      final right = demands[b] - widths[b];
-      return left.compareTo(right);
-    });
+    final wanting =
+        <int>[
+          for (var index = 0; index < widths.length; index++)
+            if (demands[index] - widths[index] > 0) index,
+        ]..sort((a, b) {
+          final left = demands[a] - widths[a];
+          final right = demands[b] - widths[b];
+          return left.compareTo(right);
+        });
     for (var served = 0; pool > 0 && served < wanting.length; served++) {
       final level = pool / (wanting.length - served);
       final index = wanting[served];

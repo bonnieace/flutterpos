@@ -125,59 +125,58 @@ final class _TenantDailySummaryPanelState
 
   @override
   Widget build(BuildContext context) => TenantRouteGuard<_DailySummaryView>(
-        key: ValueKey(_generation),
-        allowedRoles: TenantDailyMetricsRepository.allowedRoles,
-        load: (session) async => _DailySummaryView(
-          days: await TenantDailyMetricsRepository(
-            session: session,
-            reader: widget.reader,
-            clock: widget.clock,
-          ).loadRecentDays(days: widget.days),
-          // Read after the figures, and never allowed to fail them: a label is
-          // not the reason this route exists.
-          currency: await TenantReportingCurrency.read(
-            session: session,
-            reader: widget.reader,
+    key: ValueKey(_generation),
+    allowedRoles: TenantDailyMetricsRepository.allowedRoles,
+    load: (session) async => _DailySummaryView(
+      days: await TenantDailyMetricsRepository(
+        session: session,
+        reader: widget.reader,
+        clock: widget.clock,
+      ).loadRecentDays(days: widget.days),
+      // Read after the figures, and never allowed to fail them: a label is
+      // not the reason this route exists.
+      currency: await TenantReportingCurrency.read(
+        session: session,
+        reader: widget.reader,
+      ),
+    ),
+    denied: const Center(
+      key: ValueKey('daily-summary-denied'),
+      child: Text('The daily summary is available to managers and owners.'),
+    ),
+    failure: (context, error) => Center(
+      key: const ValueKey('daily-summary-failure'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('The daily summary could not be loaded.'),
+          const SizedBox(height: 12),
+          AppButton(
+            key: const ValueKey('daily-summary-retry'),
+            label: 'Retry',
+            onPressed: _refresh,
           ),
-        ),
-        denied: const Center(
-          key: ValueKey('daily-summary-denied'),
-          child: Text('The daily summary is available to managers and owners.'),
-        ),
-        failure: (context, error) => Center(
-          key: const ValueKey('daily-summary-failure'),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('The daily summary could not be loaded.'),
-              const SizedBox(height: 12),
-              AppButton(
-                key: const ValueKey('daily-summary-retry'),
-                label: 'Retry',
-                onPressed: _refresh,
-              ),
-            ],
-          ),
-        ),
-        builder: (context, session, view) => _DailySummaryContents(
-          days: view.days,
-          currency: view.currency,
-          // Profit is cost, and cost is owner/admin everywhere else - a
-          // narrower tier than the one that may read this whole summary.
-          showProfit: TenantProfitReport.canSeeInSession(session),
-          // The role is taken from the guarded session, never from the caller,
-          // so the action - and the figure above - disappears the moment the
-          // session stops allowing it.
-          reconciliationRoute:
-              session.canAccess(allowedRoles: widget.reconciliationRoles)
-              ? widget.reconciliationRoute
-              : null,
-          salesTotalsRoute:
-              session.canAccess(allowedRoles: widget.salesTotalsRoles)
-              ? widget.salesTotalsRoute
-              : null,
-        ),
-      );
+        ],
+      ),
+    ),
+    builder: (context, session, view) => _DailySummaryContents(
+      days: view.days,
+      currency: view.currency,
+      // Profit is cost, and cost is owner/admin everywhere else - a
+      // narrower tier than the one that may read this whole summary.
+      showProfit: TenantProfitReport.canSeeInSession(session),
+      // The role is taken from the guarded session, never from the caller,
+      // so the action - and the figure above - disappears the moment the
+      // session stops allowing it.
+      reconciliationRoute:
+          session.canAccess(allowedRoles: widget.reconciliationRoles)
+          ? widget.reconciliationRoute
+          : null,
+      salesTotalsRoute: session.canAccess(allowedRoles: widget.salesTotalsRoles)
+          ? widget.salesTotalsRoute
+          : null,
+    ),
+  );
 }
 
 final class _DailySummaryContents extends StatelessWidget {
@@ -288,8 +287,7 @@ final class _DailySummaryContents extends StatelessWidget {
                           ),
                           status: AppStatus.ok,
                           label: 'Reconciled',
-                          semanticLabel:
-                              '${day.businessDate} is reconciled',
+                          semanticLabel: '${day.businessDate} is reconciled',
                         ),
                     ],
                   ),

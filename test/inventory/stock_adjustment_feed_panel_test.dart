@@ -132,11 +132,12 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('stock-adjustments-scope')))
           .data,
-      startsWith(
-        'Every manual correction recorded against product product-1.',
-      ),
+      startsWith('Every manual correction recorded against product product-1.'),
     );
-    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_abc')), findsOne);
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_abc')),
+      findsOne,
+    );
   });
 
   testWidgets('a cashier is denied and issues no read at all', (tester) async {
@@ -159,7 +160,10 @@ void main() {
 
     await _pump(tester, _controller(), reader, pageSize: 2);
 
-    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_1')), findsOne);
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_1')),
+      findsOne,
+    );
     expect(
       find.byKey(const ValueKey('stock-adjustments-entry-sa_3')),
       findsNothing,
@@ -168,13 +172,19 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('stock-adjustments-next')));
     await tester.pump();
     await tester.pump();
-    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_3')), findsOne);
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_3')),
+      findsOne,
+    );
     expect(reader.queries.last.startAfterDocumentId, 'sa_2');
 
     await tester.tap(find.byKey(const ValueKey('stock-adjustments-previous')));
     await tester.pump();
     await tester.pump();
-    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_1')), findsOne);
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_1')),
+      findsOne,
+    );
   });
 
   testWidgets('a record that contradicts itself hides the page', (
@@ -226,7 +236,10 @@ void main() {
     ]);
     await tester.pump();
     await tester.pump();
-    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_xyz')), findsOne);
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_xyz')),
+      findsOne,
+    );
   });
 
   testWidgets('a correction states the same facts on a phone', (tester) async {
@@ -243,7 +256,10 @@ void main() {
       RecordList.formFor(tester.view.physicalSize.width),
       RecordForm.stackedCards,
     );
-    expect(find.byKey(const ValueKey('stock-adjustments-entry-sa_abc')), findsOne);
+    expect(
+      find.byKey(const ValueKey('stock-adjustments-entry-sa_abc')),
+      findsOne,
+    );
     // Identity, the product it is against, both attributes and the provenance
     // line: §4.3 concedes a *loss* only per attribute, and this record marks
     // none of them, so a phone states everything a table does.

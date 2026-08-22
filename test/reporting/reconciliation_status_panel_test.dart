@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -14,28 +14,31 @@ void main() {
   testWidgets('a regenerated day states the verdict and its runs', (
     tester,
   ) async {
-    final reader = _Reader(
-      documents: <String, Map<String, Object?>>{
-        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(),
-      },
-      staffNames: <String, String>{'owner-a': 'Juma'},
-    )..respond(<TenantQueryDocumentSnapshot>[
-      _run('dirty_1785540000000'),
-      _run(
-        'rj_abc',
-        overrides: <String, Object?>{
-          'source': 'manual',
-          'mode': 'full',
-          'requestedBy': 'owner-a',
-        },
-      ),
-    ]);
+    final reader =
+        _Reader(
+          documents: <String, Map<String, Object?>>{
+            'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(),
+          },
+          staffNames: <String, String>{'owner-a': 'Juma'},
+        )..respond(<TenantQueryDocumentSnapshot>[
+          _run('dirty_1785540000000'),
+          _run(
+            'rj_abc',
+            overrides: <String, Object?>{
+              'source': 'manual',
+              'mode': 'full',
+              'requestedBy': 'owner-a',
+            },
+          ),
+        ]);
 
     await _pump(tester, _controller(), reader);
 
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-verdict')))
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-verdict')),
+          )
           .data,
       'The published totals cover every sale the server holds for this day.',
     );
@@ -164,7 +167,9 @@ void main() {
 
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-verdict')))
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-verdict')),
+          )
           .data,
       'No sale has reached the server for this day, so there is nothing to '
       'reconcile.',
@@ -182,36 +187,39 @@ void main() {
   testWidgets('a failed run explains a day that is still waiting', (
     tester,
   ) async {
-    final reader = _Reader(
-      documents: <String, Map<String, Object?>>{
-        'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(
-          overrides: <String, Object?>{
-            'status': 'dirty',
-            'processedRevision': 2,
-            'invalidLineCount': 4,
+    final reader =
+        _Reader(
+          documents: <String, Map<String, Object?>>{
+            'tenants/tenant-a/reconciliation_dirty_days/2026-07-31': _intake(
+              overrides: <String, Object?>{
+                'status': 'dirty',
+                'processedRevision': 2,
+                'invalidLineCount': 4,
+              },
+            ),
           },
-        ),
-      },
-    )..respond(<TenantQueryDocumentSnapshot>[
-      _run(
-        'rj_abc',
-        overrides: <String, Object?>{
-          'status': 'failed',
-          'phase': 'metrics',
-          'completedAt': null,
-          'consecutiveFailureCount': 3,
-          'lastErrorCode': 'resource-exhausted',
-          'stockVarianceCount': 2,
-          'rerunRequested': true,
-        },
-      ),
-    ]);
+        )..respond(<TenantQueryDocumentSnapshot>[
+          _run(
+            'rj_abc',
+            overrides: <String, Object?>{
+              'status': 'failed',
+              'phase': 'metrics',
+              'completedAt': null,
+              'consecutiveFailureCount': 3,
+              'lastErrorCode': 'resource-exhausted',
+              'stockVarianceCount': 2,
+              'rerunRequested': true,
+            },
+          ),
+        ]);
 
     await _pump(tester, _controller(), reader);
 
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-verdict')))
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-verdict')),
+          )
           .data,
       'Sales are recorded for this day that the published totals do not cover '
       'yet.',
@@ -306,9 +314,7 @@ void main() {
       '0',
     );
     expect(
-      find.byKey(
-        const ValueKey('reconciliation-status-run-rerun-rj_abc'),
-      ),
+      find.byKey(const ValueKey('reconciliation-status-run-rerun-rj_abc')),
       findsOne,
     );
   });
@@ -333,13 +339,17 @@ void main() {
 
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-verdict')))
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-verdict')),
+          )
           .data,
       'The server stopped reconciling this day and recorded why.',
     );
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('reconciliation-status-error')))
+          .widget<Text>(
+            find.byKey(const ValueKey('reconciliation-status-error')),
+          )
           .data,
       'Server code: invalid_dirty_revision',
     );
@@ -480,7 +490,10 @@ void main() {
 
     await _pump(tester, _controller(), reader, pageSize: 2);
 
-    expect(find.byKey(const ValueKey('reconciliation-status-run-rj_1')), findsOne);
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-rj_1')),
+      findsOne,
+    );
     expect(
       find.byKey(const ValueKey('reconciliation-status-run-rj_3')),
       findsNothing,
@@ -489,7 +502,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('reconciliation-status-next')));
     await tester.pump();
     await tester.pump();
-    expect(find.byKey(const ValueKey('reconciliation-status-run-rj_3')), findsOne);
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-rj_3')),
+      findsOne,
+    );
     expect(reader.queries.last.startAfterDocumentId, 'rj_2');
 
     await tester.tap(
@@ -497,7 +513,10 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    expect(find.byKey(const ValueKey('reconciliation-status-run-rj_1')), findsOne);
+    expect(
+      find.byKey(const ValueKey('reconciliation-status-run-rj_1')),
+      findsOne,
+    );
   });
 
   testWidgets('opening another day starts its page again', (tester) async {
@@ -602,9 +621,7 @@ void main() {
     await _tap(tester, 'reconciliation-status-anomalies');
 
     expect(
-      find.byKey(
-        const ValueKey('reconciliation-anomaly-amend-shift_b'),
-      ),
+      find.byKey(const ValueKey('reconciliation-anomaly-amend-shift_b')),
       findsOneWidget,
     );
   });

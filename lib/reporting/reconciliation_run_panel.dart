@@ -137,11 +137,8 @@ final class _TenantReconciliationRunPanelState
       key: ValueKey('reconciliation-run-failure'),
       child: Text('This reconciliation run could not be loaded.'),
     ),
-    builder: (context, session, view) => _RunContents(
-      view: view,
-      jobId: widget.jobId,
-      selfUid: session.uid,
-    ),
+    builder: (context, session, view) =>
+        _RunContents(view: view, jobId: widget.jobId, selfUid: session.uid),
   );
 }
 

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -54,7 +54,10 @@ void main() {
       _text(tester, 'reconciliation-anomaly-figure-expected-stock_c'),
       '10',
     );
-    expect(_text(tester, 'reconciliation-anomaly-figure-observed-stock_c'), '7');
+    expect(
+      _text(tester, 'reconciliation-anomaly-figure-observed-stock_c'),
+      '7',
+    );
     // **The sign is carried by the figure and the direction by a word beside
     // it**, so neither states it alone - the same rule §9 applies to colour.
     expect(
@@ -296,7 +299,10 @@ void main() {
     expect(detail, isNot(contains('0 fewer')));
     // The one figure it does carry is the expected quantity, and it is labelled
     // as the thing that cannot be trusted rather than as a disagreement.
-    expect(_text(tester, 'reconciliation-anomaly-figure-expected-chain_a'), '10');
+    expect(
+      _text(tester, 'reconciliation-anomaly-figure-expected-chain_a'),
+      '10',
+    );
     expect(
       find.byKey(
         const ValueKey('reconciliation-anomaly-figure-variance-chain_a'),
@@ -1021,9 +1027,7 @@ Finder _amendButton(String anomalyId) =>
 /// tree while it is closed so a screen reader does not read out prose nobody can
 /// see.
 Future<void> _openScope(WidgetTester tester) async {
-  await tester.tap(
-    find.text('What this list covers'),
-  );
+  await tester.tap(find.text('What this list covers'));
   await tester.pumpAndSettle();
 }
 

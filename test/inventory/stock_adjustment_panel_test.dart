@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -12,7 +12,6 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/notices.dart';
 
 void main() {
-
   testWidgets('the adjustment explanation is kept, and starts out of the way', (
     tester,
   ) async {
@@ -23,7 +22,12 @@ void main() {
         'deleted. Correcting a mistake means recording another adjustment.';
     final reader = _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]);
 
-    await _pump(tester, _controller(), reader, callable: _Callable(_response()));
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      callable: _Callable(_response()),
+    );
 
     expect(find.text(explanation), findsNothing);
     await tester.tap(find.text('What an adjustment records'));
@@ -69,9 +73,7 @@ void main() {
     expect(
       tester
           .widget<Text>(
-            find.byKey(
-              const ValueKey('product-stock-adjustment-type-sa_abc'),
-            ),
+            find.byKey(const ValueKey('product-stock-adjustment-type-sa_abc')),
           )
           .data,
       'damage',
@@ -291,7 +293,6 @@ void main() {
       'adjust-stock-abcdefgh',
       'adjust-stock-abcdefgh',
     ]);
-
   });
 
   testWidgets('a refusal that proves nothing moved releases the ID', (
@@ -407,9 +408,7 @@ void main() {
     final reader = _Reader()..respondMovements(<TenantQueryDocumentSnapshot>[]);
 
     await _pump(tester, _controller(), reader);
-    await tester.tap(
-      find.byKey(const ValueKey('product-stock-adjustments')),
-    );
+    await tester.tap(find.byKey(const ValueKey('product-stock-adjustments')));
     await tester.pumpAndSettle();
 
     expect(find.text('Adjustments: Cold lager'), findsOne);
@@ -427,7 +426,9 @@ void main() {
   ) async {
     final reader = _Reader()
       ..respondMovements(<TenantQueryDocumentSnapshot>[_sale('mv-1')])
-      ..respondAnomalies(<TenantQueryDocumentSnapshot>[_stockAnomaly('stock_a')]);
+      ..respondAnomalies(<TenantQueryDocumentSnapshot>[
+        _stockAnomaly('stock_a'),
+      ]);
 
     await _pump(tester, _controller(), reader);
 
@@ -464,7 +465,10 @@ void main() {
     // Nothing deletes one of these, so the surface says so rather than letting
     // an old record read as a live one - now behind the fold, because it is true
     // of every difference this screen will ever show.
-    expect(find.textContaining('may already have been put right'), findsNothing);
+    expect(
+      find.textContaining('may already have been put right'),
+      findsNothing,
+    );
     await _openDifferenceScope(tester);
     expect(find.textContaining('may already have been put right'), findsOne);
     expect(
@@ -487,7 +491,12 @@ void main() {
         _stockAnomaly('stock_a'),
       ]);
 
-    await _pump(tester, _controller(), reader, callable: _Callable(_response()));
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      callable: _Callable(_response()),
+    );
 
     for (final key in <String>[
       'product-stock-quantity-disclosure',
@@ -593,9 +602,7 @@ void main() {
         ),
         _stockAnomaly(
           'movement_a',
-          overrides: <String, Object?>{
-            'anomalyType': 'invalid_stock_movement',
-          },
+          overrides: <String, Object?>{'anomalyType': 'invalid_stock_movement'},
         ),
         _snapshot('quantity_a', <String, Object?>{
           'tenantId': 'tenant-a',

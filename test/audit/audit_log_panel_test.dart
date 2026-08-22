@@ -111,8 +111,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('audit-log-filter')));
     await tester.pumpAndSettle();
-    await tester
-        .tap(find.text(TenantAuditEventType.staffStatusSet.label).last);
+    await tester.tap(find.text(TenantAuditEventType.staffStatusSet.label).last);
     await tester.pumpAndSettle();
 
     expect(reader.queries.last.equalityFilters, <String, Object?>{
@@ -246,10 +245,7 @@ void main() {
     final reader = _Reader.deferred();
 
     await _pump(tester, controller, reader, settle: false);
-    expect(
-      reader.queries.single.collectionPath,
-      'tenants/tenant-a/audit_logs',
-    );
+    expect(reader.queries.single.collectionPath, 'tenants/tenant-a/audit_logs');
 
     controller.open(uid: 'admin-a', membership: _membership('tenant-b'));
     await tester.pump();
@@ -415,8 +411,10 @@ TenantQueryDocumentSnapshot _platformEvent({String auditId = 'aud_002'}) =>
     );
 
 TenantSessionController _controller({TenantRole role = TenantRole.admin}) =>
-    TenantSessionController()
-      ..open(uid: 'admin-a', membership: _membership('tenant-a', role: role));
+    TenantSessionController()..open(
+      uid: 'admin-a',
+      membership: _membership('tenant-a', role: role),
+    );
 
 TenantMembership _membership(
   String tenantId, {

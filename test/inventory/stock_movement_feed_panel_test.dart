@@ -43,7 +43,9 @@ void main() {
     expect(
       tester
           .widget<Text>(
-            find.byKey(const ValueKey('stock-movements-feed-delta-product-1-sa_abc')),
+            find.byKey(
+              const ValueKey('stock-movements-feed-delta-product-1-sa_abc'),
+            ),
           )
           .data,
       '-3 • ${TenantStockMovementSource.manualAdjustment.label}',
@@ -102,7 +104,9 @@ void main() {
       tester
           .widget<Text>(
             find.byKey(
-              const ValueKey('stock-movements-feed-figures-product-2-sale_co-1'),
+              const ValueKey(
+                'stock-movements-feed-figures-product-2-sale_co-1',
+              ),
             ),
           )
           .data,
@@ -112,7 +116,9 @@ void main() {
       tester
           .widget<Text>(
             find.byKey(
-              const ValueKey('stock-movements-feed-recorded-product-2-sale_co-1'),
+              const ValueKey(
+                'stock-movements-feed-recorded-product-2-sale_co-1',
+              ),
             ),
           )
           .data,
@@ -231,9 +237,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('stock-movements-feed-filter')));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.text(TenantStockMovementSource.sale.label).last,
-    );
+    await tester.tap(find.text(TenantStockMovementSource.sale.label).last);
     await tester.pumpAndSettle();
 
     // A cursor is a position inside one exact query, so a filter change starts
@@ -273,7 +277,10 @@ void main() {
       reader,
       source: TenantStockMovementSource.verifiedReturn,
     );
-    expect(reader.queries.last.equalityFilters['sourceType'], 'verified_return');
+    expect(
+      reader.queries.last.equalityFilters['sourceType'],
+      'verified_return',
+    );
   });
 
   testWidgets('a movement that contradicts itself hides the page', (
@@ -290,11 +297,12 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
-    expect(find.byKey(const ValueKey('stock-movements-feed-failure')), findsOne);
     expect(
-      find.byKey(
-        const ValueKey('stock-movements-feed-entry-product-1-sa_abc'),
-      ),
+      find.byKey(const ValueKey('stock-movements-feed-failure')),
+      findsOne,
+    );
+    expect(
+      find.byKey(const ValueKey('stock-movements-feed-entry-product-1-sa_abc')),
       findsNothing,
     );
   });
@@ -318,9 +326,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(
-      find.byKey(
-        const ValueKey('stock-movements-feed-entry-product-1-sa_abc'),
-      ),
+      find.byKey(const ValueKey('stock-movements-feed-entry-product-1-sa_abc')),
       findsNothing,
     );
 
@@ -330,9 +336,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(
-      find.byKey(
-        const ValueKey('stock-movements-feed-entry-product-9-sa_xyz'),
-      ),
+      find.byKey(const ValueKey('stock-movements-feed-entry-product-9-sa_xyz')),
       findsOne,
     );
   });
@@ -341,7 +345,9 @@ void main() {
     // Every injected route follows this rule: while the composition root
     // supplies none, the feed is exactly the read-only list it was before.
     final reader = _Reader()
-      ..respond(<TenantQueryDocumentSnapshot>[_movement('product-1', 'sa_abc')]);
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _movement('product-1', 'sa_abc'),
+      ]);
 
     await _pump(tester, _controller(), reader);
 
@@ -411,7 +417,9 @@ void main() {
     TenantSessionController? scoped;
     final controller = _controller();
     final reader = _Reader()
-      ..respond(<TenantQueryDocumentSnapshot>[_movement('product-1', 'sa_abc')]);
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _movement('product-1', 'sa_abc'),
+      ]);
 
     await _pump(
       tester,
@@ -441,7 +449,9 @@ void main() {
     // only past three, so this row's one action is still a 48dp button on a
     // phone rather than something a person has to go looking for.
     final reader = _Reader()
-      ..respond(<TenantQueryDocumentSnapshot>[_movement('product-1', 'sa_abc')]);
+      ..respond(<TenantQueryDocumentSnapshot>[
+        _movement('product-1', 'sa_abc'),
+      ]);
 
     await _pump(
       tester,

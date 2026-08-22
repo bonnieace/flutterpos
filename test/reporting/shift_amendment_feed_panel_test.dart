@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -297,10 +297,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      tester.widget<PageHeader>(find.byType(PageHeader)).subtitle,
-      isNull,
-    );
+    expect(tester.widget<PageHeader>(find.byType(PageHeader)).subtitle, isNull);
   });
 
   testWidgets('an empty scoped trail says it is about one shift', (
@@ -421,7 +418,9 @@ void main() {
 
     // The first business's page arrives after the switch and is discarded
     // before it can label another business's screen.
-    reader.completeFirst(<TenantQueryDocumentSnapshot>[_amendment('amend_abc')]);
+    reader.completeFirst(<TenantQueryDocumentSnapshot>[
+      _amendment('amend_abc'),
+    ]);
     await tester.pump();
     await tester.pump();
     expect(

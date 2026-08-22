@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -58,7 +58,12 @@ void main() {
     // §9's icon-and-word requirement is the component's rather than this
     // screen's. "Stock restored" leaves the badge and stays on the record: the
     // `Verified` attribute names when and by whom.
-    _expectStatus(tester, 'sale-returns-status-ret-2', 'Verified', AppStatus.ok);
+    _expectStatus(
+      tester,
+      'sale-returns-status-ret-2',
+      'Verified',
+      AppStatus.ok,
+    );
     _expectStatus(
       tester,
       'sale-returns-status-ret-1',
@@ -82,7 +87,9 @@ void main() {
     // page about one sale; the itemisation is a fact about it.
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('sale-returns-subject-ret-1')))
+          .widget<Text>(
+            find.byKey(const ValueKey('sale-returns-subject-ret-1')),
+          )
           .data,
       '3 units across 2 products',
     );
@@ -127,7 +134,10 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(find.byKey(const ValueKey('sale-returns-failure')), findsOne);
-    expect(find.byKey(const ValueKey('sale-returns-entry-ret-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sale-returns-entry-ret-1')),
+      findsNothing,
+    );
   });
 
   testWidgets('a return whose state contradicts itself hides the page', (
@@ -154,7 +164,10 @@ void main() {
       ]);
 
     await _pump(tester, _controller(), reader, pageSize: 2);
-    expect(find.byKey(const ValueKey('sale-returns-entry-ret-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sale-returns-entry-ret-1')),
+      findsNothing,
+    );
 
     await tester.tap(find.byKey(const ValueKey('sale-returns-next')));
     await tester.pump();
@@ -188,15 +201,24 @@ void main() {
     await tester.pump();
     reader.completeFirst();
     await tester.pump();
-    expect(find.byKey(const ValueKey('sale-returns-entry-ret-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sale-returns-entry-ret-1')),
+      findsNothing,
+    );
 
     reader.completeFirst();
     await tester.pump();
     // The route was opened for a sale in the previous business, so the new
     // session cannot answer it. Another business's returns are never shown
     // under that sale's receipt, even if a sale ID coincided.
-    expect(find.byKey(const ValueKey('sale-returns-entry-ret-9')), findsNothing);
-    expect(find.byKey(const ValueKey('sale-returns-entry-ret-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sale-returns-entry-ret-9')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('sale-returns-entry-ret-1')),
+      findsNothing,
+    );
     expect(find.byKey(const ValueKey('sale-returns-failure')), findsOne);
   });
 
@@ -309,14 +331,15 @@ void main() {
     await _pump(tester, _controller(), reader, writer: writer);
 
     // Nothing selected and no reason: the action is unavailable.
-    expect(
-      pressable(tester, 'sale-returns-submit'),
-      isFalse,
-    );
+    expect(pressable(tester, 'sale-returns-submit'), isFalse);
 
-    await tester.tap(find.byKey(const ValueKey('sale-returns-increase-product-1')));
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('sale-returns-increase-product-1')));
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
     await tester.pump();
     expect(
       tester
@@ -327,10 +350,7 @@ void main() {
       '2',
     );
     // Still refused without a reason.
-    expect(
-      pressable(tester, 'sale-returns-submit'),
-      isFalse,
-    );
+    expect(pressable(tester, 'sale-returns-submit'), isFalse);
 
     await tester.enterText(
       find.byKey(const ValueKey('sale-returns-reason')),
@@ -401,7 +421,9 @@ void main() {
       ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
 
     await _pump(tester, _controller(), reader, writer: writer);
-    await tester.tap(find.byKey(const ValueKey('sale-returns-increase-product-1')));
+    await tester.tap(
+      find.byKey(const ValueKey('sale-returns-increase-product-1')),
+    );
     await tester.pump();
     await tester.enterText(
       find.byKey(const ValueKey('sale-returns-reason')),
@@ -497,7 +519,10 @@ void main() {
 
     await _pump(tester, _controller(), reader, verifyCallable: callable);
 
-    expect(find.byKey(const ValueKey('sale-returns-verify-ret-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sale-returns-verify-ret-1')),
+      findsNothing,
+    );
     expect(callable.payloads, isEmpty);
   });
 
@@ -514,7 +539,10 @@ void main() {
       verifyCallable: _VerifyCallable(const <String, Object?>{}),
     );
 
-    expect(find.byKey(const ValueKey('sale-returns-verify-ret-2')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sale-returns-verify-ret-2')),
+      findsNothing,
+    );
     expect(find.byKey(const ValueKey('sale-returns-verified-ret-2')), findsOne);
   });
 
@@ -561,12 +589,14 @@ void main() {
     // red as "only an owner may restore stock" would report a fault where there
     // is none, which is the §1 failure this model ends.
     final refusals = <List<String>, (String, AppStatus)>{
-      <String>['failed-precondition', 'This return has already been verified.']:
-          (
-            'This return had already been verified, so nothing was restored '
-                'again.',
-            AppStatus.info,
-          ),
+      <String>[
+        'failed-precondition',
+        'This return has already been verified.',
+      ]: (
+        'This return had already been verified, so nothing was restored '
+            'again.',
+        AppStatus.info,
+      ),
       <String>[
         'failed-precondition',
         'The return quantity for product product-1 exceeds the immutable sale.',
@@ -711,13 +741,7 @@ void main() {
         _pending('ret-1'),
       ]);
 
-    await _pump(
-      tester,
-      _controller(),
-      reader,
-      pageSize: 2,
-      writer: _Writer(),
-    );
+    await _pump(tester, _controller(), reader, pageSize: 2, writer: _Writer());
 
     // The remaining quantity can only be derived from the complete set, and a
     // partial page would overstate it.
@@ -824,8 +848,7 @@ final class _Writer implements TenantReturnWriter {
   }
 }
 
-TenantSaleReturnsRequest _request() =>
-    TenantSaleReturnsRequest(sale: _sale());
+TenantSaleReturnsRequest _request() => TenantSaleReturnsRequest(sale: _sale());
 
 String _receipt(int sequence) => formatCheckoutReceiptNumber(
   deviceId: _deviceA,
@@ -874,8 +897,10 @@ TenantSale _sale() => TenantSale.fromDocument(
 );
 
 TenantSessionController _controller({TenantRole role = TenantRole.cashier}) =>
-    TenantSessionController()
-      ..open(uid: 'user-a', membership: _membership('tenant-a', role: role));
+    TenantSessionController()..open(
+      uid: 'user-a',
+      membership: _membership('tenant-a', role: role),
+    );
 
 TenantMembership _membership(
   String tenantId, {

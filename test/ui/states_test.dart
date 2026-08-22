@@ -43,7 +43,9 @@ void main() {
       expect(find.byType(CustomPaint), findsWidgets);
     });
 
-    testWidgets('settles rather than looping, per §6.4s budget', (tester) async {
+    testWidgets('settles rather than looping, per §6.4s budget', (
+      tester,
+    ) async {
       // §6.4: "Idle loops on an operational screen: **0**". An empty state is a
       // screen somebody is reading, so the mark draws once and stops - which is
       // also what lets `pumpAndSettle` return at all. A looping asset would
@@ -141,7 +143,10 @@ void main() {
       );
 
       final reference = tester.widget<Text>(find.text('SALE-0042'));
-      expect(reference.style?.fontFamily, AppTypeRoles.standard.mono.fontFamily);
+      expect(
+        reference.style?.fontFamily,
+        AppTypeRoles.standard.mono.fontFamily,
+      );
       expect(reference.style?.fontFamily, isNotNull);
     });
 
@@ -269,9 +274,7 @@ Future<void> _pump(
   String? hint,
   Widget? action,
 }) async {
-  await tester.pumpWidget(
-    _Host(title: title, hint: hint, action: action),
-  );
+  await tester.pumpWidget(_Host(title: title, hint: hint, action: action));
   await tester.pump();
 }
 

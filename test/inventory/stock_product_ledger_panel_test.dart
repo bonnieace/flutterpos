@@ -75,15 +75,9 @@ void main() {
     );
     // The figure would be a fiction: there is no product document to read one
     // from, so none is shown.
-    expect(
-      find.byKey(const ValueKey('product-ledger-quantity')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('product-ledger-quantity')), findsNothing);
     // The ledger itself is unaffected.
-    expect(
-      find.byKey(const ValueKey('product-ledger-entry-sa_abc')),
-      findsOne,
-    );
+    expect(find.byKey(const ValueKey('product-ledger-entry-sa_abc')), findsOne);
   });
 
   testWidgets('the rows are worded exactly as the business-wide feed', (
@@ -104,7 +98,9 @@ void main() {
 
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('product-ledger-delta-sa_abc')))
+          .widget<Text>(
+            find.byKey(const ValueKey('product-ledger-delta-sa_abc')),
+          )
           .data,
       '-3 • ${TenantStockMovementSource.manualAdjustment.label}',
     );
@@ -131,9 +127,7 @@ void main() {
     expect(
       tester
           .widget<Text>(
-            find.byKey(
-              const ValueKey('product-ledger-adjustment-type-sa_abc'),
-            ),
+            find.byKey(const ValueKey('product-ledger-adjustment-type-sa_abc')),
           )
           .data,
       'damage',
