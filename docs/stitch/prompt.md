@@ -45,7 +45,7 @@ Branch `stitch-wave-0-tokens`, as of 2026-08-22. **Do not re-decide or redo any 
 | Status roles carry alpha tints; amber and blue carried forward as additions | `AppStatusRoles.profoundVerdant` |
 | Breakpoints **decided and unchanged** at 768/1024; the till moved to `mediumFloor` | `OPEN_QUESTIONS.md` item 21 |
 | 48dp guarantee enforced by a source-scanning tripwire | `test/ui/tokens_test.dart` |
-| Every question in `OPEN_QUESTIONS.md` answered | items 1-22; 22 raised and resolved 2026-08-22 |
+| Every question in `OPEN_QUESTIONS.md` answered | items 1-23; 23 closes the half of 22 left open |
 | Typography **live end to end** — families bundled and the whole scale repointed to Profound Verdant | `pubspec.yaml`, `AppTypeRoles` |
 | `displayCompact` added for `headline-lg-mobile`; thirteen roles now | `lib/ui/tokens.dart` |
 | The screenshot harness no longer injects a font family | `tool/screenshots/harness.dart` |
@@ -58,6 +58,9 @@ Branch `stitch-wave-0-tokens`, as of 2026-08-22. **Do not re-decide or redo any 
 | Fixtures checked and clean; eight forbidden tokens scanned for | `test/dev/product_vocabulary_test.dart` |
 | The ten locations `lib/main.dart` reaches from nothing, recorded and pinned | `test/dev/reachable_lib_test.dart` |
 | Phases 01 and 02 checked structurally; both contracts hold, no Dart change needed | `audits/2026-08-22-phases-01-02-structural.md` |
+| **Phase 03 implemented** — the sale path composed at all four widths | `lib/checkout/checkout_cart_panel.dart` |
+| Money set apart on the till only: `mono` in `AppTextRoles.money` | `OPEN_QUESTIONS.md` decision 23 |
+| Both ST-036 defects checked and **neither needed code** | `AUTONOMOUS_RUN_LOG.md`, Phase 03 |
 
 **The token work is done.** Typography landed on 2026-08-22 and closed item 20. Hanken Grotesk
 (400/500/600/700) and JetBrains Mono (400/500) are bundled from the upstream OFL repositories, and
@@ -80,8 +83,10 @@ screens use 1,028 times alongside them, and `numericBody` is unchanged. Two thin
 forward: `labelLarge` is **measured**, not derived — `.btn-primary` reads 14 / 700 / +0.05em at
 `height: 48px`, which is also where §9's 48dp target appears in the design's own CSS. And **the
 design sets money in `data-mono`** (65 occurrences beside `currency-kes`), where `numericBody`
-deliberately stayed in the interface face; moving every price into the mono face is a composition
-decision nobody has taken, and it is the one fragment of question 22 still open.
+deliberately stayed in the interface face. ~~It is the one fragment of question 22 still open.~~
+**Answered for the till on 2026-08-22 as decision 23, and left open everywhere else** — moving every
+price in the app into the mono face is still a composition decision nobody has taken, and the token
+existing is not permission to take it.
 
 Blast radius: **346 of 361 screenshots moved.** Three assertions outside the token tests moved with
 it and each says why where it sits — `AppButton` 15 → 14, safe-landing scrollable 551 → 548, and a
@@ -126,7 +131,22 @@ refusal sentence and its mobile caps-lock hint — and for the two places the ap
 where the served design is wrong: `Own shift panel` is not a route here, and the local evidence is five
 **counts** rather than ST-033's `KES 4,200.00`.
 
-**Then: Wave 1.** No screen has been recomposed to a Stitch layout by any session yet.
+**Wave 1 has started, and Phase 03 is done.** The sale path is the first screen any session has
+recomposed to a Stitch layout — `107cdea` to `82f2f50`. The browse pane is a fixed head over a
+scrolling grid; the product tile is two tiles chosen by §4.1's band, because ST-035 and the recovered
+browse render *are* two tiles; the cart pane is a head, a scrolling middle and a foot, so a save is
+never below a fold; and above 768 the two regions are separated by depth rather than by a hairline.
+**Both ST-036 defects the handoff named needed no code at all** — the app already returns the generic
+save refusal and has no bottom navigation anywhere — which is the third and fourth instance of the
+Phase 02 pattern, *the app is right where the design is wrong*.
+
+**Next: Phase 04 (catalog/stock), then 07 (staff/access), then 09 (platform ops)**, which is the rest
+of Wave 1 in `AUTONOMOUS_HANDOVER.md` §3's order. Phase 04's full mobile composition does not exist and
+Phase 09 has no verified canonical screen; both mean inventing where Phase 03 had evidence.
+
+**Read `AUTONOMOUS_RUN_LOG.md`'s Phase 03 section before touching the till again.** It carries three
+deliberate deviations from the served designs and the reason for each, and the four figures decision 23
+lands on.
 
 **The web target does not run, and it is not the redesign's fault.** Two independent pre-existing bugs,
 both in the bootstrap, both unfixed because they are behaviour changes needing explicit authorization:
@@ -156,12 +176,12 @@ Read these sources in order:
    instructions.
 4. `docs/stitch/README.md` and `docs/stitch/DESIGN_RULES.md`.
 5. `docs/stitch/RBAC_MATRIX.md`.
-6. `docs/stitch/OPEN_QUESTIONS.md` — **mandatory, not optional.** All 22 items are answered, so read
+6. `docs/stitch/OPEN_QUESTIONS.md` — **mandatory, not optional.** All 23 items are answered, so read
    it as the decision record rather than a list of blockers: it says which values were chosen, which
-   were carried forward because the design defines none, and why. **Three sections carry dated
+   were carried forward because the design defines none, and why. **Four sections carry dated
    answers or corrections that reverse the text above them** — item 19 on the radius scale, the
-   "coupled consequence of decision 21" on `expandedFloor`, and question 22 on typography metrics.
-   Read the correction, never the row above it.
+   "coupled consequence of decision 21" on `expandedFloor`, question 22 on typography metrics, and
+   decision 23 on how money is set. Read the correction, never the row above it.
 7. `docs/stitch/TOKEN_RECONCILIATION.md` — how Profound Verdant maps onto `lib/ui/tokens.dart`, and
    which roles have no source value at all.
 8. `docs/stitch/SCREEN_INDEX.md` and `COVERAGE.md` as needed.
@@ -365,8 +385,8 @@ Before editing, provide a short execution brief containing:
   table above. That table was accurate when written and this prompt has already gone stale once, so
   check the claims that matter to your first chunk: what `_palette` points at, what `AppRadii` holds,
   and whether `OPEN_QUESTIONS.md` still reads resolved;
-- the bounded chunk you will implement first, from what the Current state section says is left. The
-  harness viewport work is **done** as of `7509dcc`, so the next chunk is the unaudited half of Wave 0;
+- the bounded chunk you will implement first, from what the Current state section says is left. Wave 0
+  and Phase 03 are **done** as of `82f2f50`, so the next chunk is Phase 04 (catalog and stock);
 - the proposed later agent streams and non-overlapping ownership boundaries;
 - the known design debts that will remain provisional — including the deliberate deviations, which are
   not debt: 768/1024 breakpoints, `pill` as an app-only value, and the deferred 3-column desktop till;

@@ -445,3 +445,168 @@ read as more than it is.
 2. **`a77e95c`.** Four of Wave 0's six named components needed nothing built. The most useful sentence
    in that audit is a negative one, and the alternative was four competing systems next to working
    ones.
+
+---
+
+# Phase 03 — the sale path, composed
+
+**Seven commits, `107cdea` to `82f2f50`**, on the same branch. Nothing pushed, no PR. This is the
+first chunk of the run that changes what a screen looks like; everything before it was tokens,
+components and contracts.
+
+## `107cdea` and `a5b6ca6` — the formatter, alone, twice
+
+- Decision: **two `dart format` commits of their own, before the slices that need them.** The
+  formatter rewrites seventy-three lines of `test/checkout/checkout_cart_panel_test.dart` and twenty
+  of `tool/screenshots/fakes.dart` that have nothing to do with Phase 03, because most of `test/` and
+  `tool/` has drifted from the current formatter. `4b1b0da` set this precedent for the Wave 0
+  components and the handover's §4 names the whole-tree run as a mistake this run already made once.
+
+## `e51b8bc` — a colour role for money
+
+- Decision: **`AppTextRoles.money` exists, and reading it is a per-surface choice.** This is the half
+  of `OPEN_QUESTIONS.md` question 22 that was left open on purpose. Evidence: 65 of the places
+  `currency-kes` appears in the export also carry `text-data-mono`, and both Phase 03 screens set
+  every price that way. `OPEN_QUESTIONS.md` **decision 23** records the answer, the four figures it
+  lands on, and the one it does not.
+- Decision: **the token is not permission to sweep.** Every price outside the till stays
+  `numericBody`. The role's own doc comment says so, because a role in the token layer is the exact
+  thing a later phase will read as a licence.
+- Both palettes carry the same hex — `currency-kes` is `_Primitive.mint400` — so this is the one row
+  a repoint left alone. It clears AA on all four grounds, and a test says so: a figure a cashier reads
+  aloud to a customer is not exempt from §9 for being a number.
+
+## `047eb6e` — the browse screen
+
+- Decision: **the products pane is a fixed head over a scrolling grid.** Both served designs draw it
+  that way, and the reason is not tidiness: a cashier who scrolled to the twentieth product lost the
+  search field off the top of the screen, and typing a name is the fastest way to reach a product.
+- Decision: **two tiles, chosen by §4.1's band, because the two designs are two tiles.** ST-035's till
+  card is dense text with the scanner's code on it and no picture at all; the recovered browse render
+  leads with a picture band and carries a count of what is already rung up. The badge is compact-only:
+  on a till screen the cart pane states that fact in full.
+- Decision: **the grid extent moves 230 → 260.** It is the number that gives this app the column
+  counts both designs ask for at every band — two on a phone and a tablet, three at 1024, four at a
+  till — from one value, with no second breakpoint deciding columns. At 230 the 1440 till took five
+  and the price ellipsised at 1024.
+- Deviation, deliberate: **`-3 in stock` rather than `Out of stock`.** Both designs write the state;
+  this writes the figure. Firestore Rules permit signed stock deliberately, the cached count in this
+  app really can be negative, and `0 in stock` says what the phrase says while `-3 in stock` says
+  something it cannot.
+- Deviation, deliberate: **the price and the cached figure take two lines where ST-035 puts them on
+  one.** That row works at its ten-pixel stock label; §2.1 makes `caption` at twelve the floor for
+  anything a person is expected to read, and this app has no role below it. The first attempt drew
+  `KES 145.…` at 1024, and an ellipsised price on a till is the one thing this screen may not do.
+- Finding, and it had been true since before this run: **the tiles never filled their grid cells.**
+  `PressSurface.fillWidth`/`fillHeight` offer the whole cell but pass *loose* constraints on, so a
+  `MainAxisSize.min` column shrink-wrapped its own text and sat centred — four cards of four widths
+  with ragged gutters — and the `Spacer` in the old tile was inert for the same reason. Both bodies
+  are `max` and `stretch` now.
+- Provisional: nothing here is pixel-approved. The recovered browse render is `RECOVERED` and was
+  never visually confirmed against an implementation.
+
+## `777db74` — the cart
+
+- Decision: **head, scrolling middle, foot.** The cart pane was one `ListView`, so on a phone a
+  cashier with six items scrolled past all six to reach the save and the total went off the top while
+  they did. Both designs draw the same three regions.
+- Decision: **the clear moves into the head.** ST-035's arrangement, and it finishes §2.1's own worked
+  example: the destructive action and the primary one are now at opposite ends of the pane rather than
+  adjacent, so a thumb reaching for the save cannot land on the clear.
+- Decision: **the total is a line, not a `StatTile`.** Both designs put the word and the figure at the
+  ends of one line, and a card inside a bordered footer is a box in a box. It keeps `numeric.hero` and
+  its roll — see decision 23 for why the face does not move where the colour does.
+- Decision: **the three regions are divided by hairlines, not by ST-035's surface step.** The same
+  pane renders inside `AppSheet`, whose ground is §2.1's `overlay` — a step *above* `raised` — so a
+  `raised` header inside one would draw recessed. The step is added back for the wide layout only, in
+  the next commit, as an explicit argument.
+- Finding, paid for in layout throws: **a labelled removal cannot share a row with the stepper.** A
+  `QuantityStepper` is 188 wide at its widest bound, a labelled button about 150, and a 411 phone
+  leaves 347 inside the card. Splitting them into ST-036's own three rows is the design's layout and
+  not a workaround for one.
+- **The first of the two ST-036 defects needed no code at all.** The handoff says its save refusal
+  invents a cause and prescribes *"This sale could not be saved on this device. Try again, and ask for
+  help if it keeps happening."* — which is verbatim what `checkout_refusal.dart:202` has said all
+  along, as the fallback for any code this build does not model. `15c-sale-refused` photographs it.
+- **The second needed none either.** ST-036 renders a `Sale / Orders / History / Sync` bottom bar; the
+  till has no bottom navigation of any kind and never has. Nothing to delete. Both corrections are
+  therefore *the app is already right where the design is wrong*, which is the same shape the Phase 02
+  audit found twice.
+
+## `1fef562` — the two-region till
+
+- Decision: **depth separates the panes, and it is wide-only.** ST-035 gives the cart its own ground
+  with the header and footer a step up and the list of lines a step down. In this app's roles that is
+  the page ground, `raised` and `sunken`. `_cartPane` takes it as an argument rather than inferring it
+  from whether a scroll controller arrived, because the sheet must not get it.
+- Decision: **the boundary between panes is `border.strong`.** It was `border.subtle` — the weight
+  this app uses between two rows of one list — and this is the boundary between the catalog and the
+  sale. §9's 3:1 row, and the argument `_CartBar` already makes for its own top edge.
+- **The 3-column desktop till stays deferred**, per decision 21. Not reopened, not built.
+- Unchanged and still asserted: the cart pane is `AppLayout.salePane`, two panes begin at 768, and the
+  test pinning the tightest case — 420 of cart leaving the products 347 — passes.
+
+## `82f2f50` — where the receipt went
+
+- Decision, and it closes a gap the brief names: **the till says where to find a receipt that did not
+  print.** Phase 03's brief asks for "route to receipts waiting" and `OPEN_QUESTIONS.md`'s Phase 03
+  item 4 records the product decision; the till said the sale was durable and the printer had failed,
+  and stopped there.
+- Decision: **the sentence belongs to this surface, not to the shared copy.**
+  `checkout_print_failures.dart` is the one place in the printing slice that holds English and the
+  print queue panel reads the same sentences — telling somebody already standing in that queue to open
+  it would be nonsense.
+- It **names a destination and does not become one.** A button here would be a routing condition, and
+  hard rule 1 keeps those out of a visual change.
+
+## Testing, and what it proves
+
+- **2,315 tests pass**, from 2,314. One test was added — the money role's value and its contrast on
+  all four grounds — and it is the §9 case, which is pass/fail rather than optional.
+- **Three copy assertions changed and none of them is behaviour.** The tile's price left the stock
+  sentence (`KES 5.00, -3 in stock` → `-3 in stock` plus a keyed price), and the compact bar's total
+  left the word (`Total: KES 14.00` → a label over `KES 14.00`). Both are the same cause: money takes
+  a role of its own now, and one `Text` cannot carry two roles.
+- **No behaviour test moved.** `test/checkout/` is 10,981 lines and every line of it passes unchanged,
+  which is the signal the handover asked for: a composition change that broke one would have meant a
+  state transition changed.
+- **The harness writes 413 images, from 405.** Eight new, **seventeen moved, none removed** — and every
+  one of the seventeen is a `14`, `15` or `15b` till capture. Nothing outside the sale path moved,
+  which is the measurement that says the change is contained.
+- New captures: `14b-new-sale-browsing-with-a-cart` at the two compact widths, and `15c-sale-refused`.
+  The second is the state hard rule 5 was missing — a sale that was *not* written existed only in the
+  widget tests, and it is the branch ST-036 gets wrong.
+
+## The commits, in order
+
+| | |
+|---|---|
+| `107cdea` | Run dart format over the till's test file before Phase 03 touches it |
+| `e51b8bc` | Give money a colour role, because the till is where a figure is read aloud |
+| `047eb6e` | Compose the browse screen the way a cashier uses it |
+| `a5b6ca6` | Run dart format over the harness fakes before Phase 03 touches them |
+| `777db74` | Put the cart's answer where a cashier can reach it |
+| `1fef562` | Make the till's two regions read as two regions |
+| `82f2f50` | Tell the cashier where the receipt that did not print went |
+
+## What still needs a device
+
+- **The screenshots prove the raster and nothing else.** They do not prove the app runs, and they
+  cannot show motion at all.
+- **Nothing in this phase touched the save or tender timing**, so the sale path's motion rule is where
+  it was: the sale is written first and the roll plays over committed state, which
+  `RollingNumber`'s own note and `_save`'s ordering both still say. That is *unchanged*, not
+  *verified* — confirming it takes a device with the performance overlay on.
+- The web target still does not run, for the two pre-existing bootstrap bugs. Deliberately unfixed.
+
+## Every pixel that is still provisional
+
+- **All of Phase 03.** ST-035 is `CANONICAL CANDIDATE / VISUAL REVIEWED` and this implementation of it
+  has never been compared to it by a person. ST-036 is `NORMALIZED / RENDER REVIEW` — corrected and
+  never visually confirmed — and the mobile browse render is recovered rather than approved.
+- The tender chooser is still a `FilterChipBar` where both designs draw a three-up segmented control.
+  Kept deliberately: it is the app's existing single-selection component, it carries its selected state
+  with a glyph as well as a colour, and §5.2 specifies no segmented control at all — inventing one is
+  the thing `ConfirmDialog` and `EmptyState` were both left alone for.
+- The two empty states in the grid stay prose rather than becoming `EmptyState`, which is the decision
+  step 9 already took for screen 08 and this phase did not reopen.

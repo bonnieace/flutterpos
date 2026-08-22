@@ -466,8 +466,10 @@ where §9's 48dp target turns up in the design's own source rather than only in 
 The second: **the design sets money in `data-mono`**, not in a tabular interface face — 65 of the
 places a `currency-kes` colour appears also carry `text-data-mono`. `numericBody` was **left in the
 interface family** anyway, because moving every price in the app into the mono face is a composition
-decision rather than a metric one. **That is the one piece of question 22 still open**, and it is a
-per-surface judgement like the `mono` reader sweep rather than a token value.
+decision rather than a metric one. ~~**That is the one piece of question 22 still open**~~ —
+**answered for the till on 2026-08-22 as decision 23 below, and left open everywhere else.** It is a
+per-surface judgement like the `mono` reader sweep rather than a token value, and decision 23 takes
+exactly one surface.
 
 Tracking is stated in `em` by the design and in logical pixels by `TextStyle`, which has no `em`.
 Every converted figure is the design's `em` times that role's own size, and the test asserts the
@@ -503,6 +505,60 @@ built differ or could be misread.
    `InputDecoration`, `SnackBar` and `Dialog` reach the engine with whatever the role names and
    nothing else. `spiritTheme.fontFamily` had named Roboto since 2026-08-16 and was never reaching
    those five. It is kept as the fallback for widgets built from no role at all.
+
+## Decision 23 — how money is set, taken for the till only, 2026-08-22
+
+**This is the half of question 22 that was left open**, and it is answered here for one surface
+rather than for the app. Question 22's own words: *"the design sets money in `data-mono`, not in a
+tabular interface face — 65 of the places a `currency-kes` colour appears also carry
+`text-data-mono`. `numericBody` was left in the interface family anyway, because moving every price
+in the app into the mono face is a composition decision rather than a metric one. That is the one
+piece of question 22 still open, and it is a per-surface judgement."*
+
+**Decision: on the till, money is `AppTypeRoles.mono` in `AppTextRoles.money`. Nowhere else changes.**
+
+`AppTextRoles.money` is `currency-kes` `#45F28D`, which had been quoted in `_ProfoundVerdant` and
+deliberately wired to nothing since the palette landed. It is a role now because hard rule 2 forbids
+a widget holding a hex, and because the next phase that wants it should read a name rather than copy
+a value. **The token existing is not permission to sweep it.** Every other price in the app stays
+`numericBody` in `text.primary`/`text.secondary` until its own phase decides otherwise.
+
+### Why the till and not the app
+
+The till is the only surface where money is the *subject* rather than a column. A cashier reads a
+figure aloud to a customer while four other figures are on screen, and the design's own emphasis is
+strongest exactly there: both served Phase 03 screens set every price and every line amount in
+`data-mono` and `currency-kes`. A back-office report is a column of amounts that must line up, which
+is what `numeric.body`'s tabular figures are for and what a proportional-metric mono face does not
+improve.
+
+### The four places it lands, and the one it does not
+
+| Figure | Role | Colour |
+|---|---|---|
+| Product tile price | `mono` | `text.money` |
+| Cart line amount | `mono` | `text.money` |
+| Compact cart bar total | `mono` | `text.money` |
+| Cart footer total | **`numericHero`** | `text.money` |
+| A price the till cannot record exactly | `mono` | `status.problem.fg` |
+
+**The grand total keeps the interface face, and the two designs are why.** ST-035 sets it in
+`font-data-mono`; ST-036 sets it in `font-headline-lg-mobile`, which is the interface face. They
+disagree, so the tie-breaker applies to the half they disagree about and not to the half they agree
+on: the colour moves and the face does not. There is a mechanical reason as well — that figure is a
+`RollingNumber`, which asserts a tabular style, and a monospace face being fixed-width is not the
+same property as `FontFeature.tabularFigures()`; the assertion is what stops every digit position
+shifting mid-roll.
+
+**A figure that is not an amount does not wear the money colour.** `Price unusable` and a line that
+cannot be priced take `status.problem`, because a colour that means *this is what it costs* must not
+be worn by a thing that is not a cost.
+
+### What this does not settle
+
+Whether the back office follows. Phases 04, 05 and 06 each have surfaces full of money, and each is
+free to take this pair, to take the colour alone, or to keep `numericBody`. This section is the
+precedent, not the rule.
 
 ## Non-blocking audit limitations
 

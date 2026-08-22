@@ -145,6 +145,17 @@ The following product-specific states are mandatory:
   render-review items because retrieval became invalid/stale; the browse successor ID must be
   recovered from the Stitch UI rather than regenerated.
 
+**Implemented 2026-08-22, `107cdea` to `82f2f50`.** The three compositions are built in
+`lib/checkout/checkout_cart_panel.dart` — a fixed browse head over a scrolling grid, two product
+tiles chosen by band, and a cart pane of head/lines/foot with the wide layout's surface steps. Money
+is set apart on this surface only (`OPEN_QUESTIONS.md` decision 23). **Both ST-036 defects needed no
+code**: the generic save refusal is what `checkout_refusal.dart` has always returned, and the app has
+no bottom navigation anywhere to delete. Three deviations are recorded in the run log — `-3 in stock`
+rather than `Out of stock`, the price and the cached figure on two lines rather than one, and
+hairlines instead of a surface step inside the sheet. **No Phase 03 screen is pixel-approved**: this
+is an implementation of a reviewed candidate and two render-review artifacts, and no person has
+compared the two.
+
 ## Phase 04 coverage result
 
 - Cashier receives a read-only catalog with product, category, code, recorded stock, and unit price;
