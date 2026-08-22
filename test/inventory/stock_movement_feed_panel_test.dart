@@ -7,6 +7,8 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/text.dart';
+
 void main() {
   testWidgets('every source is listed as the server recorded it', (
     tester,
@@ -89,13 +91,7 @@ void main() {
     );
     // The signed-in manager recorded this correction, so the row says so.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(
-              const ValueKey('stock-movements-feed-recorded-product-1-sa_abc'),
-            ),
-          )
-          .data,
+      textAt(tester, 'stock-movements-feed-recorded-product-1-sa_abc'),
       'Recorded 2026-08-01 09:00 UTC by You',
     );
     // A reconciled sale names no member of the business at all, and its writer
@@ -113,15 +109,7 @@ void main() {
       'Not recorded',
     );
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(
-              const ValueKey(
-                'stock-movements-feed-recorded-product-2-sale_co-1',
-              ),
-            ),
-          )
-          .data,
+      textAt(tester, 'stock-movements-feed-recorded-product-2-sale_co-1'),
       'Recorded 2026-08-01 09:00 UTC by the server',
     );
     // The sale it came from is its own column, so one document is filed under

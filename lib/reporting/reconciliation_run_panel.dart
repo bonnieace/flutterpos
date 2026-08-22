@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -384,20 +385,15 @@ final class TenantReconciliationRunCard extends StatelessWidget {
                 ),
               ),
             SizedBox(height: tokens.spacing.s4),
-            // §5.2's provenance rows: `caption` / `text.tertiary`.
-            Text(
-              key: ValueKey('reconciliation-status-run-requested-${run.id}'),
+            // Two rows rather than one, and they stay two: a run has an actor
+            // and a pair of instants, and §5.2 gives each its own line.
+            ProvenanceLine(
               'Requested by ${_requestedByLabel(run)}',
-              style: tokens.typography.caption.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
+              key: ValueKey('reconciliation-status-run-requested-${run.id}'),
             ),
-            Text(
-              key: ValueKey('reconciliation-status-run-instants-${run.id}'),
+            ProvenanceLine(
               _instants(run),
-              style: tokens.typography.caption.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
+              key: ValueKey('reconciliation-status-run-instants-${run.id}'),
             ),
           ],
         ),

@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/notices.dart';
 
 import '../support/buttons.dart';
+import '../support/text.dart';
 
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
 const String _businessDate = '2026-07-31';
@@ -100,11 +101,7 @@ void main() {
       '2 x Tusker, 1 x product-2',
     );
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sale-returns-recorded-ret-1')),
-          )
-          .data,
+      textAt(tester, 'sale-returns-recorded-ret-1'),
       'Recorded 2026-07-31 12:00 UTC by You',
     );
   });

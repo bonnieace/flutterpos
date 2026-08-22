@@ -10,6 +10,7 @@ import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
+import '../support/text.dart';
 
 void main() {
   testWidgets('the adjustment explanation is kept, and starts out of the way', (
@@ -87,11 +88,7 @@ void main() {
       '10 to 7',
     );
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('product-stock-recorded-sa_abc')),
-          )
-          .data,
+      textAt(tester, 'product-stock-recorded-sa_abc'),
       // The adjustment was recorded by the signed-in manager, so the row says
       // so rather than repeating their own UID back at them.
       'Recorded 2026-08-01 09:00 UTC by You (Amina)',
@@ -111,11 +108,7 @@ void main() {
     // rather than dropping the attribution half of §5.2's provenance line -
     // which is what this route used to do and neither feed beside it did.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('product-stock-recorded-sale_chk-1')),
-          )
-          .data,
+      textAt(tester, 'product-stock-recorded-sale_chk-1'),
       endsWith('by the server'),
     );
   });

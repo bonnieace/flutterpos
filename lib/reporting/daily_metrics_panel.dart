@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/buttons.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -347,12 +348,8 @@ final class _DailySummaryContents extends StatelessWidget {
                         ),
                       ),
                     SizedBox(height: tokens.spacing.s8),
-                    // §5.2's provenance row: `caption` / `text.tertiary`.
-                    Text(
+                    ProvenanceLine(
                       'Reconciled ${_instant(metrics.regeneratedAt)}',
-                      style: tokens.typography.caption.copyWith(
-                        color: tokens.colors.text.tertiary,
-                      ),
                     ),
                   ],
                   if (reconciliationRoute != null) ...[

@@ -10,6 +10,7 @@ import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
+import '../support/text.dart';
 
 void main() {
   testWidgets('states each difference and what it is about', (tester) async {
@@ -265,7 +266,7 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      _text(tester, 'reconciliation-anomaly-instants-sale_a'),
+      textAt(tester, 'reconciliation-anomaly-instants-sale_a'),
       'No run or time was recorded for this difference.',
     );
   });

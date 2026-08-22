@@ -8,6 +8,8 @@ import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/text.dart';
+
 void main() {
   testWidgets('a correction is reported as the server recorded it', (
     tester,
@@ -51,7 +53,7 @@ void main() {
     // The signed-in owner made this one, so the row says so rather than
     // repeating their own UID back at them.
     expect(
-      _text(tester, 'shift-amendment-actor-amend_abc'),
+      textAt(tester, 'shift-amendment-actor-amend_abc'),
       'Corrected by You, recorded 2026-08-04 15:30 UTC.',
     );
     expect(
@@ -95,7 +97,7 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      _text(tester, 'shift-amendment-actor-amend_abc'),
+      textAt(tester, 'shift-amendment-actor-amend_abc'),
       'Corrected by admin-b, recorded 2026-08-04 15:30 UTC.',
     );
   });

@@ -6,6 +6,8 @@ import 'package:flutter_application_1/audit/audit.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/text.dart';
+
 void main() {
   testWidgets('the trail is listed as the server recorded it', (tester) async {
     final reader = _Reader(staffNames: <String, String>{'cashier-a': 'Amina'})
@@ -39,21 +41,13 @@ void main() {
     // The signed-in admin caused this one, so the row says so rather than
     // repeating their own UID back at them.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('audit-log-recorded-aud_001')),
-          )
-          .data,
+      textAt(tester, 'audit-log-recorded-aud_001'),
       'Recorded 2026-08-01 09:00 UTC by You',
     );
     // The platform is not a member of the business it acted on, so its events
     // are attributed to the platform rather than to a missing colleague.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('audit-log-recorded-aud_002')),
-          )
-          .data,
+      textAt(tester, 'audit-log-recorded-aud_002'),
       'Recorded 2026-08-01 09:00 UTC by the platform_admin operator',
     );
     expect(

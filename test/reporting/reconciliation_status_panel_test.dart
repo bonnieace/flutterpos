@@ -9,6 +9,7 @@ import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
+import '../support/text.dart';
 
 void main() {
   testWidgets('a regenerated day states the verdict and its runs', (
@@ -69,36 +70,18 @@ void main() {
       'The published totals were generated from change 3.',
     );
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('reconciliation-status-instants')),
-          )
-          .data,
+      textAt(tester, 'reconciliation-status-instants'),
       'Last sale received 2026-07-31 18:00 UTC • '
       'Last regenerated 2026-08-01 02:30 UTC',
     );
     // A sale trigger names no member of the business, so the row says so
     // rather than attributing the work to a colleague.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(
-              const ValueKey(
-                'reconciliation-status-run-requested-dirty_1785540000000',
-              ),
-            ),
-          )
-          .data,
+      textAt(tester, 'reconciliation-status-run-requested-dirty_1785540000000'),
       'Requested by the server (system:sale_trigger)',
     );
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(
-              const ValueKey('reconciliation-status-run-requested-rj_abc'),
-            ),
-          )
-          .data,
+      textAt(tester, 'reconciliation-status-run-requested-rj_abc'),
       'Requested by Juma (owner-a)',
     );
     // The state left this line for a `StatusBadge`, and the same shared card
@@ -146,13 +129,7 @@ void main() {
     // The page is ordered by document ID, and a run ID carries no time, so each
     // run states its own instants rather than implying one from its position.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(
-              const ValueKey('reconciliation-status-run-instants-rj_abc'),
-            ),
-          )
-          .data,
+      textAt(tester, 'reconciliation-status-run-instants-rj_abc'),
       'Completed 2026-08-01 02:31 UTC • Last updated 2026-08-01 02:31 UTC',
     );
     expect(reader.queries.single.equalityFilters, <String, Object?>{

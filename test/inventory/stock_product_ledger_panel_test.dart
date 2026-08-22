@@ -8,6 +8,8 @@ import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/text.dart';
+
 void main() {
   testWidgets('one product\'s ledger is read by path, not by group', (
     tester,
@@ -133,11 +135,7 @@ void main() {
       'damage',
     );
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('product-ledger-recorded-sa_abc')),
-          )
-          .data,
+      textAt(tester, 'product-ledger-recorded-sa_abc'),
       'Recorded 2026-08-01 09:00 UTC by You (Amina)',
     );
     // A reconciled sale records neither an actor nor a before and after, and
@@ -160,11 +158,7 @@ void main() {
       'co-1',
     );
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('product-ledger-recorded-sale_co-1')),
-          )
-          .data,
+      textAt(tester, 'product-ledger-recorded-sale_co-1'),
       'Recorded 2026-08-01 11:00 UTC by the server',
     );
     // The columns are the union of what any record carries, so a sale that is

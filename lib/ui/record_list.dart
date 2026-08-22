@@ -76,6 +76,7 @@ import 'package:flutter/material.dart';
 
 import 'buttons.dart';
 import 'measure.dart';
+import 'states.dart';
 import 'status.dart';
 import 'tokens.dart';
 
@@ -704,13 +705,7 @@ final class _RecordCard extends StatelessWidget {
             ],
             if (item.provenance case final line?) ...<Widget>[
               SizedBox(height: tokens.spacing.s12),
-              Text(
-                line,
-                key: item.provenanceKey,
-                style: tokens.typography.caption.copyWith(
-                  color: tokens.colors.text.tertiary,
-                ),
-              ),
+              ProvenanceLine(line, key: item.provenanceKey),
             ],
             if (item.actions.isNotEmpty) ...<Widget>[
               SizedBox(height: tokens.spacing.s12),
@@ -920,7 +915,15 @@ final class RecordTableColumns {
         identity = math.max(identity, text(line, body));
       }
       if (item.provenance case final line?) {
-        identity = math.max(identity, text(line, tokens.typography.caption));
+        // **`ProvenanceLine.styleOf`, not `typography.caption`.** This is
+        // arithmetic rather than a rendering - `text()` returns a width - and it
+        // has to be the width of the style that is actually painted. Naming the
+        // role here and the role there is how a repoint of one allocates this
+        // table's columns against a style nothing draws.
+        identity = math.max(
+          identity,
+          text(line, ProvenanceLine.styleOf(tokens)),
+        );
       }
     }
     demands.add(identity);
@@ -1236,13 +1239,7 @@ final class _RecordTableRow extends StatelessWidget {
             // a column of near-identical timestamps is width spent on
             // nothing.
             if (item.provenance case final line?)
-              Text(
-                line,
-                key: item.provenanceKey,
-                style: tokens.typography.caption.copyWith(
-                  color: tokens.colors.text.tertiary,
-                ),
-              ),
+              ProvenanceLine(line, key: item.provenanceKey),
           ],
         ),
         attributes: <Widget>[

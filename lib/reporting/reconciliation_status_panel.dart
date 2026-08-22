@@ -9,6 +9,7 @@ import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/pagination.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -510,13 +511,9 @@ final class _ReconciliationContents extends StatelessWidget {
                       ),
                     ),
                   SizedBox(height: tokens.spacing.s8),
-                  // §5.2's provenance row: `caption` / `text.tertiary`.
-                  Text(
-                    key: const ValueKey('reconciliation-status-instants'),
+                  ProvenanceLine(
                     _instants(intake),
-                    style: tokens.typography.caption.copyWith(
-                      color: tokens.colors.text.tertiary,
-                    ),
+                    key: const ValueKey('reconciliation-status-instants'),
                   ),
                 ],
               ],

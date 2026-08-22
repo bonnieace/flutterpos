@@ -10,6 +10,8 @@ import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/text.dart';
+
 const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
 const String _businessDate = '2026-07-31';
 const String _payloadHash =
@@ -366,11 +368,7 @@ void main() {
     );
 
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sale-history-recorded-at-co-2')),
-          )
-          .data,
+      textAt(tester, 'sale-history-recorded-at-co-2'),
       'Recorded 2026-07-31 12:00 UTC by Brian (user-b)',
     );
   });
@@ -389,11 +387,7 @@ void main() {
     );
 
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sale-history-recorded-at-co-1')),
-          )
-          .data,
+      textAt(tester, 'sale-history-recorded-at-co-1'),
       'Recorded 2026-07-31 12:00 UTC by You',
     );
   });
@@ -414,11 +408,7 @@ void main() {
     );
 
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('sale-history-recorded-at-co-2')),
-          )
-          .data,
+      textAt(tester, 'sale-history-recorded-at-co-2'),
       'Recorded 2026-07-31 12:00 UTC by user-b',
     );
     expect(find.byKey(const ValueKey('sale-history-failure')), findsNothing);

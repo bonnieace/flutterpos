@@ -11,6 +11,7 @@ import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/states.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -646,12 +647,9 @@ final class _AnomalyContents extends StatelessWidget {
                 ),
               ),
             SizedBox(height: tokens.spacing.s4),
-            Text(
-              key: ValueKey('reconciliation-anomaly-instants-${anomaly.id}'),
+            ProvenanceLine(
               reconciliationDifferenceProvenance(anomaly),
-              style: tokens.typography.caption.copyWith(
-                color: tokens.colors.text.tertiary,
-              ),
+              key: ValueKey('reconciliation-anomaly-instants-${anomaly.id}'),
             ),
             if (_canAmendRow(anomaly) ||
                 anomaly.shiftId != null ||

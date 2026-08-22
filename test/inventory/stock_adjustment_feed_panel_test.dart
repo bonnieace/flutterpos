@@ -7,6 +7,8 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/record_list.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/text.dart';
+
 void main() {
   testWidgets('the business-wide record is listed as it was recorded', (
     tester,
@@ -76,20 +78,12 @@ void main() {
     // repeating their own UID back at them. Their name was never read, so only
     // the authoritative UID is available for them.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('stock-adjustments-recorded-sa_abc')),
-          )
-          .data,
+      textAt(tester, 'stock-adjustments-recorded-sa_abc'),
       'Recorded 2026-08-01 09:00 UTC by You',
     );
     // A colleague is labelled by the resolved name beside their UID.
     expect(
-      tester
-          .widget<Text>(
-            find.byKey(const ValueKey('stock-adjustments-recorded-sa_def')),
-          )
-          .data,
+      textAt(tester, 'stock-adjustments-recorded-sa_def'),
       'Recorded 2026-08-01 09:00 UTC by Juma (owner-a)',
     );
     expect(

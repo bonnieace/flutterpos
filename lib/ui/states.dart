@@ -1,4 +1,5 @@
-/// The three full-page states: `EmptyState`, `LoadingState` and `ErrorState`.
+/// The three full-page states - `EmptyState`, `LoadingState` and `ErrorState` -
+/// and `ProvenanceLine`, which is not one of them and says why below.
 ///
 /// `design.md` §5.1 gives them three rows — "prose paragraph", "bare
 /// `CircularProgressIndicator`" and "'could not be read' prose" — and §7 gives
@@ -346,6 +347,79 @@ final class ErrorState extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Who recorded a thing, and when. §5.2's provenance row.
+///
+/// **The last of §5.2's rows that nothing implemented.** Its specification is
+/// one line long - `caption`, `text.tertiary`, the instant first and then the
+/// actor - and until 2026-08-22 that line was written out **seven times** across
+/// five files: twice inside `RecordList` and once each in the daily metrics,
+/// reconciliation run, reconciliation status and reconciliation anomalies panels.
+/// Four of those five carried a comment naming the section they were
+/// implementing by hand, which is the clearest signal available that an
+/// abstraction is missing rather than declined.
+///
+/// **It could not be fixed with a scan, which is why it is a widget.** The read-only
+/// notices next door were pinned by one - every `-read-only` key must sit on an
+/// `info` `Callout` - because the rendering *is* the identifying feature there.
+/// Here it is not: `caption` with `text.tertiary` appears **29 times** in `lib/`
+/// and only seven are provenance. The other 22 are stat details, cart notes,
+/// helper lines and figure captions, all correctly that pair and none of them
+/// this. A scan over the style would have flagged all 29; the concept needed a
+/// name instead.
+///
+/// **The drift it prevents had already happened once.**
+/// `stock_adjustment_panel.dart` folds a provenance string into a
+/// `Callout.message` after a newline, so it renders at the callout's body style
+/// and colour rather than at `caption` / `text.tertiary` - the same sentence
+/// about the same kind of fact, two type roles from where §5.2 puts it, and no
+/// test or picture able to tell the two apart. That site is left alone: the
+/// provenance is genuinely part of that message rather than a row under it, and
+/// changing it would be recomposing a `Callout`, not naming a style.
+///
+/// **It takes a string and nothing else.** The label's *format* stays with the
+/// callers that already own it - `stockMovementRecordedLabel`,
+/// `reconciliationDifferenceProvenance`, and the four others - for the reason
+/// `ShiftBanner` takes a status rather than a shift: a component in `lib/ui/`
+/// that decided how to word "recorded at, by" would be deciding product meaning.
+///
+/// **Density does not change it, and that is a decision rather than an
+/// oversight.** §5.2 states `caption` flat, and `caption` is one of the roles
+/// `AppDensity` does not swap - only the body role moves. So provenance is 12
+/// beside a 16 body at comfortable and 12 beside a 14 body at compact, and the
+/// pair of captures in the harness exists to show exactly that: the line holding
+/// still while its neighbours move.
+///
+/// **A plain `Text`, with no `Semantics` wrapper.** `EmptyState` has one because
+/// it is a whole page speaking as one thing; this is a line inside a record, and
+/// giving it a container of its own would announce it separately from the record
+/// it belongs to - which is the opposite of what a provenance line is for.
+final class ProvenanceLine extends StatelessWidget {
+  const ProvenanceLine(this.label, {super.key});
+
+  /// The line, in the caller's words. *Recorded 2026-08-01 09:00 UTC by Amina.*
+  final String label;
+
+  /// The style this draws, so a caller that has to *measure* provenance measures
+  /// what is actually painted.
+  ///
+  /// **Exposed for one real caller and it is not a test.** `RecordList`'s
+  /// narrow-loss column allocator asks how wide each of a record's lines wants
+  /// to be, and provenance is one of them - so before this existed, the
+  /// allocator named `typography.caption` and the renderer named
+  /// `typography.caption` and nothing tied the two together. A repoint of one
+  /// would have allocated the table's columns against a style nothing paints.
+  ///
+  /// Same reason `RecordList.formFor` and `PageHeader.showsDisplayTitle` are
+  /// statics: a question a widget answers is worth more when something else can
+  /// ask it the same way.
+  static TextStyle styleOf(AppTokens tokens) =>
+      tokens.typography.caption.copyWith(color: tokens.colors.text.tertiary);
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(label, style: styleOf(AppTokens.componentOf(context)));
 }
 
 /// §6.4's asset 6: an open box that draws itself once.

@@ -8,6 +8,8 @@ import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/text.dart';
+
 void main() {
   testWidgets('one run is read by its own exact path, not searched for', (
     tester,
@@ -42,7 +44,7 @@ void main() {
     );
     expect(_text(tester, 'reconciliation-status-run-attempts-rj_abc'), '1');
     expect(
-      _text(tester, 'reconciliation-status-run-instants-rj_abc'),
+      textAt(tester, 'reconciliation-status-run-instants-rj_abc'),
       'Completed 2026-08-01 02:31 UTC • Last updated 2026-08-01 02:31 UTC',
     );
   });
@@ -208,7 +210,7 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      _text(tester, 'reconciliation-status-run-requested-rj_abc'),
+      textAt(tester, 'reconciliation-status-run-requested-rj_abc'),
       'Requested by the server (system:nightly)',
     );
     expect(
@@ -237,7 +239,7 @@ void main() {
     // The UID stays visible beside the name: it is the identity every other
     // record attributes work by.
     expect(
-      _text(tester, 'reconciliation-status-run-requested-rj_abc'),
+      textAt(tester, 'reconciliation-status-run-requested-rj_abc'),
       'Requested by Juma (owner-a)',
     );
     expect(reader.documentPaths, contains('tenants/tenant-a/staff/owner-a'));
@@ -259,7 +261,7 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      _text(tester, 'reconciliation-status-run-requested-rj_abc'),
+      textAt(tester, 'reconciliation-status-run-requested-rj_abc'),
       'Requested by You (Amina)',
     );
   });
@@ -284,7 +286,7 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      _text(tester, 'reconciliation-status-run-requested-rj_abc'),
+      textAt(tester, 'reconciliation-status-run-requested-rj_abc'),
       'Requested by owner-a',
     );
   });
@@ -321,7 +323,7 @@ void main() {
     expect(_text(tester, 'reconciliation-status-run-attempts-rj_abc'), '3');
     expect(_text(tester, 'reconciliation-status-run-failures-rj_abc'), '2');
     expect(
-      _text(tester, 'reconciliation-status-run-instants-rj_abc'),
+      textAt(tester, 'reconciliation-status-run-instants-rj_abc'),
       'Last failed 2026-08-01 03:05 UTC • Last updated 2026-08-01 02:31 UTC',
     );
   });
@@ -450,7 +452,7 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      _text(tester, 'reconciliation-status-run-instants-rj_abc'),
+      textAt(tester, 'reconciliation-status-run-instants-rj_abc'),
       'No instant was recorded for this run.',
     );
   });
