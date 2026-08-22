@@ -86,10 +86,7 @@ void main() {
         const AppTextField(label: 'Receipt number', placeholder: 'CT-A7F-0042'),
       );
       final field = tester.widget<TextField>(find.byType(TextField));
-      expect(
-        field.decoration!.hintStyle!.color,
-        _tokens.colors.text.secondary,
-      );
+      expect(field.decoration!.hintStyle!.color, _tokens.colors.text.secondary);
     });
 
     testWidgets('an optional leading icon, at §5.2\'s named 18', (
@@ -486,10 +483,7 @@ void main() {
   group('the editing behaviour a call site already relies on', () {
     testWidgets('onChanged fires with the new value', (tester) async {
       final seen = <String>[];
-      await _pump(
-        tester,
-        AppTextField(label: 'Name', onChanged: seen.add),
-      );
+      await _pump(tester, AppTextField(label: 'Name', onChanged: seen.add));
       await tester.enterText(find.byType(TextField), 'Bread');
       expect(seen, <String>['Bread']);
     });
@@ -585,10 +579,7 @@ void main() {
         (decoration.borderRadius! as BorderRadius).topLeft.x,
         _tokens.radius.md,
       );
-      expect(
-        _styleOf(tester, 'Role').color,
-        _tokens.colors.text.secondary,
-      );
+      expect(_styleOf(tester, 'Role').color, _tokens.colors.text.secondary);
     });
 
     testWidgets('choosing an option reports it', (tester) async {
@@ -668,10 +659,7 @@ void main() {
     // colour that is in none of them.
     await _pump(
       tester,
-      const AppTextField(
-        label: 'Name',
-        helper: 'Such as Bakery.',
-      ),
+      const AppTextField(label: 'Name', helper: 'Such as Bakery.'),
     );
     // **`surface.field` is listed explicitly since 2026-08-22.** The well
     // paints it, and this set passed for months without naming it because in the

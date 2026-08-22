@@ -35,7 +35,9 @@ const String _unknownFailure =
     'keeps happening.';
 
 void main() {
-  testWidgets('an empty password is refused without being sent', (tester) async {
+  testWidgets('an empty password is refused without being sent', (
+    tester,
+  ) async {
     final signIn = _SignIn();
     await _pump(tester, signIn);
 
@@ -78,7 +80,9 @@ void main() {
     );
   });
 
-  testWidgets('a refusal by this form leaves the button usable', (tester) async {
+  testWidgets('a refusal by this form leaves the button usable', (
+    tester,
+  ) async {
     final signIn = _SignIn();
     await _pump(tester, signIn);
 
@@ -105,7 +109,9 @@ void main() {
     // The assertion that would have caught this in 2026-08-04: no string on
     // screen anywhere is one that nobody wrote.
     expect(
-      _renderedText(tester).where((text) => text.contains('dev.flutter.pigeon')),
+      _renderedText(
+        tester,
+      ).where((text) => text.contains('dev.flutter.pigeon')),
       isEmpty,
     );
     expect(
@@ -144,7 +150,9 @@ void main() {
   });
 
   testWidgets('a refused credential names the credential', (tester) async {
-    final signIn = _SignIn(failure: const SignInException('invalid-credential'));
+    final signIn = _SignIn(
+      failure: const SignInException('invalid-credential'),
+    );
     await _pump(tester, signIn);
 
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
@@ -202,7 +210,9 @@ void main() {
   testWidgets('a failure releases the button so it can be tried again', (
     tester,
   ) async {
-    final signIn = _SignIn(failure: const SignInException('invalid-credential'));
+    final signIn = _SignIn(
+      failure: const SignInException('invalid-credential'),
+    );
     await _pump(tester, signIn);
 
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
@@ -215,7 +225,9 @@ void main() {
   testWidgets('editing the address clears the error it describes', (
     tester,
   ) async {
-    final signIn = _SignIn(failure: const SignInException('invalid-credential'));
+    final signIn = _SignIn(
+      failure: const SignInException('invalid-credential'),
+    );
     await _pump(tester, signIn);
 
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
@@ -230,7 +242,9 @@ void main() {
   testWidgets('editing the password clears the error it describes', (
     tester,
   ) async {
-    final signIn = _SignIn(failure: const SignInException('invalid-credential'));
+    final signIn = _SignIn(
+      failure: const SignInException('invalid-credential'),
+    );
     await _pump(tester, signIn);
 
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
@@ -264,7 +278,9 @@ void main() {
   testWidgets('moving the cursor is not editing, and keeps the error', (
     tester,
   ) async {
-    final signIn = _SignIn(failure: const SignInException('invalid-credential'));
+    final signIn = _SignIn(
+      failure: const SignInException('invalid-credential'),
+    );
     await _pump(tester, signIn);
 
     await _signInAs(tester, 'owner@example.com', 'wrong horse');
@@ -273,10 +289,8 @@ void main() {
     // A TextEditingController notifies on a selection change as well as a text
     // change. Revealing the password moves the cursor and answers nothing the
     // refusal said, so the refusal must survive it.
-    tester
-        .widget<TextField>(_field('login-password'))
-        .controller!
-        .selection = const TextSelection(baseOffset: 0, extentOffset: 3);
+    tester.widget<TextField>(_field('login-password')).controller!.selection =
+        const TextSelection(baseOffset: 0, extentOffset: 3);
     await tester.pump();
     expect(_notice(tester), isNotNull);
 
@@ -379,7 +393,9 @@ void main() {
 
     expect(find.byType(AppTextField), findsNWidgets(2));
     expect(
-      tester.widget<AppTextField>(find.byKey(const ValueKey('login-email'))).label,
+      tester
+          .widget<AppTextField>(find.byKey(const ValueKey('login-email')))
+          .label,
       'Email address',
     );
     // §5.2: a placeholder is an example, never a restatement of the label. The
@@ -453,7 +469,10 @@ void main() {
       expect(key, findsOneWidget);
       // The `PressSurface`, which is the tap target rather than the painted
       // face: §9's row is about what answers a finger.
-      final target = find.ancestor(of: key, matching: find.byType(PressSurface));
+      final target = find.ancestor(
+        of: key,
+        matching: find.byType(PressSurface),
+      );
       expect(
         tester.getSize(target.first).width,
         greaterThanOrEqualTo(AppDensity.comfortable.minimumTapTarget.width),
@@ -487,12 +506,14 @@ void main() {
           .map(
             (row) => row.fold<int>(
               0,
-              (total, key) => total + switch (key) {
-                PosKeyboard.space => 4,
-                PosKeyboard.enter => 2,
-                PosKeyboard.backspace => 2,
-                _ => 1,
-              },
+              (total, key) =>
+                  total +
+                  switch (key) {
+                    PosKeyboard.space => 4,
+                    PosKeyboard.enter => 2,
+                    PosKeyboard.backspace => 2,
+                    _ => 1,
+                  },
             ),
           )
           .reduce((a, b) => a > b ? a : b);
@@ -606,10 +627,8 @@ void main() {
 }
 
 /// The key whose face reads [face], inside the keypad.
-Finder _keyFace(WidgetTester tester, String face) => find.descendant(
-  of: find.byType(PosKeyboard),
-  matching: find.text(face),
-);
+Finder _keyFace(WidgetTester tester, String face) =>
+    find.descendant(of: find.byType(PosKeyboard), matching: find.text(face));
 
 Finder _capsKey() => find.descendant(
   of: find.byType(PosKeyboard),
@@ -619,9 +638,7 @@ Finder _capsKey() => find.descendant(
 /// The container colour of the Caps key.
 Color? _capsFill(WidgetTester tester) {
   final box = tester.widget<DecoratedBox>(
-    find
-        .ancestor(of: _capsKey(), matching: find.byType(DecoratedBox))
-        .first,
+    find.ancestor(of: _capsKey(), matching: find.byType(DecoratedBox)).first,
   );
   return (box.decoration as BoxDecoration).color;
 }
@@ -641,7 +658,10 @@ Future<void> _pumpAt(WidgetTester tester, double width) async {
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    MaterialApp(theme: spiritTheme, home: LoginScreen(signIn: _SignIn())),
+    MaterialApp(
+      theme: spiritTheme,
+      home: LoginScreen(signIn: _SignIn()),
+    ),
   );
   await tester.pump();
 }
@@ -659,7 +679,10 @@ Future<void> _pump(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    MaterialApp(theme: theme, home: LoginScreen(signIn: signIn)),
+    MaterialApp(
+      theme: theme,
+      home: LoginScreen(signIn: signIn),
+    ),
   );
   await tester.pump();
 }

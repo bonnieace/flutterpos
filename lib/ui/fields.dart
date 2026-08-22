@@ -75,6 +75,7 @@ final class AppTextField extends StatefulWidget {
     this.autocorrect = true,
     this.enableSuggestions = true,
     this.obscureText = false,
+    this.obscuringCharacter = '*',
     this.autovalidateMode,
     this.inputFormatters,
     this.onChanged,
@@ -139,6 +140,15 @@ final class AppTextField extends StatefulWidget {
   final bool autocorrect;
   final bool enableSuggestions;
   final bool obscureText;
+
+  /// The glyph an obscured field draws for each character typed.
+  ///
+  /// **An asterisk rather than Flutter's bullet, at the product owner's
+  /// direction (2026-08-23).** It matters that this and the placeholder
+  /// agree: a field whose placeholder shows asterisks and whose typing
+  /// shows bullets tells a person the box changed character set when they
+  /// touched it. Only [obscureText] fields read this at all.
+  final String obscuringCharacter;
 
   /// When the [validator] runs on its own, rather than only on
   /// `Form.validate()`. Carried across from the call sites that set it.
@@ -275,6 +285,7 @@ class _AppTextFieldState extends State<AppTextField> {
               autocorrect: widget.autocorrect,
               enableSuggestions: widget.enableSuggestions,
               obscureText: widget.obscureText,
+              obscuringCharacter: widget.obscuringCharacter,
               inputFormatters: widget.inputFormatters,
               onChanged: (value) {
                 _handleTextChanged();
@@ -532,11 +543,18 @@ final class AppFieldWell extends StatelessWidget {
     // §2.3 as amended in v0.4: an input is a pill. The shape is the product
     // owner's, and the reason it is not simply `AppButton`'s row is that §2.3
     // still restricts the pill to buttons *and inputs* - a chip does not get it.
-    // **`radius.md` since 2026-08-22.** The design styles its inputs with the
-    // same `borderRadius.xl` as its buttons, so a well and the button under it
-    // are the same corner. This was the pill the product owner asked for in
-    // v0.4; the redesign takes it back.
-    final radius = BorderRadius.circular(tokens.radius.md);
+    // **`radius.pill` since 2026-08-23, and it is the product owner's
+    // direction rather than a reading of the design.** Stated plainly
+    // because the evidence below is real and points the other way: the
+    // Profound Verdant export renders square-cornered controls throughout,
+    // and the note it replaces was right about that. The owner asked for
+    // the pill back; a shape is theirs to choose, and `OPEN_QUESTIONS.md`
+    // decision 26 records the override with the evidence it overrides.
+    // This is the third time this one value has moved: v0.4 made it a pill at
+    // the owner's request, 2026-08-22 took it back to the design's corner,
+    // and this restores it. `StatusBadge` still keeps `radius.sm` - it is
+    // read rather than pressed, and nothing about it is a pill.
+    final radius = BorderRadius.circular(tokens.radius.pill);
     final gutter = ring.width + ring.offset;
 
     Widget well = DecoratedBox(
@@ -650,24 +668,25 @@ final class AppFieldWell extends StatelessWidget {
         // itself - so that one caller labels the whole control and passes none
         // here. An empty string that still reserved sixteen pixels put its two
         // buttons above the number they change; the picture is what caught it.
-        if (label.isNotEmpty) Padding(
-          // The label sits over the well's own gutter, so the gap a person sees
-          // between the two is `space.4` plus the ring's 4 rather than a
-          // second, larger one.
-          padding: EdgeInsets.only(
-            left: gutter,
-            right: gutter,
-            bottom: tokens.spacing.s4,
-          ),
-          child: Text(
-            label,
-            style: tokens.typography.labelMedium.copyWith(
-              color: enabled
-                  ? colors.text.secondary
-                  : colors.action.disabledLabel,
+        if (label.isNotEmpty)
+          Padding(
+            // The label sits over the well's own gutter, so the gap a person sees
+            // between the two is `space.4` plus the ring's 4 rather than a
+            // second, larger one.
+            padding: EdgeInsets.only(
+              left: gutter,
+              right: gutter,
+              bottom: tokens.spacing.s4,
+            ),
+            child: Text(
+              label,
+              style: tokens.typography.labelMedium.copyWith(
+                color: enabled
+                    ? colors.text.secondary
+                    : colors.action.disabledLabel,
+              ),
             ),
           ),
-        ),
         well,
         if (footnote != null || counter != null)
           Padding(

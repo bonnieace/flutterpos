@@ -217,11 +217,14 @@ final class AppButton extends StatelessWidget {
 
     final hasIcon = icon != null;
     final padding = size.horizontalPadding(tokens.spacing, hasIcon: hasIcon);
-    // **`radius.md`, not `radius.pill`, since 2026-08-22.** Profound Verdant's
-    // own CSS gives `.btn-primary` `border-radius: theme('borderRadius.xl')`,
-    // and its rendered buttons are square-cornered. Its prose calls one
-    // element pill-shaped and its render disagrees; the render wins.
-    final radius = BorderRadius.circular(tokens.radius.md);
+    // **`radius.pill` since 2026-08-23, and it is the product owner's
+    // direction rather than a reading of the design.** Stated plainly
+    // because the evidence below is real and points the other way: the
+    // Profound Verdant export renders square-cornered controls throughout,
+    // and the note it replaces was right about that. The owner asked for
+    // the pill back; a shape is theirs to choose, and `OPEN_QUESTIONS.md`
+    // decision 26 records the override with the evidence it overrides.
+    final radius = BorderRadius.circular(tokens.radius.pill);
 
     final labelStyle = tokens.typography.labelLarge.copyWith(color: labelColor);
 

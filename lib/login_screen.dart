@@ -365,9 +365,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 key: const ValueKey('login-password'),
                 label: 'Password',
                 leading: Icons.lock_outline,
-                // No placeholder, deliberately. It said "Enter Password", and
-                // §5.2 is explicit that a placeholder is an *example* and never
-                // a restatement of the label.
+                // **Asterisks, at the product owner's direction (2026-08-23),
+                // and they are an example rather than a restatement.** §5.2
+                // permits a placeholder that shows the shape of the value and
+                // forbids one that repeats the label - which is why the note
+                // this replaces was right to delete "Enter Password" and wrong
+                // to conclude the field could carry nothing at all. Eight
+                // asterisks are what this box will look like once somebody
+                // types in it, so the placeholder and `obscuringCharacter`
+                // below are deliberately the same glyph.
+                placeholder: '********',
                 controller: passwordController,
                 focusNode: passwordFocus,
                 obscureText: _passwordHidden,

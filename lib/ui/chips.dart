@@ -146,11 +146,7 @@ final class FilterChipBar<T> extends StatelessWidget {
             runSpacing: tokens.spacing.s8,
             children: chips,
           );
-    return Semantics(
-      container: true,
-      label: semanticLabel,
-      child: row,
-    );
+    return Semantics(container: true, label: semanticLabel, child: row);
   }
 }
 
@@ -193,10 +189,14 @@ final class _Chip<T> extends StatelessWidget {
       containerColor = Colors.transparent;
     }
     // §2.3's row for a control, as amended in v0.7.
-    // **`radius.sm` since 2026-08-22**, reversing `design.md` v0.7's "a chip is
-    // a pill". Profound Verdant's status chips carry its bare `rounded` in 78 of
-    // the 82 places one appears, which is 2.
-    final radius = BorderRadius.circular(tokens.radius.sm);
+    // **`radius.pill` since 2026-08-23, and it is the product owner's
+    // direction rather than a reading of the design.** Stated plainly
+    // because the evidence below is real and points the other way: the
+    // Profound Verdant export renders square-cornered controls throughout,
+    // and the note it replaces was right about that. The owner asked for
+    // the pill back; a shape is theirs to choose, and `OPEN_QUESTIONS.md`
+    // decision 26 records the override with the evidence it overrides.
+    final radius = BorderRadius.circular(tokens.radius.pill);
 
     return Semantics(
       container: true,
@@ -218,9 +218,7 @@ final class _Chip<T> extends StatelessWidget {
             border: Border.all(color: borderColor),
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              minHeight: FilterChipBar.height,
-            ),
+            constraints: const BoxConstraints(minHeight: FilterChipBar.height),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s12),
               child: Row(

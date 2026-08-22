@@ -121,7 +121,7 @@ final AppTypeRoles _type = _palette.typography;
 /// left in the app.
 OutlineInputBorder _fieldBorder(Color colour, {double width = 1}) =>
     OutlineInputBorder(
-      borderRadius: BorderRadius.circular(_palette.radius.md),
+      borderRadius: BorderRadius.circular(_palette.radius.pill),
       borderSide: BorderSide(color: colour, width: width),
     );
 
@@ -375,7 +375,7 @@ final ThemeData spiritTheme = ThemeData(
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_palette.radius.md),
+        borderRadius: BorderRadius.circular(_palette.radius.pill),
       ),
     ).copyWith(overlayColor: _pressOverlay(_action.primary)),
   ),
@@ -387,7 +387,7 @@ final ThemeData spiritTheme = ThemeData(
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_palette.radius.md),
+        borderRadius: BorderRadius.circular(_palette.radius.pill),
       ),
     ).copyWith(overlayColor: _pressOverlay(_action.primary)),
   ),
@@ -398,7 +398,7 @@ final ThemeData spiritTheme = ThemeData(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       side: BorderSide(color: _action.secondary.border!),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_palette.radius.md),
+        borderRadius: BorderRadius.circular(_palette.radius.pill),
       ),
     ).copyWith(overlayColor: _pressOverlay(_action.secondary)),
   ),
@@ -453,7 +453,7 @@ final ThemeData spiritTheme = ThemeData(
     ),
     checkmarkColor: _action.primary.container,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(_palette.radius.sm),
+      borderRadius: BorderRadius.circular(_palette.radius.pill),
     ),
   ),
   dialogTheme: DialogThemeData(
