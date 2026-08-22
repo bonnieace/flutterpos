@@ -60,6 +60,22 @@ const Map<String, String> captions = <String, String>{
   '13c-staff-directory-read-only':
       'The same directory as a manager, who may read it and change nothing. '
       'The only session its standing is true of.',
+  '13d-invite-staff':
+      'The invitation form open. The one action on this route that names no '
+      'existing member, and the first picture of it.',
+  '13e-resend-an-invitation':
+      'Queueing a second invitation to a pending hire. Three of these forms '
+      'need a pending membership, and Faith Njeri is the one seeded member '
+      'who has one.',
+  '13f-cancel-an-invitation':
+      'Withdrawing an invitation, which is destructive and asks for the '
+      'reason the audit record keeps.',
+  '13g-replace-an-invitation-email':
+      'Cancelling a pending membership and queueing a fresh invitation to a '
+      'corrected address, stated as the one act it is.',
+  '13h-deactivate-a-member':
+      'Removing a member’s access. The destructive direction of the status '
+      'action; activating is the same form and gives a till back.',
   '14-new-sale':
       'The till. On a desktop the cart is a second pane; on a phone it is a '
       'sheet reached from a badge.',

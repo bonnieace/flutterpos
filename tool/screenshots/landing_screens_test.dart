@@ -170,7 +170,70 @@ void main() {
     controller: seedSession(role: TenantRole.admin, uid: adminUid),
   );
 
-  screenshotCase('13-staff-directory', build: staffDirectory);
+  /// Opens one of the route's actions and settles, on whichever session and at
+  /// whichever width the case is rendering under.
+  ///
+  /// **Shared by every form case below rather than spelled six times.** All five
+  /// member forms are `RecordItem.details` reached from a row action, so the
+  /// choreography is identical and only the key differs - and at 411 the action
+  /// is below the fold, where `tap` warns rather than fails when it misses.
+  ///
+  /// **`underRecord` is not optional decoration; it is §4.3's overflow rule.**
+  /// `RecordActionSet.inlineCountFor` draws **no** action inline on
+  /// `stackedCards` once a record has more than three, and three on
+  /// `twoColumnCards` - so a pending membership's four actions are all behind
+  /// the menu at 411, and its fourth is behind the menu at 834 as well. The key
+  /// then exists only as a `PopupMenuItem` in an overlay, which is why the
+  /// finder is tried first and the menu opened only when it comes back empty.
+  /// `13b` never had to do this because an accepted membership carries two
+  /// actions and two are inline at every band.
+  Future<void> Function(WidgetTester) openStaffAction(
+    String key, {
+    String? underRecord,
+  }) => (tester) async {
+    final scrollable = find.byType(Scrollable).first;
+    Future<void> reach(Finder target) async {
+      await tester.scrollUntilVisible(
+        target,
+        300,
+        scrollable: scrollable,
+        maxScrolls: 30,
+      );
+      // `scrollUntilVisible` stops when a widget is built rather than when it
+      // is on screen, which is the trap the catalog's captures paid for twice.
+      await tester.ensureVisible(target);
+      await tester.pumpAndSettle();
+    }
+
+    final action = find.byKey(ValueKey(key));
+    if (action.evaluate().isEmpty && underRecord != null) {
+      final menu = find.descendant(
+        of: find.byKey(ValueKey(underRecord)),
+        matching: find.byIcon(Icons.more_vert),
+      );
+      await reach(menu);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      // The item is in an overlay now, so it needs no scrolling of its own.
+      await tester.tap(find.byKey(ValueKey(key)));
+    } else {
+      await reach(action);
+      await tester.tap(action);
+    }
+    await tester.pumpAndSettle();
+    // The form opened inside the record, so the record is what to frame - the
+    // action that opened it may have been a menu item that no longer exists.
+    if (underRecord != null) {
+      await tester.ensureVisible(find.byKey(ValueKey(underRecord)));
+      await tester.pumpAndSettle();
+    }
+  };
+
+  screenshotCase(
+    '13-staff-directory',
+    build: staffDirectory,
+    viewports: responsiveViewports,
+  );
 
   /// The same route as a manager, which is the only session it says anything to.
   ///
@@ -186,6 +249,7 @@ void main() {
       TenantStaffDirectoryScreen(reader: FakeTenantReader.business()),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   /// The same route with one member's form open - the state `RecordItem.details`
@@ -203,11 +267,72 @@ void main() {
   screenshotCase(
     '13b-staff-directory-editing',
     build: staffDirectory,
-    afterPump: (tester) async {
-      final edit = find.byKey(const ValueKey('edit-staff-$managerUid'));
-      await tester.ensureVisible(edit);
-      await tester.pumpAndSettle();
-      await tester.tap(edit);
-    },
+    afterPump: openStaffAction(
+      'edit-staff-$managerUid',
+      underRecord: 'staff-record-$managerUid',
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // **The other five surfaces this route opens, none of which had a picture.**
+  // `13b` photographed one of the six actions and the whole family had three
+  // captures; the brief asks for pending, active, disabled, expired/invalid,
+  // busy, validation and failure states, hard rule 5 asks for each of them in
+  // the harness, and ST-055's fourth section draws a consequence dialog for
+  // every one of the five below. Their behaviour is not thin - eleven test files
+  // and 5,501 lines cover them - so what was missing was only ever the raster.
+  //
+  // Faith Njeri (`pending-dev`) is the subject of three of them because resend,
+  // cancel and replace-email all require a pending membership with an
+  // unaccepted invitation, and she is the one seeded member who has one. The
+  // status change targets Brian Kimani rather than Peter Otieno, whom ST-055
+  // draws: Peter is `adminUid` and therefore the acting session in these
+  // captures, and a person deactivating themselves is not the picture this
+  // state is for.
+  screenshotCase(
+    '13d-invite-staff',
+    build: staffDirectory,
+    afterPump: openStaffAction('invite-staff-open'),
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    '13e-resend-an-invitation',
+    build: staffDirectory,
+    afterPump: openStaffAction(
+      'resend-staff-invitation-pending-dev',
+      underRecord: 'staff-record-pending-dev',
+    ),
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    '13f-cancel-an-invitation',
+    build: staffDirectory,
+    afterPump: openStaffAction(
+      'cancel-staff-invitation-pending-dev',
+      underRecord: 'staff-record-pending-dev',
+    ),
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    '13g-replace-an-invitation-email',
+    build: staffDirectory,
+    afterPump: openStaffAction(
+      'replace-staff-email-pending-dev',
+      underRecord: 'staff-record-pending-dev',
+    ),
+    viewports: responsiveViewports,
+  );
+
+  screenshotCase(
+    '13h-deactivate-a-member',
+    build: staffDirectory,
+    afterPump: openStaffAction(
+      'set-staff-status-$cashierUid',
+      underRecord: 'staff-record-$cashierUid',
+    ),
+    viewports: responsiveViewports,
   );
 }
