@@ -43,6 +43,22 @@ const String seedPayloadHash =
 /// surfaces that read a day - the daily summary, reconciliation - compute the
 /// same string from `DateTime.now()` and read by exact path. A hardcoded date
 /// would render those two screens permanently empty.
+///
+/// **So the harness is deterministic within one UTC day and not across two, and
+/// that is a trap for the way this project measures a change.** Every phase
+/// reports "N images moved" as its evidence of containment, hashing
+/// `screenshots/` before and after. When a session straddles midnight UTC, every
+/// capture that renders a business date or a seeded timestamp moves on the next
+/// run for that reason alone - roughly forty of them, none of which the change
+/// touched. Phase 07 spent a bisect on it: a nine-file spacing repoint appeared
+/// to move 36 reporting, shift, returns and receipt images, and re-measuring
+/// against a same-day baseline showed it moved **none**.
+///
+/// The tell is that the moved set is all date-bearing screens and contains
+/// nothing you edited. **Re-baseline and re-run rather than going looking for
+/// the cause in your own diff.** Fixing it properly means one injectable clock
+/// shared by the fixtures and the surfaces under test, which is a behaviour
+/// change and needs its own authorisation.
 String seedBusinessDate([int daysAgo = 0]) => checkoutBusinessDate(
   DateTime.now().toUtc().subtract(Duration(days: daysAgo)),
 );
