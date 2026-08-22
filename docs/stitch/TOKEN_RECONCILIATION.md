@@ -292,13 +292,59 @@ change. Suggested sequence, each step its own reviewable commit:
    and the omission surfaced as a test failure.
 
    Roughly forty tests pinned old-palette values. They now read whatever palette the theme registers,
-   so they check the wiring rather than the hues, and a future palette change will not break them.
+   so they check the wiring rather than the hues, and a future palette change will not break them. The
+   pattern that fixed them is below, and **steps 4 and 5 will need it again** — radius and type values
+   are pinned in tests exactly the way colours were.
 4. **`AppRadii` values** (decision 19). Independent of colour; separate diff so roundness changes are
    not confused with palette changes.
 5. **Font assets and `AppTypeRoles` families** (decision 20). A `pubspec.yaml` change, integration
    owner only.
-6. **The responsive contract** (decision 21) — `showsTwoPanes` to `mediumFloor` first, then
-   `expandedFloor` to 1280, together, with the 1024-1279 harness viewport added.
+6. **The responsive contract** (decision 21) — `showsTwoPanes` to `mediumFloor` **first**, then
+   `expandedFloor` to 1280, together, with the 1024-1279 harness viewport added. Taken in the other
+   order, or alone, the second half strips two panes from 1024-1279 and regresses the sale path.
 
 Keeping 3, 4, 5 and 6 apart matters: each moves pixels for a different reason, and a combined diff
 makes every regression ambiguous.
+
+## Repointing a test that pins a token value
+
+Step 3 hit about forty of these and the fix was the same every time. Expect the same on steps 4 and 5,
+and reach for this rather than rediscovering it one failure at a time.
+
+**The shape of the bug.** A test binds the token set at the top of the file and then pumps its widget
+inside the app theme:
+
+```dart
+const AppTokens _tokens = AppTokens.dark;          // the assertion's source
+Widget _app(Widget child) => MaterialApp(theme: spiritTheme, ...);   // what actually renders
+```
+
+Those agree only while `spiritTheme` registers `AppTokens.dark`. The moment it registers anything else,
+the test asserts one token set against a widget rendered from another — and fails for a reason that has
+nothing to do with what it was written to check.
+
+**The fix.** Bind to what the theme actually registers:
+
+```dart
+final AppTokens _tokens = spiritTheme.extension<AppTokens>()!;
+```
+
+Every affected file already imports `theme.dart` for `spiritTheme`. `const` becomes `final`, because a
+property access is not a constant expression. In `test/ui/tokens_test.dart` the same handle is called
+`registered`, and that file deliberately keeps `AppTokens.dark` as well — it is the one place that
+measures the shipped palette's own values, so it needs both.
+
+**Three cases the binding change does not cover:**
+
+- **A hex written inline.** Assert the role instead of the value: `_actions.destructive.label`, not
+  `const Color(0xFFFF5C6C)`. The value belongs to `tokens_test.dart`, pinned against the decision that
+  chose it; every other test should be checking that a widget reads the right *role*.
+- **A test name that describes the old value.** "the ordinary tier is sage and the primary label is
+  ink" was never about sage or ink. Rename to the behaviour.
+- **An allowed-value set that passed on a collision.** `fields_test.dart` listed the roles a field may
+  paint and omitted `surface.field`, which only passed because it shared a hex with
+  `action.disabledBorder`. Read a failure like this as the set working, not as the set being wrong.
+
+**Verifying afterwards.** `flutter test test/` for correctness, then the screenshot hash comparison
+above for the pixel claim. `AppTokens.dark` must come out of every step unedited — a test asserts that,
+because editing it would make the record of the shipped palette a lie rather than a comparison.
