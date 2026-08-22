@@ -1,3 +1,6 @@
+import 'dart:io' show Directory, File;
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/status.dart';
@@ -52,10 +55,7 @@ void main() {
       // somebody remembered: the defect being replaced is one green doing seven
       // jobs, so the test that matters is that the five differ.
       for (final status in AppStatus.values) {
-        await _pump(
-          tester,
-          StatusBadge(status: status, label: status.name),
-        );
+        await _pump(tester, StatusBadge(status: status, label: status.name));
         final decoration = _decorationOf(tester, StatusBadge);
         final role = status.role(_tokens);
         expect(decoration.color, role.bg, reason: '${status.name} background');
@@ -632,9 +632,7 @@ void main() {
         _styleOf(tester, summary).fontSize,
         _tokens.typography.bodyLarge.fontSize,
       );
-      final glyph = tester.widget<Icon>(
-        find.byIcon(Icons.info_outline),
-      );
+      final glyph = tester.widget<Icon>(find.byIcon(Icons.info_outline));
       expect(glyph.color, _tokens.colors.status.info.fg);
       expect(glyph.size, Disclosure.glyphSize);
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);
@@ -652,9 +650,7 @@ void main() {
           child: Text(body),
         ),
       );
-      final style = DefaultTextStyle.of(
-        tester.element(find.text(body)),
-      ).style;
+      final style = DefaultTextStyle.of(tester.element(find.text(body))).style;
       expect(style.color, _tokens.colors.text.secondary);
       expect(style.fontSize, _tokens.typography.bodyLarge.fontSize);
     });
@@ -713,4 +709,122 @@ void main() {
       );
     });
   });
+  group('every read-only notice is an info callout - the §2.1 lookup', () {
+    test('no surface says read-only as anything but a Callout', () {
+      // **A source scan, because the defect it catches is not a type error.**
+      // Six surfaces tell a person that something cannot be changed, and five of
+      // them render an `info` [Callout]. The sixth,
+      // `checkout-configuration-read-only`, was a bare `Text` until 2026-08-22:
+      // no container, no glyph, no status role - the same fact as its four
+      // siblings, under the same condition, in the same feature folder as one of
+      // them. §9 requires that status never be carried by colour alone, and this
+      // carried it by nothing.
+      //
+      // **Nothing typed could have caught it**, because a `String` in a `Text` and
+      // a `String` in a `Callout.message` are the same `String`. And nothing
+      // *did* catch it for a different reason worth recording: every capture that
+      // reaches one of these branches injects a writer, so three of the six
+      // notices had never appeared in a picture. `95-read-only-notices` fixes
+      // that half; this fixes the half a picture cannot, which is the next site.
+      //
+      // **The pattern this pins is the one five sites already agreed on**, not a
+      // new rule: an `info` [Callout], titled when it states the standing of a
+      // whole page and untitled when it states that one control is unavailable
+      // here. The six at the time of writing:
+      //
+      // - `catalog-read-only`, titled - `lib/tenancy/tenant_catalog.dart`
+      // - `staff-directory-read-only`, titled - `lib/tenancy/tenant_staff_directory.dart`
+      // - `catalog-management-read-only`, untitled
+      // - `catalog-management-product-read-only`, untitled
+      // - `printer-configuration-read-only`, untitled
+      // - `checkout-configuration-read-only`, untitled - the one this scan exists for
+      //
+      // **What it deliberately does not reach.** `checkout_print_queue_panel`
+      // renders *nothing at all* when no retry is injected - the decided
+      // treatment, recorded in `37c-receipts-waiting-read-only`'s own caption as
+      // "a statement of what is waiting, and no control that would fail". It
+      // carries no `-read-only` key, so it is not matched, and it must not be
+      // pushed into carrying a notice.
+      //
+      // Legacy is excluded: `lib/pos/**` and `lib/screens/**` are the previous
+      // single-tenant app, read-only per `CLAUDE.md` hard rule 3.
+      final offenders = <String>[];
+      var found = 0;
+
+      for (final file in _activeDartFiles()) {
+        final lines = file.readAsStringSync().split(RegExp(r'\r?\n'));
+        for (var index = 0; index < lines.length; index++) {
+          if (!_readOnlyKey.hasMatch(lines[index])) continue;
+          found++;
+          final where = '${_shortPath(file)}:${index + 1}';
+
+          // The constructor this key is an argument of opens on an earlier line.
+          // `dart format` puts one argument per line here, so the opener is
+          // within a couple of lines; six is slack, not a guess.
+          var opener = '<none>';
+          var openedAt = index;
+          for (var back = index - 1; back >= 0 && back >= index - 6; back--) {
+            final match = _constructorOpen.firstMatch(lines[back].trim());
+            if (match != null) {
+              opener = match.group(1)!;
+              openedAt = back;
+              break;
+            }
+          }
+          if (opener != 'Callout') {
+            offenders.add(
+              '$where - the key sits on `$opener`, not `Callout`. A read-only '
+              'statement is the state of a surface, so it takes §2.1\'s `info` '
+              'container and glyph rather than being body prose.',
+            );
+            continue;
+          }
+
+          // `status:` follows `key:` at every current site, but the argument
+          // order is the call site's business, so the whole call is searched.
+          final window = lines
+              .sublist(openedAt, math.min(lines.length, index + 10))
+              .join('\n');
+          if (!window.contains('AppStatus.info')) {
+            offenders.add(
+              '$where - a `Callout`, but not an `info` one. §2.1 gives `info` the '
+              'meaning "offline, read-only, informational"; every other status '
+              'would claim something else happened.',
+            );
+          }
+        }
+      }
+
+      expect(
+        found,
+        greaterThan(0),
+        reason:
+            'No `-read-only` ValueKey was found anywhere in the active app. '
+            'Either every read-only notice was deleted, or the keys were '
+            'renamed and this scan is now checking nothing.',
+      );
+      expect(offenders, isEmpty, reason: offenders.join('\n'));
+    });
+  });
 }
+
+/// `ValueKey('<anything>-read-only')`, with or without an explicit type
+/// argument.
+final RegExp _readOnlyKey = RegExp(
+  r"ValueKey(?:<String>)?\('[^']*-read-only'\)",
+);
+
+/// A constructor call being opened on its own line: `Callout(`, `const Callout(`.
+final RegExp _constructorOpen = RegExp(r'^(?:const\s+)?([A-Z]\w*)\($');
+
+/// Every Dart file of the app that is not legacy.
+Iterable<File> _activeDartFiles() => Directory('lib')
+    .listSync(recursive: true)
+    .whereType<File>()
+    .where((file) => file.path.endsWith('.dart'))
+    .where((file) {
+      final path = file.path.replaceAll(r'\', '/');
+      return !path.contains('/pos/') && !path.contains('/screens/');
+    });
+
+String _shortPath(File file) => file.path.replaceAll(r'\', '/');

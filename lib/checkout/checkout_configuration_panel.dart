@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -264,9 +264,7 @@ AppNotice _refusalNotice(String code) => switch (code) {
   'configuration_forbidden' => const AppNotice.refused(
     'Only an owner or administrator may change the checkout settings.',
   ),
-  _ => const AppNotice.refused(
-    'The checkout settings could not be changed.',
-  ),
+  _ => const AppNotice.refused('The checkout settings could not be changed.'),
 };
 
 /// What every state of this route says about selling.
@@ -316,9 +314,12 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Currency', style: tokens.typography.titleMedium.copyWith(
+        Text(
+          'Currency',
+          style: tokens.typography.titleMedium.copyWith(
             color: tokens.colors.text.primary,
-          )),
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           key: const ValueKey('checkout-configuration-current'),
@@ -343,9 +344,25 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
         ),
         if (!widget.canPublish) ...[
           const SizedBox(height: 12),
-          const Text(
+          // **A notice, not a sentence, and it was a sentence until 2026-08-22.**
+          // This is the state of the build rather than a line of the page's
+          // prose, and §2.1 gives `info` the meaning "offline, read-only,
+          // informational" - so it wears the container and the glyph its four
+          // siblings wear. Untitled, because the two-tier pattern the other five
+          // sites already follow reserves a title for the standing of a whole
+          // page: `catalog-read-only` and `staff-directory-read-only` carry one,
+          // and a single control that is unavailable here does not.
+          //
+          // It rendered as a bare `Text` for as long as it did because **no
+          // capture contained it** - `16-checkout-settings` injects a writer, so
+          // the branch never drew in a picture at all.
+          // `16b-checkout-settings-read-only` is the repair for that half, and
+          // `test/ui/status_test.dart` scans for the pattern so a seventh site
+          // cannot invent a seventh rendering.
+          const Callout(
             key: ValueKey('checkout-configuration-read-only'),
-            'This build cannot change the setting from here.',
+            status: AppStatus.info,
+            message: 'This build cannot change the setting from here.',
           ),
         ] else ...[
           const SizedBox(height: 16),

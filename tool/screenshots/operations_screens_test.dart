@@ -62,10 +62,7 @@ void main() {
   screenshotCase(
     '14-new-sale',
     build: () => inSession(
-      TenantCheckoutScreen(
-        cache: FakeCatalogSource(),
-        drafts: FakeDraftSink(),
-      ),
+      TenantCheckoutScreen(cache: FakeCatalogSource(), drafts: FakeDraftSink()),
       controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
     ),
     viewports: responsiveViewports,
@@ -74,10 +71,7 @@ void main() {
   screenshotCase(
     '15-new-sale-with-a-cart',
     build: () => inSession(
-      TenantCheckoutScreen(
-        cache: FakeCatalogSource(),
-        drafts: FakeDraftSink(),
-      ),
+      TenantCheckoutScreen(cache: FakeCatalogSource(), drafts: FakeDraftSink()),
       controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
     ),
     afterPump: (tester) async {
@@ -139,6 +133,22 @@ void main() {
     ),
   );
 
+  // **The same route with no writer, and until 2026-08-22 nothing photographed
+  // it.** `16` above injects one, so the whole `!canPublish` branch - the notice
+  // and the absent form - had never appeared in any of the 361 images. That is
+  // how the notice came to be a bare `Text` where its four siblings are `info`
+  // callouts, and it is the same trap `18b-catalog-notice` records one screen
+  // over: a conditional section invisible in every capture is not covered.
+  //
+  // The counterpart of `36c-printer-settings-read-only`, which is the sibling
+  // that *was* photographed and stayed right.
+  screenshotCase(
+    '16b-checkout-settings-read-only',
+    build: () => inSession(
+      TenantCheckoutConfigurationScreen(reader: FakeTenantReader.business()),
+    ),
+  );
+
   // -------------------------------------------------------------------------
   // Catalog and stock
   // -------------------------------------------------------------------------
@@ -194,6 +204,23 @@ void main() {
   // This is that, on the surface with the most notice branches in the app. The
   // other statuses are covered by the `Callout` matrix; what no matrix can show
   // is how one reads *in place*, above a page of forms.
+  // **The only picture of the two catalog read-only notices, and of the pair
+  // together.** Both render in this state and they answer different questions -
+  // one says the catalog cannot be changed at all, the other stands where the
+  // form a person came here to fill in would be - so a picture of one would
+  // misrepresent the page. `18` and `18b` both inject a writer, so neither had
+  // ever drawn either.
+  //
+  // No `updateCallable` and no `bulkRoute` either: a build with no writer has no
+  // correction path and no bulk route, and passing them would photograph a
+  // combination the composition root does not produce.
+  screenshotCase(
+    '18c-manage-catalog-read-only',
+    build: () => inSession(
+      TenantCatalogManagementScreen(reader: FakeTenantReader.business()),
+    ),
+  );
+
   screenshotCase(
     '18b-catalog-notice',
     build: () {
@@ -226,7 +253,9 @@ void main() {
         find.byKey(const ValueKey('catalog-management-add-category')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+      await tester.tap(
+        find.byKey(const ValueKey('catalog-management-confirm')),
+      );
       await tester.pumpAndSettle();
       // The notice lands near the top of the route, above the forms, so the page
       // is scrolled back to it rather than photographed where the tap left it.
@@ -414,7 +443,8 @@ void main() {
                 businessDate: businessDate,
                 actions: fakeReconciliationActions(),
               ),
-          reconciliationRoles: TenantReconciliationStatusRepository.allowedRoles,
+          reconciliationRoles:
+              TenantReconciliationStatusRepository.allowedRoles,
           salesTotalsRoute: () => TenantSalesTotalsScreen(
             callable: FakeCallable(seedSalesTotalsResponse()),
             reader: reader,
@@ -460,11 +490,10 @@ void main() {
         reader: FakeTenantReader.business(
           extraDocuments: <String, Map<String, Object?>>{
             'tenants/$seedTenantId/reconciliation_dirty_days/'
-                    '${seedBusinessDate()}':
-                seedReconciliationIntake(
-                  businessDate: seedBusinessDate(),
-                  invalidLineCount: 4,
-                ),
+                '${seedBusinessDate()}': seedReconciliationIntake(
+              businessDate: seedBusinessDate(),
+              invalidLineCount: 4,
+            ),
           },
         ),
         businessDate: seedBusinessDate(),

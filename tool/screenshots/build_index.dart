@@ -68,10 +68,18 @@ const Map<String, String> captions = <String, String>{
   '16-checkout-settings':
       'The one surface that publishes what the till prices in. Owner and '
       'administrator only.',
+  '16b-checkout-settings-read-only':
+      'The same route in a build with no writer. The notice is the one that was '
+      'a bare sentence until 2026-08-22, because no capture had ever contained '
+      'this branch.',
   '17-read-only-catalog': 'The catalog every active member may read.',
   '18-manage-catalog':
       'Adding a category, adding a product, and the product list a correction '
       'starts from.',
+  '18c-manage-catalog-read-only':
+      'Manage catalog with no writer: both read-only notices at once. One says '
+      'the catalog cannot be changed at all, the other stands where the form '
+      'would be.',
   '18b-catalog-notice':
       'What a write did, in place. The first picture of a notice on any '
       'screen: they appear only after a write, so no capture had one.',
