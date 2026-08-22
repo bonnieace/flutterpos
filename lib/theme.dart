@@ -293,17 +293,43 @@ final ThemeData spiritTheme = ThemeData(
     outline: _surface.borderSubtle,
     outlineVariant: _surface.borderSubtle,
   ),
+  // **The three slots this file sets by hand, and all three were literals until
+  // 2026-08-22.** The other twelve are Material's own metrics with this theme's
+  // family and colour applied, which is why `test/theme_test.dart` can enumerate
+  // fifteen and find fifteen correct colours while three of them carried sizes
+  // §2.2 does not have: 40, 16 and 15. A figure that belongs to no role is a
+  // literal in the sense hard rule 2 means - it looks right and nothing can
+  // check it.
   textTheme: TextTheme(
-    headlineLarge: TextStyle(
-      fontSize: 40,
-      fontWeight: FontWeight.w700,
-      color: _text.primary,
-    ),
-    bodyMedium: TextStyle(fontSize: 16, color: _text.secondary),
-    // Every button label. Left without a colour or a family on purpose: it
-    // merges onto the default style, so it inherits both and cannot drift
-    // into a different face from the text beside it.
-    labelLarge: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+    // **`display`, and it reaches nothing today.** `headlineLarge` has zero
+    // readers in `lib/`: no app widget names it and no stock Material component
+    // resolves to it, so this moves no pixel. It is repointed rather than
+    // deleted because the slot exists whether or not the app reads it - a
+    // Material or third-party widget that resolves to it would have been handed
+    // 40, and §2.2's largest role is 32. A slot that says 40 when the design's
+    // ceiling is 32 is a figure that will eventually be believed.
+    headlineLarge: _type.display.copyWith(color: _text.primary),
+    // **`body.lg`, which is the app's body text.** `AppDensity.comfortable`
+    // reads `AppBodyRole.large`, so 16 was already the right *size* - what was
+    // missing is the leading. §2.2 states `body.lg` as 16 / 24 and a bare
+    // `fontSize: 16` inherits Material's `bodyMedium` height of 20/14, so every
+    // one of the bare `Text` call sites this reaches through `DefaultTextStyle`
+    // was setting 16 on a 22.9 line box instead of a 24 one.
+    bodyMedium: _type.bodyLarge.copyWith(color: _text.secondary),
+    // **Every button label, and `label.lg` is the *measured* role.** The design's
+    // own `.btn-primary` reads 14 / 700 / +0.05em, so 15 / 600 disagreed with
+    // `AppButton` - which names the role directly - on both a size and a weight.
+    // What it reaches is the three `SegmentedButton`s in the app, and they now
+    // wear the same label as every other button.
+    //
+    // **Still written without a colour, and the original reason still holds** -
+    // though it is worth stating precisely, because the obvious assertion about
+    // it is false. `ThemeData` applies its body and display colours to every
+    // slot, so this does not reach a widget colourless; it reaches one carrying
+    // the same ink as the text beside it, which is what "cannot drift" meant.
+    // The role names no colour either, so nothing about that changes. It does
+    // now name a family - the same family the fallback would have supplied.
+    labelLarge: _type.labelLarge,
   ),
   appBarTheme: AppBarTheme(
     backgroundColor: _surface.base,

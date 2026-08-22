@@ -1,3 +1,5 @@
+import 'dart:io' show File;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
@@ -373,6 +375,107 @@ void main() {
       expectNamedFamily(
         resolvedStyle(tester, 'Business: dev-corner-shop'),
         'a bare Text under DefaultTextStyle',
+      );
+    });
+  });
+
+  // **The three `TextTheme` slots this theme sets by hand, and the rule that
+  // keeps them honest.** The other twelve are Material's own metrics with this
+  // theme's family and colour applied; these three were written out, and all
+  // three carried a size §2.2 does not have - `headlineLarge` 40 where the
+  // largest role is 32, `bodyMedium` 16 with Material's 20/14 leading where
+  // §2.2 says 16 / 24, and `labelLarge` 15 / 600 where the design *measures*
+  // `.btn-primary` at 14 / 700.
+  //
+  // The colour tests above would have passed on any of those, because a colour
+  // is right or wrong independently of a size. So would the type tests in
+  // `test/ui/tokens_test.dart`, which measure `AppTypeRoles` and never ask
+  // whether the theme reads it.
+  group('the theme names no type metric of its own - §2.2 and hard rule 2', () {
+    final type = spiritTheme.extension<AppTokens>()!.typography;
+
+    /// Everything about a style except its colour, which is the theme's to set.
+    ({
+      String? family,
+      double? size,
+      FontWeight? weight,
+      double? height,
+      double? tracking,
+    })
+    metricsOf(TextStyle style) => (
+      family: style.fontFamily,
+      size: style.fontSize,
+      weight: style.fontWeight,
+      height: style.height,
+      tracking: style.letterSpacing,
+    );
+
+    test('headlineLarge is `display`, whatever reads it', () {
+      // Zero readers in `lib/` today - no app widget names it and no stock
+      // Material component resolves to it - so this is not about a rendering. It
+      // is about the slot not being able to hand 40 to whatever reads it next.
+      expect(
+        metricsOf(spiritTheme.textTheme.headlineLarge!),
+        metricsOf(type.display),
+      );
+    });
+
+    test('bodyMedium is `body.lg`, which is the app\'s body text', () {
+      // `AppDensity.comfortable` reads `AppBodyRole.large`, and every bare
+      // `Text` in the app resolves here through `DefaultTextStyle`. The size was
+      // already 16; the leading was Material's, not §2.2's.
+      expect(
+        metricsOf(spiritTheme.textTheme.bodyMedium!),
+        metricsOf(type.bodyLarge),
+      );
+    });
+
+    test('labelLarge is `label.lg`, the measured button role', () {
+      expect(
+        metricsOf(spiritTheme.textTheme.labelLarge!),
+        metricsOf(type.labelLarge),
+      );
+      // The half of the original note worth keeping, stated as what is
+      // observable rather than as what is authored. `ThemeData` applies its body
+      // and display colours to every slot, so a style written with no colour does
+      // not arrive with none - it arrives with the theme's. Which is the point:
+      // a button label takes the same ink as the text beside it and cannot drift
+      // into one of its own.
+      expect(
+        spiritTheme.textTheme.labelLarge!.color,
+        spiritTheme.textTheme.bodyLarge!.color,
+      );
+    });
+
+    test('and `lib/theme.dart` writes no size, weight, leading or tracking', () {
+      // **A source scan, because the assertions above only cover the three slots
+      // that exist today.** A fourth written next month with a literal in it
+      // would pass every one of them. What hard rule 2 actually forbids is the
+      // number, wherever it appears, so that is what this looks for.
+      //
+      // Comments are stripped first: this file explains the figures it removed,
+      // and a scan that could not tell prose from code would forbid saying why.
+      final source = File('lib/theme.dart').readAsStringSync();
+      final offenders = <String>[];
+      final lines = source.split(RegExp(r'\r?\n'));
+      for (var index = 0; index < lines.length; index++) {
+        final comment = lines[index].indexOf('//');
+        final code = comment < 0
+            ? lines[index]
+            : lines[index].substring(0, comment);
+        final match = RegExp(
+          r'\b(fontSize|fontWeight|letterSpacing|height|wordSpacing):',
+        ).firstMatch(code);
+        if (match == null) continue;
+        offenders.add('lib/theme.dart:${index + 1} names ${match.group(1)}');
+      }
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            '${offenders.join('; ')}. Type metrics belong to §2.2 and reach the '
+            'theme through an `AppTypeRoles` role, never as a number here. Point '
+            'the style at the role and `copyWith` the colour onto it.',
       );
     });
   });
