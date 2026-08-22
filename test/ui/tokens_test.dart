@@ -1384,8 +1384,11 @@ void main() {
               .borderRadius;
       expect(
         inputRadius.topLeft.x,
-        registered.radius.md,
-        reason: 'an input was 14, then a pill, and is now the card corner',
+        registered.radius.pill,
+        reason:
+            'an input was 14, then a pill, then the card corner, and is the '
+            'pill again at the direction of the product owner - decision 26. '
+            'The card above it deliberately did not follow.',
       );
     });
 

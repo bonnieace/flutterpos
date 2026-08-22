@@ -371,15 +371,17 @@ void main() {
     });
 
     testWidgets('the corner the design measures for a button', (tester) async {
-      // **Was 'a pill, and pills are buttons only' until 2026-08-22.** Profound
-      // Verdant's own CSS gives `.btn-primary` `borderRadius.xl`, and its
-      // rendered buttons are square-cornered - so a button is `radius.md`, the
-      // same corner as the card it sits on and the field beside it. The pill it
-      // used to assert is gone from the product, not merely from this test.
+      // **`radius.pill` since 2026-08-23, at the product owner's
+      // direction.** The evidence this replaces was real and points the
+      // other way - Profound Verdant's CSS, its status chips and its
+      // rendered screens are all square-cornered - and the override is
+      // recorded as an override in `OPEN_QUESTIONS.md` decision 26. A shape
+      // is the owner's to choose; what this test holds is that the choice
+      // reaches the widget from the token layer rather than from a literal.
       await tester.pumpWidget(_app(AppButton(label: 'Go', onPressed: () {})));
       final radius = _container(tester).borderRadius! as BorderRadius;
-      expect(radius.topLeft.x, _tokens.radius.md);
-      expect(radius.topLeft.x, isNot(_tokens.radius.pill));
+      expect(radius.topLeft.x, _tokens.radius.pill);
+      expect(radius.topLeft.x, isNot(_tokens.radius.md));
     });
   });
 

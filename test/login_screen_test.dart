@@ -398,14 +398,20 @@ void main() {
           .label,
       'Email address',
     );
-    // §5.2: a placeholder is an example, never a restatement of the label. The
-    // password field's said "Enter Password".
-    expect(
-      tester
-          .widget<AppTextField>(find.byKey(const ValueKey('login-password')))
-          .placeholder,
-      isNull,
+    // §5.2: a placeholder is an example, never a restatement of the label.
+    // The password field's said "Enter Password", which is the restatement,
+    // and it carried nothing at all from then until 2026-08-23. It shows
+    // asterisks now at the product owner's direction, and asterisks are the
+    // permitted kind: they are what the box will look like once somebody
+    // types in it rather than a second copy of its label.
+    final password = tester.widget<AppTextField>(
+      find.byKey(const ValueKey('login-password')),
     );
+    expect(password.placeholder, '********');
+    expect(password.placeholder, isNot(contains('assword')));
+    // The placeholder and the obscuring glyph have to agree, or the box
+    // appears to change character set the moment it is touched.
+    expect(password.obscuringCharacter, '*');
   });
 
   testWidgets('a field draws one border, not two', (tester) async {

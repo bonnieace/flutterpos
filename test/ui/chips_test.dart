@@ -134,12 +134,16 @@ void main() {
           .map((box) => box.decoration)
           .whereType<BoxDecoration>()
           .where((d) => d.borderRadius != null);
-      // `radius.sm` since 2026-08-22, reversing `design.md` v0.7's pill: the
-      // design's status chips carry its bare `rounded` in 78 of the 82 places
-      // one appears.
+      // **`radius.pill` since 2026-08-23, at the product owner's
+      // direction.** The evidence this replaces was real and points the
+      // other way - Profound Verdant's CSS, its status chips and its
+      // rendered screens are all square-cornered - and the override is
+      // recorded as an override in `OPEN_QUESTIONS.md` decision 26. A shape
+      // is the owner's to choose; what this test holds is that the choice
+      // reaches the widget from the token layer rather than from a literal.
       expect(
         decorated.first.borderRadius,
-        BorderRadius.circular(tokens.radius.sm),
+        BorderRadius.circular(tokens.radius.pill),
       );
     });
   });

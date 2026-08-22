@@ -50,15 +50,18 @@ TextStyle _styleOf(WidgetTester tester, String text) =>
 
 void main() {
   group('the well is §5.2\'s well', () {
-    testWidgets('surface.field, border.strong at 1px, radius.md', (
+    testWidgets('surface.field, border.strong at 1px, radius.pill', (
       tester,
     ) async {
-      // **The corner moved twice.** It was `surface.sunken` at `radius.sm` - a
-      // near-black rectangle - then the raised pill the product owner asked for
-      // in `design.md` v0.4 on 2026-08-15, and since 2026-08-22 it is
-      // `radius.md`: Profound Verdant styles its inputs with the same
-      // `borderRadius.xl` as its buttons, so a well and the button under it are
-      // the same shape. The border did not move in any of that, and that is not
+      // **The corner has moved three times, and this is the owner's shape
+      // twice over.** It was `surface.sunken` at `radius.sm` - a near-black
+      // rectangle - then the raised pill the owner asked for in `design.md`
+      // v0.4 on 2026-08-15, then `radius.md` on 2026-08-22 because Profound
+      // Verdant styles its inputs with the same `borderRadius.xl` as its
+      // buttons, and since 2026-08-23 the pill again at the owner's
+      // direction - `OPEN_QUESTIONS.md` decision 26, recorded as an override
+      // of that evidence rather than a rereading of it.
+      // The border did not move in any of that, and that is not
       // inertia: §5.2 switches it to `status.problem.border` on error, so a well
       // with no border has no error state to switch.
       await _pump(tester, const AppTextField(label: 'Product name'));
@@ -71,7 +74,7 @@ void main() {
       expect((decoration.border! as Border).top.width, 1);
       expect(
         (decoration.borderRadius! as BorderRadius).topLeft.x,
-        _tokens.radius.md,
+        _tokens.radius.pill,
       );
     });
 
@@ -577,7 +580,7 @@ void main() {
       );
       expect(
         (decoration.borderRadius! as BorderRadius).topLeft.x,
-        _tokens.radius.md,
+        _tokens.radius.pill,
       );
       expect(_styleOf(tester, 'Role').color, _tokens.colors.text.secondary);
     });
