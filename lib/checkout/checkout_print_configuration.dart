@@ -36,16 +36,30 @@ import 'checkout_print_transport_base.dart';
 /// amendment here rather than a free integer, because a receipt formatter has
 /// to be written against each one.
 enum PrinterPaperWidth {
-  /// 58mm roll.
-  columns32('columns_32', 32),
+  columns32('columns_32', 32, '58mm'),
 
-  /// 80mm roll.
-  columns48('columns_48', 48);
+  columns48('columns_48', 48, '80mm');
 
-  const PrinterPaperWidth(this.wireValue, this.columns);
+  const PrinterPaperWidth(this.wireValue, this.columns, this.roll);
 
   final String wireValue;
   final int columns;
+
+  /// The roll a shopkeeper buys, which is what the box it comes in says.
+  ///
+  /// **This was a doc comment on each value and nothing rendered it.** §8 rule 1
+  /// is to name a thing the way the shopkeeper does and never the way the system
+  /// does, and the printer form offered `32 columns` and `48 columns` - the
+  /// ESC/POS abstraction, not a width anybody has ever ordered paper by. Phase
+  /// 08's fourth criterion is that a width choice communicates its physical
+  /// consequence, and a column count communicates none.
+  ///
+  /// The column figure stays beside it: it is exact, it is what decides the
+  /// layout, and `ReceiptText.forPrinter` measures against it.
+  final String roll;
+
+  /// `58mm roll (32 columns)`, for a control a person chooses from.
+  String get label => '$roll roll ($columns columns)';
 
   static PrinterPaperWidth? tryParse(Object? value) {
     if (value is! String) return null;
@@ -220,9 +234,7 @@ final class TenantConfiguredPrinter {
   TenantPrinterConfiguration require() {
     final resolved = configuration;
     if (resolved == null) {
-      throw const PrinterTransportException(
-        PrinterTransportCode.notConfigured,
-      );
+      throw const PrinterTransportException(PrinterTransportCode.notConfigured);
     }
     return resolved;
   }

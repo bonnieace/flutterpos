@@ -133,18 +133,19 @@ final class _TenantPrinterConfigurationPanelState
     // sentence in the confirmation describes the write that would be issued.
     final TenantPrinterUpdateIntent intent;
     try {
-      intent = TenantPrinterConfigurationPublisher(
-        session: session,
-        reader: widget.reader,
-      ).buildUpdateIntent(
-        transport: values.transport,
-        host: values.host,
-        port: values.port,
-        paperWidth: values.paperWidth,
-        hasCutter: values.hasCutter,
-        bridgeToken: values.bridgeToken,
-        configured: configured,
-      );
+      intent =
+          TenantPrinterConfigurationPublisher(
+            session: session,
+            reader: widget.reader,
+          ).buildUpdateIntent(
+            transport: values.transport,
+            host: values.host,
+            port: values.port,
+            paperWidth: values.paperWidth,
+            hasCutter: values.hasCutter,
+            bridgeToken: values.bridgeToken,
+            configured: configured,
+          );
     } on TenantPrinterConfigurationException catch (error) {
       setState(() => _notice = _refusalNotice(error.code));
       return;
@@ -218,7 +219,9 @@ final class _TenantPrinterConfigurationPanelState
     final previous = intent.replaces.configuration?.endpoint;
     final confirmed = await showConfirmDialog(
       context,
-      title: moving ? 'Point receipts at a different printer?' : 'Save this printer?',
+      title: moving
+          ? 'Point receipts at a different printer?'
+          : 'Save this printer?',
       consequence: moving
           ? 'Receipts printed after this go to ${intent.configuration.endpoint} '
                 'instead of $previous.'
@@ -398,7 +401,9 @@ class _PrinterContentsState extends State<_PrinterContents> {
   /// disabling the button on the same rule would leave a typo unexplained,
   /// which is the argument `checkout_configuration_panel.dart` already records.
   bool get _hasSomethingToSubmit =>
-      !widget.busy && _host.text.trim().isNotEmpty && _port.text.trim().isNotEmpty;
+      !widget.busy &&
+      _host.text.trim().isNotEmpty &&
+      _port.text.trim().isNotEmpty;
 
   _PrinterFormValues get _values => _PrinterFormValues(
     // **Phase 1 is direct TCP and the form does not offer a choice.** The
@@ -474,7 +479,8 @@ class _PrinterContentsState extends State<_PrinterContents> {
             onChanged: (_) => setState(() {}),
             label: 'Printer address',
             leading: Icons.print_outlined,
-            helper: 'The name or IP the printer shows on its own test page, '
+            helper:
+                'The name or IP the printer shows on its own test page, '
                 'such as 192.168.1.50.',
           ),
           SizedBox(height: tokens.spacing.s8),
@@ -493,13 +499,14 @@ class _PrinterContentsState extends State<_PrinterContents> {
             value: _paperWidth,
             enabled: !widget.busy,
             label: 'Paper width',
-            helper: 'The roll this printer takes. It decides how the receipt '
+            helper:
+                'The roll this printer takes. It decides how the receipt '
                 'is laid out.',
             items: <AppSelectItem<PrinterPaperWidth>>[
               for (final width in PrinterPaperWidth.values)
                 AppSelectItem<PrinterPaperWidth>(
                   value: width,
-                  label: '${width.columns} columns',
+                  label: width.label,
                 ),
             ],
             onChanged: (value) =>
