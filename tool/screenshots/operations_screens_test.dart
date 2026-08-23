@@ -779,6 +779,24 @@ void main() {
     viewports: responsiveViewports,
   );
 
+  // **The same route as a cashier, which is the session the role standing is
+  // for.** `34` runs as a manager, who may verify, so the notice saying a
+  // recorded return waits for management renders in none of its images - the
+  // "a conditional section invisible in every capture is not covered" trap
+  // again, caught this time by the change moving zero pixels.
+  screenshotCase(
+    '34b-returns-as-a-cashier',
+    build: () => inSession(
+      TenantSaleReturnsScreen(
+        reader: FakeTenantReader.business(),
+        request: TenantSaleReturnsRequest(sale: _sale('co-1')),
+        actions: fakeReturnActions(),
+      ),
+      controller: seedSession(role: TenantRole.cashier, uid: cashierUid),
+    ),
+    viewports: responsiveViewports,
+  );
+
   screenshotCase(
     '35-activity-log',
     build: () => inSession(

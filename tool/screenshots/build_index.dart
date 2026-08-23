@@ -192,6 +192,9 @@ const Map<String, String> captions = <String, String>{
   '37d-receipts-some-unreadable':
       'A queue holding a durable record this build cannot parse. The count is '
       'stated rather than the record being silently dropped.',
+  '34b-returns-as-a-cashier':
+      'The same returns route as a cashier, who may record a return and '
+      'not verify one. The only session that notice is true of.',
   '35-activity-log':
       'The business’s own event trail, including the changes the platform '
       'made to it.',
