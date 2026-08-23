@@ -984,3 +984,33 @@ across 163 screens**, from 484 across 158 — 52 new, all of them staff captures
 and 02 were checked structurally at `06a24f9` and still need their visual pass. Phase 07's own slice 3
 is not started. The token layer, the harness coverage and the three owner shapes now reach all of
 them, so none of that work will need redoing — but none of it is done, and the reskin is not finished.
+
+# Phases 05, 06, 08, 09 — one fast evidence pass, 2026-08-23
+
+**Five commits, `6d3c216` to `7217bf4`.** Deliberately thin records: the coverage pass and three
+defects, no long-form narrative.
+
+- **`6d3c216`** — all 27 captures across the four phases rendered at 1440 and 411 only, none at 834
+  or 1024. All four now, and **nothing overflows**: 455 capture tests pass. 68 new images.
+- **`098162b`** — **Reject a business, archive one, suspend one, disable a user were all drawn as
+  ordinary secondary buttons**, identical to Approve or Reactivate beside them, while all four
+  confirmations they open already take §2.1's destructive tier — two with a comment saying why. The
+  decision was made one screen deeper and never reached the row. A scan for the same shape found no
+  other untiered destructive `AppButton` anywhere in the reachable tree.
+- **`afac531`** — the differences filter had **nine options with sentence-length labels**, wrapping to
+  three rows and taking more of a tablet than the first difference card. Decision 26b leaves a lone
+  chip strip alone; nine long options is where that stops being right, because the rule is about a
+  wall of pills rather than about counting filters.
+- **`7217bf4`** — **the print queue never said whose queue it is.** Phase 08's third criterion is that
+  scope is clearly device-local; the screen opened straight into its callouts and list, and "2
+  receipts waiting" with no scope reads as the business's. It is a Hive box on one handset.
+
+**Checked and found already right:** Phase 06's return verification names its consequence, lists the
+exact lines being restored and says what stays true; Phase 05's difference and unusable-line states
+carry their meaning in words rather than colour.
+
+2,318 tests pass, 604 images across 163 screens, 9 moved — the four platform screens, the differences
+screen and the four queue screens, which is exactly what the three fixes touched.
+
+**Still not started: the composition passes for 05, 06, 08 and 09, Phase 10, Phase 07's slice 3, and
+the 01/02 visual passes.** This was an evidence-and-defect pass, not a rewrite.
