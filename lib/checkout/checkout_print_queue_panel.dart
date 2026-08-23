@@ -33,11 +33,7 @@ import 'checkout_print_transport_base.dart';
 typedef PrintJobRetry = Future<String?> Function(String receiptNumber);
 
 final class TenantPrintQueueScreen extends StatelessWidget {
-  const TenantPrintQueueScreen({
-    super.key,
-    required this.queue,
-    this.onRetry,
-  });
+  const TenantPrintQueueScreen({super.key, required this.queue, this.onRetry});
 
   final HivePrintJobQueue queue;
 
@@ -103,6 +99,26 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          // **Phase 08's third criterion, which nothing on this screen said.**
+          // The queue is a Hive box on this handset, so a receipt waiting here
+          // is waiting on *this* device and no colleague's phone will show it or
+          // clear it. The screen opened straight into its callouts and its list,
+          // and "2 receipts waiting" with no scope reads as the business's queue.
+          //
+          // §2.2's `caption` in `text.tertiary`, which is the weight the till
+          // gives the same kind of standing fact, and stated unconditionally:
+          // the scope is true when the queue is empty too, and a line that
+          // appears only when something is wrong is a line no capture covers.
+          Text(
+            key: const ValueKey('print-queue-scope'),
+            'This queue is on this device only. Another device does not show '
+            'or clear these receipts, and a receipt here is already a recorded '
+            'sale.',
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s16),
           if (listing.unreadable > 0) ...<Widget>[
             Callout(
               key: const ValueKey('print-queue-unreadable'),
@@ -130,12 +146,11 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
             empty: const EmptyState(
               key: ValueKey('print-queue-empty'),
               title: 'No receipts are waiting',
-              hint: 'A receipt appears here only if it did not reach the '
+              hint:
+                  'A receipt appears here only if it did not reach the '
                   'printer.',
             ),
-            items: <RecordItem>[
-              for (final job in listing.jobs) _item(job),
-            ],
+            items: <RecordItem>[for (final job in listing.jobs) _item(job)],
           ),
         ],
       ),
@@ -191,9 +206,7 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
           RecordAction(
             label: _sending == job.receiptNumber ? 'Sending' : 'Send again',
             actionKey: ValueKey('print-queue-retry-${job.receiptNumber}'),
-            onPressed: retryable && _sending == null
-                ? () => _retry(job)
-                : null,
+            onPressed: retryable && _sending == null ? () => _retry(job) : null,
           ),
       ],
     );
