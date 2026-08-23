@@ -485,6 +485,29 @@ final class _SaleReturnsContents extends StatelessWidget {
           'Stock is restored only when a return is verified. A pending return '
           'has changed no stock yet.',
         ),
+        // **Phase 06's second criterion, which this page left to inference.**
+        // Requesting a return is open to every active role and verifying it is
+        // management's, and for a cashier the difference was that the action
+        // simply was not drawn - correct guarding, and silent. Nothing told them
+        // whether a pending return was waiting on somebody or stuck.
+        //
+        // The same shape the catalog's `Only an owner or administrator may
+        // retire a product` and the staff directory's read-only standing both
+        // use, and `info` for the same reason: nothing has failed, the whole
+        // list is readable, and one action belongs to somebody else. The
+        // refusal copy that already existed says this too, but only after an
+        // attempt that a cashier can never make.
+        if (!canVerify) ...[
+          SizedBox(height: tokens.spacing.s12),
+          const Callout(
+            key: ValueKey('sale-returns-verification-unavailable'),
+            status: AppStatus.info,
+            message:
+                'Anyone can record a return. Verifying one and restoring its '
+                'stock is an owner, administrator, or manager action, so a '
+                'return you record here waits for one of them.',
+          ),
+        ],
         if (notice case final answer?) ...[
           SizedBox(height: tokens.spacing.s12),
           Callout(
