@@ -249,7 +249,7 @@ final class _DailySummaryContents extends StatelessWidget {
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        for (final day in days)
+        for (final (index, day) in days.indexed)
           Card(
             key: ValueKey('daily-summary-${day.businessDate}'),
             child: Padding(
@@ -312,6 +312,35 @@ final class _DailySummaryContents extends StatelessWidget {
                       ),
                       emphasis: true,
                     ),
+                    // **The comparison this page could not make.** It listed
+                    // seven days and never said whether one was up or down on
+                    // the day before it, which is the analytical question
+                    // ST-041 draws two bars to answer. Two bars is the wrong
+                    // form for it - `dataviz`'s own table sends a handful of
+                    // headline numbers to stat tiles and names the one-bar and
+                    // grouped-bar versions as what *not* to do - and a chart
+                    // beside figures the page already states is the decorative
+                    // case Phase 05's second criterion forbids. A value and its
+                    // delta is the form that reference recommends, and
+                    // `OPEN_QUESTIONS.md` Phase 05 item 1 caps charting at
+                    // "two exact daily sales bars" as a ceiling rather than
+                    // asking for them.
+                    //
+                    // **Stated only where the day before it is also
+                    // reconciled.** An unreconciled neighbour has no sales
+                    // figure at all, and a delta against nothing would read as
+                    // a fall to zero.
+                    if (_previousSales(days, index) case final previous?)
+                      StatLine(
+                        label: 'Change on the day before',
+                        value: _signedCurrency(
+                          currency,
+                          metrics.sales - previous,
+                        ),
+                        valueKey: ValueKey(
+                          'daily-summary-change-${day.businessDate}',
+                        ),
+                      ),
                     StatLine(
                       label: 'Transactions',
                       value: '${metrics.transactions}',
@@ -401,4 +430,28 @@ String _instant(DateTime value) {
   String pad(int part) => part.toString().padLeft(2, '0');
   return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
       '${pad(utc.hour)}:${pad(utc.minute)} UTC';
+}
+
+/// The sales figure of the day *before* [index], or null where there is none.
+///
+/// The list is newest-first, so the day before is the next element. Null covers
+/// both the oldest day on the page and a neighbour that has not been reconciled:
+/// neither has a figure to compare against.
+double? _previousSales(List<TenantDailyMetricsDay> days, int index) {
+  if (index + 1 >= days.length) return null;
+  return days[index + 1].metrics?.sales;
+}
+
+/// A signed money delta, with the sign doing the work.
+///
+/// **Deliberately not coloured.** §2.1's statuses have defined meanings and
+/// none of them is "sales went up": a rise is not `ok` and a fall is not
+/// `problem` - a shop can take more by discounting and less by closing early,
+/// and this screen cannot know which. The figure and its sign say what happened
+/// and stop there, which is the same reasoning decision 24 applied to a stock
+/// badge.
+String _signedCurrency(TenantReportingCurrency currency, double delta) {
+  if (delta == 0) return 'No change';
+  final formatted = currency.format(delta.abs());
+  return delta > 0 ? '+$formatted' : '-$formatted';
 }
