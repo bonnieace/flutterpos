@@ -1014,3 +1014,37 @@ screen and the four queue screens, which is exactly what the three fixes touched
 
 **Still not started: the composition passes for 05, 06, 08 and 09, Phase 10, Phase 07's slice 3, and
 the 01/02 visual passes.** This was an evidence-and-defect pass, not a rewrite.
+
+## Composition changes across 05, 06, 08 and 09 — 2026-08-23
+
+Six screen changes on top of the coverage pass. Each serves a named acceptance
+criterion and each was found by looking at the new pictures or at the code behind them.
+
+- **`b253a09` — the daily summary compares days now.** It listed seven and never said whether one
+  was up or down on the day before. ST-041 draws two bars for that question; **two bars is the
+  wrong form** — `dataviz`'s form table sends a handful of headline numbers to stat tiles and names
+  the grouped-bar version as what not to do, and a chart beside figures the page already states is
+  the decorative case criterion 2 forbids. `OPEN_QUESTIONS.md` Phase 05 item 1 caps charting at
+  "two exact daily sales bars" as a ceiling, not a request. So: a value and its delta, exact, from
+  the seven days already loaded, stated only where the neighbour is also reconciled, and **not
+  coloured** — no §2.1 status means "sales went up", and a shop can take more by discounting.
+- **`6851d3f` — the platform shell says it is not a business.** Criterion 1 is that it be distinct
+  from tenant management and the shell was *titled* `Platform tenant management`. It is
+  `Platform operations` now, ST-073's own words, plus an authority marker naming the operator and
+  stating the reach — criterion 3, because a dedicated operator has no membership, no business name
+  and no role line to infer any of it from.
+- **`e3c9a83` — the paper is named the way it is bought.** `32 columns` is the ESC/POS abstraction;
+  the enum's own doc comments already said `58mm roll` and `80mm roll` and nothing rendered them.
+  §8 rule 1, criterion 4, and `tool/printer_row_probe.dart` already wrote the pair in this shape.
+- **`7217bf4` — the print queue says whose queue it is.** Criterion 3, and the screen said nothing
+  about scope at all.
+- **`ebaba64` and `1fd13e6` — the returns route states its role split.** Criterion 2. A cashier saw
+  the verify action simply absent: correct guarding, silent. **The notice commit moved zero images**,
+  which is how its own gap surfaced — `34` runs as a manager, so the branch was unphotographed.
+  `34b` is the cashier reading, and a zero-pixel diff catching a coverage hole is worth recording.
+- **`098162b` and `afac531`** — the four platform destructive tiers and the nine-option filter, above.
+
+2,318 tests pass. 612 images across 164 screens.
+
+**Still not started:** Phase 10, Phase 07's slice 3, and the 01/02 visual passes. These were
+criterion-driven fixes on real screens, not full recompositions against each design.
