@@ -661,7 +661,14 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
   Widget build(BuildContext context) => DefaultTabController(
     length: 4,
     child: AppScaffold(
-      title: 'Platform tenant management',
+      // **`Platform operations`, and the old title was the defect.** Phase 09's
+      // first criterion is that the platform shell is visually and semantically
+      // distinct from tenant management - and the shell was *called* "Platform
+      // tenant management", naming itself after the thing it must not be
+      // confused with. ST-073 titles it `Platform Operations` and the brief is
+      // `Platform administration`; either is distinct and this takes the
+      // design's.
+      title: 'Platform operations',
       contentWidth: AppContentWidth.records,
       actions: <Widget>[
         AppButton(
@@ -678,6 +685,31 @@ final class PlatformTenantManagementScreen extends StatelessWidget {
       // changed - the `DefaultTabController` above still owns the selection.
       body: Column(
         children: <Widget>[
+          // **What marks this as platform authority rather than a business.**
+          // Criterion 1 again, and criterion 3 with it - a dedicated operator
+          // has no membership anywhere, so nothing else on this shell said whose
+          // console it is or what its reach was. ST-073 carries a `SUPERADMIN`
+          // marker in its top bar and an identity panel beside its routes; this
+          // is that fact in the one place §7's page pattern has for a page's
+          // standing.
+          //
+          // `info` rather than `problem`: nothing has failed and nothing is
+          // withheld. It states a scope.
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: AppTokens.componentOf(context).spacing.s16,
+            ),
+            child: Callout(
+              key: const ValueKey('platform-shell-authority'),
+              status: AppStatus.info,
+              title: 'Platform operator',
+              message:
+                  'Signed in as ${identity.uid} with the platform superAdmin '
+                  'claim. This console admits and archives whole businesses '
+                  'and disables accounts across all of them. It is not a '
+                  'membership of any business and grants none.',
+            ),
+          ),
           // §5.1's `AppTabs`, which is where the type roles, the indicator and
           // §9's 48dp height now live. The four labels are unchanged.
           const AppTabs(
