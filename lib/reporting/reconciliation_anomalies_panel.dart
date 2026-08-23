@@ -5,7 +5,6 @@ import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/buttons.dart';
-import '../ui/chips.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
@@ -799,21 +798,31 @@ final class _KindChips extends StatelessWidget {
   final TenantReconciliationAnomalyKind? selected;
   final ValueChanged<TenantReconciliationAnomalyKind?> onNarrow;
 
+  /// **A dropdown, not a chip strip, and this is the one filter on a single-filter
+  /// surface that takes one.** Decision 26b sends a surface with more than one
+  /// filter to dropdowns and leaves a lone strip alone, on the grounds that a
+  /// strip shows its options without a tap. Nine options is where that stops
+  /// being true: these labels are sentences - `Stock checkpoint chain is broken`
+  /// - so the strip wrapped onto three rows and took more of a tablet than the
+  /// first difference below it. The rule is about a wall of pills rather than
+  /// about the number of filters, and nine long options is a wall.
   @override
   Widget build(BuildContext context) =>
-      FilterChipBar<TenantReconciliationAnomalyKind>(
-        semanticLabel: 'Narrow the differences by kind',
-        selected: selected,
-        onSelected: onNarrow,
-        options: <FilterChipOption<TenantReconciliationAnomalyKind>>[
-          const FilterChipOption<TenantReconciliationAnomalyKind>(
+      AppSelect<TenantReconciliationAnomalyKind?>(
+        key: const ValueKey('reconciliation-anomaly-kind'),
+        label: 'Kind',
+        leading: Icons.filter_alt_outlined,
+        value: selected,
+        onChanged: onNarrow,
+        items: <AppSelectItem<TenantReconciliationAnomalyKind?>>[
+          const AppSelectItem<TenantReconciliationAnomalyKind?>(
             key: ValueKey('reconciliation-anomaly-kind-all'),
             value: null,
             label: 'Every kind',
           ),
           for (final kind in TenantReconciliationAnomalyKind.values)
             if (kind != TenantReconciliationAnomalyKind.other)
-              FilterChipOption<TenantReconciliationAnomalyKind>(
+              AppSelectItem<TenantReconciliationAnomalyKind?>(
                 key: ValueKey('reconciliation-anomaly-kind-${kind.wireValue}'),
                 value: kind,
                 label: kind.label,

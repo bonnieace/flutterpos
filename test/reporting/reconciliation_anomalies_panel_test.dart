@@ -7,10 +7,38 @@ import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/scaffold.dart';
+import 'package:flutter_application_1/ui/fields.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
 import '../support/text.dart';
+
+/// The option keys the kind dropdown is offering.
+List<Key?> _kindOptionKeys(WidgetTester tester) => tester
+    .widget<AppSelect<TenantReconciliationAnomalyKind?>>(
+      find.byKey(const ValueKey('reconciliation-anomaly-kind')),
+    )
+    .items
+    .map((item) => item.key)
+    .toList();
+
+/// Opens the kind dropdown and chooses one option.
+///
+/// Taps the option's `Text`: a closed `DropdownButton` keeps an offstage copy of
+/// the selected item, so the key alone can resolve to something not hit-testable.
+Future<void> _chooseKind(WidgetTester tester, String wireValue) async {
+  await tester.tap(find.byKey(const ValueKey('reconciliation-anomaly-kind')));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find
+        .descendant(
+          of: find.byKey(ValueKey('reconciliation-anomaly-kind-$wireValue')),
+          matching: find.byType(Text),
+        )
+        .last,
+  );
+  await tester.pumpAndSettle();
+}
 
 void main() {
   testWidgets('states each difference and what it is about', (tester) async {
@@ -187,9 +215,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('reconciliation-anomaly-kind-stock_variance')),
-    );
+    await _chooseKind(tester, 'stock_variance');
     await _settle(tester);
 
     // A cursor is a position inside one exact query, so the narrowed list
@@ -213,18 +239,21 @@ void main() {
 
     await _pump(tester, _controller(), reader);
 
+    // Read off `AppSelect.items` rather than the tree: the kind filter is a
+    // dropdown, and a closed one builds only the option it is showing.
+    final offered = _kindOptionKeys(tester);
     expect(
-      find.byKey(const ValueKey('reconciliation-anomaly-kind-all')),
-      findsOneWidget,
+      offered,
+      contains(const ValueKey('reconciliation-anomaly-kind-all')),
     );
     expect(
-      find.byKey(const ValueKey('reconciliation-anomaly-kind-stock_variance')),
-      findsOneWidget,
+      offered,
+      contains(const ValueKey('reconciliation-anomaly-kind-stock_variance')),
     );
     // `other` names every unmodelled kind, so it identifies no stored value.
     expect(
-      find.byKey(const ValueKey('reconciliation-anomaly-kind-')),
-      findsNothing,
+      offered,
+      isNot(contains(const ValueKey('reconciliation-anomaly-kind-'))),
     );
   });
 
