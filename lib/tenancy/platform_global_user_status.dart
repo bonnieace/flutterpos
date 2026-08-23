@@ -1176,6 +1176,9 @@ final class _PlatformGlobalUserStatusScreenState
                                 'platform-disable-global-user',
                               ),
                               label: 'Disable user',
+                              // As the confirmation this opens: disabling an
+                              // identity takes away every business it can reach.
+                              tier: AppButtonTier.destructive,
                               onPressed: () => setState(() => _changing = true),
                             )
                           : AppButton(

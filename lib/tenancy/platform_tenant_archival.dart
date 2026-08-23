@@ -769,6 +769,8 @@ final class _PlatformRejectedTenantScreenState
                         key: ValueKey('platform-archive-${tenant.tenantId}'),
                         label: 'Archive',
                         icon: Icons.archive_outlined,
+                        // As `Archive business` in the confirmation this opens.
+                        tier: AppButtonTier.destructive,
                         onPressed: () => _archive(tenant),
                       ),
                     )

@@ -896,6 +896,8 @@ final class _PlatformLifecycleTenantScreenState
                                 'platform-suspend-${tenant.tenantId}',
                               ),
                               label: 'Suspend',
+                              // As the confirmation this opens.
+                              tier: AppButtonTier.destructive,
                               onPressed: () => _change(tenant),
                             )
                           : AppButton(

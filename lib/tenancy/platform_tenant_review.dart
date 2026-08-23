@@ -910,6 +910,12 @@ final class _PlatformPendingTenantReviewScreenState
                       AppButton(
                         key: ValueKey('platform-reject-${tenant.tenantId}'),
                         label: 'Reject',
+                        // §2.1's destructive tier, which `Reject request` in the
+                        // confirmation this opens already takes. The decision was
+                        // made one screen deeper and the button that starts the act
+                        // did not get it, so refusing a business an account was drawn
+                        // exactly like approving one.
+                        tier: AppButtonTier.destructive,
                         onPressed: () =>
                             _review(tenant, PlatformTenantReviewAction.reject),
                       ),
