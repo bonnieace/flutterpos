@@ -132,6 +132,7 @@ void main() {
         probe: const _RefusingTransport().probe,
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -143,6 +144,7 @@ void main() {
         probe: const _RefusingTransport().probe,
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   // No writer and no transport: the read-only rendering every injected
@@ -155,6 +157,7 @@ void main() {
         reader: FakeTenantReader.business(extraDocuments: _printer()),
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   // A document that exists and cannot be trusted. It is deliberately not
@@ -171,6 +174,7 @@ void main() {
         probe: const _RefusingTransport().probe,
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   // -------------------------------------------------------------------------
@@ -180,6 +184,7 @@ void main() {
   screenshotCase(
     '37a-no-receipts-waiting',
     build: () => inSession(TenantPrintQueueScreen(queue: empty)),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -190,11 +195,13 @@ void main() {
         onRetry: (_) async => PrinterTransportCode.unreachable,
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
     '37c-receipts-waiting-read-only',
     build: () => inSession(TenantPrintQueueScreen(queue: waiting)),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -205,5 +212,6 @@ void main() {
         onRetry: (_) async => PrinterTransportCode.unreachable,
       ),
     ),
+    viewports: responsiveViewports,
   );
 }

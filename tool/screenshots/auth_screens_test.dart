@@ -256,7 +256,11 @@ void main() {
     uid: 'platform-admin',
   );
 
-  screenshotCase('09a-platform-pending-reviews', build: platform);
+  screenshotCase(
+    '09a-platform-pending-reviews',
+    build: platform,
+    viewports: responsiveViewports,
+  );
 
   // The other three tabs, each reached the way an operator reaches it. A tab is
   // a screen here: they have different data sources, different callables, and
@@ -270,6 +274,7 @@ void main() {
       name,
       build: platform,
       afterPump: (tester) async => tester.tap(find.text(label)),
+      viewports: responsiveViewports,
     );
   }
 }

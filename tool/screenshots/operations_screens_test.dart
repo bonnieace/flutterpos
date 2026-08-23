@@ -217,6 +217,7 @@ void main() {
         writer: FakeCheckoutConfigurationWriter(),
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   // **The same route with no writer, and until 2026-08-22 nothing photographed
@@ -233,6 +234,7 @@ void main() {
     build: () => inSession(
       TenantCheckoutConfigurationScreen(reader: FakeTenantReader.business()),
     ),
+    viewports: responsiveViewports,
   );
 
   // -------------------------------------------------------------------------
@@ -606,6 +608,7 @@ void main() {
         ),
       );
     },
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -616,6 +619,7 @@ void main() {
         reader: FakeTenantReader.business(),
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -627,6 +631,7 @@ void main() {
         actions: fakeReconciliationActions(),
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   // **The day page's second stat tile has never been in a picture.** The seeded
@@ -653,6 +658,7 @@ void main() {
         actions: fakeReconciliationActions(),
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -663,6 +669,7 @@ void main() {
         actions: fakeReconciliationActions(),
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -673,6 +680,7 @@ void main() {
         jobId: 'rj_000001',
       ),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -680,6 +688,7 @@ void main() {
     build: () => inSession(
       TenantShiftAmendmentScreen(reader: FakeTenantReader.business()),
     ),
+    viewports: responsiveViewports,
   );
 
   // -------------------------------------------------------------------------
@@ -695,6 +704,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -718,6 +728,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Find receipt'));
     },
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -729,6 +740,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -751,6 +763,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -763,6 +776,7 @@ void main() {
       ),
       controller: seedSession(role: TenantRole.manager, uid: managerUid),
     ),
+    viewports: responsiveViewports,
   );
 
   screenshotCase(
@@ -771,5 +785,6 @@ void main() {
       TenantAuditLogScreen(reader: FakeTenantReader.business()),
       controller: seedSession(role: TenantRole.admin, uid: adminUid),
     ),
+    viewports: responsiveViewports,
   );
 }
