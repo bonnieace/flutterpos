@@ -255,7 +255,13 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
                 key: const ValueKey('expenses-record'),
                 icon: Icons.add,
                 semanticLabel: 'Record expense',
-                tier: AppButtonTier.primary,
+                // **Tertiary, not primary.** The primary tier's label is the
+                // near-black ink that sits on a mint container, and an
+                // unbordered icon button paints no container - so a primary `+`
+                // is black on the bar's own dark surface, which is the contrast
+                // failure hard rule 4 is pass/fail about. Tertiary is the mint
+                // glyph on nothing, which is what this control is.
+                tier: AppButtonTier.tertiary,
                 bordered: false,
                 onPressed: () => _record(session),
               ),
