@@ -1,3 +1,9 @@
+> # RETIRED — 2026-08-27
+>
+> **Not authority.** Implementation history only. **The developer is the source of truth and the
+> planner of the work**; their request outranks anything written here. Kept for the reasoning it
+> records.
+
 # Design system
 
 **Status:** v0.8 — in implementation. §11 steps 1–6, 8, 9 and 11 are done, and step 7

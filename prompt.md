@@ -1,3 +1,9 @@
+> # RETIRED — 2026-08-27
+>
+> **Not authority.** Implementation history only. **The developer is the source of truth and the
+> planner of the work**; their request outranks anything written here. Kept for the reasoning it
+> records.
+
 Read `PLAN.md` for current state — the status board, the "built, tested, and unreachable" table, open decisions, rollout position, the toolchain notes, and the next bounded chunk. Consult `HISTORY.md` only when you need the reasoning behind a specific past decision; do not read it end to end.
 
 **Both files open with a line-numbered index, and it is there so discovery costs nothing.** Read the index, then read the sections you need by line offset — never sweep either file to find something. A standing decision in `PLAN.md` names the `HISTORY.md` session that holds its reasoning; the index turns that name into a line number.

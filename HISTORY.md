@@ -5,10 +5,16 @@ Every dated session handover, verbatim and in order, moved out of `PLAN.md` on
 retractions and corrections stay exactly where they were written, at the text
 they correct.
 
-`PLAN.md` holds current state. This file is the record of how it got there, and
-is the place to look for why a decision was made, what a chunk deliberately left
-out, and which failures cost a debugging cycle. Each standing decision in
-`PLAN.md` names the session below that carries its reasoning.
+**The developer is the source of truth and the planner of the work, and this file is not.
+It is a record.** It says why a decision was made, what a chunk deliberately left out, and
+which failures cost a debugging cycle. It does not say what to build next, and nothing in it
+overrides a request the developer makes. **The developer decides when it is written to** -
+do not append to it unasked.
+
+`PLAN.md` is **retired** as of 2026-08-27 and no longer holds current state; it froze on
+2026-08-23 and was never brought forward. Where a session below points at it, or at
+`docs/stitch/**` or `design.md`, read that as the pointer it was when written, not as a live
+authority. See the 2026-08-27 entry at the end.
 
 ## Sessions
 
@@ -16,157 +22,158 @@ out, and which failures cost a debugging cycle. Each standing decision in
 
 Every session, newest last, with the line it starts on. Read the one a standing decision points at; never the file.
 
-- **13** — Sessions
-- **178** — Implementation handoff - 2026-07-29
-- **412** — Frontend implementation handoff - 2026-07-29
-- **457** — Authentication-to-tenant routing handoff - 2026-07-29
-- **517** — Route-guard and tenant repository foundation handoff - 2026-07-29
-- **579** — Read-only tenant catalog handoff - 2026-07-29
-- **672** — Read-only tenant staff-directory handoff - 2026-07-29
-- **772** — Typed staff invitation handoff - 2026-07-29
-- **875** — Typed staff update handoff - 2026-07-29
-- **971** — Typed staff status handoff - 2026-07-29
-- **1070** — Typed staff invitation resend handoff - 2026-07-29
-- **1172** — Typed staff invitation cancellation handoff - 2026-07-29
-- **1279** — Typed staff invitation email replacement handoff - 2026-07-30
-- **1386** — Typed visible invitation acceptance handoff - 2026-07-30
-- **1483** — Typed email-link invitation acceptance handoff - 2026-07-30
-- **1581** — Invitation emulator contract handoff - 2026-07-30
-- **1667** — Typed default tenant selection handoff - 2026-07-30
-- **1768** — Typed tenant request handoff - 2026-07-30
-- **1881** — Platform pending-tenant review handoff - 2026-07-30
-- **1999** — Platform tenant suspension/reactivation handoff - 2026-07-30
-- **2108** — Platform rejected-tenant archival handoff - 2026-07-30
-- **2226** — Platform exact-UID global-user status handoff - 2026-07-30
-- **2345** — Guarded platform-admin grant CLI handoff - 2026-07-31
-- **2455** — Guarded platform-admin revocation CLI handoff - 2026-07-31
-- **2667** — Tenant-switch safety coordinator handoff - 2026-07-31
-- **2794** — Encrypted Hive checkout-outbox foundation handoff - 2026-07-31
-- **2944** — Confirmation-safe checkout restart recovery handoff - 2026-07-31
-- **3089** — Deterministic checkout submission worker handoff - 2026-07-31
-- **3247** — Offline catalog cache and checkout draft handoff - 2026-07-31
-- **3420** — Per-device receipt numbering and checkout configuration handoff - 2026-07-31
-- **3608** — Guarded tenant shift lifecycle handoff - 2026-07-31
-- **3824** — Shift-scoped sale attribution and closing summary handoff - 2026-07-31
-- **4040** — Guarded shift-history read surface handoff - 2026-08-01
-- **4240** — Guarded sale-history read surface handoff - 2026-08-01
-- **4394** — Guarded staff-name resolution handoff - 2026-08-01
-- **4541** — Guarded daily summary handoff - 2026-08-01
-- **4698** — Guarded returns read surface handoff - 2026-08-01
-- **4862** — Guarded return creation handoff - 2026-08-01
-- **5030** — Guarded return verification handoff - 2026-08-01
-- **5163** — Guarded receipt lookup handoff - 2026-08-01
-- **5303** — Guarded stock adjustment surface handoff - 2026-08-01
-- **5519** — Guarded business-wide stock adjustment feed handoff - 2026-08-01
-- **5715** — Guarded tenant activity log handoff - 2026-08-01
-- **5926** — Guarded business-wide stock movement feed handoff - 2026-08-01
-- **6161** — Guarded reconciliation status surface handoff - 2026-08-01
-- **6398** — Guarded account verification entry point handoff - 2026-08-01
-- **6553** — Guarded email delivery-status handoff - 2026-08-01
-- **6680** — Checkout tender contract - payload v2 handoff - 2026-08-02
-- **6898** — Reachable point-of-sale till handoff - 2026-08-02
-- **7083** — Usable till handoff - search, quantity, stock, receipt - 2026-08-02
-- **7228** — Reconciliation can be asked for - 2026-08-02
-- **7435** — A till that holds a real catalog - 2026-08-02
-- **7553** — What a business has taken today - 2026-08-02
-- **7722** — Which category is actually selling - 2026-08-02
-- **7865** — Every reported figure now names its currency - 2026-08-02
-- **8001** — Who sold what - 2026-08-02
-- **8261** — The app can reach the emulators - 2026-08-02
-- **8422** — The totals panel, split - 2026-08-02
-- **8509** — What the business was paid with - 2026-08-02
-- **8700** — The first real run, and what it found - 2026-08-02
-- **8974** — A saved sale reaches the server while the till stays open - 2026-08-02
-- **9090** — Which differences reconciliation found - 2026-08-02
-- **9288** — A closed shift may be corrected to what its sales prove - 2026-08-04
-- **9531** — The correction is reachable from the row that reports it - 2026-08-04
-- **9742** — The first run that corrected a real shift - 2026-08-04
-- **10021** — The sentinel audit, and a guard that keeps it done - 2026-08-04
-- **10221** — The harness that would have caught it - 2026-08-04
-- **10420** — The corrections a business can finally see - 2026-08-04
-- **10619** — The two defects the real run left alone - 2026-08-04
-- **10847** — The shift half of the pipeline, proved end to end - 2026-08-04
-- **11039** — One shift's correction, reachable from the shift itself - 2026-08-05
-- **11233** — The stock half of the runner, entered for the first time - 2026-08-05
-- **11464** — The same narrowing, from the other side - 2026-08-05
-- **11635** — A stock difference, where the correction is made - 2026-08-05
-- **11853** — The kind that could never be recorded - 2026-08-05
-- **12054** — One decision, in one place, with tests - 2026-08-05
-- **12228** — The last thing the stock phase can conclude - 2026-08-05
-- **12413** — Saying there is more, after looking at it - 2026-08-05
-- **12604** — What the pinned buttons cost, measured - 2026-08-05
-- **12771** — A defect that was not there - 2026-08-05
-- **12911** — The narrowing that was not worth having - 2026-08-05
-- **13137** — The run behind the difference, finished - 2026-08-05
-- **13375** — The largest module's first unit tests - 2026-08-06
-- **13645** — A hook with no producer, and three bounds nothing had counted - 2026-08-07
-- **14008** — Nine months of `flutter test` paths, and who may run a job's next page - 2026-08-07
-- **14325** — PLAN.md split into current state and history - 2026-08-07
-- **14407** — A business can set what it sells in - 2026-08-07
-- **14632** — A shop can stock itself - 2026-08-07
-- **14852** — The trigger every reconciliation job comes from - 2026-08-07
-- **15083** — The sweep that decides who is reconciled tonight - 2026-08-07
-- **15374** — The callable that corrects a price - 2026-08-07
-- **15604** — The flake was the test's own clock - 2026-08-07
-- **15763** — A product records what it cost, and a sale freezes it - 2026-08-07
-- **15923** — The status board moved accounts - 2026-08-08
-- **16001** — Bulk catalog and return scoring are scoped as rewrites - 2026-08-08
-- **16123** — A price is corrected from the app - 2026-08-08
-- **16345** — Many products at once, previewed before they change - 2026-08-08
-- **16646** — Products imported from a spreadsheet, previewed before they exist - 2026-08-08
-- **16972** — Both bulk halves reach a person - 2026-08-08
-- **17231** — Profit is shown, or refused, and never overstated - 2026-08-08
-- **17474** — The password-reset worker runs against real Auth and real Firestore - 2026-08-08
-- **17673** — The app is driven on Android against the emulators - 2026-08-08
-- **17878** — The sign-in screen says something true - 2026-08-08
-- **18056** — A refused invitation says what will actually work - 2026-08-08
-- **18271** — The design system's token layer, wired to nothing - 2026-08-11
-- **18577** — A category is named, and never shown as a document ID - 2026-08-11
-- **18801** — The ripple dies at the theme - 2026-08-11
-- **19010** — The working tree is emptied into the repository - 2026-08-11
-- **19125** — `AppButton`, and the spring substrate under it - 2026-08-11
-- **19360** — Every remaining button becomes an `AppButton` - 2026-08-11
-- **19508** — A route arrives on a spring - 2026-08-12
-- **19735** — One field, everywhere - 2026-08-12
-- **19916** — Five statuses, two notices, and prose that folds away - 2026-08-12
-- **20101** — A screen title stops being chrome - 2026-08-12
-- **20325** — Every page gets a maximum width, and 768 stops being declared three times - 2026-08-12
-- **20604** — A record list becomes one component, and §4.3's middle band gets its first picture - 2026-08-13
-- **20854** — The staff directory becomes a `RecordList`, and a record gets somewhere to open a form - 2026-08-13
-- **21081** — The catalog becomes a `RecordList`, and a product that cannot be sold says so - 2026-08-13
-- **21286** — The stock family becomes one record, and a screen stops describing it three ways - 2026-08-13
-- **21482** — The shift family becomes a `RecordList`, and step 6's sweep is finished - 2026-08-13
-- **21722** — The reconciliation family gets one vocabulary, and step 4's sweep begins - 2026-08-14
-- **21996** — The catalog family folds its prose, and a bulk report gets its first picture - 2026-08-14
-- **22251** — A figure becomes a component, and the money screens stop writing numbers into sentences - 2026-08-14
-- **22495** — A difference states its figures, and step 8 is finished - 2026-08-15
-- **22728** — A notice says which answer it is, and four of them were never refusals - 2026-08-15
-- **22901** — A title appears once, and one page was telling everybody it was read-only - 2026-08-15
-- **23069** — A table stops guessing how wide its columns are - 2026-08-15
-- **23286** — The front door stops having a palette of its own - 2026-08-15
-- **23546** — An input is a pill again, and a keypad learns lower case - 2026-08-15
-- **23741** — A record says its standing in words, and §8 rule 1's own example was still on screen - 2026-08-15
-- **23952** — The home stops being eleven identical pills - 2026-08-16
-- **24094** — The menu leaves the page and becomes the frame's - 2026-08-16
-- **24283** — Ten chunks in, the till has had none of it - 2026-08-16
-- **24371** — The till gets the redesign, and seventeen answers stop being a colour - 2026-08-16
-- **24518** — Two contradictions closed, and five components written down before anyone builds them - 2026-08-16
-- **24586** — Five components, seven decisions, and the reskin runs out of things it can do alone - 2026-08-16
-- **24783** — Three states, a dialog that holds a form, and a page bar that stops moving - 2026-08-16
-- **25142** — Printing gets its plumbing, and the exclusion that blocked it was five days stale - 2026-08-17
-- **25314** — A receipt gets a body, and a shop name with a macron stops crashing the sale - 2026-08-17
-- **25470** — Printing reaches paper, and six faults wearing one sentence - 2026-08-18
-- **25580** — A receipt that lost its last digit, and a package whose two numbers disagree - 2026-08-18
-- **25673** — The printing working tree becomes one checkpoint before the next prompt - 2026-08-20
-- **25725** — Stitch takes over visual composition, without taking over product truth - 2026-08-20
-- **25774** — Stitch Phase 00 normalizes the working canvas without approving stale renders - 2026-08-20
-- **25804** — Two families the design named and the repository never had - 2026-08-22
-- **25890** — The type scale moves, and the frontmatter is right this time - 2026-08-22
-- **25966** — Five regions on one axis, and the harness had three of them — 2026-08-22
-- **26065** — Wave 0's remainder, and the token layer that was not finished — 2026-08-22
-- **26293** — The sale path is composed, and both defects it was sent to fix were already fixed — 2026-08-22
-- **26406** — The catalog stops telling a cashier a product cannot be sold — 2026-08-22
-- **26585** — The pill comes back, and the last literal spacing goes — 2026-08-23
+- **19** — Sessions
+- **185** — Implementation handoff - 2026-07-29
+- **419** — Frontend implementation handoff - 2026-07-29
+- **464** — Authentication-to-tenant routing handoff - 2026-07-29
+- **524** — Route-guard and tenant repository foundation handoff - 2026-07-29
+- **586** — Read-only tenant catalog handoff - 2026-07-29
+- **679** — Read-only tenant staff-directory handoff - 2026-07-29
+- **779** — Typed staff invitation handoff - 2026-07-29
+- **882** — Typed staff update handoff - 2026-07-29
+- **978** — Typed staff status handoff - 2026-07-29
+- **1077** — Typed staff invitation resend handoff - 2026-07-29
+- **1179** — Typed staff invitation cancellation handoff - 2026-07-29
+- **1286** — Typed staff invitation email replacement handoff - 2026-07-30
+- **1393** — Typed visible invitation acceptance handoff - 2026-07-30
+- **1490** — Typed email-link invitation acceptance handoff - 2026-07-30
+- **1588** — Invitation emulator contract handoff - 2026-07-30
+- **1674** — Typed default tenant selection handoff - 2026-07-30
+- **1775** — Typed tenant request handoff - 2026-07-30
+- **1888** — Platform pending-tenant review handoff - 2026-07-30
+- **2006** — Platform tenant suspension/reactivation handoff - 2026-07-30
+- **2115** — Platform rejected-tenant archival handoff - 2026-07-30
+- **2233** — Platform exact-UID global-user status handoff - 2026-07-30
+- **2352** — Guarded platform-admin grant CLI handoff - 2026-07-31
+- **2462** — Guarded platform-admin revocation CLI handoff - 2026-07-31
+- **2674** — Tenant-switch safety coordinator handoff - 2026-07-31
+- **2801** — Encrypted Hive checkout-outbox foundation handoff - 2026-07-31
+- **2951** — Confirmation-safe checkout restart recovery handoff - 2026-07-31
+- **3096** — Deterministic checkout submission worker handoff - 2026-07-31
+- **3254** — Offline catalog cache and checkout draft handoff - 2026-07-31
+- **3427** — Per-device receipt numbering and checkout configuration handoff - 2026-07-31
+- **3615** — Guarded tenant shift lifecycle handoff - 2026-07-31
+- **3831** — Shift-scoped sale attribution and closing summary handoff - 2026-07-31
+- **4047** — Guarded shift-history read surface handoff - 2026-08-01
+- **4247** — Guarded sale-history read surface handoff - 2026-08-01
+- **4401** — Guarded staff-name resolution handoff - 2026-08-01
+- **4548** — Guarded daily summary handoff - 2026-08-01
+- **4705** — Guarded returns read surface handoff - 2026-08-01
+- **4869** — Guarded return creation handoff - 2026-08-01
+- **5037** — Guarded return verification handoff - 2026-08-01
+- **5170** — Guarded receipt lookup handoff - 2026-08-01
+- **5310** — Guarded stock adjustment surface handoff - 2026-08-01
+- **5526** — Guarded business-wide stock adjustment feed handoff - 2026-08-01
+- **5722** — Guarded tenant activity log handoff - 2026-08-01
+- **5933** — Guarded business-wide stock movement feed handoff - 2026-08-01
+- **6168** — Guarded reconciliation status surface handoff - 2026-08-01
+- **6405** — Guarded account verification entry point handoff - 2026-08-01
+- **6560** — Guarded email delivery-status handoff - 2026-08-01
+- **6687** — Checkout tender contract - payload v2 handoff - 2026-08-02
+- **6905** — Reachable point-of-sale till handoff - 2026-08-02
+- **7090** — Usable till handoff - search, quantity, stock, receipt - 2026-08-02
+- **7235** — Reconciliation can be asked for - 2026-08-02
+- **7442** — A till that holds a real catalog - 2026-08-02
+- **7560** — What a business has taken today - 2026-08-02
+- **7729** — Which category is actually selling - 2026-08-02
+- **7872** — Every reported figure now names its currency - 2026-08-02
+- **8008** — Who sold what - 2026-08-02
+- **8268** — The app can reach the emulators - 2026-08-02
+- **8429** — The totals panel, split - 2026-08-02
+- **8516** — What the business was paid with - 2026-08-02
+- **8707** — The first real run, and what it found - 2026-08-02
+- **8981** — A saved sale reaches the server while the till stays open - 2026-08-02
+- **9097** — Which differences reconciliation found - 2026-08-02
+- **9295** — A closed shift may be corrected to what its sales prove - 2026-08-04
+- **9538** — The correction is reachable from the row that reports it - 2026-08-04
+- **9749** — The first run that corrected a real shift - 2026-08-04
+- **10028** — The sentinel audit, and a guard that keeps it done - 2026-08-04
+- **10228** — The harness that would have caught it - 2026-08-04
+- **10427** — The corrections a business can finally see - 2026-08-04
+- **10626** — The two defects the real run left alone - 2026-08-04
+- **10854** — The shift half of the pipeline, proved end to end - 2026-08-04
+- **11046** — One shift's correction, reachable from the shift itself - 2026-08-05
+- **11240** — The stock half of the runner, entered for the first time - 2026-08-05
+- **11471** — The same narrowing, from the other side - 2026-08-05
+- **11642** — A stock difference, where the correction is made - 2026-08-05
+- **11860** — The kind that could never be recorded - 2026-08-05
+- **12061** — One decision, in one place, with tests - 2026-08-05
+- **12235** — The last thing the stock phase can conclude - 2026-08-05
+- **12420** — Saying there is more, after looking at it - 2026-08-05
+- **12611** — What the pinned buttons cost, measured - 2026-08-05
+- **12778** — A defect that was not there - 2026-08-05
+- **12918** — The narrowing that was not worth having - 2026-08-05
+- **13144** — The run behind the difference, finished - 2026-08-05
+- **13382** — The largest module's first unit tests - 2026-08-06
+- **13652** — A hook with no producer, and three bounds nothing had counted - 2026-08-07
+- **14015** — Nine months of `flutter test` paths, and who may run a job's next page - 2026-08-07
+- **14332** — PLAN.md split into current state and history - 2026-08-07
+- **14414** — A business can set what it sells in - 2026-08-07
+- **14639** — A shop can stock itself - 2026-08-07
+- **14859** — The trigger every reconciliation job comes from - 2026-08-07
+- **15090** — The sweep that decides who is reconciled tonight - 2026-08-07
+- **15381** — The callable that corrects a price - 2026-08-07
+- **15611** — The flake was the test's own clock - 2026-08-07
+- **15770** — A product records what it cost, and a sale freezes it - 2026-08-07
+- **15930** — The status board moved accounts - 2026-08-08
+- **16008** — Bulk catalog and return scoring are scoped as rewrites - 2026-08-08
+- **16130** — A price is corrected from the app - 2026-08-08
+- **16352** — Many products at once, previewed before they change - 2026-08-08
+- **16653** — Products imported from a spreadsheet, previewed before they exist - 2026-08-08
+- **16979** — Both bulk halves reach a person - 2026-08-08
+- **17238** — Profit is shown, or refused, and never overstated - 2026-08-08
+- **17481** — The password-reset worker runs against real Auth and real Firestore - 2026-08-08
+- **17680** — The app is driven on Android against the emulators - 2026-08-08
+- **17885** — The sign-in screen says something true - 2026-08-08
+- **18063** — A refused invitation says what will actually work - 2026-08-08
+- **18278** — The design system's token layer, wired to nothing - 2026-08-11
+- **18584** — A category is named, and never shown as a document ID - 2026-08-11
+- **18808** — The ripple dies at the theme - 2026-08-11
+- **19017** — The working tree is emptied into the repository - 2026-08-11
+- **19132** — `AppButton`, and the spring substrate under it - 2026-08-11
+- **19367** — Every remaining button becomes an `AppButton` - 2026-08-11
+- **19515** — A route arrives on a spring - 2026-08-12
+- **19742** — One field, everywhere - 2026-08-12
+- **19923** — Five statuses, two notices, and prose that folds away - 2026-08-12
+- **20108** — A screen title stops being chrome - 2026-08-12
+- **20332** — Every page gets a maximum width, and 768 stops being declared three times - 2026-08-12
+- **20611** — A record list becomes one component, and §4.3's middle band gets its first picture - 2026-08-13
+- **20861** — The staff directory becomes a `RecordList`, and a record gets somewhere to open a form - 2026-08-13
+- **21088** — The catalog becomes a `RecordList`, and a product that cannot be sold says so - 2026-08-13
+- **21293** — The stock family becomes one record, and a screen stops describing it three ways - 2026-08-13
+- **21489** — The shift family becomes a `RecordList`, and step 6's sweep is finished - 2026-08-13
+- **21729** — The reconciliation family gets one vocabulary, and step 4's sweep begins - 2026-08-14
+- **22003** — The catalog family folds its prose, and a bulk report gets its first picture - 2026-08-14
+- **22258** — A figure becomes a component, and the money screens stop writing numbers into sentences - 2026-08-14
+- **22502** — A difference states its figures, and step 8 is finished - 2026-08-15
+- **22735** — A notice says which answer it is, and four of them were never refusals - 2026-08-15
+- **22908** — A title appears once, and one page was telling everybody it was read-only - 2026-08-15
+- **23076** — A table stops guessing how wide its columns are - 2026-08-15
+- **23293** — The front door stops having a palette of its own - 2026-08-15
+- **23553** — An input is a pill again, and a keypad learns lower case - 2026-08-15
+- **23748** — A record says its standing in words, and §8 rule 1's own example was still on screen - 2026-08-15
+- **23959** — The home stops being eleven identical pills - 2026-08-16
+- **24101** — The menu leaves the page and becomes the frame's - 2026-08-16
+- **24290** — Ten chunks in, the till has had none of it - 2026-08-16
+- **24378** — The till gets the redesign, and seventeen answers stop being a colour - 2026-08-16
+- **24525** — Two contradictions closed, and five components written down before anyone builds them - 2026-08-16
+- **24593** — Five components, seven decisions, and the reskin runs out of things it can do alone - 2026-08-16
+- **24790** — Three states, a dialog that holds a form, and a page bar that stops moving - 2026-08-16
+- **25149** — Printing gets its plumbing, and the exclusion that blocked it was five days stale - 2026-08-17
+- **25321** — A receipt gets a body, and a shop name with a macron stops crashing the sale - 2026-08-17
+- **25477** — Printing reaches paper, and six faults wearing one sentence - 2026-08-18
+- **25587** — A receipt that lost its last digit, and a package whose two numbers disagree - 2026-08-18
+- **25680** — The printing working tree becomes one checkpoint before the next prompt - 2026-08-20
+- **25732** — Stitch takes over visual composition, without taking over product truth - 2026-08-20
+- **25781** — Stitch Phase 00 normalizes the working canvas without approving stale renders - 2026-08-20
+- **25811** — Two families the design named and the repository never had - 2026-08-22
+- **25897** — The type scale moves, and the frontmatter is right this time - 2026-08-22
+- **25973** — Five regions on one axis, and the harness had three of them — 2026-08-22
+- **26072** — Wave 0's remainder, and the token layer that was not finished — 2026-08-22
+- **26300** — The sale path is composed, and both defects it was sent to fix were already fixed — 2026-08-22
+- **26413** — The catalog stops telling a cashier a product cannot be sold — 2026-08-22
+- **26592** — The pill comes back, and the last literal spacing goes — 2026-08-23
+- **26733** — Four days off the record, a crash of my own making, and the docs stop being in charge — 2026-08-27
 
 <!-- index:end -->
 
@@ -26722,3 +26729,219 @@ not started either. The token layer, the harness's width coverage and the three 
 all of those surfaces, so none of that work will need redoing — but none of it is done, and the reskin
 is not finished. 2,318 tests pass and the harness writes 536 images across 163 screens; what that
 proves is the raster, and no part of this implementation has been compared to a design by a person.
+
+## Four days off the record, a crash of my own making, and the docs stop being in charge — 2026-08-27
+
+**Read the first section before anything else in this file.** From today the developer is the
+source of truth and the planner of the work. `PLAN.md` is retired, `docs/stitch/**` is retired,
+`design.md` and the root reviews and audits are retired, and this file is a record rather than an
+instruction. The developer decides when it is written to.
+
+### What this entry can and cannot vouch for
+
+The last entry above is dated 2026-08-23. Everything between then and now sat uncommitted in the
+working tree — 184 modified files and 40 new ones — and went in today as one commit, `094692e`.
+There is therefore **no per-day commit record for 24, 25 and 26 August**, and no session handover
+was written on any of those days.
+
+So this entry is two different kinds of evidence and says which is which:
+
+- **2026-08-26 and 2026-08-27 I was present for**, and those sections are first-hand.
+- **2026-08-24 and 2026-08-25 are reconstructed from the tree**: file names, doc comments and
+  their dated rationales. Where a comment in the code dates a decision, that date is quoted.
+  Nothing here is inferred beyond what a file says about itself.
+
+The developer planned and directed all four days. That is the reason the gap exists and it is not
+a defect in the work — it is a defect in this file, now closed.
+
+### The reversal, and what it took (reconstructed, 24–25 August)
+
+The direction change of 2026-08-25 — existing customers know the pre-multitenancy app and find the
+Stitch redesign's navigation confusing — reached the code across these areas:
+
+- **The till gates itself again.** `lib/shift/shift_gate.dart` is new and its own header says why:
+  the old `lib/pos/pos.dart` asked `_checkAndInitializeShift` on entry and offered *Just Stepping
+  Away* or *End My Shift* on the way out. The Stitch redesign had moved both onto the home as a
+  card a cashier could walk past — and walking past it means ringing up sales against no shift.
+  The gate is a modal that refuses the scrim *and* the system back gesture, which the old dialog
+  did not.
+- **The Sales slot is a weekly report.** `lib/reporting/weekly_report{,_charts,_panel,_sections}.dart`,
+  replacing the daily summary on that route on 2026-08-27 per `main.dart`'s own comment: those
+  figures are the whole subject of the Sales route, and week-against-week is the reading the
+  product did not otherwise have.
+- **Returns and sales read as day-grouped cards** — `return_feed_panel.dart`,
+  `return_journal.dart`, `sales_report_panel.dart` — in the old till's shape rather than the
+  redesign's record lists.
+- **Product photographs, end to end**: `product_image_store.dart`, `product_visual.dart`,
+  `product_background_removal.dart`, `storage.rules`, `rules-tests/test/product-images.test.js`
+  and `functions/src/operations/productBackground.ts`. The background remover is a callable
+  because the key lives in the deployment's secret manager; a deployment that never set it gets a
+  `failed-precondition` the form words as "not set up for this business" rather than as a fault.
+- **A searchable staff and product index**, with its backfill: `functions/src/staff/search.ts` and
+  `functions/src/cli/backfill{Product,Staff}Search.ts`.
+- **Supporting UI the above assumed**: `lib/ui/skeleton.dart`, `lib/ui/snackbar.dart`,
+  `lib/ui/card.dart`, `lib/tenancy/tenant_directory_cache.dart`.
+
+### The two infrastructure failures that cost the most time
+
+Neither is interesting and both will happen again to whoever is next.
+
+**`C:` filled to zero and hung the build inside a Jetifier transform.** The fix was moving Gradle's
+home to `D:\gradle-home`, which freed 12 GB. Two traps in doing it: `cp -u` of the Gradle cache
+fails with "File exists" and is not worth fighting — verify the key directories arrived and delete
+the source; and the copied wrapper distribution arrived incomplete, giving *Could not locate the
+Gradle launcher JAR*, fixed by deleting `wrapper/dists/gradle-8.12-all` and letting it re-download.
+**Every build now needs `GRADLE_USER_HOME=D:\gradle-home` passed explicitly**, because Gradle
+recreates `~/.gradle` on `C:` when it is not.
+
+**A DHCP lease broke the same device build twice in one day**, which is what `tool/lan_debug_build.dart`
+now exists to stop. Android has refused cleartext since API 28, the emulators serve plain HTTP, and
+`network_security_config.xml` names the exact hosts a debug build may talk to — a list that cannot
+hold a subnet. The machine went `192.168.100.5` → `10.193.49.54` → `10.170.85.53` inside 2026-08-27.
+**The failure is silent on the wire**: Android drops the socket before it leaves the device, nothing
+reaches the emulator, nothing appears in its log, and the app reports *"We could not open your
+business account"* — naming a connection that is in fact fine. Two hours went into diagnosing
+exactly that, from a logcat stack trace and `ipconfig` rather than from guessing at auth. The script
+reads the current IPv4, rewrites the one managed `<domain>` entry, runs the drift test, and builds.
+One line per network, updated in place, or the list grows a dead address per rebuild.
+
+### The skeletons were slabs, and Decision 35 is why
+
+The product owner's report: *"sales screen shimmers are just plain boxes they lack internal layout
+arrangement."* Correct. `_SaleCardsSkeleton` drew four 148-pixel blocks, which reserves the right
+*space* and says nothing about what will fill it — four grey slabs are indistinguishable from four
+loading anything, which is the whole argument for a skeleton over a spinner thrown away.
+
+It now mirrors the real card: a glyph square, a mono time, a receipt glyph, a money block, two item
+rows, a meta band at two ragged widths. **The chrome is real and only the values shimmer** — the
+card frame, both rules and the meta band's fill do not change when the read returns, so they are
+drawn rather than approximated. One literal is documented rather than invented as a token: the
+one-pixel hairline, because this app has no stroke-width token to read it from.
+
+**`RecordListSkeleton` (`lib/ui/skeleton.dart:309`) still has the identical defect** — plain 132dp
+cards and 48dp table rows with no internal structure — and was deliberately left. It backs every
+record list in the app, so the scope is the developer's call. It was offered and not taken up.
+
+### The jitter fix that caused a crash — 2026-08-26 and 2026-08-27
+
+This is the part worth keeping, because the fix and the failure were four days apart and looked
+unrelated.
+
+**2026-08-26.** Every *New sale* drew the gate's loading state before the till. The cause was
+structural rather than cosmetic: `TenantShiftGate` built a controller per mount, and a fresh
+`TenantShiftController` starts at `TenantShiftPhase.unknown` — so each entry read the canonical
+shift again and only then drew a till. The fix cached one controller per session on an `Expando`
+keyed by the `TenantSessionController` (weak, so a gone session takes its controller with it), and
+taught the gate to *unsubscribe* rather than dispose. It was flagged at the time as a behaviour
+change on the sale path, not a visual one. **It was never verified on a device.**
+
+**2026-08-27.** The developer photographed a full-screen red `ErrorWidget` on the phone:
+
+> A TenantShiftController was used after being disposed.
+
+The journey: Register → the app finds the shift more than 24 hours old → close the expired shift →
+it prompts to open a new one in the same flow → the new shift opens successfully → red screen
+instead of the till.
+
+**Root cause: one instance, two owners.** `shiftControllerFactory` had become a cache and
+`TenantShiftGate` had been taught not to dispose. `TenantShiftPanel` had not — it went on calling
+`_shifts?.dispose()` in both `didChangeDependencies` and `dispose`, correct when the factory minted
+one per mount and wrong from the moment it stopped. The panel lives on the route the gate pushes
+for *Close shift*, so popping that route destroyed the controller the whole session shares. **The
+`Expando` is never invalidated**, so every later caller was handed the same dead object.
+
+`ChangeNotifier.debugAssertNotDisposed` guards `addListener`, `notifyListeners` and `dispose`
+itself — but deliberately **not** `removeListener`, which is why the gate's own teardown was
+silent. `addListener` runs in the build phase, and the build phase is the only one that paints an
+`ErrorWidget` over a whole route. Since each *New sale* tap pushes a new route with a fresh gate,
+the first `addListener` after the disposal is on the next till entry.
+
+**The reproduction settled a question the code could not.** The suspicion was that the throw fired
+on returning from the manager. It does not: the end-to-end expired journey passes even against the
+broken code. It fires on the *next* construction of a gate or panel. So the red screen was a later
+till entry, and — worth stating because the assumption was the opposite — **re-entering does not
+mint a fresh controller.** That is the second half of the defect.
+
+**The fix is two deletions** in `shift_panel.dart`. The panel keeps `_countedCash.dispose()`, which
+is its own. What the factory owns is now stated on the `TenantShiftControllerFactory` typedef,
+where the next caller will look, rather than left to whoever reads the composition root.
+
+### The tests could not have caught it, and that was the real defect
+
+Every shift suite passed a factory that minted a controller per call — `shift_panel_test.dart`
+twice, and `tool/screenshots/landing_screens_test.dart` — modelling the ownership this app had
+*before* 2026-08-26. A shared instance was never once exercised. `TenantShiftGate` had **no widget
+test at all**; its rewrite on the 25th, the disposal change on the 26th and this crash all shipped
+through that hole.
+
+Now: the fakes are shared in `test/support/shift_fakes.dart` behind one
+`sharedShiftControllerFactory`, the screenshot harness composes the till the way `main.dart` does,
+and `test/shift/shift_gate_test.dart` is twelve cases. **The regression case was verified by
+restoring the pre-fix file and re-running**: it reproduces the crash verbatim and it is the only
+one of the twelve that fails.
+
+Two notes on the other cases, kept because they are the kind of thing this file is for:
+
+- **Four of them do not catch this bug**, and saying so matters. They cover cancelling a cash
+  count, a close refused for want of a connection, popping the manager mid-close, and switching
+  business mid-open. They are coverage, not further proof of the fix.
+- **The tenant-switch case was written vacuously and admitted it the moment it was made to assert
+  something.** An open reads local state, checks the network and looks for a shift to adopt before
+  it writes, so a single pumped frame switched business during that preamble and the controller
+  rejected it long before the check the test is named after. `server.created` came back empty. It
+  now settles up to a held write and asserts the write landed, without which it could not fail.
+
+### Test baseline, corrected
+
+**12 failing tests across 8 files**, verified by stashing and re-running rather than by inspection.
+An earlier figure of "8" in this session was counting files, not tests, and was wrong.
+
+`audit_log_panel` (1), `token_spacing` (1), `sale_history_panel` (2), `shift_history_panel` (1),
+`rbac_matrix` (1), `tenant_catalog` (1), `tenant_safe_landing` (5). All pre-date this work.
+`flutter analyze` reports 33 `use_build_context_synchronously` hits and **every one is in
+`lib/pos/**` or `lib/screens/**`** — the reachable app is clean.
+
+### A lifecycle audit, since the crash was a lifecycle bug
+
+The reachable app has exactly **three** `ChangeNotifier` subclasses, which is why this is short.
+Recorded rather than acted on; the developer decides which, if any, are worth doing.
+
+- **The session-scoped controller has no session-change reset.** It is cached on the
+  `TenantSessionController`, which survives `clear()` and the next `open()`, and `_state` is only
+  re-checked when an operation runs. A gate mounted for a new identity can read the previous
+  identity's phase for the frames before `restore` lands, and briefly draw a sellable till. **The
+  sale itself is still refused** — `TenantShiftCheckoutBinder` reads Hive per-uid, not this state
+  — so it is a display defect, not a sale-path one.
+- **`_ProductImagePreviewModel` is never disposed.** One unreleased notifier per product-form
+  sheet. Listeners are removed correctly, so nothing crashes.
+- **`SpiritPOSApp` builds its whole service graph inside `build`** — readers, writers, callables,
+  the print dispatcher, the factory closure. Two consumers compare these by *identity* and restart
+  work when it changes: `TenantRouteGuard.didUpdateWidget` and
+  `CheckoutPendingEvidencePanel.didUpdateWidget`. Quiet today only because that widget rarely
+  rebuilds.
+
+A structural target was written up and **not** built: give the shift controller the same treatment
+the session controller already has — a `TenantShiftScope extends InheritedNotifier`, owned and
+disposed by the routing shell, with the gate and panel reading it rather than building it. That
+deletes the `Expando`, the factory, and the ambiguity that caused this. There is no Redux, Provider
+or Bloc in this project and none should be added; the one state-management package present, `get`,
+is imported by four `lib/pos/**` files and nothing reachable.
+
+### Left open
+
+- **The home's trend stat against a zero baseline.** `_TrendReading.from` returns `null` when
+  yesterday was 0 and today is not, so the home says nothing. The developer's position is that any
+  sale today is truthfully a 100% increase; the counter-argument is that a percentage against zero
+  is undefined and "up from no sales yesterday" says the true thing. **Unresolved, and the
+  developer's call.**
+- **`RecordListSkeleton`**, above.
+- **672 MB of debug APKs** were sitting untracked at the repository root and came within one
+  `git add -A` of entering history. `.gitignore` now carries `chilltent-lan-debug-*.apk`.
+
+### Branches
+
+`stitch-wave-0-tokens` carries the four days as `094692e`. `multitenant-main` was fast-forwarded
+onto it — 94 commits, no merge commit. The shift fix is `fix/shift-controller-ownership`, branched
+off `multitenant-main`. **`main` is the single-tenant branch and was not touched.** Nothing has
+been pushed: `multitenant-main` is 241 commits ahead of its remote, by the developer's direction.
+

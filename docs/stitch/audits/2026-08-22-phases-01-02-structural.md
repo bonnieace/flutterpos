@@ -1,3 +1,13 @@
+> # RETIRED — 2026-08-27
+>
+> **Not authority.** The Stitch redesign, its phase briefs, handovers, open questions, coverage
+> and audit trail are all retired. The pre-multitenancy app's look and flow is what recent work
+> has been rebuilding on the multitenant backend, and **the developer directs that screen by
+> screen** — their request outranks anything written here.
+>
+> Kept for reference and for the reasoning it records. Do not treat any decision, brief, matrix or
+> checklist in this directory as a constraint on work the developer has asked for.
+
 # Phases 01 and 02, structurally — 2026-08-22
 
 Scope: the routing and permission contracts `prompt.md` asks to be implemented before any product

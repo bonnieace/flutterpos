@@ -3,62 +3,55 @@
 Instructions for Claude Code working in this repository. Keep this file short — it loads
 on every turn, and length here costs context on every task.
 
-## The design system
+## Who decides
 
-**Direction changed 2026-08-25.** Existing customers know the pre-multitenancy app
-(`lib/pos/**`, `lib/screens/**` — still read-only reference only, see hard rule 3) and find the
-Stitch redesign's navigation and visual changes confusing. For screens covered by that reversal,
-the old app's screens/flows/visual character are the target, rebuilt on the existing multitenant
-backend and token layer — see the plan at
-`C:\Users\BonifaceMasota\.claude\plans\look-at-the-old-expressive-sutton.md` for scope
-(currently Login, Home/Main Hub, Sales Report/Book Keeping) and approach. `docs/stitch/README.md`
-carries a retirement notice for those screens; treat its phase briefs and `OPEN_QUESTIONS.md` as
-historical for them, not authoritative. For any screen **not yet** covered by the reversal,
-`docs/stitch/README.md` and the selected phase brief are still the coordination point — read them
-before visual work there.
+**The developer is the source of truth and the planner of the work.** What they ask for in the
+current conversation outranks every document in this repository, including this one. If a doc and
+the developer disagree, the developer is right and the doc is out of date.
 
-`docs/stitch/RBAC_MATRIX.md` remains the authority for behavior and access everywhere,
-regardless of which visual direction a screen follows. `docs/stitch/DESIGN_RULES.md`'s
-accessibility and product-truthfulness rules (§9 contrast/target/focus/state requirements,
-offline-first truthfulness) still apply everywhere too — only its Profound Verdant visual
-character is what old-look screens override, deliberately.
+**Every document in this repo is history or reference, not authority.** That includes `PLAN.md`,
+`HISTORY.md`, everything under `docs/stitch/**`, `design.md`/`DESIGN.md`, and every root `*.md`
+review, audit and proposal. They are useful for *why* something was built the way it was. They do
+not describe what to build next, and they must not be quoted back at the developer as a constraint
+on a request they just made.
 
-Root `DESIGN.md` documents the previous Flutter-led system. It is implementation history, not
-visual authority for new Stitch compositions. Preserve reusable semantic theming: approved
-tokens must flow through the theme layer rather than becoming hardcoded widget values, even
-when recreating an old screen's look — extend `AppTokens` rather than hardcoding a value the
-old screen used. If neither the applicable rules nor product evidence define a decision, record
-it in `docs/stitch/OPEN_QUESTIONS.md` instead of inventing one.
+- **`PLAN.md` is retired.** It froze on 2026-08-23 and was never brought forward. Do not read it
+  as current state, do not treat its status board or "standing decisions" as binding, and do not
+  update it.
+- **`HISTORY.md` is the record, and the developer decides when it is written.** Do not append to
+  it unasked.
+- **The Stitch redesign is retired**, along with its phase briefs, handovers, open questions,
+  coverage and audit trail. The pre-multitenancy app's look and flow (`lib/pos/**`,
+  `lib/screens/**` — read-only reference) is what recent work has been rebuilding on the
+  multitenant backend, and the developer directs that screen by screen.
 
-## Hard rules
+Do not go looking for a document to authorise a decision. Ask the developer, or make the ordinary
+call and say which you made.
 
-1. **A UI change never changes behaviour.** No repository calls, no state logic, no
-   routing conditions, no API shapes in a visual pull request. If a screen cannot be
-   restyled without a logic change, stop and describe the coupling.
-2. **No hardcoded values in widgets.** Every colour, size, radius, spacing, duration and
-   spring comes from the token layer. A literal hex or a magic number in a widget is a
-   defect regardless of whether it looks right.
-3. **Do not touch `lib/pos/**` or `lib/screens/**`.** Legacy, read-only, out of scope.
-   **Eight more locations are equally unreachable and equally out of scope** — including a
-   `pill` component set and two rival colour systems. `test/dev/reachable_lib_test.dart` holds
-   the list and fails if it changes; read it before restyling anything outside `lib/ui/`.
-4. **One phase per branch.** Use the numbered briefs under `docs/stitch/phases/`. Do one
-   phase and stop; a completed Stitch design is not permission to begin Flutter implementation.
-5. **Every component ships with its full state matrix** — enabled, hover, focus-visible,
-   pressed, disabled, loading, error, read-only, empty, whichever apply — and each state
-   appears in the screenshot harness. A component missing a state is not done.
-6. **Accessibility is pass/fail.** See §9. Contrast, 48dp targets, focus rings, and
-   status never conveyed by colour alone are requirements, not preferences.
+## Rules that are about the code
 
-## Workflow for any visual change
+These hold unless the developer says otherwise on a given task.
 
-1. Read `docs/stitch/README.md`, the relevant control documents, and one phase brief.
-2. State the plan, exact Stitch operation/IDs or code file list, and exclusions. Wait for confirmation.
-3. Perform only the approved design operation or implementation phase.
-4. Re-read affected Stitch screens and/or regenerate the local screenshots as applicable.
-5. Update the Stitch index/coverage/audit trail and report deviations.
+1. **A UI change never changes behaviour.** No repository calls, no state logic, no routing
+   conditions, no API shapes in a visual change. If a screen cannot be restyled without a logic
+   change, stop and describe the coupling.
+2. **No hardcoded values in widgets.** Colours, sizes, radii, spacing, durations and springs come
+   from `AppTokens`. Extend the token layer rather than inlining a literal.
+3. **Do not touch `lib/pos/**` or `lib/screens/**`.** Legacy, read-only. **Eight more locations
+   are equally unreachable** — including a `pill` component set and two rival colour systems.
+   `test/dev/reachable_lib_test.dart` holds the list and fails if it changes; read it before
+   restyling anything outside `lib/ui/`.
+4. **Accessibility is pass/fail.** Contrast, 48dp targets, focus rings, and status never conveyed
+   by colour alone.
+5. **A component ships with the states it can be in** — enabled, hover, focus-visible, pressed,
+   disabled, loading, error, read-only, empty, whichever apply.
 
-Do not skip step 2, and do not batch steps 3 and 4 into a single unreviewable change.
+## Motion
+
+- Anything spatial uses a spring and must be interruptible from its current position and velocity.
+  Never `AnimationController.forward()` from zero on a retrigger.
+- Nothing on the sale path may sit between an input and its record. The sale is written first; the
+  animation plays over committed state.
 
 ## Screenshot harness
 
@@ -67,20 +60,21 @@ flutter test tool/screenshots
 dart run tool/screenshots/build_index.dart
 ```
 
-The harness rasterises the widget tree. It does **not** prove the app runs, and it cannot
-show motion at all. Never report a change as verified on the basis of screenshots alone —
-say what the screenshots prove and what still needs a device.
+It rasterises the widget tree. It does **not** prove the app runs, and it cannot show motion.
+Never report a change as verified on screenshots alone — say what they prove and what still needs
+a device.
 
-## Motion
+## Device runs
 
-Two product motion rules that carry forward independently of the retired layout system:
+```
+dart run tool/lan_debug_build.dart          # reads this machine's IP, syncs the cleartext
+adb install -r --no-streaming build/app/outputs/flutter-apk/app-debug.apk
+```
 
-- Anything spatial uses a spring and must be interruptible from its current position and
-  velocity. Never `AnimationController.forward()` from zero on a retrigger.
-- Nothing on the sale path may sit between an input and its record. The sale is written
-  first; the animation plays over committed state.
+The emulator host and the cleartext allowlist are compiled into the APK, so a DHCP lease change
+means a rebuild. `GRADLE_USER_HOME=D:\gradle-home` on this machine, or the build fills `C:`.
 
 ## Reporting
 
-Be direct about incomplete work. "Steps 1–3 done, step 4 blocked because X" is useful.
-A summary that implies more is finished than is finished costs more than the work saved.
+Be direct about incomplete work. "Steps 1–3 done, step 4 blocked because X" is useful. A summary
+that implies more is finished than is finished costs more than the work saved.

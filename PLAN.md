@@ -1,3 +1,18 @@
+> # RETIRED — 2026-08-27
+>
+> **This file is not current state and must not be read as authority.** It froze on 2026-08-23
+> and was never brought forward; the four days after that were planned and directed by the
+> developer directly, not through this document.
+>
+> **The developer is the source of truth and the planner of the work.** Nothing here overrides a
+> request they make. Its status board, "found by using the app" list, test baselines and standing
+> decisions all describe a repository that has since moved, and several of them are now simply
+> wrong.
+>
+> Keep it for the reasoning it records. Do not update it, do not cite it back at the developer,
+> and do not use it to decide what to build next. `HISTORY.md` is the record; the developer
+> decides when that is written.
+
 # Chilltent POS — Frozen Implementation Baseline
 
 Current state only. Every dated session handover lives in [HISTORY.md](HISTORY.md),
@@ -17,116 +32,116 @@ theming remains required, but the existing `AppLayout.contract` is not carried i
 
 Every section of this file, with the line it starts on. Read the one you need.
 
-- **14** — Index
-  - **275** — Published status board
-- **328** — Status board
-  - **330** — Tracks
-  - **351** — Can a shop do this yet?
-  - **388** — Where the last chunk left it
-  - **450** — Chunk index
-  - **536** — Found by using the app
-  - **668** — Rollout position
-  - **690** — Test baselines
-- **1379** — Corrections made in the 2026-08-07 PLAN/HISTORY split
-- **1410** — Standing decisions and unreachable capabilities
-  - **1418** — A sale records how it was paid for, chosen manually
-  - **1436** — A business publishes its own currency, and it converts nothing
-  - **1454** — A shop stocks itself, and a retired product keeps its history
-  - **1477** — A price is corrected on the server, and never a quantity
-  - **1510** — A product records what it cost, and a sale freezes it
-  - **1535** — A profit figure is complete or it is not shown
-  - **1558** — Bulk catalog work is a rewrite, and the old code is not the starting point
-  - **1588** — A spreadsheet becomes products, and its stock has an origin
-  - **1628** — One screen reaches both bulk callables, and it previews before it writes
-  - **1657** — A suspicious return is scored on the server, after the first deployment
-  - **1681** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
-  - **1700** — A refused invitation names what will work, and only a transient failure invites a retry
-  - **1727** — The token layer is additive, and a density is a nested `Theme`
-  - **1763** — The ripple dies at the theme, and the press arrives with the button
-  - **1790** — A button is a component, and a spring is the substrate under it
-  - **1815** — Every button is an `AppButton`, and the tier is a decision per site
-  - **1837** — Five statuses, and three components two of which have no specification
-  - **1869** — One field, everywhere - and an audit finding that was false
-  - **1896** — A route arrives on a spring, and one parallax is deliberately missing
-  - **1928** — A category is named, and a document ID is not a name
-  - **1950** — A screen title is content, and the toolbar keeps only the way back
-  - **1985** — One boundary, one variable, and a maximum width on every page
-  - **2013** — One record model, three renderings, and the loss the caller owns
-  - **2042** — The staff directory stops choosing its own form, and a record gets a form slot
-  - **2065** — A product states its facts as facts, and only one that cannot be sold has a standing
-  - **2091** — One ledger entry, one vocabulary, and a screen that had three
-  - **2120** — A shift has a standing, and two paragraphs were never about a record
-  - **2148** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
-  - **2179** — A page's standing is a status, and a report row's reads the mode it was written in
-  - **2206** — A figure is a component, and a row of them measures what it holds
-  - **2242** — A figure is evidence on these three, and one document is read two ways on purpose
-  - **2265** — A notice says which answer it is, and four of them were never refusals
-  - **2293** — A title appears once, and the page that said it was read-only was not
-  - **2318** — A column asks for what it holds, and a share is a guess about content
-  - **2351** — A boundary is a measurement, and the front door had a second palette
-  - **2389** — An input is a pill again, and the specification moved first
-  - **2428** — The till draws the token layer, and a status is never a colour on its own
-  - **2461** — Thirteen components exist, and what is left of §5.1 is one that does and one that should not
-  - **2515** — A printer is dialled behind a seam, and a receipt number is the idempotency key
-  - **2578** — A read has three answers, a dialog may hold a form, and a page bar does not move
-  - **2619** — Built, tested, and still unreachable
-  - **2660** — The home is cards below 1024 and a side menu above it, and the till is pushed
-- **2717** — Open decisions
-  - **2719** — One printer per device, or several — and it decides the shape of a durable record
-  - **2740** — §5.1 gives `LedgerEntry` a row and §4.3 took every screen it names
-  - **2756** — A form dialog cannot be escaped by its scrim, and two dialogs changed behaviour
-  - **2772** — `AppDialog` is 720 wide because §4.3's `Form` row is, and no section states a dialog's maximum
-  - **2789** — ~~§7 wants a filled destructive confirm~~ — resolved 2026-08-16: §7 gave up the word
-  - **2809** — ~~§2.2 gives a section head `title.lg`~~ — resolved 2026-08-16: it gives it `title.md`
-  - **2834** — §4.4's home top bar needs two facts the home is not given, and fetching them is not a restyle
-  - **2871** — §4.4 wants the side menu on every route, and every route reaches it by a push
-  - **2907** — Public password reset needs App Check, which this app has none of
-  - **3014** — `Callout` has no specification, and three glyph sizes were borrowed
-  - **3038** — Every string is painted 0.25px per character wider than its token style says
-  - **3059** — ~~A chip is the only thing §2.3's pill argument still guards~~ — resolved 2026-08-16: the chip is a pill
-  - **3087** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
-  - **3111** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
-  - **3132** — Three run counts are decoded on every read and displayed by nothing
-  - **3149** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
-  - **3184** — `design.md` states no page padding, and `AppScaffold` had to pick one
-  - **3203** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
-  - **3228** — `AppSheet` has no specification, and step 7 opens a sheet
-  - **3251** — The app teaches by folding prose, and nobody has decided whether folding is teaching
-  - **3274** — The invitation email names no business, and no step reaches an email
-  - **3296** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
-  - **3335** — Three design-system questions the redesign has refused to answer
-  - **3379** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
-  - **3390** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
-  - **3460** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
-- **3526** — Identity, Tenancy, and Public Interfaces
-  - **3528** — Environments
-  - **3535** — Root model
-  - **3567** — Tenant path contract
-  - **3577** — Tenant routing and limits
-  - **3594** — Shared authorization
-  - **3611** — Public callable interfaces
-  - **3645** — Full export surface
-- **3675** — Platform, Ownership, and Membership Integrity
-- **3731** — Invitations and Email
-- **3795** — Offline Operations, Stock, and Receipts
-- **3844** — Reconciliation, Rules, and Testing
-  - **3846** — Reconciliation
-  - **3910** — Rules
-  - **3936** — Required tests
-- **3954** — Working on this repository
-  - **3956** — The emulator prelude is not optional
-  - **3971** — Standing traps
-  - **4387** — Repository state
-- **4562** — Next bounded chunk
-  - **4739** — What it builds, and the first two are one item
-  - **4762** — What it must not do
-  - **4777** — What it owes
-  - **4805** — What it builds, in the order that section prescribes
-  - **4824** — The one decision this chunk must have answered before item 3
-  - **4832** — What it must not do
-  - **4849** — What this chunk owes on top of the work
-  - **4856** — Behind it
-  - **4864** — ~~The reskin tail's own five items, its exclusions and its size estimate~~ — retired 2026-08-16
+- **29** — Index
+  - **290** — Published status board
+- **343** — Status board
+  - **345** — Tracks
+  - **366** — Can a shop do this yet?
+  - **403** — Where the last chunk left it
+  - **465** — Chunk index
+  - **551** — Found by using the app
+  - **683** — Rollout position
+  - **705** — Test baselines
+- **1394** — Corrections made in the 2026-08-07 PLAN/HISTORY split
+- **1425** — Standing decisions and unreachable capabilities
+  - **1433** — A sale records how it was paid for, chosen manually
+  - **1451** — A business publishes its own currency, and it converts nothing
+  - **1469** — A shop stocks itself, and a retired product keeps its history
+  - **1492** — A price is corrected on the server, and never a quantity
+  - **1525** — A product records what it cost, and a sale freezes it
+  - **1550** — A profit figure is complete or it is not shown
+  - **1573** — Bulk catalog work is a rewrite, and the old code is not the starting point
+  - **1603** — A spreadsheet becomes products, and its stock has an origin
+  - **1643** — One screen reaches both bulk callables, and it previews before it writes
+  - **1672** — A suspicious return is scored on the server, after the first deployment
+  - **1696** — A sign-in failure is a sentence this app wrote, and it cannot be anything else
+  - **1715** — A refused invitation names what will work, and only a transient failure invites a retry
+  - **1742** — The token layer is additive, and a density is a nested `Theme`
+  - **1778** — The ripple dies at the theme, and the press arrives with the button
+  - **1805** — A button is a component, and a spring is the substrate under it
+  - **1830** — Every button is an `AppButton`, and the tier is a decision per site
+  - **1852** — Five statuses, and three components two of which have no specification
+  - **1884** — One field, everywhere - and an audit finding that was false
+  - **1911** — A route arrives on a spring, and one parallax is deliberately missing
+  - **1943** — A category is named, and a document ID is not a name
+  - **1965** — A screen title is content, and the toolbar keeps only the way back
+  - **2000** — One boundary, one variable, and a maximum width on every page
+  - **2028** — One record model, three renderings, and the loss the caller owns
+  - **2057** — The staff directory stops choosing its own form, and a record gets a form slot
+  - **2080** — A product states its facts as facts, and only one that cannot be sold has a standing
+  - **2106** — One ledger entry, one vocabulary, and a screen that had three
+  - **2135** — A shift has a standing, and two paragraphs were never about a record
+  - **2163** — A notice does not fold, a helper does, and four surfaces stopped wording one document two ways
+  - **2194** — A page's standing is a status, and a report row's reads the mode it was written in
+  - **2221** — A figure is a component, and a row of them measures what it holds
+  - **2257** — A figure is evidence on these three, and one document is read two ways on purpose
+  - **2280** — A notice says which answer it is, and four of them were never refusals
+  - **2308** — A title appears once, and the page that said it was read-only was not
+  - **2333** — A column asks for what it holds, and a share is a guess about content
+  - **2366** — A boundary is a measurement, and the front door had a second palette
+  - **2404** — An input is a pill again, and the specification moved first
+  - **2443** — The till draws the token layer, and a status is never a colour on its own
+  - **2476** — Thirteen components exist, and what is left of §5.1 is one that does and one that should not
+  - **2530** — A printer is dialled behind a seam, and a receipt number is the idempotency key
+  - **2593** — A read has three answers, a dialog may hold a form, and a page bar does not move
+  - **2634** — Built, tested, and still unreachable
+  - **2675** — The home is cards below 1024 and a side menu above it, and the till is pushed
+- **2732** — Open decisions
+  - **2734** — One printer per device, or several — and it decides the shape of a durable record
+  - **2755** — §5.1 gives `LedgerEntry` a row and §4.3 took every screen it names
+  - **2771** — A form dialog cannot be escaped by its scrim, and two dialogs changed behaviour
+  - **2787** — `AppDialog` is 720 wide because §4.3's `Form` row is, and no section states a dialog's maximum
+  - **2804** — ~~§7 wants a filled destructive confirm~~ — resolved 2026-08-16: §7 gave up the word
+  - **2824** — ~~§2.2 gives a section head `title.lg`~~ — resolved 2026-08-16: it gives it `title.md`
+  - **2849** — §4.4's home top bar needs two facts the home is not given, and fetching them is not a restyle
+  - **2886** — §4.4 wants the side menu on every route, and every route reaches it by a push
+  - **2922** — Public password reset needs App Check, which this app has none of
+  - **3029** — `Callout` has no specification, and three glyph sizes were borrowed
+  - **3053** — Every string is painted 0.25px per character wider than its token style says
+  - **3074** — ~~A chip is the only thing §2.3's pill argument still guards~~ — resolved 2026-08-16: the chip is a pill
+  - **3102** — An unticked control's outline carries meaning, and no §2.1 border clears §9's 3:1
+  - **3126** — A shift's money is stated with no currency code, and §8 rule 8 says money always carries one
+  - **3147** — Three run counts are decoded on every read and displayed by nothing
+  - **3164** — `AppScaffold` is where §3's density lands, and nothing can tell it what a pointer device is
+  - **3199** — `design.md` states no page padding, and `AppScaffold` had to pick one
+  - **3218** — Six screens draw a record list nobody gave §4.3 to, and no numbered step claims them
+  - **3243** — `AppSheet` has no specification, and step 7 opens a sheet
+  - **3266** — The app teaches by folding prose, and nobody has decided whether folding is teaching
+  - **3289** — The invitation email names no business, and no step reaches an email
+  - **3311** — ~~The emulator suites need a JDK 21 this machine does not have~~ — withdrawn 2026-08-13, it was never true
+  - **3350** — Three design-system questions the redesign has refused to answer
+  - **3394** — ~~Whether the app should be able to stock itself~~ — closed 2026-08-07
+  - **3405** — ~~How a price is corrected~~ — resolved 2026-08-07: an `updateProduct` callable
+  - **3475** — ~~What a receipt is printed on~~ — answered 2026-08-07, and it is not ours
+- **3541** — Identity, Tenancy, and Public Interfaces
+  - **3543** — Environments
+  - **3550** — Root model
+  - **3582** — Tenant path contract
+  - **3592** — Tenant routing and limits
+  - **3609** — Shared authorization
+  - **3626** — Public callable interfaces
+  - **3660** — Full export surface
+- **3690** — Platform, Ownership, and Membership Integrity
+- **3746** — Invitations and Email
+- **3810** — Offline Operations, Stock, and Receipts
+- **3859** — Reconciliation, Rules, and Testing
+  - **3861** — Reconciliation
+  - **3925** — Rules
+  - **3951** — Required tests
+- **3969** — Working on this repository
+  - **3971** — The emulator prelude is not optional
+  - **3986** — Standing traps
+  - **4402** — Repository state
+- **4577** — Next bounded chunk
+  - **4754** — What it builds, and the first two are one item
+  - **4777** — What it must not do
+  - **4792** — What it owes
+  - **4820** — What it builds, in the order that section prescribes
+  - **4839** — The one decision this chunk must have answered before item 3
+  - **4847** — What it must not do
+  - **4864** — What this chunk owes on top of the work
+  - **4871** — Behind it
+  - **4879** — ~~The reskin tail's own five items, its exclusions and its size estimate~~ — retired 2026-08-16
 
 <!-- index:end -->
 

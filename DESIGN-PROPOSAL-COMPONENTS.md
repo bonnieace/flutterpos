@@ -1,3 +1,9 @@
+> # RETIRED — 2026-08-27
+>
+> **Not authority.** Implementation history only. **The developer is the source of truth and the
+> planner of the work**; their request outranks anything written here. Kept for the reasoning it
+> records.
+
 # Five components, proposed — `design.md` §5.1's remaining rows
 
 **Status: a proposal awaiting the product owner. Nothing here is implemented and

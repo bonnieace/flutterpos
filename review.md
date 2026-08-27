@@ -1,3 +1,9 @@
+> # RETIRED — 2026-08-27
+>
+> **Not authority.** Implementation history only. **The developer is the source of truth and the
+> planner of the work**; their request outranks anything written here. Kept for the reasoning it
+> records.
+
 # Code Review: POS Module (`pos.dart`)
 
 **Reviewer:** PM / Senior Developer  

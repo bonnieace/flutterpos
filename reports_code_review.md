@@ -1,3 +1,9 @@
+> # RETIRED — 2026-08-27
+>
+> **Not authority.** Implementation history only. **The developer is the source of truth and the
+> planner of the work**; their request outranks anything written here. Kept for the reasoning it
+> records.
+
 # ChillTent POS — Code Review: `reports.dart`
 **Date:** May 2026
 **Reviewer:** Claude
