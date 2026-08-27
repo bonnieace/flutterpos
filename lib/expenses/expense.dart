@@ -328,6 +328,28 @@ final class TenantExpensePeriod {
     return List<TenantExpenseCategory>.unmodifiable(categories);
   }
 
+  /// Every heading these records fall under, whether or not any of them still
+  /// counts, largest first.
+  ///
+  /// **This is not [spentCategories] with a different name.** That one answers
+  /// *where did the money go*, and a heading holding nothing but voided records
+  /// did not take any - so it is correctly absent from the composition. This
+  /// one answers *where are these records*, which is a different question and
+  /// the only one that can be asked of a period whose every record has been
+  /// withdrawn. Without it those records are on no screen at all.
+  List<TenantExpenseCategory> get categories {
+    final present =
+        <TenantExpenseCategory>{
+          for (final record in records) record.category,
+        }.toList()..sort((a, b) {
+          final byAmount = (totalByCategory[b] ?? 0).compareTo(
+            totalByCategory[a] ?? 0,
+          );
+          return byAmount != 0 ? byAmount : a.index.compareTo(b.index);
+        });
+    return List<TenantExpenseCategory>.unmodifiable(present);
+  }
+
   /// Just one of this period's business dates, as a period of its own.
   ///
   /// Lets a surface listing several days read the whole span once and split it,

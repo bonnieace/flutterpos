@@ -32,6 +32,7 @@ final class TenantExpenseCategoryScreen extends StatelessWidget {
     required this.period,
     required this.currency,
     required this.periodLabel,
+    this.onVoid,
   });
 
   final TenantExpenseCategory category;
@@ -46,6 +47,15 @@ final class TenantExpenseCategoryScreen extends StatelessWidget {
   /// What the route behind this called the stretch of days - *Last 30 days*.
   final String periodLabel;
 
+  /// Withdraws one of these records, answering whether it was withdrawn, or
+  /// null on a build that cannot write.
+  ///
+  /// **This screen leaves on a true.** It holds the period it was handed, so a
+  /// record withdrawn from here makes its own total and chart stale the instant
+  /// the write lands. The route behind it re-reads, so going back is both the
+  /// correction and the confirmation.
+  final TenantExpenseVoidRequest? onVoid;
+
   @override
   Widget build(BuildContext context) {
     final scoped = period.forCategory(category);
@@ -59,6 +69,7 @@ final class TenantExpenseCategoryScreen extends StatelessWidget {
         whole: period,
         currency: currency,
         periodLabel: periodLabel,
+        onVoid: onVoid,
       ),
     );
   }
@@ -71,6 +82,7 @@ final class _CategoryContents extends StatelessWidget {
     required this.whole,
     required this.currency,
     required this.periodLabel,
+    this.onVoid,
   });
 
   final TenantExpenseCategory category;
@@ -83,6 +95,7 @@ final class _CategoryContents extends StatelessWidget {
 
   final TenantReportingCurrency currency;
   final String periodLabel;
+  final TenantExpenseVoidRequest? onVoid;
 
   @override
   Widget build(BuildContext context) {
@@ -170,13 +183,22 @@ final class _CategoryContents extends StatelessWidget {
               record: record,
               currency: currency,
               first: index == 0,
-              // Every row here is under the heading this screen is named for,
-              // and none of them carries a control, so neither is given room.
+              // Every row here is under the heading this screen is named for.
               showCategory: false,
-              reserveAction: false,
+              onVoid: onVoid == null || record.isVoided
+                  ? null
+                  : () => _withdraw(context, record),
             ),
         ],
       ],
     );
+  }
+
+  /// Asks for the void, and leaves if it happened.
+  Future<void> _withdraw(BuildContext context, TenantExpense record) async {
+    // Read before the await: this screen is about to be popped, and a
+    // `Navigator.of` after the gap would be looking at a dead element.
+    final navigator = Navigator.of(context);
+    if (await onVoid!(record)) navigator.pop();
   }
 }

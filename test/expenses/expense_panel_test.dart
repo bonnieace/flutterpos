@@ -107,9 +107,6 @@ void main() {
       ),
     );
 
-    // The word, beside the reason it was withdrawn for - not the strike
-    // through the figure on its own.
-    expect(find.textContaining('Voided'), findsOne);
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
@@ -117,6 +114,14 @@ void main() {
       'KES 100.00',
       reason: 'Money that did not leave the business counts towards nothing.',
     );
+
+    // It is still listed - under the heading it was spent on, which is the
+    // only place this app lists records now.
+    await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
+    await tester.pumpAndSettle();
+    // The word, beside the reason it was withdrawn for - not the strike
+    // through the figure on its own.
+    expect(find.textContaining('Voided'), findsOne);
   });
 
   testWidgets('a part-read period says the total is not the whole of it', (
@@ -325,6 +330,8 @@ void main() {
     await _pump(tester, reader: reader, writer: writer);
     final readsBefore = reader.reads;
 
+    await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('expense-void-2026-08-27-aaa')));
     await tester.pumpAndSettle();
 
@@ -346,6 +353,11 @@ void main() {
     expect(writer.voided.single.expenseId, '2026-08-27-aaa');
     expect(writer.voided.single.reason, 'Recorded twice');
     expect(reader.reads, greaterThan(readsBefore));
+    // **And the heading's own screen is gone.** It holds the period it was
+    // handed, so every figure on it went stale the moment the write landed;
+    // the list behind it has re-read by the time a person lands back on it.
+    expect(find.byKey(const ValueKey('expense-category')), findsNothing);
+    expect(find.byKey(const ValueKey('expenses')), findsOne);
   });
 
   testWidgets('an already voided record offers no second void', (tester) async {
@@ -358,12 +370,38 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
+    await tester.pumpAndSettle();
+
     expect(
       find.byKey(const ValueKey('expense-void-2026-08-27-aaa')),
       findsNothing,
     );
     // The reason it went travels with it, so a struck-through row is a
     // correction rather than a mystery.
+    expect(find.textContaining('Recorded twice'), findsOne);
+  });
+
+  testWidgets('a period of nothing but voided records still reaches them', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      reader: _Reader(
+        records: <Map<String, Object?>>[
+          _record(token: 'aaa', amountMinor: 30000, voided: true),
+        ],
+      ),
+    );
+
+    // Nothing was taken, so there is no composition to draw - but the record
+    // exists, and a heading is the only way into it now that this route lists
+    // none itself.
+    expect(find.byKey(const ValueKey('expenses-total')), findsOne);
+    await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('expense-category')), findsOne);
     expect(find.textContaining('Recorded twice'), findsOne);
   });
 
@@ -378,9 +416,14 @@ void main() {
       writer: null,
     );
 
+    await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('expense-category')), findsOne);
     expect(
       find.byKey(const ValueKey('expense-void-2026-08-27-aaa')),
       findsNothing,
+      reason: 'A build that cannot write offers no control that writes.',
     );
   });
 }

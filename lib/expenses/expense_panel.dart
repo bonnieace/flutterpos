@@ -54,6 +54,12 @@ enum TenantExpenseRange {
   final String label;
 }
 
+/// Withdraws one expense, answering whether it was withdrawn.
+///
+/// A `Future<bool>` rather than a `void` callback because the surface asking
+/// is a pushed route holding a snapshot: it has to know whether to leave.
+typedef TenantExpenseVoidRequest = Future<bool> Function(TenantExpense record);
+
 /// The Expenses route.
 final class TenantExpensesScreen extends StatelessWidget {
   const TenantExpensesScreen({
@@ -132,20 +138,27 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
     };
   }
 
-  /// Withdraws one record that should not have been there.
+  /// Withdraws one record that should not have been there, and answers whether
+  /// it was withdrawn.
   ///
   /// **A void rather than a delete, and it asks why.** The record stays on the
   /// list struck through, the reason travels with it, and both are refused any
   /// further change - so a correction is a thing that happened rather than a
   /// gap where something used to be. The Firestore rule enforces every part of
   /// that; this is the surface for it.
-  Future<void> _void(
+  ///
+  /// **It reports back because the surface that asks is a pushed route.** A
+  /// category's screen holds the period it was handed, so once one of its
+  /// records is withdrawn its own figures are stale; it leaves on a true, and
+  /// the list behind it - which has re-read by then - is what the person lands
+  /// back on.
+  Future<bool> _void(
     TenantSession session,
     TenantExpense record,
     TenantReportingCurrency currency,
   ) async {
     final writer = widget.writer;
-    if (writer == null) return;
+    if (writer == null) return false;
     final answer = await showExpenseVoidSheet(
       context,
       writer: writer,
@@ -153,13 +166,16 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
       record: record,
       currency: currency,
     );
-    if (!mounted || answer == null) return;
+    if (!mounted || answer == null) return false;
     showAppSnackBar(context, answer);
-    if (answer.status == AppStatus.ok) _reload();
+    if (answer.status != AppStatus.ok) return false;
+    _reload();
+    return true;
   }
 
   /// Opens one category on its own, carrying the period already read.
   void _openCategory(
+    TenantSession session,
     TenantExpenseCategory category,
     TenantExpensePeriod period,
     TenantReportingCurrency currency,
@@ -176,6 +192,9 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
             period: period,
             currency: currency,
             periodLabel: _range.label.toLowerCase(),
+            onVoid: widget.writer == null
+                ? null
+                : (record) => _void(session, record, currency),
           ),
         ),
       ),
@@ -271,11 +290,8 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
           currency: view.currency,
           range: _range,
           canRecord: widget.writer != null,
-          onVoid: widget.writer == null
-              ? null
-              : (record) => _void(session, record, view.currency),
           onOpenCategory: (category) =>
-              _openCategory(category, view.period, view.currency),
+              _openCategory(session, category, view.period, view.currency),
         ),
       ),
     );
@@ -333,7 +349,6 @@ final class _ExpensesContents extends StatelessWidget {
     required this.currency,
     required this.range,
     required this.canRecord,
-    this.onVoid,
     this.onOpenCategory,
   });
 
@@ -341,9 +356,6 @@ final class _ExpensesContents extends StatelessWidget {
   final TenantReportingCurrency currency;
   final TenantExpenseRange range;
   final bool canRecord;
-
-  /// Withdraws one record, or null on a build that cannot write.
-  final ValueChanged<TenantExpense>? onVoid;
 
   /// Opens one category's own records and its day-by-day chart.
   final ValueChanged<TenantExpenseCategory>? onOpenCategory;
@@ -353,6 +365,7 @@ final class _ExpensesContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final live = period.records.where((record) => !record.isVoided).length;
     final spent = period.spentCategories.isNotEmpty;
+    final reachable = period.records.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -371,13 +384,9 @@ final class _ExpensesContents extends StatelessWidget {
         // headline cards over a ring said the same figure twice and pushed the
         // picture below the fold on a phone. The composition is this page's
         // headline, and the total belongs in the hole it already has.
-        if (spent)
-          _CategoryShares(
-            period: period,
-            currency: currency,
-            onOpenCategory: onOpenCategory,
-          )
-        else
+        // A period that took no money draws no ring, so the figure it would
+        // have held goes above the headings instead of inside them.
+        if (!spent) ...<Widget>[
           Text(
             currency.format(period.total),
             key: const ValueKey('expenses-total'),
@@ -385,6 +394,14 @@ final class _ExpensesContents extends StatelessWidget {
             style: tokens.typography.numericHero.copyWith(
               color: tokens.colors.text.money,
             ),
+          ),
+          if (reachable) SizedBox(height: tokens.spacing.s24),
+        ],
+        if (reachable)
+          _CategoryShares(
+            period: period,
+            currency: currency,
+            onOpenCategory: onOpenCategory,
           ),
         SizedBox(height: tokens.spacing.s12),
         Text(
@@ -408,8 +425,14 @@ final class _ExpensesContents extends StatelessWidget {
                 'stretch of days to see a complete total.',
           ),
         ],
-        SizedBox(height: tokens.spacing.s32),
-        if (period.records.isEmpty)
+        // **The page ends at the headings, at the developer's direction on
+        // 2026-08-28.** The reference this feature is measured against lists no
+        // records here at all: the question this screen answers is *where did
+        // the money go*, and a flat list of every record underneath answers a
+        // different one twice as loudly. Records - and withdrawing one - are
+        // inside the heading they belong to, one tap away.
+        if (period.records.isEmpty) ...<Widget>[
+          SizedBox(height: tokens.spacing.s32),
           EmptyState(
             key: const ValueKey('expenses-empty'),
             title: 'Nothing recorded ${range.label.toLowerCase()}',
@@ -417,18 +440,8 @@ final class _ExpensesContents extends StatelessWidget {
                 ? 'Record rent, wages, fuel or a repair and it counts against '
                       'profit from then on.'
                 : null,
-          )
-        else
-          for (final (index, record) in period.records.indexed)
-            ExpenseRow(
-              key: ValueKey('expense-${record.expenseId}'),
-              record: record,
-              currency: currency,
-              onVoid: onVoid == null || record.isVoided
-                  ? null
-                  : () => onVoid!(record),
-              first: index == 0,
-            ),
+          ),
+        ],
       ],
     );
   }
@@ -648,14 +661,19 @@ final class _CategoryShares extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final categories = period.spentCategories;
+    // **The fallback is the reachability rule, not a cosmetic one.** A period
+    // whose every record has been voided took no money and so has no
+    // composition to draw - but its records still exist, and a heading is the
+    // only way into them now that the route lists none itself.
+    final spent = period.spentCategories;
+    final categories = spent.isEmpty ? period.categories : spent;
     if (categories.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         ExpenseCompositionRing(period: period, currency: currency),
-        SizedBox(height: tokens.spacing.s20),
+        if (spent.isNotEmpty) SizedBox(height: tokens.spacing.s20),
         // **The rows are the ring's legend and its accessible reading.**
         // Each carries the same colour as its slice, and also the name, the
         // figure and the share in words - so nothing here is told by colour
