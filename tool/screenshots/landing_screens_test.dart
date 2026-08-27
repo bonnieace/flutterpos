@@ -64,6 +64,23 @@ void main() {
     final reader = FakeTenantReader.business();
     final sessions = seedSession(role: role, uid: uid);
     final returnActions = fakeReturnActions();
+    // **One controller for both hosts, as `main.dart` composes it.** The gate
+    // and the shift panel it pushes are handed the same instance there - the
+    // composition root caches one per session - and a harness that built two
+    // photographs a screen this app does not run. It also photographs a
+    // lifetime this app does not have: the panel used to dispose what it was
+    // given, which under one shared instance is the crash of 2026-08-27.
+    final shifts = <TenantSessionController, TenantShiftController>{};
+    TenantShiftController shiftControllerFactory(
+      TenantSessionController controller,
+    ) => shifts.putIfAbsent(
+      controller,
+      () => fakeShiftController(
+        sessions: controller,
+        localState: shiftState,
+        server: shiftServer,
+      ),
+    );
     return TenantSessionScope(
       controller: sessions,
       child: TenantSafeLandingScreen(
@@ -99,11 +116,7 @@ void main() {
           ),
         ),
         checkoutRoute: (_) => TenantShiftGate(
-          controllerFactory: (controller) => fakeShiftController(
-            sessions: controller,
-            localState: shiftState,
-            server: shiftServer,
-          ),
+          controllerFactory: shiftControllerFactory,
           shiftManagerBuilder: (context) => AppScaffold(
             title: 'Close shift',
             contentWidth: AppContentWidth.records,
@@ -111,11 +124,7 @@ void main() {
               currency: TenantReportingCurrency.unknown,
               historyReader: reader,
               returnActions: returnActions,
-              controllerFactory: (controller) => fakeShiftController(
-                sessions: controller,
-                localState: shiftState,
-                server: shiftServer,
-              ),
+              controllerFactory: shiftControllerFactory,
             ),
           ),
           child: TenantCheckoutScreen(

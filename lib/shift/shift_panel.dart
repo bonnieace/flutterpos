@@ -21,13 +21,24 @@ import 'shift_controller.dart';
 import 'shift_history_panel.dart';
 import 'shift_sales_ledger.dart';
 
-/// Builds the shift controller for the session controller owned by the shell.
+/// Supplies the shift controller belonging to the session controller owned by
+/// the shell.
+///
+/// **The factory owns what it returns; a caller subscribes and never disposes.**
+/// It reads as though it builds one, and since 2026-08-26 it does not: the
+/// composition root caches one controller per session so that re-entering the
+/// till does not restart from `TenantShiftPhase.unknown`. Two widgets are handed
+/// the same instance - see `TenantShiftGate`, which says the two must never hold
+/// different controllers for one session - and a screen that disposed it would
+/// destroy the other's state along with every later till entry's. That is
+/// exactly the crash of 2026-08-27, and it is why this is stated on the typedef
+/// rather than left to whoever reads the composition root.
 typedef TenantShiftControllerFactory =
     TenantShiftController Function(TenantSessionController sessions);
 
 /// The guarded shift surface rendered on the tenant-safe landing route.
 ///
-/// The panel owns one [TenantShiftController] per session controller and
+/// The panel renders one [TenantShiftController] per session controller and
 /// rebuilds the surface for every canonical state change. Authorization,
 /// stale-epoch rejection, and canonical reads all stay in the controller and
 /// the route guard; this widget renders and dispatches only.
@@ -71,13 +82,20 @@ final class _TenantShiftPanelState extends State<TenantShiftPanel> {
     final sessions = TenantSessionScope.of(context);
     if (identical(sessions, _sessions) && _shifts != null) return;
     _sessions = sessions;
-    _shifts?.dispose();
+    // **Exchanged, not disposed**, for the reason
+    // [TenantShiftControllerFactory] gives: the controller is the session's.
+    // Disposing here would take the incoming session's controller down with the
+    // outgoing one, because the factory answers with the cached instance and
+    // this line would already have killed it.
     _shifts = widget.controllerFactory(sessions);
   }
 
   @override
   void dispose() {
-    _shifts?.dispose();
+    // The text field is this panel's and goes with it. The controller is not:
+    // it belongs to the session, the till's gate is listening to the same one,
+    // and every later entry to either surface reads the state this panel would
+    // otherwise have destroyed on the way out.
     _countedCash.dispose();
     super.dispose();
   }

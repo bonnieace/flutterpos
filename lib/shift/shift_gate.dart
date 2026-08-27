@@ -276,6 +276,7 @@ class _TenantShiftGateState extends State<TenantShiftGate> {
                 'sent.',
             actions: <Widget>[
               AppButton(
+                key: const ValueKey('shift-gate-close'),
                 label: 'Close shift',
                 tier: AppButtonTier.primary,
                 onPressed: _openShiftManager,

@@ -11,14 +11,13 @@ import 'package:flutter_application_1/reporting/reporting_currency.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
-const String _deviceA = 'dev-0123456789abcdef0123456789abcdef';
-const String _businessDate = '2026-07-31';
+import '../support/shift_fakes.dart';
 
 void main() {
   late Directory directory;
   late Box<dynamic> box;
   late HiveTenantShiftState state;
-  late _Server server;
+  late ShiftServer server;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('shift-panel-test-');
@@ -27,7 +26,7 @@ void main() {
     // test's fake async zone; a file-backed box would never complete there.
     box = await Hive.openBox<dynamic>(
       HiveTenantShiftState.boxName,
-      encryptionCipher: HiveAesCipher(_encryptionKey),
+      encryptionCipher: HiveAesCipher(shiftEncryptionKey),
       crashRecovery: false,
       bytes: Uint8List(0),
     );
@@ -35,7 +34,7 @@ void main() {
       box,
       clock: () => DateTime.utc(2026, 7, 31, 9),
     );
-    server = _Server();
+    server = ShiftServer();
   });
 
   tearDown(() async {
@@ -97,8 +96,8 @@ void main() {
   });
 
   testWidgets('a cash count does not survive a restart', (tester) async {
-    await state.save(_record(countedCashMinor: 900));
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord(countedCashMinor: 900));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(tester, state, server);
 
@@ -113,8 +112,8 @@ void main() {
   testWidgets('shows the confirmed sales summary during the count', (
     tester,
   ) async {
-    await state.save(_record(countedCashMinor: 900));
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord(countedCashMinor: 900));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
@@ -147,8 +146,8 @@ void main() {
     // The defect a real run found: this line read "Confirmed sales: 1
     // transactions". Every surface beside it - the differences list, the daily
     // summary, the corrections trail - already agreed one is singular.
-    await state.save(_record(countedCashMinor: 900));
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord(countedCashMinor: 900));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
@@ -165,14 +164,14 @@ void main() {
   });
 
   testWidgets('shows the expected cash beside the count', (tester) async {
-    await state.save(_record(countedCashMinor: 900));
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord(countedCashMinor: 900));
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
       state,
       server,
-      sales: _summary(
+      sales: shiftSummary(
         totalMinor: 42500,
         transactionCount: 4,
         recorded: const <CheckoutTender, ShiftTenderTotals>{
@@ -213,14 +212,14 @@ void main() {
   testWidgets('a shift with no cash sales still states the figure', (
     tester,
   ) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
       state,
       server,
-      sales: _summary(
+      sales: shiftSummary(
         totalMinor: 12500,
         transactionCount: 1,
         recorded: const <CheckoutTender, ShiftTenderTotals>{
@@ -240,14 +239,14 @@ void main() {
   testWidgets('states the takings that name no recognised method', (
     tester,
   ) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
       state,
       server,
-      sales: _summary(
+      sales: shiftSummary(
         totalMinor: 9000,
         transactionCount: 3,
         recorded: const <CheckoutTender, ShiftTenderTotals>{
@@ -285,14 +284,14 @@ void main() {
   ) async {
     // The same agreement rule applied to the drawer figure, including the
     // pronoun: one sale is "It is inside", not "They are inside".
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
       state,
       server,
-      sales: _summary(
+      sales: shiftSummary(
         totalMinor: 3001,
         transactionCount: 2,
         recorded: const <CheckoutTender, ShiftTenderTotals>{
@@ -324,14 +323,14 @@ void main() {
   testWidgets('a shift that recorded no method carries no disclaimer', (
     tester,
   ) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
       state,
       server,
-      sales: _summary(
+      sales: shiftSummary(
         totalMinor: 3000,
         transactionCount: 1,
         unrecorded: const ShiftTenderTotals(
@@ -351,14 +350,14 @@ void main() {
   testWidgets('a split that does not add up shows no cash figure', (
     tester,
   ) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
       state,
       server,
-      sales: _summary(
+      sales: shiftSummary(
         totalMinor: 9000,
         transactionCount: 2,
         recorded: const <CheckoutTender, ShiftTenderTotals>{
@@ -381,8 +380,8 @@ void main() {
   testWidgets('states unsynchronized sales instead of a cash figure', (
     tester,
   ) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
@@ -412,8 +411,8 @@ void main() {
   testWidgets('one unsynchronized sale is described in the singular', (
     tester,
   ) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
@@ -438,14 +437,14 @@ void main() {
   testWidgets('a complete shift says nothing about synchronization', (
     tester,
   ) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(
       tester,
       state,
       server,
-      sales: _summary(
+      sales: shiftSummary(
         totalMinor: 4000,
         transactionCount: 1,
         recorded: const <CheckoutTender, ShiftTenderTotals>{
@@ -463,8 +462,8 @@ void main() {
   });
 
   testWidgets('no cash figure appears before the count begins', (tester) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(tester, state, server);
 
@@ -484,8 +483,7 @@ void main() {
           child: Scaffold(
             body: TenantShiftPanel(
               currency: TenantReportingCurrency.unknown,
-              controllerFactory: (controller) =>
-                  _controller(controller, state, server),
+              controllerFactory: sharedShiftControllerFactory(state, server),
             ),
           ),
         ),
@@ -501,7 +499,7 @@ void main() {
   testWidgets('shows the cross-business restriction to a cashier', (
     tester,
   ) async {
-    await state.save(_record(tenantId: 'tenant-b', shiftId: 'shift-b'));
+    await state.save(shiftRecord(tenantId: 'tenant-b', shiftId: 'shift-b'));
 
     await _pumpPanel(tester, state, server);
     await tester.tap(find.byKey(const ValueKey('open-shift')));
@@ -529,7 +527,7 @@ void main() {
   testWidgets('reaches the read-only shift history from the panel', (
     tester,
   ) async {
-    server.shifts['tenants/tenant-a/shifts/shift-closed'] = _document(
+    server.shifts['tenants/tenant-a/shifts/shift-closed'] = shiftDocument(
       overrides: <String, Object?>{
         'shiftId': 'shift-closed',
         'status': 'closed',
@@ -545,8 +543,8 @@ void main() {
     // The sheet is reachable only from `Close shift`, so the history it holds
     // needs an open shift to get to. That is the access gap this change
     // introduced and has not yet closed - see the panel's own note.
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(tester, state, server, history: true);
     await _openShiftSheet(tester);
@@ -572,8 +570,8 @@ void main() {
   testWidgets('the history route stays unreachable without a reader', (
     tester,
   ) async {
-    await state.save(_record());
-    server.shifts['tenants/tenant-a/shifts/shift-a'] = _document();
+    await state.save(shiftRecord());
+    server.shifts['tenants/tenant-a/shifts/shift-a'] = shiftDocument();
 
     await _pumpPanel(tester, state, server);
 
@@ -589,7 +587,7 @@ void main() {
     await _settle(tester);
     expect(_heading(tester), 'Shift open');
 
-    sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
+    sessions.open(uid: 'user-a', membership: shiftMembership('tenant-b'));
     await _settle(tester);
 
     expect(_heading(tester), isNot('Shift open'));
@@ -610,12 +608,12 @@ Future<void> _settle(WidgetTester tester) async {
 Future<TenantSessionController> _pumpPanel(
   WidgetTester tester,
   HiveTenantShiftState state,
-  _Server server, {
+  ShiftServer server, {
   ShiftSalesSummary sales = ShiftSalesSummary.empty,
   bool history = false,
 }) async {
   final sessions = TenantSessionController()
-    ..open(uid: 'user-a', membership: _membership('tenant-a'));
+    ..open(uid: 'user-a', membership: shiftMembership('tenant-a'));
   addTearDown(sessions.dispose);
   await tester.pumpWidget(
     MaterialApp(
@@ -624,9 +622,8 @@ Future<TenantSessionController> _pumpPanel(
         child: Scaffold(
           body: TenantShiftPanel(
             currency: TenantReportingCurrency.unknown,
-            historyReader: history ? _Reader(server) : null,
-            controllerFactory: (controller) =>
-                _controller(controller, state, server, sales: sales),
+            historyReader: history ? ShiftReader(server) : null,
+            controllerFactory: sharedShiftControllerFactory(state, server, sales: sales),
           ),
         ),
       ),
@@ -636,194 +633,18 @@ Future<TenantSessionController> _pumpPanel(
   return sessions;
 }
 
-TenantShiftController _controller(
-  TenantSessionController sessions,
-  HiveTenantShiftState state,
-  _Server server, {
-  ShiftSalesSummary sales = ShiftSalesSummary.empty,
-}) {
-  var nextShift = 0;
-  return TenantShiftController(
-    sessionController: sessions,
-    localState: state,
-    salesLedger: _Ledger(sales),
-    reader: _Reader(server),
-    writer: FirebaseTenantShiftWriter.forTesting(
-      isOnline: () async => true,
-      create: server.create,
-      update: server.update,
-    ),
-    deviceId: _deviceA,
-    isOnline: () async => true,
-    shiftIdFactory: () => 'shift-${++nextShift}',
-    clock: () => DateTime.utc(2026, 7, 31, 9),
-  );
-}
-
-final List<int> _encryptionKey = List<int>.generate(
-  HiveTenantShiftState.encryptionKeyBytes,
-  (index) => (index * 17) % 256,
-);
-
-Map<String, Object?> _document({Map<String, Object?>? overrides}) {
-  final data = <String, Object?>{
-    'shiftId': 'shift-a',
-    'tenantId': 'tenant-a',
-    'staffId': 'user-a',
-    'deviceId': _deviceA,
-    'businessDate': _businessDate,
-    'status': 'open',
-    'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 6)),
-  };
-  if (overrides != null) data.addAll(overrides);
-  return data;
-}
-
-/// One closing summary with a tender split, as the ledger would have built it.
-ShiftSalesSummary _summary({
-  required int totalMinor,
-  required int transactionCount,
-  Map<CheckoutTender, ShiftTenderTotals> recorded =
-      const <CheckoutTender, ShiftTenderTotals>{},
-  ShiftTenderTotals unrecorded = ShiftTenderTotals.empty,
-  ShiftTenderTotals unrecognised = ShiftTenderTotals.empty,
-}) => ShiftSalesSummary(
-  transactionCount: transactionCount,
-  totalMinor: totalMinor,
-  unsettledCount: 0,
-  tenders: ShiftTenderSplit(
-    recorded: recorded,
-    unrecorded: unrecorded,
-    unrecognised: unrecognised,
-  ),
-);
-
-TenantShiftLocalRecord _record({
-  String uid = 'user-a',
-  String tenantId = 'tenant-a',
-  String shiftId = 'shift-a',
-  bool closeInProgress = false,
-  int? countedCashMinor,
-  DateTime? openedAt,
-}) => TenantShiftLocalRecord(
-  uid: uid,
-  tenantId: tenantId,
-  shiftId: shiftId,
-  businessDate: _businessDate,
-  deviceId: _deviceA,
-  serverConfirmedOpen: true,
-  closeInProgress: closeInProgress,
-  countedCashMinor: countedCashMinor,
-  updatedAt: DateTime.utc(2026, 7, 31, 9),
-  openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),
-);
-
-final class _Server {
-  final Map<String, Map<String, Object?>> shifts =
-      <String, Map<String, Object?>>{};
-  final List<String> reads = <String>[];
-  final List<(String, Map<String, Object?>)> created =
-      <(String, Map<String, Object?>)>[];
-  final List<(String, Map<String, Object?>)> updated =
-      <(String, Map<String, Object?>)>[];
-
-  Future<void> create(String path, Map<String, Object?> data) async {
-    created.add((path, data));
-    shifts[path] = <String, Object?>{
-      ...data,
-      'startTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 6)),
-    };
-  }
-
-  Future<void> update(String path, Map<String, Object?> data) async {
-    updated.add((path, data));
-    final current = shifts[path];
-    if (current == null) throw StateError('No shift at $path.');
-    shifts[path] = <String, Object?>{
-      ...current,
-      ...data,
-      'endTime': Timestamp.fromDate(DateTime.utc(2026, 7, 31, 18)),
-    };
-  }
-}
-
-final class _Reader implements TenantDataReader {
-  _Reader(this._server);
-
-  final _Server _server;
-
-  @override
-  Future<TenantDocumentSnapshot?> getDocument(String path) async {
-    _server.reads.add(path);
-    final data = _server.shifts[path];
-    if (data == null) return null;
-    return TenantDocumentSnapshot(path: path, data: data);
-  }
-
-  @override
-  Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
-    TenantCollectionQuery query,
-  ) async {
-    final matches = <TenantQueryDocumentSnapshot>[];
-    final paths = _server.shifts.keys.toList()..sort();
-    if (query.descending) {
-      paths.sort((left, right) => right.compareTo(left));
-    }
-    for (final path in paths) {
-      if (!path.startsWith('${query.collectionPath}/')) continue;
-      final data = _server.shifts[path]!;
-      if (!query.equalityFilters.entries.every(
-        (filter) => data[filter.key] == filter.value,
-      )) {
-        continue;
-      }
-      matches.add(TenantQueryDocumentSnapshot(path: path, data: data));
-      if (matches.length >= query.limit) break;
-    }
-    return matches;
-  }
-}
-
-/// The panel renders whatever the controller publishes; the sale evidence
-/// itself is proved in the ledger and controller suites.
-final class _Ledger implements ShiftSalesLedger {
-  const _Ledger(this.summary);
-
-  final ShiftSalesSummary summary;
-
-  @override
-  Future<ShiftSalesSummary> summarize({
-    required String uid,
-    required String tenantId,
-    required String shiftId,
-  }) async => summary;
-}
-
-TenantMembership _membership(
-  String tenantId, {
-  TenantRole role = TenantRole.cashier,
-}) => TenantMembership(
-  tenantId: tenantId,
-  tenantName: tenantId,
-  tenantSlug: tenantId,
-  role: role,
-  membershipStatus: MembershipStatus.active,
-  tenantStatus: TenantStatus.active,
-  isOwner: false,
-  mirrorVersion: 1,
-  createdAt: DateTime.utc(2026, 1, 1),
-  updatedAt: DateTime.utc(2026, 1, 1),
-  serverCanAccess: true,
-  canonicalTenantExists: true,
-  canonicalMembershipExists: true,
-);
-
-/// The one line the banner states beneath the standing.
+/// A factory shaped like the composition root's: **one controller per session,
+/// answered again on every call.**
 ///
-/// **Seven facts became one line in §11 step 7**, which is what a banner is:
-/// the status sentence, two "open elsewhere" warnings, the sales summary, the
-/// unsynchronized-sales warning and the error line all competed for the same
-/// row, and `ShiftBanner` carries whichever is loudest. So a test that used to
+/// `main.dart` caches on an `Expando` keyed by the session controller, so a
+/// second host - the till's gate and this panel share one - is handed the
+/// instance the first one is already listening to. A factory that minted a
+/// fresh controller per call, which is what every test here used to pass,
+/// models the ownership this app had before 2026-08-26 and cannot see the one
+/// it has now break. It did not: `TenantShiftPanel` went on disposing a
+/// controller it no longer owned for two days, and the whole suite stayed green
+/// while a device showed *A TenantShiftController was used after being
+/// disposed*.
 /// look for a keyed paragraph reads the line instead.
 String _detail(WidgetTester tester) =>
     tester.widget<ShiftBanner>(find.byType(ShiftBanner)).detail;
