@@ -83,6 +83,12 @@ void main() {
         // trail; `amendShiftSummary` is the only writer, it only ever appends,
         // and the client can never create, change, or erase one.
         TenantCollection.shiftAmendments: 'tenants/tenant-a/shift_amendments',
+        // What the business spent outside the cost of its stock. Added
+        // deliberately: the client is the only writer, a record is immutable
+        // once written, and the only permitted change is a void that freezes
+        // every other key. Owner and administrator only, read as well as
+        // write, matching the roles a profit figure is shown to.
+        TenantCollection.expenses: 'tenants/tenant-a/expenses',
       };
 
       expect(TenantPaths.businessCollections.toSet(), expected.keys.toSet());

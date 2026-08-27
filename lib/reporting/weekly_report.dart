@@ -21,6 +21,9 @@ library;
 import '../checkout/checkout_draft.dart';
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_session.dart';
+import '../expenses/expense.dart';
+import '../expenses/expense_repository.dart';
+import 'net_profit.dart';
 import 'sales_totals.dart';
 
 /// One Monday-to-Sunday week, named by how many weeks back it is.
@@ -118,6 +121,7 @@ final class TenantWeeklyReport {
     required this.recentSales,
     required this.itemsSold,
     required this.scanWasTruncated,
+    this.expenses,
   });
 
   final TenantReportWeek week;
@@ -146,6 +150,21 @@ final class TenantWeeklyReport {
   /// as the whole week is the kind of plausible-but-wrong figure
   /// `DESIGN_RULES.md` is about.
   final bool scanWasTruncated;
+
+  /// What the business spent over the same week, or null where it was not
+  /// read - by role, by wiring, or because the read failed.
+  final TenantExpensePeriod? expenses;
+
+  /// This week after everything the business spent, or null where either half
+  /// is missing.
+  ///
+  /// Composed here so the card and any test ask the same question of the same
+  /// object, rather than each assembling its own.
+  TenantNetProfitReport? get netProfitReport {
+    final gross = totals?.profitReport;
+    if (gross == null || expenses == null) return null;
+    return TenantNetProfitReport.from(gross: gross, expenses: expenses);
+  }
 
   double get sales => totals?.sales ?? 0;
   int get transactions => totals?.transactions ?? 0;
@@ -180,6 +199,7 @@ final class TenantWeeklyReportLoader {
     required TenantSession session,
     required SalesTotalsCallable callable,
     required TenantSaleHistoryRepository sales,
+    TenantExpenseRepository? expenses,
     DateTime Function()? clock,
     this.recentSaleCount = 8,
     this.topItemCount = 5,
@@ -191,11 +211,17 @@ final class TenantWeeklyReportLoader {
          clock: clock,
        ),
        _sales = sales,
+       _expenses = expenses,
        _clock = clock ?? _utcNow;
 
   final TenantSession _session;
   final TenantSalesTotalsGateway _gateway;
   final TenantSaleHistoryRepository _sales;
+
+  /// Reads what the business spent over the same week, or null where this
+  /// session may not be shown it.
+  final TenantExpenseRepository? _expenses;
+
   final DateTime Function() _clock;
 
   final int recentSaleCount;
@@ -255,6 +281,12 @@ final class TenantWeeklyReportLoader {
         categoryId: categoryId,
       ),
       if (elapsed.isNotEmpty) _rollUpItems(week, now: now, soldById: soldById),
+      // **In the same batch, and it is the only member of it that is not a
+      // callable.** A Firestore range walk serves from the offline cache, so
+      // joining the batch costs the week nothing and the net figure lands with
+      // the gross one. Its failure is swallowed into a null, like the previous
+      // week's, so it can share this list safely.
+      _weekExpenses(week, now: now),
     ];
     final settled = await Future.wait(pending);
     final byDate = <String, TenantSalesTotals>{
@@ -265,6 +297,7 @@ final class TenantWeeklyReportLoader {
     final roll = elapsed.isEmpty
         ? const _ItemRoll.empty()
         : settled[elapsed.length + 1]! as _ItemRoll;
+    final expenses = settled.last as TenantExpensePeriod?;
     return TenantWeeklyReport(
       week: week,
       totals: byDate.isEmpty ? null : _sum(byDate.values),
@@ -276,7 +309,31 @@ final class TenantWeeklyReportLoader {
       recentSales: roll.recent.take(recentSaleCount).toList(growable: false),
       itemsSold: roll.itemsSold,
       scanWasTruncated: roll.truncated,
+      expenses: expenses,
     );
+  }
+
+  /// What the business spent over this week, or null where it could not be
+  /// read.
+  ///
+  /// **A failure here drops the net figure rather than the page**, exactly as
+  /// [_previousWeekTotals] drops the comparison: every gross figure on the
+  /// report still stands, and what goes missing is the one card that depends
+  /// on this.
+  Future<TenantExpensePeriod?> _weekExpenses(
+    TenantReportWeek week, {
+    required DateTime now,
+  }) async {
+    final expenses = _expenses;
+    if (expenses == null) return null;
+    try {
+      return await expenses.readRange(
+        startDate: week.startBusinessDate,
+        endDate: week.endBusinessDateAt(now),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// The week before, or null where it could not be read.

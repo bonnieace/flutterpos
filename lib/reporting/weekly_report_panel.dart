@@ -25,6 +25,7 @@ import 'package:intl/intl.dart';
 
 import '../sales/sale_history.dart';
 import '../tenancy/tenant_repository.dart';
+import '../expenses/expense_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
@@ -102,6 +103,13 @@ class _TenantWeeklyReportScreenState extends State<TenantWeeklyReportScreen> {
         session: session,
         callable: widget.callable,
         sales: sales,
+        // Built from this route's own reader, and only for a session that may
+        // be shown spending at all - which is narrower than the roles that may
+        // read this report. A manager sees the week's gross figures and no net
+        // card, which is the same boundary the margin already sits behind.
+        expenses: TenantExpenseRepository.canSeeInSession(session)
+            ? TenantExpenseRepository(session: session, reader: widget.reader)
+            : null,
         clock: widget.clock == null ? null : _now,
       );
       // A stale selection is dropped rather than sent: the same rule the totals

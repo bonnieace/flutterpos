@@ -1,5 +1,6 @@
 export 'daily_metrics.dart';
 export 'daily_metrics_panel.dart';
+export 'net_profit.dart';
 export 'profit_report.dart';
 export 'profit_statement.dart';
 export 'reconciliation_actions.dart';

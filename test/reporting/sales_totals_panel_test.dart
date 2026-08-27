@@ -484,7 +484,19 @@ void main() {
       'tenants/tenant-a/staff/owner-a',
       'tenants/tenant-a/configuration/checkout',
     ]);
-    expect(reader.queries, hasLength(2));
+    // **The categories and the roster are read once each and cached**, which
+    // is what this case is actually about. Asserting on the paths rather than
+    // on a count keeps it about that: the expense range is read again on the
+    // second period because it genuinely depends on the period, and a bare
+    // count would have hidden a cached read leaking out as easily as it hid
+    // this one.
+    expect(
+      reader.queries
+          .map((query) => query.collectionPath)
+          .where((path) => !path.endsWith('/expenses'))
+          .toList(),
+      <String>['tenants/tenant-a/categories', 'tenants/tenant-a/staff'],
+    );
     expect(find.textContaining('KES 4820.75'), findsOne);
   });
 

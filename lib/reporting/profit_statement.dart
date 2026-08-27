@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/stats.dart';
 import '../ui/tokens.dart';
+import 'net_profit.dart';
 import 'profit_report.dart';
 import 'reporting_currency.dart';
 
@@ -21,9 +22,21 @@ final class TenantProfitStatement extends StatelessWidget {
     required this.report,
     required this.currency,
     required this.keyPrefix,
+    this.net,
   });
 
   final TenantProfitReport report;
+
+  /// The same period after what the business *spent*, or null on a surface that
+  /// reads no expenses.
+  ///
+  /// **Null keeps this widget exactly what it was.** The server's profit is
+  /// revenue minus the cost of the goods sold and nothing else; a surface that
+  /// has not read the period's expenses has no business implying otherwise, so
+  /// it passes nothing and the block says `Profit` as it always did. A surface
+  /// that has read them gets the whole statement - gross, spending, and what
+  /// was actually kept.
+  final TenantNetProfitReport? net;
 
   /// The code the business published, or nothing at all. A figure is the reason
   /// this exists; its label is not.
@@ -50,22 +63,58 @@ final class TenantProfitStatement extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final margin = report.marginPercent;
+    final net = this.net;
+    // The spending and what it leaves are shown only when the whole period's
+    // expenses were read. A partial expense total subtracts too little, which
+    // makes what the business kept look *better* than it was - the same
+    // overstatement `TenantProfitBasis.incomplete` refuses a gross figure for.
+    final showsNet = net != null && net.isShowable;
+    final netMargin = net?.netMarginPercent;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (report.isShowable) ...[
           StatLine(
-            label: 'Profit',
+            // Renamed only where there is a second figure to tell it apart
+            // from. On a surface reading no expenses this is the only profit
+            // there is, and calling it gross would imply a net it never shows.
+            label: net == null ? 'Profit' : 'Gross profit',
             money: true,
             value: currency.format(report.profit),
             valueKey: ValueKey('$keyPrefix-profit'),
+            detail: net == null ? null : 'After the cost of the goods sold',
           ),
           if (margin != null)
             StatLine(
-              label: 'Margin',
+              label: net == null ? 'Margin' : 'Gross margin',
               value: '${margin.toStringAsFixed(1)}%',
               valueKey: ValueKey('$keyPrefix-margin'),
             ),
+          if (showsNet) ...[
+            StatLine(
+              label: 'Expenses',
+              money: true,
+              value: currency.format(net.expenses),
+              valueKey: ValueKey('$keyPrefix-expenses'),
+              detail: 'Rent, wages, transport and the rest',
+            ),
+            StatLine(
+              // **The one the others add up to**, which is what `emphasis` is
+              // for. It is also the only figure on this block that answers the
+              // question a shopkeeper actually asks.
+              label: 'Net profit',
+              money: true,
+              emphasis: true,
+              value: currency.format(net.netProfit),
+              valueKey: ValueKey('$keyPrefix-net-profit'),
+            ),
+            if (netMargin != null)
+              StatLine(
+                label: 'Net margin',
+                value: '${netMargin.toStringAsFixed(1)}%',
+                valueKey: ValueKey('$keyPrefix-net-margin'),
+              ),
+          ],
         ],
         Padding(
           padding: EdgeInsets.only(top: tokens.spacing.s4),
@@ -77,9 +126,37 @@ final class TenantProfitStatement extends StatelessWidget {
             ),
           ),
         ),
+        if (_netNote() case final note?)
+          Padding(
+            padding: EdgeInsets.only(top: tokens.spacing.s4),
+            child: Text(
+              key: ValueKey('$keyPrefix-net-profit-note'),
+              note,
+              style: tokens.typography.caption.copyWith(
+                color: tokens.colors.text.tertiary,
+              ),
+            ),
+          ),
       ],
     );
   }
+
+  /// What is known about the spending behind the net figure, or `null` where
+  /// there is no net figure to qualify.
+  ///
+  /// The same discipline [_note] enforces for the gross figure, applied to the
+  /// new way this one can be wrong. A withheld gross needs no sentence of its
+  /// own here - [_note] has already said nothing is being shown and why, and
+  /// repeating it in different words would read as a second, separate problem.
+  String? _netNote() => switch (net?.basis) {
+    null || TenantNetProfitBasis.grossWithheld => null,
+    TenantNetProfitBasis.complete =>
+      'Net profit is what was left after the spending recorded for this '
+          'period.',
+    TenantNetProfitBasis.expensesUnread =>
+      'Net profit is not shown: some of what this business spent could not be '
+          'read, and leaving it out would overstate what was kept.',
+  };
 
   String _note() => switch (report.basis) {
     // The positive form of the requirement, and the reason it is stated rather

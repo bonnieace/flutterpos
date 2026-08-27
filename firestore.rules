@@ -461,6 +461,74 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // What the business spent that no sale line accounts for - rent, wages,
+      // fuel, a repair. Profit as this system computes it is revenue minus the
+      // cost of the goods sold, so without these a shop can be losing money
+      // while every report shows a healthy margin.
+      //
+      // **Owner and administrator only, read as well as write.** That is the
+      // same list a profit figure is shown to, and narrower than the one that
+      // may read the takings: an expense is cost, and nobody should be writing
+      // into a figure they are not shown. Unlike daily_metrics - which a
+      // manager's device already holds in full, making its narrower surface a
+      // presentation choice - this is a real boundary.
+      //
+      // A record is immutable once written. The only permitted update is a
+      // void, which adds three keys and freezes every other one, so a mistake
+      // leaves both the original and the correction on the record.
+      match /expenses/{expenseId} {
+        allow read: if hasTenantRole(tenantId, ['owner', 'admin']);
+        allow create: if hasTenantRole(tenantId, ['owner', 'admin'])
+          && expenseId == request.resource.data.expenseId
+          && request.resource.data.tenantId == tenantId
+          && request.resource.data.recordedBy == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.businessDate is string
+          && request.resource.data.businessDate.matches(
+            '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          )
+          // The key carries the business date because that is the only way a
+          // client can read a date range: every page is ordered by document ID
+          // and takes no range filter. A record whose key disagreed with its
+          // own field would be counted into a period it does not belong to, so
+          // the two are pinned together here rather than trusted to agree.
+          // The date is checked against its own pattern first, so it cannot
+          // smuggle a wildcard into this one.
+          && expenseId.matches(
+            '^' + request.resource.data.businessDate + '-[A-Za-z0-9_-]{1,64}$'
+          )
+          && request.resource.data.category in [
+            'rent', 'wages', 'utilities', 'transport',
+            'supplies', 'repairs', 'licences', 'other'
+          ]
+          && request.resource.data.description is string
+          && request.resource.data.description.size() >= 3
+          && request.resource.data.description.size() <= 500
+          // Zero is refused with the negatives: an expense of nothing did not
+          // happen, and recording one puts a row on a report that no money
+          // corresponds to.
+          && request.resource.data.amountMinor is int
+          && request.resource.data.amountMinor > 0
+          && request.resource.data.amountMinor <= 100000000000
+          && request.resource.data.amount is number
+          && request.resource.data.keys().hasOnly([
+            'expenseId', 'tenantId', 'businessDate', 'category',
+            'description', 'amountMinor', 'amount', 'recordedBy', 'createdAt'
+          ]);
+        // The void, and nothing else. A record that has already been voided
+        // cannot be re-voided or its reason reworded.
+        allow update: if hasTenantRole(tenantId, ['owner', 'admin'])
+          && !('voidedAt' in resource.data)
+          && request.resource.data.voidedAt == request.time
+          && request.resource.data.voidedBy == request.auth.uid
+          && request.resource.data.voidReason is string
+          && request.resource.data.voidReason.size() >= 3
+          && request.resource.data.voidReason.size() <= 500
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['voidedAt', 'voidedBy', 'voidReason']);
+        allow delete: if false;
+      }
+
       match /configuration/{documentId} {
         allow read: if activeStaff(tenantId);
         allow write: if hasTenantRole(tenantId, ['owner', 'admin']);

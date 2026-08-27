@@ -18,6 +18,7 @@ import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart'
 import 'audit/audit.dart';
 import 'checkout/checkout.dart';
 import 'dev/firebase_emulators.dart';
+import 'expenses/expenses.dart';
 import 'inventory/inventory.dart';
 import 'reporting/reporting.dart';
 import 'returns/returns.dart';
@@ -337,6 +338,14 @@ class SpiritPOSApp extends StatelessWidget {
       ),
       verifyCallable: FirebaseVerifyReturnCallable(),
     );
+    // What the business spends outside its stock. Recording is owner and
+    // administrator only - the rules enforce it - and the same online check
+    // every other client write uses: an expense is recorded on the server, so
+    // there is nothing honest to show for one attempted with no connection.
+    final expenseWriter = FirebaseTenantExpenseWriter(
+      firestore: FirebaseFirestore.instance,
+      isOnline: isOnline,
+    );
     // The only path in the app that can set stock to an arbitrary figure.
     // It is management-only, which the callable itself enforces, and it is
     // reached one product at a time from the read-only catalog.
@@ -499,6 +508,9 @@ class SpiritPOSApp extends StatelessWidget {
           ),
         ),
         dailySummaryRoles: TenantSalesTotalsGateway.allowedRoles,
+        expensesRoute: (reader) =>
+            TenantExpensesScreen(reader: reader, writer: expenseWriter),
+        expensesRoles: TenantExpenseRepository.allowedRoles,
         receiptLookupRoute: (reader) => TenantSalesReportScreen(
           reader: reader,
           reportReader: tenantDataReader,

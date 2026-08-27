@@ -3,6 +3,8 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_staff_directory.dart';
 import 'reporting_currency.dart';
+import '../expenses/expense.dart';
+import 'net_profit.dart';
 import 'sales_totals.dart';
 
 /// The categories one session may filter by, and whether they could be read.
@@ -94,10 +96,37 @@ final class SalesTotalsSessionContext {
 
 /// One period's totals together with the context they are labelled by.
 final class SalesTotalsView {
-  const SalesTotalsView({required this.totals, required this.context});
+  const SalesTotalsView({
+    required this.totals,
+    required this.context,
+    this.expenses,
+  });
 
   final TenantSalesTotals totals;
   final SalesTotalsSessionContext context;
+
+  /// What the business spent over the same stretch of days, or null where it
+  /// was not read.
+  ///
+  /// **Never read for a filtered view, and that is a correctness rule rather
+  /// than a saving.** An expense belongs to the business and to a date; it
+  /// belongs to no colleague and to no product category. Subtracting the whole
+  /// shop's rent from one cashier's takings, or from the gross profit of one
+  /// category, produces a number that looks like net profit and is not one.
+  /// So the loader reads spending only for the unfiltered, whole-business
+  /// view, and every filtered view shows gross alone.
+  final TenantExpensePeriod? expenses;
+
+  /// This period after everything the business spent, or null where either
+  /// half is missing.
+  TenantNetProfitReport? get netProfitReport {
+    final spending = expenses;
+    if (spending == null) return null;
+    return TenantNetProfitReport.from(
+      gross: totals.profitReport,
+      expenses: spending,
+    );
+  }
 }
 
 /// Reads this session's categories, colleagues, and currency once each.

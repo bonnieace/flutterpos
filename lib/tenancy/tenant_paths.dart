@@ -42,7 +42,17 @@ enum TenantCollection {
   /// never create, amend, or erase one. Each record states what the shift said
   /// before, what it says now, why, and who asked - and that the counted cash
   /// was left alone.
-  shiftAmendments('shift_amendments');
+  shiftAmendments('shift_amendments'),
+
+  /// What the business spent that no sale line accounts for - rent, wages,
+  /// fuel, a repair. The client is the only writer, and a record is immutable
+  /// once written: a mistake is voided, never edited away.
+  ///
+  /// **A document ID here begins with the business date it belongs to**, which
+  /// is not decoration. [TenantReadRepository] orders a page by document ID and
+  /// takes only equality filters, so a date *range* is reachable only if the
+  /// ordering key already carries the date. See `tenantExpenseId`.
+  expenses('expenses');
 
   const TenantCollection(this.segment);
 
@@ -87,6 +97,7 @@ final class TenantPaths {
     TenantCollection.reconciliationDirtyDays,
     TenantCollection.reconciliationAnomalies,
     TenantCollection.shiftAmendments,
+    TenantCollection.expenses,
   ];
 
   final String tenantId;
@@ -119,6 +130,7 @@ final class TenantPaths {
       collectionPath(TenantCollection.reconciliationDirtyDays);
   String get shiftAmendments =>
       collectionPath(TenantCollection.shiftAmendments);
+  String get expenses => collectionPath(TenantCollection.expenses);
 
   String product(String productId) =>
       documentPath(TenantCollection.products, productId);
@@ -129,6 +141,8 @@ final class TenantPaths {
       documentPath(TenantCollection.shifts, shiftId);
   String returnRecord(String returnId) =>
       documentPath(TenantCollection.returns, returnId);
+  String expenseRecord(String expenseId) =>
+      documentPath(TenantCollection.expenses, expenseId);
   String staffMember(String uid) => documentPath(TenantCollection.staff, uid);
   String configurationDocument(String documentId) =>
       documentPath(TenantCollection.configuration, documentId);

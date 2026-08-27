@@ -1,0 +1,750 @@
+/// The Expenses route: what the business spent, and recording more of it.
+///
+/// **The two ideas carried across from the project this came from** are the
+/// per-category share bars and a detail view per category. Both read without a
+/// charting library, which is why they survived: a ring chart of eight slices
+/// is a legend a person has to decode, while a labelled bar with its own figure
+/// beside it is read in one pass. Everything else there - free-text categories,
+/// a collection scan per keystroke, a client clock - is rebuilt here against
+/// this app's own contracts.
+library;
+
+import 'package:flutter/material.dart';
+
+import '../checkout/checkout_draft.dart';
+import '../reporting/reporting_currency.dart';
+import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
+import '../ui/buttons.dart';
+import '../ui/card.dart';
+import '../ui/chips.dart';
+import '../ui/fields.dart';
+import '../ui/record_list.dart';
+import '../ui/scaffold.dart';
+import '../ui/sheet.dart';
+import '../ui/skeleton.dart';
+import '../ui/snackbar.dart';
+import '../ui/states.dart';
+import '../ui/stats.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
+import 'expense.dart';
+import 'expense_repository.dart';
+import 'expense_request.dart';
+
+/// The stretch of trading days this route totals.
+///
+/// **A chip strip rather than a dropdown**, which is this app's own rule: a
+/// surface carrying one filter shows its options without a tap, and only a
+/// surface carrying several folds them into `AppSelect`.
+enum TenantExpenseRange {
+  today(1, 'Today'),
+  last7Days(7, 'Last 7 days'),
+  last30Days(30, 'Last 30 days');
+
+  const TenantExpenseRange(this.days, this.label);
+
+  /// How many business dates the range covers, including today.
+  final int days;
+
+  final String label;
+}
+
+/// The Expenses route.
+final class TenantExpensesScreen extends StatelessWidget {
+  const TenantExpensesScreen({
+    super.key,
+    required this.reader,
+    this.writer,
+    this.clock,
+  });
+
+  final TenantDataReader reader;
+
+  /// The write boundary, or null on a build with no recording wired up - in
+  /// which case this route reads and never offers a form it cannot submit.
+  final TenantExpenseWriter? writer;
+
+  final DateTime Function()? clock;
+
+  @override
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Expenses',
+    subtitle: 'What the business spent, beyond the cost of its stock.',
+    contentWidth: AppContentWidth.records,
+    body: TenantExpensesPanel(reader: reader, writer: writer, clock: clock),
+  );
+}
+
+/// Reads and records expenses behind [TenantRouteGuard].
+final class TenantExpensesPanel extends StatefulWidget {
+  const TenantExpensesPanel({
+    super.key,
+    required this.reader,
+    this.writer,
+    this.clock,
+  });
+
+  final TenantDataReader reader;
+  final TenantExpenseWriter? writer;
+  final DateTime Function()? clock;
+
+  @override
+  State<TenantExpensesPanel> createState() => _TenantExpensesPanelState();
+}
+
+class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
+  TenantExpenseRange _range = TenantExpenseRange.last30Days;
+  int _generation = 0;
+
+  String? _loaderKey;
+  TenantGuardedLoader<_ExpensesView>? _loader;
+
+  DateTime get _now => (widget.clock ?? _utcNow)().toUtc();
+
+  /// Re-reads the period, after a record or a void changed what is in it.
+  void _reload() => setState(() => _generation++);
+
+  /// One loader per guard key. A closure rebuilt every frame would re-read on
+  /// every keystroke of the form above it.
+  TenantGuardedLoader<_ExpensesView> _loaderFor(String key) {
+    if (key == _loaderKey && _loader != null) return _loader!;
+    _loaderKey = key;
+    final endDate = checkoutBusinessDate(_now);
+    final startDate = checkoutBusinessDate(
+      _now.subtract(Duration(days: _range.days - 1)),
+    );
+    return _loader = (session) async {
+      // **Both are Firestore reads and both serve from the cache**, so they are
+      // started together and neither waits on the other's round trip. There is
+      // no callable anywhere on this page, which is why it works with no signal
+      // at all - and why net profit is composed on the client from this rather
+      // than asked of a server.
+      final period = TenantExpenseRepository(
+        session: session,
+        reader: widget.reader,
+      ).readRange(startDate: startDate, endDate: endDate);
+      final currency = TenantReportingCurrency.read(
+        session: session,
+        reader: widget.reader,
+      );
+      return (period: await period, currency: await currency);
+    };
+  }
+
+  Future<void> _record(TenantSession session) async {
+    final writer = widget.writer;
+    if (writer == null) return;
+    final answer = await showExpenseRecordSheet(
+      context,
+      writer: writer,
+      session: session,
+      businessDate: checkoutBusinessDate(_now),
+    );
+    if (!mounted || answer == null) return;
+    showAppSnackBar(context, answer);
+    if (answer.status == AppStatus.ok) _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final guardKey = '${_range.name}:$_generation';
+    final chips = Padding(
+      padding: EdgeInsets.only(bottom: tokens.spacing.s20),
+      child: FilterChipBar<TenantExpenseRange>(
+        key: const ValueKey('expenses-range'),
+        semanticLabel: 'The stretch of days these expenses cover.',
+        options: <FilterChipOption<TenantExpenseRange>>[
+          for (final range in TenantExpenseRange.values)
+            FilterChipOption<TenantExpenseRange>(
+              key: ValueKey('expenses-range-${range.name}'),
+              value: range,
+              label: range.label,
+            ),
+        ],
+        selected: _range,
+        // There is no "no period" reading of this page, so a deselection is
+        // refused rather than silently mapped onto a default - the same call
+        // the sales totals period chooser makes.
+        onSelected: (range) {
+          if (range == null || range == _range) return;
+          setState(() => _range = range);
+        },
+      ),
+    );
+    return TenantRouteGuard<_ExpensesView>(
+      key: ValueKey(guardKey),
+      allowedRoles: TenantExpenseRepository.allowedRoles,
+      load: _loaderFor(guardKey),
+      // **The chooser stays on screen through every phase**, the way the sales
+      // totals page keeps its own: the control that would take a person to a
+      // different period must not be behind the read of this one.
+      loading: _ExpensesFrame(chips: chips, child: const _ExpensesReading()),
+      denied: _ExpensesFrame(
+        chips: chips,
+        child: const EmptyState(
+          key: ValueKey('expenses-denied'),
+          title: 'Expenses are not shown for this role',
+          hint: 'An owner or an administrator can record and review them.',
+        ),
+      ),
+      failure: (context, error) => _ExpensesFrame(
+        chips: chips,
+        child: const ErrorState(
+          key: ValueKey('expenses-failure'),
+          badgeLabel: 'Not read',
+          statement: 'What this business spent could not be read.',
+          stillTrue: 'Nothing has been recorded or changed.',
+        ),
+      ),
+      builder: (context, session, view) => _ExpensesFrame(
+        chips: chips,
+        child: _ExpensesContents(
+          period: view.period,
+          currency: view.currency,
+          range: _range,
+          canRecord: widget.writer != null,
+          onRecord: () => _record(session),
+        ),
+      ),
+    );
+  }
+}
+
+/// The period, and the code its figures are labelled with.
+typedef _ExpensesView = ({
+  TenantExpensePeriod period,
+  TenantReportingCurrency currency,
+});
+
+/// The chooser, then whatever the page has to say beneath it.
+///
+/// **A `ListView` rather than a `Column`, and that is not cosmetic.** A month
+/// of a real business is hundreds of records; `RecordList` lays them out and
+/// does not scroll them, so the page owning the scroll is what stops the list
+/// running off the bottom. Every other record page here does the same, with the
+/// same padding.
+final class _ExpensesFrame extends StatelessWidget {
+  const _ExpensesFrame({required this.chips, required this.child});
+
+  final Widget chips;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('expenses'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: <Widget>[chips, child],
+    );
+  }
+}
+
+/// What is known once the period has been read.
+final class _ExpensesContents extends StatelessWidget {
+  const _ExpensesContents({
+    required this.period,
+    required this.currency,
+    required this.range,
+    required this.canRecord,
+    required this.onRecord,
+  });
+
+  final TenantExpensePeriod period;
+  final TenantReportingCurrency currency;
+  final TenantExpenseRange range;
+  final bool canRecord;
+  final VoidCallback onRecord;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        // The same note the daily summary and the totals page carry, in the
+        // same place: a figure is why this route exists, its label is not.
+        if (!currency.isKnown) ...<Widget>[
+          const Callout(
+            key: ValueKey('expenses-currency-unknown'),
+            status: AppStatus.info,
+            message: TenantReportingCurrency.unknownNotice,
+          ),
+          SizedBox(height: tokens.spacing.s16),
+        ],
+        StatRow(
+          tiles: <StatTile>[
+            StatTile(
+              key: const ValueKey('expenses-total'),
+              label: 'Spent',
+              value: currency.format(period.total),
+              money: true,
+              icon: Icons.receipt_outlined,
+              detail: range.label,
+            ),
+            StatTile(
+              key: const ValueKey('expenses-count'),
+              label: 'Records',
+              value: '${period.records.where((e) => !e.isVoided).length}',
+              icon: Icons.list_alt_outlined,
+              detail: range.label,
+            ),
+          ],
+        ),
+        if (period.truncated) ...<Widget>[
+          SizedBox(height: tokens.spacing.s16),
+          const Callout(
+            key: ValueKey('expenses-truncated'),
+            status: AppStatus.attention,
+            title: 'This total is not the whole period',
+            message:
+                'More expenses were recorded than one reading holds, so what '
+                'is shown above is only part of the spending. Choose a shorter '
+                'stretch of days to see a complete total.',
+          ),
+        ],
+        if (canRecord) ...<Widget>[
+          SizedBox(height: tokens.spacing.s20),
+          AppButton(
+            key: const ValueKey('expenses-record'),
+            label: 'Record expense',
+            tier: AppButtonTier.primary,
+            icon: Icons.add,
+            onPressed: onRecord,
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s32),
+        _CategoryShares(period: period, currency: currency),
+        SizedBox(height: tokens.spacing.s32),
+        RecordList(
+          identityLabel: 'Expense',
+          items: <RecordItem>[
+            for (final record in period.records) _recordItem(record, currency),
+          ],
+          empty: EmptyState(
+            key: const ValueKey('expenses-empty'),
+            title: 'Nothing recorded ${range.label.toLowerCase()}',
+            hint: canRecord
+                ? 'Record rent, wages, fuel or a repair and it counts against '
+                      'profit from then on.'
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  RecordItem _recordItem(
+    TenantExpense record,
+    TenantReportingCurrency currency,
+  ) => RecordItem(
+    id: record.expenseId,
+    recordKey: ValueKey('expense-${record.expenseId}'),
+    title: record.description,
+    subtitle: record.category.label,
+    // A voided record keeps its place in the list and says what it is. It is
+    // money that did not leave the business, and every total here excludes it.
+    status: record.isVoided
+        ? const RecordStatus(status: AppStatus.neutral, label: 'Voided')
+        : null,
+    attributes: <RecordAttribute>[
+      RecordAttribute(
+        label: 'Amount',
+        value: currency.format(record.amount),
+        kind: RecordValueKind.money,
+        valueKey: ValueKey('expense-amount-${record.expenseId}'),
+      ),
+      RecordAttribute(label: 'Date', value: record.businessDate),
+    ],
+  );
+}
+
+/// What each category took of the period's spending.
+///
+/// **The one visual idea carried over intact.** A labelled bar with its own
+/// figure beside it says which category is eating the month without a legend,
+/// a colour key, or a charting library - and the figure is what makes the bar
+/// legible rather than decorative. **The share is never the only signal**: it
+/// is stated in words for a screen reader, drawn as a bar, and printed as money
+/// on the same row, so nothing here depends on seeing a length or a colour.
+final class _CategoryShares extends StatelessWidget {
+  const _CategoryShares({required this.period, required this.currency});
+
+  final TenantExpensePeriod period;
+  final TenantReportingCurrency currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final categories = period.spentCategories;
+    if (categories.isEmpty) return const SizedBox.shrink();
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            'Where it went',
+            style: tokens.typography.labelEyebrow.copyWith(
+              color: tokens.colors.text.tertiary,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s16),
+          for (final category in categories) ...<Widget>[
+            if (category != categories.first)
+              SizedBox(height: tokens.spacing.s16),
+            _CategoryShareRow(
+              category: category,
+              amount: (period.totalByCategory[category] ?? 0) / 100,
+              share: period.shareOf(category),
+              currency: currency,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+final class _CategoryShareRow extends StatelessWidget {
+  const _CategoryShareRow({
+    required this.category,
+    required this.amount,
+    required this.share,
+    required this.currency,
+  });
+
+  final TenantExpenseCategory category;
+  final double amount;
+  final double? share;
+  final TenantReportingCurrency currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final fraction = share ?? 0;
+    final percent = (fraction * 100).toStringAsFixed(0);
+    return Semantics(
+      container: true,
+      label:
+          '${category.label}, ${currency.format(amount)}, '
+          '$percent per cent of what was spent.',
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  category.label,
+                  key: ValueKey('expense-share-${category.wireValue}'),
+                  style: tokens.typography.labelMedium.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Text(
+                '$percent%',
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.tertiary,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Text(
+                currency.format(amount),
+                key: ValueKey('expense-share-amount-${category.wireValue}'),
+                style: tokens.typography.numericBody.copyWith(
+                  color: tokens.colors.text.money,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(tokens.radius.sm),
+            child: LinearProgressIndicator(
+              value: fraction,
+              minHeight: tokens.spacing.s8,
+              backgroundColor: tokens.colors.surface.field,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                tokens.colors.chart.bar,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The page while its own read is still running.
+///
+/// Shaped like what is coming - two figure tiles, a block where the shares go,
+/// three record rows - rather than one grey slab, and it claims nothing: no
+/// zero total, no "nothing recorded", both of which are answers this page does
+/// not have yet.
+final class _ExpensesReading extends StatelessWidget {
+  const _ExpensesReading();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return SkeletonGroup(
+      key: const ValueKey('expenses-reading'),
+      semanticLabel: 'Reading what this business spent.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              for (var tile = 0; tile < 2; tile++) ...<Widget>[
+                if (tile > 0) SizedBox(width: tokens.spacing.s16),
+                Expanded(
+                  child: SkeletonBlock(
+                    height: tokens.spacing.s64 + tokens.spacing.s24,
+                    radius: tokens.radius.lg,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s32),
+          for (var row = 0; row < 3; row++) ...<Widget>[
+            if (row > 0) SizedBox(height: tokens.spacing.s16),
+            SkeletonLine(
+              widthFactor: 0.9 - row * 0.15,
+              style: tokens.typography.bodyMedium,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Opens the record form as a sheet over the list it will add to.
+///
+/// A sheet rather than a route, for the same reason the stock correction is
+/// one: recording an expense is a short errand with one answer, and pushing a
+/// screen takes a person away from the period they were reading.
+Future<AppNotice?> showExpenseRecordSheet(
+  BuildContext context, {
+  required TenantExpenseWriter writer,
+  required TenantSession session,
+  required String businessDate,
+}) => showAppSheet<AppNotice>(
+  context,
+  initialDetent: AppSheetDetent.full,
+  builder: (sheetContext, scrollController) => _RecordExpenseForm(
+    writer: writer,
+    session: session,
+    businessDate: businessDate,
+    scrollController: scrollController,
+    onCompleted: (notice) => Navigator.of(sheetContext).pop(notice),
+    onCancel: () => Navigator.of(sheetContext).pop(),
+  ),
+);
+
+final class _RecordExpenseForm extends StatefulWidget {
+  const _RecordExpenseForm({
+    required this.writer,
+    required this.session,
+    required this.businessDate,
+    required this.scrollController,
+    required this.onCompleted,
+    required this.onCancel,
+  });
+
+  final TenantExpenseWriter writer;
+  final TenantSession session;
+  final String businessDate;
+  final ScrollController scrollController;
+  final ValueChanged<AppNotice> onCompleted;
+  final VoidCallback onCancel;
+
+  @override
+  State<_RecordExpenseForm> createState() => _RecordExpenseFormState();
+}
+
+class _RecordExpenseFormState extends State<_RecordExpenseForm> {
+  final TextEditingController _description = TextEditingController();
+  final TextEditingController _amount = TextEditingController();
+
+  /// **No default category.** A chooser that opens on one makes that one the
+  /// cheapest answer, and a report where most of the money sits under whatever
+  /// the form opened on tells its reader nothing.
+  TenantExpenseCategory? _category;
+
+  bool _busy = false;
+  String? _error;
+
+  /// Held across an ambiguous attempt, so a retry addresses the same document
+  /// rather than filing the expense twice.
+  String? _token;
+
+  @override
+  void dispose() {
+    _description.dispose();
+    _amount.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final category = _category;
+    if (category == null) {
+      setState(() => _error = 'Choose what this expense was for.');
+      return;
+    }
+    final amountMinor = checkoutMinorUnitsFromMajor(
+      double.tryParse(_amount.text.trim()) ?? -1,
+    );
+    if (amountMinor == null || amountMinor <= 0) {
+      setState(() => _error = 'Enter an amount greater than zero.');
+      return;
+    }
+    if (_description.text.trim().length < 3) {
+      setState(() => _error = 'Say in a few words what this was for.');
+      return;
+    }
+
+    final TenantExpenseCreateIntent intent;
+    try {
+      intent = TenantExpenseCreateIntent(
+        tenantId: widget.session.tenantId,
+        businessDate: widget.businessDate,
+        token: _token ??= secureTenantExpenseToken(),
+        category: category,
+        description: _description.text,
+        amountMinor: amountMinor,
+        recordedBy: widget.session.uid,
+      );
+    } on TenantExpenseException {
+      setState(() => _error = 'This expense could not be recorded as entered.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final result = await widget.writer.recordExpense(intent);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    switch (result.kind) {
+      case TenantExpenseWriteKind.committed:
+        widget.onCompleted(
+          const AppNotice(message: 'Expense recorded.', status: AppStatus.ok),
+        );
+      case TenantExpenseWriteKind.unavailable:
+        setState(
+          () => _error =
+              'This device is offline. An expense is recorded on the server, '
+              'so it has to wait for a connection.',
+        );
+      case TenantExpenseWriteKind.rejected:
+        // A rejection will not change on a retry, so the held token is dropped
+        // and the next attempt is a genuinely new record.
+        _token = null;
+        setState(() => _error = 'The server refused this expense.');
+      case TenantExpenseWriteKind.ambiguous:
+        setState(
+          () => _error =
+              'It is not known whether this was recorded. Try again - the same '
+              'entry cannot be filed twice.',
+        );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      controller: widget.scrollController,
+      padding: EdgeInsets.all(tokens.spacing.s24),
+      children: <Widget>[
+        Text(
+          'Record an expense',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s8),
+        Text(
+          'It counts against profit for ${widget.businessDate}.',
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s24),
+        // Typed nullable so the field can stand empty: see [_category].
+        AppSelect<TenantExpenseCategory?>(
+          key: const ValueKey('expense-category'),
+          label: 'What for',
+          value: _category,
+          enabled: !_busy,
+          helper: 'Rent, wages, fuel, a repair.',
+          items: <AppSelectItem<TenantExpenseCategory?>>[
+            for (final category in TenantExpenseCategory.values)
+              AppSelectItem<TenantExpenseCategory?>(
+                key: ValueKey('expense-category-${category.wireValue}'),
+                value: category,
+                label: category.label,
+              ),
+          ],
+          onChanged: (category) => setState(() => _category = category),
+        ),
+        SizedBox(height: tokens.spacing.s20),
+        AppTextField(
+          key: const ValueKey('expense-description'),
+          label: 'Description',
+          controller: _description,
+          enabled: !_busy,
+          maxLength: 500,
+          placeholder: 'August rent',
+        ),
+        SizedBox(height: tokens.spacing.s20),
+        AppTextField(
+          key: const ValueKey('expense-amount'),
+          label: 'Amount',
+          controller: _amount,
+          enabled: !_busy,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        ),
+        if (_error case final message?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s20),
+          Callout(
+            key: const ValueKey('expense-error'),
+            status: AppStatus.problem,
+            message: message,
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s32),
+        AppButton(
+          key: const ValueKey('expense-submit'),
+          label: 'Record expense',
+          tier: AppButtonTier.primary,
+          loading: _busy,
+          expand: true,
+          onPressed: _busy ? null : _submit,
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        AppButton(
+          key: const ValueKey('expense-cancel'),
+          label: 'Cancel',
+          expand: true,
+          onPressed: _busy ? null : widget.onCancel,
+        ),
+      ],
+    );
+  }
+}
+
+DateTime _utcNow() => DateTime.now().toUtc();

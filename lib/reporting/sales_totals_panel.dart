@@ -8,11 +8,15 @@ import '../ui/tokens.dart';
 import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import 'profit_report.dart';
 import 'profit_statement.dart';
 import 'reporting_currency.dart';
+import '../expenses/expense.dart';
+import '../expenses/expense_repository.dart';
+import 'net_profit.dart';
 import 'sales_totals.dart';
 import 'sales_totals_choosers.dart';
 import 'sales_totals_session_context.dart';
@@ -97,6 +101,30 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
   String? _loaderKey;
   TenantGuardedLoader<SalesTotalsView>? _loader;
 
+  /// What the business spent over the same days, or null.
+  ///
+  /// Swallowed into a null on failure, like every other qualifier on this page:
+  /// an expense read that did not answer must remove the net figure, never the
+  /// takings a manager came here for.
+  Future<TenantExpensePeriod?> _readExpenses(
+    TenantSession session,
+    TenantSalesTotalsQuery query,
+  ) async {
+    if (query.soldById != null ||
+        query.categoryId != null ||
+        !TenantExpenseRepository.canSeeInSession(session)) {
+      return null;
+    }
+    try {
+      return await TenantExpenseRepository(
+        session: session,
+        reader: widget.reader,
+      ).readRange(startDate: query.startDate, endDate: query.endDate);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// The category list, staff list, and currency for one session, so none of
   /// them can label - or filter - another business's figures. All three are
   /// cached because the filters change often and none of them depends on the
@@ -162,15 +190,22 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
                   context.staff.contains(chosenMember))
           ? chosenMember
           : null;
-      return SalesTotalsView(
-        totals: await gateway.load(
-          gateway.createQuery(
-            period: period,
-            soldById: soldById,
-            categoryId: categoryId,
-          ),
+      final totals = await gateway.load(
+        gateway.createQuery(
+          period: period,
+          soldById: soldById,
+          categoryId: categoryId,
         ),
+      );
+      return SalesTotalsView(
+        totals: totals,
         context: context,
+        // Only for the whole business over the whole period - see
+        // `SalesTotalsView.expenses` for why a filtered view gets none. The
+        // dates come from the answered query rather than the selection, so the
+        // spending covers exactly the days the takings above it were counted
+        // over.
+        expenses: await _readExpenses(session, totals.query),
       );
     };
   }
@@ -225,6 +260,7 @@ final class _TenantSalesTotalsPanelState extends State<TenantSalesTotalsPanel> {
         // filters above are read from the answer rather than the selection.
         showProfit: TenantProfitReport.canSeeInSession(session),
         totals: view.totals,
+        net: view.netProfitReport,
       ),
     );
   }
@@ -272,6 +308,7 @@ final class _SalesTotalsContents extends StatelessWidget {
     required this.onRetry,
     required this.showProfit,
     this.totals,
+    this.net,
     this.failureMessage,
   });
 
@@ -293,6 +330,10 @@ final class _SalesTotalsContents extends StatelessWidget {
   final bool showProfit;
 
   final TenantSalesTotals? totals;
+
+  /// The same period after what the business spent, or null where it was not
+  /// read - including every filtered view.
+  final TenantNetProfitReport? net;
   final String? failureMessage;
 
   TenantReportingCurrency get _currency => sessionContext.currency;
@@ -418,6 +459,10 @@ final class _SalesTotalsContents extends StatelessWidget {
                       report: answer.profitReport,
                       currency: _currency,
                       keyPrefix: 'sales-totals',
+                      // Null for a filtered view, which is what keeps the
+                      // shop's whole rent from being subtracted from one
+                      // colleague's takings. See `SalesTotalsView.expenses`.
+                      net: net,
                     ),
                   ] else if (!answer.hasCompleteCostData) ...[
                     SizedBox(height: tokens.spacing.s8),

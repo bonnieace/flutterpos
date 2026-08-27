@@ -295,6 +295,7 @@ final class _MetricGrid extends StatelessWidget {
     final data = report;
     final previous = data?.previousTotals;
     final profit = data?.totals?.profitReport;
+    final net = data?.netProfitReport;
     final cards = <Widget>[
       _MetricCard(
         cardKey: const ValueKey('weekly-report-sales'),
@@ -328,6 +329,31 @@ final class _MetricGrid extends StatelessWidget {
           comparisonLabel: _comparisonLabel,
           icon: Icons.trending_up,
           emphasis: (profit?.profit ?? 0) >= 0,
+        ),
+      // **A card of its own rather than a changed GROSS PROFIT.** The two
+      // answer different questions - what the stock earned, and what the
+      // business kept - and a week where they diverge sharply is exactly the
+      // week somebody needs to see both. It appears only where the spending
+      // was read; a week with no expense reading shows gross alone, as this
+      // page always did.
+      if (showProfit && net != null)
+        _MetricCard(
+          cardKey: const ValueKey('weekly-report-net-profit'),
+          title: 'NET PROFIT',
+          reading: reading,
+          value: net.isShowable
+              ? weeklyReportMoney(currency, net.netProfit)
+              : '—',
+          subtitle: net.isShowable
+              ? 'After expenses'
+              : 'Some spending is not counted',
+          // **No comparison arrow.** The week before was not read for
+          // spending, so there is no prior net profit to compare against, and
+          // an arrow drawn from the gross figures would describe a different
+          // quantity than the one above it.
+          comparisonLabel: _comparisonLabel,
+          icon: Icons.account_balance_wallet_outlined,
+          emphasis: !net.isLoss,
         ),
       _MetricCard(
         cardKey: const ValueKey('weekly-report-transactions'),

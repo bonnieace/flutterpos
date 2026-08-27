@@ -8,9 +8,13 @@ import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_types.dart';
+import '../expenses/expense.dart';
+import '../expenses/expense_repository.dart';
+import 'net_profit.dart';
 import 'daily_metrics.dart';
 import 'profit_report.dart';
 import 'profit_statement.dart';
@@ -36,6 +40,7 @@ final class TenantDailySummaryScreen extends StatelessWidget {
   const TenantDailySummaryScreen({
     super.key,
     required this.reader,
+    this.expenseReader,
     this.reconciliationRoute,
     this.reconciliationRoles = const <TenantRole>[],
     this.salesTotalsRoute,
@@ -44,6 +49,15 @@ final class TenantDailySummaryScreen extends StatelessWidget {
 
   /// Only document reads are needed: a day is read by exact path.
   final TenantDocumentReader reader;
+
+  /// The reader used for the collection page an expense range needs.
+  ///
+  /// **Separate and optional because [reader] cannot do it.** This route holds
+  /// a document reader; a range walk is a collection page, which is a wider
+  /// boundary. The same split `TenantSalesReportScreen` already makes with its
+  /// `reportReader`. Absent, this surface shows gross profit exactly as it did
+  /// before expenses existed - which is the right degradation, not a failure.
+  final TenantDataReader? expenseReader;
 
   /// Opens the guarded explanation of one day's reconciliation state.
   final TenantReconciliationRouteBuilder? reconciliationRoute;
@@ -63,6 +77,7 @@ final class TenantDailySummaryScreen extends StatelessWidget {
     contentWidth: AppContentWidth.records,
     body: TenantDailySummaryPanel(
       reader: reader,
+      expenseReader: expenseReader,
       reconciliationRoute: reconciliationRoute,
       reconciliationRoles: reconciliationRoles,
       salesTotalsRoute: salesTotalsRoute,
@@ -80,6 +95,7 @@ final class TenantDailySummaryPanel extends StatefulWidget {
   const TenantDailySummaryPanel({
     super.key,
     required this.reader,
+    this.expenseReader,
     this.days = 7,
     this.clock,
     this.reconciliationRoute,
@@ -90,6 +106,15 @@ final class TenantDailySummaryPanel extends StatefulWidget {
 
   /// Only document reads are needed: a day is read by exact path.
   final TenantDocumentReader reader;
+
+  /// The reader used for the collection page an expense range needs.
+  ///
+  /// **Separate and optional because [reader] cannot do it.** This route holds
+  /// a document reader; a range walk is a collection page, which is a wider
+  /// boundary. The same split `TenantSalesReportScreen` already makes with its
+  /// `reportReader`. Absent, this surface shows gross profit exactly as it did
+  /// before expenses existed - which is the right degradation, not a failure.
+  final TenantDataReader? expenseReader;
   final int days;
   final DateTime Function()? clock;
 
@@ -112,10 +137,18 @@ final class TenantDailySummaryPanel extends StatefulWidget {
 
 /// One guarded load of the summary and the code its figures are labelled with.
 final class _DailySummaryView {
-  const _DailySummaryView({required this.days, required this.currency});
+  const _DailySummaryView({
+    required this.days,
+    required this.currency,
+    this.expenses,
+  });
 
   final List<TenantDailyMetricsDay> days;
   final TenantReportingCurrency currency;
+
+  /// Every expense across the days shown, read once and sliced per day, or
+  /// null where this session may not read them.
+  final TenantExpensePeriod? expenses;
 }
 
 final class _TenantDailySummaryPanelState
@@ -124,25 +157,59 @@ final class _TenantDailySummaryPanelState
 
   void _refresh() => setState(() => _generation++);
 
+  /// What the business spent across the days on screen.
+  ///
+  /// Null rather than an exception on failure: an expense read that did not
+  /// answer must remove the net figure, never the day's takings above it -
+  /// which is exactly what a null does, through
+  /// `TenantNetProfitBasis.expensesUnread`.
+  Future<TenantExpensePeriod?> _readExpenses(
+    TenantSession session,
+    List<TenantDailyMetricsDay> days,
+  ) async {
+    final expenseReader = widget.expenseReader;
+    if (expenseReader == null ||
+        days.isEmpty ||
+        !TenantExpenseRepository.canSeeInSession(session)) {
+      return null;
+    }
+    final dates = days.map((day) => day.businessDate).toList()..sort();
+    try {
+      return await TenantExpenseRepository(
+        session: session,
+        reader: expenseReader,
+      ).readRange(startDate: dates.first, endDate: dates.last);
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return TenantRouteGuard<_DailySummaryView>(
       key: ValueKey(_generation),
       allowedRoles: TenantDailyMetricsRepository.allowedRoles,
-      load: (session) async => _DailySummaryView(
-        days: await TenantDailyMetricsRepository(
+      load: (session) async {
+        final days = await TenantDailyMetricsRepository(
           session: session,
           reader: widget.reader,
           clock: widget.clock,
-        ).loadRecentDays(days: widget.days),
-        // Read after the figures, and never allowed to fail them: a label is
-        // not the reason this route exists.
-        currency: await TenantReportingCurrency.read(
-          session: session,
-          reader: widget.reader,
-        ),
-      ),
+        ).loadRecentDays(days: widget.days);
+        return _DailySummaryView(
+          days: days,
+          // Read after the figures, and never allowed to fail them: a label is
+          // not the reason this route exists.
+          currency: await TenantReportingCurrency.read(
+            session: session,
+            reader: widget.reader,
+          ),
+          // **One read for the whole span, sliced per day below.** The span is
+          // taken from the days that came back rather than from the clock, so
+          // it can only ever cover dates this page is actually showing.
+          expenses: await _readExpenses(session, days),
+        );
+      },
       denied: const Center(
         key: ValueKey('daily-summary-denied'),
         child: Text('The daily summary is available to managers and owners.'),
@@ -165,6 +232,7 @@ final class _TenantDailySummaryPanelState
       builder: (context, session, view) => _DailySummaryContents(
         days: view.days,
         currency: view.currency,
+        expenses: view.expenses,
         // Profit is cost, and cost is owner/admin everywhere else - a
         // narrower tier than the one that may read this whole summary.
         showProfit: TenantProfitReport.canSeeInSession(session),
@@ -189,12 +257,16 @@ final class _DailySummaryContents extends StatelessWidget {
     required this.days,
     required this.currency,
     required this.showProfit,
+    this.expenses,
     this.reconciliationRoute,
     this.salesTotalsRoute,
   });
 
   final List<TenantDailyMetricsDay> days;
   final TenantReportingCurrency currency;
+
+  /// Every expense across the days shown, or null where none were read.
+  final TenantExpensePeriod? expenses;
 
   /// Whether this session may be shown what the business made, rather than
   /// only what it took.
@@ -366,6 +438,16 @@ final class _DailySummaryContents extends StatelessWidget {
                         report: metrics.profitReport,
                         currency: currency,
                         keyPrefix: 'daily-summary-${day.businessDate}',
+                        // This day's slice of the span read once above. Null
+                        // where the session may not read spending at all, in
+                        // which case the block says `Profit` exactly as it
+                        // always did rather than implying a net it has not got.
+                        net: expenses == null
+                            ? null
+                            : TenantNetProfitReport.from(
+                                gross: metrics.profitReport,
+                                expenses: expenses!.forDate(day.businessDate),
+                              ),
                       )
                     else if (!metrics.hasCompleteCostData)
                       Padding(

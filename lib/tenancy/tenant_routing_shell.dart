@@ -2,7 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../checkout/checkout_draft.dart';
+import '../expenses/expense.dart';
+import '../expenses/expense_repository.dart';
 import '../reporting/daily_metrics.dart';
+import '../reporting/net_profit.dart';
 import '../reporting/reporting_currency.dart';
 import '../reporting/profit_report.dart';
 import '../reporting/sales_totals.dart';
@@ -114,6 +118,8 @@ final class TenantRoutingShell extends StatefulWidget {
     this.shiftPanel,
     this.dailySummaryRoute,
     this.dailySummaryRoles = const <TenantRole>[],
+    this.expensesRoute,
+    this.expensesRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
     this.returnFeedRoute,
@@ -267,6 +273,12 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles the reporting route is offered to.
   final List<TenantRole> dailySummaryRoles;
+
+  /// Optional expenses route, injected for the same reason.
+  final Widget Function(TenantDataReader reader)? expensesRoute;
+
+  /// The roles the expenses route is offered to.
+  final List<TenantRole> expensesRoles;
 
   /// Optional guarded receipt-lookup route, injected for the same reason.
   final Widget Function(TenantDataReader reader)? receiptLookupRoute;
@@ -847,6 +859,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       shiftPanel: widget.shiftPanel,
       dailySummaryRoute: widget.dailySummaryRoute,
       dailySummaryRoles: widget.dailySummaryRoles,
+      expensesRoute: widget.expensesRoute,
+      expensesRoles: widget.expensesRoles,
       receiptLookupRoute: widget.receiptLookupRoute,
       receiptLookupRoles: widget.receiptLookupRoles,
       returnFeedRoute: widget.returnFeedRoute,
@@ -1494,6 +1508,7 @@ final class _HomeOverview {
     this.today,
     this.trend,
     this.currency,
+    this.expenses,
     this.showProfit = false,
   });
 
@@ -1522,6 +1537,16 @@ final class _HomeOverview {
 
   /// What the business prices in, read only when [today] was.
   final TenantReportingCurrency? currency;
+
+  /// Today's recorded spending, or null where this member may not read it or
+  /// the read failed.
+  ///
+  /// **Awaited with the rest rather than handed on like [trend].** This is a
+  /// Firestore read and serves from the cache, so it costs the page nothing to
+  /// wait for and the net figure lands with the gross one instead of after it.
+  /// It is also why net profit works with no signal at all: both halves of the
+  /// subtraction are cached reads.
+  final TenantExpensePeriod? expenses;
 
   /// Whether this member may be shown the margin at all.
   ///
@@ -1669,10 +1694,9 @@ final class _LandingGreeting extends StatelessWidget {
             _ => null,
           };
     final wide = PageHeader.showsDisplayTitle(MediaQuery.sizeOf(context).width);
-    final display = (wide
-            ? tokens.typography.display
-            : tokens.typography.displayCompact)
-        .copyWith(color: tokens.colors.text.primary);
+    final display =
+        (wide ? tokens.typography.display : tokens.typography.displayCompact)
+            .copyWith(color: tokens.colors.text.primary);
     final compact = tokens.typography.displayCompact.copyWith(
       color: tokens.colors.text.primary,
     );
@@ -2052,6 +2076,8 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.salesTotalsCallable,
     this.dailySummaryRoute,
     this.dailySummaryRoles = const <TenantRole>[],
+    this.expensesRoute,
+    this.expensesRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
     this.returnFeedRoute,
@@ -2132,6 +2158,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the reporting domain.
   final List<TenantRole> dailySummaryRoles;
+
+  /// Builds the expenses route, supplied by the composition root like every
+  /// other one here; it stays unreachable while it is absent.
+  final Widget Function(TenantDataReader reader)? expensesRoute;
+
+  /// The roles that route is offered to, decided by the expenses domain.
+  final List<TenantRole> expensesRoles;
 
   /// Optional guarded receipt-lookup route, injected for the same reason.
   final Widget Function(TenantDataReader reader)? receiptLookupRoute;
@@ -2242,6 +2275,19 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 TenantReportingCurrency.read(session: session, reader: reader),
           )
         : Future<TenantReportingCurrency?>.value();
+    // What the business spent today, which is the other half of a profit
+    // figure. Narrower than the takings above - `TenantExpenseRepository`
+    // is owner and administrator, matching the roles a margin is shown to -
+    // and a Firestore read, so it is cached like the rest of this set.
+    final expenses = TenantExpenseRepository.canSeeInSession(session)
+        ? _quiet(() {
+            final today = checkoutBusinessDate(DateTime.now().toUtc());
+            return TenantExpenseRepository(
+              session: session,
+              reader: reader,
+            ).readDay(today);
+          })
+        : Future<TenantExpensePeriod?>.value();
     final days = await recentDays ?? const <TenantDailyMetricsDay>[];
     // **The trend is handed on rather than awaited**, for the reason
     // `_HomeOverview.trend` gives. It is already in flight; what changes is
@@ -2251,6 +2297,7 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       today: days.isEmpty ? null : days.first,
       trend: trend,
       currency: await currency,
+      expenses: await expenses,
       showProfit: TenantProfitReport.canSeeInSession(session),
     );
   }
@@ -2389,6 +2436,15 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     final metrics = day?.metrics;
     final report = metrics?.profitReport;
     final currency = overview.currency ?? TenantReportingCurrency.unknown;
+    // Composed here rather than on the server: `daily_metrics.profit` is
+    // revenue minus the cost of the goods sold and stays that way, so nothing
+    // already written changes meaning. Null where either half is missing.
+    final net = report == null || overview.expenses == null
+        ? null
+        : TenantNetProfitReport.from(
+            gross: report,
+            expenses: overview.expenses,
+          );
     final tiles = <StatTile>[
       if (day != null) ...<StatTile>[
         StatTile(
@@ -2434,7 +2490,10 @@ final class TenantSafeLandingScreen extends StatelessWidget {
         if (overview.showProfit)
           StatTile(
             key: const ValueKey('home-today-profit'),
-            label: 'Profit',
+            // Renamed only when a net figure stands beside it. Where no
+            // spending could be read this is the only profit the home shows,
+            // and calling it gross would imply a second figure that is absent.
+            label: net == null ? 'Profit' : 'Gross profit',
             value: report == null || !report.isShowable
                 ? '—'
                 : currency.format(report.profit),
@@ -2445,6 +2504,28 @@ final class TenantSafeLandingScreen extends StatelessWidget {
                 : report != null && report.isShowable
                 ? 'After cost of goods'
                 : 'Some lines carry no cost',
+          ),
+        // **A second tile rather than one relabelled figure.** A tile whose
+        // meaning changes with whether a read succeeded is worse than a tile
+        // that is simply absent: a person who glanced at *Profit* yesterday
+        // and *Profit* today would have no way to tell that one of them
+        // counted the rent and the other did not.
+        if (overview.showProfit && net != null)
+          StatTile(
+            key: const ValueKey('home-today-net-profit'),
+            label: 'Net profit',
+            value: net.isShowable ? currency.format(net.netProfit) : '—',
+            money: net.isShowable,
+            icon: Icons.account_balance_wallet_outlined,
+            // A loss is the one reading this whole feature exists to make
+            // possible, so it is marked rather than left to the minus sign.
+            status: net.isLoss ? AppStatus.problem : null,
+            statusLabel: net.isLoss ? 'Loss' : null,
+            detail: metrics == null
+                ? 'Not reconciled yet'
+                : net.isShowable
+                ? 'After cost of goods and expenses'
+                : 'Some spending is not counted',
           ),
       ],
       // **Receipts waiting is not a tile, and that is a measurement rather
@@ -2632,6 +2713,31 @@ final class TenantSafeLandingScreen extends StatelessWidget {
               builder: (_) => TenantSessionScope(
                 controller: controller,
                 child: catalogManagementRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // Beside Reports, because it is the other half of the same question. A
+    // report says what came in and what the stock cost; this says what else
+    // went out, and the two together are the only way the profit on those
+    // reports is the whole story.
+    if (expensesRoute != null && membership.role.canAccess(expensesRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('expenses'),
+        label: 'Expenses',
+        description:
+            'Record rent, wages and running costs, and see what profit is '
+            'left after them.',
+        group: 'Reports',
+        icon: Icons.account_balance_wallet_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: expensesRoute!(reader),
               ),
             ),
           );
