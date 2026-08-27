@@ -154,12 +154,26 @@ final class _CategoryContents extends StatelessWidget {
             currency: currency,
           ),
           SizedBox(height: tokens.spacing.s32),
+          // The reference titles the list under its chart, and the title is
+          // what separates the two halves of the screen without a card around
+          // either.
+          Text(
+            'Expense details',
+            style: tokens.typography.titleMedium.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s8),
           for (final (index, record) in period.records.indexed)
             ExpenseRow(
               key: ValueKey('expense-category-${record.expenseId}'),
               record: record,
               currency: currency,
               first: index == 0,
+              // Every row here is under the heading this screen is named for,
+              // and none of them carries a control, so neither is given room.
+              showCategory: false,
+              reserveAction: false,
             ),
         ],
       ],

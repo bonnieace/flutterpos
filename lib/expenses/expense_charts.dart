@@ -26,13 +26,19 @@ final class ExpenseChartMetrics {
   const ExpenseChartMetrics._();
 
   /// How tall the composition ring is drawn.
-  static const double ringHeight = 220;
+  ///
+  /// **These three are the reference's geometry, not a taste.** `bonnieace/
+  /// Jengaapp` draws its ring in a 200 box at a 32 stroke, which puts the outer
+  /// edge at 100 and the hole at 68. Reproducing the arrangement and then
+  /// drawing the ring a different weight is how a replica ends up *nearly*
+  /// right, which is the complaint this answers.
+  static const double ringHeight = 200;
 
   /// The hole in the middle, which is where the total goes.
-  static const double ringHoleRadius = 64;
+  static const double ringHoleRadius = 68;
 
-  /// How thick the ring itself is.
-  static const double ringThickness = 26;
+  /// How thick the ring itself is. The reference's `ringStrokeWidth`.
+  static const double ringThickness = 32;
 
   /// The gap between one slice and the next, so two adjacent slices of similar
   /// shade still read as two.
@@ -140,13 +146,10 @@ final class ExpenseCompositionRing extends StatelessWidget {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text(
-                  'Spent',
-                  style: tokens.typography.labelEyebrow.copyWith(
-                    color: tokens.colors.text.tertiary,
-                  ),
-                ),
-                SizedBox(height: tokens.spacing.s4),
+                // **The figure alone, with no caption over it.** The reference
+                // puts the period's total in the hole and nothing else; a
+                // `Spent` eyebrow above it spends a line of the hole saying
+                // what the whole screen is already called.
                 // **Shrunk to fit rather than clipped.** A shop that spent six
                 // figures this month has a longer total than one that spent
                 // three, and the hole does not grow - so the figure gives way,

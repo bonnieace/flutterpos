@@ -10,6 +10,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../checkout/checkout_draft.dart';
 import '../reporting/reporting_currency.dart';
@@ -455,6 +456,8 @@ final class ExpenseRow extends StatelessWidget {
     required this.currency,
     this.onVoid,
     this.first = false,
+    this.showCategory = true,
+    this.reserveAction = true,
   });
 
   final TenantExpense record;
@@ -466,6 +469,28 @@ final class ExpenseRow extends StatelessWidget {
 
   /// Whether this is the first row, which draws no hairline above itself.
   final bool first;
+
+  /// Whether the heading is named beside the date. False on a category's own
+  /// screen, where every row is under the heading the screen is called.
+  final bool showCategory;
+
+  /// Whether to hold the trailing control's width on a row that has none.
+  ///
+  /// True in a list where *some* row can be withdrawn, so every figure shares
+  /// one right edge. False where no row in the list has an action at all, and
+  /// holding the slot would only rob the description of 48 it could have used.
+  final bool reserveAction;
+
+  /// The reference's `DateFormat.yMMMd`, in this app's order - the same face
+  /// the daily chart labels its axis with, so a date means the same thing on
+  /// both halves of the screen.
+  static final DateFormat _dayFormat = DateFormat('d MMM yyyy');
+
+  String get _when {
+    final date = DateTime.tryParse(record.businessDate);
+    final day = date == null ? record.businessDate : _dayFormat.format(date);
+    return showCategory ? '${record.category.label} - $day' : day;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -500,6 +525,20 @@ final class ExpenseRow extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                // The reference leads every record with a wallet glyph, and it
+                // earns its place: it is what makes a column of rows read as a
+                // ledger of money out rather than as a list of sentences.
+                Padding(
+                  padding: EdgeInsets.only(top: tokens.spacing.s4),
+                  child: Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: AppButton.iconSize,
+                    color: voided
+                        ? tokens.colors.text.tertiary
+                        : tokens.colors.action.tertiary.label,
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,7 +554,7 @@ final class ExpenseRow extends StatelessWidget {
                       ),
                       SizedBox(height: tokens.spacing.s4),
                       Text(
-                        '${record.category.label} - ${record.businessDate}',
+                        _when,
                         style: tokens.typography.caption.copyWith(
                           color: tokens.colors.text.tertiary,
                         ),
@@ -555,25 +594,27 @@ final class ExpenseRow extends StatelessWidget {
                     decoration: voided ? TextDecoration.lineThrough : null,
                   ),
                 ),
-                SizedBox(width: tokens.spacing.s8),
                 // **The slot is held whether or not it is filled.** A row that
                 // simply dropped the control let its figure run to the edge,
                 // and a column of money that does not share one right edge
                 // cannot be scanned down - which is the whole reason the
                 // figures are on this side.
-                SizedBox(
-                  width: tokens.spacing.s48,
-                  child: onVoid == null
-                      ? null
-                      : AppIconButton(
-                          key: ValueKey('expense-void-${record.expenseId}'),
-                          icon: Icons.remove_circle_outline,
-                          semanticLabel: 'Void ${record.description}',
-                          tier: AppButtonTier.destructive,
-                          bordered: false,
-                          onPressed: onVoid,
-                        ),
-                ),
+                if (reserveAction) ...<Widget>[
+                  SizedBox(width: tokens.spacing.s8),
+                  SizedBox(
+                    width: tokens.spacing.s48,
+                    child: onVoid == null
+                        ? null
+                        : AppIconButton(
+                            key: ValueKey('expense-void-${record.expenseId}'),
+                            icon: Icons.remove_circle_outline,
+                            semanticLabel: 'Void ${record.description}',
+                            tier: AppButtonTier.destructive,
+                            bordered: false,
+                            onPressed: onVoid,
+                          ),
+                  ),
+                ],
               ],
             ),
           ),
