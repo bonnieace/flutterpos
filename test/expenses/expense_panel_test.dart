@@ -75,11 +75,11 @@ void main() {
     );
 
     expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('expenses-total')),
-        matching: find.text('KES 400.00'),
-      ),
-      findsOne,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
+          .data,
+      'KES 400.00',
+      reason: 'The period total is the middle of the ring.',
     );
     // Largest first, and each row carries its own figure rather than leaving
     // the share to the length of a bar.
@@ -107,13 +107,14 @@ void main() {
       ),
     );
 
-    expect(find.text('Voided'), findsOne);
+    // The word, beside the reason it was withdrawn for - not the strike
+    // through the figure on its own.
+    expect(find.textContaining('Voided'), findsOne);
     expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('expenses-total')),
-        matching: find.text('KES 100.00'),
-      ),
-      findsOne,
+      tester
+          .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
+          .data,
+      'KES 100.00',
       reason: 'Money that did not leave the business counts towards nothing.',
     );
   });
@@ -300,16 +301,16 @@ void main() {
     // Only this category, and its share of everything.
     expect(
       tester
-          .widget<Text>(
-            find.descendant(
-              of: find.byKey(const ValueKey('expense-category-total')),
-              matching: find.text('KES 300.00'),
-            ),
-          )
+          .widget<Text>(find.byKey(const ValueKey('expense-category-total')))
           .data,
       'KES 300.00',
     );
-    expect(find.text('75%'), findsOne);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('expense-category-summary')))
+          .data,
+      contains('75% of all spending'),
+    );
   });
 
   testWidgets('voiding a record asks why, writes it, and re-reads', (

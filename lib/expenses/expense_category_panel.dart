@@ -16,15 +16,13 @@ library;
 import 'package:flutter/material.dart';
 
 import '../reporting/reporting_currency.dart';
-import '../ui/card.dart';
-import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
-import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'expense.dart';
 import 'expense_charts.dart';
+import 'expense_panel.dart';
 
 /// One category's records across the period that was on screen behind this.
 final class TenantExpenseCategoryScreen extends StatelessWidget {
@@ -96,39 +94,40 @@ final class _CategoryContents extends StatelessWidget {
       key: const ValueKey('expense-category'),
       padding: EdgeInsets.all(tokens.spacing.s20),
       children: <Widget>[
-        StatRow(
-          tiles: <StatTile>[
-            StatTile(
-              key: const ValueKey('expense-category-total'),
-              label: 'Spent',
-              value: currency.format(period.total),
-              money: true,
-              icon: Icons.receipt_outlined,
-              detail: periodLabel,
-            ),
-            StatTile(
-              key: const ValueKey('expense-category-share'),
-              label: 'Share',
-              // An em dash where there is no share to take, for the reason
-              // `shareOf` returns null: a share of no spending is a division
-              // by zero, not a share of nothing.
-              value: share == null
-                  ? '—'
-                  : '${(share * 100).toStringAsFixed(0)}%',
-              icon: Icons.pie_chart_outline,
-              detail: 'Of all spending',
-            ),
-            StatTile(
-              key: const ValueKey('expense-category-count'),
-              label: 'Records',
-              value: '$counted',
-              icon: Icons.list_alt_outlined,
-              detail: periodLabel,
-            ),
-          ],
+        // **The heading is the figure, not a tile holding one.** Three stat
+        // cards over a chart is the arrangement the developer asked to be rid
+        // of on 2026-08-27: what this screen is for is one number and its
+        // shape over time, and the number goes at the top at the size that
+        // says so.
+        Text(
+          currency.format(period.total),
+          key: const ValueKey('expense-category-total'),
+          textAlign: TextAlign.center,
+          style: tokens.typography.numericHero.copyWith(
+            color: tokens.colors.text.money,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        Text(
+          <String>[
+            '$counted ${counted == 1 ? 'record' : 'records'}',
+            // An em dash where there is no share to take, for the reason
+            // `shareOf` returns null: a share of no spending is a division by
+            // zero, not a share of nothing.
+            if (share == null)
+              '— of all spending'
+            else
+              '${(share * 100).toStringAsFixed(0)}% of all spending',
+            periodLabel,
+          ].join(', '),
+          key: const ValueKey('expense-category-summary'),
+          textAlign: TextAlign.center,
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
         ),
         if (period.truncated) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
+          SizedBox(height: tokens.spacing.s20),
           const Callout(
             key: ValueKey('expense-category-truncated'),
             status: AppStatus.attention,
@@ -138,7 +137,7 @@ final class _CategoryContents extends StatelessWidget {
                 'the total and the chart below cover only part of it.',
           ),
         ],
-        SizedBox(height: tokens.spacing.s24),
+        SizedBox(height: tokens.spacing.s32),
         if (period.records.isEmpty)
           EmptyState(
             key: const ValueKey('expense-category-empty'),
@@ -146,57 +145,22 @@ final class _CategoryContents extends StatelessWidget {
             hint: 'This heading had no spending in the days shown.',
           )
         else ...<Widget>[
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  'Day by day',
-                  style: tokens.typography.labelEyebrow.copyWith(
-                    color: tokens.colors.text.tertiary,
-                  ),
-                ),
-                SizedBox(height: tokens.spacing.s16),
-                ExpenseDailyChart(
-                  key: const ValueKey('expense-category-chart'),
-                  dates: dates,
-                  totalsMinor: <int>[
-                    for (final date in dates) period.totalMinorOn(date),
-                  ],
-                  currency: currency,
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: tokens.spacing.s24),
-          RecordList(
-            identityLabel: 'Expense',
-            items: <RecordItem>[
-              for (final record in period.records)
-                RecordItem(
-                  id: record.expenseId,
-                  recordKey: ValueKey('expense-category-${record.expenseId}'),
-                  title: record.description,
-                  subtitle: record.businessDate,
-                  status: record.isVoided
-                      ? const RecordStatus(
-                          status: AppStatus.neutral,
-                          label: 'Voided',
-                        )
-                      : null,
-                  attributes: <RecordAttribute>[
-                    RecordAttribute(
-                      label: 'Amount',
-                      value: currency.format(record.amount),
-                      kind: RecordValueKind.money,
-                    ),
-                    if (record.voidReason case final reason?)
-                      RecordAttribute(label: 'Voided because', value: reason),
-                  ],
-                ),
+          ExpenseDailyChart(
+            key: const ValueKey('expense-category-chart'),
+            dates: dates,
+            totalsMinor: <int>[
+              for (final date in dates) period.totalMinorOn(date),
             ],
+            currency: currency,
           ),
+          SizedBox(height: tokens.spacing.s32),
+          for (final (index, record) in period.records.indexed)
+            ExpenseRow(
+              key: ValueKey('expense-category-${record.expenseId}'),
+              record: record,
+              currency: currency,
+              first: index == 0,
+            ),
         ],
       ],
     );

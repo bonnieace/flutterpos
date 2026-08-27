@@ -17,11 +17,9 @@ import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
-import '../ui/card.dart';
 import '../ui/chips.dart';
 import '../ui/fields.dart';
 import '../ui/press.dart';
-import '../ui/record_list.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
@@ -29,7 +27,6 @@ import '../ui/sheet.dart';
 import '../ui/skeleton.dart';
 import '../ui/snackbar.dart';
 import '../ui/states.dart';
-import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'expense.dart';
@@ -74,12 +71,8 @@ final class TenantExpensesScreen extends StatelessWidget {
   final DateTime Function()? clock;
 
   @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'Expenses',
-    subtitle: 'What the business spent, beyond the cost of its stock.',
-    contentWidth: AppContentWidth.records,
-    body: TenantExpensesPanel(reader: reader, writer: writer, clock: clock),
-  );
+  Widget build(BuildContext context) =>
+      TenantExpensesPanel(reader: reader, writer: writer, clock: clock);
 }
 
 /// Reads and records expenses behind [TenantRouteGuard].
@@ -256,12 +249,21 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
       ),
       builder: (context, session, view) => _ExpensesFrame(
         chips: chips,
+        action: widget.writer == null
+            ? null
+            : AppIconButton(
+                key: const ValueKey('expenses-record'),
+                icon: Icons.add,
+                semanticLabel: 'Record expense',
+                tier: AppButtonTier.primary,
+                bordered: false,
+                onPressed: () => _record(session),
+              ),
         child: _ExpensesContents(
           period: view.period,
           currency: view.currency,
           range: _range,
           canRecord: widget.writer != null,
-          onRecord: () => _record(session),
           onVoid: widget.writer == null
               ? null
               : (record) => _void(session, record, view.currency),
@@ -279,26 +281,40 @@ typedef _ExpensesView = ({
   TenantReportingCurrency currency,
 });
 
-/// The chooser, then whatever the page has to say beneath it.
+/// The page, in whatever phase the guard has it.
+///
+/// **The scaffold is built here rather than by the route, and that is the
+/// point of the class.** The one control this page exists for - recording an
+/// expense - belongs at the trailing edge of the top bar, and it may only be
+/// offered to somebody the guard has already admitted. A route drawing that
+/// button outside the guard would hold it out to the manager the guard is
+/// about to refuse.
 ///
 /// **A `ListView` rather than a `Column`, and that is not cosmetic.** A month
-/// of a real business is hundreds of records; `RecordList` lays them out and
-/// does not scroll them, so the page owning the scroll is what stops the list
-/// running off the bottom. Every other record page here does the same, with the
-/// same padding.
+/// of a real business is hundreds of records, and the page owning the scroll is
+/// what stops the list running off the bottom.
 final class _ExpensesFrame extends StatelessWidget {
-  const _ExpensesFrame({required this.chips, required this.child});
+  const _ExpensesFrame({required this.chips, required this.child, this.action});
 
   final Widget chips;
   final Widget child;
 
+  /// The top bar's own control, or null in a phase that has nothing to offer.
+  final Widget? action;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return ListView(
-      key: const ValueKey('expenses'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
-      children: <Widget>[chips, child],
+    return AppScaffold(
+      title: 'Expenses',
+      subtitle: 'What the business spent, beyond the cost of its stock.',
+      contentWidth: AppContentWidth.records,
+      primaryAction: action,
+      body: ListView(
+        key: const ValueKey('expenses'),
+        padding: EdgeInsets.all(tokens.spacing.s20),
+        children: <Widget>[chips, child],
+      ),
     );
   }
 }
@@ -310,7 +326,6 @@ final class _ExpensesContents extends StatelessWidget {
     required this.currency,
     required this.range,
     required this.canRecord,
-    required this.onRecord,
     this.onVoid,
     this.onOpenCategory,
   });
@@ -319,7 +334,6 @@ final class _ExpensesContents extends StatelessWidget {
   final TenantReportingCurrency currency;
   final TenantExpenseRange range;
   final bool canRecord;
-  final VoidCallback onRecord;
 
   /// Withdraws one record, or null on a build that cannot write.
   final ValueChanged<TenantExpense>? onVoid;
@@ -330,6 +344,8 @@ final class _ExpensesContents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final live = period.records.where((record) => !record.isVoided).length;
+    final spent = period.spentCategories.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -344,27 +360,37 @@ final class _ExpensesContents extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.s16),
         ],
-        StatRow(
-          tiles: <StatTile>[
-            StatTile(
-              key: const ValueKey('expenses-total'),
-              label: 'Spent',
-              value: currency.format(period.total),
-              money: true,
-              icon: Icons.receipt_outlined,
-              detail: range.label,
+        // **The total is the middle of the ring, not a tile above it.** Two
+        // headline cards over a ring said the same figure twice and pushed the
+        // picture below the fold on a phone. The composition is this page's
+        // headline, and the total belongs in the hole it already has.
+        if (spent)
+          _CategoryShares(
+            period: period,
+            currency: currency,
+            onOpenCategory: onOpenCategory,
+          )
+        else
+          Text(
+            currency.format(period.total),
+            key: const ValueKey('expenses-total'),
+            textAlign: TextAlign.center,
+            style: tokens.typography.numericHero.copyWith(
+              color: tokens.colors.text.money,
             ),
-            StatTile(
-              key: const ValueKey('expenses-count'),
-              label: 'Records',
-              value: '${period.records.where((e) => !e.isVoided).length}',
-              icon: Icons.list_alt_outlined,
-              detail: range.label,
-            ),
-          ],
+          ),
+        SizedBox(height: tokens.spacing.s12),
+        Text(
+          '$live ${live == 1 ? 'record' : 'records'}, '
+          '${range.label.toLowerCase()}',
+          key: const ValueKey('expenses-count'),
+          textAlign: TextAlign.center,
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
         ),
         if (period.truncated) ...<Widget>[
-          SizedBox(height: tokens.spacing.s16),
+          SizedBox(height: tokens.spacing.s20),
           const Callout(
             key: ValueKey('expenses-truncated'),
             status: AppStatus.attention,
@@ -375,79 +401,180 @@ final class _ExpensesContents extends StatelessWidget {
                 'stretch of days to see a complete total.',
           ),
         ],
-        if (canRecord) ...<Widget>[
-          SizedBox(height: tokens.spacing.s20),
-          AppButton(
-            key: const ValueKey('expenses-record'),
-            label: 'Record expense',
-            tier: AppButtonTier.primary,
-            icon: Icons.add,
-            onPressed: onRecord,
-          ),
-        ],
         SizedBox(height: tokens.spacing.s32),
-        _CategoryShares(
-          period: period,
-          currency: currency,
-          onOpenCategory: onOpenCategory,
-        ),
-        SizedBox(height: tokens.spacing.s32),
-        RecordList(
-          identityLabel: 'Expense',
-          items: <RecordItem>[
-            for (final record in period.records) _recordItem(record, currency),
-          ],
-          empty: EmptyState(
+        if (period.records.isEmpty)
+          EmptyState(
             key: const ValueKey('expenses-empty'),
             title: 'Nothing recorded ${range.label.toLowerCase()}',
             hint: canRecord
                 ? 'Record rent, wages, fuel or a repair and it counts against '
                       'profit from then on.'
                 : null,
+          )
+        else
+          for (final (index, record) in period.records.indexed)
+            ExpenseRow(
+              key: ValueKey('expense-${record.expenseId}'),
+              record: record,
+              currency: currency,
+              onVoid: onVoid == null || record.isVoided
+                  ? null
+                  : () => onVoid!(record),
+              first: index == 0,
+            ),
+      ],
+    );
+  }
+}
+
+/// One expense, as a row.
+///
+/// **A row rather than a card, at the developer's direction on 2026-08-27.**
+/// `RecordList` gives every list in this app the same bordered card with its
+/// actions in a left-aligned `Wrap`, and six of those stacked reads as filing
+/// rather than as a ledger. This is the shape the app this feature came from
+/// used: the money on the right, where a column of figures can be scanned down;
+/// what it was for on the left; and a hairline between one row and the next
+/// instead of a border drawn around every one.
+///
+/// **The void is a trailing control, not a boxed button beneath the record.**
+/// It is one destructive action on a row that has no others, so it takes the
+/// trailing edge - where this app already puts a record's own control wherever
+/// a table is drawn - rather than a button the width of its own label sitting
+/// under the figure it withdraws.
+final class ExpenseRow extends StatelessWidget {
+  const ExpenseRow({
+    super.key,
+    required this.record,
+    required this.currency,
+    this.onVoid,
+    this.first = false,
+  });
+
+  final TenantExpense record;
+  final TenantReportingCurrency currency;
+
+  /// Withdraws this record, or null where it cannot be - a build with no
+  /// writer, or a record that has already been voided.
+  final VoidCallback? onVoid;
+
+  /// Whether this is the first row, which draws no hairline above itself.
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final voided = record.isVoided;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        if (!first)
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: tokens.colors.surface.borderSubtle,
+          ),
+        Semantics(
+          container: true,
+          // The row's own reading, in the order a person would say it. The
+          // strike-through and the muted figure are both restatements of
+          // "voided", which is said here in words (hard rule 4).
+          label: <String>[
+            record.description,
+            record.category.label,
+            currency.format(record.amount),
+            record.businessDate,
+            if (voided) 'Voided',
+            if (record.voidReason case final reason?) 'Because $reason',
+          ].join(', '),
+          excludeSemantics: true,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: tokens.spacing.s16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        record.description,
+                        style: tokens.typography.bodyLarge.copyWith(
+                          color: voided
+                              ? tokens.colors.text.tertiary
+                              : tokens.colors.text.primary,
+                        ),
+                      ),
+                      SizedBox(height: tokens.spacing.s4),
+                      Text(
+                        '${record.category.label} - ${record.businessDate}',
+                        style: tokens.typography.caption.copyWith(
+                          color: tokens.colors.text.tertiary,
+                        ),
+                      ),
+                      // **The word, not only the strike.** A struck figure is
+                      // a second way of saying this, and hard rule 4 does not
+                      // accept a line through a number as the only one. The
+                      // reason travels with it where there is one: a withdrawn
+                      // record with no explanation is a mystery rather than a
+                      // correction.
+                      if (voided) ...<Widget>[
+                        SizedBox(height: tokens.spacing.s4),
+                        Text(
+                          record.voidReason == null
+                              ? 'Voided'
+                              : 'Voided - ${record.voidReason}',
+                          style: tokens.typography.caption.copyWith(
+                            color: tokens.colors.status.neutral.fg,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s16),
+                Text(
+                  currency.format(record.amount),
+                  key: ValueKey('expense-amount-${record.expenseId}'),
+                  // **`numeric.body`, not the compact hero.** A 22pt figure on
+                  // every row pushed the description into a second line and
+                  // made a list of seven look like seven headlines; this is the
+                  // size the role exists for - "money and counts in flow".
+                  style: tokens.typography.numericBody.copyWith(
+                    color: voided
+                        ? tokens.colors.text.tertiary
+                        : tokens.colors.text.money,
+                    decoration: voided ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s8),
+                // **The slot is held whether or not it is filled.** A row that
+                // simply dropped the control let its figure run to the edge,
+                // and a column of money that does not share one right edge
+                // cannot be scanned down - which is the whole reason the
+                // figures are on this side.
+                SizedBox(
+                  width: tokens.spacing.s48,
+                  child: onVoid == null
+                      ? null
+                      : AppIconButton(
+                          key: ValueKey('expense-void-${record.expenseId}'),
+                          icon: Icons.remove_circle_outline,
+                          semanticLabel: 'Void ${record.description}',
+                          tier: AppButtonTier.destructive,
+                          bordered: false,
+                          onPressed: onVoid,
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
     );
   }
-
-  RecordItem _recordItem(
-    TenantExpense record,
-    TenantReportingCurrency currency,
-  ) => RecordItem(
-    id: record.expenseId,
-    recordKey: ValueKey('expense-${record.expenseId}'),
-    title: record.description,
-    subtitle: record.category.label,
-    // A voided record keeps its place in the list and says what it is. It is
-    // money that did not leave the business, and every total here excludes it.
-    status: record.isVoided
-        ? const RecordStatus(status: AppStatus.neutral, label: 'Voided')
-        : null,
-    attributes: <RecordAttribute>[
-      RecordAttribute(
-        label: 'Amount',
-        value: currency.format(record.amount),
-        kind: RecordValueKind.money,
-        valueKey: ValueKey('expense-amount-${record.expenseId}'),
-      ),
-      RecordAttribute(label: 'Date', value: record.businessDate),
-      // The reason travels with the record it withdrew. A struck-through row
-      // with no explanation is a mystery rather than a correction.
-      if (record.voidReason case final reason?)
-        RecordAttribute(label: 'Voided because', value: reason),
-    ],
-    actions: <RecordAction>[
-      // Offered once. An already-voided record has nothing left to withdraw,
-      // and the rule refuses a second one anyway.
-      if (onVoid != null && !record.isVoided)
-        RecordAction(
-          label: 'Void',
-          actionKey: ValueKey('expense-void-${record.expenseId}'),
-          destructive: true,
-          onPressed: () => onVoid!(record),
-        ),
-    ],
-  );
 }
 
 /// What each category took of the period's spending.
@@ -476,39 +603,30 @@ final class _CategoryShares extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final categories = period.spentCategories;
     if (categories.isEmpty) return const SizedBox.shrink();
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(
-            'Where it went',
-            style: tokens.typography.labelEyebrow.copyWith(
-              color: tokens.colors.text.tertiary,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        ExpenseCompositionRing(period: period, currency: currency),
+        SizedBox(height: tokens.spacing.s20),
+        // **The rows are the ring's legend and its accessible reading.**
+        // Each carries the same colour as its slice, and also the name, the
+        // figure and the share in words - so nothing here is told by colour
+        // alone (hard rule 4).
+        for (var index = 0; index < categories.length; index++) ...<Widget>[
+          if (index > 0) SizedBox(height: tokens.spacing.s16),
+          _CategoryShareRow(
+            category: categories[index],
+            swatch: ExpenseCompositionRing.colorFor(tokens, index),
+            amount: (period.totalByCategory[categories[index]] ?? 0) / 100,
+            share: period.shareOf(categories[index]),
+            currency: currency,
+            onOpen: onOpenCategory == null
+                ? null
+                : () => onOpenCategory!(categories[index]),
           ),
-          SizedBox(height: tokens.spacing.s16),
-          ExpenseCompositionRing(period: period, currency: currency),
-          SizedBox(height: tokens.spacing.s20),
-          // **The rows are the ring's legend and its accessible reading.**
-          // Each carries the same colour as its slice, and also the name, the
-          // figure and the share in words - so nothing here is told by colour
-          // alone (hard rule 4).
-          for (var index = 0; index < categories.length; index++) ...<Widget>[
-            if (index > 0) SizedBox(height: tokens.spacing.s16),
-            _CategoryShareRow(
-              category: categories[index],
-              swatch: ExpenseCompositionRing.colorFor(tokens, index),
-              amount: (period.totalByCategory[categories[index]] ?? 0) / 100,
-              share: period.shareOf(categories[index]),
-              currency: currency,
-              onOpen: onOpenCategory == null
-                  ? null
-                  : () => onOpenCategory!(categories[index]),
-            ),
-          ],
         ],
-      ),
+      ],
     );
   }
 }
