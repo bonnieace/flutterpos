@@ -100,87 +100,87 @@ final class WeeklyRevenueChart extends StatelessWidget {
           if (reading)
             _ReadingBars(key: const ValueKey('weekly-report-chart-reading'))
           else
-          SizedBox(
-            height: WeeklyReportMetrics.chartHeight,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: ceiling,
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => tokens.colors.surface.overlay,
-                    getTooltipItem: (group, _, rod, _) => BarTooltipItem(
-                      weeklyReportMoney(currency, rod.toY),
-                      tokens.typography.labelMedium.copyWith(
-                        color: tokens.colors.text.primary,
+            SizedBox(
+              height: WeeklyReportMetrics.chartHeight,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: ceiling,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (_) => tokens.colors.surface.overlay,
+                      getTooltipItem: (group, _, rod, _) => BarTooltipItem(
+                        weeklyReportMoney(currency, rod.toY),
+                        tokens.typography.labelMedium.copyWith(
+                          color: tokens.colors.text.primary,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(),
-                  rightTitles: const AxisTitles(),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, _) {
-                        final index = value.toInt();
-                        if (index < 0 || index >= days.length) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: EdgeInsets.only(top: tokens.spacing.s8),
-                          child: Text(
-                            days[index],
-                            style: tokens.typography.caption.copyWith(
-                              color: chart.axisLabel,
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(),
+                    rightTitles: const AxisTitles(),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, _) {
+                          final index = value.toInt();
+                          if (index < 0 || index >= days.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: EdgeInsets.only(top: tokens.spacing.s8),
+                            child: Text(
+                              days[index],
+                              style: tokens.typography.caption.copyWith(
+                                color: chart.axisLabel,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: WeeklyReportMetrics.axisReserve,
+                        getTitlesWidget: (value, _) => Text(
+                          weeklyReportAxisMoney(currency, value),
+                          style: tokens.typography.caption.copyWith(
+                            color: chart.axisLabel,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                  gridData: FlGridData(
+                    drawVerticalLine: false,
+                    horizontalInterval:
+                        ceiling / WeeklyReportMetrics.gridDivisions,
+                    getDrawingHorizontalLine: (_) =>
+                        FlLine(color: chart.gridLine, strokeWidth: 1),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  barGroups: <BarChartGroupData>[
+                    for (var day = 0; day < days.length; day++)
+                      BarChartGroupData(
+                        x: day,
+                        barRods: <BarChartRodData>[
+                          BarChartRodData(
+                            toY: revenue[day],
+                            width: WeeklyReportMetrics.barWidth,
+                            color: day == best ? chart.barEmphasis : chart.bar,
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(tokens.radius.sm),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: WeeklyReportMetrics.axisReserve,
-                      getTitlesWidget: (value, _) => Text(
-                        weeklyReportAxisMoney(currency, value),
-                        style: tokens.typography.caption.copyWith(
-                          color: chart.axisLabel,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                        ],
                       ),
-                    ),
-                  ),
+                  ],
                 ),
-                gridData: FlGridData(
-                  drawVerticalLine: false,
-                  horizontalInterval:
-                      ceiling / WeeklyReportMetrics.gridDivisions,
-                  getDrawingHorizontalLine: (_) =>
-                      FlLine(color: chart.gridLine, strokeWidth: 1),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: <BarChartGroupData>[
-                  for (var day = 0; day < days.length; day++)
-                    BarChartGroupData(
-                      x: day,
-                      barRods: <BarChartRodData>[
-                        BarChartRodData(
-                          toY: revenue[day],
-                          width: WeeklyReportMetrics.barWidth,
-                          color: day == best ? chart.barEmphasis : chart.bar,
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(tokens.radius.sm),
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
               ),
             ),
-          ),
         ],
       ),
     );
