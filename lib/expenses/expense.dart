@@ -346,6 +346,53 @@ final class TenantExpensePeriod {
     truncated: truncated,
   );
 
+  /// Just this period's records in one category, as a period of its own.
+  ///
+  /// Keeps [startDate] and [endDate], so a chart drawn from the slice still
+  /// spans the days the person chose rather than only the days that category
+  /// happened to be spent on.
+  TenantExpensePeriod forCategory(TenantExpenseCategory category) =>
+      TenantExpensePeriod(
+        startDate: startDate,
+        endDate: endDate,
+        records: <TenantExpense>[
+          for (final record in records)
+            if (record.category == category) record,
+        ],
+        truncated: truncated,
+      );
+
+  /// Every business date this period spans, ascending, **including the days
+  /// nothing was spent on**.
+  ///
+  /// A chart needs the empty days: a week with one expense in it is a row of
+  /// six gaps and one bar, and dropping the gaps would draw that as a single
+  /// full-width day.
+  List<String> get businessDates {
+    final start = _utcMidnight(startDate);
+    final end = _utcMidnight(endDate);
+    final dates = <String>[];
+    for (
+      var day = start;
+      !day.isAfter(end) && dates.length < _maximumChartedDays;
+      day = day.add(const Duration(days: 1))
+    ) {
+      dates.add(day.toIso8601String().substring(0, 10));
+    }
+    return List<String>.unmodifiable(dates);
+  }
+
+  /// What was spent on one business date, in whole minor units, voided records
+  /// excluded.
+  int totalMinorOn(String businessDate) {
+    var total = 0;
+    for (final record in records) {
+      if (record.isVoided || record.businessDate != businessDate) continue;
+      total += record.amountMinor;
+    }
+    return total;
+  }
+
   /// [category]'s share of [totalMinor], between 0 and 1, or `null` when there
   /// is no total to take a share of.
   ///
@@ -359,6 +406,23 @@ final class TenantExpensePeriod {
 }
 
 final RegExp _tokenPattern = RegExp(r'^[A-Za-z0-9_-]+$');
+
+/// A business date read as midnight UTC.
+///
+/// **UTC rather than the device's own zone, and it is not a formality.** Local
+/// midnight plus twenty-four hours is not the next local midnight on the two
+/// days a year a zone shifts its clocks: one of them lands back on the date it
+/// started from, which would draw that day twice and lose one off the end of
+/// the span. The range these strings are cut from is computed in UTC to begin
+/// with, so this is also the reading that agrees with it.
+DateTime _utcMidnight(String businessDate) =>
+    DateTime.parse('${businessDate}T00:00:00Z');
+
+/// How many days one period will enumerate for a chart.
+///
+/// The longest stretch the Expenses route offers is thirty days; this is a
+/// guard against a caller asking for a decade, not a product limit.
+const int _maximumChartedDays = 366;
 
 /// `yyyy-MM-dd`.
 const int _businessDateLength = 10;

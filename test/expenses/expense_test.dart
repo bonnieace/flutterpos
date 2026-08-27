@@ -242,6 +242,125 @@ void main() {
     );
   });
 
+  group('slicing a period for a chart', () {
+    test('one category keeps the whole period as its span', () async {
+      // The chart on the category route must cover the days the person chose,
+      // not only the days that category happened to fall on.
+      final reader = _ExpenseReader(<String, Map<String, Object?>>{
+        ..._expense(date: '2026-08-20', token: 'aaa', amountMinor: 100),
+        ..._expense(
+          date: '2026-08-22',
+          token: 'bbb',
+          amountMinor: 900,
+          category: TenantExpenseCategory.transport,
+        ),
+      });
+
+      final period = await _repository(
+        reader,
+      ).readRange(startDate: '2026-08-20', endDate: '2026-08-22');
+      final rent = period.forCategory(TenantExpenseCategory.rent);
+
+      expect(rent.totalMinor, 100);
+      expect(rent.startDate, '2026-08-20');
+      expect(rent.endDate, '2026-08-22');
+      expect(rent.businessDates, hasLength(3));
+    });
+
+    test('every day of the span is enumerated, empty ones included', () {
+      // A week with one expense is six gaps and one bar. Dropping the gaps
+      // would draw that single day as the whole week.
+      final period = TenantExpensePeriod.empty(
+        startDate: '2026-08-20',
+        endDate: '2026-08-26',
+      );
+      expect(period.businessDates, <String>[
+        '2026-08-20',
+        '2026-08-21',
+        '2026-08-22',
+        '2026-08-23',
+        '2026-08-24',
+        '2026-08-25',
+        '2026-08-26',
+      ]);
+    });
+
+    test('a span crossing a month end is enumerated correctly', () {
+      final period = TenantExpensePeriod.empty(
+        startDate: '2026-08-30',
+        endDate: '2026-09-02',
+      );
+      expect(period.businessDates, <String>[
+        '2026-08-30',
+        '2026-08-31',
+        '2026-09-01',
+        '2026-09-02',
+      ]);
+    });
+
+    test('a single day is a span of one', () {
+      final period = TenantExpensePeriod.empty(
+        startDate: '2026-08-20',
+        endDate: '2026-08-20',
+      );
+      expect(period.businessDates, <String>['2026-08-20']);
+    });
+
+    test('one day of the span totals only its own records', () async {
+      final reader = _ExpenseReader(<String, Map<String, Object?>>{
+        ..._expense(date: '2026-08-20', token: 'aaa', amountMinor: 100),
+        ..._expense(date: '2026-08-20', token: 'bbb', amountMinor: 200),
+        ..._expense(date: '2026-08-21', token: 'ccc', amountMinor: 900),
+      });
+
+      final period = await _repository(
+        reader,
+      ).readRange(startDate: '2026-08-20', endDate: '2026-08-21');
+
+      expect(period.totalMinorOn('2026-08-20'), 300);
+      expect(period.totalMinorOn('2026-08-21'), 900);
+      expect(period.totalMinorOn('2026-08-19'), 0);
+    });
+
+    test('a voided record counts towards no day', () async {
+      final reader = _ExpenseReader(<String, Map<String, Object?>>{
+        ..._expense(
+          date: '2026-08-20',
+          token: 'aaa',
+          amountMinor: 900,
+          voided: true,
+        ),
+      });
+
+      final period = await _repository(reader).readDay('2026-08-20');
+
+      expect(period.totalMinorOn('2026-08-20'), 0);
+    });
+
+    test('a truncated period stays truncated through every slice', () async {
+      // A read that stopped early may have dropped records from any day or any
+      // category, so no slice of it can claim to be complete.
+      final records = <String, Map<String, Object?>>{};
+      for (var index = 0; index < 300; index++) {
+        records.addAll(
+          _expense(
+            date: '2026-08-20',
+            token: 'tok${index.toString().padLeft(4, '0')}',
+            amountMinor: 100,
+          ),
+        );
+      }
+
+      final period = await _repository(
+        _ExpenseReader(records),
+      ).readRange(startDate: '2026-08-20', endDate: '2026-08-21');
+
+      expect(period.truncated, isTrue);
+      expect(period.forCategory(TenantExpenseCategory.rent).truncated, isTrue);
+      expect(period.forDate('2026-08-20').truncated, isTrue);
+    });
+  });
+
   group('decoding refuses what it cannot trust', () {
     test('a key that disagrees with the stored date is refused', () {
       // The walk trusts the key. A record whose field said otherwise would be

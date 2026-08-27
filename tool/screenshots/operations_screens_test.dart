@@ -13,6 +13,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/audit/audit.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
+import 'package:flutter_application_1/expenses/expenses.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/returns/returns.dart';
@@ -1142,6 +1143,62 @@ void main() {
     ),
     viewports: responsiveViewports,
   );
+
+  // **The route that makes profit whole.** Owner, because reading spending is
+  // owner and administrator only - the same tier a margin sits behind - so a
+  // capture under any other role would photograph the refusal.
+  screenshotCase(
+    '36-expenses',
+    build: () => inSession(
+      TenantExpensesScreen(
+        reader: FakeTenantReader.business(),
+        writer: _FakeExpenseWriter(),
+      ),
+      controller: seedSession(),
+    ),
+    viewports: responsiveViewports,
+  );
+
+  // One heading on its own, which is the only place the day-by-day chart is
+  // drawn.
+  //
+  // **Reached by pressing the row rather than built directly**, because
+  // `TenantReportingCurrency` can only be produced by reading a business's own
+  // configuration - there is no synthetic one, deliberately, so that no surface
+  // can invent a currency. Navigating gets the real thing and photographs the
+  // real route into the bargain.
+  screenshotCase(
+    '37-expenses-one-category',
+    build: () => inSession(
+      TenantExpensesScreen(
+        reader: FakeTenantReader.business(),
+        writer: _FakeExpenseWriter(),
+      ),
+      controller: seedSession(),
+    ),
+    afterPump: (tester) async {
+      final row = find.byKey(const ValueKey('expense-open-transport'));
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+    },
+    viewports: responsiveViewports,
+  );
+}
+
+/// A writer that answers but is never actually pressed: the captures are of
+/// the page, and a form it could not submit would be the wrong page.
+final class _FakeExpenseWriter implements TenantExpenseWriter {
+  @override
+  Future<TenantExpenseWriteResult> recordExpense(
+    TenantExpenseCreateIntent intent,
+  ) async => const TenantExpenseWriteResult.committed();
+
+  @override
+  Future<TenantExpenseWriteResult> voidExpense(
+    TenantExpenseVoidIntent intent,
+  ) async => const TenantExpenseWriteResult.committed();
 }
 
 /// Opens a sheet on the first frame, so a capture can be of one.

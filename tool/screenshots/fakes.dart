@@ -490,6 +490,98 @@ seedShifts() => <String, Map<String, Object?>>{
   },
 };
 
+/// What the seeded business spent, over the last week of trading.
+///
+/// **The document ID leads with the business date**, which is not decoration:
+/// a client repository orders every page by document ID and takes no range
+/// filter, so this is what makes a date range readable at all. A fake that
+/// keyed these any other way would draw an empty Expenses route and look like
+/// a broken screen rather than a broken seed.
+///
+/// One record is voided, so the captures show what a withdrawn expense looks
+/// like beside a live one.
+Map<String, Map<String, Object?>> seedExpenses() {
+  Map<String, Object?> record({
+    required int daysAgo,
+    required String token,
+    required String category,
+    required String description,
+    required int amountMinor,
+    bool voided = false,
+  }) => <String, Object?>{
+    'expenseId': '${seedBusinessDate(daysAgo)}-$token',
+    'tenantId': seedTenantId,
+    'businessDate': seedBusinessDate(daysAgo),
+    'category': category,
+    'description': description,
+    'amountMinor': amountMinor,
+    'amount': amountMinor / 100,
+    'recordedBy': ownerUid,
+    'createdAt': seedTimestamp(daysAgo: daysAgo, hour: 8),
+    if (voided) ...<String, Object?>{
+      'voidedAt': seedTimestamp(daysAgo: daysAgo, hour: 17),
+      'voidedBy': ownerUid,
+      'voidReason': 'Recorded twice by mistake',
+    },
+  };
+
+  final seeded = <Map<String, Object?>>[
+    record(
+      daysAgo: 6,
+      token: 'rent01',
+      category: 'rent',
+      description: 'Shop rent for the month',
+      amountMinor: 4500000,
+    ),
+    record(
+      daysAgo: 5,
+      token: 'wage01',
+      category: 'wages',
+      description: 'Weekly wages for two staff',
+      amountMinor: 1800000,
+    ),
+    record(
+      daysAgo: 4,
+      token: 'util01',
+      category: 'utilities',
+      description: 'Electricity token top-up',
+      amountMinor: 320000,
+    ),
+    record(
+      daysAgo: 3,
+      token: 'tran01',
+      category: 'transport',
+      description: 'Delivery run to the depot',
+      amountMinor: 145000,
+    ),
+    record(
+      daysAgo: 2,
+      token: 'supp01',
+      category: 'supplies',
+      description: 'Till roll and carrier bags',
+      amountMinor: 68000,
+    ),
+    record(
+      daysAgo: 1,
+      token: 'repa01',
+      category: 'repairs',
+      description: 'Fridge thermostat replaced',
+      amountMinor: 250000,
+    ),
+    record(
+      daysAgo: 1,
+      token: 'void01',
+      category: 'transport',
+      description: 'Delivery run to the depot',
+      amountMinor: 145000,
+      voided: true,
+    ),
+  ];
+  return <String, Map<String, Object?>>{
+    for (final entry in seeded) entry['expenseId']! as String: entry,
+  };
+}
+
 Map<String, Map<String, Object?>> seedReturns() =>
     <String, Map<String, Object?>>{
       'ret-1': <String, Object?>{
@@ -909,6 +1001,7 @@ final class FakeTenantReader
         '$root/sales': seedSales(),
         '$root/shifts': seedShifts(),
         '$root/returns': seedReturns(),
+        '$root/expenses': seedExpenses(),
         '$root/stock_adjustments': seedStockAdjustments(),
         '$root/audit_logs': seedAuditLogs(),
         '$root/shift_amendments': seedShiftAmendments(),

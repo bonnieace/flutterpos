@@ -1,0 +1,204 @@
+/// One category of spending, on its own.
+///
+/// **Carried across from the project this feature came from**, where tapping a
+/// category opened its own screen with a chart and its records beneath. The
+/// reading is worth keeping: *where is the money going* is answered by the ring
+/// on the route behind this one, and *when did it go* only by this.
+///
+/// **It is handed the records rather than reading them again.** The route
+/// behind it has already read the whole period, and this is a slice of exactly
+/// that - so a second read would spend a query to produce the same answer, and
+/// could produce a different one if a write landed in between, which would make
+/// two screens of the same period disagree. `TenantProductStockScreen` takes
+/// its product the same way, for the same reason.
+library;
+
+import 'package:flutter/material.dart';
+
+import '../reporting/reporting_currency.dart';
+import '../ui/card.dart';
+import '../ui/record_list.dart';
+import '../ui/scaffold.dart';
+import '../ui/states.dart';
+import '../ui/stats.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
+import 'expense.dart';
+import 'expense_charts.dart';
+
+/// One category's records across the period that was on screen behind this.
+final class TenantExpenseCategoryScreen extends StatelessWidget {
+  const TenantExpenseCategoryScreen({
+    super.key,
+    required this.category,
+    required this.period,
+    required this.currency,
+    required this.periodLabel,
+  });
+
+  final TenantExpenseCategory category;
+
+  /// The whole period. Sliced to [category] here rather than by the caller, so
+  /// the chart still spans every day the person chose and not only the days
+  /// this category happened to fall on.
+  final TenantExpensePeriod period;
+
+  final TenantReportingCurrency currency;
+
+  /// What the route behind this called the stretch of days - *Last 30 days*.
+  final String periodLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final scoped = period.forCategory(category);
+    return AppScaffold(
+      title: category.label,
+      subtitle: 'Spending under one heading, $periodLabel.',
+      contentWidth: AppContentWidth.records,
+      body: _CategoryContents(
+        category: category,
+        period: scoped,
+        whole: period,
+        currency: currency,
+        periodLabel: periodLabel,
+      ),
+    );
+  }
+}
+
+final class _CategoryContents extends StatelessWidget {
+  const _CategoryContents({
+    required this.category,
+    required this.period,
+    required this.whole,
+    required this.currency,
+    required this.periodLabel,
+  });
+
+  final TenantExpenseCategory category;
+
+  /// This category only.
+  final TenantExpensePeriod period;
+
+  /// Every category, so this one's share can be stated.
+  final TenantExpensePeriod whole;
+
+  final TenantReportingCurrency currency;
+  final String periodLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final dates = period.businessDates;
+    final share = whole.shareOf(category);
+    final counted = period.records.where((record) => !record.isVoided).length;
+    return ListView(
+      key: const ValueKey('expense-category'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      children: <Widget>[
+        StatRow(
+          tiles: <StatTile>[
+            StatTile(
+              key: const ValueKey('expense-category-total'),
+              label: 'Spent',
+              value: currency.format(period.total),
+              money: true,
+              icon: Icons.receipt_outlined,
+              detail: periodLabel,
+            ),
+            StatTile(
+              key: const ValueKey('expense-category-share'),
+              label: 'Share',
+              // An em dash where there is no share to take, for the reason
+              // `shareOf` returns null: a share of no spending is a division
+              // by zero, not a share of nothing.
+              value: share == null
+                  ? '—'
+                  : '${(share * 100).toStringAsFixed(0)}%',
+              icon: Icons.pie_chart_outline,
+              detail: 'Of all spending',
+            ),
+            StatTile(
+              key: const ValueKey('expense-category-count'),
+              label: 'Records',
+              value: '$counted',
+              icon: Icons.list_alt_outlined,
+              detail: periodLabel,
+            ),
+          ],
+        ),
+        if (period.truncated) ...<Widget>[
+          SizedBox(height: tokens.spacing.s16),
+          const Callout(
+            key: ValueKey('expense-category-truncated'),
+            status: AppStatus.attention,
+            title: 'This is not the whole period',
+            message:
+                'More expenses were recorded than one reading holds, so both '
+                'the total and the chart below cover only part of it.',
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s24),
+        if (period.records.isEmpty)
+          EmptyState(
+            key: const ValueKey('expense-category-empty'),
+            title: 'Nothing under ${category.label.toLowerCase()}',
+            hint: 'This heading had no spending in the days shown.',
+          )
+        else ...<Widget>[
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  'Day by day',
+                  style: tokens.typography.labelEyebrow.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.s16),
+                ExpenseDailyChart(
+                  key: const ValueKey('expense-category-chart'),
+                  dates: dates,
+                  totalsMinor: <int>[
+                    for (final date in dates) period.totalMinorOn(date),
+                  ],
+                  currency: currency,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s24),
+          RecordList(
+            identityLabel: 'Expense',
+            items: <RecordItem>[
+              for (final record in period.records)
+                RecordItem(
+                  id: record.expenseId,
+                  recordKey: ValueKey('expense-category-${record.expenseId}'),
+                  title: record.description,
+                  subtitle: record.businessDate,
+                  status: record.isVoided
+                      ? const RecordStatus(
+                          status: AppStatus.neutral,
+                          label: 'Voided',
+                        )
+                      : null,
+                  attributes: <RecordAttribute>[
+                    RecordAttribute(
+                      label: 'Amount',
+                      value: currency.format(record.amount),
+                      kind: RecordValueKind.money,
+                    ),
+                    if (record.voidReason case final reason?)
+                      RecordAttribute(label: 'Voided because', value: reason),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}

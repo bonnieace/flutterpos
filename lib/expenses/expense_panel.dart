@@ -20,7 +20,10 @@ import '../ui/buttons.dart';
 import '../ui/card.dart';
 import '../ui/chips.dart';
 import '../ui/fields.dart';
+import '../ui/press.dart';
 import '../ui/record_list.dart';
+import '../tenancy/tenant_session_controller.dart';
+import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
 import '../ui/skeleton.dart';
@@ -30,6 +33,8 @@ import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'expense.dart';
+import 'expense_category_panel.dart';
+import 'expense_charts.dart';
 import 'expense_repository.dart';
 import 'expense_request.dart';
 
@@ -133,6 +138,56 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
     };
   }
 
+  /// Withdraws one record that should not have been there.
+  ///
+  /// **A void rather than a delete, and it asks why.** The record stays on the
+  /// list struck through, the reason travels with it, and both are refused any
+  /// further change - so a correction is a thing that happened rather than a
+  /// gap where something used to be. The Firestore rule enforces every part of
+  /// that; this is the surface for it.
+  Future<void> _void(
+    TenantSession session,
+    TenantExpense record,
+    TenantReportingCurrency currency,
+  ) async {
+    final writer = widget.writer;
+    if (writer == null) return;
+    final answer = await showExpenseVoidSheet(
+      context,
+      writer: writer,
+      session: session,
+      record: record,
+      currency: currency,
+    );
+    if (!mounted || answer == null) return;
+    showAppSnackBar(context, answer);
+    if (answer.status == AppStatus.ok) _reload();
+  }
+
+  /// Opens one category on its own, carrying the period already read.
+  void _openCategory(
+    TenantExpenseCategory category,
+    TenantExpensePeriod period,
+    TenantReportingCurrency currency,
+  ) {
+    final controller = TenantSessionScope.of(context);
+    Navigator.of(context).push(
+      AppPageRoute<void>(
+        // The same scope the route behind it runs under, so a business switch
+        // invalidates this detail exactly as it invalidates the list.
+        builder: (_) => TenantSessionScope(
+          controller: controller,
+          child: TenantExpenseCategoryScreen(
+            category: category,
+            period: period,
+            currency: currency,
+            periodLabel: _range.label.toLowerCase(),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _record(TenantSession session) async {
     final writer = widget.writer;
     if (writer == null) return;
@@ -207,6 +262,11 @@ class _TenantExpensesPanelState extends State<TenantExpensesPanel> {
           range: _range,
           canRecord: widget.writer != null,
           onRecord: () => _record(session),
+          onVoid: widget.writer == null
+              ? null
+              : (record) => _void(session, record, view.currency),
+          onOpenCategory: (category) =>
+              _openCategory(category, view.period, view.currency),
         ),
       ),
     );
@@ -251,6 +311,8 @@ final class _ExpensesContents extends StatelessWidget {
     required this.range,
     required this.canRecord,
     required this.onRecord,
+    this.onVoid,
+    this.onOpenCategory,
   });
 
   final TenantExpensePeriod period;
@@ -258,6 +320,12 @@ final class _ExpensesContents extends StatelessWidget {
   final TenantExpenseRange range;
   final bool canRecord;
   final VoidCallback onRecord;
+
+  /// Withdraws one record, or null on a build that cannot write.
+  final ValueChanged<TenantExpense>? onVoid;
+
+  /// Opens one category's own records and its day-by-day chart.
+  final ValueChanged<TenantExpenseCategory>? onOpenCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -318,7 +386,11 @@ final class _ExpensesContents extends StatelessWidget {
           ),
         ],
         SizedBox(height: tokens.spacing.s32),
-        _CategoryShares(period: period, currency: currency),
+        _CategoryShares(
+          period: period,
+          currency: currency,
+          onOpenCategory: onOpenCategory,
+        ),
         SizedBox(height: tokens.spacing.s32),
         RecordList(
           identityLabel: 'Expense',
@@ -359,6 +431,21 @@ final class _ExpensesContents extends StatelessWidget {
         valueKey: ValueKey('expense-amount-${record.expenseId}'),
       ),
       RecordAttribute(label: 'Date', value: record.businessDate),
+      // The reason travels with the record it withdrew. A struck-through row
+      // with no explanation is a mystery rather than a correction.
+      if (record.voidReason case final reason?)
+        RecordAttribute(label: 'Voided because', value: reason),
+    ],
+    actions: <RecordAction>[
+      // Offered once. An already-voided record has nothing left to withdraw,
+      // and the rule refuses a second one anyway.
+      if (onVoid != null && !record.isVoided)
+        RecordAction(
+          label: 'Void',
+          actionKey: ValueKey('expense-void-${record.expenseId}'),
+          destructive: true,
+          onPressed: () => onVoid!(record),
+        ),
     ],
   );
 }
@@ -372,10 +459,17 @@ final class _ExpensesContents extends StatelessWidget {
 /// is stated in words for a screen reader, drawn as a bar, and printed as money
 /// on the same row, so nothing here depends on seeing a length or a colour.
 final class _CategoryShares extends StatelessWidget {
-  const _CategoryShares({required this.period, required this.currency});
+  const _CategoryShares({
+    required this.period,
+    required this.currency,
+    this.onOpenCategory,
+  });
 
   final TenantExpensePeriod period;
   final TenantReportingCurrency currency;
+
+  /// Opens one category's own records and its day-by-day chart.
+  final ValueChanged<TenantExpenseCategory>? onOpenCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -394,14 +488,23 @@ final class _CategoryShares extends StatelessWidget {
             ),
           ),
           SizedBox(height: tokens.spacing.s16),
-          for (final category in categories) ...<Widget>[
-            if (category != categories.first)
-              SizedBox(height: tokens.spacing.s16),
+          ExpenseCompositionRing(period: period, currency: currency),
+          SizedBox(height: tokens.spacing.s20),
+          // **The rows are the ring's legend and its accessible reading.**
+          // Each carries the same colour as its slice, and also the name, the
+          // figure and the share in words - so nothing here is told by colour
+          // alone (hard rule 4).
+          for (var index = 0; index < categories.length; index++) ...<Widget>[
+            if (index > 0) SizedBox(height: tokens.spacing.s16),
             _CategoryShareRow(
-              category: category,
-              amount: (period.totalByCategory[category] ?? 0) / 100,
-              share: period.shareOf(category),
+              category: categories[index],
+              swatch: ExpenseCompositionRing.colorFor(tokens, index),
+              amount: (period.totalByCategory[categories[index]] ?? 0) / 100,
+              share: period.shareOf(categories[index]),
               currency: currency,
+              onOpen: onOpenCategory == null
+                  ? null
+                  : () => onOpenCategory!(categories[index]),
             ),
           ],
         ],
@@ -413,33 +516,57 @@ final class _CategoryShares extends StatelessWidget {
 final class _CategoryShareRow extends StatelessWidget {
   const _CategoryShareRow({
     required this.category,
+    required this.swatch,
     required this.amount,
     required this.share,
     required this.currency,
+    this.onOpen,
   });
 
   final TenantExpenseCategory category;
+
+  /// The colour of this category's slice of the ring above.
+  final Color swatch;
+
   final double amount;
   final double? share;
   final TenantReportingCurrency currency;
+
+  /// Opens this category on its own, or null where there is nowhere to go.
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final fraction = share ?? 0;
     final percent = (fraction * 100).toStringAsFixed(0);
-    return Semantics(
+    final row = Semantics(
       container: true,
-      label:
-          '${category.label}, ${currency.format(amount)}, '
-          '$percent per cent of what was spent.',
-      excludeSemantics: true,
+      // A row that opens nothing states itself here; one that does is wrapped
+      // below by a `PressSurface` that states it as a button instead.
+      label: onOpen != null
+          ? null
+          : '${category.label}, ${currency.format(amount)}, '
+                '$percent per cent of what was spent.',
+      excludeSemantics: onOpen == null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Row(
             children: <Widget>[
+              // The ring's colour, restated where the name is. This is the
+              // only place the palette is decoded, and it never carries the
+              // fact alone - the name is right beside it.
+              Container(
+                width: tokens.spacing.s8,
+                height: tokens.spacing.s8,
+                decoration: BoxDecoration(
+                  color: swatch,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s8),
               Expanded(
                 child: Text(
                   category.label,
@@ -473,13 +600,26 @@ final class _CategoryShareRow extends StatelessWidget {
               value: fraction,
               minHeight: tokens.spacing.s8,
               backgroundColor: tokens.colors.surface.field,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                tokens.colors.chart.bar,
-              ),
+              valueColor: AlwaysStoppedAnimation<Color>(swatch),
             ),
           ),
         ],
       ),
+    );
+    if (onOpen == null) return row;
+    // `PressSurface` carries the density's own minimum tap target, so a short
+    // row is still a full-sized thing to hit, and it brings the hover, focus
+    // and pressed states a tappable row has to have (hard rule 5).
+    return PressSurface(
+      key: ValueKey('expense-open-${category.wireValue}'),
+      onPressed: onOpen,
+      borderRadius: BorderRadius.circular(tokens.radius.md),
+      fillWidth: true,
+      semanticLabel:
+          'Open ${category.label}, ${currency.format(amount)}, '
+          '$percent per cent of what was spent.',
+      excludeSemantics: true,
+      child: row,
     );
   }
 }
@@ -552,6 +692,178 @@ Future<AppNotice?> showExpenseRecordSheet(
     onCancel: () => Navigator.of(sheetContext).pop(),
   ),
 );
+
+/// Asks why a record is being withdrawn, then withdraws it.
+///
+/// **The reason is required rather than offered.** The Firestore rule refuses a
+/// void without one, and that is the point of the whole mechanism: a figure
+/// that changed without a stated cause is the thing a business cannot audit.
+Future<AppNotice?> showExpenseVoidSheet(
+  BuildContext context, {
+  required TenantExpenseWriter writer,
+  required TenantSession session,
+  required TenantExpense record,
+  required TenantReportingCurrency currency,
+}) => showAppSheet<AppNotice>(
+  context,
+  builder: (sheetContext, scrollController) => _VoidExpenseForm(
+    writer: writer,
+    session: session,
+    record: record,
+    currency: currency,
+    scrollController: scrollController,
+    onCompleted: (notice) => Navigator.of(sheetContext).pop(notice),
+    onCancel: () => Navigator.of(sheetContext).pop(),
+  ),
+);
+
+final class _VoidExpenseForm extends StatefulWidget {
+  const _VoidExpenseForm({
+    required this.writer,
+    required this.session,
+    required this.record,
+    required this.currency,
+    required this.scrollController,
+    required this.onCompleted,
+    required this.onCancel,
+  });
+
+  final TenantExpenseWriter writer;
+  final TenantSession session;
+  final TenantExpense record;
+  final TenantReportingCurrency currency;
+  final ScrollController scrollController;
+  final ValueChanged<AppNotice> onCompleted;
+  final VoidCallback onCancel;
+
+  @override
+  State<_VoidExpenseForm> createState() => _VoidExpenseFormState();
+}
+
+class _VoidExpenseFormState extends State<_VoidExpenseForm> {
+  final TextEditingController _reason = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final TenantExpenseVoidIntent intent;
+    try {
+      intent = TenantExpenseVoidIntent(
+        tenantId: widget.session.tenantId,
+        expenseId: widget.record.expenseId,
+        reason: _reason.text,
+        voidedBy: widget.session.uid,
+      );
+    } on TenantExpenseException {
+      setState(() => _error = 'Say in a few words why this is being removed.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final result = await widget.writer.voidExpense(intent);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    switch (result.kind) {
+      case TenantExpenseWriteKind.committed:
+        widget.onCompleted(
+          const AppNotice(message: 'Expense voided.', status: AppStatus.ok),
+        );
+      case TenantExpenseWriteKind.unavailable:
+        setState(
+          () => _error =
+              'This device is offline. A void is recorded on the server, so '
+              'it has to wait for a connection.',
+        );
+      case TenantExpenseWriteKind.rejected:
+        setState(
+          () => _error =
+              'The server refused this. A record can only be voided once.',
+        );
+      case TenantExpenseWriteKind.ambiguous:
+        setState(
+          () => _error =
+              'It is not known whether this was voided. Open the list again to '
+              'see where it stands.',
+        );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      controller: widget.scrollController,
+      padding: EdgeInsets.all(tokens.spacing.s24),
+      children: <Widget>[
+        Text(
+          'Void this expense?',
+          style: tokens.typography.titleMedium.copyWith(
+            color: tokens.colors.text.primary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s8),
+        Text(
+          '${widget.record.description} - '
+          '${widget.currency.format(widget.record.amount)} on '
+          '${widget.record.businessDate}.',
+          style: tokens.typography.bodyMedium.copyWith(
+            color: tokens.colors.text.secondary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        Text(
+          'It stays on the list, struck through, and stops counting against '
+          'profit. It cannot be restored or edited afterwards.',
+          style: tokens.typography.caption.copyWith(
+            color: tokens.colors.text.tertiary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s24),
+        AppTextField(
+          key: const ValueKey('expense-void-reason'),
+          label: 'Why',
+          controller: _reason,
+          enabled: !_busy,
+          maxLength: 500,
+          placeholder: 'Recorded twice',
+        ),
+        if (_error case final message?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s20),
+          Callout(
+            key: const ValueKey('expense-void-error'),
+            status: AppStatus.problem,
+            message: message,
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s32),
+        AppButton(
+          key: const ValueKey('expense-void-submit'),
+          label: 'Void expense',
+          tier: AppButtonTier.destructive,
+          loading: _busy,
+          expand: true,
+          onPressed: _busy ? null : _submit,
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        AppButton(
+          key: const ValueKey('expense-void-cancel'),
+          label: 'Keep it',
+          expand: true,
+          onPressed: _busy ? null : widget.onCancel,
+        ),
+      ],
+    );
+  }
+}
 
 final class _RecordExpenseForm extends StatefulWidget {
   const _RecordExpenseForm({

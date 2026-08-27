@@ -11,6 +11,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/expenses/expense.dart';
+import 'package:flutter_application_1/expenses/expense_charts.dart';
 import 'package:flutter_application_1/expenses/expense_panel.dart';
 import 'package:flutter_application_1/expenses/expense_request.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
@@ -237,6 +238,150 @@ void main() {
     expect(find.byKey(const ValueKey('expense-error')), findsOne);
     expect(find.byKey(const ValueKey('expense-submit')), findsOne);
   });
+
+  testWidgets('the composition ring is drawn with its legend', (tester) async {
+    await _pump(
+      tester,
+      reader: _Reader(
+        records: <Map<String, Object?>>[
+          _record(token: 'aaa', amountMinor: 30000),
+          _record(
+            token: 'bbb',
+            amountMinor: 10000,
+            category: TenantExpenseCategory.transport,
+          ),
+        ],
+      ),
+    );
+
+    expect(find.byType(ExpenseCompositionRing), findsOne);
+    // The total sits in the hole in the middle, which is what the ring is for.
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('expenses-ring-total')))
+          .data,
+      'KES 400.00',
+    );
+    // **The legend is the accessible reading of the same data.** Every slice
+    // has a labelled row carrying its name and figure, so no fact here is
+    // told by colour alone.
+    expect(find.byKey(const ValueKey('expense-share-rent')), findsOne);
+    expect(find.byKey(const ValueKey('expense-share-transport')), findsOne);
+  });
+
+  testWidgets('a period that spent nothing draws no ring', (tester) async {
+    // A ring of one grey slice says a business had one expense, which is a
+    // different fact from none.
+    await _pump(tester, reader: _Reader());
+
+    expect(find.byType(ExpenseCompositionRing), findsNothing);
+  });
+
+  testWidgets('a category opens its own records and chart', (tester) async {
+    await _pump(
+      tester,
+      reader: _Reader(
+        records: <Map<String, Object?>>[
+          _record(token: 'aaa', amountMinor: 30000),
+          _record(
+            token: 'bbb',
+            amountMinor: 10000,
+            category: TenantExpenseCategory.transport,
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('expense-open-rent')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('expense-category')), findsOne);
+    expect(find.byKey(const ValueKey('expense-category-chart')), findsOne);
+    // Only this category, and its share of everything.
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(const ValueKey('expense-category-total')),
+              matching: find.text('KES 300.00'),
+            ),
+          )
+          .data,
+      'KES 300.00',
+    );
+    expect(find.text('75%'), findsOne);
+  });
+
+  testWidgets('voiding a record asks why, writes it, and re-reads', (
+    tester,
+  ) async {
+    final writer = _Writer();
+    final reader = _Reader(
+      records: <Map<String, Object?>>[
+        _record(token: 'aaa', amountMinor: 30000),
+      ],
+    );
+    await _pump(tester, reader: reader, writer: writer);
+    final readsBefore = reader.reads;
+
+    await tester.tap(find.byKey(const ValueKey('expense-void-2026-08-27-aaa')));
+    await tester.pumpAndSettle();
+
+    // A void with no reason is refused before it reaches the network, because
+    // the Firestore rule refuses it too.
+    await tester.tap(find.byKey(const ValueKey('expense-void-submit')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('expense-void-error')), findsOne);
+    expect(writer.voided, isEmpty);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('expense-void-reason')),
+      'Recorded twice',
+    );
+    await tester.tap(find.byKey(const ValueKey('expense-void-submit')));
+    await tester.pumpAndSettle();
+
+    expect(writer.voided, hasLength(1));
+    expect(writer.voided.single.expenseId, '2026-08-27-aaa');
+    expect(writer.voided.single.reason, 'Recorded twice');
+    expect(reader.reads, greaterThan(readsBefore));
+  });
+
+  testWidgets('an already voided record offers no second void', (tester) async {
+    await _pump(
+      tester,
+      reader: _Reader(
+        records: <Map<String, Object?>>[
+          _record(token: 'aaa', amountMinor: 30000, voided: true),
+        ],
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('expense-void-2026-08-27-aaa')),
+      findsNothing,
+    );
+    // The reason it went travels with it, so a struck-through row is a
+    // correction rather than a mystery.
+    expect(find.textContaining('Recorded twice'), findsOne);
+  });
+
+  testWidgets('a build with no writer offers no void', (tester) async {
+    await _pump(
+      tester,
+      reader: _Reader(
+        records: <Map<String, Object?>>[
+          _record(token: 'aaa', amountMinor: 30000),
+        ],
+      ),
+      writer: null,
+    );
+
+    expect(
+      find.byKey(const ValueKey('expense-void-2026-08-27-aaa')),
+      findsNothing,
+    );
+  });
 }
 
 Future<void> _pump(
@@ -295,6 +440,7 @@ final class _Writer implements TenantExpenseWriter {
   final TenantExpenseWriteResult result;
   final List<TenantExpenseCreateIntent> recorded =
       <TenantExpenseCreateIntent>[];
+  final List<TenantExpenseVoidIntent> voided = <TenantExpenseVoidIntent>[];
 
   @override
   Future<TenantExpenseWriteResult> recordExpense(
@@ -307,7 +453,10 @@ final class _Writer implements TenantExpenseWriter {
   @override
   Future<TenantExpenseWriteResult> voidExpense(
     TenantExpenseVoidIntent intent,
-  ) async => result;
+  ) async {
+    if (result.kind == TenantExpenseWriteKind.committed) voided.add(intent);
+    return result;
+  }
 }
 
 Map<String, Object?> _record({

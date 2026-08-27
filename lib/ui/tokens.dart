@@ -949,6 +949,7 @@ final class AppChartRoles {
     required this.barEmphasis,
     required this.gridLine,
     required this.axisLabel,
+    required this.series,
   });
 
   /// An ordinary bar. The old screen's `mutedGreen`.
@@ -965,11 +966,37 @@ final class AppChartRoles {
   /// Day names and money along the two axes.
   final Color axisLabel;
 
+  /// The ordered palette for a chart whose parts are *categories* rather than
+  /// positions on an axis - the expense composition ring, and anything after
+  /// it that has to tell one slice from another.
+  ///
+  /// **Neither status hue appears here, deliberately.** `red400` and `amber400`
+  /// carry meaning everywhere else in this app; a red slice for *Transport*
+  /// would read as a warning about transport. So this is the brand family plus
+  /// the one neutral blue, ordered for separation rather than by shade, and the
+  /// two nearest members sit at positions 4 and 7 - which only collide in a
+  /// business that spends under seven different headings at once, and the
+  /// largest headings take the earliest, most distinct colours.
+  ///
+  /// **A palette is never the only signal.** Every surface drawing from this
+  /// also prints the label and the figure beside the swatch, per hard rule 4.
+  final List<Color> series;
+
   static const AppChartRoles dark = AppChartRoles(
     bar: _Primitive.green700,
     barEmphasis: _Primitive.mint400,
     gridLine: _Primitive.green800,
     axisLabel: _Primitive.sage200,
+    series: <Color>[
+      _Primitive.mint400,
+      _Primitive.blue300,
+      _Primitive.sage050,
+      _Primitive.green400,
+      _Primitive.sage200,
+      _Primitive.green600,
+      _Primitive.green300,
+      _Primitive.green800,
+    ],
   );
 
   static const AppChartRoles profoundVerdant = dark;
@@ -980,6 +1007,10 @@ final class AppChartRoles {
         barEmphasis: Color.lerp(a.barEmphasis, b.barEmphasis, t)!,
         gridLine: Color.lerp(a.gridLine, b.gridLine, t)!,
         axisLabel: Color.lerp(a.axisLabel, b.axisLabel, t)!,
+        series: <Color>[
+          for (var index = 0; index < a.series.length; index++)
+            Color.lerp(a.series[index], b.series[index], t)!,
+        ],
       );
 }
 
@@ -1760,8 +1791,16 @@ final class AppMotion {
       short: AppMotionDuration.lerp(a.short, b.short, t),
       medium: AppMotionDuration.lerp(a.medium, b.medium, t),
       long: AppMotionDuration.lerp(a.long, b.long, t),
-      skeletonSweep: AppMotionDuration.lerp(a.skeletonSweep, b.skeletonSweep, t),
-      skeletonDelay: AppMotionDuration.lerp(a.skeletonDelay, b.skeletonDelay, t),
+      skeletonSweep: AppMotionDuration.lerp(
+        a.skeletonSweep,
+        b.skeletonSweep,
+        t,
+      ),
+      skeletonDelay: AppMotionDuration.lerp(
+        a.skeletonDelay,
+        b.skeletonDelay,
+        t,
+      ),
       pressScale: lerpDouble(a.pressScale, b.pressScale, t)!,
       routeParallax: lerpDouble(a.routeParallax, b.routeParallax, t)!,
     );
