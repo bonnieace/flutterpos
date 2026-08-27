@@ -107,10 +107,7 @@ void main() {
         // A v1 sale that grew a tender did not come from this client.
         'v1-with-tender': <String, Object?>{'tender': 'cash'},
         'v2-without-tender': <String, Object?>{'payloadSchemaVersion': 2},
-        'v2-empty': <String, Object?>{
-          'payloadSchemaVersion': 2,
-          'tender': '',
-        },
+        'v2-empty': <String, Object?>{'payloadSchemaVersion': 2, 'tender': ''},
         'v2-capitalised': <String, Object?>{
           'payloadSchemaVersion': 2,
           'tender': 'Cash',
@@ -123,10 +120,7 @@ void main() {
           'payloadSchemaVersion': 2,
           'tender': 'cheque',
         },
-        'v2-numeric': <String, Object?>{
-          'payloadSchemaVersion': 2,
-          'tender': 1,
-        },
+        'v2-numeric': <String, Object?>{'payloadSchemaVersion': 2, 'tender': 1},
         'v2-map': <String, Object?>{
           'payloadSchemaVersion': 2,
           'tender': <String, Object?>{'method': 'cash'},
@@ -268,7 +262,10 @@ void main() {
       expect(page.items.map((sale) => sale.id), <String>['co-2', 'co-1']);
       final query = reader.queries.single;
       expect(query.collectionPath, 'tenants/tenant-a/sales');
-      expect(query.equalityFilters, <String, Object?>{'shiftId': 'shift-a'});
+      expect(query.equalityFilters, <String, Object?>{
+        'shiftId': 'shift-a',
+        'soldById': 'user-a',
+      });
       expect(query.descending, isTrue);
       expect(query.limit, 21);
     });
@@ -286,8 +283,7 @@ void main() {
         // The receipt is regenerated so only the attribution disagrees.
         final reader = _Reader(<String, Map<String, Object?>>{
           'tenants/tenant-a/sales/co-1': _sale(
-            deviceId:
-                entry.value['deviceId'] as String? ?? _deviceA,
+            deviceId: entry.value['deviceId'] as String? ?? _deviceA,
             businessDate:
                 entry.value['businessDate'] as String? ?? _businessDate,
             overrides: <String, Object?>{
@@ -295,7 +291,7 @@ void main() {
                 'soldById': entry.value['soldById'],
             },
           ),
-        });
+        }, ignoreFilters: true);
 
         await expectLater(
           _repository(reader).loadShiftSales(shift: _scope()),
@@ -305,30 +301,33 @@ void main() {
       }
     });
 
-    test('pages this cashier own recent sales and refuses a foreign one', () async {
-      final reader = _Reader(<String, Map<String, Object?>>{
-        'tenants/tenant-a/sales/co-1': _sale(),
-        'tenants/tenant-a/sales/co-2': _sale(saleId: 'co-2', sequence: 2),
-      });
+    test(
+      'pages this cashier own recent sales and refuses a foreign one',
+      () async {
+        final reader = _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/sales/co-1': _sale(),
+          'tenants/tenant-a/sales/co-2': _sale(saleId: 'co-2', sequence: 2),
+        });
 
-      final page = await _repository(reader).loadOwnRecentSales(pageSize: 1);
-      expect(page.items.single.id, 'co-2');
-      expect(page.hasMore, isTrue);
-      expect(page.nextCursor, 'co-2');
-      expect(reader.queries.single.equalityFilters, <String, Object?>{
-        'soldById': 'user-a',
-      });
+        final page = await _repository(reader).loadOwnRecentSales(pageSize: 1);
+        expect(page.items.single.id, 'co-2');
+        expect(page.hasMore, isTrue);
+        expect(page.nextCursor, 'co-2');
+        expect(reader.queries.single.equalityFilters, <String, Object?>{
+          'soldById': 'user-a',
+        });
 
-      final foreign = _Reader(<String, Map<String, Object?>>{
-        'tenants/tenant-a/sales/co-1': _sale(
-          overrides: <String, Object?>{'soldById': 'user-b'},
-        ),
-      }, ignoreFilters: true);
-      await expectLater(
-        _repository(foreign).loadOwnRecentSales(),
-        throwsA(_saleCode('foreign_sale')),
-      );
-    });
+        final foreign = _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/sales/co-1': _sale(
+            overrides: <String, Object?>{'soldById': 'user-b'},
+          ),
+        }, ignoreFilters: true);
+        await expectLater(
+          _repository(foreign).loadOwnRecentSales(),
+          throwsA(_saleCode('foreign_sale')),
+        );
+      },
+    );
 
     test('resumes an own-sales page from its cursor', () async {
       final reader = _Reader(<String, Map<String, Object?>>{
@@ -376,11 +375,8 @@ TenantSaleShiftScope _scope() => const TenantSaleShiftScope(
   businessDate: _businessDate,
 );
 
-Matcher _saleCode(String code) => isA<TenantSaleException>().having(
-  (error) => error.code,
-  'code',
-  code,
-);
+Matcher _saleCode(String code) =>
+    isA<TenantSaleException>().having((error) => error.code, 'code', code);
 
 Matcher _code(String code) => throwsA(_saleCode(code));
 
@@ -457,9 +453,7 @@ final class _Reader implements TenantDataReader {
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
     final data = _documents[path];
-    return data == null
-        ? null
-        : TenantDocumentSnapshot(path: path, data: data);
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
   @override

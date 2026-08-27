@@ -1,3 +1,4 @@
+import 'package:flutter/semantics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
@@ -38,12 +39,20 @@ TextStyle _styleOf(WidgetTester tester, String text) =>
     tester.widget<Text>(find.text(text)).style!;
 
 void main() {
-  group('the screen title is a piece of content, not a piece of chrome', () {
-    testWidgets('it is `title.lg` below §4.1\'s expanded floor', (
+  group('the screen title is chrome again, and says why', () {
+    // **§7 moved the title out of the toolbar and 2026-08-23 moved it back.**
+    // The original reading was faithful to `design.md` §2.2, which gives a
+    // screen title `display` 32 - and no 56-high bar holds one. The design
+    // this app is now built to writes its own mobile header as
+    // `<h1 class="text-section-title">This sale</h1>` inside the bar, and 22
+    // fits.
+    //
+    // What the header block cost is the reason it went: 20 above the title, a
+    // 33-pixel line, a subtitle and a section gap - about 130 logical pixels
+    // of every route, before a single record, on a screen 640 tall.
+    testWidgets('it is `title.lg`, which is the export\'s own header role', (
       tester,
     ) async {
-      // §2.2 gives `title.lg` "screen title (compact)". A `display` title at
-      // phone width would be 32/40 in a 411-wide column.
       await _pump(
         tester,
         const AppScaffold(
@@ -56,41 +65,58 @@ void main() {
       final style = _styleOf(tester, 'Daily summary');
       expect(style.fontSize, _tokens.typography.titleLarge.fontSize);
       expect(style.fontWeight, _tokens.typography.titleLarge.fontWeight);
-      expect(style.height, _tokens.typography.titleLarge.height);
+      expect(style.color, _tokens.colors.text.primary);
     });
 
-    testWidgets('it is `display` at and above it', (tester) async {
-      // §2.2 marks `display` "expanded only", and 1024 is where §4.1 says
-      // expanded begins.
+    testWidgets('the same role at every band', (tester) async {
+      // The header block resolved two roles against §4.1's `expanded` floor,
+      // which is what `display` versus `title.lg` was for. A toolbar is the
+      // same height on every surface, so there is one role and no boundary.
+      for (final width in <double>[411, 834, 1440]) {
+        await _pump(
+          tester,
+          const AppScaffold(
+            contentWidth: AppContentWidth.records,
+            title: 'Daily summary',
+            body: SizedBox(),
+          ),
+          width: width,
+        );
+        expect(
+          _styleOf(tester, 'Daily summary').fontSize,
+          _tokens.typography.titleLarge.fontSize,
+          reason: 'at $width',
+        );
+      }
+    });
+
+    testWidgets('a long one ellipsises rather than wrapping the bar', (
+      tester,
+    ) async {
+      // §5.2 says a record's identity is never truncated below two lines and
+      // the header block read that as "a long title wraps". A bar cannot: a
+      // second line there pushes the whole page down for a word. One line,
+      // ellipsised, and the route is still named by the way back to it.
       await _pump(
         tester,
         const AppScaffold(
           contentWidth: AppContentWidth.records,
-          title: 'Daily summary',
+          title: 'Reconciliation differences for the Nairobi Westlands branch',
           body: SizedBox(),
         ),
-        width: _expandedWidth,
       );
 
-      final style = _styleOf(tester, 'Daily summary');
-      expect(style.fontSize, _tokens.typography.display.fontSize);
-      expect(style.fontWeight, _tokens.typography.display.fontWeight);
-      expect(style.height, _tokens.typography.display.height);
+      final title = tester.widget<Text>(
+        find.text(
+          'Reconciliation differences for the Nairobi Westlands branch',
+        ),
+      );
+      expect(title.maxLines, 1);
+      expect(title.overflow, TextOverflow.ellipsis);
     });
 
-    test('the boundary the widget uses is the one already declared', () {
-      // The predicate is exposed so this can be asked directly rather than
-      // inferred from two pixel widths that happen to agree with it today.
-      expect(PageHeader.showsDisplayTitle(_compactWidth), isFalse);
-      expect(PageHeader.showsDisplayTitle(_expandedWidth), isTrue);
-    });
-
-    testWidgets('the role follows the screen, not the padded header box', (
-      tester,
-    ) async {
-      // At exactly 1024 the header's own box is the page inset narrower. A role
-      // resolved against a `LayoutBuilder` would flip at 1064 instead - a
-      // fourth breakpoint produced by arithmetic that nobody declared.
+    testWidgets('a screen reader is told it is a heading', (tester) async {
+      final handle = tester.ensureSemantics();
       await _pump(
         tester,
         const AppScaffold(
@@ -98,93 +124,21 @@ void main() {
           title: 'Activity log',
           body: SizedBox(),
         ),
-        width: _expandedWidth,
       );
 
       expect(
-        tester.getSize(find.byType(PageHeader)).width,
-        lessThan(_expandedWidth),
-      );
-      expect(
-        _styleOf(tester, 'Activity log').fontSize,
-        _tokens.typography.display.fontSize,
-      );
-    });
-
-    testWidgets('it carries `text.primary` at both roles', (tester) async {
-      for (final width in <double>[_compactWidth, _expandedWidth]) {
-        await _pump(
-          tester,
-          const AppScaffold(
-          contentWidth: AppContentWidth.records,
-          title: 'Manage catalog',
-          body: SizedBox(),
-        ),
-          width: width,
-        );
-        expect(
-          _styleOf(tester, 'Manage catalog').color,
-          _tokens.colors.text.primary,
-          reason: 'at $width',
-        );
-      }
-    });
-
-    testWidgets('it is never truncated - a long one wraps instead', (
-      tester,
-    ) async {
-      // §5.2 says this of a record's identity and the same argument is stronger
-      // for a screen: a person who cannot read the whole title does not know
-      // which screen they are on.
-      const title =
-          'Adjustments: Fresh whole milk 500ml, refrigerated, case of twelve';
-      await _pump(
-        tester,
-        const AppScaffold(
-          contentWidth: AppContentWidth.records,
-          title: title,
-          body: SizedBox(),
-        ),
-        width: 411,
-      );
-
-      final text = tester.widget<Text>(find.text(title));
-      expect(text.overflow, isNot(TextOverflow.ellipsis));
-      expect(text.maxLines, isNull);
-      // And it actually took more than one line at phone width, so the
-      // assertion above is about a case that occurs rather than a hypothetical.
-      expect(
-        tester.getSize(find.text(title)).height,
-        greaterThan(_tokens.typography.titleLarge.height! *
-            _tokens.typography.titleLarge.fontSize!),
-      );
-    });
-
-    testWidgets('a screen reader is told it is a heading', (tester) async {
-      // An `AppBar.title` announced itself as a header. Moving the title out of
-      // the toolbar must not quietly drop that.
-      final handle = tester.ensureSemantics();
-      await _pump(
-        tester,
-        const AppScaffold(
-          contentWidth: AppContentWidth.records,
-          title: 'Shift history',
-          body: SizedBox(),
-        ),
-      );
-
-      expect(
-        tester.getSemantics(find.text('Shift history')),
-        matchesSemantics(label: 'Shift history', isHeader: true),
+        tester
+            .getSemantics(find.text('Activity log'))
+            .hasFlag(SemanticsFlag.isHeader),
+        isTrue,
       );
       handle.dispose();
     });
   });
 
   group('the title appears once', () {
-    testWidgets('the toolbar no longer carries one', (tester) async {
-      // §7's line, as an assertion. The `AppBar` is still there - it owns the
-      // way back - and its title slot is empty.
+    testWidgets('in the toolbar, and nowhere in the body', (tester) async {
+      // §7's rule is unchanged; only the place it holds true has moved.
       await _pump(
         tester,
         const AppScaffold(
@@ -194,13 +148,12 @@ void main() {
         ),
       );
 
-      expect(tester.widget<AppBar>(find.byType(AppBar)).title, isNull);
       expect(
         find.descendant(
           of: find.byType(AppBar),
           matching: find.text('Find a receipt'),
         ),
-        findsNothing,
+        findsOneWidget,
       );
       expect(find.text('Find a receipt'), findsOneWidget);
     });
@@ -226,7 +179,9 @@ void main() {
   });
 
   group('the subtitle', () {
-    testWidgets('is absent when none is given', (tester) async {
+    testWidgets('is absent when none is given, and costs no height', (
+      tester,
+    ) async {
       await _pump(
         tester,
         const AppScaffold(
@@ -237,17 +192,23 @@ void main() {
       );
 
       expect(
-        find.descendant(
-          of: find.byType(PageHeader),
-          matching: find.byType(Text),
-        ),
+        find.descendant(of: find.byType(AppBar), matching: find.byType(Text)),
         findsOneWidget,
+      );
+      expect(
+        tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight,
+        isNull,
+        reason: 'a bar with one line keeps Material\'s own height',
       );
     });
 
-    testWidgets('takes the density body role and `text.secondary`', (
+    testWidgets('names what the page is scoped to, under the title', (
       tester,
     ) async {
+      // Six routes carry one - which reconciliation run, which shift, which
+      // receipt - and it is the kind of fact a person needs before they read a
+      // single row. The export's own header does the same: a title and a
+      // small second line under it.
       await _pump(
         tester,
         const AppScaffold(
@@ -259,59 +220,24 @@ void main() {
       );
 
       final style = _styleOf(tester, '2026-08-12 UTC');
-      final body = _tokens.density.body(_tokens.typography);
-      expect(style.fontSize, body.fontSize);
+      expect(style.fontSize, _tokens.typography.bodyMedium.fontSize);
       expect(style.color, _tokens.colors.text.secondary);
-    });
-
-    testWidgets('follows the screen density rather than a fixed size', (
-      tester,
-    ) async {
-      // §3 gives comfortable `body.lg` and compact `body.md`. A subtitle that
-      // ignored the density would be the only line on the page that did.
-      await _pump(
-        tester,
-        Builder(
-          builder: (context) => Theme(
-            data: Theme.of(context).copyWith(
-              extensions: <ThemeExtension<dynamic>>[
-                AppTokens.of(context).withDensity(AppDensity.compact),
-              ],
-            ),
-            child: const AppScaffold(
-              contentWidth: AppContentWidth.records,
-              title: 'Activity log',
-              subtitle: 'Every event this business recorded',
-              body: SizedBox(),
-            ),
-          ),
-        ),
-      );
-
       expect(
-        _styleOf(tester, 'Every event this business recorded').fontSize,
-        _tokens.typography.bodyMedium.fontSize,
+        tester.getTopLeft(find.text('2026-08-12 UTC')).dy,
+        greaterThan(tester.getTopLeft(find.text('Reconciliation status')).dy),
+      );
+      expect(
+        tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight,
+        AppScaffold.toolbarHeightWithSubtitle,
       );
     });
   });
 
   group('the primary action', () {
-    test('the side-by-side boundary is the other declared constant', () {
-      // `AppLayout.contract.mediumFloor` was written to answer exactly "is there
-      // room for two things side by side" and had zero consumers until now.
-      expect(
-        PageHeader.placesActionBesideTitle(AppLayout.contract.mediumFloor - 1),
-        isFalse,
-      );
-      expect(
-        PageHeader.placesActionBesideTitle(AppLayout.contract.mediumFloor),
-        isTrue,
-      );
-    });
-
-    testWidgets('sits at the trailing edge of the title on a wide screen', (
-      tester,
-    ) async {
+    testWidgets('sits at the trailing edge of the bar', (tester) async {
+      // It sat beside the title in the header block. The block is gone, and
+      // the trailing edge of the bar is where the export puts a page's own
+      // control.
       await _pump(
         tester,
         AppScaffold(
@@ -323,98 +249,49 @@ void main() {
             onPressed: () {},
           ),
           body: const SizedBox(),
-        ),
-        width: AppLayout.contract.mediumFloor,
-      );
-
-      final title = tester.getRect(find.text('Manage catalog'));
-      final action = tester.getRect(find.byType(AppButton));
-      expect(action.left, greaterThan(title.right));
-      expect(action.top, title.top);
-    });
-
-    testWidgets('drops under the title on a phone', (tester) async {
-      await _pump(
-        tester,
-        AppScaffold(
-          contentWidth: AppContentWidth.records,
-          title: 'Manage catalog',
-          primaryAction: AppButton(
-            label: 'Add a product',
-            tier: AppButtonTier.primary,
-            onPressed: () {},
-          ),
-          body: const SizedBox(),
-        ),
-        width: 411,
-      );
-
-      final title = tester.getRect(find.text('Manage catalog'));
-      final action = tester.getRect(find.byType(AppButton));
-      expect(action.top, greaterThanOrEqualTo(title.bottom));
-      expect(action.left, title.left);
-    });
-
-    testWidgets('a long title never squeezes it, at either arrangement', (
-      tester,
-    ) async {
-      // The failure this guards against is the one `tenant_safe_landing_test`
-      // guards against in the toolbar, in its other direction: a title and a
-      // control competing for one row until one of them is unreadable. The
-      // widest button label in the app is measured against the longest title a
-      // route can carry, which is a product name.
-      const title =
-          'Adjustments: Fresh whole milk 500ml, refrigerated, case of twelve';
-      for (final width in <double>[411, AppLayout.contract.mediumFloor, 1440]) {
-        await _pump(
-          tester,
-          AppScaffold(
-            contentWidth: AppContentWidth.records,
-            title: title,
-            primaryAction: AppButton(
-              label: 'Record an adjustment',
-              onPressed: () {},
-            ),
-            body: const SizedBox(),
-          ),
-          width: width,
-          height: 2400,
-        );
-
-        expect(tester.takeException(), isNull, reason: 'at $width');
-        final action = tester.getRect(find.byType(AppButton));
-        expect(action.right, lessThanOrEqualTo(width), reason: 'at $width');
-        expect(action.left, greaterThanOrEqualTo(0), reason: 'at $width');
-        // The title keeps a column it can be read in rather than being
-        // squeezed to a stack of single letters, which is what a `Row` that
-        // gives an unflexed action all the width it asks for produces. A third
-        // of the screen is the floor rather than half because `flutter test`
-        // renders every glyph as a square of the font size, so a five-word
-        // button label measures far wider here than it does in Roboto.
-        expect(
-          tester.getSize(find.text(title)).width,
-          greaterThan(width / 3),
-          reason: 'at $width',
-        );
-      }
-    });
-
-    testWidgets('is absent from the layout when none is given', (tester) async {
-      await _pump(
-        tester,
-        const AppScaffold(
-          contentWidth: AppContentWidth.records,
-          title: 'Stock movements',
-          body: SizedBox(),
         ),
       );
 
       expect(
         find.descendant(
-          of: find.byType(PageHeader),
-          matching: find.byType(Row),
+          of: find.byType(AppBar),
+          matching: find.text('Add a product'),
         ),
-        findsNothing,
+        findsOneWidget,
+      );
+      expect(
+        tester.getCenter(find.text('Add a product')).dx,
+        greaterThan(tester.getCenter(find.text('Manage catalog')).dx),
+      );
+    });
+
+    testWidgets('follows any toolbar actions rather than replacing them', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        AppScaffold(
+          contentWidth: AppContentWidth.records,
+          title: 'Manage catalog',
+          actions: <Widget>[
+            AppButton(
+              label: 'Sign out',
+              tier: AppButtonTier.tertiary,
+              onPressed: () {},
+            ),
+          ],
+          primaryAction: AppButton(
+            label: 'Add a product',
+            tier: AppButtonTier.primary,
+            onPressed: () {},
+          ),
+          body: const SizedBox(),
+        ),
+      );
+
+      expect(
+        tester.getCenter(find.text('Add a product')).dx,
+        greaterThan(tester.getCenter(find.text('Sign out')).dx),
       );
     });
   });
@@ -535,9 +412,11 @@ void main() {
     /// below it would still be found by `find.byType`. **Not off the title
     /// text**, which is inside a start-aligned column and sizes to its own
     /// glyphs rather than to the page.
+    // The page column itself, which §4.2's maximum is applied to. It measured
+    // `PageHeader` until 2026-08-23, when the header block moved into the bar
+    // and stopped being part of the page at all.
     double pageWidth(WidgetTester tester) =>
-        tester.getSize(find.byType(PageHeader)).width +
-        AppScaffold.horizontalInset(_tokens.spacing) * 2;
+        tester.getSize(find.byKey(AppScaffold.pageKey)).width;
 
     testWidgets('a reading surface stops at 720 on a wide window', (
       tester,
@@ -653,10 +532,13 @@ void main() {
         width: 1440,
       );
 
+      // **The body alone now.** The title is in the toolbar, which §4.2 does
+      // not constrain - a back arrow that drifted inwards on a wide window,
+      // away from the corner every platform puts it in, would be chrome
+      // obeying a content rule.
       expect(
         tester.getTopLeft(find.text('a record')).dx,
-        tester.getTopLeft(find.text('Manage catalog')).dx -
-            AppScaffold.horizontalInset(_tokens.spacing),
+        tester.getTopLeft(find.byKey(AppScaffold.pageKey)).dx,
       );
     });
 
@@ -674,9 +556,8 @@ void main() {
         width: 1440,
       );
 
-      final left = tester.getTopLeft(find.text('Checkout settings')).dx;
-      final inset = AppScaffold.horizontalInset(_tokens.spacing);
-      expect(left - inset, (1440 - _tokens.layout.reading) / 2);
+      final left = tester.getTopLeft(find.byKey(AppScaffold.pageKey)).dx;
+      expect(left, (1440 - _tokens.layout.reading) / 2);
     });
 
     testWidgets('`full` adds no constraining widget at all', (tester) async {
@@ -751,15 +632,18 @@ void main() {
         _tokens.density.sectionGap,
         0,
       };
-      final padding = tester.widget<Padding>(
+      // The frame draws one gap of its own now - the space above the body,
+      // where the header block used to sit - and it is on the scale like
+      // every other.
+      final gap = tester.widget<SizedBox>(
         find
-            .ancestor(
-              of: find.byType(PageHeader),
-              matching: find.byType(Padding),
+            .descendant(
+              of: find.byKey(AppScaffold.pageKey),
+              matching: find.byType(SizedBox),
             )
             .first,
       );
-      final inset = padding.padding.resolve(TextDirection.ltr);
+      final inset = EdgeInsets.all(gap.height ?? 0);
       for (final value in <double>[
         inset.left,
         inset.top,
@@ -780,10 +664,14 @@ void main() {
       }
     });
 
-    testWidgets('the header and the content are a section gap apart', (
+    testWidgets('the bar and the content are one spacing step apart', (
       tester,
     ) async {
-      // §3's own row for the gap between one section of a page and the next.
+      // **`space.8`, down from 16 on 2026-08-26 and 24 before that.** The
+      // header block was a section of the page and needed §3's gap under it;
+      // a toolbar is chrome with its own edge. The 16 was still a second
+      // opinion on top of the 20 every body pads itself with, which the
+      // product owner read as wasted ground under the title.
       await _pump(
         tester,
         const AppScaffold(
@@ -796,12 +684,9 @@ void main() {
         ),
       );
 
-      final header = tester.getRect(find.byType(PageHeader));
+      final bar = tester.getRect(find.byType(AppBar));
       final content = tester.getRect(find.text('first line of content'));
-      expect(
-        content.top - header.bottom,
-        _tokens.density.sectionGap,
-      );
+      expect(content.top - bar.bottom, _tokens.spacing.s8);
     });
 
     testWidgets('the body is given every pixel below the header', (
@@ -819,11 +704,9 @@ void main() {
       );
 
       final bar = tester.getRect(find.byType(AppBar));
-      final header = tester.getRect(find.byType(PageHeader));
       final body = tester.getRect(find.byKey(const ValueKey('body')));
-      expect(body.top, header.bottom + _tokens.density.sectionGap);
+      expect(body.top, bar.bottom + _tokens.spacing.s8);
       expect(body.bottom, height);
-      expect(bar.bottom, lessThanOrEqualTo(header.top));
     });
   });
 
@@ -876,9 +759,11 @@ void main() {
     /// The width the page column ends up with, measured the same way §4.2's
     /// group measures it: off the laid-out header rather than off a constraint
     /// that may or may not be honoured below it.
+    // The page column itself, which §4.2's maximum is applied to. It measured
+    // `PageHeader` until 2026-08-23, when the header block moved into the bar
+    // and stopped being part of the page at all.
     double pageWidth(WidgetTester tester) =>
-        tester.getSize(find.byType(PageHeader)).width +
-        AppScaffold.horizontalInset(_tokens.spacing) * 2;
+        tester.getSize(find.byKey(AppScaffold.pageKey)).width;
 
     /// The inset the frame draws to the left of the menu, plus the menu.
     final double columnCost =
@@ -997,7 +882,7 @@ void main() {
       // Centred in what is left rather than in the window: the page's own
       // centre is the middle of the space beside the menu.
       expect(
-        tester.getRect(find.byType(PageHeader)).center.dx,
+        tester.getRect(find.byKey(AppScaffold.pageKey)).center.dx,
         closeTo((columnCost + 1600) / 2, 0.5),
       );
     });

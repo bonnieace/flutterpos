@@ -7,6 +7,7 @@ import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/text.dart';
+import '../support/landing_drawer.dart';
 
 void main() {
   testWidgets('the trail is listed as the server recorded it', (tester) async {
@@ -268,6 +269,7 @@ void main() {
         ..respond(<TenantQueryDocumentSnapshot>[_staffEvent()]);
 
       await _pumpLanding(tester, reader, role: TenantRole.owner);
+      await openLandingDrawer(tester);
       await tester.tap(find.byKey(const ValueKey('view-audit-log')));
       await tester.pumpAndSettle();
 
@@ -280,11 +282,23 @@ void main() {
 
       await _pumpLanding(tester, reader, role: TenantRole.manager);
 
+      await openLandingDrawer(tester);
       expect(find.byKey(const ValueKey('view-audit-log')), findsNothing);
       // The catalog is still offered, so the absence is the role boundary and
       // not a screen that failed to build.
       expect(find.text('View read-only catalog'), findsOneWidget);
-      expect(reader.queries, isEmpty);
+      // **No *audit* query, rather than no query at all.** The landing route
+      // reads this member's own recent sales for its activity list as of
+      // 2026-08-23, so `isEmpty` would now be asserting that the home does not
+      // work. What this test is about is the role boundary on the audit log.
+      expect(
+        reader.queries.where(
+          (query) => query.collectionPath.endsWith(
+            '/${TenantCollection.auditLogs.segment}',
+          ),
+        ),
+        isEmpty,
+      );
     });
 
     testWidgets('the route stays unreachable while none is supplied', (

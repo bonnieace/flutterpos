@@ -11,6 +11,7 @@ import '../ui/pagination.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/stats.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'reconciliation_actions.dart';
@@ -101,6 +102,19 @@ final class _TenantReconciliationStatusPanelState
   int _generation = 0;
   bool _busy = false;
   AppNotice? _notice;
+
+  /// Reports one write outcome, on the surface its kind belongs to.
+  ///
+  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
+  /// that names a next step stays where it was drawn.
+  void _report(AppNotice notice) {
+    if (noticeIsTransient(notice)) {
+      showAppSnackBar(context, notice);
+      return;
+    }
+    setState(() => _notice = notice);
+  }
+
   TenantReconciliationMode _mode = TenantReconciliationMode.incremental;
 
   /// Retained only across an ambiguous attempt, so a retry addresses the same
@@ -195,8 +209,8 @@ final class _TenantReconciliationStatusPanelState
       final result = await gateway.submit(gateway.createIntent(mode: _mode));
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
-      setState(
-        () => _notice = AppNotice.confirmed(
+      _report(
+        AppNotice.confirmed(
           'Queued as ${result.jobId}. The server works through outstanding '
           'days oldest first, so this may regenerate another day before '
           'this one.',
@@ -209,7 +223,7 @@ final class _TenantReconciliationStatusPanelState
       // request ID. Every other refusal left nothing behind, and reusing its ID
       // would make a later attempt fail as a duplicate.
       if (!error.mayHaveQueued) _requestId = null;
-      setState(() => _notice = _requestNotice(error.failure));
+      _report(_requestNotice(error.failure));
       if (error.mayHaveQueued) _reload();
     } on FormatException {
       if (!_stillCurrent(capturedKey)) return;
@@ -560,12 +574,7 @@ final class _ReconciliationContents extends StatelessWidget {
             ),
         ],
         SizedBox(height: tokens.spacing.s24),
-        Text(
-          'Reconciliation runs',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Reconciliation runs'),
         SizedBox(height: tokens.spacing.s4),
         const Disclosure(
           key: ValueKey('reconciliation-status-runs-disclosure'),
@@ -656,12 +665,7 @@ final class _RequestReconciliation extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Ask the server to reconcile',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Ask the server to reconcile'),
         SizedBox(height: tokens.spacing.s4),
         // The single most important sentence on this surface. A request is
         // filed for the business under today's business date and the runners

@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/scaffold.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'email_delivery_status.dart';
@@ -260,8 +261,9 @@ final class _AccountVerificationPanelState
   /// and the server answers the same delivery instead of queuing another.
   AccountVerificationIntent? _intentFor(AccountVerificationGateway gateway) {
     final existing = _intent;
-    if (existing != null && existing.uid == widget.identity.uid)
+    if (existing != null && existing.uid == widget.identity.uid) {
       return existing;
+    }
     try {
       return _intent = gateway.createIntent();
     } catch (_) {
@@ -338,8 +340,9 @@ final class _AccountVerificationPanelState
     try {
       await widget.onReload();
     } catch (error) {
-      if (!mounted || widget.identity.uid != checkedUid || !_isCurrent())
+      if (!mounted || widget.identity.uid != checkedUid || !_isCurrent()) {
         return;
+      }
       setState(() {
         _reloading = false;
         _safeError = accountVerificationSafeError(error);
@@ -364,12 +367,7 @@ final class _AccountVerificationPanelState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Verify your email address',
-              style: tokens.typography.titleMedium.copyWith(
-                color: tokens.colors.text.primary,
-              ),
-            ),
+            SectionHeading('Verify your email address'),
             SizedBox(height: tokens.spacing.s8),
             const Text(
               'Until this address is verified you cannot request a business or '
@@ -417,10 +415,8 @@ final class _AccountVerificationPanelState
               ),
             ],
             SizedBox(height: tokens.spacing.s16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
+            AppActionRow(
+              actions: <Widget>[
                 // `busy` covers both in-flight calls on this screen, so the
                 // other one's spinner must not appear here: `loading` is this
                 // button's own flag and `onPressed` carries the shared guard.

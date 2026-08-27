@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'invitation_acceptance_failure.dart';
@@ -342,9 +343,7 @@ final class _TenantInvitationAcceptanceFormState
     }
     if (!mounted || !_isStillSubmitted(submittedUid, submittedLink)) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Invitation accepted.')));
+    showAppSnackBar(context, const AppNotice.confirmed('Invitation accepted.'));
     widget.onSuccess();
   }
 

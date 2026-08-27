@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_bootstrap.dart';
@@ -298,8 +300,9 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
     }
     if (!mounted || !_isStillCurrent(submittedUid, intent)) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${result.name} was submitted for review.')),
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed('${result.name} was submitted for review.'),
     );
     widget.onSuccess(result);
   }
@@ -323,12 +326,7 @@ final class _TenantRequestFormState extends State<TenantRequestForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Request a business',
-            style: tokens.typography.titleMedium.copyWith(
-              color: tokens.colors.text.primary,
-            ),
-          ),
+          SectionHeading('Request a business'),
           SizedBox(height: tokens.spacing.s8),
           const Text('New businesses remain pending until platform review.'),
           SizedBox(height: tokens.spacing.s16),

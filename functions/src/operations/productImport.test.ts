@@ -321,6 +321,7 @@ test("a created row carries exactly the keys the catalog's own create writes", (
 
   assert.deepEqual(Object.keys(result.writes[0].documentData).sort(), [
     "SKU", "categoryId", "cost", "name", "price", "quantity",
+    "searchName", "searchPrefixes",
   ]);
   assert.deepEqual(result.writes[0].documentData, {
     name: "Cola 500ml",
@@ -329,6 +330,11 @@ test("a created row carries exactly the keys the catalog's own create writes", (
     cost: 12.5,
     quantity: 24,
     categoryId: CATEGORY,
+    searchName: "cola 500ml",
+    searchPrefixes: [
+      "50", "500", "500m", "500ml", "cl", "cl5", "cl50", "cl500",
+      "co", "col", "cola",
+    ],
   });
   // Omitted rather than written as null when no cost was recorded, so "never
   // recorded" and "recorded as nothing" stay distinguishable in the document.

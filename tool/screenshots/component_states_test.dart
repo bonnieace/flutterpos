@@ -45,11 +45,7 @@ enum _State { enabled, disabled, loading }
 
 /// A page rendering one state across all four tiers and all three sizes.
 class _ButtonMatrix extends StatelessWidget {
-  const _ButtonMatrix({
-    required this.title,
-    required this.state,
-    this.focused,
-  });
+  const _ButtonMatrix({required this.title, required this.state, this.focused});
 
   final String title;
   final _State state;
@@ -123,10 +119,8 @@ void main() {
       // spinners never stop, so `pumpAndSettle` would time out rather than
       // settle.
       settle: state != _State.loading,
-      build: () => _ButtonMatrix(
-        title: 'AppButton - ${state.name}',
-        state: state,
-      ),
+      build: () =>
+          _ButtonMatrix(title: 'AppButton - ${state.name}', state: state),
     );
   }
 
@@ -145,9 +139,7 @@ void main() {
         state: _State.enabled,
       ),
       afterPump: (tester) async {
-        final mouse = await tester.createGesture(
-          kind: PointerDeviceKind.mouse,
-        );
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
         await mouse.addPointer(location: Offset.zero);
         addTearDown(mouse.removePointer);
         await mouse.moveTo(tester.getCenter(_large(tier)));

@@ -747,7 +747,7 @@ void main() {
     // 5a built for exactly this.
     expect(
       find.descendant(
-        of: find.byType(PageHeader),
+        of: find.byType(AppBar),
         matching: find.text('shift-a'),
       ),
       findsOne,

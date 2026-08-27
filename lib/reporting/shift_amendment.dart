@@ -80,8 +80,7 @@ final class TenantShiftAmendmentException implements Exception {
   /// the shift is exactly as it was, which matters because the surface that
   /// offers this also lists the difference it resolves: showing a difference as
   /// resolved when it is not would be worse than showing it unresolved.
-  bool get mayHaveAmended =>
-      failure == TenantShiftAmendmentFailure.ambiguous;
+  bool get mayHaveAmended => failure == TenantShiftAmendmentFailure.ambiguous;
 
   @override
   String toString() => 'TenantShiftAmendmentException(${failure.name})';
@@ -153,7 +152,10 @@ final class TenantShiftAmendmentResult {
     );
     final totalSalesMinor = _requiredMinorUnits(data, 'totalSalesMinor');
     final transactionCount = _requiredCount(data, 'transactionCount');
-    final transactionVariance = _requiredDifference(data, 'transactionVariance');
+    final transactionVariance = _requiredDifference(
+      data,
+      'transactionVariance',
+    );
     // The transaction figures are whole counts from one comparison, so this
     // identity is exact and a response that breaks it did not come from the
     // handler. The money figures are deliberately not cross-checked the same
@@ -360,7 +362,9 @@ TenantShiftAmendmentFailure _classify(FirebaseFunctionsException error) =>
 
 Map<String, Object?> _strictMap(Object? value) {
   if (value is! Map) {
-    throw const FormatException('amendShiftSummary returned an invalid response.');
+    throw const FormatException(
+      'amendShiftSummary returned an invalid response.',
+    );
   }
   return <String, Object?>{
     for (final key in value.keys)

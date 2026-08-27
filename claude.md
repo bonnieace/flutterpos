@@ -5,15 +5,30 @@ on every turn, and length here costs context on every task.
 
 ## The design system
 
-The current redesign is coordinated from `docs/stitch/README.md`. Read it and the selected
-phase brief before any visual work. `docs/stitch/DESIGN_RULES.md` is the visual guardrail;
-active code and `docs/stitch/RBAC_MATRIX.md` remain the authority for behavior and access.
+**Direction changed 2026-08-25.** Existing customers know the pre-multitenancy app
+(`lib/pos/**`, `lib/screens/**` — still read-only reference only, see hard rule 3) and find the
+Stitch redesign's navigation and visual changes confusing. For screens covered by that reversal,
+the old app's screens/flows/visual character are the target, rebuilt on the existing multitenant
+backend and token layer — see the plan at
+`C:\Users\BonifaceMasota\.claude\plans\look-at-the-old-expressive-sutton.md` for scope
+(currently Login, Home/Main Hub, Sales Report/Book Keeping) and approach. `docs/stitch/README.md`
+carries a retirement notice for those screens; treat its phase briefs and `OPEN_QUESTIONS.md` as
+historical for them, not authoritative. For any screen **not yet** covered by the reversal,
+`docs/stitch/README.md` and the selected phase brief are still the coordination point — read them
+before visual work there.
 
-Root `DESIGN.md` documents the previous Flutter-led system. It is implementation history,
-not visual authority for new Stitch compositions, and its layout contract must not constrain
-the redesign. Preserve reusable semantic theming: approved tokens must flow through the theme
-layer rather than becoming hardcoded widget values. If the Stitch rules and product evidence do
-not define a decision, record it in `docs/stitch/OPEN_QUESTIONS.md` instead of inventing one.
+`docs/stitch/RBAC_MATRIX.md` remains the authority for behavior and access everywhere,
+regardless of which visual direction a screen follows. `docs/stitch/DESIGN_RULES.md`'s
+accessibility and product-truthfulness rules (§9 contrast/target/focus/state requirements,
+offline-first truthfulness) still apply everywhere too — only its Profound Verdant visual
+character is what old-look screens override, deliberately.
+
+Root `DESIGN.md` documents the previous Flutter-led system. It is implementation history, not
+visual authority for new Stitch compositions. Preserve reusable semantic theming: approved
+tokens must flow through the theme layer rather than becoming hardcoded widget values, even
+when recreating an old screen's look — extend `AppTokens` rather than hardcoding a value the
+old screen used. If neither the applicable rules nor product evidence define a decision, record
+it in `docs/stitch/OPEN_QUESTIONS.md` instead of inventing one.
 
 ## Hard rules
 

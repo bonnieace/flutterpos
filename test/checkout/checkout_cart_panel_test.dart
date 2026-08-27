@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/dialogs.dart';
+import 'package:flutter_application_1/ui/fields.dart';
+import 'package:flutter_application_1/ui/skeleton.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/stepper.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
@@ -50,7 +53,7 @@ void main() {
     expect(_text(tester, 'checkout-total'), 'KES 248.00');
   });
 
-  testWidgets('refuses to save until a payment method is chosen', (
+  testWidgets('preselects cash and saves without touching the tender', (
     tester,
   ) async {
     await _pump(tester, sessions, catalog, drafts);
@@ -62,13 +65,18 @@ void main() {
 
     await _tap(tester, 'checkout-product-product-b');
 
-    // Nothing is pre-selected, so the sale still cannot be saved. A default
-    // would be indistinguishable from a payment somebody actually observed.
-    expect(
-      _text(tester, 'checkout-save-blocked'),
-      'Choose how the customer paid.',
-    );
-    expect(_save(tester).onPressed, isNull);
+    // Cash is preselected as of 2026-08-23, so an item is the only thing the
+    // save was ever waiting for. The consequence this locks in deliberately:
+    // a sale nobody set a tender on records `cash`.
+    expect(find.byKey(const ValueKey('checkout-save-blocked')), findsNothing);
+    expect(_save(tester).onPressed, isNotNull);
+  });
+
+  testWidgets('another tender can still be chosen over the default', (
+    tester,
+  ) async {
+    await _pump(tester, sessions, catalog, drafts);
+    await _tap(tester, 'checkout-product-product-b');
 
     await _tap(tester, 'checkout-tender-mpesa');
 
@@ -98,7 +106,7 @@ void main() {
     // The discount has no control, so a saved sale can never carry one.
     expect(drafts.requests.single.discountMinor, 0);
 
-    expect(_notice(tester, 'checkout-saved'), contains('CT-A7F-20260731-0001'));
+    expect(snackNotice(tester).message, contains('CT-A7F-20260731-0001'));
     // The cart resets so the next customer cannot inherit these lines, and the
     // tender resets with it so it is never carried over unobserved.
     expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
@@ -121,7 +129,7 @@ void main() {
     expect(_notice(tester, 'checkout-refusal'), 'Open a shift before selling.');
     // The cashier does not have to ring the sale up again.
     expect(find.byKey(const ValueKey('checkout-line-product-a')), findsOne);
-    expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
+    expect(find.byType(AppSnackBar), findsNothing);
   });
 
   testWidgets('says when retrying cannot clear the refusal', (tester) async {
@@ -457,7 +465,7 @@ void main() {
     });
   });
 
-  group('entering a code', () {
+  group('searching the catalog', () {
     setUp(() {
       catalog.put(
         uid: 'user-a',
@@ -471,116 +479,65 @@ void main() {
       );
     });
 
-    testWidgets('a scanned code adds the product and clears the field', (
-      tester,
-    ) async {
+    testWidgets('a search narrows the list and adds nothing', (tester) async {
       await _pump(tester, sessions, catalog, drafts);
 
-      // A retail scanner types the code and submits, which is exactly this.
-      await _submit(tester, 'checkout-search', 'sku-loaf');
+      await _enter(tester, 'checkout-search', 'cola');
 
-      expect(find.byKey(const ValueKey('checkout-line-loaf')), findsOne);
-      // Cleared so the next scan starts from the whole catalog.
-      expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
-      expect(find.byKey(const ValueKey('checkout-code-notice')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-water')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-line-cola')), findsNothing);
     });
 
-    testWidgets('a code is matched whatever the category filter is set to', (
-      tester,
-    ) async {
+    testWidgets('submitting an exact code adds nothing', (tester) async {
       await _pump(tester, sessions, catalog, drafts);
 
-      await _tap(tester, 'checkout-category-drinks');
-      await _submit(tester, 'checkout-search', 'sku-loaf');
+      // The scanner path was removed on 2026-08-23: this field searches and
+      // never adds. Submitting the one code that names exactly one product is
+      // the case that used to add it, so it is the case worth pinning.
+      await _submit(tester, 'checkout-search', 'sku-cola');
 
-      // A scanned code is evidence about what is in the cashier's hand; a chip
-      // set earlier must not make the scanner useless.
-      expect(find.byKey(const ValueKey('checkout-line-loaf')), findsOne);
-      // The filter itself is left exactly as it was.
-      expect(find.byKey(const ValueKey('checkout-product-loaf')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-line-cola')), findsNothing);
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
     });
 
-    testWidgets('a code no product carries adds nothing and says so', (
+    testWidgets('a code is searchable as text', (tester) async {
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _enter(tester, 'checkout-search', 'sku-cola');
+
+      expect(find.byKey(const ValueKey('checkout-product-cola')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-product-water')), findsNothing);
+    });
+
+    testWidgets('a search matching nothing says so and adds nothing', (
       tester,
     ) async {
       await _pump(tester, sessions, catalog, drafts);
 
-      await _submit(tester, 'checkout-search', 'sku-nothing');
+      await _submit(tester, 'checkout-search', 'nothing-carries-this');
 
       expect(
-        _notice(tester, 'checkout-code-notice'),
-        'Nothing on this device matches that. Check the code and try again.',
+        find.byKey(const ValueKey('checkout-catalog-no-matches')),
+        findsOne,
       );
-      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-    });
-
-    testWidgets('a code two products share is refused rather than guessed', (
-      tester,
-    ) async {
-      // Nothing makes a SKU unique: Firestore Rules do not mention it and the
-      // cache only refuses duplicate product IDs, so this is a real state.
-      catalog.put(
-        uid: 'user-a',
-        tenantId: 'tenant-a',
-        products: <TenantProduct>[
-          _product('tenant-a', 'cola-330', sku: 'SHARED'),
-          _product('tenant-a', 'cola-500', sku: 'SHARED'),
-        ],
-      );
-      await _pump(tester, sessions, catalog, drafts);
-
-      await _submit(tester, 'checkout-search', 'SHARED');
-
-      expect(
-        _notice(tester, 'checkout-code-notice'),
-        'More than one product on this device carries that code, so nothing '
-        'was added. Pick the right one from the list.',
-      );
-      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
       expect(drafts.requests, isEmpty);
     });
 
-    testWidgets('a search naming exactly one product adds it too', (
-      tester,
-    ) async {
+    testWidgets('tapping a searched card is what adds it', (tester) async {
       await _pump(tester, sessions, catalog, drafts);
 
-      // Not a code, but no less unambiguous: one product is left on screen.
-      await _submit(tester, 'checkout-search', 'water');
+      await _enter(tester, 'checkout-search', 'cola');
+      await _tap(tester, 'checkout-product-cola');
 
-      expect(find.byKey(const ValueKey('checkout-line-water')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-line-cola')), findsOne);
     });
 
-    testWidgets('a search naming several products adds none of them', (
-      tester,
-    ) async {
+    testWidgets('tapping the same card twice sells two of it', (tester) async {
       await _pump(tester, sessions, catalog, drafts);
 
-      await _submit(tester, 'checkout-search', 'name');
-
-      expect(
-        _notice(tester, 'checkout-code-notice'),
-        'That matches more than one product, so nothing was added. Pick one '
-        'from the list, or enter its exact code.',
-      );
-      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-    });
-
-    testWidgets('an empty search does nothing at all', (tester) async {
-      await _pump(tester, sessions, catalog, drafts);
-
-      await _submit(tester, 'checkout-search', '');
-
-      expect(find.byKey(const ValueKey('checkout-code-notice')), findsNothing);
-      expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
-    });
-
-    testWidgets('scanning the same code twice sells two of it', (tester) async {
-      await _pump(tester, sessions, catalog, drafts);
-
-      await _submit(tester, 'checkout-search', 'sku-cola');
-      await _submit(tester, 'checkout-search', 'sku-cola');
-      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-product-cola');
+      await _tap(tester, 'checkout-product-cola');
       await _tap(tester, 'checkout-save');
 
       expect(drafts.requests.single.lines.single.quantity, 2);
@@ -635,14 +592,16 @@ void main() {
       );
     });
 
-    testWidgets('a product past the cap is still sellable by its code', (
+    testWidgets('a product past the cap is reachable by searching for it', (
       tester,
     ) async {
       await _pump(tester, sessions, catalog, drafts);
 
-      // The cap bounds what is drawn, never what can be sold.
-      await _submit(tester, 'checkout-search', 'sku-product-064');
-      await _tap(tester, 'checkout-tender-cash');
+      // The cap bounds what is drawn, never what can be sold. Since
+      // 2026-08-23 the way through it is to narrow the search until the
+      // product is drawn, and then tap it - the code no longer adds directly.
+      await _enter(tester, 'checkout-search', 'sku-product-064');
+      await _tap(tester, 'checkout-product-product-064');
       await _tap(tester, 'checkout-save');
 
       expect(drafts.requests.single.lines.single.productId, 'product-064');
@@ -718,7 +677,7 @@ void main() {
 
       // The receipt describes a different, finished sale.
       expect(
-        _notice(tester, 'checkout-saved'),
+        snackNotice(tester).message,
         contains('CT-A7F-20260731-0001'),
       );
     });
@@ -1090,8 +1049,14 @@ void main() {
       // that was saved and one that was refused.
       await _pump(tester, sessions, catalog, drafts);
 
+      // The refusal notice this used to read went with the scanner path on
+      // 2026-08-23: a search that matches nothing now says so in the grid
+      // rather than as a refusal, because nothing was being refused.
       await _submit(tester, 'checkout-search', 'nothing-carries-this');
-      expect(_status(tester, 'checkout-code-notice'), AppStatus.problem);
+      expect(
+        find.byKey(const ValueKey('checkout-catalog-no-matches')),
+        findsOne,
+      );
 
       // The search is still narrowing the list, and clearing it is what a
       // cashier does next rather than something this assertion needs.
@@ -1099,7 +1064,7 @@ void main() {
       await _tap(tester, 'checkout-product-product-a');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
-      expect(_status(tester, 'checkout-saved'), AppStatus.ok);
+      expect(snackNotice(tester).status, AppStatus.ok);
     });
 
     testWidgets('a sale saved with no receipt number is awaiting, not wrong', (
@@ -1116,7 +1081,7 @@ void main() {
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
 
-      expect(_status(tester, 'checkout-saved'), AppStatus.attention);
+      expect(dialogNotice(tester).status, AppStatus.attention);
     });
 
     testWidgets('a receipt that did not print is stated beside the sale', (
@@ -1132,11 +1097,18 @@ void main() {
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
 
-      expect(_status(tester, 'checkout-saved'), AppStatus.ok);
-      expect(_status(tester, 'checkout-receipt-print'), AppStatus.problem);
+      // **A modal since 2026-08-26, and it is the case that argues for one.**
+      // Nothing came out of the printer, so no paper carries the number - a
+      // snack bar would take the only copy off the screen after seven seconds.
+      expect(find.byType(NoticeDialog), findsOne);
+      expect(find.byType(AppSnackBar), findsNothing);
+      // The sale's own outcome is in the title, so a printer fault can never
+      // read as a lost sale.
+      expect(find.text('Saved as CT-A7F-20260731-0001'), findsOne);
+      expect(dialogNotice(tester).status, AppStatus.problem);
       // The sentence is `checkout_print_failures.dart`'s, not this screen's.
       expect(
-        _notice(tester, 'checkout-receipt-print'),
+        dialogNotice(tester).message,
         PrinterFailureNotice.of(PrinterTransportCode.unreachable).message,
       );
       // **And where the receipt went, which that sentence cannot say.** Those
@@ -1144,8 +1116,8 @@ void main() {
       // this surface rather than to the shared copy. `OPEN_QUESTIONS.md`'s
       // Phase 03 item 4 is the product decision it states.
       expect(
-        _text(tester, 'checkout-receipt-print-route'),
-        'After closing, open Receipts waiting from the business home.',
+        find.textContaining('Open Receipts waiting from the business home'),
+        findsOne,
       );
     });
 
@@ -1162,7 +1134,7 @@ void main() {
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
 
-      expect(_status(tester, 'checkout-receipt-print'), AppStatus.attention);
+      expect(dialogNotice(tester).status, AppStatus.attention);
     });
 
     testWidgets('a receipt that printed adds no second notice', (tester) async {
@@ -1175,15 +1147,13 @@ void main() {
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
 
-      expect(find.byKey(const ValueKey('checkout-saved')), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('checkout-receipt-print')),
-        findsNothing,
-      );
+      expect(find.byType(AppSnackBar), findsOne);
       // The route line belongs to the failure, not to the sale, so a receipt
-      // that reached the printer must not send anybody to the queue.
+      // that reached the printer must not send anybody to the queue - and must
+      // not raise a modal at all.
+      expect(find.byType(NoticeDialog), findsNothing);
       expect(
-        find.byKey(const ValueKey('checkout-receipt-print-route')),
+        find.textContaining('Receipts waiting'),
         findsNothing,
       );
     });
@@ -1289,10 +1259,12 @@ void main() {
 
       expect(_text(tester, 'checkout-product-stock-product-b'), '12 in stock');
       expect(_text(tester, 'checkout-product-price-product-b'), 'KES 7.00');
+      // The freshness sentence that used to sit above the grid was removed on
+      // 2026-08-23 to give the products the screen. The figure itself is what
+      // a cashier reads, and it is still on the card.
       expect(
-        _text(tester, 'checkout-catalog-freshness'),
-        'Prices and stock come from this device, last synced 2026-07-31 '
-        '00:00 UTC. A sale is never blocked by a stock count.',
+        find.byKey(const ValueKey('checkout-catalog-freshness')),
+        findsNothing,
       );
     });
 
@@ -1317,7 +1289,7 @@ void main() {
       // signed stock, so refusing here would block a legitimate sale on stale
       // data while guaranteeing nothing.
       expect(drafts.requests.single.lines.single.quantity, 30);
-      expect(find.byKey(const ValueKey('checkout-saved')), findsOne);
+      expect(find.byType(AppSnackBar), findsOne);
     });
 
     testWidgets('a negative cached figure is stated rather than hidden', (
@@ -1358,7 +1330,13 @@ void main() {
   });
 
   group('the saved receipt', () {
-    testWidgets('survives the next cart edit until it is closed', (
+    // **Three outcomes on three surfaces since 2026-08-26**, where all three
+    // used to be inline `Callout`s that stayed until the cashier pressed
+    // *Close*. The split is by whether anybody has to act: a sale that saved
+    // and printed is a snack bar and withdraws itself; the two that need
+    // dealing with are modals that cannot.
+
+    testWidgets('a saved sale is a snack bar, not a block on the till', (
       tester,
     ) async {
       await _pump(tester, sessions, catalog, drafts);
@@ -1366,76 +1344,93 @@ void main() {
       await _tap(tester, 'checkout-product-product-a');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
-      expect(
-        _notice(tester, 'checkout-saved'),
-        contains('CT-A7F-20260731-0001'),
-      );
-
-      // The cashier starts serving the next customer straight away. The number
-      // describes a sale that is already finished, so it must not vanish.
-      await _tap(tester, 'checkout-product-product-b');
 
       expect(
-        _notice(tester, 'checkout-saved'),
-        contains('CT-A7F-20260731-0001'),
+        snackNotice(tester).message,
+        'Saved as CT-A7F-20260731-0001. It syncs on its own.',
       );
-
-      await _tap(tester, 'checkout-dismiss-receipt');
-
+      expect(snackNotice(tester).status, AppStatus.ok);
+      // Nothing is reserved for it in the till's own layout any more, which is
+      // the point: the common case stopped pushing the cart down the screen.
       expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
-      // Closing the receipt is not the same as clearing the cart.
+      expect(find.byType(NoticeDialog), findsNothing);
+    });
+
+    testWidgets('it withdraws itself, so the next customer needs no press', (
+      tester,
+    ) async {
+      // The old notice survived every later cart edit and was cleared only by
+      // a press, because a cashier had to be able to read the number off the
+      // screen. The number is on the paper now.
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+      expect(find.byType(AppSnackBar), findsOne);
+
+      await _waitOutSnackBar(tester);
+
+      expect(find.byType(AppSnackBar), findsNothing);
+      // And it took nothing else with it: the cart the cashier has started for
+      // the next customer is untouched.
+      await _tap(tester, 'checkout-product-product-b');
       expect(find.byKey(const ValueKey('checkout-line-product-b')), findsOne);
     });
 
-    testWidgets('can be copied', (tester) async {
-      final copied = <String>[];
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (call) async {
-          if (call.method == 'Clipboard.setData') {
-            copied.add((call.arguments as Map)['text'] as String);
-          }
-          return null;
-        },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        ),
-      );
+    testWidgets('nothing is offered to copy, because paper carries it', (
+      tester,
+    ) async {
+      // Owner direction, 2026-08-26: the customer has the printed receipt at
+      // that moment, and receipt search has been simplified since. The control
+      // and the clipboard write are both gone rather than hidden.
       await _pump(tester, sessions, catalog, drafts);
 
       await _tap(tester, 'checkout-product-product-a');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
-      await _tap(tester, 'checkout-copy-receipt');
 
-      expect(copied, <String>['CT-A7F-20260731-0001']);
-      expect(find.byKey(const ValueKey('checkout-receipt-copied')), findsOne);
+      expect(find.byKey(const ValueKey('checkout-copy-receipt')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('checkout-receipt-copied')),
+        findsNothing,
+      );
     });
 
-    testWidgets('a second save replaces the first receipt', (tester) async {
+    testWidgets('a second save announces its own number, not the first', (
+      tester,
+    ) async {
+      // **That a snack bar replaces rather than queues is asserted where the
+      // component lives**, in `test/ui/snackbar_test.dart`. What this one is
+      // for is the till: the second sale's number is the one announced.
+      //
+      // The first bar is waited out rather than saved through, because a
+      // floating snack bar sits over the bottom of the pane and the save
+      // control is down there - see the note on `_waitOutSnackBar`'s call here.
       await _pump(tester, sessions, catalog, drafts);
 
       await _tap(tester, 'checkout-product-product-a');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
+      expect(snackNotice(tester).message, contains('CT-A7F-20260731-0001'));
+      await _waitOutSnackBar(tester);
+
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-tender-mpesa');
       await _tap(tester, 'checkout-save');
 
+      expect(find.byType(AppSnackBar), findsOne);
       expect(
-        _notice(tester, 'checkout-saved'),
+        snackNotice(tester).message,
         contains('CT-A7F-20260731-0002'),
       );
       expect(
-        _notice(tester, 'checkout-saved'),
+        snackNotice(tester).message,
         isNot(contains('CT-A7F-20260731-0001')),
       );
     });
 
-    testWidgets('a refused save takes the previous receipt off screen', (
+    testWidgets('a refused save announces nothing about a receipt', (
       tester,
     ) async {
       await _pump(tester, sessions, catalog, drafts);
@@ -1443,21 +1438,52 @@ void main() {
       await _tap(tester, 'checkout-product-product-a');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
+      await _waitOutSnackBar(tester);
 
       drafts.refusal = 'no_open_shift';
       await _tap(tester, 'checkout-product-product-b');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
 
-      // An older number beside a refusal reads as if the refused sale saved.
-      expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
+      // A number beside a refusal reads as if the refused sale saved.
+      expect(find.byType(AppSnackBar), findsNothing);
       expect(
         _notice(tester, 'checkout-refusal'),
         'Open a shift before selling.',
       );
     });
 
-    testWidgets('a save with no receipt number still says the sale is kept', (
+    testWidgets('a save with no receipt number is a modal, not a snack bar', (
+      tester,
+    ) async {
+      // **This one cannot be allowed to withdraw itself unseen.** A cashier
+      // must not read out a number the till could not produce, and §2.1's
+      // `attention` - "unreconciled, pending, **awaiting**" - is what it is:
+      // nothing failed, the sale is durable, the number is what is awaited.
+      drafts.omitReceiptNumber = true;
+      await _pump(tester, sessions, catalog, drafts);
+
+      await _tap(tester, 'checkout-product-product-a');
+      await _tap(tester, 'checkout-tender-cash');
+      await _tap(tester, 'checkout-save');
+
+      expect(find.byType(NoticeDialog), findsOne);
+      expect(find.byType(AppSnackBar), findsNothing);
+      expect(dialogNotice(tester).status, AppStatus.attention);
+      expect(
+        dialogNotice(tester).message,
+        startsWith('The sale is saved on this device'),
+      );
+      // Silence here would have the cashier ring the same sale up again, so
+      // the bound on it is stated rather than left to be inferred.
+      expect(
+        find.textContaining('nothing needs ringing up again'),
+        findsOne,
+      );
+      expect(find.text('Saved without a receipt number'), findsOne);
+    });
+
+    testWidgets('the modal has to be answered rather than waited out', (
       tester,
     ) async {
       drafts.omitReceiptNumber = true;
@@ -1467,12 +1493,13 @@ void main() {
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
 
-      // Silence here would have the cashier ring the same sale up again.
-      expect(
-        _notice(tester, 'checkout-saved'),
-        startsWith('Saved on this device, but it could not state a receipt'),
-      );
-      expect(find.byKey(const ValueKey('checkout-copy-receipt')), findsNothing);
+      await _waitOutSnackBar(tester, AppSnackBar.actionableDwell);
+      expect(find.byType(NoticeDialog), findsOne);
+
+      await tester.tap(find.byKey(const ValueKey('checkout-dismiss-receipt')));
+      // `_settle` pumps 60ms, short of the dialog's own exit animation.
+      await tester.pumpAndSettle();
+      expect(find.byType(NoticeDialog), findsNothing);
     });
   });
 
@@ -1490,14 +1517,16 @@ void main() {
       await _tap(tester, 'checkout-product-product-a');
       await _tap(tester, 'checkout-tender-cash');
       await _tap(tester, 'checkout-save');
-      expect(find.byKey(const ValueKey('checkout-saved')), findsOne);
+      expect(find.byType(AppSnackBar), findsOne);
+      await _waitOutSnackBar(tester);
 
       sessions.open(uid: 'user-a', membership: _membership('tenant-b'));
       await _settle(tester);
 
       // Nothing from the first business may be carried into the second: not a
-      // line, not a search term, and not a receipt number.
-      expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
+      // line and not a search term. A receipt number is no longer among them -
+      // the confirmation is transient and had already withdrawn itself.
+      expect(find.byType(AppSnackBar), findsNothing);
       expect(find.byKey(const ValueKey('checkout-cart-empty')), findsOne);
       expect(_field(tester, 'checkout-search').controller!.text, isEmpty);
       expect(_text(tester, 'checkout-total'), 'KES 0.00');
@@ -1524,8 +1553,112 @@ void main() {
     gate.complete();
     await _settle(tester);
 
-    expect(find.byKey(const ValueKey('checkout-saved')), findsNothing);
+    expect(find.byType(AppSnackBar), findsNothing);
   });
+
+  // `docs/stitch/OPEN_QUESTIONS.md` decision 35. The till used to answer this
+  // read with one centred sentence, which said nothing about the screen and
+  // then swapped a whole product grid in underneath it.
+  group('a till reading its catalog still looks like a till', () {
+    testWidgets('the search field is real, and says it is not ready', (
+      tester,
+    ) async {
+      final catalog = _Catalog()
+        ..put(uid: 'user-a', tenantId: 'tenant-a', products: <TenantProduct>[]);
+      await _pumpUnsettledTill(tester, sessions, catalog);
+
+      final search = tester.widget<AppTextField>(
+        find.byKey(const ValueKey('checkout-search')),
+      );
+      // Present because its frame and label do not come from the read;
+      // disabled because it cannot search a list that is not loaded, and a
+      // field that swallows keystrokes is worse than one that says so.
+      expect(search.enabled, isFalse);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('checkout-search')),
+          matching: find.byType(SkeletonBlock),
+        ),
+        findsNothing,
+      );
+
+      await _settle(tester);
+    });
+
+    testWidgets('the products are the placeholders', (tester) async {
+      final catalog = _Catalog()
+        ..put(uid: 'user-a', tenantId: 'tenant-a', products: <TenantProduct>[]);
+      await _pumpUnsettledTill(tester, sessions, catalog);
+
+      expect(find.byKey(const ValueKey('checkout-loading')), findsOne);
+      expect(find.byType(SkeletonBlock), findsWidgets);
+
+      await _settle(tester);
+    });
+
+    testWidgets('a placeholder tile has a tile\'s parts, not one rectangle', (
+      tester,
+    ) async {
+      // **This started as a single filled block per tile and that was a real
+      // shortcoming.** A solid rectangle says only *something is coming here*;
+      // it does not say the thing coming has a name at the top and a price at
+      // the bottom, which is the entire argument for a skeleton over a spinner.
+      //
+      // Four parts at the wide till: the name, the code under it, the price and
+      // the stock figure. Asserting "more than one" rather than an exact count
+      // deliberately - the number is the tile's business and will change with
+      // it; that there is *structure at all* is what must not regress.
+      await _pumpUnsettledTill(
+        tester,
+        sessions,
+        _Catalog()
+          ..put(uid: 'user-a', tenantId: 'tenant-a', products: <TenantProduct>[]),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('checkout-product-skeleton-0')),
+          matching: find.byType(SkeletonBlock),
+        ),
+        findsAtLeast(2),
+      );
+
+      await _settle(tester);
+    });
+
+    testWidgets('an empty catalog answers with its sentence, not a skeleton', (
+      tester,
+    ) async {
+      // The requirement that outranks all of this: an empty read has answered.
+      final catalog = _Catalog()
+        ..put(uid: 'user-a', tenantId: 'tenant-a', products: <TenantProduct>[]);
+      await _pumpUnsettledTill(tester, sessions, catalog);
+      await _settle(tester);
+
+      expect(find.byKey(const ValueKey('checkout-catalog-empty')), findsOne);
+      expect(find.byType(SkeletonBlock), findsNothing);
+    });
+  });
+}
+
+/// The till on its first frame, before the catalog read has answered.
+Future<void> _pumpUnsettledTill(
+  WidgetTester tester,
+  TenantSessionController controller,
+  _Catalog catalog,
+) async {
+  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TenantSessionScope(
+        controller: controller,
+        child: TenantCheckoutScreen(cache: catalog, drafts: null),
+      ),
+    ),
+  );
 }
 
 Future<void> _pump(
@@ -1575,6 +1708,28 @@ Future<void> _pumpAt(
 /// `pumpAndSettle` never returns while an indeterminate progress indicator is
 /// on screen, which is what the route guard shows by default. The panel supplies
 /// its own non-animating loading widget precisely so this screen can be settled.
+/// Advances past a snack bar's dwell and waits for it to leave.
+///
+/// **One big `pump` does not do it, and the reason is where Material starts the
+/// clock.** `ScaffoldMessenger` schedules the dismissal timer inside a `.then()`
+/// on the *entrance* animation, so the timer does not exist until that
+/// animation has run to completion — and a single `pump(5s)` produces one frame
+/// five seconds later rather than the frames the animation needs to finish.
+/// Jumping the clock that way leaves the bar up with no timer ever set.
+///
+/// So: one jump past the dwell, then real frames until it goes.
+Future<void> _waitOutSnackBar(
+  WidgetTester tester, [
+  Duration dwell = AppSnackBar.dwell,
+]) async {
+  await tester.pump(dwell + const Duration(seconds: 1));
+  for (var frame = 0; frame < 40; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (find.byType(AppSnackBar).evaluate().isEmpty) return;
+  }
+  await tester.pumpAndSettle();
+}
+
 Future<void> _settle(WidgetTester tester) async {
   for (var frame = 0; frame < 6; frame++) {
     await tester.pump(const Duration(milliseconds: 10));

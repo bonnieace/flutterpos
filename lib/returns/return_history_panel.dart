@@ -12,6 +12,8 @@ import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
+import '../ui/sheet.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'return_actions.dart';
@@ -19,11 +21,7 @@ import 'return_history.dart';
 import 'return_request.dart';
 import 'return_verification.dart';
 
-/// What one returns page is scoped to.
-///
-/// Only a sale-scoped page exists. A business-wide returns list would need its
-/// own deliberate filter, index, and read decision; a descending page always
-/// carries an equality filter, so there is no unfiltered scan to fall into.
+/// What the return process is scoped to.
 final class TenantSaleReturnsRequest {
   const TenantSaleReturnsRequest({required this.sale});
 
@@ -37,33 +35,47 @@ final class TenantSaleReturnsRequest {
   String get key => 'sale:$saleId';
 }
 
-/// Read/record returns route for the selected tenant session.
-final class TenantSaleReturnsScreen extends StatelessWidget {
-  const TenantSaleReturnsScreen({
-    super.key,
-    required this.reader,
-    required this.request,
-    this.actions,
-  });
-
-  final TenantDataReader reader;
-  final TenantSaleReturnsRequest request;
-
-  /// Supplied by the composition root. Whatever is absent stays unavailable, so
-  /// a route with no actions is exactly the read-only surface it was before.
-  final TenantReturnActions? actions;
-
-  @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: 'Returns',
-    subtitle: request.receiptNumber,
-    contentWidth: AppContentWidth.records,
-    body: TenantSaleReturnsPanel(
-      reader: reader,
-      request: request,
-      actions: actions,
+/// Records a return against one selected sale, as a sheet over the sale it is
+/// against.
+///
+/// **A sheet rather than a route since 2026-08-26**, on the same reading as the
+/// stock correction: this is one short errand against a record a person is
+/// already looking at, and pushing a screen for it took the sale off the
+/// display at the moment they needed to check what was on it.
+///
+/// **A confirmed return closes the sheet and is announced over the sale
+/// list**; see [TenantSaleReturnsPanel.onCompleted] for why a refusal is not.
+Future<void> openTenantSaleReturnSheet(
+  BuildContext context, {
+  required TenantDataReader reader,
+  required TenantSaleReturnsRequest request,
+  TenantReturnActions? actions,
+  String Function()? requestIdFactory,
+}) async {
+  // Captured before the sheet exists: a sheet is a route of its own and
+  // inherits no scope from the page it covers.
+  final sessions = TenantSessionScope.read(context);
+  final answer = await showAppSheet<AppNotice>(
+    context,
+    // A line per sold product, a reason field and a pair of buttons. `half`
+    // puts the submit control under the fold on any sale of more than two or
+    // three lines.
+    initialDetent: AppSheetDetent.full,
+    builder: (sheetContext, controller) => TenantSessionScope(
+      controller: sessions,
+      child: TenantSaleReturnsPanel(
+        reader: reader,
+        request: request,
+        actions: actions,
+        requestIdFactory: requestIdFactory,
+        showHistory: false,
+        scrollController: controller,
+        onCompleted: (notice) => Navigator.of(sheetContext).pop(notice),
+        onCancel: () => Navigator.of(sheetContext).pop(),
+      ),
     ),
   );
+  if (answer != null && context.mounted) showAppSnackBar(context, answer);
 }
 
 /// One guarded view of a sale's returns and what may still be returned.
@@ -95,6 +107,10 @@ final class TenantSaleReturnsPanel extends StatefulWidget {
     this.actions,
     this.pageSize = 20,
     this.requestIdFactory,
+    this.showHistory = true,
+    this.scrollController,
+    this.onCompleted,
+    this.onCancel,
   });
 
   final TenantDataReader reader;
@@ -104,6 +120,31 @@ final class TenantSaleReturnsPanel extends StatefulWidget {
 
   /// One fresh request ID per confirmation or verification intent.
   final String Function()? requestIdFactory;
+
+  /// The sale route is a focused return process. The complete business record
+  /// lives on the home's Returns screen.
+  final bool showHistory;
+
+  /// The sheet's own controller, which must reach the scrollable this builds or
+  /// dragging the form scrolls the form and the sheet never moves. Null when
+  /// this panel is pumped outside a sheet, which is how its tests reach it.
+  final ScrollController? scrollController;
+
+  /// Called with the confirmation once, and only once, a return commits.
+  ///
+  /// **Only a commit reports out, and a refusal deliberately does not.** The
+  /// sheet closes on this callback, so handing it a refusal would throw away a
+  /// set of chosen quantities and a typed reason at the exact moment a person
+  /// needs them to fix what was wrong. A refusal stays here as a [Callout] over
+  /// the form that produced it, and so does an ambiguous outcome — that one has
+  /// a page re-read behind it whose records are the answer.
+  ///
+  /// Null renders every outcome in place, which is what the full returns
+  /// surface and a test pumping this panel bare both see.
+  final void Function(AppNotice notice)? onCompleted;
+
+  /// Abandons the return. Null draws no cancel control.
+  final VoidCallback? onCancel;
 
   @override
   State<TenantSaleReturnsPanel> createState() => _TenantSaleReturnsPanelState();
@@ -192,8 +233,14 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
       // request ID. A rejected or unattempted write left nothing behind, and
       // reusing its ID would deny an edited retry as a duplicate.
       if (result.kind != TenantReturnWriteKind.ambiguous) _requestId = null;
-      setState(() => _notice = _resultNotice(result));
-      if (result.kind == TenantReturnWriteKind.committed) _reload();
+      _answer(_resultNotice(result));
+      // **The re-read is skipped when the sheet is closing.** `_answer` pops
+      // the route on a commit, and a `_reload` after it would start a guarded
+      // read against a deactivated element.
+      if (result.kind == TenantReturnWriteKind.committed &&
+          widget.onCompleted == null) {
+        _reload();
+      }
     } on TenantReturnException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
@@ -201,6 +248,20 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Reports [notice] the way this panel was wired to, and nothing more.
+  ///
+  /// A commit hands the sentence to [TenantSaleReturnsPanel.onCompleted] where
+  /// there is one; every other outcome, and every outcome at all where there is
+  /// not, is rendered in place.
+  void _answer(AppNotice notice) {
+    final completed = widget.onCompleted;
+    if (notice.status == AppStatus.ok && completed != null) {
+      completed(notice);
+      return;
+    }
+    setState(() => _notice = notice);
   }
 
   /// Whether the session this work was authorized against is still selected.
@@ -296,6 +357,9 @@ final class _TenantSaleReturnsPanelState extends State<TenantSaleReturnsPanel> {
         onRecord: (quantities, reason) =>
             _record(session, view.returnable!, quantities, reason),
         onVerify: (record) => _verify(session, record),
+        showHistory: widget.showHistory,
+        scrollController: widget.scrollController,
+        onCancel: widget.onCancel,
       ),
     );
   }
@@ -449,6 +513,9 @@ final class _SaleReturnsContents extends StatelessWidget {
     required this.onPreviousPage,
     required this.onRecord,
     required this.onVerify,
+    required this.showHistory,
+    required this.scrollController,
+    required this.onCancel,
   });
 
   final TenantSaleReturnsRequest request;
@@ -466,6 +533,13 @@ final class _SaleReturnsContents extends StatelessWidget {
   final VoidCallback onPreviousPage;
   final void Function(Map<String, int> quantities, String reason) onRecord;
   final ValueChanged<TenantReturn> onVerify;
+  final bool showHistory;
+
+  /// The sheet's drag controller. See
+  /// [TenantSaleReturnsPanel.scrollController].
+  final ScrollController? scrollController;
+
+  final VoidCallback? onCancel;
 
   TenantReturnPage get page => view.page;
 
@@ -474,17 +548,62 @@ final class _SaleReturnsContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return ListView(
       key: const ValueKey('sale-returns'),
-      padding: EdgeInsets.all(tokens.spacing.s20),
+      controller: scrollController,
+      padding: showHistory
+          ? EdgeInsets.all(tokens.spacing.s20)
+          // The sheet's handle already sits above this and pads it, so there is
+          // no top inset; the bottom is the sheet's, so the submit control
+          // clears its edge.
+          : EdgeInsets.fromLTRB(
+              tokens.spacing.s20,
+              0,
+              tokens.spacing.s20,
+              tokens.spacing.s24,
+            ),
       children: [
         // §7's "Title appears once". This named *which* sale rather than
         // repeating the title, so the receipt number moved to
         // `PageHeader.subtitle`; the header reads `Returns` over the receipt
         // where the page used to say `Returns` and then `Returns against …`.
-        SizedBox(height: tokens.spacing.s4),
-        const Text(
-          'Stock is restored only when a return is verified. A pending return '
-          'has changed no stock yet.',
-        ),
+        if (showHistory) ...<Widget>[
+          SizedBox(height: tokens.spacing.s4),
+          const Text(
+            'Stock is restored only when a return is verified. A pending '
+            'return has changed no stock yet.',
+          ),
+        ] else ...<Widget>[
+          // The sheet carries what `AppScaffold` used to, for the same reason
+          // the stock sheet does: it is a route of its own with no app bar.
+          PageHeader(
+            key: const ValueKey('sale-returns-header'),
+            title: 'Return',
+            subtitle: request.receiptNumber,
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          // **Three pieces of standing prose folded into one, on 2026-08-26.**
+          // This sheet opened with a two-sentence paragraph, then a
+          // `SectionHeading` reading *Record a return* under a header already
+          // reading *Return*, then a second two-sentence paragraph inside the
+          // form — roughly a third of a phone screen of explanation above the
+          // first control, all of it permanent and all of it true of every
+          // return this sheet will ever record. §5.1's own row for that is a
+          // `Disclosure`, which is what the rest of this app already uses.
+          //
+          // **Every sentence is kept verbatim and reordered, not rewritten.**
+          // The order is what a person asks in: what may I return, what does
+          // recording it do, and when does stock actually move.
+          const Disclosure(
+            key: ValueKey('sale-returns-scope-disclosure'),
+            summary: 'What a return does',
+            child: Text(
+              key: ValueKey('sale-returns-scope'),
+              'Choose what the customer returned and record the reason. Only '
+              'what this sale still has available may be returned, and pending '
+              'returns already count against it. Stock changes only after a '
+              'manager verifies the return.',
+            ),
+          ),
+        ],
         // **Phase 06's second criterion, which this page left to inference.**
         // Requesting a return is open to every active role and verifying it is
         // management's, and for a cashier the difference was that the action
@@ -497,7 +616,7 @@ final class _SaleReturnsContents extends StatelessWidget {
         // list is readable, and one action belongs to somebody else. The
         // refusal copy that already existed says this too, but only after an
         // attempt that a cashier can never make.
-        if (!canVerify) ...[
+        if (showHistory && !canVerify) ...[
           SizedBox(height: tokens.spacing.s12),
           const Callout(
             key: ValueKey('sale-returns-verification-unavailable'),
@@ -516,34 +635,43 @@ final class _SaleReturnsContents extends StatelessWidget {
             message: answer.message,
           ),
         ],
-        SizedBox(height: tokens.spacing.s16),
-        if (page.items.isNotEmpty) ...[
-          Text(key: const ValueKey('sale-returns-counts'), _countsLabel(page)),
-          SizedBox(height: tokens.spacing.s12),
-        ],
-        // §4.3's responsive contract.
-        RecordList(
-          identityLabel: 'Return',
-          items: <RecordItem>[
-            for (final record in page.items) _entry(context, record),
+        if (showHistory) ...[
+          SizedBox(height: tokens.spacing.s16),
+          if (page.items.isNotEmpty) ...[
+            Text(
+              key: const ValueKey('sale-returns-counts'),
+              _countsLabel(page),
+            ),
+            SizedBox(height: tokens.spacing.s12),
           ],
-          empty: const Text(
-            key: ValueKey('sale-returns-empty'),
-            'No returns were recorded against this sale.',
+          // §4.3's responsive contract.
+          RecordList(
+            identityLabel: 'Return',
+            items: <RecordItem>[
+              for (final record in page.items) _entry(context, record),
+            ],
+            empty: const Text(
+              key: ValueKey('sale-returns-empty'),
+              'No returns were recorded against this sale.',
+            ),
           ),
-        ),
-        SizedBox(height: tokens.spacing.s16),
-        Pagination(
-          pageNumber: pageIndex + 1,
-          previousKey: const ValueKey('sale-returns-previous'),
-          nextKey: const ValueKey('sale-returns-next'),
-          onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: page.hasMore ? onNextPage : null,
-        ),
+          SizedBox(height: tokens.spacing.s16),
+          Pagination(
+            pageNumber: pageIndex + 1,
+            previousKey: const ValueKey('sale-returns-previous'),
+            nextKey: const ValueKey('sale-returns-next'),
+            onPrevious: pageIndex > 0 ? onPreviousPage : null,
+            onNext: page.hasMore ? onNextPage : null,
+          ),
+        ],
         if (canRecord) ...[
-          SizedBox(height: tokens.spacing.s24),
-          const Divider(),
-          SizedBox(height: tokens.spacing.s12),
+          SizedBox(
+            height: showHistory ? tokens.spacing.s24 : tokens.spacing.s16,
+          ),
+          if (showHistory) ...[
+            const Divider(),
+            SizedBox(height: tokens.spacing.s12),
+          ],
           if (view.returnable case final returnable?)
             if (returnable.hasReturnableLines)
               _RecordReturnForm(
@@ -551,6 +679,7 @@ final class _SaleReturnsContents extends StatelessWidget {
                 returnable: returnable,
                 busy: busy,
                 onRecord: onRecord,
+                onCancel: onCancel,
               )
             else
               const Text(
@@ -563,6 +692,13 @@ final class _SaleReturnsContents extends StatelessWidget {
               'More returns exist than this page shows. Go back to the first '
               'page to record another return against this sale.',
             ),
+        ] else if (!showHistory) ...[
+          SizedBox(height: tokens.spacing.s16),
+          const Callout(
+            key: ValueKey('sale-return-recording-unavailable'),
+            status: AppStatus.info,
+            message: 'Return recording is unavailable for this session.',
+          ),
         ],
       ],
     );
@@ -606,6 +742,7 @@ final class _SaleReturnsContents extends StatelessWidget {
     ),
     attributes: <RecordAttribute>[
       RecordAttribute(
+        kind: RecordValueKind.money,
         label: 'Returned',
         value: record.lines.map(_lineLabel).join(', '),
         valueKey: ValueKey('sale-returns-lines-${record.id}'),
@@ -674,10 +811,19 @@ final class _RecordReturnForm extends StatefulWidget {
     required this.returnable,
     required this.busy,
     required this.onRecord,
+    this.onCancel,
   });
 
   final TenantReturnableSale returnable;
   final bool busy;
+
+  /// Abandons the return without recording anything.
+  ///
+  /// **The sheet is dismissible and still draws this**, which is not a
+  /// duplicate control: dragging a sheet down is a gesture, and §9's target
+  /// rules are about things a person can aim at. `secondary`, so §2.1's
+  /// one-primary-per-region still names `Record return`.
+  final VoidCallback? onCancel;
   final void Function(Map<String, int> quantities, String reason) onRecord;
 
   @override
@@ -733,18 +879,11 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Record a return',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        const Text(
-          'Only what this sale still has available may be returned. Pending '
-          'returns already count against it.',
-        ),
-        SizedBox(height: tokens.spacing.s12),
+        // **The heading and the availability paragraph left on 2026-08-26.**
+        // The heading read `Record a return` directly under a sheet header
+        // reading `Return`, which is §7's "title appears once"; the paragraph
+        // is now the middle sentence of this sheet's one `Disclosure`. Neither
+        // sentence was lost — see `sale-returns-scope`.
         for (final line in widget.returnable.lines)
           Padding(
             padding: EdgeInsets.symmetric(vertical: tokens.spacing.s4),
@@ -786,12 +925,28 @@ final class _RecordReturnFormState extends State<_RecordReturnForm> {
           onChanged: (_) => setState(() {}),
           label: 'Reason for this return',
         ),
-        SizedBox(height: tokens.spacing.s12),
-        AppButton(
-          key: const ValueKey('sale-returns-submit'),
-          label: 'Record return',
-          tier: AppButtonTier.primary,
-          onPressed: _canSubmit ? _confirm : null,
+        SizedBox(height: tokens.spacing.s16),
+        // Right-aligned with the primary last, for the reason the stock sheet's
+        // pair gives: the control a right-handed thumb reaches is the one it
+        // should press.
+        AppActionRow(
+          actions: <Widget>[
+            if (widget.onCancel case final cancel?)
+              AppButton(
+                key: const ValueKey('sale-returns-cancel'),
+                label: 'Cancel',
+                tier: AppButtonTier.secondary,
+                // Disabled while a write is outstanding: it is already on its
+                // way, and closing the sheet would discard the answer to it.
+                onPressed: widget.busy ? null : cancel,
+              ),
+            AppButton(
+              key: const ValueKey('sale-returns-submit'),
+              label: 'Record return',
+              tier: AppButtonTier.primary,
+              onPressed: _canSubmit ? _confirm : null,
+            ),
+          ],
         ),
       ],
     );

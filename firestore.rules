@@ -309,14 +309,21 @@ service cloud.firestore {
       }
 
       match /sales/{saleId} {
-        // Deliberately wider than the shift rule: any active staff member reads
-        // any sale in the business. A sale is the business's shared record of a
-        // transaction - a receipt lookup, a return against a colleague's sale,
-        // and the fail-closed confirmation classification of a deterministic
-        // sale path all need it - whereas a shift is one cashier's own cash
-        // record. Narrowing this to `soldById` would also turn an unreadable
-        // foreign sale into an endless retry instead of a reported mismatch.
-        allow read: if activeStaff(tenantId);
+        // Direct reads stay business-wide for deterministic checkout
+        // confirmation and existing return workflows. Collection searches are
+        // narrower: management may inspect the business, while a cashier's
+        // query must prove every possible result was issued by that cashier.
+        // Firestore evaluates the candidate result set rather than filtering it
+        // after the read, so an unscoped or foreign cashier query is denied.
+        allow get: if activeStaff(tenantId);
+        allow list: if hasTenantRole(
+            tenantId,
+            ['owner', 'admin', 'manager']
+          )
+          || (
+            hasTenantRole(tenantId, ['cashier'])
+            && resource.data.soldById == request.auth.uid
+          );
         allow create: if activeStaff(tenantId)
           && saleId == request.resource.data.checkoutId
           && request.resource.data.tenantId == tenantId

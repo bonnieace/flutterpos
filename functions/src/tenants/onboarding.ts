@@ -14,6 +14,7 @@ import {
   requireRequestId,
   requireString,
 } from "../core/validation";
+import {staffSearchFields} from "../staff/search";
 import {
   findTenantLimitViolation,
   resolveTenantLimits,
@@ -191,6 +192,7 @@ export const requestTenant = onCall<RequestTenantRequest, Promise<RequestTenantR
         role: "owner",
         status: "active",
         invitationStatus: "accepted",
+        ...staffSearchFields(ownerName, ownerEmail),
         createdAt: FieldValue.serverTimestamp(),
         joinedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),

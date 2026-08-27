@@ -220,21 +220,20 @@ final class TenantProductBatchPage {
 
   final List<TenantProductBatchRow> rows;
 
-  Map<String, Object?> payload(TenantBulkCatalogMode mode) =>
-      <String, Object?>{
-        'tenantId': tenantId,
-        'mode': mode.wireValue,
-        'requestId': requestId,
-        'rows': <Map<String, Object?>>[
-          for (final row in rows)
-            <String, Object?>{
-              'productId': row.productId,
-              // Named on every row even when it is null, because a cleared cost
-              // is `cost: null` and an omitted key is "leave it alone".
-              field.wireKey: wireValue,
-            },
-        ],
-      };
+  Map<String, Object?> payload(TenantBulkCatalogMode mode) => <String, Object?>{
+    'tenantId': tenantId,
+    'mode': mode.wireValue,
+    'requestId': requestId,
+    'rows': <Map<String, Object?>>[
+      for (final row in rows)
+        <String, Object?>{
+          'productId': row.productId,
+          // Named on every row even when it is null, because a cleared cost
+          // is `cost: null` and an omitted key is "leave it alone".
+          field.wireKey: wireValue,
+        },
+    ],
+  };
 }
 
 /// Every request one bulk correction needs, in the order they must be sent.
@@ -254,8 +253,7 @@ final class TenantProductBatchPlan {
 
   final List<TenantProductBatchPage> pages;
 
-  int get rowCount =>
-      pages.fold(0, (total, page) => total + page.rows.length);
+  int get rowCount => pages.fold(0, (total, page) => total + page.rows.length);
 }
 
 /// One product one page of an import will create.
@@ -338,15 +336,12 @@ final class TenantProductImportPage {
   final int pageCount;
   final List<TenantProductImportRow> rows;
 
-  Map<String, Object?> payload(TenantBulkCatalogMode mode) =>
-      <String, Object?>{
-        'tenantId': tenantId,
-        'mode': mode.wireValue,
-        'requestId': requestId,
-        'rows': <Map<String, Object?>>[
-          for (final row in rows) row.payload(),
-        ],
-      };
+  Map<String, Object?> payload(TenantBulkCatalogMode mode) => <String, Object?>{
+    'tenantId': tenantId,
+    'mode': mode.wireValue,
+    'requestId': requestId,
+    'rows': <Map<String, Object?>>[for (final row in rows) row.payload()],
+  };
 }
 
 /// Every request one import needs, plus the rows that never became one.
@@ -580,13 +575,12 @@ final class TenantProductBatchResult {
           'updateProducts answered rows out of order.',
         );
       }
-      final status = _requireStatus(row, source, const <
-        TenantBulkCatalogRowStatus
-      >{
-        TenantBulkCatalogRowStatus.updated,
-        TenantBulkCatalogRowStatus.unchanged,
-        TenantBulkCatalogRowStatus.failed,
-      });
+      final status =
+          _requireStatus(row, source, const <TenantBulkCatalogRowStatus>{
+            TenantBulkCatalogRowStatus.updated,
+            TenantBulkCatalogRowStatus.unchanged,
+            TenantBulkCatalogRowStatus.failed,
+          });
       final productId = row['productId'];
       // A refused row may name no product - the server reports one only when the
       // row got far enough to identify one - but a row it acted on must name the
@@ -712,12 +706,14 @@ final class TenantProductImportResult {
           'importProducts answered rows out of order.',
         );
       }
-      final status = _requireStatus(row, source, const <
-        TenantBulkCatalogRowStatus
-      >{
-        TenantBulkCatalogRowStatus.created,
-        TenantBulkCatalogRowStatus.failed,
-      });
+      final status = _requireStatus(
+        row,
+        source,
+        const <TenantBulkCatalogRowStatus>{
+          TenantBulkCatalogRowStatus.created,
+          TenantBulkCatalogRowStatus.failed,
+        },
+      );
       if (status == TenantBulkCatalogRowStatus.failed) {
         outcomes.add(
           TenantProductImportRowOutcome._(
@@ -970,9 +966,7 @@ final class TenantBulkCatalogRepository {
         wireValue = category.id;
         valueLabel = category.name;
       case TenantProductField.price:
-        final minor = _shared(
-          () => tenantCatalogPriceMinorUnits(edit.value),
-        );
+        final minor = _shared(() => tenantCatalogPriceMinorUnits(edit.value));
         wireValue = minor / 100;
         valueLabel = tenantCatalogMajorUnits(minor);
       case TenantProductField.cost:
@@ -992,6 +986,7 @@ final class TenantBulkCatalogRepository {
         }
       case TenantProductField.name:
       case TenantProductField.sku:
+      case TenantProductField.image:
         // Unreachable through [TenantBulkCatalogEdit], whose four constructors
         // are the only way to name a field. Refused rather than asserted,
         // because a name or a code shared across many products is a state the
@@ -1025,8 +1020,8 @@ final class TenantBulkCatalogRepository {
       );
     }
 
-    final pageCount = (rows.length + maximumBulkCatalogRows - 1) ~/
-        maximumBulkCatalogRows;
+    final pageCount =
+        (rows.length + maximumBulkCatalogRows - 1) ~/ maximumBulkCatalogRows;
     final pages = <TenantProductBatchPage>[];
     for (var start = 0; start < rows.length; start += maximumBulkCatalogRows) {
       final requestId = requestIds();
@@ -1107,8 +1102,8 @@ final class TenantBulkCatalogRepository {
       throw const TenantBulkCatalogException('sheet_has_no_rows');
     }
 
-    final pageCount = (rows.length + maximumBulkCatalogRows - 1) ~/
-        maximumBulkCatalogRows;
+    final pageCount =
+        (rows.length + maximumBulkCatalogRows - 1) ~/ maximumBulkCatalogRows;
     final pages = <TenantProductImportPage>[];
     for (var start = 0; start < rows.length; start += maximumBulkCatalogRows) {
       final requestId = requestIds();
@@ -1258,11 +1253,15 @@ String _describePrevious(
       final cost = product.cost;
       if (cost == null) return 'not recorded';
       final minor = checkoutMinorUnitsFromMajor(cost);
-      return minor == null ? '$cost (unusable)' : tenantCatalogMajorUnits(minor);
+      return minor == null
+          ? '$cost (unusable)'
+          : tenantCatalogMajorUnits(minor);
     case TenantProductField.name:
       return product.name;
     case TenantProductField.sku:
       return product.sku;
+    case TenantProductField.image:
+      throw const TenantBulkCatalogException('field_not_bulk_editable');
   }
 }
 
@@ -1288,9 +1287,17 @@ enum _SheetColumn {
   // `productName` rather than `name`, and `categoryName` rather than `category`:
   // an enum cannot declare a constant called `name`, because every enum already
   // has one.
-  productName('name', <String>['name', 'product', 'product name'], required: true),
+  productName('name', <String>[
+    'name',
+    'product',
+    'product name',
+  ], required: true),
   sku('sku', <String>['sku', 'code', 'barcode'], required: true),
-  price('price', <String>['price', 'unit price', 'selling price'], required: true),
+  price('price', <String>[
+    'price',
+    'unit price',
+    'selling price',
+  ], required: true),
   cost('cost', <String>['cost', 'unit cost', 'buying price']),
   quantity('quantity', <String>['quantity', 'qty', 'stock', 'opening stock']),
   categoryName('category', <String>['category', 'category name']),
@@ -1367,10 +1374,16 @@ _SheetTable _parseDelimitedSheet(String sheet) {
     }
     final column = _SheetColumn.fromHeader(header);
     if (column == null) {
-      throw TenantBulkCatalogException('sheet_unknown_column', headers[position]);
+      throw TenantBulkCatalogException(
+        'sheet_unknown_column',
+        headers[position],
+      );
     }
     if (columns.containsKey(column)) {
-      throw TenantBulkCatalogException('sheet_repeated_column', headers[position]);
+      throw TenantBulkCatalogException(
+        'sheet_repeated_column',
+        headers[position],
+      );
     }
     columns[column] = position;
   }
@@ -1456,9 +1469,8 @@ final class TenantProductBatchGateway {
   final TenantSession _session;
   final UpdateProductsCallable _callable;
 
-  static bool canChangeInSession(TenantSession session) => session.canAccess(
-    allowedRoles: TenantBulkCatalogRepository.allowedRoles,
-  );
+  static bool canChangeInSession(TenantSession session) =>
+      session.canAccess(allowedRoles: TenantBulkCatalogRepository.allowedRoles);
 
   /// Sends one page in one mode. A page keeps its request ID across both, so a
   /// commit following its own preview is one request the server has never
@@ -1492,9 +1504,8 @@ final class TenantProductImportGateway {
   final TenantSession _session;
   final ImportProductsCallable _callable;
 
-  static bool canImportInSession(TenantSession session) => session.canAccess(
-    allowedRoles: TenantBulkCatalogRepository.allowedRoles,
-  );
+  static bool canImportInSession(TenantSession session) =>
+      session.canAccess(allowedRoles: TenantBulkCatalogRepository.allowedRoles);
 
   Future<TenantProductImportResult> send(
     TenantProductImportPage page,
@@ -1593,8 +1604,7 @@ List<TenantBulkCatalogRowReport> describeBatchOutcomes(
         // carries no U+2192, so the arrow drew as a box on every device that
         // ever showed this report. A word costs nothing and says more: the two
         // values were never obviously ordered by an arrow alone.
-        _ =>
-          'from ${page.rows[outcome.index].previous} to ${page.valueLabel}',
+        _ => 'from ${page.rows[outcome.index].previous} to ${page.valueLabel}',
       },
     ),
 ];
@@ -1654,89 +1664,84 @@ String _importedCategory(
 ) => names[categoryId] ?? row.categoryName ?? unlistedTenantCategoryPhrase;
 
 /// What a locally refused row says, in the words the person who pasted it needs.
-String bulkCatalogRefusalMessage(TenantBulkCatalogException error) =>
-    switch (error.code) {
-      'catalog_forbidden' =>
-        'Only an owner, administrator, or manager may change the catalog.',
-      'no_products_selected' =>
-        'Choose at least one product before previewing a correction.',
-      'too_many_products' =>
-        'At most $maximumBulkCatalogSheetRows products can be corrected in one '
-            'pass. Correct some of them, then the rest.',
-      'product_named_twice' =>
-        'One product is named twice, and two corrections for one product have '
-            'no order. Nothing was sent.',
-      'field_not_bulk_editable' =>
-        'A name and a code belong to one product each and cannot be corrected '
-            'across many.',
-      'unknown_category' =>
-        'Choose one of the categories read from this business.',
-      'edit_forbidden' =>
-        'One of those products belongs to another business, so nothing was '
-            'sent.',
-      'price_forbidden' =>
-        'Only an owner or administrator may change a price, and one row naming '
-            'money refuses every row.',
-      'cost_forbidden' =>
-        'Only an owner or administrator may record what a product costs. Remove '
-            'the cost column, or ask one of them to import it.',
-      'invalid_price' =>
-        'The price must be a plain amount with at most two decimal places, such '
-            'as 65 or 19.99.',
-      'price_not_representable' =>
-        'That price is larger than a sale in this app can record, so it is '
-            'refused here rather than at the till.',
-      'invalid_cost' =>
-        'The unit cost must be a plain amount with at most two decimal places, '
-            'or blank.',
-      'cost_not_representable' =>
-        'That unit cost is larger than a sale in this app can record.',
-      'invalid_product_name' =>
-        'The product name must not be blank and must be at most '
-            '$maximumCatalogNameLength characters.',
-      'invalid_category_name' =>
-        'The category name must not be blank and must be at most '
-            '$maximumCatalogNameLength characters.',
-      'invalid_sku' =>
-        'The code must not be blank, must have no spaces, and must be at most '
-            '$maximumCatalogSkuLength characters - it is what the till matches '
-            'a scan against.',
-      'invalid_quantity' =>
-        'The opening quantity must be a whole number of units between 0 and '
-            '$maximumBulkOpeningQuantity, or blank.',
-      'invalid_category_id' => 'That category ID is not a usable document ID.',
-      'row_needs_category' =>
-        'Every product is filed under a category, so this row needs one.',
-      'row_category_twice' =>
-        'This row names a category twice, by name and by ID, and there is no '
-            'honest way to decide which was meant.',
-      'row_column_count' =>
-        'This row has ${error.detail} cells the header names.',
-      'sheet_empty' => 'Paste the rows, starting with a header line.',
-      'sheet_no_delimiter' =>
-        'The header line must separate its columns with a comma, a tab, or a '
-            'semicolon.',
-      'sheet_blank_column' =>
-        'Column ${error.detail} of the header has no name.',
-      'sheet_unknown_column' =>
-        '"${error.detail}" is not a column this import reads. Remove it, or '
-            'rename it - nothing is dropped silently.',
-      'sheet_repeated_column' =>
-        '"${error.detail}" appears twice in the header.',
-      'sheet_missing_column' =>
-        'The header must name a ${error.detail} column.',
-      'sheet_missing_category' =>
-        'The header must name a category column, or a categoryId column.',
-      'sheet_too_many_rows' =>
-        'At most ${error.detail} rows can be imported in one pass. Split the '
-            'sheet and import each part.',
-      'sheet_has_no_rows' =>
-        'The header was read and no rows followed it.',
-      'invalid_catalog_request_id' =>
-        'This build produced an unusable request identifier, so nothing was '
-            'sent.',
-      _ => 'That row could not be read.',
-    };
+String bulkCatalogRefusalMessage(
+  TenantBulkCatalogException error,
+) => switch (error.code) {
+  'catalog_forbidden' =>
+    'Only an owner, administrator, or manager may change the catalog.',
+  'no_products_selected' =>
+    'Choose at least one product before previewing a correction.',
+  'too_many_products' =>
+    'At most $maximumBulkCatalogSheetRows products can be corrected in one '
+        'pass. Correct some of them, then the rest.',
+  'product_named_twice' =>
+    'One product is named twice, and two corrections for one product have '
+        'no order. Nothing was sent.',
+  'field_not_bulk_editable' =>
+    'A name and a code belong to one product each and cannot be corrected '
+        'across many.',
+  'unknown_category' => 'Choose one of the categories read from this business.',
+  'edit_forbidden' =>
+    'One of those products belongs to another business, so nothing was '
+        'sent.',
+  'price_forbidden' =>
+    'Only an owner or administrator may change a price, and one row naming '
+        'money refuses every row.',
+  'cost_forbidden' =>
+    'Only an owner or administrator may record what a product costs. Remove '
+        'the cost column, or ask one of them to import it.',
+  'invalid_price' =>
+    'The price must be a plain amount with at most two decimal places, such '
+        'as 65 or 19.99.',
+  'price_not_representable' =>
+    'That price is larger than a sale in this app can record, so it is '
+        'refused here rather than at the till.',
+  'invalid_cost' =>
+    'The unit cost must be a plain amount with at most two decimal places, '
+        'or blank.',
+  'cost_not_representable' =>
+    'That unit cost is larger than a sale in this app can record.',
+  'invalid_product_name' =>
+    'The product name must not be blank and must be at most '
+        '$maximumCatalogNameLength characters.',
+  'invalid_category_name' =>
+    'The category name must not be blank and must be at most '
+        '$maximumCatalogNameLength characters.',
+  'invalid_sku' =>
+    'The code must not be blank, must have no spaces, and must be at most '
+        '$maximumCatalogSkuLength characters - it is what the till matches '
+        'a scan against.',
+  'invalid_quantity' =>
+    'The opening quantity must be a whole number of units between 0 and '
+        '$maximumBulkOpeningQuantity, or blank.',
+  'invalid_category_id' => 'That category ID is not a usable document ID.',
+  'row_needs_category' =>
+    'Every product is filed under a category, so this row needs one.',
+  'row_category_twice' =>
+    'This row names a category twice, by name and by ID, and there is no '
+        'honest way to decide which was meant.',
+  'row_column_count' => 'This row has ${error.detail} cells the header names.',
+  'sheet_empty' => 'Paste the rows, starting with a header line.',
+  'sheet_no_delimiter' =>
+    'The header line must separate its columns with a comma, a tab, or a '
+        'semicolon.',
+  'sheet_blank_column' => 'Column ${error.detail} of the header has no name.',
+  'sheet_unknown_column' =>
+    '"${error.detail}" is not a column this import reads. Remove it, or '
+        'rename it - nothing is dropped silently.',
+  'sheet_repeated_column' => '"${error.detail}" appears twice in the header.',
+  'sheet_missing_column' => 'The header must name a ${error.detail} column.',
+  'sheet_missing_category' =>
+    'The header must name a category column, or a categoryId column.',
+  'sheet_too_many_rows' =>
+    'At most ${error.detail} rows can be imported in one pass. Split the '
+        'sheet and import each part.',
+  'sheet_has_no_rows' => 'The header was read and no rows followed it.',
+  'invalid_catalog_request_id' =>
+    'This build produced an unusable request identifier, so nothing was '
+        'sent.',
+  _ => 'That row could not be read.',
+};
 
 Map<String, Object?> _strictMap(Object? value, String source) {
   if (value is! Map) {
@@ -1871,11 +1876,14 @@ void _requireBatchValueApplied(
     TenantProductField.categoryId => product.categoryId == page.wireValue,
     TenantProductField.price =>
       product.priceMinor == checkoutMinorUnitsFromMajor(page.wireValue as num),
-    TenantProductField.cost => page.clearsCost
-        ? product.costMinor == null
-        : product.costMinor ==
-              checkoutMinorUnitsFromMajor(page.wireValue as num),
-    TenantProductField.name || TenantProductField.sku => false,
+    TenantProductField.cost =>
+      page.clearsCost
+          ? product.costMinor == null
+          : product.costMinor ==
+                checkoutMinorUnitsFromMajor(page.wireValue as num),
+    TenantProductField.name ||
+    TenantProductField.sku ||
+    TenantProductField.image => false,
   };
   if (!applied) {
     throw const FormatException(
@@ -1907,11 +1915,7 @@ void _requireImportRowApplied(
   }
 }
 
-String _requiredString(
-  Map<String, Object?> data,
-  String field,
-  String source,
-) {
+String _requiredString(Map<String, Object?> data, String field, String source) {
   final value = data[field];
   if (value is! String || value.isEmpty || value != value.trim()) {
     throw FormatException('$source returned an invalid $field.');

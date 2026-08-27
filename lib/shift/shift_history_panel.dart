@@ -360,6 +360,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
       ),
       attributes: <RecordAttribute>[
         RecordAttribute(
+          kind: RecordValueKind.money,
           label: 'Counted cash',
           value: _money(entry.closingCashMinor),
           valueKey: ValueKey('shift-history-counted-${entry.id}'),
@@ -368,11 +369,13 @@ final class _ShiftHistoryContents extends StatelessWidget {
         // both meant the transaction count could not be read down a page.
         if (summary != null) ...<RecordAttribute>[
           RecordAttribute(
+            kind: RecordValueKind.money,
             label: 'Recorded sales',
             value: _money(summary.totalSalesMinor),
             valueKey: ValueKey('shift-history-sales-${entry.id}'),
           ),
           RecordAttribute(
+            kind: RecordValueKind.code,
             label: 'Transactions',
             value: '${summary.transactionCount}',
             valueKey: ValueKey('shift-history-transactions-${entry.id}'),
@@ -382,6 +385,7 @@ final class _ShiftHistoryContents extends StatelessWidget {
         // said so and a difference of nothing is not a difference.
         if (variance != null && variance != 0)
           RecordAttribute(
+            kind: RecordValueKind.money,
             label: 'Cash difference',
             value: _money(variance.abs()),
             valueKey: ValueKey('shift-history-variance-${entry.id}'),

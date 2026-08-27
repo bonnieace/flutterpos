@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -48,6 +48,7 @@ void main() {
 
     expect(reader.queries.single.equalityFilters, <String, Object?>{
       'receiptNumber': _receipt(42),
+      'soldById': 'user-a',
     });
     expect(
       tester
@@ -58,9 +59,11 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('receipt-lookup-returns-co-1')));
     await tester.pumpAndSettle();
+    // The return surface is a sheet since 2026-08-26, so the receipt it names
+    // sits in the sheet's own header rather than in an `AppBar`.
     expect(
       find.descendant(
-        of: find.byType(PageHeader),
+        of: find.byKey(const ValueKey('sale-returns-header')),
         matching: find.text(_receipt(42)),
       ),
       findsOne,
@@ -98,7 +101,9 @@ void main() {
 
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('receipt-lookup-tender-co-1')))
+          .widget<Text>(
+            find.byKey(const ValueKey('receipt-lookup-tender-co-1')),
+          )
           .data,
       checkoutTenderUnrecordedMessage,
     );
@@ -141,7 +146,10 @@ void main() {
     await _lookUp(tester, _receipt(42));
 
     expect(find.byKey(const ValueKey('receipt-lookup-failure')), findsOne);
-    expect(find.byKey(const ValueKey('receipt-lookup-sale-co-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('receipt-lookup-sale-co-1')),
+      findsNothing,
+    );
   });
 
   testWidgets('no session renders the denied state and starts no read', (
@@ -177,7 +185,10 @@ void main() {
     await tester.pump();
     reader.completeFirst();
     await tester.pump();
-    expect(find.byKey(const ValueKey('receipt-lookup-sale-co-1')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('receipt-lookup-sale-co-1')),
+      findsNothing,
+    );
 
     // The new business answers the same receipt with its own sale, which is
     // correct: a receipt is only ever looked up inside one business.
@@ -233,8 +244,10 @@ String _receipt(int sequence) => formatCheckoutReceiptNumber(
 );
 
 TenantSessionController _controller({TenantRole role = TenantRole.cashier}) =>
-    TenantSessionController()
-      ..open(uid: 'user-a', membership: _membership('tenant-a', role: role));
+    TenantSessionController()..open(
+      uid: 'user-a',
+      membership: _membership('tenant-a', role: role),
+    );
 
 TenantMembership _membership(
   String tenantId, {

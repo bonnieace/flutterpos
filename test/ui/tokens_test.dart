@@ -314,13 +314,36 @@ void main() {
       }
     });
 
-    test('the two interaction rules do not overlap', () {
-      // §2.1 states one rule for the primary tier - named hover and pressed
-      // containers - and another for the three overlay tiers, which tint their
-      // own label at 8% and 12%. A tier carrying both would let a widget pick
-      // the wrong one and still render something plausible.
-      expect(action.primary.hoverOverlayOpacity, isNull);
-      expect(action.primary.pressedOverlayOpacity, isNull);
+    test('the primary tier carries a container and a wash, and they differ', () {
+      // **This test used to assert the primary tier carried *no* overlay
+      // opacities**, on the reasoning that "a tier carrying both would let a
+      // widget pick the wrong one and still render something plausible".
+      // Amended 2026-08-27, because the separation caused the defect it was
+      // meant to prevent rather than preventing it.
+      //
+      // §2.1's two rules are about two different surfaces, not two different
+      // tiers. A *button* is its container, so pressing it swaps the container.
+      // A *card* is composed content with an overlay laid over the top, and the
+      // home's module cards had only `pressedFill` available - which for this
+      // tier is opaque - so a pressed card became a green rectangle with the
+      // card hidden underneath it.
+      //
+      // What disambiguates now is the method a widget asks for, which is a
+      // compile-time choice with a name on it, rather than the absence of a
+      // value - which was a silent one.
+      final primary = action.primary;
+      expect(primary.pressedContainer, isNotNull);
+      expect(primary.hoverOverlayOpacity, 0.08);
+      expect(primary.pressedOverlayOpacity, 0.12);
+      expect(primary.pressedFill(), primary.pressedContainer);
+      expect(primary.pressedWash(), primary.label.withValues(alpha: 0.12));
+      expect(primary.hoverWash(), primary.label.withValues(alpha: 0.08));
+      // The whole point: a wash must never be the opaque container.
+      expect(primary.pressedWash(), isNot(primary.pressedFill()));
+      expect(primary.pressedWash().a, lessThan(1));
+    });
+
+    test('the three overlay tiers state no container at all', () {
       for (final tier in <AppActionRole>[
         action.secondary,
         action.tertiary,
@@ -332,6 +355,9 @@ void main() {
         expect(tier.pressedOverlayOpacity, 0.12);
         expect(tier.hoverFill(), tier.label.withValues(alpha: 0.08));
         expect(tier.pressedFill(), tier.label.withValues(alpha: 0.12));
+        // With no container to prefer, the two are the same colour here - which
+        // is why the defect only ever showed on the primary tier.
+        expect(tier.pressedWash(), tier.pressedFill());
       }
     });
 
@@ -442,11 +468,15 @@ void main() {
   });
 
   group('type roles - design.md §2.2', () {
-    test('all thirteen roles exist under their specification names', () {
+    test('all fourteen roles exist under their specification names', () {
       // Twelve until 2026-08-22, when `display.compact` was added for Profound
       // Verdant's `headline-lg-mobile` - the first breakpoint-aware type value
-      // any source this app has had actually states.
-      expect(type.all, hasLength(13));
+      // any source this app has had actually states. Thirteen until
+      // 2026-08-23, when `numeric.compact` joined it as the second: the export
+      // draws a headline figure at `text-4xl` on a reporting page and at
+      // `section-title` on a card, and 30 is wide enough to force a phone's
+      // grid of figures into one column.
+      expect(type.all, hasLength(14));
       expect(type.all.keys, <String>[
         'display',
         'display.compact',
@@ -459,6 +489,7 @@ void main() {
         'label.eyebrow',
         'caption',
         'numeric.hero',
+        'numeric.compact',
         'numeric.body',
         'mono',
       ]);
@@ -481,7 +512,9 @@ void main() {
         'label.md': (14, 20, FontWeight.w600), // derived, text-sm
         'label.eyebrow': (12, 12, FontWeight.w700), // label-caps
         'caption': (12, 16, FontWeight.w400), // derived, text-xs
-        'numeric.hero': (30, 36, FontWeight.w700), // derived, text-3xl
+        'numeric.hero': (30, 36, FontWeight.w500), // derived, text-3xl
+        // `section-title`'s size in `data-mono`'s face and weight.
+        'numeric.compact': (22, 30.8, FontWeight.w500),
         'numeric.body': (14, 20, FontWeight.w500), // unchanged
         'mono': (14, 14, FontWeight.w500), // data-mono
       };
@@ -566,10 +599,22 @@ void main() {
       // replaces the text theme's rather than merging onto it, so a role that
       // names nothing reaches the engine with nothing however `ThemeData`
       // is configured. Inheritance was never actually reaching `ListTile`.
+      // **Three roles are mono as of 2026-08-23, not one.** The design's
+      // typography section puts *every* figure in JetBrains Mono - "for
+      // currency (KES) and numerical data (Stock counts, SKU numbers)" - and
+      // the export draws headline amounts as `font-data-mono` throughout. So
+      // the two numeric roles joined `mono`; everything a person reads as
+      // prose is still the interface face.
+      const monoRoles = <String>{
+        'mono',
+        'numeric.hero',
+        'numeric.compact',
+        'numeric.body',
+      };
       for (final entry in type.all.entries) {
         expect(
           entry.value.fontFamily,
-          entry.key == 'mono'
+          monoRoles.contains(entry.key)
               ? AppTypeRoles.monoFamily
               : AppTypeRoles.interfaceFamily,
           reason: '${entry.key} names the wrong family',
@@ -749,6 +794,37 @@ void main() {
         );
         expect(token.curve, curve, reason: '${entry.key} curve');
       }
+    });
+
+    test('the two skeleton durations stay out of §2.4\'s map', () {
+      // `docs/stitch/OPEN_QUESTIONS.md` decision 35. They are this app's own
+      // rather than the specification's, and `durations` is what the
+      // specification names - so the assertion above keeps meaning what it
+      // says. This is the tripwire on that: a later hand folding them in
+      // breaks a test whose name explains why not to.
+      expect(motion.durations.containsKey('motion.skeletonSweep'), isFalse);
+      expect(motion.durations.containsKey('motion.skeletonDelay'), isFalse);
+    });
+
+    test('a skeleton sweeps far slower than any transition', () {
+      // The four above are transitions and anything past a third of a second
+      // reads as lag; this is a loop on a surface a person is waiting at, and
+      // at transition speed it strobes.
+      expect(motion.skeletonSweep.duration, const Duration(milliseconds: 1200));
+      expect(motion.skeletonSweep.curve, Curves.easeInOut);
+      expect(
+        motion.skeletonSweep.duration,
+        greaterThan(motion.long.duration * 3),
+      );
+    });
+
+    test('a skeleton is not drawn for a read that finishes promptly', () {
+      // The threshold that stopped the till flashing: a Hive read resolves in a
+      // frame or two, and a placeholder drawn and torn down inside that is the
+      // jitter it was added to remove.
+      expect(motion.skeletonDelay.duration, const Duration(milliseconds: 100));
+      // A threshold rather than an animation, so nothing reads its curve.
+      expect(motion.skeletonDelay.curve, Curves.linear);
     });
 
     test('a press scales rather than ripples', () {
@@ -1384,11 +1460,12 @@ void main() {
               .borderRadius;
       expect(
         inputRadius.topLeft.x,
-        registered.radius.pill,
+        registered.radius.md,
         reason:
-            'an input was 14, then a pill, then the card corner, and is the '
-            'pill again at the direction of the product owner - decision 26. '
-            'The card above it deliberately did not follow.',
+            'an input was 14, then a pill, then the card corner, then the '
+            'pill again, and is the card corner again now that the Stitch '
+            'render is the target. The design writes it as CSS: '
+            "input { border-radius: theme('borderRadius.xl') }.",
       );
     });
 
@@ -1473,8 +1550,14 @@ void main() {
       // The design system assigns `#132A1F` to fields and to popovers both.
       expect(pv.surface.field, const Color(0xFF132A1F));
       expect(pv.surface.overlay, pv.surface.field);
-      expect(pv.surface.borderSubtle, const Color(0xFF3D4A3D));
-      expect(pv.surface.borderStrong, const Color(0xFF869585));
+      // **Both border roles moved down one tier on 2026-08-23.** The export
+      // uses three border values and this set held the top two: a card edge
+      // and a horizontal rule are `surface-elevated`, an input and a
+      // secondary button are `outline-variant`, and `outline` is a muted text
+      // colour rather than an edge.
+      expect(pv.surface.borderSubtle, const Color(0xFF132A1F));
+      expect(pv.surface.borderSubtle, pv.surface.field);
+      expect(pv.surface.borderStrong, const Color(0xFF3D4A3D));
     });
 
     test('decision 17: the scrim is carried, not taken from the prose', () {
@@ -1486,9 +1569,10 @@ void main() {
       expect(pv.text.primary, const Color(0xFFD4E7DD));
       expect(pv.text.primary, isNot(AppColorRoles.dark.text.primary));
       expect(pv.text.secondary, const Color(0xFFBCCBB9));
-      // Derived, not quoted: no third text tier exists, so `outline` does both
-      // jobs. Worth asserting so the reuse is deliberate rather than accidental.
-      expect(pv.text.tertiary, pv.surface.borderStrong);
+      // Derived, not quoted: no third text tier exists, so `outline` fills
+      // it. It stopped being a border role on 2026-08-23 - see the surface
+      // ramp - so this is the only role that reads the value now.
+      expect(pv.text.tertiary, const Color(0xFF869585));
       expect(pv.text.disabled, AppColorRoles.dark.text.disabled);
     });
 
@@ -1643,14 +1727,20 @@ void main() {
       );
     });
 
-    test('decisions 10 and 11: the two additions are the dark values', () {
-      // Profound Verdant has no amber and no blue at all, so these carry
-      // forward. Asserting the identity keeps them honest as *additions* rather
-      // than letting a later edit pass off a new hex as design-system truth.
+    test('decision 10: attention is carried, and 11 is withdrawn', () {
+      // Profound Verdant has no amber, so `attention` still carries forward.
+      // Asserting the identity keeps it honest as an *addition* rather than
+      // letting a later edit pass off a new hex as design-system truth.
       expect(pv.status.attention.fg, AppColorRoles.dark.status.attention.fg);
       expect(pv.status.attention.fg, const Color(0xFFF2C14E));
-      expect(pv.status.info.fg, AppColorRoles.dark.status.info.fg);
-      expect(pv.status.info.fg, const Color(0xFF6FB7F2));
+
+      // **Decision 11 - carrying `dark`'s blue into `info` - was withdrawn on
+      // 2026-08-23.** The palette has no blue at all, and the export writes an
+      // informational notice in the muted sage it does have. One blue callout
+      // on the landing route was the loudest thing on a green page.
+      expect(pv.status.info.fg, const Color(0xFFB0CDBD));
+      expect(pv.status.info.fg, isNot(AppColorRoles.dark.status.info.fg));
+      expect(pv.status.info.fg, isNot(const Color(0xFF6FB7F2)));
     });
 
     test('the five statuses stay five distinct foregrounds', () {

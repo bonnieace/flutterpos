@@ -7,6 +7,30 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('AppDialog', () {
+    testWidgets('keeps its two actions horizontal on a phone', (tester) async {
+      tester.view.physicalSize = const Size(320, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpAppDialog(
+        tester,
+        title: 'Remove this image?',
+        content: const Text('This cannot be undone.'),
+        actions: <Widget>[
+          AppButton(label: 'Cancel', onPressed: () {}),
+          AppButton(
+            label: 'Remove image',
+            tier: AppButtonTier.destructive,
+            onPressed: () {},
+          ),
+        ],
+      );
+
+      final cancel = tester.getRect(find.text('Cancel'));
+      final remove = tester.getRect(find.text('Remove image'));
+      expect(cancel.center.dy, remove.center.dy);
+      expect(cancel.left, lessThan(remove.left));
+    });
+
     testWidgets('holds a child, which is the whole of what it adds', (
       tester,
     ) async {
@@ -84,10 +108,7 @@ void main() {
       // Two scroll views inside each other is an unbounded-height error rather
       // than a cosmetic problem, and a form in a dialog on a phone is taller
       // than the window more often than not.
-      await _pumpAppDialog(
-        tester,
-        content: const SizedBox(height: 4000),
-      );
+      await _pumpAppDialog(tester, content: const SizedBox(height: 4000));
 
       expect(
         find.descendant(
@@ -141,8 +162,7 @@ void main() {
                 label: 'Open',
                 onPressed: () => showAppDialog<void>(
                   context,
-                  builder: (_) =>
-                      const AppDialog(content: Text('A form.')),
+                  builder: (_) => const AppDialog(content: Text('A form.')),
                 ),
               ),
             ),
@@ -152,9 +172,7 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      final route = ModalRoute.of(
-        tester.element(find.byType(AppDialog)),
-      )!;
+      final route = ModalRoute.of(tester.element(find.byType(AppDialog)))!;
       expect(route.barrierColor, AppTokens.dark.colors.surface.scrim);
     });
   });
@@ -234,7 +252,10 @@ void main() {
       );
 
       expect(find.byKey(const ValueKey('product-stock-confirm')), findsOne);
-      expect(find.byKey(const ValueKey('confirm-dialog-confirm')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('confirm-dialog-confirm')),
+        findsNothing,
+      );
     });
 
     testWidgets('is drawn on §2.1 and §2.3 rather than on Material', (
@@ -302,8 +323,9 @@ AppButton _confirm(WidgetTester tester) => tester.widget<AppButton>(
   find.byKey(const ValueKey('confirm-dialog-confirm')),
 );
 
-AppButton _cancel(WidgetTester tester) =>
-    tester.widget<AppButton>(find.byKey(const ValueKey('confirm-dialog-cancel')));
+AppButton _cancel(WidgetTester tester) => tester.widget<AppButton>(
+  find.byKey(const ValueKey('confirm-dialog-cancel')),
+);
 
 Future<void> _pump(
   WidgetTester tester, {

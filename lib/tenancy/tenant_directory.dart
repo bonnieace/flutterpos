@@ -1,3 +1,4 @@
+import 'tenant_directory_cache.dart';
 import 'tenant_membership.dart';
 
 final class TenantListPage {
@@ -44,8 +45,44 @@ final class TenantListPage {
   final bool hasMore;
 }
 
+/// The directory could not be reached, as opposed to refusing to answer.
+///
+/// **The distinction is the whole safety property of the offline fallback.**
+/// A device may fall back to what it last knew when it *could not ask*; it may
+/// never fall back when the server answered and the answer was no. So the
+/// gateway raises this only for transport failures, and an authorization
+/// refusal keeps propagating as itself.
+final class TenantDirectoryUnavailable implements Exception {
+  const TenantDirectoryUnavailable(this.code);
+
+  /// The transport's own code, kept for the failure surface to name.
+  final String code;
+
+  @override
+  String toString() => 'TenantDirectoryUnavailable($code)';
+}
+
 abstract interface class TenantDirectoryGateway {
   Future<TenantListPage> listMyTenants({required int pageSize, String? cursor});
+}
+
+/// A directory load, and whether it came from the server or from memory.
+final class TenantDirectoryLoad {
+  const TenantDirectoryLoad({
+    required this.memberships,
+    required this.fromCache,
+    this.cachedAt,
+  });
+
+  final List<TenantMembership> memberships;
+
+  /// True where the server could not be reached and this device answered from
+  /// its own last copy. Carried all the way to the shell so the app can say so
+  /// rather than quietly presenting stale routing as live.
+  final bool fromCache;
+
+  /// When that copy was written, or null where this came from the server.
+  final DateTime? cachedAt;
 }
 
 /// Loads every page before applying sole-tenant or selector routing logic.
@@ -54,7 +91,8 @@ final class TenantDirectory {
     this._gateway, {
     this.pageSize = 50,
     this.maximumPages = 200,
-  }) {
+    TenantDirectoryCache cache = const NullTenantDirectoryCache(),
+  }) : _cache = cache {
     if (pageSize < 1 || pageSize > 50) {
       throw ArgumentError.value(pageSize, 'pageSize', 'Must be from 1 to 50.');
     }
@@ -70,8 +108,44 @@ final class TenantDirectory {
   final TenantDirectoryGateway _gateway;
   final int pageSize;
   final int maximumPages;
+  final TenantDirectoryCache _cache;
 
-  Future<List<TenantMembership>> loadAll() async {
+  /// Every page, from the server, falling back to this device's last copy.
+  ///
+  /// **The fallback needs a [uid] and silently declines without one**, because
+  /// the cache is keyed by account and answering the wrong one would be worse
+  /// than answering nothing. The one caller that passes none is the tenant
+  /// switcher, which is already online-gated and must not be rescued by a
+  /// cache anyway.
+  Future<TenantDirectoryLoad> load({String? uid}) async {
+    try {
+      final memberships = await _loadEveryPage();
+      if (uid != null) {
+        // Best effort. A device that cannot write its cache has still just
+        // loaded its businesses, and failing that sign-in over a bookkeeping
+        // write would trade the thing that worked for the thing that did not.
+        try {
+          await _cache.write(uid, memberships);
+        } catch (_) {}
+      }
+      return TenantDirectoryLoad(memberships: memberships, fromCache: false);
+    } on TenantDirectoryUnavailable {
+      if (uid == null) rethrow;
+      final cached = await _cache.read(uid);
+      if (cached == null) rethrow;
+      return TenantDirectoryLoad(
+        memberships: cached.memberships,
+        fromCache: true,
+        cachedAt: cached.cachedAt,
+      );
+    }
+  }
+
+  /// The server's answer, with no fallback. Kept because a caller that wants
+  /// the canonical list and nothing else should not have to ask twice.
+  Future<List<TenantMembership>> loadAll() => _loadEveryPage();
+
+  Future<List<TenantMembership>> _loadEveryPage() async {
     final memberships = <TenantMembership>[];
     final seenTenantIds = <String>{};
     final seenCursors = <String>{};

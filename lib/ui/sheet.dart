@@ -62,10 +62,17 @@ enum AppSheetDetent {
 /// scrollable it returns, which is what couples the sheet's drag to the
 /// content's scroll: without it, dragging the list scrolls the list and the
 /// sheet never moves.
+///
+/// **[masthead] fills the sheet's own top corners**, and is for a sheet whose
+/// subject is a picture: a product photograph, not a form field about one. See
+/// [AppSheetMasthead] for why it is drawn by this component rather than by the
+/// caller.
 Future<T?> showAppSheet<T>(
   BuildContext context, {
   required Widget Function(BuildContext context, ScrollController controller)
   builder,
+  WidgetBuilder? masthead,
+  double mastheadFraction = AppSheetMasthead.fraction,
   AppSheetDetent initialDetent = AppSheetDetent.half,
   bool dismissible = true,
 }) {
@@ -95,18 +102,70 @@ Future<T?> showAppSheet<T>(
       snapSizes: <double>[
         for (final detent in AppSheetDetent.values) detent.fraction,
       ],
-      builder: (context, controller) =>
-          _Surface(controller: controller, child: builder(context, controller)),
+      builder: (context, controller) => _Surface(
+        controller: controller,
+        masthead: masthead,
+        mastheadFraction: mastheadFraction,
+        child: builder(context, controller),
+      ),
     ),
   );
 }
 
+/// A band that fills the top of a sheet, under its own corners.
+///
+/// **It is the component's rather than the caller's, because the corners are.**
+/// A caller drawing its own picture at the top of a sheet would have to know
+/// [_Surface.radiusOf] to clip to it, and would then own a copy of §2.3's row
+/// that goes stale the first time the radius moves. So the sheet clips, and the
+/// caller supplies only what goes inside.
+///
+/// **The drag handle moves on top of it**, which is the other half of why this
+/// is here. The handle normally sits in a strip of its own above the content;
+/// over a masthead that strip would be a bar of surface colour between the
+/// sheet's edge and the picture, which is exactly the "double card" this exists
+/// to avoid. It is overlaid instead, on a scrim, so it stays visible over a
+/// photograph of any brightness — §9's contrast rule does not stop applying
+/// because the background is an image.
+abstract final class AppSheetMasthead {
+  /// What share of the sheet's height a masthead takes.
+  ///
+  /// **A fraction of the sheet rather than an aspect ratio of its width**, at
+  /// the product owner's direction on 2026-08-26, and the reason is what it
+  /// must not do: an aspect ratio grows with the sheet, so on a wide surface
+  /// the picture pushes the fields it belongs to off the bottom. A fraction
+  /// cannot — the form always starts in the same place, whatever the screen.
+  ///
+  /// 0.3 leaves the majority of the sheet to the form, which is what the form
+  /// is for.
+  static const double fraction = 0.3;
+
+  /// The scrim behind the drag handle, so it reads against a light photograph.
+  ///
+  /// Named here rather than tokenised for the reason [_Surface.handleSize] is:
+  /// `design.md` states no such value, and inventing one would be inventing a
+  /// token. It is the surface scrim at a third of its strength — enough to
+  /// separate a 4px bar from a photograph, not enough to read as a band.
+  static const double handleScrimOpacity = 0.2;
+}
+
 /// The sheet's own chrome: the surface, the corners and the handle.
 final class _Surface extends StatelessWidget {
-  const _Surface({required this.controller, required this.child});
+  const _Surface({
+    required this.controller,
+    required this.child,
+    this.masthead,
+    this.mastheadFraction = AppSheetMasthead.fraction,
+  });
 
   final ScrollController controller;
   final Widget child;
+
+  /// See [AppSheetMasthead]. Null draws the ordinary handle-above-content
+  /// arrangement, which is what every sheet in the app had before 2026-08-26.
+  final WidgetBuilder? masthead;
+
+  final double mastheadFraction;
 
   /// §2.3's row for "dialogs, bottom sheets", on the top corners only — a sheet
   /// is anchored to the bottom edge and rounding the corners it is anchored by
@@ -123,38 +182,114 @@ final class _Surface extends StatelessWidget {
   /// affordance stays the one people already recognise.
   static const Size handleSize = Size(32, 4);
 
+  /// Where ink and `ListTile` backgrounds are painted.
+  ///
+  /// **A sheet had no `Material` in it until 2026-08-26, and nothing noticed
+  /// because nothing in one needed it.** The sheets this component was written
+  /// for hold buttons and text, and `AppButton` draws its own press states
+  /// through `PressSurface`. Moving the product forms in brought `ListTile`,
+  /// which paints its background and its splash on the nearest `Material`
+  /// ancestor - and finding none above a `DecoratedBox`, Flutter asserts that
+  /// both will be invisible.
+  ///
+  /// `MaterialType.transparency` rather than a surface: the colour is already
+  /// painted by the box around this, and a second opaque layer would be a
+  /// second card. It provides the ink target and nothing else.
+  static Widget _inkable(Widget child) =>
+      Material(type: MaterialType.transparency, child: child);
+
+  /// The bar itself, without the strip it normally sits in.
+  Widget _handle(AppTokens tokens) => Semantics(
+    label: 'Drag to resize',
+    child: SizedBox(
+      width: handleSize.width,
+      height: handleSize.height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: tokens.colors.surface.borderStrong,
+          borderRadius: BorderRadius.circular(tokens.radius.pill),
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        // §2.1: "dialogs, menus, bottom sheets".
+    final banner = masthead;
+    if (banner == null) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          // §2.1: "dialogs, menus, bottom sheets".
+          color: tokens.colors.surface.overlay,
+          borderRadius: radiusOf(tokens),
+        ),
+        child: Column(
+          children: <Widget>[
+            // **The handle is outside the content's scroll**, so it stays under
+            // the finger while the list moves. It is also the drag target a
+            // person aims at when the content itself is scrolled to the top.
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: tokens.spacing.s12),
+              child: _handle(tokens),
+            ),
+            Expanded(child: _inkable(child)),
+          ],
+        ),
+      );
+    }
+
+    // **`ClipRRect` rather than a `DecoratedBox`'s own radius**, because the
+    // masthead paints to the sheet's edge and a decoration only rounds what it
+    // draws itself - a picture inside it would square off the corners again.
+    //
+    // **`LayoutBuilder` for the height, and it is the honest measure.** These
+    // constraints are the sheet's current extent, which is what a fraction of
+    // "the sheet" has to mean while it is being dragged between detents.
+    return ClipRRect(
+      borderRadius: radiusOf(tokens),
+      child: ColoredBox(
         color: tokens.colors.surface.overlay,
-        borderRadius: radiusOf(tokens),
-      ),
-      child: Column(
-        children: <Widget>[
-          // **The handle is outside the content's scroll**, so it stays under
-          // the finger while the list moves. It is also the drag target a
-          // person aims at when the content itself is scrolled to the top.
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: tokens.spacing.s12),
-            child: Semantics(
-              label: 'Drag to resize',
-              child: SizedBox(
-                width: handleSize.width,
-                height: handleSize.height,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: tokens.colors.surface.borderStrong,
-                    borderRadius: BorderRadius.circular(tokens.radius.pill),
-                  ),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Column(
+            children: <Widget>[
+              SizedBox(
+                height: constraints.maxHeight * mastheadFraction,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    banner(context),
+                    // The handle over the picture rather than above it: a strip
+                    // of surface between the sheet's edge and the image is the
+                    // second card this arrangement exists to remove.
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: EdgeInsets.only(top: tokens.spacing.s12),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: tokens.colors.surface.scrim.withValues(
+                              alpha: AppSheetMasthead.handleScrimOpacity,
+                            ),
+                            borderRadius: BorderRadius.circular(
+                              tokens.radius.pill,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.all(tokens.spacing.s4),
+                            child: _handle(tokens),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+              Expanded(child: _inkable(child)),
+            ],
           ),
-          Expanded(child: child),
-        ],
+        ),
       ),
     );
   }

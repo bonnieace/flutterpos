@@ -1,5 +1,17 @@
 # Chilltent POS Stitch redesign control room
 
+> **RETIRED for screens being reverted to the old single-tenant look and flow.** As of 2026-08-25
+> the product direction changed: existing customers know the pre-multitenancy app
+> (`lib/pos/**`, `lib/screens/**`, read-only reference only), and its screens, navigation, and
+> visual character — not this redesign's IA — are now the target for those areas, rebuilt on the
+> existing multitenant backend and token layer. See
+> `C:\Users\BonifaceMasota\.claude\plans\look-at-the-old-expressive-sutton.md` for the current
+> plan and which screens are affected (starting with Login, Home/Main Hub, Sales Report/Book
+> Keeping). Do not treat the phase briefs below, or their IA/layout decisions in
+> `OPEN_QUESTIONS.md`, as authoritative for those screens. **`RBAC_MATRIX.md` is unaffected** — role
+> and permission behavior still derives from it regardless of which visual direction a screen
+> follows. Areas not yet reverted still follow this directory until the pivot reaches them.
+
 This directory is the operating contract for redesigning Chilltent POS in Stitch project
 `7478406619239162026`. It separates product truth from visual exploration so that an attractive
 mockup cannot silently add behavior, permissions, data, or settings that the app does not have.

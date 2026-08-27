@@ -8,12 +8,36 @@
  * to this script - they are what makes `firebase-admin` itself incapable of
  * reaching a real project - so requiring them is the guarantee, not a check.
  */
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { deleteApp, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+
+/**
+ * The search metadata the inventory query orders by, taken from the callable
+ * rather than reimplemented here.
+ *
+ * **A product without `searchName` is invisible to the inventory route, and
+ * silently so.** `searchTenantProducts` orders by that field, and Firestore
+ * omits any document that does not carry the field it is ordered by - so a
+ * seeded catalog missing it renders as an empty shop rather than as an error,
+ * while the till, which orders by document ID, shows every one of the same
+ * products. That is the exact shape of the bug this import closes.
+ *
+ * **Imported from `functions/lib` on purpose.** `productSearchFields` is the
+ * one normalization the callable, the bulk import, and the backfill migration
+ * all share; a second copy here is a copy that goes stale the first time the
+ * prefix rule changes, and the two would then disagree about what a product is
+ * called. It is a build artifact, so `emulators:dev` builds functions before
+ * running this - a bare `seed:dev` against an unbuilt tree fails loudly here
+ * rather than seeding a catalog the inventory route cannot see.
+ */
+const { productSearchFields } = createRequire(import.meta.url)(
+  "../../functions/lib/operations/productUpdate.js",
+);
 
 /** The project the Flutter app is built against; see `lib/firebase_options.dart`. */
 const DEFAULT_PROJECT_ID = "multitenant-pos-b8326";
@@ -22,9 +46,88 @@ const TENANT_ID = "dev-shop";
 const TENANT_NAME = "Dev Corner Shop";
 const TENANT_SLUG = "dev-corner-shop";
 const OWNER_EMAIL = "owner@example.com";
-const OWNER_PASSWORD = "Local-emulator-password-123!";
 const OWNER_NAME = "Dev Owner";
 const CURRENCY = "KES";
+
+/**
+ * One password for every seeded account, and a short one on purpose.
+ *
+ * These accounts exist only inside an emulator that cannot reach a real
+ * project, and the cost being paid here is typing: every sign-in during a
+ * device run is done by thumb on a handset. Six characters is the Firebase
+ * Auth minimum, so this is as short as an account can be.
+ */
+const PASSWORD = "pos123";
+
+/**
+ * The staff roster, one row per state the directory can actually be in.
+ *
+ * **The combinations are not free.** `TenantStaffSummary.fromSnapshot` in
+ * `lib/tenancy/tenant_staff_directory.dart` refuses a staff document whose
+ * membership and invitation states disagree: `pending` pairs only with
+ * `pending` or `sent`, `active` and `inactive` only with `accepted`, the owner
+ * must be active/accepted, and nobody else may hold the `owner` role. A row
+ * here that breaks one of those does not produce a test case, it produces a
+ * directory that throws.
+ *
+ * **Only accepted members get an Auth account and a membership mirror.** An
+ * invitation that has not been accepted is precisely a staff document with
+ * nobody behind it yet, so creating a login for one would seed a state the
+ * product cannot reach.
+ */
+const STAFF = [
+  {
+    id: "admin",
+    email: "admin@example.com",
+    name: "Dev Admin",
+    role: "admin",
+    status: "active",
+    invitationStatus: "accepted",
+  },
+  {
+    id: "manager",
+    email: "manager@example.com",
+    name: "Dev Manager",
+    role: "manager",
+    status: "active",
+    invitationStatus: "accepted",
+  },
+  {
+    id: "cashier",
+    email: "cashier@example.com",
+    name: "Dev Cashier",
+    role: "cashier",
+    status: "active",
+    invitationStatus: "accepted",
+  },
+  {
+    id: "cashier-invited",
+    email: "invited.cashier@example.com",
+    name: "Invited Cashier",
+    role: "cashier",
+    status: "pending",
+    invitationStatus: "sent",
+  },
+  {
+    id: "manager-unsent",
+    email: "unsent.manager@example.com",
+    name: "Unsent Manager",
+    role: "manager",
+    status: "pending",
+    invitationStatus: "pending",
+  },
+  {
+    id: "cashier-former",
+    email: "former.cashier@example.com",
+    name: "Former Cashier",
+    role: "cashier",
+    status: "inactive",
+    invitationStatus: "accepted",
+  },
+];
+
+/** Whether this row is a person who can sign in, rather than an invitation. */
+const hasAccount = (member) => member.invitationStatus === "accepted";
 
 const CATEGORIES = [
   { id: "cat-bakery", name: "Bakery" },
@@ -128,32 +231,101 @@ function assertNoRealCredentials() {
   }
 }
 
-async function ensureOwner(auth) {
-  const record = await auth
-    .getUserByEmail(OWNER_EMAIL)
-    .catch((error) => {
-      if (error.code === "auth/user-not-found") return undefined;
-      throw error;
-    });
+async function ensureAccount(auth, email, name) {
+  const record = await auth.getUserByEmail(email).catch((error) => {
+    if (error.code === "auth/user-not-found") return undefined;
+    throw error;
+  });
   if (record) {
     // The account is stuck behind the verification gate in
     // `lib/tenancy/tenant_request.dart` unless the address is verified, and a
     // re-run must repair an account that was created without it.
     await auth.updateUser(record.uid, {
-      password: OWNER_PASSWORD,
+      password: PASSWORD,
       emailVerified: true,
-      displayName: OWNER_NAME,
+      displayName: name,
       disabled: false,
     });
     return record.uid;
   }
   const created = await auth.createUser({
-    email: OWNER_EMAIL,
-    password: OWNER_PASSWORD,
+    email,
+    password: PASSWORD,
     emailVerified: true,
-    displayName: OWNER_NAME,
+    displayName: name,
   });
   return created.uid;
+}
+
+const ensureOwner = (auth) => ensureAccount(auth, OWNER_EMAIL, OWNER_NAME);
+
+/**
+ * Resolves the roster to uids, creating accounts only for accepted members.
+ *
+ * An invited row gets a synthetic uid instead. It has to be *some* stable
+ * string, because the staff document is keyed by it and the directory refuses
+ * a document whose `uid` field disagrees with its own ID.
+ */
+async function resolveStaff(auth) {
+  const resolved = [];
+  for (const member of STAFF) {
+    resolved.push({
+      ...member,
+      uid: hasAccount(member)
+        ? await ensureAccount(auth, member.email, member.name)
+        : `invited-${member.id}`,
+    });
+  }
+  return resolved;
+}
+
+async function seedStaff(firestore, staff) {
+  const now = Timestamp.now();
+  const tenant = firestore.collection("tenants").doc(TENANT_ID);
+  for (const member of staff) {
+    await tenant.collection("staff").doc(member.uid).set({
+      uid: member.uid,
+      email: member.email,
+      name: member.name,
+      role: member.role,
+      status: member.status,
+      invitationStatus: member.invitationStatus,
+      ...(hasAccount(member) ? { joinedAt: now } : { invitedAt: now }),
+      updatedAt: now,
+    });
+    // An invitation nobody has accepted has no account and therefore no user
+    // document and no membership mirror. Writing one would put a business in
+    // the tenant list of a person who has not joined it.
+    if (!hasAccount(member)) continue;
+    const user = firestore.collection("users").doc(member.uid);
+    await user.set({
+      email: member.email,
+      displayName: member.name,
+      accountType: "tenant_user",
+      identityOrigin: "invitation",
+      globalStatus: "active",
+      defaultTenantId: TENANT_ID,
+      membershipCount: 1,
+      ownedTenantCount: 0,
+      ownedActiveTenantCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await user.collection("tenant_memberships").doc(TENANT_ID).set({
+      tenantId: TENANT_ID,
+      tenantName: TENANT_NAME,
+      tenantSlug: TENANT_SLUG,
+      role: member.role,
+      membershipStatus: member.status,
+      tenantStatus: "active",
+      invitationStatus: member.invitationStatus,
+      isOwner: false,
+      mirrorVersion: 1,
+      createdAt: now,
+      joinedAt: now,
+      updatedAt: now,
+    });
+  }
 }
 
 async function seedFirestore(firestore, uid) {
@@ -243,8 +415,15 @@ async function seedFirestore(firestore, uid) {
   }
   for (const product of PRODUCTS) {
     const { id, ...fields } = product;
+    // The inventory route orders by `searchName` and filters on
+    // `searchPrefixes`; see the note on the import. Written from the same
+    // helper the callable writes them with, so a seeded product and a product
+    // created through the app are indexed identically.
+    const search = productSearchFields(fields.name, fields.SKU);
     batch.set(tenant.collection("products").doc(id), {
       ...fields,
+      searchName: search.searchName,
+      searchPrefixes: search.searchPrefixes,
       createdAt: now,
       updatedAt: now,
     });
@@ -281,6 +460,22 @@ async function verifySeed(firestore, uid) {
       `Seeding wrote ${products.size} products, expected ${PRODUCTS.length}.`,
     );
   }
+  // **Counted again through the inventory route's own query, not the plain
+  // one above.** The count that just passed is the till's view - ordered by
+  // document ID, so it sees every product whatever fields it carries. The
+  // inventory route orders by `searchName`, and Firestore drops any document
+  // without that field *silently*: the screen renders an empty shop and
+  // nothing anywhere reports an error. Asking the question the way the app
+  // asks it is the only check that can catch that, and a count of documents
+  // written cannot.
+  const indexed = await tenant.collection("products").orderBy("searchName").get();
+  if (indexed.size !== PRODUCTS.length) {
+    throw new Error(
+      `Seeding indexed ${indexed.size} of ${PRODUCTS.length} products for ` +
+        "search. The inventory route orders by `searchName` and will not " +
+        "show the rest.",
+    );
+  }
 }
 
 /** Reports the ports the app must be pointed at, read from `firebase.json`. */
@@ -307,16 +502,27 @@ export async function seedDevEmulator() {
 
   const app = initializeApp({ projectId }, `seed-${Date.now()}`);
   try {
-    const uid = await ensureOwner(getAuth(app));
+    const auth = getAuth(app);
+    const uid = await ensureOwner(auth);
+    const staff = await resolveStaff(auth);
     const firestore = getFirestore(app);
     const result = await seedFirestore(firestore, uid);
+    await seedStaff(firestore, staff);
     await verifySeed(firestore, uid);
     console.log(
       [
         "Seeded the local emulators.",
         `  project     ${projectId}`,
         `  business    ${TENANT_NAME} (${result.tenantId})`,
-        `  sign in as  ${OWNER_EMAIL} / ${OWNER_PASSWORD}`,
+        `  password    ${PASSWORD} (every account below)`,
+        "  accounts",
+        `    ${OWNER_EMAIL.padEnd(30)} owner    active`,
+        ...staff.map(
+          (member) =>
+            `    ${member.email.padEnd(30)} ${member.role.padEnd(8)} ` +
+            `${member.status}` +
+            (hasAccount(member) ? "" : ` (invitation ${member.invitationStatus}, no login)`),
+        ),
         `  auth        ${process.env.FIREBASE_AUTH_EMULATOR_HOST}`,
         `  firestore   ${process.env.FIRESTORE_EMULATOR_HOST}`,
         `  functions   port ${ports.functions?.port ?? "unset"}`,

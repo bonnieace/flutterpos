@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../checkout/checkout_tender.dart';
@@ -6,12 +8,11 @@ import '../returns/return_history_panel.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session.dart';
-import '../tenancy/tenant_session_controller.dart';
 import '../tenancy/tenant_staff_names.dart';
 import '../ui/pagination.dart';
 import '../ui/record_list.dart';
-import '../ui/routes.dart';
 import '../ui/scaffold.dart';
+import '../ui/skeleton.dart';
 import '../ui/states.dart';
 import '../ui/tokens.dart';
 import 'sale_history.dart';
@@ -189,6 +190,16 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
           ).resolve(page.items.map((sale) => sale.soldById)),
         );
       },
+      // **The page itself, with placeholders where the sales will be.** It used
+      // to take the guard's default full-page spinner, which replaced the
+      // heading and the pagination along with the records - so a person waiting
+      // learned nothing about the screen they were waiting for. Decision 35:
+      // only the read is a placeholder.
+      loading: _SaleHistoryContents(
+        request: request,
+        page: null,
+        pageIndex: _pageIndex,
+      ),
       denied: const Center(
         key: ValueKey('sale-history-denied'),
         child: Text('Sales are unavailable for this business.'),
@@ -210,45 +221,67 @@ final class _TenantSaleHistoryPanelState extends State<TenantSaleHistoryPanel> {
     );
   }
 
-  /// Opens the read-only returns route under the same session scope, so its own
-  /// guard sees the exact controller this page was authorized against.
+  /// Opens the return sheet over this list.
+  ///
+  /// **A sheet rather than a pushed route since 2026-08-26.** It captures its
+  /// own session scope and reports its own answer, so there is nothing left to
+  /// do here but name the sale.
   void _openReturns(BuildContext context, TenantSale sale) {
-    final sessions = TenantSessionScope.read(context);
-    Navigator.of(context).push(
-      AppPageRoute<void>(
-        builder: (_) => TenantSessionScope(
-          controller: sessions,
-          child: TenantSaleReturnsScreen(
-            reader: widget.reader,
-            request: TenantSaleReturnsRequest(sale: sale),
-            actions: widget.returnActions,
-          ),
-        ),
+    unawaited(
+      openTenantSaleReturnSheet(
+        context,
+        reader: widget.reader,
+        request: TenantSaleReturnsRequest(sale: sale),
+        actions: widget.returnActions,
       ),
     );
   }
 }
 
+/// The page, whether or not its sales have arrived yet.
+///
+/// **One composition for the loading state and the loaded one**, which is
+/// decision 35 (`docs/stitch/OPEN_QUESTIONS.md`, 2026-08-27) made structural
+/// rather than promised: the heading, the shift's recorded-figures note and the
+/// pagination do not come from the read, so they are built here once and drawn
+/// in both. There is no second widget that could drift from this one.
+///
+/// This is the shape `weekly_report_panel.dart` already uses for its *failure*
+/// state - `WeeklyReportContents(report: null)`, keeping the filters alive - and
+/// all that has happened is that the loading state now takes it too.
 final class _SaleHistoryContents extends StatelessWidget {
   const _SaleHistoryContents({
     required this.request,
     required this.page,
-    required this.staffNames,
-    required this.selfUid,
+    this.staffNames = const <String, String>{},
+    this.selfUid,
     required this.pageIndex,
-    required this.onNextPage,
-    required this.onPreviousPage,
-    required this.onViewReturns,
+    this.onNextPage,
+    this.onPreviousPage,
+    this.onViewReturns,
   });
 
   final TenantSaleHistoryRequest request;
-  final TenantSalePage page;
+
+  /// Null while the read is outstanding. **Not null-for-empty**: an empty read
+  /// has answered, and answers with `page.items.isEmpty`, which is what puts
+  /// `RecordList`'s own empty state on screen instead of a placeholder.
+  final TenantSalePage? page;
+
   final Map<String, String> staffNames;
-  final String selfUid;
+
+  /// Null only while [page] is, since nothing reads it until there are records.
+  final String? selfUid;
+
   final int pageIndex;
-  final VoidCallback onNextPage;
-  final VoidCallback onPreviousPage;
-  final ValueChanged<TenantSale> onViewReturns;
+
+  /// Null while loading. The buttons still draw - they are the page's furniture
+  /// rather than the read's - and `Pagination` already renders a null handler as
+  /// a disabled control, which is the truth: there is no next page to go to
+  /// until this one has been read.
+  final VoidCallback? onNextPage;
+  final VoidCallback? onPreviousPage;
+  final ValueChanged<TenantSale>? onViewReturns;
 
   @override
   Widget build(BuildContext context) {
@@ -276,19 +309,31 @@ final class _SaleHistoryContents extends StatelessWidget {
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        // §4.3's responsive contract.
-        RecordList(
-          identityLabel: 'Sale',
-          items: <RecordItem>[for (final sale in page.items) _record(sale)],
-          // §7's Empty pattern. No action: a sale is rung up at the till rather
-          // than from its own history, so there is nothing here for a person to
-          // press that would end the emptiness.
-          empty: const EmptyState(
-            key: ValueKey('sale-history-empty'),
-            title: 'No sales yet',
-            hint: 'A sale appears here once it has been confirmed.',
+        // The sales themselves are the read, so they are the one region that
+        // becomes a placeholder. Everything above and below this is furniture
+        // and is already on screen.
+        if (page case final loaded?)
+          // §4.3's responsive contract.
+          RecordList(
+            identityLabel: 'Sale',
+            items: <RecordItem>[
+              for (final sale in loaded.items) _record(sale),
+            ],
+            // §7's Empty pattern. No action: a sale is rung up at the till
+            // rather than from its own history, so there is nothing here for a
+            // person to press that would end the emptiness.
+            empty: const EmptyState(
+              key: ValueKey('sale-history-empty'),
+              title: 'No sales yet',
+              hint: 'A sale appears here once it has been confirmed.',
+            ),
+          )
+        else
+          const SkeletonGroup(
+            key: ValueKey('sale-history-skeleton'),
+            semanticLabel: 'Reading the sales.',
+            child: RecordListSkeleton(),
           ),
-        ),
         // **Said once under the list, in the words `sales_totals_panel.dart`
         // already says them.** It rode on every row as the second half of "Paid
         // by Cash. …", which at §5.2's key-value made the payment column three
@@ -297,7 +342,7 @@ final class _SaleHistoryContents extends StatelessWidget {
         // how a tender is captured rather than of any sale, and this screen still
         // states it, which is what `sale_history.dart` requires of a surface that
         // shows one.
-        if (page.items.any((sale) => sale.tender != null)) ...[
+        if (page?.items.any((sale) => sale.tender != null) ?? false) ...[
           SizedBox(height: tokens.spacing.s8),
           const Text(
             key: ValueKey('sale-history-tender-disclaimer'),
@@ -308,7 +353,7 @@ final class _SaleHistoryContents extends StatelessWidget {
         // for the reason the totals page gives: that one says "This sale", which
         // is a claim about one record and is wrong above a list of them. The fact
         // is the same and is stated again rather than reused wrongly.
-        if (page.items.any((sale) => sale.tender == null)) ...[
+        if (page?.items.any((sale) => sale.tender == null) ?? false) ...[
           SizedBox(height: tokens.spacing.s8),
           const Text(
             key: ValueKey('sale-history-tender-unrecorded-note'),
@@ -322,7 +367,7 @@ final class _SaleHistoryContents extends StatelessWidget {
           previousKey: const ValueKey('sale-history-previous'),
           nextKey: const ValueKey('sale-history-next'),
           onPrevious: pageIndex > 0 ? onPreviousPage : null,
-          onNext: page.hasMore ? onNextPage : null,
+          onNext: (page?.hasMore ?? false) ? onNextPage : null,
         ),
       ],
     );
@@ -348,6 +393,7 @@ final class _SaleHistoryContents extends StatelessWidget {
       RecordAttribute(
         label: 'Total',
         value: '${sale.currency} ${_money(sale.totalMinor)}',
+        kind: RecordValueKind.money,
         valueKey: ValueKey('sale-history-total-${sale.id}'),
         flex: 2,
       ),
@@ -359,11 +405,13 @@ final class _SaleHistoryContents extends StatelessWidget {
         RecordAttribute(
           label: 'Discount',
           value: _money(sale.discountMinor),
+          kind: RecordValueKind.money,
           valueKey: ValueKey('sale-history-discount-${sale.id}'),
         ),
       RecordAttribute(
         label: 'Items',
         value: '${sale.lines.length}',
+        kind: RecordValueKind.code,
         valueKey: ValueKey('sale-history-items-${sale.id}'),
       ),
       RecordAttribute(
@@ -386,14 +434,14 @@ final class _SaleHistoryContents extends StatelessWidget {
     ],
     provenance: _recordedAtLabel(
       sale,
-      tenantStaffLabel(sale.soldById, names: staffNames, selfUid: selfUid),
+      tenantStaffLabel(sale.soldById, names: staffNames, selfUid: selfUid ?? ''),
     ),
     provenanceKey: ValueKey('sale-history-recorded-at-${sale.id}'),
     actions: <RecordAction>[
       RecordAction(
         label: 'View returns',
         actionKey: ValueKey('sale-history-returns-link-${sale.id}'),
-        onPressed: () => onViewReturns(sale),
+        onPressed: () => onViewReturns?.call(sale),
       ),
     ],
   );

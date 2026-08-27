@@ -477,10 +477,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The returns route derives its own page from the sale it was opened from.
+    // The returns surface derives its own page from the sale it was opened
+    // from. **It is a sheet rather than a pushed route since 2026-08-26**, so
+    // the receipt it names is in the sheet's own `PageHeader` where it used to
+    // be in an `AppBar`; the fact asserted is the same one.
     expect(
       find.descendant(
-        of: find.byType(PageHeader),
+        of: find.byKey(const ValueKey('sale-returns-header')),
         matching: find.text(_receipt(1)),
       ),
       findsOne,
@@ -490,6 +493,71 @@ void main() {
       'saleId': 'co-1',
     });
   });
+
+  // `docs/stitch/OPEN_QUESTIONS.md` decision 35.
+  group('a page being read keeps its furniture', () {
+    testWidgets('the placeholders are actually painted', (tester) async {
+      // **The assertion is that pixels land, not that a widget exists.** The
+      // first version of this call site put `RecordListSkeleton` outside any
+      // `SkeletonGroup`, and a block with no group above it returned a bare
+      // `SizedBox` - so the loading state was an empty page that no test
+      // noticed. Both halves of that are fixed; this is the half that stays
+      // fixed.
+      // **A deferred reader, because the threshold is real.** With a reader
+      // that answers at once the page resolves inside `motion.skeletonDelay`
+      // and no placeholder is ever painted - which is the delay doing its job,
+      // and is why this case has to stage a genuinely slow read.
+      await _pumpUnsettledHistory(tester, deferred: true);
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(find.byKey(const ValueKey('sale-history-skeleton')), findsOne);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('sale-history-skeleton')),
+          matching: find.byType(DecoratedBox),
+        ),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('the pagination is real while the sales are not', (
+      tester,
+    ) async {
+      await _pumpUnsettledHistory(tester);
+
+      expect(find.byKey(const ValueKey('sale-history-previous')), findsOne);
+      expect(find.byKey(const ValueKey('sale-history-next')), findsOne);
+    });
+
+    testWidgets('an empty read answers with its empty state', (tester) async {
+      await _pumpUnsettledHistory(tester);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('sale-history-empty')), findsOne);
+      expect(find.byKey(const ValueKey('sale-history-skeleton')), findsNothing);
+    });
+  });
+}
+
+/// The panel on its first frame, before the guard's read has answered.
+Future<void> _pumpUnsettledHistory(
+  WidgetTester tester, {
+  bool deferred = false,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TenantSessionScope(
+        controller: _controller(),
+        child: Scaffold(
+          body: TenantSaleHistoryPanel(
+            reader: _Reader(deferred: deferred),
+            request: const TenantOwnSaleHistoryRequest(),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 String _receipt(int sequence) => formatCheckoutReceiptNumber(

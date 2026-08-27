@@ -35,7 +35,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'fields.dart';
 import 'tokens.dart';
 
 /// A count, with a control on each side of it.
@@ -127,25 +126,31 @@ final class QuantityStepper extends StatefulWidget {
   /// better failure than a cart nobody can read.
   static const int maximumSizedDigits = 4;
 
-  /// How wide the whole control is: two buttons, two gaps and the well.
+  /// How wide the whole control is: two buttons and the number between them.
+  ///
+  /// **No gaps since 2026-08-23, because the three pieces are one control.**
+  /// The design draws a stepper as
+  /// `flex items-center bg-surface-elevated rounded-lg border` with the two
+  /// buttons and the number inside a single bordered group; this app drew a
+  /// bordered circle, a gap, a bordered well, a gap and a second circle, which
+  /// is five shapes for one number and the widest thing on a cart line.
   ///
   /// Exposed because the error line under it is bounded to this rather than to
   /// its own sentence - see the note at that call site.
   static double controlWidth(AppSpacing spacing, {int? maximum}) =>
-      height * 2 + spacing.s8 * 2 + wellWidth(spacing, maximum: maximum);
+      height * 2 + wellWidth(spacing, maximum: maximum);
 
-  /// How wide the number's well is drawn, given a [maximum].
+  /// How wide the number itself is drawn, given a [maximum].
   ///
-  /// **Derived rather than picked**, which is the difference between this and
-  /// the 132 the cart used: §5.2 gives a field `space.20` of padding on each
-  /// side, and a digit at `numeric.body` is about 9 logical pixels wide, so the
-  /// well is the padding plus room for the digits it is sized for. Sizing for a
-  /// bound rather than for the current value is what stops the row reflowing
-  /// when a quantity goes from 9 to 10.
+  /// **Derived rather than picked.** A digit at `numeric.body` is about 9
+  /// logical pixels wide and the number sits inside the group rather than in a
+  /// well of its own, so it takes `space.8` of breathing room each side rather
+  /// than a field's `space.20`. Sizing for a bound rather than for the current
+  /// value is what stops the row reflowing when a quantity goes from 9 to 10.
   static double wellWidth(AppSpacing spacing, {int? maximum}) {
     final wanted = (maximum ?? 9999).toString().length;
     final digits = wanted < maximumSizedDigits ? wanted : maximumSizedDigits;
-    return spacing.s20 * 2 + digits * 9.0;
+    return spacing.s8 * 2 + digits * 9.0;
   }
 
   @override
@@ -156,6 +161,13 @@ class _QuantityStepperState extends State<QuantityStepper> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.quantity.toString(),
   );
+
+  /// Whether the number is taking the keys, so the group can show it.
+  ///
+  /// The group draws the outline now, so the focus signal has to live at the
+  /// group rather than inside it - the same rule `AppFieldWell` follows, one
+  /// level out.
+  bool _focused = false;
 
   @override
   void didUpdateWidget(covariant QuantityStepper old) {
@@ -178,6 +190,11 @@ class _QuantityStepperState extends State<QuantityStepper> {
     super.dispose();
   }
 
+  void _handleFocus(bool focused) {
+    if (!mounted || _focused == focused) return;
+    setState(() => _focused = focused);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
@@ -194,58 +211,101 @@ class _QuantityStepperState extends State<QuantityStepper> {
           ),
           SizedBox(height: tokens.spacing.s4),
         ],
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          // The well is the tallest thing here and the buttons sit against its
-          // top edge, so a helper or a counter under the number never drags the
-          // two controls down with it.
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            _StepButton(
-              key: const ValueKey('quantity-stepper-decrement'),
-              icon: Icons.remove,
-              semanticLabel: widget.decrementSemanticLabel,
-              onPressed: widget.enabled ? widget.onDecrement : null,
+        // **One bordered group holding all three, which is how the design
+        // draws a stepper**: `flex items-center bg-surface-elevated rounded-lg
+        // border border-surface-container-high`, two icon buttons and the
+        // number between them. The outline is the group's, so the two buttons
+        // carry none of their own and the number is a bare field rather than a
+        // second well inside the first.
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: tokens.colors.surface.field,
+            borderRadius: BorderRadius.circular(tokens.radius.md),
+            border: Border.all(
+              color: !widget.enabled
+                  ? tokens.colors.action.disabledBorder
+                  : widget.error != null
+                  ? tokens.colors.status.problem.fg
+                  : _focused
+                  ? tokens.colors.action.focusRing.color
+                  : tokens.colors.surface.borderSubtle,
+              // The focused outline is the same 2px, painted outward, that
+              // `AppFieldWell` settled on - see the note there.
+              width: _focused && widget.enabled
+                  ? tokens.colors.action.focusRing.width
+                  : 1,
+              strokeAlign: _focused && widget.enabled
+                  ? BorderSide.strokeAlignOutside
+                  : BorderSide.strokeAlignInside,
             ),
-            SizedBox(width: tokens.spacing.s8),
-            Semantics(
-              label: widget.semanticLabel,
-              textField: true,
-              child: SizedBox(
-              width: QuantityStepper.wellWidth(
-                tokens.spacing,
-                maximum: widget.maximum,
-              ),
-              child: AppTextField(
-                key: const ValueKey('quantity-stepper-field'),
-                // The label is drawn above the whole control, so the field
-                // inside carries none - two labels for one number is what a
-                // stepper assembled from a field and two buttons looks like.
-                label: '',
-                controller: _controller,
-                enabled: widget.enabled,
-                keyboardType: TextInputType.number,
-                inputFormatters: <TextInputFormatter>[
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                onChanged: widget.onChanged,
-                // The outline and the announcement, not the words: the
-                // sentence is drawn under the whole control below, because a
-                // 76-pixel well wraps it to six lines and pushes the two
-                // buttons out of alignment with the number they change.
-                error: widget.error,
-                showsErrorText: false,
-              ),
-              ),
+          ),
+          child: SizedBox(
+            height: QuantityStepper.height,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                _StepButton(
+                  key: const ValueKey('quantity-stepper-decrement'),
+                  icon: Icons.remove,
+                  semanticLabel: widget.decrementSemanticLabel,
+                  onPressed: widget.enabled ? widget.onDecrement : null,
+                ),
+                Semantics(
+                  label: widget.semanticLabel,
+                  textField: true,
+                  child: SizedBox(
+                    width: QuantityStepper.wellWidth(
+                      tokens.spacing,
+                      maximum: widget.maximum,
+                    ),
+                    child: Focus(
+                      onFocusChange: _handleFocus,
+                      child: TextField(
+                        key: const ValueKey('quantity-stepper-field'),
+                        controller: _controller,
+                        enabled: widget.enabled,
+                        textAlign: TextAlign.center,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onChanged: widget.onChanged,
+                        cursorColor: tokens.colors.action.focusRing.color,
+                        // The design sets the number in `data-mono`, which is
+                        // what makes a column of carts line up.
+                        style: tokens.typography.mono.copyWith(
+                          color: widget.enabled
+                              ? tokens.colors.text.primary
+                              : tokens.colors.action.disabledLabel,
+                        ),
+                        // Every part of the chrome is the group's, so the
+                        // field contributes none. A decoration here would be a
+                        // second box inside the first.
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          isCollapsed: true,
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _StepButton(
+                  key: const ValueKey('quantity-stepper-increment'),
+                  icon: Icons.add,
+                  semanticLabel: widget.incrementSemanticLabel,
+                  onPressed: widget.enabled ? widget.onIncrement : null,
+                ),
+              ],
             ),
-            SizedBox(width: tokens.spacing.s8),
-            _StepButton(
-              key: const ValueKey('quantity-stepper-increment'),
-              icon: Icons.add,
-              semanticLabel: widget.incrementSemanticLabel,
-              onPressed: widget.enabled ? widget.onIncrement : null,
-            ),
-          ],
+          ),
         ),
         // §5.2's error line, at the width of the control rather than of the
         // well inside it - and **bounded to that width**, which is the second
@@ -273,13 +333,18 @@ class _QuantityStepperState extends State<QuantityStepper> {
   }
 }
 
-/// One square control, in §2.1's `secondary` tier.
+/// One square control inside the stepper's group.
 ///
 /// **An `AppButton` would be the obvious choice and is the wrong shape**: it
 /// takes a `label` and centres it with §5.2's horizontal padding, so a
 /// glyph-only button comes out label-width plus 40 and the two sides of a
-/// stepper stop being square. This borrows the tier's colours and `PressSurface`
-/// underneath, which is what `AppButton` is made of.
+/// stepper stop being square.
+///
+/// **It draws no border and no container of its own since 2026-08-23.** The
+/// group around it is the control's outline; a bordered circle inside a
+/// bordered group is the five-shapes rendering this replaced. It keeps its 48
+/// square, which is §9's target and the design's own `w-11 h-11` rounded up to
+/// this app's floor.
 final class _StepButton extends StatelessWidget {
   const _StepButton({
     super.key,
@@ -295,7 +360,6 @@ final class _StepButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final role = tokens.colors.action.secondary;
     final disabled = onPressed == null;
     return Semantics(
       button: true,
@@ -308,16 +372,12 @@ final class _StepButton extends StatelessWidget {
         iconSize: 18,
         style: IconButton.styleFrom(
           fixedSize: const Size.square(QuantityStepper.height),
+          backgroundColor: Colors.transparent,
           foregroundColor: disabled
               ? tokens.colors.action.disabledLabel
-              : role.label,
-          side: BorderSide(
-            color: disabled
-                ? tokens.colors.action.disabledBorder
-                : role.border!,
-          ),
+              : tokens.colors.text.secondary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(tokens.radius.pill),
+            borderRadius: BorderRadius.circular(tokens.radius.md),
           ),
         ),
       ),

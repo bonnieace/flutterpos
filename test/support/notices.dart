@@ -13,6 +13,8 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/ui/dialogs.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -31,3 +33,22 @@ String noticeMessage(WidgetTester tester, String key) =>
 /// happily if every outcome on the screen were painted as a failure.
 AppStatus noticeStatus(WidgetTester tester, String key) =>
     noticeAt(tester, key).status;
+
+/// The [AppNotice] in the snack bar currently up, whoever put it there.
+///
+/// **Found by type rather than by key, and that is a property of the
+/// component.** A snack bar is a route of the `ScaffoldMessenger`'s rather than
+/// part of the panel that asked for it, so it carries no key of that panel's to
+/// look it up by. There is only ever one: `showAppSnackBar` replaces rather
+/// than queues, precisely so a till never shows a stale sentence about money.
+AppNotice snackNotice(WidgetTester tester) =>
+    tester.widget<AppSnackBar>(find.byType(AppSnackBar)).notice;
+
+/// The [AppNotice] in the [NoticeDialog] currently up.
+///
+/// The third of the app's three notice surfaces. A `Callout` is found by the
+/// key its page gave it, a snack bar by type because it belongs to the
+/// messenger rather than the page - and this by type for the same reason: it is
+/// a route of its own, and only one can be up at a time.
+AppNotice dialogNotice(WidgetTester tester) =>
+    tester.widget<NoticeDialog>(find.byType(NoticeDialog)).notice;

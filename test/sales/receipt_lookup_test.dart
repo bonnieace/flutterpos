@@ -53,6 +53,60 @@ void main() {
     });
   });
 
+  group('receipt ending query', () {
+    test('accepts padded and unpadded daily sequences', () {
+      for (final ending in <String>['42', '0042']) {
+        final query = TenantReceiptEndingQuery.parse(
+          businessDate: _businessDate,
+          ending: ending,
+          maximumBusinessDate: _businessDate,
+        );
+
+        expect(query.businessDate, _businessDate);
+        expect(query.sequence, 42);
+        expect(query.displayEnding, '0042');
+      }
+    });
+
+    test('refuses invalid endings before a read can be built', () {
+      for (final ending in <String>[
+        '',
+        'abc',
+        '4a',
+        '0',
+        '000000',
+        '1000000',
+      ]) {
+        expect(
+          () => TenantReceiptEndingQuery.parse(
+            businessDate: _businessDate,
+            ending: ending,
+          ),
+          _code('invalid_receipt_ending'),
+          reason: ending,
+        );
+      }
+    });
+
+    test('refuses malformed and future business dates', () {
+      expect(
+        () => TenantReceiptEndingQuery.parse(
+          businessDate: '2026-02-31',
+          ending: '42',
+        ),
+        _code('invalid_business_date'),
+      );
+      expect(
+        () => TenantReceiptEndingQuery.parse(
+          businessDate: '2026-08-01',
+          ending: '42',
+          maximumBusinessDate: _businessDate,
+        ),
+        _code('future_business_date'),
+      );
+    });
+  });
+
   group('receipt lookup repository', () {
     test('finds the one sale that carries the receipt', () async {
       final reader = _Reader(<String, Map<String, Object?>>{
@@ -72,9 +126,8 @@ void main() {
       expect(query.collectionPath, 'tenants/tenant-a/sales');
       expect(query.equalityFilters, <String, Object?>{
         'receiptNumber': _receipt(_deviceA, 2),
+        'soldById': 'user-a',
       });
-      // An equality filter with the default ascending key order needs no
-      // composite index; a descending page would and would buy nothing.
       expect(query.descending, isFalse);
     });
 
@@ -92,27 +145,30 @@ void main() {
       expect(result.matches, isEmpty);
     });
 
-    test('two devices sharing a receipt code are reported, not resolved', () async {
-      // The device code is a three-character digest, so a collision is real.
-      // Picking one sale would attribute a return to the wrong till.
-      final colliding = _collidingDeviceId();
-      final reader = _Reader(<String, Map<String, Object?>>{
-        'tenants/tenant-a/sales/co-1': _sale(sequence: 7),
-        'tenants/tenant-a/sales/co-2': _sale(
-          saleId: 'co-2',
-          sequence: 7,
-          deviceId: colliding,
-        ),
-      });
+    test(
+      'two devices sharing a receipt code are reported, not resolved',
+      () async {
+        // The device code is a three-character digest, so a collision is real.
+        // Picking one sale would attribute a return to the wrong till.
+        final colliding = _collidingDeviceId();
+        final reader = _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/sales/co-1': _sale(sequence: 7),
+          'tenants/tenant-a/sales/co-2': _sale(
+            saleId: 'co-2',
+            sequence: 7,
+            deviceId: colliding,
+          ),
+        });
 
-      final result = await _repository(
-        reader,
-      ).findByReceipt(_receipt(_deviceA, 7));
+        final result = await _repository(
+          reader,
+        ).findByReceipt(_receipt(_deviceA, 7));
 
-      expect(result.isAmbiguous, isTrue);
-      expect(result.matches.length, 2);
-      expect(() => result.sale, throwsStateError);
-    });
+        expect(result.isAmbiguous, isTrue);
+        expect(result.matches.length, 2);
+        expect(() => result.sale, throwsStateError);
+      },
+    );
 
     test('a malformed receipt is refused before any read', () async {
       final reader = _Reader(const <String, Map<String, Object?>>{});
@@ -164,6 +220,95 @@ void main() {
         throwsA(isA<TenantScopeViolation>()),
       );
     });
+
+    test('daily ending lookup returns every matching till', () async {
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/sales/co-1': _sale(sequence: 42),
+        'tenants/tenant-a/sales/co-2': _sale(
+          saleId: 'co-2',
+          sequence: 42,
+          deviceId: 'dev-11111111111111111111111111111111',
+        ),
+      });
+
+      final result = await _repository(
+        reader,
+        role: TenantRole.manager,
+      ).findByEnding(businessDate: _businessDate, ending: '42');
+
+      expect(result.isAmbiguous, isTrue);
+      expect(result.query.displayEnding, '0042');
+      expect(result.matches.map((sale) => sale.id), <String>['co-1', 'co-2']);
+      expect(reader.queries.single.equalityFilters, <String, Object?>{
+        'businessDate': _businessDate,
+        'receiptSequence': 42,
+      });
+    });
+
+    test(
+      'a cashier ending lookup is always narrowed to its own sales',
+      () async {
+        final reader = _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/sales/co-1': _sale(sequence: 42),
+          'tenants/tenant-a/sales/co-2': _sale(
+            saleId: 'co-2',
+            sequence: 42,
+            soldById: 'user-b',
+          ),
+        });
+
+        final result = await _repository(reader).findByEnding(
+          businessDate: _businessDate,
+          ending: '0042',
+          soldById: 'user-b',
+        );
+
+        expect(result.matches.map((sale) => sale.id), <String>['co-1']);
+        expect(reader.queries.single.equalityFilters['soldById'], 'user-a');
+      },
+    );
+
+    test('management may narrow an ending lookup to one member', () async {
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/sales/co-1': _sale(sequence: 42),
+        'tenants/tenant-a/sales/co-2': _sale(
+          saleId: 'co-2',
+          sequence: 42,
+          soldById: 'user-b',
+        ),
+      });
+
+      final result = await _repository(reader, role: TenantRole.admin)
+          .findByEnding(
+            businessDate: _businessDate,
+            ending: '0042',
+            soldById: 'user-b',
+          );
+
+      expect(result.matches.map((sale) => sale.id), <String>['co-2']);
+      expect(reader.queries.single.equalityFilters['soldById'], 'user-b');
+    });
+
+    test(
+      'more than fifty ending collisions fail instead of truncating',
+      () async {
+        final reader = _Reader(<String, Map<String, Object?>>{
+          for (var index = 0; index < 51; index++)
+            'tenants/tenant-a/sales/co-$index': _sale(
+              saleId: 'co-$index',
+              sequence: 7,
+              deviceId: 'dev-${index.toRadixString(16).padLeft(32, '0')}',
+            ),
+        });
+
+        await expectLater(
+          _repository(
+            reader,
+          ).findByEnding(businessDate: _businessDate, ending: '7'),
+          _code('too_many_matches'),
+        );
+      },
+    );
   });
 }
 
@@ -213,10 +358,11 @@ Map<String, Object?> _sale({
   String saleId = 'co-1',
   int sequence = 1,
   String deviceId = _deviceA,
+  String soldById = 'user-a',
 }) => <String, Object?>{
   'checkoutId': saleId,
   'tenantId': 'tenant-a',
-  'soldById': 'user-a',
+  'soldById': soldById,
   'payloadHash': _payloadHash,
   'payloadSchemaVersion': 1,
   'currency': 'KES',
@@ -254,9 +400,7 @@ final class _Reader implements TenantDataReader {
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
     final data = _documents[path];
-    return data == null
-        ? null
-        : TenantDocumentSnapshot(path: path, data: data);
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
   @override
@@ -275,10 +419,7 @@ final class _Reader implements TenantDataReader {
           );
       if (!matchesFilters) continue;
       matches.add(
-        TenantQueryDocumentSnapshot(
-          path: responsePath ?? path,
-          data: data,
-        ),
+        TenantQueryDocumentSnapshot(path: responsePath ?? path, data: data),
       );
       if (matches.length >= query.limit) break;
     }

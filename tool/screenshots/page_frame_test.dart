@@ -213,7 +213,8 @@ void main() {
   screenshotCase(
     '94-page-frame-long-title',
     build: () => const _Frame(
-      title: 'Adjustments: Fresh whole milk 500ml, refrigerated, case of twelve',
+      title:
+          'Adjustments: Fresh whole milk 500ml, refrigerated, case of twelve',
       action: true,
     ),
   );

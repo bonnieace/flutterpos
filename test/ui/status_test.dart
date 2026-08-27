@@ -197,15 +197,18 @@ void main() {
   });
 
   group('the badge is §5.2\'s badge', () {
-    testWidgets('radius.sm, label.md, 24h, space.8 padding', (tester) async {
+    testWidgets('radius.md, label.md, 24h, space.8 padding', (tester) async {
       await _pump(
         tester,
         const StatusBadge(status: AppStatus.ok, label: 'Confirmed'),
       );
       final decoration = _decorationOf(tester, StatusBadge);
+      // **`md` since 2026-08-26, where §5.2 and decision 26a both say `sm`.**
+      // The product owner's call: at 2 a badge was a hard rectangle inside a
+      // card drawn at 8, so the smallest thing on a row was also the sharpest.
       expect(
         (decoration.borderRadius! as BorderRadius).topLeft.x,
-        _tokens.radius.sm,
+        _tokens.radius.md,
       );
       expect(tester.getSize(find.byType(StatusBadge)).height, 24);
 

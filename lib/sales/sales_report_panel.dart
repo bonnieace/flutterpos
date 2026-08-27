@@ -1,0 +1,1635 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../checkout/checkout_draft.dart';
+import '../checkout/checkout_receipt.dart';
+import '../checkout/checkout_tender.dart';
+import '../reporting/reporting_currency.dart';
+import '../reporting/sales_totals.dart';
+import '../reporting/sales_totals_session_context.dart';
+import '../returns/return_actions.dart';
+import '../returns/return_history_panel.dart';
+import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_route_guard.dart';
+import '../tenancy/tenant_session.dart';
+import '../tenancy/tenant_session_controller.dart';
+import '../tenancy/tenant_staff_names.dart';
+import '../ui/buttons.dart';
+import '../ui/card.dart';
+import '../ui/fields.dart';
+import '../ui/pagination.dart';
+import '../ui/scaffold.dart';
+import '../ui/skeleton.dart';
+import '../ui/states.dart';
+import '../ui/status.dart';
+import '../ui/tokens.dart';
+import 'receipt_lookup.dart';
+import 'sale_history.dart';
+
+/// One tenant-safe Sales destination for daily browsing, lookup, and returns.
+final class TenantSalesReportScreen extends StatelessWidget {
+  const TenantSalesReportScreen({
+    super.key,
+    required this.reader,
+    this.reportReader,
+    this.totalsCallable,
+    this.returnActions,
+    this.clock,
+  });
+
+  final TenantDataReader reader;
+  final TenantSalesHistoryQueryReader? reportReader;
+  final SalesTotalsCallable? totalsCallable;
+  final TenantReturnActions? returnActions;
+  final DateTime Function()? clock;
+
+  @override
+  Widget build(BuildContext context) => AppScaffold(
+    title: 'Sales Report',
+    subtitle: 'Review transactions, receipts, and returns.',
+    contentWidth: AppContentWidth.records,
+    body: TenantSalesReportPanel(
+      reader: reader,
+      reportReader: reportReader,
+      totalsCallable: totalsCallable,
+      returnActions: returnActions,
+      clock: clock,
+    ),
+  );
+}
+
+/// Guarded, paginated daily Sales report with receipt-ending lookup.
+final class TenantSalesReportPanel extends StatefulWidget {
+  const TenantSalesReportPanel({
+    super.key,
+    required this.reader,
+    this.reportReader,
+    this.totalsCallable,
+    this.returnActions,
+    this.clock,
+    this.pageSize = 20,
+    this.staffPageSize = 50,
+  });
+
+  final TenantDataReader reader;
+  final TenantSalesHistoryQueryReader? reportReader;
+  final SalesTotalsCallable? totalsCallable;
+  final TenantReturnActions? returnActions;
+  final DateTime Function()? clock;
+  final int pageSize;
+  final int staffPageSize;
+
+  @override
+  State<TenantSalesReportPanel> createState() => _TenantSalesReportPanelState();
+}
+
+final class _TenantSalesReportPanelState extends State<TenantSalesReportPanel> {
+  final TextEditingController _receipt = TextEditingController();
+  late String _businessDate;
+  String? _staffId;
+  List<String?> _cursors = <String?>[null];
+  int _pageIndex = 0;
+  int _generation = 0;
+  String? _submittedEnding;
+  String? _receiptRejection;
+  String? _historyLoaderKey;
+  TenantGuardedLoader<_SalesReportView>? _historyLoader;
+  String? _receiptLoaderKey;
+  TenantGuardedLoader<TenantReceiptEndingLookupResult>? _receiptLoader;
+  final Map<String, Future<_SalesTotalsOutcome>> _totals =
+      <String, Future<_SalesTotalsOutcome>>{};
+  late final SalesTotalsSessionContextLoader _sessionContext =
+      SalesTotalsSessionContextLoader(
+        reader: widget.reader,
+        staffPageSize: widget.staffPageSize,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    _businessDate = _todayBusinessDate;
+  }
+
+  String get _todayBusinessDate => checkoutBusinessDate(
+    (widget.clock?.call() ?? DateTime.now().toUtc()).toUtc(),
+  );
+
+  @override
+  void dispose() {
+    _receipt.dispose();
+    super.dispose();
+  }
+
+  void _resetPages() {
+    _cursors = <String?>[null];
+    _pageIndex = 0;
+    _generation++;
+  }
+
+  void _setBusinessDate(String businessDate) {
+    if (businessDate == _businessDate) return;
+    setState(() {
+      _businessDate = businessDate;
+      _resetPages();
+    });
+  }
+
+  Future<void> _pickBusinessDate() async {
+    final today = _todayBusinessDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.parse(_businessDate),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.parse(today),
+      helpText: 'Select sales date',
+    );
+    if (picked == null || !mounted) return;
+    _setBusinessDate(picked.toIso8601String().substring(0, 10));
+  }
+
+  void _setStaff(String? staffId) {
+    if (staffId == _staffId) return;
+    setState(() {
+      _staffId = staffId;
+      _resetPages();
+    });
+  }
+
+  void _next(String? cursor) {
+    if (cursor == null) return;
+    setState(() {
+      _cursors = <String?>[..._cursors.take(_pageIndex + 1), cursor];
+      _pageIndex++;
+    });
+  }
+
+  void _previous() {
+    if (_pageIndex == 0) return;
+    setState(() => _pageIndex--);
+  }
+
+  void _onReceiptChanged(String value) {
+    if (value.trim().isNotEmpty ||
+        _submittedEnding == null && _receiptRejection == null) {
+      return;
+    }
+    setState(() {
+      _submittedEnding = null;
+      _receiptRejection = null;
+    });
+  }
+
+  void _submitReceipt() {
+    try {
+      final query = TenantReceiptEndingQuery.parse(
+        businessDate: _businessDate,
+        ending: _receipt.text,
+        maximumBusinessDate: _todayBusinessDate,
+      );
+      setState(() {
+        _submittedEnding = query.displayEnding;
+        _receiptRejection = null;
+      });
+    } on TenantReceiptLookupException {
+      setState(() {
+        _submittedEnding = null;
+        _receiptRejection =
+            'Enter the receipt ending as 1 to 6 digits, such as 0042.';
+      });
+    }
+  }
+
+  TenantGuardedLoader<_SalesReportView> _historyLoaderFor(String key) {
+    if (_historyLoaderKey == key && _historyLoader != null) {
+      return _historyLoader!;
+    }
+    _historyLoaderKey = key;
+    final businessDate = _businessDate;
+    final chosenStaffId = _staffId;
+    final cursor = _cursors[_pageIndex];
+    return _historyLoader = (session) async {
+      final management = session.canAccess(
+        allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
+      );
+      final context = management
+          ? await _sessionContext.load(session)
+          : await _cashierContext(session);
+      final appliedStaffId =
+          management &&
+              chosenStaffId != null &&
+              context.staff.contains(chosenStaffId)
+          ? chosenStaffId
+          : null;
+      final query = management && widget.totalsCallable != null
+          ? TenantSalesTotalsGateway(
+              session: session,
+              callable: widget.totalsCallable!,
+              clock: widget.clock,
+            ).createBusinessDateQuery(
+              businessDate: businessDate,
+              soldById: appliedStaffId,
+            )
+          : null;
+      final page =
+          await TenantSaleHistoryRepository(
+            session: session,
+            reader: widget.reader,
+            reportReader: widget.reportReader,
+          ).loadReport(
+            startBusinessDate: businessDate,
+            endBusinessDate: businessDate,
+            selectedStaffId: management ? appliedStaffId : session.uid,
+            pageSize: widget.pageSize,
+            cursor: cursor,
+          );
+      final resolved = await TenantStaffNameResolver(
+        session: session,
+        reader: widget.reader,
+      ).resolve(page.items.map((sale) => sale.soldById));
+      final totals = query == null
+          ? const _SalesTotalsOutcome()
+          : await _totalsFor(session, query);
+      return _SalesReportView(
+        page: page,
+        businessDate: businessDate,
+        appliedStaffId: appliedStaffId,
+        management: management,
+        context: context,
+        names: <String, String>{...context.staff.names, ...resolved},
+        totals: totals,
+      );
+    };
+  }
+
+  Future<SalesTotalsSessionContext> _cashierContext(
+    TenantSession session,
+  ) async {
+    TenantReportingCurrency currency;
+    try {
+      currency = await TenantReportingCurrency.read(
+        session: session,
+        reader: widget.reader,
+      );
+    } catch (_) {
+      currency = TenantReportingCurrency.unknown;
+    }
+    return SalesTotalsSessionContext(
+      categories: const SalesTotalsCategoryOptions.unreadable(),
+      staff: const SalesTotalsStaffOptions.unreadable(),
+      currency: currency,
+    );
+  }
+
+  Future<_SalesTotalsOutcome> _totalsFor(
+    TenantSession session,
+    TenantSalesTotalsQuery query,
+  ) {
+    final key =
+        '${session.uid}:${session.tenantId}:${session.epoch}:'
+        '${query.startDate}:${query.endDate}:${query.soldById ?? '-'}';
+    return _totals.putIfAbsent(key, () async {
+      try {
+        return _SalesTotalsOutcome(
+          value: await TenantSalesTotalsGateway(
+            session: session,
+            callable: widget.totalsCallable!,
+            clock: widget.clock,
+          ).load(query),
+        );
+      } catch (error) {
+        return _SalesTotalsOutcome(error: error);
+      }
+    });
+  }
+
+  TenantGuardedLoader<TenantReceiptEndingLookupResult> _receiptLoaderFor({
+    required String ending,
+    required String businessDate,
+    required String? soldById,
+  }) {
+    final key = '$businessDate:$ending:${soldById ?? '-'}';
+    if (_receiptLoaderKey == key && _receiptLoader != null) {
+      return _receiptLoader!;
+    }
+    _receiptLoaderKey = key;
+    return _receiptLoader = (session) =>
+        TenantReceiptLookupRepository(
+          session: session,
+          reader: widget.reader,
+        ).findByEnding(
+          businessDate: businessDate,
+          ending: ending,
+          soldById: soldById,
+          maximumBusinessDate: _todayBusinessDate,
+        );
+  }
+
+  /// Opens the return sheet over this list.
+  ///
+  /// **A sheet rather than a pushed route since 2026-08-26.** It captures its
+  /// own session scope and reports its own answer, so there is nothing left to
+  /// do here but name the sale.
+  void _openReturns(BuildContext context, TenantSale sale) {
+    unawaited(
+      openTenantSaleReturnSheet(
+        context,
+        reader: widget.reader,
+        request: TenantSaleReturnsRequest(sale: sale),
+        actions: widget.returnActions,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final key =
+        'sales:$_generation:$_pageIndex:$_businessDate:${_staffId ?? '-'}';
+    return TenantRouteGuard<_SalesReportView>(
+      key: ValueKey(key),
+      allowedRoles: TenantSaleHistoryRepository.reportRoles,
+      load: _historyLoaderFor(key),
+      // **The report itself, with placeholders where the read will land.** It
+      // took the guard's default full-page spinner until 2026-08-27, which
+      // replaced the receipt search, the date button and the pagination along
+      // with the figures - so a cashier who came to look up a receipt had to
+      // wait for a day's sales they had not asked for. Decision 35: the
+      // furniture is drawn, and only the day's takings and its sales are
+      // placeholders.
+      //
+      // The session is read from the scope rather than the guard, because the
+      // guard has not admitted one yet at this point; `requireSession` is what
+      // decides that, and a denied session never reaches here.
+      loading: switch (TenantSessionScope.of(context).session) {
+        final session? => _SalesReportContents(
+          session: session,
+          view: null,
+          businessDate: _businessDate,
+          management: session.canAccess(
+            allowedRoles: TenantSaleHistoryRepository.managementReportRoles,
+          ),
+          receipt: _receipt,
+          submittedEnding: _submittedEnding,
+          receiptRejection: _receiptRejection,
+          receiptResult: null,
+          pageIndex: _pageIndex,
+          onReceiptChanged: _onReceiptChanged,
+          onSubmitReceipt: _submitReceipt,
+          onPickDate: _pickBusinessDate,
+          onStaffChanged: _setStaff,
+          onPrevious: null,
+          onNext: null,
+          onOpenReturns: (sale) => _openReturns(context, sale),
+        ),
+        // No session in scope at all is the guard's own `denied` case arriving
+        // a frame early. Drawing nothing is what it draws.
+        null => const SizedBox.shrink(),
+      },
+      failure: (context, error) => const Center(
+        key: ValueKey('sales-report-failure'),
+        child: Text('Sales could not be read for this day.'),
+      ),
+      builder: (context, session, view) {
+        final ending = _submittedEnding;
+        final Widget? receiptResult = ending == null
+            ? null
+            : TenantRouteGuard<TenantReceiptEndingLookupResult>(
+                key: ValueKey(
+                  'sales-receipt:${view.businessDate}:$ending:'
+                  '${view.appliedStaffId ?? '-'}',
+                ),
+                allowedRoles: TenantReceiptLookupRepository.allowedRoles,
+                load: _receiptLoaderFor(
+                  ending: ending,
+                  businessDate: view.businessDate,
+                  soldById: view.appliedStaffId,
+                ),
+                failure: (context, error) => Callout(
+                  key: const ValueKey('sales-receipt-failure'),
+                  status: AppStatus.problem,
+                  message:
+                      error is TenantReceiptLookupException &&
+                          error.code == 'too_many_matches'
+                      ? 'More than 50 sales share this ending. Select a staff '
+                            'member to narrow the search.'
+                      : 'That receipt could not be looked up.',
+                ),
+                builder: (context, session, result) => _ReceiptSearchResult(
+                  result: result,
+                  names: view.names,
+                  selfUid: session.uid,
+                  onOpenReturns: (sale) => _openReturns(context, sale),
+                ),
+              );
+        return _SalesReportContents(
+          session: session,
+          view: view,
+          businessDate: view.businessDate,
+          management: view.management,
+          receipt: _receipt,
+          submittedEnding: _submittedEnding,
+          receiptRejection: _receiptRejection,
+          receiptResult: receiptResult,
+          pageIndex: _pageIndex,
+          onReceiptChanged: _onReceiptChanged,
+          onSubmitReceipt: _submitReceipt,
+          onPickDate: _pickBusinessDate,
+          onStaffChanged: _setStaff,
+          onPrevious: _pageIndex == 0 ? null : _previous,
+          onNext: view.page.hasMore ? () => _next(view.page.nextCursor) : null,
+          onOpenReturns: (sale) => _openReturns(context, sale),
+        );
+      },
+    );
+  }
+}
+
+final class _SalesTotalsOutcome {
+  const _SalesTotalsOutcome({this.value, this.error});
+
+  final TenantSalesTotals? value;
+  final Object? error;
+}
+
+final class _SalesReportView {
+  const _SalesReportView({
+    required this.page,
+    required this.businessDate,
+    required this.appliedStaffId,
+    required this.management,
+    required this.context,
+    required this.names,
+    required this.totals,
+  });
+
+  final TenantSalePage page;
+  final String businessDate;
+  final String? appliedStaffId;
+  final bool management;
+  final SalesTotalsSessionContext context;
+  final Map<String, String> names;
+  final _SalesTotalsOutcome totals;
+}
+
+/// The report, whether or not the day's sales have arrived yet.
+///
+/// **The screen decision 35 was taken for.** Everything a person came here to
+/// *do* - look up a receipt, change the date, narrow to a colleague, page
+/// through - is furniture rather than data, and none of it has any reason to
+/// wait for a read. So this composition is built once and drawn in both states:
+/// [view] null means the sales and the totals are outstanding, and they are the
+/// only two regions that become placeholders.
+///
+/// **[businessDate] and [management] are passed rather than read off [view]**,
+/// which is what makes the date button and the staff filter genuinely
+/// independent of the read. The date is the panel's own selection - it is what
+/// was *asked for*, and the panel knows it before anyone answers - and whether
+/// this member manages is a property of the session, which the guard has
+/// already established. Taking either from the loaded view would have made two
+/// controls wait for a figure neither of them shows.
+final class _SalesReportContents extends StatelessWidget {
+  const _SalesReportContents({
+    required this.session,
+    required this.view,
+    required this.businessDate,
+    required this.management,
+    required this.receipt,
+    required this.submittedEnding,
+    required this.receiptRejection,
+    required this.receiptResult,
+    required this.pageIndex,
+    required this.onReceiptChanged,
+    required this.onSubmitReceipt,
+    required this.onPickDate,
+    required this.onStaffChanged,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onOpenReturns,
+  });
+
+  final TenantSession session;
+
+  /// Null while the day is still being read. **Not null-for-empty**: a day with
+  /// no sales has answered, and `_SalesPresentation` has its own empty state
+  /// for exactly that.
+  final _SalesReportView? view;
+
+  /// The day being asked about, which the panel knows before anything answers.
+  final String businessDate;
+
+  /// Whether this member may narrow the day to one colleague, from the session
+  /// rather than from the read.
+  final bool management;
+  final TextEditingController receipt;
+  final String? submittedEnding;
+  final String? receiptRejection;
+  final Widget? receiptResult;
+  final int pageIndex;
+  final ValueChanged<String> onReceiptChanged;
+  final VoidCallback onSubmitReceipt;
+  final VoidCallback onPickDate;
+  final ValueChanged<String?> onStaffChanged;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+  final ValueChanged<TenantSale> onOpenReturns;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final inset = width < AppLayout.contract.mediumFloor
+        ? tokens.spacing.s16
+        : width < AppLayout.contract.expandedFloor
+        ? tokens.spacing.s20
+        : tokens.spacing.s24;
+    return ListView(
+      key: const ValueKey('sales-report'),
+      padding: EdgeInsets.all(inset),
+      children: <Widget>[
+        _receiptSearch(context),
+        if (receiptRejection case final message?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s12),
+          Callout(
+            key: const ValueKey('sales-receipt-invalid'),
+            status: AppStatus.attention,
+            message: message,
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s12),
+        _scopeControls(context),
+        SizedBox(height: tokens.spacing.s16),
+        if (submittedEnding != null && receiptResult != null)
+          receiptResult!
+        else ...<Widget>[
+          // **The one region on this page that genuinely needs a server.** The
+          // day's sales come from Firestore and serve from its cache offline;
+          // the totals are a callable and do not. So this is the band that is
+          // actually being waited on, and while a read is in flight it is the
+          // band that says so.
+          if (management) ...<Widget>[
+            if (view case final loaded?)
+              _ManagementSalesSummary(view: loaded)
+            else
+              const SkeletonGroup(
+                key: ValueKey('sales-report-totals-skeleton'),
+                semanticLabel: 'Reading the totals for this day.',
+                child: SkeletonBlock(height: _totalsBandHeight),
+              ),
+            SizedBox(height: tokens.spacing.s20),
+          ],
+          if (view case final loaded?)
+            _SalesPresentation(
+              sales: loaded.page.items,
+              names: loaded.names,
+              selfUid: session.uid,
+              filtered: loaded.appliedStaffId != null,
+              onOpenReturns: onOpenReturns,
+            )
+          else
+            const _SaleCardsSkeleton(key: ValueKey('sales-report-skeleton')),
+          SizedBox(height: tokens.spacing.s16),
+          Pagination(
+            pageNumber: pageIndex + 1,
+            previousKey: const ValueKey('sales-report-previous-page'),
+            nextKey: const ValueKey('sales-report-next-page'),
+            pageKey: const ValueKey('sales-report-page'),
+            onPrevious: onPrevious,
+            onNext: onNext,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _receiptSearch(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final field = AppTextField(
+      key: const ValueKey('sales-receipt-search'),
+      controller: receipt,
+      label: '',
+      placeholder: 'Receipt ending, e.g. 0042',
+      leading: Icons.receipt_long_outlined,
+      maxLength: 6,
+      keyboardType: TextInputType.number,
+      textInputAction: TextInputAction.search,
+      inputFormatters: <TextInputFormatter>[
+        FilteringTextInputFormatter.digitsOnly,
+      ],
+      autocorrect: false,
+      enableSuggestions: false,
+      onChanged: onReceiptChanged,
+      onSubmitted: (_) => onSubmitReceipt(),
+    );
+    final button = AppIconButton(
+      key: const ValueKey('sales-receipt-submit'),
+      icon: Icons.search,
+      semanticLabel: 'Find receipt',
+      onPressed: onSubmitReceipt,
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Expanded(child: field),
+        SizedBox(width: tokens.spacing.s12),
+        button,
+      ],
+    );
+  }
+
+  Widget _scopeControls(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final loaded = view;
+    final date = Column(
+      key: const ValueKey('sales-date-filter'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          'Date',
+          style: tokens.typography.labelMedium.copyWith(
+            color: tokens.colors.text.secondary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s8),
+        AppButton(
+          key: const ValueKey('sales-date-picker'),
+          label: businessDate,
+          icon: Icons.calendar_today_outlined,
+          tier: AppButtonTier.secondary,
+          expand: true,
+          onPressed: onPickDate,
+        ),
+      ],
+    );
+    // A member who cannot narrow the day never gets this control in either
+    // state. While the read is outstanding the directory has not answered yet,
+    // so the control is drawn holding the only option it can honestly offer.
+    if (!management || (loaded != null && !loaded.context.staff.readable)) {
+      return date;
+    }
+    final staff = AppSelect<String>(
+      key: const ValueKey('sales-staff-filter'),
+      value: loaded?.appliedStaffId ?? '',
+      label: 'Sold by',
+      leading: Icons.person_outline,
+      // **Disabled rather than absent while the colleagues are being read.**
+      // Absent would move the date button from half the row to all of it and
+      // back again, which is the jump this whole change exists to remove; and a
+      // list a person can open onto one option is a control that lies about
+      // being ready. `AppSelect` draws its own disabled state.
+      enabled: loaded != null,
+      items: <AppSelectItem<String>>[
+        const AppSelectItem<String>(value: '', label: 'All staff'),
+        if (loaded != null)
+          for (final uid in loaded.context.staff.uids)
+            AppSelectItem<String>(
+              value: uid,
+              label: tenantStaffLabel(
+                uid,
+                names: loaded.context.staff.names,
+                selfUid: session.uid,
+              ),
+            ),
+      ],
+      onChanged: (value) =>
+          onStaffChanged(value == null || value.isEmpty ? null : value),
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(child: date),
+        SizedBox(width: tokens.spacing.s12),
+        Expanded(child: staff),
+      ],
+    );
+  }
+}
+
+/// The totals band's height while it is being read.
+///
+/// **Named here rather than tokenised, for the reason `EmptyState.markSize`
+/// gives**: no source this app has states this band's box, and
+/// `_ManagementSalesSummary` derives its own from figures a placeholder does
+/// not have. 96 is what the takings-and-count pair measures once its payment
+/// rows are folded, which is the shape it opens in.
+const double _totalsBandHeight = 96;
+
+/// Placeholder sale cards, for the day that has not been read yet.
+///
+/// **Its own widget rather than `RecordListSkeleton`**, because
+/// `_SalesPresentation` draws cards at every width - it is not a `RecordList`
+/// and does not become a table at `expanded`. A placeholder that turned into a
+/// table here would promise a screen this page never draws.
+final class _SaleCardsSkeleton extends StatelessWidget {
+  const _SaleCardsSkeleton({super.key});
+
+  /// Four fills a phone without pretending to know what the day holds.
+  static const int _cards = 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return SkeletonGroup(
+      semanticLabel: 'Reading the sales for this day.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (var card = 0; card < _cards; card++)
+            Padding(
+              padding: EdgeInsets.only(bottom: tokens.spacing.s8),
+              child: const _SaleCardSkeleton(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One placeholder sale card, arranged like the card it stands in for.
+///
+/// **A featureless slab was wrong and 2026-08-27 replaces it**, at the product
+/// owner's report. The first version drew one 148-pixel block per sale, which
+/// reserves the right *space* and says nothing about what will fill it: four
+/// grey slabs are indistinguishable from four loading anything. A person
+/// waiting on this screen should be able to see, before the read lands, that a
+/// sale is a time and a receipt over its items with a total - which is the
+/// whole argument for a skeleton over a spinner.
+///
+/// **The chrome is real, and only the values are blocks.** Decision 35 again:
+/// the card frame, both rules and the meta band's fill do not change when the
+/// read returns, so they are drawn rather than approximated. What shimmers is
+/// exactly the set of things the server is still deciding.
+final class _SaleCardSkeleton extends StatelessWidget {
+  const _SaleCardSkeleton();
+
+  /// Two item rows, because a placeholder cannot know a basket's size and two
+  /// is enough to read as *a list of things* rather than as one more line.
+  static const int _items = 2;
+
+  /// The hairline [_SaleCard] rules its regions with: one logical pixel, which
+  /// is the figure the real card passes and `Divider`'s own default. Named
+  /// rather than inlined because this app has no stroke-width token to read it
+  /// from - recorded here rather than invented as one.
+  static const double _hairline = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    // Everything sits inside a card, so every block steps up from `raised`
+    // rather than matching it.
+    const tone = SkeletonTone.onRaised;
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Padding(
+            padding: EdgeInsets.all(tokens.spacing.s12),
+            child: Row(
+              children: <Widget>[
+                SkeletonBlock(
+                  width: tokens.spacing.s20,
+                  height: tokens.spacing.s20,
+                  radius: tokens.radius.sm,
+                  tone: tone,
+                ),
+                SizedBox(width: tokens.spacing.s8),
+                Expanded(
+                  child: Row(
+                    children: <Widget>[
+                      // The time, which leads the real card and so leads this.
+                      Expanded(
+                        child: SkeletonLine(
+                          widthFactor: 0.72,
+                          style: tokens.typography.mono.copyWith(
+                            fontSize: tokens.typography.bodyLarge.fontSize,
+                          ),
+                          tone: tone,
+                        ),
+                      ),
+                      SizedBox(width: tokens.spacing.s8),
+                      SkeletonBlock(
+                        width: tokens.spacing.s16,
+                        height: tokens.spacing.s16,
+                        radius: tokens.radius.sm,
+                        tone: tone,
+                      ),
+                      SizedBox(width: tokens.spacing.s4),
+                      Expanded(
+                        child: SkeletonLine(
+                          widthFactor: 0.62,
+                          style: tokens.typography.caption,
+                          tone: tone,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s8),
+                SizedBox(
+                  width: tokens.spacing.s64,
+                  child: SkeletonLine(
+                    style: tokens.typography.numericBody,
+                    tone: tone,
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s8),
+                SkeletonBlock(
+                  width: tokens.spacing.s24,
+                  height: tokens.spacing.s24,
+                  radius: tokens.radius.sm,
+                  tone: tone,
+                ),
+              ],
+            ),
+          ),
+          Divider(height: _hairline, color: tokens.colors.surface.borderSubtle),
+          for (var item = 0; item < _items; item++) ...<Widget>[
+            if (item > 0)
+              Divider(
+                height: _hairline,
+                indent: tokens.spacing.s16,
+                endIndent: tokens.spacing.s16,
+                color: tokens.colors.surface.borderSubtle,
+              ),
+            const _SaleItemRowSkeleton(tone: tone),
+          ],
+          Container(
+            padding: EdgeInsets.all(tokens.spacing.s12),
+            color: tokens.colors.surface.overlay,
+            child: Wrap(
+              spacing: tokens.spacing.s16,
+              runSpacing: tokens.spacing.s8,
+              children: <Widget>[
+                // Two ragged widths rather than two equal ones: a staff name
+                // and a tender are not the same length, and a placeholder that
+                // pretends they are reads as a table.
+                _SaleMetaSkeleton(tone: tone, width: tokens.spacing.s64),
+                _SaleMetaSkeleton(tone: tone, width: tokens.spacing.s48),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One placeholder item row, shaped like [_SaleItemRow]: a product square, its
+/// name over its quantity, and the line total against the trailing edge.
+final class _SaleItemRowSkeleton extends StatelessWidget {
+  const _SaleItemRowSkeleton({required this.tone});
+
+  final SkeletonTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.s16,
+        vertical: tokens.spacing.s12,
+      ),
+      child: Row(
+        children: <Widget>[
+          SkeletonBlock(
+            width: tokens.spacing.s40,
+            height: tokens.spacing.s40,
+            radius: tokens.radius.md,
+            tone: tone,
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                SkeletonLine(
+                  widthFactor: 0.62,
+                  style: tokens.typography.labelMedium,
+                  tone: tone,
+                ),
+                SizedBox(height: tokens.spacing.s4),
+                SkeletonLine(
+                  widthFactor: 0.34,
+                  style: tokens.typography.caption,
+                  tone: tone,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          SizedBox(
+            width: tokens.spacing.s64,
+            child: SkeletonLine(
+              style: tokens.typography.numericBody,
+              tone: tone,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One placeholder meta pair in the card's foot, shaped like [_SaleMeta].
+final class _SaleMetaSkeleton extends StatelessWidget {
+  const _SaleMetaSkeleton({required this.tone, required this.width});
+
+  final SkeletonTone tone;
+
+  /// How wide the label reads. The caller varies it so the two do not line up.
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        SkeletonBlock(
+          width: tokens.spacing.s16,
+          height: tokens.spacing.s16,
+          radius: tokens.radius.sm,
+          tone: tone,
+        ),
+        SizedBox(width: tokens.spacing.s4),
+        SizedBox(
+          width: width,
+          child: SkeletonLine(style: tokens.typography.caption, tone: tone),
+        ),
+      ],
+    );
+  }
+}
+
+final class _ManagementSalesSummary extends StatelessWidget {
+  const _ManagementSalesSummary({required this.view});
+
+  final _SalesReportView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final totals = view.totals.value;
+    if (totals == null) {
+      if (view.totals.error == null) return const SizedBox.shrink();
+      return Callout(
+        key: const ValueKey('sales-report-totals-failure'),
+        status: AppStatus.attention,
+        title: 'Totals unavailable',
+        message: _totalsFailureMessage(view.totals.error!),
+      );
+    }
+    final breakdown = totals.tenderBreakdown;
+    final paymentRows = breakdown == null
+        ? const <_PaymentSummaryEntry>[]
+        : <_PaymentSummaryEntry>[
+            for (final entry in breakdown.recorded.entries)
+              if (!entry.value.isEmpty)
+                _PaymentSummaryEntry(
+                  label: entry.key.label,
+                  icon: switch (entry.key) {
+                    CheckoutTender.cash => Icons.payments_outlined,
+                    CheckoutTender.mpesa => Icons.phone_android_outlined,
+                    CheckoutTender.card => Icons.credit_card_outlined,
+                  },
+                  totals: entry.value,
+                ),
+            if (!breakdown.unrecorded.isEmpty)
+              _PaymentSummaryEntry(
+                label: 'Not recorded',
+                icon: Icons.history_outlined,
+                totals: breakdown.unrecorded,
+              ),
+            if (!breakdown.unrecognised.isEmpty)
+              _PaymentSummaryEntry(
+                label: 'Unrecognised',
+                icon: Icons.help_outline,
+                totals: breakdown.unrecognised,
+              ),
+          ];
+    return AppCard(
+      key: const ValueKey('sales-report-summary'),
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: tokens.colors.status.ok.bg,
+                  borderRadius: BorderRadius.circular(tokens.radius.md),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(tokens.spacing.s12),
+                  child: Icon(
+                    Icons.payments_outlined,
+                    color: tokens.colors.text.money,
+                    size: 24,
+                  ),
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      'Revenue',
+                      style: tokens.typography.labelMedium.copyWith(
+                        color: tokens.colors.text.secondary,
+                      ),
+                    ),
+                    SizedBox(height: tokens.spacing.s4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        view.context.currency.format(totals.sales),
+                        key: const ValueKey('sales-report-revenue'),
+                        maxLines: 1,
+                        style: tokens.typography.numericHero.copyWith(
+                          color: view.context.currency.isKnown
+                              ? tokens.colors.text.money
+                              : tokens.colors.text.primary,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: tokens.spacing.s4),
+                    Text(
+                      view.businessDate,
+                      key: const ValueKey('sales-report-summary-range'),
+                      style: tokens.typography.caption.copyWith(
+                        color: tokens.colors.text.tertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: tokens.spacing.s12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    'Transactions',
+                    style: tokens.typography.labelMedium.copyWith(
+                      color: tokens.colors.text.secondary,
+                    ),
+                  ),
+                  SizedBox(height: tokens.spacing.s4),
+                  Text(
+                    '${totals.transactions}',
+                    key: const ValueKey('sales-report-transactions'),
+                    style: tokens.typography.numericHero.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (paymentRows.isNotEmpty) ...<Widget>[
+            SizedBox(height: tokens.spacing.s16),
+            Divider(height: 1, color: tokens.colors.surface.borderSubtle),
+            SizedBox(height: tokens.spacing.s12),
+            Text(
+              'Paid by',
+              style: tokens.typography.titleMedium.copyWith(
+                color: tokens.colors.text.primary,
+              ),
+            ),
+            SizedBox(height: tokens.spacing.s8),
+            for (
+              var index = 0;
+              index < paymentRows.length;
+              index++
+            ) ...<Widget>[
+              if (index > 0) SizedBox(height: tokens.spacing.s12),
+              _PaymentSummaryLine(
+                entry: paymentRows[index],
+                periodSales: totals.sales,
+                currency: view.context.currency,
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+final class _PaymentSummaryEntry {
+  const _PaymentSummaryEntry({
+    required this.label,
+    required this.icon,
+    required this.totals,
+  });
+
+  final String label;
+  final IconData icon;
+  final TenantSalesTenderTotals totals;
+}
+
+final class _PaymentSummaryLine extends StatelessWidget {
+  const _PaymentSummaryLine({
+    required this.entry,
+    required this.periodSales,
+    required this.currency,
+  });
+
+  final _PaymentSummaryEntry entry;
+  final double periodSales;
+  final TenantReportingCurrency currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final share = periodSales <= 0
+        ? 0.0
+        : (entry.totals.sales / periodSales).clamp(0.0, 1.0).toDouble();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: tokens.colors.surface.overlay,
+            borderRadius: BorderRadius.circular(tokens.radius.sm),
+          ),
+          child: SizedBox.square(
+            dimension: 36,
+            child: Icon(entry.icon, size: 18, color: tokens.colors.text.money),
+          ),
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      entry.label,
+                      style: tokens.typography.labelMedium.copyWith(
+                        color: tokens.colors.text.primary,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${entry.totals.transactions} '
+                    '${entry.totals.transactions == 1 ? 'sale' : 'sales'}',
+                    style: tokens.typography.caption.copyWith(
+                      color: tokens.colors.text.tertiary,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: tokens.spacing.s4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(tokens.radius.sm),
+                child: LinearProgressIndicator(
+                  minHeight: 4,
+                  value: share,
+                  backgroundColor: tokens.colors.surface.borderSubtle,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    tokens.colors.text.money,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        SizedBox(
+          width: 112,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerEnd,
+                child: Text(
+                  currency.format(entry.totals.sales),
+                  maxLines: 1,
+                  style: tokens.typography.numericBody.copyWith(
+                    color: currency.isKnown
+                        ? tokens.colors.text.money
+                        : tokens.colors.text.primary,
+                  ),
+                ),
+              ),
+              Text(
+                '${(share * 100).round()}%',
+                style: tokens.typography.caption.copyWith(
+                  color: tokens.colors.text.tertiary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _totalsFailureMessage(Object error) {
+  if (error is! TenantSalesTotalsException) {
+    return 'The trusted selected-day totals could not be read. The sales list '
+        'below is still available and is not presented as a total.';
+  }
+  return switch (error.failure) {
+    TenantSalesTotalsFailure.periodTooLarge =>
+      'This day contains more than ${TenantSalesTotals.maximumTransactions} '
+          'sales, so the server refused to present a partial total.',
+    TenantSalesTotalsFailure.unusableSaleData =>
+      'A stored sale could not be safely included, so no total is shown.',
+    TenantSalesTotalsFailure.forbidden =>
+      'Your current access no longer permits business-wide totals.',
+    _ =>
+      'The trusted selected-day totals could not be read. The sales list '
+          'below is still available and is not presented as a total.',
+  };
+}
+
+final class _ReceiptSearchResult extends StatelessWidget {
+  const _ReceiptSearchResult({
+    required this.result,
+    required this.names,
+    required this.selfUid,
+    required this.onOpenReturns,
+  });
+
+  final TenantReceiptEndingLookupResult result;
+  final Map<String, String> names;
+  final String selfUid;
+  final ValueChanged<TenantSale> onOpenReturns;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    if (result.isMissing) {
+      return const EmptyState(
+        key: ValueKey('sales-receipt-missing'),
+        title: 'Receipt not found',
+        hint: 'Check the selected date and receipt ending, then try again.',
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (result.isAmbiguous) ...<Widget>[
+          Callout(
+            key: const ValueKey('sales-receipt-ambiguous'),
+            status: AppStatus.attention,
+            title: 'More than one sale matches',
+            message:
+                '${result.matches.length} sales share #'
+                '${result.query.displayEnding} on this date. Compare the '
+                'recorded time, staff member, and items before opening returns.',
+          ),
+          SizedBox(height: tokens.spacing.s12),
+        ],
+        _SalesPresentation(
+          sales: result.matches,
+          names: names,
+          selfUid: selfUid,
+          filtered: true,
+          onOpenReturns: onOpenReturns,
+        ),
+      ],
+    );
+  }
+}
+
+final class _SalesPresentation extends StatelessWidget {
+  const _SalesPresentation({
+    required this.sales,
+    required this.names,
+    required this.selfUid,
+    required this.filtered,
+    required this.onOpenReturns,
+  });
+
+  final List<TenantSale> sales;
+  final Map<String, String> names;
+  final String selfUid;
+  final bool filtered;
+  final ValueChanged<TenantSale> onOpenReturns;
+
+  @override
+  Widget build(BuildContext context) {
+    if (sales.isEmpty) {
+      return EmptyState(
+        key: ValueKey(
+          filtered ? 'sales-report-no-matches' : 'sales-report-empty',
+        ),
+        title: filtered ? 'No matching sales' : 'No sales yet',
+        hint: filtered
+            ? 'Try another date or staff member.'
+            : 'Transactions recorded on this date will appear here.',
+      );
+    }
+    final tokens = AppTokens.componentOf(context);
+    return Column(
+      key: const ValueKey('sales-report-cards'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        for (final sale in sales)
+          Padding(
+            padding: EdgeInsets.only(bottom: tokens.spacing.s8),
+            child: _SaleCard(
+              sale: sale,
+              staffLabel: _staffLabel(sale),
+              onOpenReturns: () => onOpenReturns(sale),
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _staffLabel(TenantSale sale) =>
+      tenantStaffLabel(sale.soldById, names: names, selfUid: selfUid);
+}
+
+final class _SaleCard extends StatelessWidget {
+  const _SaleCard({
+    required this.sale,
+    required this.staffLabel,
+    required this.onOpenReturns,
+  });
+
+  final TenantSale sale;
+  final String staffLabel;
+  final VoidCallback onOpenReturns;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return AppCard(
+      key: ValueKey('sales-record-${sale.id}'),
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Padding(
+            padding: EdgeInsets.all(tokens.spacing.s12),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  Icons.schedule_outlined,
+                  size: 18,
+                  color: tokens.colors.action.primary.container,
+                ),
+                SizedBox(width: tokens.spacing.s8),
+                Expanded(
+                  child: Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          _recordedTime(sale),
+                          key: ValueKey('sales-recorded-time-${sale.id}'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: tokens.typography.mono.copyWith(
+                            color: tokens.colors.text.primary,
+                            fontSize: tokens.typography.bodyLarge.fontSize,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: tokens.spacing.s8),
+                      Icon(
+                        Icons.receipt_long_outlined,
+                        size: 14,
+                        color: tokens.colors.text.tertiary,
+                      ),
+                      SizedBox(width: tokens.spacing.s4),
+                      Flexible(
+                        child: Text(
+                          '#${sale.receiptSequence.toString().padLeft(checkoutReceiptSequenceDigits, '0')}',
+                          key: ValueKey('sales-receipt-ending-${sale.id}'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: tokens.typography.caption.copyWith(
+                            color: tokens.colors.text.tertiary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.s8),
+                Text(
+                  _saleMoney(sale),
+                  key: ValueKey('sales-total-${sale.id}'),
+                  style: tokens.typography.numericBody.copyWith(
+                    color: tokens.colors.text.money,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                _SaleMenu(sale: sale, onOpenReturns: onOpenReturns),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: tokens.colors.surface.borderSubtle),
+          for (final (index, line) in sale.lines.indexed) ...<Widget>[
+            if (index > 0)
+              Divider(
+                height: 1,
+                indent: tokens.spacing.s16,
+                endIndent: tokens.spacing.s16,
+                color: tokens.colors.surface.borderSubtle,
+              ),
+            _SaleItemRow(sale: sale, line: line, index: index),
+          ],
+          Container(
+            padding: EdgeInsets.all(tokens.spacing.s12),
+            color: tokens.colors.surface.overlay,
+            child: Wrap(
+              spacing: tokens.spacing.s16,
+              runSpacing: tokens.spacing.s8,
+              children: <Widget>[
+                _SaleMeta(icon: Icons.person_outline, label: staffLabel),
+                _SaleMeta(icon: Icons.payments_outlined, label: _tender(sale)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _SaleItemRow extends StatelessWidget {
+  const _SaleItemRow({
+    required this.sale,
+    required this.line,
+    required this.index,
+  });
+
+  final TenantSale sale;
+  final TenantSaleLine line;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Padding(
+      key: ValueKey('sales-item-${sale.id}-$index'),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.s16,
+        vertical: tokens.spacing.s12,
+      ),
+      child: Row(
+        children: <Widget>[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: tokens.colors.surface.overlay,
+              borderRadius: BorderRadius.circular(tokens.radius.md),
+            ),
+            child: SizedBox.square(
+              dimension: 40,
+              child: Icon(
+                Icons.inventory_2_outlined,
+                size: 20,
+                color: tokens.colors.text.tertiary,
+              ),
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  line.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.typography.labelMedium.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.s4),
+                Text(
+                  '${line.quantity} × ${sale.currency} '
+                  '${_money(line.unitPriceMinor)}',
+                  style: tokens.typography.caption.copyWith(
+                    color: tokens.colors.text.tertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: tokens.spacing.s12),
+          Text(
+            '${sale.currency} ${_money(line.lineTotalMinor)}',
+            style: tokens.typography.numericBody.copyWith(
+              color: tokens.colors.text.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _SaleMeta extends StatelessWidget {
+  const _SaleMeta({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Icon(icon, size: 16, color: tokens.colors.text.tertiary),
+        SizedBox(width: tokens.spacing.s4),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 220),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.typography.caption.copyWith(
+              color: tokens.colors.text.secondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+final class _SaleMenu extends StatelessWidget {
+  const _SaleMenu({required this.sale, required this.onOpenReturns});
+
+  final TenantSale sale;
+  final VoidCallback onOpenReturns;
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<int>(
+    key: ValueKey('sales-actions-${sale.id}'),
+    tooltip: 'Actions for receipt ${sale.receiptNumber}',
+    icon: const Icon(Icons.more_vert),
+    onSelected: (_) => onOpenReturns(),
+    itemBuilder: (context) => <PopupMenuEntry<int>>[
+      PopupMenuItem<int>(
+        key: ValueKey('sales-returns-${sale.id}'),
+        value: 0,
+        height: 48,
+        child: const _SaleMenuLabel(
+          icon: Icons.assignment_return_outlined,
+          label: 'Return',
+        ),
+      ),
+    ],
+  );
+}
+
+final class _SaleMenuLabel extends StatelessWidget {
+  const _SaleMenuLabel({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 20, color: tokens.colors.text.secondary),
+        SizedBox(width: tokens.spacing.s12),
+        Expanded(
+          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
+  }
+}
+
+String _tender(TenantSale sale) => sale.tender?.label ?? 'Not recorded';
+
+String _saleMoney(TenantSale sale) =>
+    '${sale.currency} ${_money(sale.totalMinor)}';
+
+String _money(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+
+String _recordedTime(TenantSale sale) {
+  final value = sale.recordedAt;
+  if (value == null) return 'Awaiting server time';
+  final local = value.toLocal();
+  String pad(int part) => part.toString().padLeft(2, '0');
+  return '${pad(local.hour)}:${pad(local.minute)}';
+}

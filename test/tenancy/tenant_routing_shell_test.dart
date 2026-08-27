@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/landing_drawer.dart';
 
 void main() {
   testWidgets('opens the UID-local selected business', (tester) async {
@@ -76,6 +77,7 @@ void main() {
       await _pumpRouting(tester);
       expect(fixture.gateway.rootCalls, 1);
 
+      await openLandingDrawer(tester);
       await tester.tap(find.byKey(const ValueKey('make-default-tenant')));
       await tester.pumpAndSettle();
       expect(fixture.gateway.rootCalls, 1);
@@ -89,6 +91,10 @@ void main() {
         'requestId': 'routing-default-request',
       });
       expect(fixture.gateway.rootCalls, 2);
+      // The drawer shut itself when the destination was pressed, which is what
+      // stops a panel sitting open under the route it just opened. Re-opening
+      // it is how a person would check the label changed.
+      await openLandingDrawer(tester);
       expect(find.text('Default business'), findsOneWidget);
       await fixture.dispose(tester);
     },
@@ -128,6 +134,7 @@ void main() {
 
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
+    await openLandingDrawer(tester);
     await tester.tap(find.byKey(const ValueKey('start-checkout')));
     await _pumpRouting(tester);
 
@@ -196,6 +203,7 @@ void main() {
 
       expect(find.text('Business tenant-a'), findsOneWidget);
       expect(reader.tenantARequest, isNotNull);
+      await openLandingDrawer(tester);
       await tester.tap(find.byKey(const ValueKey('change-business')));
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
@@ -313,6 +321,7 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
+    await openLandingDrawer(tester);
     await tester.tap(find.byKey(const ValueKey('change-business')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
@@ -342,6 +351,7 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
+    await openLandingDrawer(tester);
     await tester.tap(find.byKey(const ValueKey('change-business')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));
@@ -369,6 +379,7 @@ void main() {
     fixture.auth.add('user-a');
     await _pumpRouting(tester);
 
+    await openLandingDrawer(tester);
     await tester.tap(find.byKey(const ValueKey('change-business')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('switch-business-tenant-b')));

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
@@ -339,12 +340,7 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
           // third phrasing chosen here. `Staff:` is doing work: this route also
           // opens an *invitation* form, and correcting a person's details is
           // not correcting their invitation.
-          Text(
-            'Correct Staff: ${widget.target.displayName}',
-            style: tokens.typography.titleMedium.copyWith(
-              color: tokens.colors.text.primary,
-            ),
-          ),
+          SectionHeading('Correct Staff: ${widget.target.displayName}'),
           SizedBox(height: tokens.spacing.s8),
           AppTextField(
             key: const ValueKey('update-staff-name'),
@@ -420,14 +416,9 @@ final class _TenantStaffUpdateFormState extends State<TenantStaffUpdateForm> {
             ),
           ],
           SizedBox(height: tokens.spacing.s16),
-          // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
-          // form is laid out inside a record now, and a record at §4.1's `medium`
-          // band is half a page wide.
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: AppTokens.componentOf(context).spacing.s8,
-            runSpacing: AppTokens.componentOf(context).spacing.s8,
-            children: [
+          // The shared action row keeps this pair horizontal on every record.
+          AppActionRow(
+            actions: <Widget>[
               AppButton(
                 key: const ValueKey('update-staff-cancel'),
                 label: 'Cancel',

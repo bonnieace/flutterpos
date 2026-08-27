@@ -455,8 +455,8 @@ npm --prefix rules-tests run emulators:dev
 ```
 
 That builds Functions, writes local-only `functions/.secret.local` and
-`functions/.env.local` values, starts Auth, Firestore, and Functions, seeds one
-complete business, prints the sign-in details, and holds until Ctrl+C. Both
+`functions/.env.local` values, starts Auth, Firestore, Functions, and Storage,
+seeds one complete business, prints the sign-in details, and holds until Ctrl+C. Both
 local files are removed on exit and neither is ever committed. The command
 refuses to start if either already exists, so a real local configuration is
 never overwritten.

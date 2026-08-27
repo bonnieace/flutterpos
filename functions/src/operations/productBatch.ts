@@ -180,7 +180,7 @@ export interface ProductBatchRowWrite {
   productId: string;
   updateId: string;
   rowIndex: number;
-  documentUpdate: Record<string, string | number | null>;
+  documentUpdate: Record<string, string | number | null | readonly string[]>;
   changes: readonly ProductFieldChange[];
   changedFields: readonly EditableProductField[];
 }

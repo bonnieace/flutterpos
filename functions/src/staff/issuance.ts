@@ -58,6 +58,7 @@ import {
   requireCancellationReason,
   requireInvitableRole,
 } from "./validation";
+import {staffSearchFields} from "./search";
 
 interface InviteStaffRequest {
   tenantId?: unknown;
@@ -276,6 +277,7 @@ export const inviteStaff = onCall<InviteStaffRequest, Promise<InvitationMutation
         role,
         status: "pending",
         invitationStatus: "pending",
+        ...staffSearchFields(name, targetIdentity.email),
       };
 
       await assertExactCanonicalOwner(db, transaction, tenantId, tenant.ownerUid);
@@ -623,6 +625,10 @@ export const replacePendingStaffEmail = onCall<
         role: oldPending.staff.role,
         status: "pending",
         invitationStatus: "pending",
+        ...staffSearchFields(
+          oldPending.staff.name ?? replacementIdentity.displayName,
+          replacementIdentity.email
+        ),
       };
 
       await assertExactCanonicalOwner(db, transaction, tenantId, tenant.ownerUid);

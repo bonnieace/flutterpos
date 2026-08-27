@@ -146,8 +146,15 @@ final class AppNotice {
 
 /// A status, as a small bordered container with an icon and a word.
 ///
-/// §5.2: `radius.sm`, `label.md`, 24h, icon 14px leading, `space.8` padding,
-/// the full status triple.
+/// §5.2: `label.md`, 24h, icon 14px leading, `space.8` padding, the full status
+/// triple.
+///
+/// **`radius.md` since 2026-08-26, where §5.2 and `OPEN_QUESTIONS.md` decision
+/// 26a both say `sm`.** The product owner's call, and the reason is what a badge
+/// reads as next to everything it sits in: at 2 it is a hard rectangle inside a
+/// card drawn at 8, so the smallest element on a row is also the sharpest one.
+/// Decision 26a's own argument for keeping badges off `pill` is unaffected —
+/// this is not a capsule, it is the same corner the container around it has.
 ///
 /// **The container is not decoration and must not be tidied away.** §2.1 notes
 /// that [AppStatus.ok] and the brand accent are deliberately the same mint, and
@@ -226,7 +233,9 @@ final class StatusBadge extends StatelessWidget {
             decoration: BoxDecoration(
               color: role.bg,
               border: Border.all(color: role.border),
-              borderRadius: BorderRadius.circular(tokens.radius.sm),
+              // See this class's doc: `md` rather than §5.2's `sm` since
+              // 2026-08-26, so a badge is not sharper than the card holding it.
+              borderRadius: BorderRadius.circular(tokens.radius.md),
             ),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s8),

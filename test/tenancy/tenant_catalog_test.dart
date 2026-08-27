@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/landing_drawer.dart';
 
 void main() {
   group('strict catalog models', () {
@@ -336,8 +338,128 @@ void main() {
     });
   });
 
+  group('tenant product backend search', () {
+    test('passes every filter and advances an opaque stable cursor', () async {
+      final reader = _CatalogReader(handler: (_) async => const []);
+      final searchReader = _ProductSearchReader(
+        handler: (_) async => <TenantQueryDocumentSnapshot>[
+          _productSnapshot(
+            'tenant-a',
+            'product-a',
+            data: _productData()
+              ..['searchName'] = 'brown bread'
+              ..['quantity'] = 0,
+          ),
+          _productSnapshot(
+            'tenant-a',
+            'product-b',
+            data: _productData()
+              ..['searchName'] = 'brown bun'
+              ..['quantity'] = -1,
+          ),
+          _productSnapshot(
+            'tenant-a',
+            'product-c',
+            data: _productData()
+              ..['searchName'] = 'brown cake'
+              ..['quantity'] = -2,
+          ),
+        ],
+      );
+      final repository = TenantCatalogRepository(
+        session: _session('tenant-a'),
+        reader: reader,
+        productSearchReader: searchReader,
+      );
+
+      final first = await repository.searchProducts(
+        pageSize: 2,
+        searchPrefix: 'br',
+        categoryId: 'drinks',
+        stock: TenantProductStockFilter.atOrBelowZero,
+      );
+
+      final query = searchReader.queries.single;
+      expect(query.collectionPath, 'tenants/tenant-a/products');
+      expect(query.limit, 3);
+      expect(query.searchPrefix, 'br');
+      expect(query.categoryId, 'drinks');
+      expect(query.stock, TenantProductStockFilter.atOrBelowZero);
+      expect(first.items.map((product) => product.id), [
+        'product-a',
+        'product-b',
+      ]);
+      expect(first.nextCursor, isNot(anyOf(isNull, 'product-b')));
+
+      searchReader.handler = (next) async {
+        expect(next.startAfter?.searchName, 'brown bun');
+        expect(next.startAfter?.documentId, 'product-b');
+        expect(next.startAfter?.quantity, -1);
+        return <TenantQueryDocumentSnapshot>[
+          _productSnapshot(
+            'tenant-a',
+            'product-c',
+            data: _productData()
+              ..['searchName'] = 'brown cake'
+              ..['quantity'] = -2,
+          ),
+        ];
+      };
+      final second = await repository.searchProducts(
+        pageSize: 2,
+        cursor: first.nextCursor,
+        searchPrefix: 'br',
+        categoryId: 'drinks',
+        stock: TenantProductStockFilter.atOrBelowZero,
+      );
+      expect(second.items.single.id, 'product-c');
+      expect(second.hasMore, isFalse);
+    });
+
+    test(
+      'rejects malformed filters, cursors, and cross-tenant results',
+      () async {
+        final searchReader = _ProductSearchReader(
+          handler: (_) async => <TenantQueryDocumentSnapshot>[
+            _productSnapshot(
+              'tenant-b',
+              'product-a',
+              data: _productData()..['searchName'] = 'bread',
+            ),
+          ],
+        );
+        final repository = TenantCatalogRepository(
+          session: _session('tenant-a'),
+          reader: _CatalogReader(handler: (_) async => const []),
+          productSearchReader: searchReader,
+        );
+
+        await expectLater(
+          repository.searchProducts(searchPrefix: 'b'),
+          throwsArgumentError,
+        );
+        await expectLater(
+          repository.searchProducts(searchPrefix: 'BR'),
+          throwsArgumentError,
+        );
+        await expectLater(
+          repository.searchProducts(categoryId: 'escape/path'),
+          throwsArgumentError,
+        );
+        await expectLater(
+          repository.searchProducts(cursor: 'not-a-cursor'),
+          throwsFormatException,
+        );
+        await expectLater(
+          repository.searchProducts(searchPrefix: 'br'),
+          throwsA(isA<TenantScopeViolation>()),
+        );
+      },
+    );
+  });
+
   group('guarded catalog route', () {
-    testWidgets('safe landing opens the guarded read-only route', (
+    testWidgets('safe landing opens the unified inventory route', (
       tester,
     ) async {
       final controller = TenantSessionController()
@@ -354,6 +476,8 @@ void main() {
             child: TenantSafeLandingScreen(
               membership: _membership('tenant-a'),
               reader: reader,
+              catalogManagementRoute: (reader) =>
+                  TenantCatalogManagementScreen(reader: reader),
               onSignOut: () async {},
             ),
           ),
@@ -361,14 +485,14 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('View read-only catalog'));
+      await openLandingDrawer(tester);
+      await tester.tap(find.text('Inventory'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Product catalog'), findsOneWidget);
+      expect(find.text('Inventory'), findsWidgets);
       expect(find.text('Cold lager'), findsOneWidget);
-      expect(find.text('Catalog changes'), findsNothing);
-      expect(find.textContaining('Catalog changes'), findsOneWidget);
-      expect(find.text('Add product'), findsNothing);
+      expect(find.byKey(const ValueKey('inventory-search')), findsOneWidget);
+      expect(find.byKey(const ValueKey('inventory-add-product')), findsNothing);
     });
 
     testWidgets('a product names its category, never the ID it is filed under', (
@@ -842,6 +966,22 @@ final class _CatalogReader implements TenantDataReader {
   @override
   Future<List<TenantQueryDocumentSnapshot>> getCollectionPage(
     TenantCollectionQuery query,
+  ) {
+    queries.add(query);
+    return handler(query);
+  }
+}
+
+final class _ProductSearchReader implements TenantProductSearchReader {
+  _ProductSearchReader({required this.handler});
+
+  Future<List<TenantQueryDocumentSnapshot>> Function(TenantProductSearchQuery)
+  handler;
+  final List<TenantProductSearchQuery> queries = <TenantProductSearchQuery>[];
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
+    TenantProductSearchQuery query,
   ) {
     queries.add(query);
     return handler(query);

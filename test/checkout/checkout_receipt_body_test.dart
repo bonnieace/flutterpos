@@ -264,17 +264,117 @@ void main() {
         }
       });
 
-      test('${width.columns} columns: a price is never on its name line', () {
+      test('${width.columns} columns: a price sits beside its name', () {
         final lines = printedLines(
           body(width: width).build(_sale(), servedBy: 'Wanjiku'),
         );
-        // §"One line per sale line, over two printed rows". The two arrived as
-        // one on paper, which is how the positioning defect first showed.
-        final merged = lines.where(
-          (line) => line.contains(' x ') && line.contains('KES '),
-        );
-        expect(merged, isEmpty, reason: 'a name and its price shared a line');
+        // **The opposite of what this asserted until 2026-08-26.** It required
+        // that a name and its price never share a line, which is what made a
+        // receipt show its totals as aligned pairs and the items that made them
+        // up as a ragged column with prices floating underneath.
+        final named = lines.where((line) => line.contains(' x ')).toList();
+        expect(named, hasLength(2));
+        for (final line in named) {
+          expect(line, contains('KES '), reason: '|$line|');
+          // Still the full width of the roll, money hard against the last
+          // column - the same contract every other paired line has.
+          expect(line.length, width.columns, reason: '|$line|');
+          expect(line.endsWith('0'), isTrue, reason: '|$line|');
+        }
       });
+
+      test('${width.columns} columns: a long name wraps inside its column', () {
+        // **Owner direction, 2026-08-26: the name wraps in the *name column*,
+        // not across the whole roll, and the price lands on the row the wrap
+        // ends on.** Laid across the full width, a wrapped line ran under where
+        // the price column belongs and the receipt stopped reading as a table.
+        final long = 'Sunflower cooking oil 5 litre refined and bottled';
+        final lines = printedLines(
+          body(width: width).build(
+            _sale(name: long, onlyOneLine: true),
+            servedBy: 'Wanjiku',
+          ),
+        );
+
+        final amount = lines.singleWhere(
+          (line) => line.contains('KES') && !_isTotalRow(line),
+        );
+        final index = lines.indexOf(amount);
+        // The amount shares the row the name finishes on - never a row of its
+        // own. `_right` was deleted along with that case.
+        expect(amount.length, width.columns, reason: '|$amount|');
+        expect(amount.trimLeft(), isNot(startsWith('KES')), reason: amount);
+
+        // The name column: the roll, less the amount, less one space. Every row
+        // above the last must stay inside it, so nothing is drawn under the
+        // price.
+        final column = width.columns - 'KES 899.00'.length - 1;
+        final wrapped = <String>[];
+        for (var i = index; i >= 0; i--) {
+          if (lines[i].startsWith('-')) break;
+          wrapped.insert(0, lines[i]);
+        }
+        for (final row in wrapped.take(wrapped.length - 1)) {
+          expect(
+            row.length,
+            lessThanOrEqualTo(column),
+            reason: 'row runs into the price column: |$row|',
+          );
+        }
+
+        // Nothing was dropped on the way: every word is still on the paper.
+        final joined = wrapped.join(' ');
+        for (final word in long.split(' ')) {
+          expect(joined, contains(word), reason: word);
+        }
+      });
+
+      test('${width.columns} columns: no line ever overruns the roll', () {
+        // **Found on paper rather than in a test.** The old fallback emitted the
+        // description raw, so a name one character past the roll overflowed and
+        // the printer broke it wherever it ran out - mid-word, unpredictably.
+        for (final name in <String>[
+          'Sunflower cooking oil 5 litre refined and bottled',
+          'A' * (width.columns * 2 + 5),
+          'Maize flour 2kg',
+        ]) {
+          final lines = printedLines(
+            body(width: width).build(_sale(name: name), servedBy: 'Wanjiku'),
+          );
+          for (final line in lines) {
+            expect(
+              line.length,
+              lessThanOrEqualTo(width.columns),
+              reason: '${line.length} chars for "$name": |$line|',
+            );
+          }
+        }
+      });
+
+      test('${width.columns} columns: one word longer than the column', () {
+        // No boundary to break on - a SKU pasted into a name - so it is chopped
+        // at the column count rather than left to overflow. Nothing is lost:
+        // every character is on the paper, on the next row.
+        final long = 'A' * (width.columns * 2 + 5);
+        final lines = printedLines(
+          body(width: width).build(
+            _sale(name: long, onlyOneLine: true),
+            servedBy: 'Wanjiku',
+          ),
+        );
+        // Only the rows between the provenance rule and the totals rule, so a
+        // stray capital in the heading or the receipt number cannot be counted.
+        final rules = <int>[
+          for (var i = 0; i < lines.length; i++)
+            if (lines[i].startsWith('-')) i,
+        ];
+        final body_ = lines.sublist(rules[1] + 1, rules[2]);
+        final letters = body_
+            .map((line) => line.replaceAll(RegExp(r'[^A]'), ''))
+            .join();
+        expect(letters.length, long.length);
+      });
+
     }
   });
 
@@ -375,23 +475,29 @@ CheckoutSalePayload _sale({
   String currency = 'KES',
   int discountMinor = 0,
   Object? tender = 'cash',
+  String name = 'Maize flour 2kg',
+  bool onlyOneLine = false,
 }) {
   const deviceId = 'dev-0123456789abcdef0123456789abcdef';
   final lines = <Object?>[
     <String, Object?>{
       'productId': 'product-a',
-      'name': 'Maize flour 2kg',
+      'name': name,
       'quantity': 2,
       'unitPriceMinor': 13550,
     },
-    <String, Object?>{
-      'productId': 'product-b',
-      'name': 'Sugar 1kg',
-      'quantity': 1,
-      'unitPriceMinor': 13500,
-    },
+    // Dropped where a test is about one sale line's own layout: a second line
+    // puts a second money row on the paper, and `singleWhere` cannot then say
+    // which row it meant.
+    if (!onlyOneLine)
+      <String, Object?>{
+        'productId': 'product-b',
+        'name': 'Sugar 1kg',
+        'quantity': 1,
+        'unitPriceMinor': 13500,
+      },
   ];
-  const subtotalMinor = 2 * 13550 + 13500;
+  final subtotalMinor = 2 * 13550 + (onlyOneLine ? 0 : 13500);
   final payload = <String, Object?>{
     'schemaVersion': checkoutSalePayloadSchemaVersion,
     'checkoutId': 'checkout-a',
@@ -425,3 +531,12 @@ CheckoutSalePayload _sale({
     payloadHash: checkoutPayloadHash(payload),
   );
 }
+
+/// Whether [line] is one of the totals rather than a sale line's amount.
+///
+/// The sale lines and the totals both end in money now, which is the point of
+/// the change; a test that wants one of them has to say which.
+bool _isTotalRow(String line) =>
+    line.startsWith(ReceiptWords.subtotalLabel) ||
+    line.startsWith(ReceiptWords.discountLabel) ||
+    line.startsWith(ReceiptWords.totalLabel);

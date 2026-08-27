@@ -70,7 +70,10 @@ final class TenantShiftAmendmentRecord {
     final totalSalesMinor = _requiredMinorUnits(data, 'totalSalesMinor');
     final transactionCount = _requiredCount(data, 'transactionCount');
     final salesVarianceMinor = _requiredDifference(data, 'salesVarianceMinor');
-    final transactionVariance = _requiredDifference(data, 'transactionVariance');
+    final transactionVariance = _requiredDifference(
+      data,
+      'transactionVariance',
+    );
     final previousRepresentationsAgreed = _requiredBool(
       data,
       'previousRepresentationsAgreed',
@@ -79,7 +82,9 @@ final class TenantShiftAmendmentRecord {
     // Whole counts from a single comparison, so this identity is exact and a
     // record that breaks it did not come from `amendShiftSummary`.
     if (transactionVariance != previousTransactionCount - transactionCount) {
-      throw const TenantReconciliationException('inconsistent_amendment_counts');
+      throw const TenantReconciliationException(
+        'inconsistent_amendment_counts',
+      );
     }
     // The money identity holds only when the record says the shift's two
     // representations of the same figure agreed. The recorded variance is

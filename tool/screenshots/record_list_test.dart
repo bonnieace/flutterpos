@@ -157,7 +157,11 @@ RecordItem _manyActions() => RecordItem(
     RecordAction(label: 'Edit', onPressed: () {}),
     RecordAction(label: 'Resend invitation', onPressed: () {}),
     RecordAction(label: 'Replace email', onPressed: () {}),
-    RecordAction(label: 'Cancel invitation', destructive: true, onPressed: () {}),
+    RecordAction(
+      label: 'Cancel invitation',
+      destructive: true,
+      onPressed: () {},
+    ),
     const RecordAction(label: 'Deactivate', onPressed: null),
   ],
 );

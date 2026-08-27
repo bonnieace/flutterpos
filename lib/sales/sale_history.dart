@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../checkout/checkout_receipt.dart';
@@ -6,6 +8,7 @@ import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_types.dart';
 
 /// Raised when a canonical sale document cannot be trusted for display.
 final class TenantSaleException implements Exception {
@@ -220,10 +223,26 @@ final class TenantSaleHistoryRepository extends TenantReadRepository {
   TenantSaleHistoryRepository({
     required super.session,
     required TenantDataReader reader,
+    TenantSalesHistoryQueryReader? reportReader,
   }) : _collectionReader = reader,
+       _reportReader = reportReader,
        super(reader: reader);
 
   final TenantCollectionReader _collectionReader;
+  final TenantSalesHistoryQueryReader? _reportReader;
+
+  static const List<TenantRole> reportRoles = <TenantRole>[
+    TenantRole.owner,
+    TenantRole.admin,
+    TenantRole.manager,
+    TenantRole.cashier,
+  ];
+
+  static const List<TenantRole> managementReportRoles = <TenantRole>[
+    TenantRole.owner,
+    TenantRole.admin,
+    TenantRole.manager,
+  ];
 
   /// Pages the sales recorded during one canonical shift.
   ///
@@ -238,7 +257,13 @@ final class TenantSaleHistoryRepository extends TenantReadRepository {
   }) => _load(
     pageSize: pageSize,
     cursor: cursor,
-    filters: <String, Object?>{'shiftId': shift.shiftId},
+    // Carry the cashier attribution as well as the shift. Firestore permits a
+    // cashier collection query only when its result set is provably their own;
+    // management uses the same narrower and cheaper query shape.
+    filters: <String, Object?>{
+      'shiftId': shift.shiftId,
+      'soldById': shift.staffId,
+    },
     verify: (sale) {
       if (sale.shiftId != shift.shiftId ||
           sale.soldById != shift.staffId ||
@@ -263,6 +288,123 @@ final class TenantSaleHistoryRepository extends TenantReadRepository {
       }
     },
   );
+
+  /// Pages the familiar period report without ever downloading a wider scope.
+  ///
+  /// Management may omit [selectedStaffId] for the whole business or name one
+  /// canonical member. A cashier is always narrowed to the captured session's
+  /// own UID here, even if a caller tries to request another member.
+  Future<TenantSalePage> loadReport({
+    required String startBusinessDate,
+    required String endBusinessDate,
+    String? selectedStaffId,
+    int pageSize = 20,
+    String? cursor,
+  }) async {
+    if (!session.canAccess(allowedRoles: reportRoles)) {
+      throw const TenantSaleException('sale_report_forbidden');
+    }
+    if (pageSize < 1 || pageSize > 50) {
+      throw RangeError.range(pageSize, 1, 50, 'pageSize');
+    }
+    final start = _validatedReportDate(startBusinessDate);
+    final end = _validatedReportDate(endBusinessDate);
+    if (start.compareTo(end) > 0) {
+      throw const TenantSaleException('invalid_sale_report_range');
+    }
+    final management = session.canAccess(allowedRoles: managementReportRoles);
+    final selected = selectedStaffId == null
+        ? null
+        : _validatedReportStaffId(selectedStaffId);
+    if (!management && selected != null && selected != session.uid) {
+      throw const TenantSaleException('sale_report_forbidden');
+    }
+    final soldById = management ? selected : session.uid;
+    final reportReader =
+        _reportReader ??
+        (_collectionReader is TenantSalesHistoryQueryReader
+            ? _collectionReader as TenantSalesHistoryQueryReader
+            : null);
+    if (reportReader == null) {
+      throw StateError('Backend sales report browsing is unavailable.');
+    }
+    final position = cursor == null
+        ? null
+        : _decodeSalesReportCursor(
+            cursor,
+            start: start,
+            end: end,
+            soldById: soldById,
+          );
+    final requestedLimit = pageSize + 1;
+    final snapshots = await reportReader.queryTenantSalesHistory(
+      TenantSalesHistoryQuery.scoped(
+        collectionPath: paths.collectionPath(TenantCollection.sales),
+        limit: requestedLimit,
+        startBusinessDate: start,
+        endBusinessDate: end,
+        soldById: soldById,
+        startAfter: position,
+      ),
+    );
+    if (snapshots.length > requestedLimit) {
+      throw const TenantScopeViolation(
+        'The sales report returned more documents than requested.',
+      );
+    }
+    final items = <TenantSale>[];
+    final seen = <String>{};
+    String? previousDate;
+    String? previousId;
+    for (final snapshot in snapshots) {
+      final id = _saleDocumentId(snapshot.path, session.tenantId);
+      if (!seen.add(id)) {
+        throw const TenantScopeViolation(
+          'The sales report returned a duplicate document.',
+        );
+      }
+      final sale = TenantSale.fromDocument(
+        path: snapshot.path,
+        data: snapshot.data,
+      );
+      if (sale.tenantId != session.tenantId ||
+          sale.businessDate.compareTo(start) < 0 ||
+          sale.businessDate.compareTo(end) > 0 ||
+          soldById != null && sale.soldById != soldById) {
+        throw const TenantSaleException('sale_report_scope_mismatch');
+      }
+      if (previousDate != null) {
+        final dateOrder = previousDate.compareTo(sale.businessDate);
+        if (dateOrder < 0 || dateOrder == 0 && previousId!.compareTo(id) <= 0) {
+          throw const TenantScopeViolation(
+            'Sales report results were not stably ordered.',
+          );
+        }
+      }
+      previousDate = sale.businessDate;
+      previousId = id;
+      items.add(sale);
+    }
+    final hasMore = items.length > pageSize;
+    final visible = hasMore
+        ? items.take(pageSize).toList(growable: false)
+        : items;
+    return TenantSalePage(
+      items: visible,
+      nextCursor: hasMore
+          ? _encodeSalesReportCursor(
+              TenantSalesHistoryPosition(
+                businessDate: visible.last.businessDate,
+                documentId: visible.last.id,
+              ),
+              start: start,
+              end: end,
+              soldById: soldById,
+            )
+          : null,
+      hasMore: hasMore,
+    );
+  }
 
   Future<TenantSalePage> _load({
     required int pageSize,
@@ -475,3 +617,87 @@ DateTime? _optionalInstant(Map<String, Object?> data, String field) {
 
 final RegExp _currencyPattern = RegExp(r'^[A-Z]{3}$');
 final RegExp _sha256Pattern = RegExp(r'^[a-f0-9]{64}$');
+
+String _validatedReportDate(String value) {
+  try {
+    return validateCheckoutBusinessDate(value);
+  } on ArgumentError {
+    throw const TenantSaleException('invalid_sale_report_range');
+  }
+}
+
+String _validatedReportStaffId(String value) {
+  try {
+    return validateTenantDocumentId(value, fieldName: 'soldById');
+  } on ArgumentError {
+    throw const TenantSaleException('invalid_sale_report_scope');
+  }
+}
+
+String _saleDocumentId(String path, String tenantId) {
+  final prefix = 'tenants/$tenantId/${TenantCollection.sales.segment}/';
+  if (!path.startsWith(prefix)) {
+    throw const TenantScopeViolation(
+      'The sales report escaped its canonical tenant scope.',
+    );
+  }
+  final id = path.substring(prefix.length);
+  try {
+    return validateTenantDocumentId(id, fieldName: 'saleId');
+  } on ArgumentError {
+    throw const TenantScopeViolation(
+      'The sales report returned a non-canonical document path.',
+    );
+  }
+}
+
+String _encodeSalesReportCursor(
+  TenantSalesHistoryPosition position, {
+  required String start,
+  required String end,
+  required String? soldById,
+}) => base64Url
+    .encode(
+      utf8.encode(
+        jsonEncode(<String, Object?>{
+          'v': 1,
+          'd': position.businessDate,
+          'id': position.documentId,
+          'from': start,
+          'to': end,
+          'staff': soldById,
+        }),
+      ),
+    )
+    .replaceAll('=', '');
+
+TenantSalesHistoryPosition _decodeSalesReportCursor(
+  String cursor, {
+  required String start,
+  required String end,
+  required String? soldById,
+}) {
+  try {
+    final padded = cursor.padRight((cursor.length + 3) ~/ 4 * 4, '=');
+    final value = jsonDecode(utf8.decode(base64Url.decode(padded)));
+    if (value is! Map<String, dynamic> ||
+        value.length != 6 ||
+        value['v'] != 1 ||
+        value['from'] != start ||
+        value['to'] != end ||
+        value['staff'] != soldById ||
+        value['d'] is! String ||
+        value['id'] is! String) {
+      throw const FormatException('Invalid sales report cursor.');
+    }
+    return TenantSalesHistoryPosition(
+      businessDate: _validatedReportDate(value['d'] as String),
+      documentId: validateTenantDocumentId(
+        value['id'] as String,
+        fieldName: 'cursor',
+      ),
+    );
+  } catch (_) {
+    throw const TenantSaleException('invalid_sale_report_cursor');
+  }
+}

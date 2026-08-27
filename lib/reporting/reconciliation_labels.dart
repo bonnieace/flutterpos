@@ -242,79 +242,77 @@ List<ReconciliationFigure> reconciliationDifferenceFigureLines(
   TenantReconciliationAnomaly anomaly,
 ) => _reading(anomaly).figures;
 
-_DifferenceReading _reading(TenantReconciliationAnomaly anomaly) =>
-    switch (anomaly.kind) {
-      TenantReconciliationAnomalyKind.invalidSaleLines => _saleLines(anomaly),
-      TenantReconciliationAnomalyKind.invalidProductQuantity =>
-        const _DifferenceReading(
-          sentence:
-              'This product\'s recorded quantity could not be read as a whole '
-              'number, so its stock was not verified at all.',
-          explanation:
-              'This product\'s recorded quantity could not be read as a whole '
-              'number, so its stock was not verified at all.',
-        ),
-      // Not the variance sentence. The chain is what makes the expected
-      // quantity trustworthy, so a broken chain is a statement about the
-      // starting point rather than about a disagreement - and the variance on
-      // one of these records may legitimately be zero.
-      TenantReconciliationAnomalyKind.checkpointChainInvalid =>
-        _DifferenceReading(
-          sentence:
-              'The tamper-evident chain of checks behind this product does not '
-              'join up, so the expected quantity of ${anomaly.expectedQuantity} '
-              'cannot be trusted as a starting point. This is not a quantity '
-              'disagreement.',
-          explanation:
-              'The tamper-evident chain of checks behind this product does not '
-              'join up, so the expected quantity cannot be trusted as a '
-              'starting point. This is not a quantity disagreement.',
-          figures: <ReconciliationFigure>[
-            ReconciliationFigure(
-              slug: 'expected',
-              label: 'Expected by the ledger',
-              value: '${anomaly.expectedQuantity}',
-              detail: 'not trustworthy as a starting point',
-            ),
-          ],
-        ),
-      TenantReconciliationAnomalyKind.invalidStockMovement =>
-        _DifferenceReading(
-          sentence:
-              'A movement in this product\'s ledger could not be read, so the '
-              'expected quantity of ${anomaly.expectedQuantity} does not '
-              'account for everything that moved.',
-          explanation:
-              'A movement in this product\'s ledger could not be read.',
-          figures: <ReconciliationFigure>[
-            ReconciliationFigure(
-              slug: 'expected',
-              label: 'Expected by the ledger',
-              value: '${anomaly.expectedQuantity}',
-              detail: 'does not account for everything that moved',
-            ),
-          ],
-        ),
-      TenantReconciliationAnomalyKind.stockVariance => _stockVariance(anomaly),
-      TenantReconciliationAnomalyKind.invalidOrMissingShift =>
-        const _DifferenceReading(
-          sentence:
-              'The shift is missing, or did not record the totals a comparison '
-              'needs, so no difference could be measured.',
-          explanation:
-              'The shift is missing, or did not record the totals a comparison '
-              'needs, so no difference could be measured.',
-        ),
-      TenantReconciliationAnomalyKind.shiftVariance => _shiftVariance(anomaly),
-      TenantReconciliationAnomalyKind.other => const _DifferenceReading(
-        sentence:
-            'What this difference means is not something this version of the '
-            'app can explain.',
-        explanation:
-            'What this difference means is not something this version of the '
-            'app can explain.',
+_DifferenceReading _reading(
+  TenantReconciliationAnomaly anomaly,
+) => switch (anomaly.kind) {
+  TenantReconciliationAnomalyKind.invalidSaleLines => _saleLines(anomaly),
+  TenantReconciliationAnomalyKind.invalidProductQuantity =>
+    const _DifferenceReading(
+      sentence:
+          'This product\'s recorded quantity could not be read as a whole '
+          'number, so its stock was not verified at all.',
+      explanation:
+          'This product\'s recorded quantity could not be read as a whole '
+          'number, so its stock was not verified at all.',
+    ),
+  // Not the variance sentence. The chain is what makes the expected
+  // quantity trustworthy, so a broken chain is a statement about the
+  // starting point rather than about a disagreement - and the variance on
+  // one of these records may legitimately be zero.
+  TenantReconciliationAnomalyKind.checkpointChainInvalid => _DifferenceReading(
+    sentence:
+        'The tamper-evident chain of checks behind this product does not '
+        'join up, so the expected quantity of ${anomaly.expectedQuantity} '
+        'cannot be trusted as a starting point. This is not a quantity '
+        'disagreement.',
+    explanation:
+        'The tamper-evident chain of checks behind this product does not '
+        'join up, so the expected quantity cannot be trusted as a '
+        'starting point. This is not a quantity disagreement.',
+    figures: <ReconciliationFigure>[
+      ReconciliationFigure(
+        slug: 'expected',
+        label: 'Expected by the ledger',
+        value: '${anomaly.expectedQuantity}',
+        detail: 'not trustworthy as a starting point',
       ),
-    };
+    ],
+  ),
+  TenantReconciliationAnomalyKind.invalidStockMovement => _DifferenceReading(
+    sentence:
+        'A movement in this product\'s ledger could not be read, so the '
+        'expected quantity of ${anomaly.expectedQuantity} does not '
+        'account for everything that moved.',
+    explanation: 'A movement in this product\'s ledger could not be read.',
+    figures: <ReconciliationFigure>[
+      ReconciliationFigure(
+        slug: 'expected',
+        label: 'Expected by the ledger',
+        value: '${anomaly.expectedQuantity}',
+        detail: 'does not account for everything that moved',
+      ),
+    ],
+  ),
+  TenantReconciliationAnomalyKind.stockVariance => _stockVariance(anomaly),
+  TenantReconciliationAnomalyKind.invalidOrMissingShift =>
+    const _DifferenceReading(
+      sentence:
+          'The shift is missing, or did not record the totals a comparison '
+          'needs, so no difference could be measured.',
+      explanation:
+          'The shift is missing, or did not record the totals a comparison '
+          'needs, so no difference could be measured.',
+    ),
+  TenantReconciliationAnomalyKind.shiftVariance => _shiftVariance(anomaly),
+  TenantReconciliationAnomalyKind.other => const _DifferenceReading(
+    sentence:
+        'What this difference means is not something this version of the '
+        'app can explain.',
+    explanation:
+        'What this difference means is not something this version of the '
+        'app can explain.',
+  ),
+};
 
 /// When the difference was found, and by which run.
 ///
@@ -322,9 +320,7 @@ _DifferenceReading _reading(TenantReconciliationAnomaly anomaly) =>
 /// first, which is how one of the two surfaces used to order it. A record that
 /// carries neither still proves the difference was found, so that is stated
 /// rather than left as a silent gap.
-String reconciliationDifferenceProvenance(
-  TenantReconciliationAnomaly anomaly,
-) {
+String reconciliationDifferenceProvenance(TenantReconciliationAnomaly anomaly) {
   // Every fragment is written lowercase and the sentence is capitalised once, at
   // the end. Composing it the other way - a capitalised leading fragment and
   // lowercase followers - is how a record carrying only a run ID came out as

@@ -68,6 +68,7 @@ interface UpdateProductRequest {
   cost?: unknown;
 
   categoryId?: unknown;
+  image?: unknown;
   requestId?: unknown;
 }
 
@@ -105,6 +106,7 @@ export interface UpdateProductResponse {
   costMinor: number | null;
 
   categoryId: string;
+  image: string | null;
 }
 
 /**
@@ -195,6 +197,7 @@ export async function applyProductUpdate(
     cost: plan.product.cost,
     costMinor: plan.product.costMinor,
     categoryId: plan.product.categoryId,
+    image: plan.product.image,
   };
 }
 
@@ -227,6 +230,7 @@ export function productUpdateFingerprintInput(
     priceMinor: requested.priceMinor,
     costMinor: requested.costMinor,
     categoryId: requested.categoryId,
+    image: requested.image,
   };
 }
 

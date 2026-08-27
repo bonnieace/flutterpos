@@ -69,3 +69,7 @@ screenshots.zip
 
 # Stitch design export: 18 MB local design input, mapped by docs/stitch/EXPORT_MAP.md
 docs/stitch/stitch_chilltent_pos_redesign_system/
+
+# Debug APKs built by tool/lan_debug_build.dart against a LAN address.
+# One per DHCP lease, 224 MB each, and none of them belong in history.
+chilltent-lan-debug-*.apk

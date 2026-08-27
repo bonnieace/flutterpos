@@ -14,7 +14,10 @@ void main() {
       // status colour carries text.
       await _pump(tester, status: AppStatus.attention);
 
-      expect(find.text('Cash count unfinished'), findsOne);
+      // **Uppercased since 2026-08-23**, because the export sets this line in
+      // `label-caps` and §2.2 permits uppercase on `label.eyebrow` alone. The
+      // words are unchanged; the role they are drawn in is not.
+      expect(find.text('CASH COUNT UNFINISHED'), findsOne);
       expect(find.byIcon(AppStatus.attention.defaultIcon), findsOne);
       // Announced with the words, not left to the container.
       expect(
@@ -44,12 +47,12 @@ void main() {
       // either way is worse than one that never is.
       var opened = 0;
       await _pump(tester, onOpenDetails: () => opened++);
-      await tester.tap(find.text('Cash count unfinished'));
+      await tester.tap(find.text('CASH COUNT UNFINISHED'));
       await tester.pumpAndSettle();
       expect(opened, 1);
 
       await _pump(tester, onOpenDetails: null);
-      await tester.tap(find.text('Cash count unfinished'));
+      await tester.tap(find.text('CASH COUNT UNFINISHED'));
       await tester.pumpAndSettle();
       expect(opened, 1);
     });

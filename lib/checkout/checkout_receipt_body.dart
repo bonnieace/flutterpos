@@ -291,10 +291,11 @@ final class CheckoutReceiptBody {
     return left.padRight(room) + value;
   }
 
-  /// [value] hard against the right of a full line.
-  String _right(String value) => value.length >= _columns
-      ? value.substring(0, _columns)
-      : value.padLeft(_columns);
+  // **No `_right` any more, and its absence is the check on this change.** It
+  // put a value hard against the right of a line *with nothing on the left*,
+  // and the only caller was the sale line whose amount had been exiled to a row
+  // of its own. Every amount on this receipt now shares a row with the words it
+  // belongs to, so there is nothing left for it to do.
 
   /// [text] centred in a line of [_columns] characters, at [scale] times normal
   /// glyph width.
@@ -364,33 +365,106 @@ final class CheckoutReceiptBody {
     ..._rule(generator),
   ];
 
-  /// One line per sale line, over two printed rows.
+  /// One sale line: the name in its own column, the amount against the right.
   ///
-  /// **Two rows rather than one, and the roll decides it.** A 32-column line
-  /// cannot hold `2 x Maize flour 2kg` and `KES 271.00` side by side without
-  /// truncating the product name to about twelve characters — and the name is
-  /// the thing a customer checks. So the description takes a whole line and the
-  /// amount is right-aligned under it. At 48 columns there is room for one row,
-  /// but it stays two: a receipt whose shape changes with the roll is two
-  /// layouts to reason about, and nobody is comparing them side by side.
+  /// **A receipt has two columns and this draws them, which is the whole of the
+  /// 2026-08-26 change.** It used to print every line over two rows - the
+  /// description on one, the amount right-aligned on the next - while the
+  /// totals below used [_pair] on a single row. So a customer read `Subtotal`
+  /// and `KES 406.00` aligned, and then the items that made them up as a ragged
+  /// column of names with prices floating underneath. Two layouts for the same
+  /// label-and-money relationship, on one piece of paper.
   ///
-  /// **They were arriving on one line anyway**, which was the clearest symptom
-  /// of the positioning defect: two `text()` calls, each with its own line feed,
-  /// printed as a single row with the price sliced.
+  /// **The name column is the roll less the amount and one space**, and it is
+  /// the *only* width the description is ever laid into. A long name wraps
+  /// inside that column rather than across the whole roll, so the price column
+  /// stays empty above the price - which is what makes a wrapped line still
+  /// read as one row of a table rather than as prose with a number after it.
+  ///
+  /// **The amount goes on the row the wrap ends on**, never on a line of its
+  /// own. That was the last thing separating a long line from a short one, and
+  /// there is now no case where a price sits alone.
+  ///
+  /// **A product name is never truncated.** That was the real point of the old
+  /// two-row form and it is kept exactly: the name takes as many rows of its
+  /// column as it needs.
+  ///
+  /// The old comment defending two rows had its arithmetic wrong, which is why
+  /// it stood: it claimed a 32-column line would cut the name "to about twelve
+  /// characters", where the real budget is 21 - and `2 x Maize flour 2kg` is
+  /// nineteen. The common case always fitted.
   List<int> _lines(Generator generator, CheckoutSalePayload sale) {
     final bytes = <int>[];
     for (final line in sale.lines) {
-      bytes.addAll(
-        generator.text(
-          ReceiptText.forPrinter('${line.quantity} x ${line.name}'),
-        ),
+      final description = ReceiptText.forPrinter(
+        '${line.quantity} x ${line.name}',
       );
-      bytes.addAll(
-        generator.text(_right(_money(sale.currency, line.lineTotalMinor))),
-      );
+      final amount = _money(sale.currency, line.lineTotalMinor);
+      final rows = _wrapped(description, _nameColumn(amount));
+      // Every row but the last is name only; the last carries the amount.
+      for (final row in rows.take(rows.length - 1)) {
+        bytes.addAll(generator.text(row));
+      }
+      bytes.addAll(generator.text(_pair(rows.last, amount)));
     }
     bytes.addAll(_rule(generator));
     return bytes;
+  }
+
+  /// How wide the name column is, given the amount that shares its row.
+  ///
+  /// The roll, less the amount, less the one space [_pair] always keeps between
+  /// them. Clamped at 1 rather than allowed to go negative: an amount wider
+  /// than the whole roll is a degenerate case [_pair] already handles by
+  /// truncating the value, and this must not hand [_wrapped] a width it would
+  /// loop forever on.
+  int _nameColumn(String amount) {
+    final room = _columns - amount.length - 1;
+    return room < 1 ? 1 : room;
+  }
+
+  /// [text] broken into lines of at most [width] characters.
+  ///
+  /// **Word boundaries where there are any, and a hard break where there are
+  /// not.** A single token longer than the column - a SKU pasted into a product
+  /// name, say - has no boundary to break on, and letting that one case
+  /// overflow would put back the defect this exists to fix: before it, a
+  /// description one character past the roll was emitted raw and the printer
+  /// broke it wherever it happened to run out, mid-word. Every character is
+  /// still on the paper; only the choice of where the break falls has moved
+  /// from the machine to here.
+  ///
+  /// Never returns empty: a nameless product would otherwise print no row at
+  /// all, which reads as a sale line that was silently dropped.
+  List<String> _wrapped(String text, int width) {
+    final rows = <String>[];
+    var line = '';
+
+    void flush() {
+      if (line.isNotEmpty) {
+        rows.add(line);
+        line = '';
+      }
+    }
+
+    for (final word in text.split(' ')) {
+      var pending = word;
+      while (pending.length > width) {
+        flush();
+        rows.add(pending.substring(0, width));
+        pending = pending.substring(width);
+      }
+      if (pending.isEmpty) continue;
+      final candidate = line.isEmpty ? pending : '$line $pending';
+      if (candidate.length <= width) {
+        line = candidate;
+      } else {
+        flush();
+        line = pending;
+      }
+    }
+    flush();
+    return rows.isEmpty ? <String>[''] : rows;
   }
 
   List<int> _totals(Generator generator, CheckoutSalePayload sale) => <int>[

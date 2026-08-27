@@ -30,11 +30,7 @@ void main() {
     fullPage: false,
   );
 
-  screenshotCase(
-    '98-syncindicator-panel',
-    build: _Panel.new,
-    fullPage: false,
-  );
+  screenshotCase('98-syncindicator-panel', build: _Panel.new, fullPage: false);
 }
 
 final class _Banners extends StatelessWidget {

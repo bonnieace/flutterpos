@@ -40,8 +40,9 @@
 /// read by nothing until this file.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../tenancy/tenant_catalog.dart';
 import '../tenancy/tenant_route_guard.dart';
@@ -49,12 +50,14 @@ import '../tenancy/tenant_session.dart';
 import '../ui/buttons.dart';
 import '../ui/chips.dart';
 import '../ui/dialogs.dart';
+import '../ui/snackbar.dart';
 import '../ui/fields.dart';
 import '../ui/press.dart';
 import '../ui/records.dart';
 import '../ui/rolling_number.dart';
 import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
+import '../ui/skeleton.dart';
 import '../ui/status.dart';
 import '../ui/stepper.dart';
 import '../ui/tokens.dart';
@@ -123,6 +126,15 @@ const double _compactProductTileHeight = 210;
 /// Named for the same reason as the three figures above. It is the browse
 /// render's own `h-24`.
 const double _productThumbnailBandHeight = 96;
+
+/// The side of the picture square on a cart line, asked for on 2026-08-23.
+///
+/// Named for the same reason as the figures above: a thumbnail is not a
+/// spacing, a radius or a size token, and no source this app has stated a
+/// cart-line picture geometry. It is [AppButtonSize] `md`'s own 48, so the
+/// picture, the name beside it and the 48-square remove button at the far end
+/// of the row all sit on one line without any of them setting the height.
+const double _cartLineThumbnailSide = 48;
 
 /// The value the category bar carries for "products whose category this device
 /// does not hold".
@@ -291,13 +303,12 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
   Widget build(BuildContext context) =>
       TenantRouteGuard<CheckoutCatalogSnapshot>(
         load: (session) => _loaderFor(session)(session),
-        // Deliberately not the guard's default spinner: a till shows what it is
-        // waiting for, and an indeterminate animation also makes the screen
-        // impossible to settle in a widget test.
-        loading: const Center(
-          key: ValueKey('checkout-loading'),
-          child: Text('Reading the product list on this device...'),
-        ),
+        // **Deliberately not the guard's default spinner, and since 2026-08-27
+        // not a sentence either.** This read is a Hive box on the device, so
+        // there is nothing to spin about; what there is, is a known shape. The
+        // skeleton draws it, the search field above it is real, and the two
+        // together mean a cashier sees the till rather than a message about it.
+        loading: const _CheckoutSkeleton(key: ValueKey('checkout-loading')),
         denied: const Center(
           key: ValueKey('checkout-denied'),
           child: Text('Selling is unavailable for this business.'),
@@ -317,6 +328,279 @@ final class _TenantCheckoutPanelState extends State<TenantCheckoutPanel> {
           drafts: widget.drafts,
         ),
       );
+}
+
+/// The till while its catalog is still being read off the device.
+///
+/// **The chrome is real and only the data shimmers**, which is decision 35 and
+/// is the whole difference between this and a loading screen. A cashier opening
+/// the till sees the till: the search field with its label and its helper, the
+/// pane at its real width, the grid at its real geometry. What is missing is the
+/// products, and that is the only thing drawn as a placeholder.
+///
+/// **The search field is real but disabled**, which is the one judgement call in
+/// here. Its frame, its label and its helper do not come from the read, so by
+/// decision 35 they render - but it cannot search a list that is not loaded yet,
+/// and a field that accepts keystrokes and silently drops them is worse than one
+/// that says it is not ready. `AppTextField` draws its own disabled state, so
+/// this states the fact rather than faking it.
+///
+/// **It mirrors `_productGrid`'s geometry rather than approximating it**: the
+/// same tile extent, the same two heights, the same spacings, the same padding.
+/// That is the point of the whole exercise - when the snapshot lands, the tiles
+/// are already exactly where the placeholders were and nothing moves.
+///
+/// **The cart pane's width is reserved on a wide layout.** The cart is genuinely
+/// empty rather than loading, so nothing in it shimmers; but leaving it out
+/// would let the products pane load at full width and then jump narrower when
+/// the snapshot arrived, which is the same jolt this exists to remove.
+final class _CheckoutSkeleton extends StatelessWidget {
+  const _CheckoutSkeleton({super.key});
+
+  /// How many placeholder tiles to draw.
+  ///
+  /// **Named here rather than tokenised, and it is not
+  /// [maximumRenderedCheckoutProducts].** That constant is a cap on real work;
+  /// this is a guess at how many tiles fill a screen before scrolling, and the
+  /// two would drift into each other if they shared a name. Twelve covers a
+  /// phone twice over and a till screen once, which is as much as a placeholder
+  /// needs to say - past the fold nobody is looking.
+  static const int _tiles = 12;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final dense = TenantCheckoutPanel.showsTwoPanes(
+      MediaQuery.sizeOf(context).width,
+    );
+    final pane = SkeletonGroup(
+      semanticLabel: 'Reading the product list on this device.',
+      child: ListView(
+        padding: EdgeInsets.symmetric(
+          horizontal: AppScaffold.horizontalInset(tokens.spacing),
+          vertical: tokens.spacing.s12,
+        ),
+        children: <Widget>[
+          // Real, and the same call `_browseHead` makes.
+          AppTextField(
+            key: const ValueKey('checkout-search'),
+            label: 'Search by name or code',
+            leading: Icons.search,
+            enabled: false,
+            helper: 'Tap a product to add it to the sale.',
+          ),
+          SizedBox(height: tokens.spacing.s8),
+          // Every category label is `_snapshot.categories`, so the bar is data
+          // and shimmers. The heights are `FilterChipBar`'s own.
+          SizedBox(
+            height: _chipHeight,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _chips,
+              separatorBuilder: (context, _) =>
+                  SizedBox(width: tokens.spacing.s8),
+              itemBuilder: (context, index) => SkeletonBlock(
+                width: index.isEven ? _wideChipWidth : _narrowChipWidth,
+                height: _chipHeight,
+                radius: tokens.radius.md,
+              ),
+            ),
+          ),
+          SizedBox(height: tokens.spacing.s12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: _productTileExtent,
+              mainAxisExtent: dense
+                  ? _wideProductTileHeight
+                  : _compactProductTileHeight,
+              crossAxisSpacing: tokens.spacing.s8,
+              mainAxisSpacing: tokens.spacing.s8,
+            ),
+            itemCount: _tiles,
+            itemBuilder: (context, index) => _ProductTileSkeleton(
+              key: ValueKey('checkout-product-skeleton-$index'),
+              dense: dense,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!dense) return pane;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(child: pane),
+        Container(width: 1, color: tokens.colors.surface.borderStrong),
+        SizedBox(width: tokens.layout.salePane),
+      ],
+    );
+  }
+
+  /// The placeholder category bar's shape.
+  ///
+  /// **Three figures this component owns, for the reason `EmptyState.markSize`
+  /// gives**: no source this app has states a chip's box, `FilterChipBar` sizes
+  /// itself from its labels, and there are no labels yet. Two widths alternating
+  /// is what stops a row of identical boxes reading as a table.
+  static const double _chipHeight = 32;
+  static const double _wideChipWidth = 88;
+  static const double _narrowChipWidth = 64;
+  static const int _chips = 5;
+}
+
+/// One product tile's *parts*, not its outline.
+///
+/// **The first version of this was a single filled rectangle at the tile's
+/// height, and that was a real shortcoming rather than a simplification.** A
+/// solid block says only *something is coming here*; it does not say the thing
+/// coming has a name at the top and a price at the bottom. A cashier who can
+/// see that structure already knows where to look before the words arrive,
+/// which is the entire argument for drawing a skeleton instead of a spinner.
+///
+/// **It mirrors [_ProductTile]'s two bodies, because that widget has two.**
+/// `_bandedBody` at compact is a thumbnail band over a name, with the price and
+/// the *add* glyph on one row at the foot; `_denseBody` at wide has no image and
+/// carries a product code under the name instead. The same `space.8` padding,
+/// the same `Spacer`, the same `space.4` before the price - so when the snapshot
+/// lands, every line is already where it will be.
+///
+/// **The line heights are the type roles the real tile sets**, read off the
+/// token layer rather than guessed: `title.md` for the name, `mono` for the code
+/// and the price, `caption` for the stock figure. A placeholder measured from a
+/// different scale would move the moment real text replaced it.
+final class _ProductTileSkeleton extends StatelessWidget {
+  const _ProductTileSkeleton({super.key, required this.dense});
+
+  /// The wide till's flatter tile, which trades the picture for a code line.
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    const tone = SkeletonTone.onRaised;
+    final name = SkeletonLine(
+      widthFactor: 0.85,
+      style: tokens.typography.titleMedium,
+      tone: tone,
+    );
+    final price = SkeletonLine(
+      widthFactor: 0.5,
+      style: tokens.typography.mono,
+      tone: tone,
+    );
+    final stock = SkeletonLine(
+      widthFactor: 0.35,
+      style: tokens.typography.caption,
+      tone: tone,
+    );
+
+    if (dense) {
+      return _card(
+        tokens,
+        height: _wideProductTileHeight,
+        child: Padding(
+          padding: EdgeInsets.all(tokens.spacing.s8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              name,
+              SkeletonLine(widthFactor: 0.4, style: tokens.typography.mono),
+              const Spacer(),
+              SizedBox(height: tokens.spacing.s4),
+              price,
+              stock,
+            ],
+          ),
+        ),
+      );
+    }
+
+    return _card(
+      tokens,
+      height: _compactProductTileHeight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          // The picture band. It is the one part of the tile that is a solid
+          // block on purpose - a photograph has no internal structure to
+          // promise.
+          SkeletonBlock(
+            height: _productThumbnailBandHeight,
+            radius: tokens.radius.sm,
+            tone: tone,
+          ),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.all(tokens.spacing.s8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  name,
+                  const Spacer(),
+                  SizedBox(height: tokens.spacing.s4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[price, stock],
+                        ),
+                      ),
+                      SizedBox(width: tokens.spacing.s4),
+                      // The *add* control, which is a circle rather than a
+                      // square - and its size is `_addGlyph`'s own arithmetic
+                      // rather than a number copied off it: a `space.16` icon
+                      // inside `space.4` of padding on every side.
+                      SkeletonBlock(
+                        width: _addGlyphSide(tokens.spacing),
+                        height: _addGlyphSide(tokens.spacing),
+                        radius: tokens.radius.pill,
+                        tone: tone,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The tile's own card, drawn for real.
+  ///
+  /// **The frame does not shimmer, and that is decision 35 applied inside a
+  /// component rather than across a page.** A tile's surface, its border and its
+  /// radius do not come from the read - every tile has them whatever the catalog
+  /// says - so they are painted exactly as `_ProductTile` paints them, and only
+  /// the lines inside are placeholders. Drawing the whole tile as one block, as
+  /// the first version did, threw the grid away: what came back was a page of
+  /// floating fragments with no tiles around them.
+  static Widget _card(
+    AppTokens tokens, {
+    required double height,
+    required Widget child,
+  }) => SizedBox(
+    height: height,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.colors.surface.raised,
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        border: Border.all(color: tokens.colors.surface.borderSubtle),
+      ),
+      child: child,
+    ),
+  );
+
+  /// The *add* glyph's diameter, derived the way `_addGlyph` builds it rather
+  /// than measured off a screenshot - so a change to either token moves both.
+  static double _addGlyphSide(AppSpacing spacing) =>
+      spacing.s16 + spacing.s4 * 2;
 }
 
 /// The editable cart for one loaded catalog snapshot and one live session.
@@ -349,7 +633,7 @@ final class _CartEditorState extends State<_CartEditor> {
   /// ID, because a real category could legitimately be named anything.
   bool _uncachedCategoriesOnly = false;
 
-  CheckoutTender? _tender;
+  CheckoutTender? _tender = CheckoutTender.cash;
   bool _saving = false;
   CheckoutRefusal? _refusal;
 
@@ -358,17 +642,15 @@ final class _CartEditorState extends State<_CartEditor> {
   /// receipt number describes a finished sale, not the cart on screen, and a
   /// cashier who saves and immediately serves the next customer must still be
   /// able to read and copy it.
-  CheckoutSavedDraft? _saved;
-  bool _receiptCopied = false;
+  // **No `_saved` field since 2026-08-26.** It held the last durable save so a
+  // later `build` could render it, and survived every cart edit for the reason
+  // its comment gave: a cashier who saved and immediately served the next
+  // customer had to be able to read the receipt number off the screen. The
+  // number is on the paper now, and the outcome is reported once, when it
+  // arrives, by `_reportSave` - so there is nothing left to hold.
 
   /// Why the last submitted search added nothing. Cleared by the next edit.
   ///
-  /// **An [AppNotice] rather than a `String?`, which is the whole argument that
-  /// component makes.** Every one of the three sentences below is a refusal -
-  /// nothing was added - and holding the outcome beside the words is what stops
-  /// a later branch that *did* add something being drawn in the same red block.
-  AppNotice? _codeNotice;
-
   /// Bumped on every state change, so the compact layout's cart sheet can
   /// follow along.
   ///
@@ -429,70 +711,6 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _categoryId = uncachedOnly ? null : categoryId;
       _uncachedCategoriesOnly = uncachedOnly;
-      _codeNotice = null;
-    });
-  }
-
-  /// Adds the one product the submitted search names, or explains why it did
-  /// not. A barcode scanner arrives here: it types the code and submits.
-  ///
-  /// The code lookup deliberately spans the whole cached catalog rather than
-  /// the filtered view. A scanned code is unambiguous evidence about which
-  /// product is in the cashier's hand, and refusing it because a category chip
-  /// happens to be set would make the scanner useless the moment anyone
-  /// filtered. The category filter is therefore left exactly as it was.
-  void _submitSearch() {
-    final query = _search.text.trim();
-    if (query.isEmpty) return;
-
-    final byCode = <TenantProduct>[
-      for (final product in _snapshot.products)
-        if (product.sku.toLowerCase() == query.toLowerCase()) product,
-    ];
-    // Nothing makes a SKU unique - not Firestore Rules, not the cache, which
-    // only refuses duplicate product IDs - so a shared code is a real state and
-    // is refused rather than resolved by picking the first one.
-    if (byCode.length > 1) {
-      setState(() {
-        _codeNotice = const AppNotice.refused(
-          'More than one product on this device carries that code, so '
-          'nothing was added. Pick the right one from the list.',
-        );
-      });
-      return;
-    }
-    if (byCode.length == 1) {
-      _addFromSearch(byCode.single);
-      return;
-    }
-
-    // No code matched, so fall back to the list the cashier is looking at.
-    // One visible product is as unambiguous as a code; more than one is not.
-    final visible = _visibleProducts;
-    if (visible.length == 1) {
-      _addFromSearch(visible.single);
-      return;
-    }
-    setState(() {
-      _codeNotice = visible.isEmpty
-          ? const AppNotice.refused(
-              'Nothing on this device matches that. Check the code and try '
-              'again.',
-            )
-          : const AppNotice.refused(
-              'That matches more than one product, so nothing was added. Pick '
-              'one from the list, or enter its exact code.',
-            );
-    });
-  }
-
-  /// Adds [product] and clears the search so the next scan starts clean.
-  void _addFromSearch(TenantProduct product) {
-    _add(product);
-    if (!mounted) return;
-    setState(() {
-      _search.clear();
-      _codeNotice = null;
     });
   }
 
@@ -505,8 +723,7 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _quantities.clear();
       _unusableQuantities.clear();
-      _tender = null;
-      _codeNotice = null;
+      _tender = CheckoutTender.cash;
       _clearRefusal();
     });
   }
@@ -517,7 +734,6 @@ final class _CartEditorState extends State<_CartEditor> {
     if (!_quantities.containsKey(product.id) &&
         _quantities.length >= maximumCheckoutSaleLines) {
       setState(() {
-        _codeNotice = null;
         _refusal = CheckoutRefusal.forCode('invalid_line_count');
       });
       return;
@@ -583,20 +799,6 @@ final class _CartEditorState extends State<_CartEditor> {
   /// finished.
   void _clearRefusal() {
     _refusal = null;
-    _codeNotice = null;
-  }
-
-  void _dismissReceipt() {
-    setState(() {
-      _saved = null;
-      _receiptCopied = false;
-    });
-  }
-
-  Future<void> _copyReceipt(String receiptNumber) async {
-    await Clipboard.setData(ClipboardData(text: receiptNumber));
-    if (!mounted) return;
-    setState(() => _receiptCopied = true);
   }
 
   // --- Pricing ----------------------------------------------------------
@@ -668,10 +870,6 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _saving = true;
       _clearRefusal();
-      // The previous receipt goes now rather than when the answer arrives, so
-      // an older number is never on screen beside a save in flight.
-      _saved = null;
-      _receiptCopied = false;
     });
 
     CheckoutSavedDraft? saved;
@@ -699,13 +897,12 @@ final class _CartEditorState extends State<_CartEditor> {
     setState(() {
       _saving = false;
       _refusal = refusal;
-      _saved = saved;
       // The cart is cleared only when the draft is durable, so a refused sale
       // keeps every line the cashier already rang up.
       if (saved != null) {
         _quantities.clear();
         _unusableQuantities.clear();
-        _tender = null;
+        _tender = CheckoutTender.cash;
         // The till returns to its neutral state for the next customer rather
         // than leaving them a catalog narrowed by somebody else's search.
         _search.clear();
@@ -713,6 +910,16 @@ final class _CartEditorState extends State<_CartEditor> {
         _uncachedCategoriesOnly = false;
       }
     });
+    if (saved == null) return;
+    // **The sheet closes first, then the outcome is reported.** On a phone the
+    // cart is a sheet over the till, and a snack bar or a modal raised while it
+    // is still up would be dismissed along with it - or worse, would be
+    // anchored to a route that is going away. Closing first means both layouts
+    // report onto the till, which is the surface the cashier is left looking at.
+    final navigator = _cartSheetNavigator;
+    if (navigator != null && navigator.canPop()) navigator.pop();
+    if (!mounted) return;
+    _reportSave(context, saved);
   }
 
   // --- Rendering --------------------------------------------------------
@@ -800,9 +1007,32 @@ final class _CartEditorState extends State<_CartEditor> {
         ],
       );
 
-  Future<void> _openCartSheet(BuildContext context, String currency) {
+  /// The navigator hosting the cart sheet, while one is open.
+  ///
+  /// A save closes the sheet, so the cashier is returned to the products for
+  /// the next customer rather than having to dismiss the cart by hand between
+  /// every sale. It is null whenever no sheet is up, which is what stops a
+  /// save on the two-pane till trying to pop the route behind it.
+  NavigatorState? _cartSheetNavigator;
+
+  Future<void> _openCartSheet(BuildContext context, String currency) async {
+    _cartSheetNavigator = Navigator.of(context);
+    try {
+      await _showCartSheet(context, currency);
+    } finally {
+      _cartSheetNavigator = null;
+    }
+  }
+
+  Future<void> _showCartSheet(BuildContext context, String currency) {
     return showAppSheet<void>(
       context,
+      // **Full rather than the 0.7 detent, chosen by the product owner on
+      // 2026-08-23.** The cart is the whole task once it is open, and the
+      // half-height opening spent a drag before the tender chips were
+      // reachable. `AppSheetDetent.half` remains the floor, so the sheet still
+      // drags down to the old height and dismisses from there.
+      initialDetent: AppSheetDetent.full,
       builder: (sheetContext, controller) => ValueListenableBuilder<int>(
         valueListenable: _revision,
         // The sheet is a route of its own, so this element does not rebuild
@@ -848,7 +1078,12 @@ final class _CartEditorState extends State<_CartEditor> {
         key: const ValueKey('checkout-cart-pane'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _cartHead(context, tokens, inset, stepped: stepped),
+          // **Only the two-pane cart keeps a fixed head.** In the sheet it
+          // was a non-scrolling strip holding a heading that repeated what the
+          // sheet already was, and it blocked the drag: a gesture starting on
+          // it moved nothing. The clear moves into the scrolling content
+          // below, still at the top and still far from the save.
+          if (stepped) _cartHead(context, tokens, inset, stepped: stepped),
           Expanded(
             child: ColoredBox(
               color: stepped
@@ -864,7 +1099,26 @@ final class _CartEditorState extends State<_CartEditor> {
                   vertical: tokens.spacing.s12,
                 ),
                 children: <Widget>[
-                  ..._receiptSection(context, tokens),
+                  // The sheet's own clear, in the position the fixed head used
+                  // to hold. §2.1's worked example still applies - it is the
+                  // destructive tier, and the save is at the far end of the
+                  // pane in `_cartFoot`.
+                  if (!stepped && _quantities.isNotEmpty) ...<Widget>[
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: AppButton(
+                        key: const ValueKey('checkout-clear-sale'),
+                        label: 'Clear this sale',
+                        icon: Icons.delete_outline,
+                        tier: AppButtonTier.destructive,
+                        size: AppButtonSize.sm,
+                        onPressed: _saving
+                            ? null
+                            : () => _confirmClearSale(context),
+                      ),
+                    ),
+                    SizedBox(height: tokens.spacing.s8),
+                  ],
                   ..._saleLines(context, tokens, currency),
                   SizedBox(height: tokens.spacing.s16),
                   // **§7's "Long copy" pattern, and this is policy rather than
@@ -919,14 +1173,7 @@ final class _CartEditorState extends State<_CartEditor> {
       ),
       child: Row(
         children: <Widget>[
-          Expanded(
-            child: Text(
-              'This sale',
-              style: tokens.typography.titleMedium.copyWith(
-                color: tokens.colors.text.primary,
-              ),
-            ),
-          ),
+          Expanded(child: SectionHeading('This sale')),
           // Offered only when there is something to abandon, and never for a
           // saved sale: nothing here is persisted, so this destroys no
           // record.
@@ -1058,12 +1305,7 @@ final class _CartEditorState extends State<_CartEditor> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: <Widget>[
-        Text(
-          'Total',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Total'),
         SizedBox(width: tokens.spacing.s12),
         // §6.2's "Total recalculates - digits roll; only changed digits move,
         // `spring.smooth`, no haptic". The one figure in this app that changes
@@ -1096,116 +1338,83 @@ final class _CartEditorState extends State<_CartEditor> {
     );
   }
 
-  /// The last durable save, stated until the cashier closes it.
+  /// Reports one durable save, and leaves the till's shape alone doing it.
   ///
-  /// [CheckoutSavedDraft.receiptNumber] is nullable, and the sale is saved
-  /// either way, so the absent case is reported rather than rendered as
-  /// silence: a cashier who saved a sale and was told nothing would ring it up
-  /// again.
-  List<Widget> _receiptSection(BuildContext context, AppTokens tokens) {
-    final saved = _saved;
-    if (saved == null) return const <Widget>[];
+  /// **Three outcomes, three different surfaces, and the split is by whether
+  /// anybody has to do anything.** Until 2026-08-26 all three were inline
+  /// `Callout`s that stayed until the cashier pressed *Close*, so the common
+  /// case - a sale that saved and printed - pushed the cart down the screen and
+  /// cost a press, to carry a sentence nobody needed to act on.
+  ///
+  /// - **Saved, with a receipt number**: [showAppSnackBar]. It withdraws itself
+  ///   and the till is ready for the next customer without a press. The number
+  ///   is on the paper in the customer's hand, which is the owner's own
+  ///   reasoning for dropping *Copy receipt number* at the same time.
+  /// - **Saved, but no receipt number could be stated**: [showAppNoticeDialog].
+  ///   A cashier must not read a number out that the till could not produce, so
+  ///   this one cannot be allowed to withdraw itself unseen.
+  /// - **The receipt did not print**: the same modal. Nothing came out, so
+  ///   there is no paper carrying the number, and the queue needs visiting.
+  ///
+  /// Both modals are shown from here rather than rendered, so the till's own
+  /// layout is unchanged by any of them.
+  void _reportSave(BuildContext context, CheckoutSavedDraft saved) {
     final receipt = saved.receiptNumber;
-    // **The eighth notice surface, and the one branch that is not a
-    // confirmation.** A sale with a receipt number is `AppNotice.confirmed` -
-    // §2.1's `ok` is "reconciled, **confirmed**, in stock". A sale saved
-    // durably whose receipt number could not be stated is `AppNotice.unknown`:
-    // nothing failed, the sale syncs either way, and what is awaited is the
-    // number. Both were the same black paragraph in the same position, which is
-    // exactly the failure `AppNotice` was written for - and here the two differ
-    // by whether a cashier may read a number out to a customer.
-    final notice = receipt == null
-        ? const AppNotice.unknown(
-            'Saved on this device, but it could not state a receipt number '
-            'for this sale. The sale still syncs on its own. Ask for help '
-            'before giving the customer a receipt number.',
-          )
-        : AppNotice.confirmed(
-            'Saved on this device as $receipt. It syncs on its own; there is '
-            'nothing else to press. This stays here until you close it, so '
-            'the number can be written down.',
-          );
-    // **The receipt's own fate, stated apart from the sale's.** A printer that
-    // did not answer must never read as a sale that did not save, so this is a
-    // second `Callout` below rather than a sentence folded into the first — the
-    // two differ by whether anything needs doing.
-    //
-    // **Only a failure is drawn, and that is deliberate.**
-    // `CheckoutSavedDraft.receiptPrintFailure` is null when the receipt was
-    // sent **and** when the build queues no receipts at all, so a confirmation
-    // here would be the till asserting something it cannot distinguish. Where
-    // it did print, the paper is the proof and a second green box is noise.
     final printFailure = saved.receiptPrintFailure;
-    // Every sentence comes from `checkout_print_failures.dart`, which is the
-    // one place in the printing slice that contains English. This screen
-    // invents none of its own.
+    // Every printing sentence comes from `checkout_print_failures.dart`, which
+    // is the one place in that slice holding English. This screen invents none.
     final printNotice = printFailure == null
         ? null
         : PrinterFailureNotice.of(printFailure);
-    return <Widget>[
-      Callout(
-        key: const ValueKey('checkout-saved'),
-        status: notice.status,
-        message: notice.message,
-        action: Wrap(
-          spacing: tokens.spacing.s8,
-          runSpacing: tokens.spacing.s8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            if (receipt != null)
-              AppButton(
-                key: const ValueKey('checkout-copy-receipt'),
-                label: 'Copy receipt number',
-                onPressed: () => _copyReceipt(receipt),
-              ),
-            AppButton(
-              key: const ValueKey('checkout-dismiss-receipt'),
-              label: 'Close',
-              tier: AppButtonTier.tertiary,
-              onPressed: _dismissReceipt,
-            ),
-            if (_receiptCopied)
-              Text(
-                key: const ValueKey('checkout-receipt-copied'),
-                'Receipt number copied.',
-                style: tokens.typography.caption.copyWith(
-                  color: tokens.colors.text.tertiary,
-                ),
-              ),
-          ],
-        ),
-      ),
-      if (printNotice != null) ...<Widget>[
-        SizedBox(height: tokens.spacing.s12),
-        Callout(
-          key: const ValueKey('checkout-receipt-print'),
-          status: printNotice.status,
-          message: printNotice.message,
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        // **Where the receipt went, which the notice above cannot say.**
-        // `checkout_print_failures.dart` is the one place in the printing slice
-        // that holds English, and its sentences are read by the print queue
-        // panel too - telling somebody already standing in that queue to open
-        // it would be nonsense. So the route is stated here, at the surface that
-        // needs it, in the "say what is still true" shape §8 rule 6 asks for and
-        // the refusal below already uses.
-        //
-        // **It names a destination and does not become one.** `Receipts
-        // waiting` is a real entry on the business home
-        // (`tenant_routing_shell.dart`), and `OPEN_QUESTIONS.md`'s Phase 03 item
-        // 4 says the cashier reaches it from there. A button here would be a
-        // routing condition, which hard rule 1 keeps out of a visual change.
-        Text(
-          key: const ValueKey('checkout-receipt-print-route'),
-          'After closing, open Receipts waiting from the business home.',
-          style: tokens.typography.caption.copyWith(
-            color: tokens.colors.text.tertiary,
+
+    if (receipt == null) {
+      // §2.1's `attention` - "unreconciled, pending, **awaiting**" - because
+      // nothing failed: the sale is durable and syncs either way, and what is
+      // awaited is the number.
+      unawaited(
+        showAppNoticeDialog(
+          context,
+          title: 'Saved without a receipt number',
+          notice: const AppNotice.unknown(
+            'The sale is saved on this device and syncs on its own, but the '
+            'till could not state a receipt number for it.',
           ),
+          stillTrue:
+              'The sale is not lost and nothing needs ringing up again. Ask '
+              'for help before giving the customer a receipt number.',
+          dismissKey: const ValueKey('checkout-dismiss-receipt'),
         ),
-      ],
-      SizedBox(height: tokens.spacing.s20),
-    ];
+      );
+      return;
+    }
+
+    if (printNotice != null) {
+      unawaited(
+        showAppNoticeDialog(
+          context,
+          title: 'Saved as $receipt',
+          notice: printNotice,
+          // **Where the receipt went, which the notice above cannot say.**
+          // Those sentences are read by the print queue panel too, so telling
+          // somebody already standing in that queue to open it would be
+          // nonsense - the route belongs here, at the surface that needs it.
+          //
+          // It names a destination and does not become one: `Receipts waiting`
+          // is a real entry on the business home, and a button here would be a
+          // routing condition, which hard rule 1 keeps out of a visual change.
+          stillTrue:
+              'The sale itself is saved and syncs on its own. Open Receipts '
+              'waiting from the business home to send this one again.',
+          dismissKey: const ValueKey('checkout-dismiss-receipt'),
+        ),
+      );
+      return;
+    }
+
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed('Saved as $receipt. It syncs on its own.'),
+    );
   }
 
   /// The catalog: what is sellable, and how it is found.
@@ -1228,154 +1437,98 @@ final class _CartEditorState extends State<_CartEditor> {
     required bool dense,
   }) {
     final tokens = AppTokens.componentOf(context);
-    return Column(
+    return KeyedSubtree(
       key: const ValueKey('checkout-products-pane'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        _browseHead(context, tokens),
-        Expanded(child: _productGrid(context, tokens, currency, dense: dense)),
-      ],
+      child: _productGrid(context, tokens, currency, dense: dense),
     );
   }
 
-  /// What stays on screen while the grid scrolls: where the catalog came from,
-  /// how to search it, and how to narrow it.
+  /// The search and the category filters, drawn as the grid's first rows.
+  ///
+  /// **This scrolls away with the products, chosen by the product owner on
+  /// 2026-08-23.** It was a fixed region above the grid with the catalog's
+  /// freshness sentence in a band of its own; on a phone that spent most of a
+  /// short screen on standing context before a single product was visible.
+  /// The band is gone, the hairline that separated a *fixed* head from its
+  /// content went with it, and what remains is content in the pane's own
+  /// `ListView`.
+  ///
+  /// **The partial-catalog warning stays**, and is the one thing here that was
+  /// not merely context: a device holding part of the product list can fail to
+  /// find a product that exists, and nothing else on this screen says so.
   Widget _browseHead(BuildContext context, AppTokens tokens) {
     // §2.2's `caption` row - "timestamps, attribution" - in `text.tertiary`,
     // which §2.1 names the floor for anything a person is expected to read.
     final quiet = tokens.typography.caption.copyWith(
       color: tokens.colors.text.tertiary,
     );
-    final inset = AppScaffold.horizontalInset(tokens.spacing);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        // §2.1's hairline under a fixed region, which is what separates a head
-        // from what it is the head of everywhere else in this app.
-        border: Border(
-          bottom: BorderSide(color: tokens.colors.surface.borderSubtle),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          // **Both served designs put the freshness line in a band of its own**,
-          // full width and one step up from the page - ST-035 in the top bar,
-          // the browse render in an info strip under it. Quietened rather than
-          // deleted: it is true, and a cashier pricing from a stale device needs
-          // it, but it is standing context rather than the thing being looked
-          // at, so it no longer competes with the products for attention the way
-          // full-weight body text did.
-          Container(
-            color: tokens.colors.surface.raised,
-            padding: EdgeInsets.symmetric(
-              horizontal: inset,
-              vertical: tokens.spacing.s8,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  key: const ValueKey('checkout-catalog-freshness'),
-                  'Prices and stock come from this device, last synced '
-                  '${_instant(_snapshot.refreshedAt)}. A sale is never blocked '
-                  'by a stock count.',
-                  style: quiet,
-                ),
-                if (!_snapshot.complete)
-                  Text(
-                    key: const ValueKey('checkout-catalog-partial'),
-                    'This device holds only part of the product list for this '
-                    'business, so a product may be missing from it.',
-                    style: quiet,
-                  ),
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        if (!_snapshot.complete) ...<Widget>[
+          Text(
+            key: const ValueKey('checkout-catalog-partial'),
+            'This device holds only part of the product list for this '
+            'business, so a product may be missing from it.',
+            style: quiet,
           ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              inset,
-              tokens.spacing.s12,
-              inset,
-              tokens.spacing.s8,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                // §5.2's field, and the last two call sites of §11 step 3's
-                // sweep. The leading glyph is the "optional in the strong sense"
-                // case that section describes: a magnifier says *this one is
-                // searched*, which the label cannot say faster, and the till is
-                // where a cashier is not reading.
-                AppTextField(
-                  key: const ValueKey('checkout-search'),
-                  label: 'Search by name or code',
-                  leading: Icons.search,
-                  controller: _search,
-                  textInputAction: TextInputAction.done,
-                  onChanged: (_) => setState(() => _codeNotice = null),
-                  onSubmitted: (_) => _submitSearch(),
-                  helper: 'Scan or enter a code and press enter to add it.',
+          SizedBox(height: tokens.spacing.s8),
+        ],
+        // §5.2's field. The leading glyph is the "optional in the strong
+        // sense" case that section describes: a magnifier says *this one is
+        // searched*, which the label cannot say faster, and the till is where
+        // a cashier is not reading.
+        AppTextField(
+          key: const ValueKey('checkout-search'),
+          label: 'Search by name or code',
+          leading: Icons.search,
+          controller: _search,
+          textInputAction: TextInputAction.search,
+          // Searching filters the list and adds nothing. Adding is the card's
+          // own tap, which is the only way a product enters the sale. Barcode
+          // scanning is not wired to this field yet.
+          onChanged: (_) => setState(() {}),
+          helper: 'Tap a product to add it to the sale.',
+        ),
+        if (_snapshot.categories.isNotEmpty ||
+            _hasUncachedCategories) ...<Widget>[
+          SizedBox(height: tokens.spacing.s8),
+          // **The one bar whose selection is not simply a value**, because
+          // "Other" is a *mode* - products naming a category this device does
+          // not hold - and is tracked separately from `_categoryId` rather
+          // than as a sentinel ID, since a real category could legitimately be
+          // named anything. The sentinel lives here, at the one call site that
+          // has the problem, instead of in the component.
+          FilterChipBar<String>(
+            semanticLabel: 'Narrow the products by category',
+            selected: _uncachedCategoriesOnly ? _uncachedSentinel : _categoryId,
+            onSelected: (value) => value == _uncachedSentinel
+                ? _selectCategory(uncachedOnly: true)
+                : _selectCategory(categoryId: value),
+            options: <FilterChipOption<String>>[
+              const FilterChipOption<String>(
+                key: ValueKey('checkout-category-all'),
+                value: null,
+                label: 'All',
+              ),
+              for (final category in _snapshot.categories)
+                FilterChipOption<String>(
+                  key: ValueKey('checkout-category-${category.id}'),
+                  value: category.id,
+                  label: category.name,
                 ),
-                // **The eighth notice surface `AppNotice` has been waiting
-                // for.** All three sentences `_submitSearch` writes here are the
-                // same outcome - nothing was added - so this is one `refused`,
-                // not a status picked per branch. It was a bare `Text`, in the
-                // position a confirmation would also have taken.
-                if (_codeNotice case final notice?) ...<Widget>[
-                  SizedBox(height: tokens.spacing.s8),
-                  Callout(
-                    key: const ValueKey('checkout-code-notice'),
-                    status: notice.status,
-                    message: notice.message,
-                  ),
-                ],
-                if (_snapshot.categories.isNotEmpty ||
-                    _hasUncachedCategories) ...<Widget>[
-                  SizedBox(height: tokens.spacing.s8),
-                  // **The one bar whose selection is not simply a value**,
-                  // because "Other" is a *mode* - products naming a category
-                  // this device does not hold - and is tracked separately from
-                  // `_categoryId` rather than as a sentinel ID, since a real
-                  // category could legitimately be named anything. The sentinel
-                  // lives here, at the one call site that has the problem,
-                  // instead of in the component.
-                  FilterChipBar<String>(
-                    semanticLabel: 'Narrow the products by category',
-                    selected: _uncachedCategoriesOnly
-                        ? _uncachedSentinel
-                        : _categoryId,
-                    onSelected: (value) => value == _uncachedSentinel
-                        ? _selectCategory(uncachedOnly: true)
-                        : _selectCategory(categoryId: value),
-                    options: <FilterChipOption<String>>[
-                      const FilterChipOption<String>(
-                        key: ValueKey('checkout-category-all'),
-                        value: null,
-                        label: 'All',
-                      ),
-                      for (final category in _snapshot.categories)
-                        FilterChipOption<String>(
-                          key: ValueKey('checkout-category-${category.id}'),
-                          value: category.id,
-                          label: category.name,
-                        ),
-                      if (_hasUncachedCategories)
-                        const FilterChipOption<String>(
-                          key: ValueKey('checkout-category-other'),
-                          value: _uncachedSentinel,
-                          label: 'Other',
-                        ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
+              if (_hasUncachedCategories)
+                const FilterChipOption<String>(
+                  key: ValueKey('checkout-category-other'),
+                  value: _uncachedSentinel,
+                  label: 'Other',
+                ),
+            ],
           ),
         ],
-      ),
+        SizedBox(height: tokens.spacing.s12),
+      ],
     );
   }
 
@@ -1405,6 +1558,13 @@ final class _CartEditorState extends State<_CartEditor> {
         vertical: tokens.spacing.s12,
       ),
       children: <Widget>[
+        // **The saved-sale notice is not drawn on either layout any more.** It
+        // used to be rendered here for the phone alone, because the phone's
+        // cart is a sheet that a save closes and the confirmation would have
+        // left with it. A snack bar is shown over whatever is on screen, so
+        // that whole asymmetry is gone: both layouts now report the same way,
+        // from `_reportSave`, and neither reserves space for it.
+        _browseHead(context, tokens),
         // **Two full-page-ish states that stay prose, deliberately.** §5.1 gives
         // `EmptyState` a row and §5.2 specifies it nowhere, and step 9 already
         // took this decision once for screen 08: giving one of the three missing
@@ -1517,32 +1677,18 @@ final class _CartEditorState extends State<_CartEditor> {
 
   List<Widget> _tenderSection(BuildContext context, AppTokens tokens) =>
       <Widget>[
-        Text(
-          'How did the customer pay?',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        // **Kept as permanent prose rather than folded**, which is the rule the
-        // step-4 sweep settled: a `Disclosure` holds *policy*, and §7 says
-        // "anything over two lines that explains policy rather than **the
-        // current state**". This states what recording a tender does and does
-        // not mean about the money, and a cashier is choosing one as they read
-        // it - folding it would hide the caveat behind the control it is about.
-        Text(
-          checkoutTenderDisclaimer,
-          style: tokens.typography.caption.copyWith(
-            color: tokens.colors.text.tertiary,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s8),
-        // **No "any" option, and the null it starts in is load-bearing.** A
-        // filter's null means "no filter"; this one means *nothing has been
-        // observed yet*, which is this panel's own scope decision - "a
-        // pre-selected payment method would be indistinguishable from an
-        // observed one". So there is no chip to represent it and no glyph until
-        // a cashier picks, which is why `_blocker` can still refuse the save.
+        // **Cash is preselected, chosen by the product owner on 2026-08-23.**
+        // This reverses the panel's original scope decision - "a pre-selected
+        // payment method would be indistinguishable from an observed one" -
+        // in favour of the speed of the common case. The consequence is
+        // recorded rather than hidden: a sale whose tender nobody touched now
+        // records `cash`, so the shift close's cash-against-sales comparison
+        // and everything reconciliation derives from it can no longer tell an
+        // observed cash sale from an unset one.
+        //
+        // `_blocker`'s null branch is kept as a guard rather than deleted: it
+        // is now unreachable from the UI, and is what would still refuse the
+        // save if a future path cleared the tender again.
         FilterChipBar<CheckoutTender>(
           semanticLabel: 'How the customer paid',
           selected: _tender,
@@ -1831,13 +1977,54 @@ final class _ProductTile extends StatelessWidget {
               _name(tokens),
               const Spacer(),
               SizedBox(height: tokens.spacing.s4),
-              _price(tokens),
-              _stock(tokens, problem),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        _price(tokens),
+                        _stock(tokens, problem),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: tokens.spacing.s4),
+                  _addGlyph(tokens),
+                ],
+              ),
             ],
           ),
         ),
       ),
     ],
+  );
+
+  /// The *add* glyph at the card's foot, asked for on 2026-08-23.
+  ///
+  /// **An affordance, not a second button.** The whole tile is already the
+  /// control - `PressSurface` wraps it and its `onTap` adds the product - so a
+  /// nested button here would be a second target for one action, announce the
+  /// same thing twice to a screen reader, and start a gesture fight with the
+  /// tile underneath it. It carries no gesture and is excluded from semantics
+  /// for exactly that reason; §9's 48dp minimum is met by the tile, which is
+  /// what a thumb is actually hitting.
+  Widget _addGlyph(AppTokens tokens) => ExcludeSemantics(
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.colors.action.primary.container,
+        shape: BoxShape.circle,
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.s4),
+        child: Icon(
+          Icons.add,
+          size: tokens.spacing.s16,
+          color: tokens.colors.action.primary.label,
+        ),
+      ),
+    ),
   );
 
   /// §2.2's `title.md`: "card title, **record name**".
@@ -1915,16 +2102,23 @@ final class _ProductTile extends StatelessWidget {
 /// a square beside a name is the arrangement that render replaced. It has one
 /// caller: the compact tile. The till card has no picture at all.
 final class _ProductThumbnail extends StatelessWidget {
-  const _ProductThumbnail({required this.product});
+  const _ProductThumbnail({required this.product, this.side});
 
   final TenantProduct product;
+
+  /// A square of this side, rather than the tile's full-width band.
+  ///
+  /// The cart line wants the same picture at a size a row can hold; the grid
+  /// tile wants a band across its top. One widget draws both so a product
+  /// without a photograph falls back to the same initials in both places.
+  final double? side;
 
   @override
   Widget build(BuildContext context) {
     final url = product.imageUrl;
     return SizedBox(
-      height: _productThumbnailBandHeight,
-      width: double.infinity,
+      height: side ?? _productThumbnailBandHeight,
+      width: side ?? double.infinity,
       child: url == null
           ? _placeholder(context)
           : Image.network(
@@ -1951,10 +2145,13 @@ final class _ProductThumbnail extends StatelessWidget {
         TenantInitialsAvatar.initialsOf(product.name),
         // A band four times the height of the square it replaced holds a
         // heading rather than a card title; §2.2's `title.lg` is the section
-        // role and the largest one that is not a screen title.
-        style: tokens.typography.titleLarge.copyWith(
-          color: tokens.colors.text.secondary,
-        ),
+        // role and the largest one that is not a screen title. A cart-line
+        // square is a card title's worth of space, so it takes `title.md`.
+        style:
+            (side == null
+                    ? tokens.typography.titleLarge
+                    : tokens.typography.titleMedium)
+                .copyWith(color: tokens.colors.text.secondary),
       ),
     );
   }
@@ -2147,6 +2344,23 @@ final class _CartLine extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  // **The picture, asked for on 2026-08-23.** A cashier
+                  // checking a cart against a counter reads pictures faster
+                  // than names, and the grid they picked from is all pictures.
+                  // An unavailable product has none to draw, and its line says
+                  // so in words rather than reserving a hole where a picture
+                  // would be.
+                  if (resolved != null) ...<Widget>[
+                    ClipRRect(
+                      key: ValueKey('checkout-line-image-$productId'),
+                      borderRadius: BorderRadius.circular(tokens.radius.sm),
+                      child: _ProductThumbnail(
+                        product: resolved,
+                        side: _cartLineThumbnailSide,
+                      ),
+                    ),
+                    SizedBox(width: tokens.spacing.s8),
+                  ],
                   Expanded(
                     child: Text(
                       resolved?.name ?? 'Unavailable product',
@@ -2173,17 +2387,21 @@ final class _CartLine extends StatelessWidget {
                   // Splitting them gives each its own width, and it is the
                   // served design's layout rather than a workaround for one.
                   //
-                  // **A destructive `AppButton` rather than a bare
-                  // `IconButton`**, which is ST-035's `✕ Remove` and §2.1's
-                  // tier for "removes or reverses". A tooltip is not a label: a
-                  // glyph alone on the one control that discards a line is the
-                  // thing §9 asks a word for.
-                  AppButton(
+                  // **A glyph with a name nobody sees, since 2026-08-23.**
+                  // The note this replaces argued that §9 wants a word on the
+                  // one control that discards a line - and §9 wants a
+                  // *semantic label*, which [AppIconButton] requires. What the
+                  // visible word bought was a red bordered box as wide as the
+                  // product name beside it, on every line of the cart. Both
+                  // served designs draw a 44-square bin in `text-error` with a
+                  // 30% edge; this is that, at §9's 48.
+                  AppIconButton(
                     key: ValueKey('checkout-line-remove-$productId'),
-                    label: 'Remove',
-                    icon: Icons.close,
+                    icon: Icons.delete_outline,
+                    semanticLabel: resolved == null
+                        ? 'Remove this line'
+                        : 'Remove ${resolved.name}',
                     tier: AppButtonTier.destructive,
-                    size: AppButtonSize.sm,
                     onPressed: onRemove,
                   ),
                 ],
@@ -2279,11 +2497,4 @@ String _grouped(int value) {
     buffer.write(digits[index]);
   }
   return buffer.toString();
-}
-
-String _instant(DateTime value) {
-  final utc = value.toUtc();
-  String pad(int part) => part.toString().padLeft(2, '0');
-  return '${utc.year}-${pad(utc.month)}-${pad(utc.day)} '
-      '${pad(utc.hour)}:${pad(utc.minute)} UTC';
 }

@@ -85,9 +85,9 @@ class _StatusMatrix extends StatelessWidget {
     builder: (context) {
       final tokens = AppTokens.componentOf(context).withDensity(density);
       return Theme(
-        data: Theme.of(context).copyWith(
-          extensions: <ThemeExtension<dynamic>>[tokens],
-        ),
+        data: Theme.of(
+          context,
+        ).copyWith(extensions: <ThemeExtension<dynamic>>[tokens]),
         child: Scaffold(
           appBar: AppBar(title: Text(title)),
           body: SingleChildScrollView(
@@ -107,10 +107,7 @@ class _StatusMatrix extends StatelessWidget {
                   runSpacing: tokens.spacing.s8,
                   children: <Widget>[
                     for (final status in AppStatus.values)
-                      StatusBadge(
-                        status: status,
-                        label: _copy[status]!.badge,
-                      ),
+                      StatusBadge(status: status, label: _copy[status]!.badge),
                   ],
                 ),
                 SizedBox(height: tokens.density.sectionGap),

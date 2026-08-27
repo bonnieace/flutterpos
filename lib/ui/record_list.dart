@@ -96,12 +96,42 @@ enum RecordForm {
   table,
 }
 
+/// What kind of value an attribute carries, and therefore what face it is set
+/// in.
+///
+/// **This is the reader `AppTypeRoles.mono` never had.** The design gives
+/// currency and numeric data their own family - "for currency (KES) and
+/// numerical data (Stock counts, SKU numbers), JetBrains Mono is utilized to
+/// ensure tabular alignment and distinct character recognition in high-pressure
+/// environments" - and it gives money its own colour on top of that. The role
+/// and the colour both existed here and nothing read either, so every figure in
+/// the app was set in the interface face at body colour.
+///
+/// **A caller declares the kind; this component never guesses.** Sniffing a
+/// currency prefix out of an already-formatted string would be a component
+/// deciding what a record means, and it would be wrong the first time a shop
+/// trades in something that is not KES.
+enum RecordValueKind {
+  /// Words. The interface face at `text.secondary`, which is every value that
+  /// is not a figure or an identifier.
+  text,
+
+  /// An identifier: a code, a SKU, a receipt number, a document id. `mono` at
+  /// `text.secondary`.
+  code,
+
+  /// An amount of money, already formatted by the caller. `mono` at
+  /// `text.money`, which is the design's own `currency-kes`.
+  money,
+}
+
 /// One key-value fact about a record. §5.2's "Attributes" row.
 @immutable
 final class RecordAttribute {
   const RecordAttribute({
     required this.label,
     required this.value,
+    this.kind = RecordValueKind.text,
     this.valueKey,
     this.inNarrowForm = true,
     this.flex = 1,
@@ -115,6 +145,9 @@ final class RecordAttribute {
   /// The value, already formatted by the caller. This component decides nothing
   /// about what a record may say.
   final String value;
+
+  /// Which face and colour the value takes. See [RecordValueKind].
+  final RecordValueKind kind;
 
   /// Key on the value's own `Text`, for a caller whose tests read the string
   /// rather than the row around it.
@@ -216,12 +249,25 @@ final class RecordItem {
     this.subtitle,
     this.subtitleKey,
     this.status,
+    this.leading,
+    this.leadingExtent,
+    this.tableLeadingExtent,
     this.attributes = const <RecordAttribute>[],
     this.provenance,
     this.provenanceKey,
     this.actions = const <RecordAction>[],
     this.details,
-  });
+  }) : assert(
+         (leading == null &&
+                 leadingExtent == null &&
+                 tableLeadingExtent == null) ||
+             (leading != null && leadingExtent != null && leadingExtent > 0),
+         'A leading visual must carry a positive measured extent.',
+       ),
+       assert(
+         tableLeadingExtent == null || tableLeadingExtent > 0,
+         'A table leading extent must be positive.',
+       );
 
   /// What makes this record itself - a document ID, a UID, a SKU.
   ///
@@ -251,6 +297,15 @@ final class RecordItem {
   final Key? subtitleKey;
 
   final RecordStatus? status;
+
+  /// Optional visual beside the identity in every responsive form.
+  ///
+  /// [leadingExtent] makes its width part of table measurement instead of an
+  /// incidental child size. [tableLeadingExtent] may make a desktop thumbnail
+  /// denser while cards keep the touch-friendly visual scale.
+  final Widget? leading;
+  final double? leadingExtent;
+  final double? tableLeadingExtent;
 
   /// In the order they should be read, which in [RecordForm.table] is the
   /// column order.
@@ -676,30 +731,69 @@ final class _RecordCard extends StatelessWidget {
               Align(alignment: Alignment.centerLeft, child: standing._badge()),
               SizedBox(height: tokens.spacing.s8),
             ],
-            Text(
-              item.title,
-              key: item.titleKey,
-              // §5.2's "never truncated below two lines", read as a floor.
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: tokens.typography.titleMedium.copyWith(
-                color: tokens.colors.text.primary,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (item.leading case final visual?) ...<Widget>[
+                  SizedBox.square(
+                    dimension: item.leadingExtent!,
+                    child: visual,
+                  ),
+                  SizedBox(width: tokens.spacing.s12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        item.title,
+                        key: item.titleKey,
+                        // §5.2's "never truncated below two lines", read as a floor.
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        // **`body.lg` at 600, not `title.md`, since 2026-08-23.** Every
+                        // record heading in the export is `font-body-md font-bold` - 16
+                        // - and a section heading above it is 22. The card was drawing
+                        // its identity at 18 / 500, which is neither, and which read as
+                        // a section title inside a card rather than as the record's own
+                        // name.
+                        style: tokens.typography.bodyLarge.copyWith(
+                          color: tokens.colors.text.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (item.subtitle case final line?) ...<Widget>[
+                        SizedBox(height: tokens.spacing.s4),
+                        Text(
+                          line,
+                          key: item.subtitleKey,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: body.copyWith(
+                            color: tokens.colors.text.secondary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
-            if (item.subtitle case final line?) ...<Widget>[
-              SizedBox(height: tokens.spacing.s4),
-              Text(
-                line,
-                key: item.subtitleKey,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: body.copyWith(color: tokens.colors.text.secondary),
-              ),
-            ],
             if (attributes.isNotEmpty) ...<Widget>[
               SizedBox(height: tokens.spacing.s12),
+              // The export's `pt-4 border-t border-surface-elevated`: a card
+              // separates what the record *is* from what it *holds* with a
+              // hairline, which is what stops a stack of six lines reading as
+              // one paragraph.
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: tokens.colors.surface.borderSubtle,
+              ),
+              SizedBox(height: tokens.spacing.s12),
               for (final (index, attribute) in attributes.indexed) ...<Widget>[
-                if (index > 0) SizedBox(height: tokens.spacing.s4),
+                if (index > 0) SizedBox(height: tokens.spacing.s8),
                 _CardAttribute(attribute: attribute),
               ],
             ],
@@ -735,13 +829,18 @@ final class _CardAttribute extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final body = tokens.density.body(tokens.typography);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          attribute.label,
-          style: tokens.typography.caption.copyWith(
+          // **`label.eyebrow`, uppercased.** The export labels a figure inside
+          // a card with `text-label-caps font-label-caps
+          // text-on-surface-variant` and uppercases it - `STOCK`, `PRICE`,
+          // `CODE` - which is §2.2's one permitted uppercase role. It was
+          // `caption` in sentence case, which read as a second value beside
+          // the first rather than as its key.
+          attribute.label.toUpperCase(),
+          style: tokens.typography.labelEyebrow.copyWith(
             color: tokens.colors.text.tertiary,
           ),
         ),
@@ -751,12 +850,33 @@ final class _CardAttribute extends StatelessWidget {
             attribute.value,
             key: attribute.valueKey,
             textAlign: TextAlign.end,
-            style: body.copyWith(color: tokens.colors.text.secondary),
+            style: attribute.valueStyle(tokens),
           ),
         ),
       ],
     );
   }
+}
+
+/// The face and colour a value's [RecordValueKind] asks for.
+///
+/// An extension rather than a method on [RecordAttribute] so the model stays a
+/// plain description of a fact and knows nothing about a theme. One place,
+/// read by the card and by the table, so a figure cannot be monospaced on a
+/// phone and not on a desktop.
+extension RecordAttributeStyle on RecordAttribute {
+  TextStyle valueStyle(AppTokens tokens) => switch (kind) {
+    RecordValueKind.text =>
+      tokens.density
+          .body(tokens.typography)
+          .copyWith(color: tokens.colors.text.secondary),
+    RecordValueKind.code => tokens.typography.mono.copyWith(
+      color: tokens.colors.text.secondary,
+    ),
+    RecordValueKind.money => tokens.typography.mono.copyWith(
+      color: tokens.colors.text.money,
+    ),
+  };
 }
 
 /// How wide each column of one [RecordForm.table] is, measured from what the
@@ -907,12 +1027,9 @@ final class RecordTableColumns {
       // twice what it is entitled to and take it from a column with no second
       // line to fall back on. The subtitle and the provenance line are
       // `maxLines: 1` and ask for all of theirs.
-      identity = math.max(
-        identity,
-        text(item.title, tokens.typography.titleMedium) / 2,
-      );
+      var itemIdentity = text(item.title, tokens.typography.titleMedium) / 2;
       if (item.subtitle case final line?) {
-        identity = math.max(identity, text(line, body));
+        itemIdentity = math.max(itemIdentity, text(line, body));
       }
       if (item.provenance case final line?) {
         // **`ProvenanceLine.styleOf`, not `typography.caption`.** This is
@@ -920,11 +1037,17 @@ final class RecordTableColumns {
         // has to be the width of the style that is actually painted. Naming the
         // role here and the role there is how a repoint of one allocates this
         // table's columns against a style nothing draws.
-        identity = math.max(
-          identity,
+        itemIdentity = math.max(
+          itemIdentity,
           text(line, ProvenanceLine.styleOf(tokens)),
         );
       }
+      if (item.leading != null) {
+        itemIdentity +=
+            (item.tableLeadingExtent ?? item.leadingExtent!) +
+            tokens.spacing.s12;
+      }
+      identity = math.max(identity, itemIdentity);
     }
     demands.add(identity);
     shares.add(identityShare);
@@ -1213,33 +1336,47 @@ final class _RecordTableRow extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: item.status?._badge() ?? const SizedBox.shrink(),
         ),
-        identity: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        identity: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            Text(
-              item.title,
-              key: item.titleKey,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: tokens.typography.titleMedium.copyWith(
-                color: tokens.colors.text.primary,
+            if (item.leading case final visual?) ...<Widget>[
+              SizedBox.square(
+                dimension: item.tableLeadingExtent ?? item.leadingExtent!,
+                child: visual,
+              ),
+              SizedBox(width: tokens.spacing.s12),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    item.title,
+                    key: item.titleKey,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: tokens.typography.titleMedium.copyWith(
+                      color: tokens.colors.text.primary,
+                    ),
+                  ),
+                  if (item.subtitle case final line?)
+                    Text(
+                      line,
+                      key: item.subtitleKey,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: body.copyWith(color: tokens.colors.text.secondary),
+                    ),
+                  // Provenance rides under the identity rather than taking a
+                  // column of its own: it is the same sentence on every row, and
+                  // a column of near-identical timestamps is width spent on
+                  // nothing.
+                  if (item.provenance case final line?)
+                    ProvenanceLine(line, key: item.provenanceKey),
+                ],
               ),
             ),
-            if (item.subtitle case final line?)
-              Text(
-                line,
-                key: item.subtitleKey,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: body.copyWith(color: tokens.colors.text.secondary),
-              ),
-            // Provenance rides under the identity rather than taking a
-            // column of its own: it is the same sentence on every row, and
-            // a column of near-identical timestamps is width spent on
-            // nothing.
-            if (item.provenance case final line?)
-              ProvenanceLine(line, key: item.provenanceKey),
           ],
         ),
         attributes: <Widget>[
@@ -1252,7 +1389,7 @@ final class _RecordTableRow extends StatelessWidget {
               final attribute? => Text(
                 attribute.value,
                 key: attribute.valueKey,
-                style: body.copyWith(color: tokens.colors.text.secondary),
+                style: attribute.valueStyle(tokens),
               ),
               null => const SizedBox.shrink(),
             },

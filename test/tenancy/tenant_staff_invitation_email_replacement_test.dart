@@ -655,10 +655,8 @@ Future<void> _chooseFromOverflow(
   required String record,
   required String action,
 }) async {
-  final menu = find.descendant(
-    of: find.byKey(ValueKey(record)),
-    matching: find.byTooltip('More actions'),
-  );
+  final uid = record.substring('staff-record-'.length);
+  final menu = find.byKey(ValueKey('staff-actions-$uid'));
   await tester.ensureVisible(menu);
   await tester.pumpAndSettle();
   await tester.tap(menu);

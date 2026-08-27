@@ -152,8 +152,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(reader.queryCount, 1);
 
-      await tester.tap(find.byKey(const ValueKey('edit-staff-owner-a')));
-      await tester.pump();
+      await _chooseDirectoryAction(
+        tester,
+        targetUid: 'owner-a',
+        actionKey: 'edit-staff-owner-a',
+      );
       expect(find.text('Owner'), findsWidgets);
       await tester.enterText(
         find.byKey(const ValueKey('update-staff-name')),
@@ -183,8 +186,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('edit-staff-staff-a')));
-      await tester.pump();
+      await _chooseDirectoryAction(
+        tester,
+        targetUid: 'staff-a',
+        actionKey: 'edit-staff-staff-a',
+      );
       await _tapVisible(tester, 'update-staff-role');
       await tester.tap(find.text('Manager').last);
       await tester.pumpAndSettle();
@@ -224,7 +230,11 @@ void main() {
       // An active accepted member carries two actions - edit and deactivate -
       // so both are inline at every band and no menu is involved. It is the
       // *card* that is narrow here, not the action set.
-      await _tapVisible(tester, 'edit-staff-staff-a');
+      await _chooseDirectoryAction(
+        tester,
+        targetUid: 'staff-a',
+        actionKey: 'edit-staff-staff-a',
+      );
 
       expect(find.byKey(const ValueKey('update-staff-submit')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -574,5 +584,15 @@ Future<void> _tapVisible(WidgetTester tester, String key) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseDirectoryAction(
+  WidgetTester tester, {
+  required String targetUid,
+  required String actionKey,
+}) async {
+  await _tapVisible(tester, 'staff-actions-$targetUid');
+  await tester.tap(find.byKey(ValueKey(actionKey)));
   await tester.pumpAndSettle();
 }

@@ -5,6 +5,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
@@ -321,8 +323,9 @@ final class _TenantStaffInvitationResendFormState
       return;
     }
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Invitation resent to ${widget.target.email}.')),
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed('Invitation resent to ${widget.target.email}.'),
     );
     widget.onSuccess();
   }
@@ -352,12 +355,7 @@ final class _TenantStaffInvitationResendFormState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Resend invitation to ${widget.target.displayName}?',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Resend invitation to ${widget.target.displayName}?'),
         SizedBox(height: tokens.spacing.s8),
         Text('A new invitation will be queued for ${widget.target.email}.'),
         if (_safeError != null) ...[
@@ -372,14 +370,9 @@ final class _TenantStaffInvitationResendFormState
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
-        // form is laid out inside a record now, and a record at §4.1's `medium`
-        // band is half a page wide.
-        Wrap(
-          alignment: WrapAlignment.end,
-          spacing: AppTokens.componentOf(context).spacing.s8,
-          runSpacing: AppTokens.componentOf(context).spacing.s8,
-          children: [
+        // The pair remains horizontal on every record width.
+        AppActionRow(
+          actions: <Widget>[
             AppButton(
               key: const ValueKey('resend-staff-invitation-cancel'),
               label: 'Cancel',

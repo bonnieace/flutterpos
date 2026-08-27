@@ -77,6 +77,7 @@ export const EDITABLE_PRODUCT_FIELDS = [
   "price",
   "cost",
   "categoryId",
+  "image",
 ] as const;
 
 export type EditableProductField = (typeof EDITABLE_PRODUCT_FIELDS)[number];
@@ -106,7 +107,11 @@ const ACCEPTED_REQUEST_KEYS = new Set<string>([
  */
 export const ACCEPTED_PRODUCT_ROW_KEYS = new Set<string>([
   "productId",
-  ...EDITABLE_PRODUCT_FIELDS,
+  "name",
+  "sku",
+  "price",
+  "cost",
+  "categoryId",
 ]);
 
 /**
@@ -168,6 +173,8 @@ export interface StoredProductFields {
   category?: unknown;
 
   image?: unknown;
+  searchName?: unknown;
+  searchPrefixes?: unknown;
 }
 
 /** A product every client can parse and the till can sell. */
@@ -183,6 +190,7 @@ export interface SellableProduct {
 
   quantity: number;
   categoryId: string;
+  image: string | null;
 }
 
 /** One field's correction, as the audit entry records it. */
@@ -217,7 +225,7 @@ export interface ProductUpdatePlan {
    * requested value writes nothing for it, so an audit entry never claims a
    * change that did not happen.
    */
-  documentUpdate: Record<string, string | number | null>;
+  documentUpdate: Record<string, string | number | null | readonly string[]>;
 
   /** What the product holds once the plan is applied. */
   product: SellableProduct;
@@ -242,6 +250,7 @@ export interface ProductUpdateInput {
   costMinor?: number | null;
 
   categoryId?: string;
+  image?: string | null;
 
   /**
    * The editable keys the payload named, before anything is compared with what
@@ -302,6 +311,45 @@ function normalizeProductSku(value: unknown): string {
     throw new HttpsError("invalid-argument", "sku cannot contain whitespace.");
   }
   return sku;
+}
+
+/** Shared normalization for product search fields and migration output. */
+export function normalizeProductSearchText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Word-prefix and SKU-prefix metadata used by the dedicated inventory query. */
+export function productSearchFields(
+  name: string,
+  sku: string
+): {searchName: string; searchPrefixes: string[]} {
+  const words = new Set<string>([
+    ...normalizeProductSearchText(name).split(" "),
+    normalizeProductSearchText(sku),
+  ]);
+  const prefixes = new Set<string>();
+  for (const word of words) {
+    for (let length = 2; length <= word.length; length += 1) {
+      prefixes.add(word.slice(0, length));
+    }
+  }
+  return {
+    searchName: normalizeProductSearchText(name),
+    searchPrefixes: [...prefixes].sort(),
+  };
+}
+
+function normalizeProductImage(value: unknown): string {
+  if (typeof value !== "string" || value !== value.trim()) {
+    throw new HttpsError("invalid-argument", "image must be an HTTPS URL or null.");
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || parsed.hostname.length === 0) throw new Error();
+  } catch (_) {
+    throw new HttpsError("invalid-argument", "image must be an HTTPS URL or null.");
+  }
+  return value;
 }
 
 /**
@@ -416,10 +464,14 @@ export function readProductUpdateInput(
     input.categoryId = requireDocumentId(data.categoryId, "categoryId");
     requestedFields.push("categoryId");
   }
+  if ("image" in data && data.image !== undefined) {
+    input.image = data.image === null ? null : normalizeProductImage(data.image);
+    requestedFields.push("image");
+  }
   if (requestedFields.length === 0) {
     throw new HttpsError(
       "invalid-argument",
-      "Name at least one of name, sku, price, cost, or categoryId to change."
+      "Name at least one editable product field to change."
     );
   }
   return input;
@@ -562,17 +614,19 @@ export function readSellableProduct(fields: StoredProductFields): SellableProduc
       "categories, so no device can read it."
     );
   }
+  let image: string | null = null;
   if (fields.image !== undefined && fields.image !== null && fields.image !== "") {
-    const image = fields.image;
+    const storedImage = fields.image;
     if (
-      typeof image !== "string" || image !== image.trim() ||
-      !/^https:\/\/[^/\s]+/.test(image)
+      typeof storedImage !== "string" || storedImage !== storedImage.trim() ||
+      !/^https:\/\/[^/\s]+/.test(storedImage)
     ) {
       throw unusableProduct(
         "This product's image is not an HTTPS URL, which this callable cannot " +
         "correct. It needs an operator."
       );
     }
+    image = storedImage;
   }
   return {
     name,
@@ -583,6 +637,7 @@ export function readSellableProduct(fields: StoredProductFields): SellableProduc
     costMinor,
     quantity: fields.quantity as number,
     categoryId,
+    image,
   };
 }
 
@@ -645,10 +700,14 @@ export function planProductUpdate(input: {
       resulting.category = requested.categoryId;
     }
   }
+  if (requested.image !== undefined) resulting.image = requested.image;
   const product = readSellableProduct(resulting);
 
   const changes: ProductFieldChange[] = [];
-  const documentUpdate: Record<string, string | number | null> = {};
+  const documentUpdate: Record<
+    string,
+    string | number | null | readonly string[]
+  > = {};
   if (requested.name !== undefined && stored.name !== product.name) {
     changes.push({
       field: "name",
@@ -706,6 +765,23 @@ export function planProductUpdate(input: {
     if (stored.category !== undefined && stored.category !== null) {
       documentUpdate.category = product.categoryId;
     }
+  }
+  if (requested.image !== undefined) {
+    const storedImage = typeof stored.image === "string" && stored.image !== "" ?
+      stored.image : null;
+    if (storedImage !== product.image) {
+      changes.push({
+        field: "image",
+        previous: storedImage === null ? null : "product image",
+        next: product.image === null ? null : "replacement image",
+      });
+      documentUpdate.image = product.image;
+    }
+  }
+  if (changes.some((change) => change.field === "name" || change.field === "sku")) {
+    const search = productSearchFields(product.name, product.sku);
+    documentUpdate.searchName = search.searchName;
+    documentUpdate.searchPrefixes = search.searchPrefixes;
   }
   if (changes.length === 0 && input.allowUnchanged !== true) {
     throw unusableProduct("This product already holds every value in the request.");

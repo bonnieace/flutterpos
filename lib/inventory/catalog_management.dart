@@ -36,6 +36,35 @@ const int maximumCatalogSkuLength = 64;
 /// stock is recorded, once, through the route that writes a ledger entry.
 const int catalogOpeningQuantity = 0;
 
+/// Normalizes product search text identically to the callable and migration.
+String tenantProductSearchTerm(String value) =>
+    value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+/// The deterministic sort value stored beside every product.
+String tenantProductSearchName(String name) => tenantProductSearchTerm(name);
+
+/// Every searchable word/SKU prefix stored on one product.
+///
+/// Prefixes begin at two characters because the UI never searches sooner and
+/// a one-character array value creates a very broad, expensive index entry.
+List<String> tenantProductSearchPrefixes({
+  required String name,
+  required String sku,
+}) {
+  final prefixes = <String>{};
+  final words = <String>{
+    ...tenantProductSearchTerm(name).split(' '),
+    tenantProductSearchTerm(sku),
+  }..removeWhere((word) => word.length < 2);
+  for (final word in words) {
+    for (var length = 2; length <= word.length; length++) {
+      prefixes.add(word.substring(0, length));
+    }
+  }
+  final result = prefixes.toList()..sort();
+  return List<String>.unmodifiable(result);
+}
+
 /// Raised when a catalog change is refused before anything is written.
 final class TenantCatalogManagementException implements Exception {
   const TenantCatalogManagementException(this.code);
@@ -78,6 +107,30 @@ final class TenantCategoryCreateIntent {
   };
 }
 
+/// A validated rename that preserves the category document identity.
+final class TenantCategoryRenameIntent {
+  const TenantCategoryRenameIntent._({
+    required this.path,
+    required this.tenantId,
+    required this.categoryId,
+    required this.previousName,
+    required this.name,
+    required this.updatedBy,
+  });
+
+  final String path;
+  final String tenantId;
+  final String categoryId;
+  final String previousName;
+  final String name;
+  final String updatedBy;
+
+  Map<String, Object?> documentData() => <String, Object?>{
+    'name': name,
+    'updatedBy': updatedBy,
+  };
+}
+
 /// A validated instruction to create exactly one product document.
 ///
 /// The key set is the one [TenantProduct] demands, in full. The rule on
@@ -97,6 +150,7 @@ final class TenantProductCreateIntent {
     required this.categoryId,
     required this.categoryName,
     required this.createdBy,
+    this.imageUrl,
   });
 
   final String path;
@@ -124,6 +178,7 @@ final class TenantProductCreateIntent {
 
   final String categoryId;
   final String createdBy;
+  final Uri? imageUrl;
 
   /// The stored major-unit price, derived from [priceMinor] rather than from
   /// what was typed, so the stored figure is exactly the one the till will
@@ -143,6 +198,9 @@ final class TenantProductCreateIntent {
     if (cost != null) 'cost': cost,
     'quantity': catalogOpeningQuantity,
     'categoryId': categoryId,
+    'searchName': tenantProductSearchName(name),
+    'searchPrefixes': tenantProductSearchPrefixes(name: name, sku: sku),
+    if (imageUrl != null) 'image': imageUrl.toString(),
     'createdBy': createdBy,
   };
 }
@@ -184,7 +242,8 @@ enum TenantProductField {
   sku('sku', 'Code'),
   price('price', 'Unit price'),
   cost('cost', 'Unit cost'),
-  categoryId('categoryId', 'Category');
+  categoryId('categoryId', 'Category'),
+  image('image', 'Image');
 
   const TenantProductField(this.wireKey, this.label);
 
@@ -247,6 +306,8 @@ final class TenantProductUpdateIntent {
     required this.clearsCost,
     required this.categoryId,
     required this.categoryName,
+    required this.imageUrl,
+    required this.clearsImage,
   });
 
   final String tenantId;
@@ -281,6 +342,8 @@ final class TenantProductUpdateIntent {
   /// The name of the category being moved to, carried for the confirmation
   /// only. Null when the category is not being changed.
   final String? categoryName;
+  final Uri? imageUrl;
+  final bool clearsImage;
 
   /// The fields this payload names, which is what the server authorizes on.
   List<TenantProductField> get fields =>
@@ -306,6 +369,8 @@ final class TenantProductUpdateIntent {
     if (clearsCost) 'cost': null,
     if (costMinor != null) 'cost': costMinor! / 100,
     if (categoryId != null) 'categoryId': categoryId,
+    if (imageUrl != null) 'image': imageUrl.toString(),
+    if (clearsImage) 'image': null,
   };
 }
 
@@ -390,6 +455,25 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     );
   }
 
+  TenantCategoryRenameIntent buildCategoryRenameIntent({
+    required TenantCategory category,
+    required String name,
+  }) {
+    _requireCreateRole();
+    final safeName = tenantCatalogNormalizedName(name, 'invalid_category_name');
+    if (safeName == category.name) {
+      throw const TenantCatalogManagementException('category_unchanged');
+    }
+    return TenantCategoryRenameIntent._(
+      path: paths.category(category.id),
+      tenantId: session.tenantId,
+      categoryId: category.id,
+      previousName: category.name,
+      name: safeName,
+      updatedBy: session.uid,
+    );
+  }
+
   /// Builds the one create instruction the typed product describes.
   ///
   /// [categories] is the set of categories this surface actually offered, so a
@@ -407,6 +491,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     required Iterable<TenantCategory> categories,
     required String requestId,
     String cost = '',
+    Uri? imageUrl,
   }) {
     _requireCreateRole();
     _requireRequestId(requestId);
@@ -457,6 +542,7 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       categoryId: category.id,
       categoryName: category.name,
       createdBy: session.uid,
+      imageUrl: _validatedProductImage(imageUrl),
     );
   }
 
@@ -508,6 +594,8 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
     String? price,
     String? cost,
     bool clearCost = false,
+    Uri? imageUrl,
+    bool clearImage = false,
   }) {
     // The server's PRODUCT_UPDATE_ROLES are the same operational three that may
     // create, which is why the route guard's own list is reused here.
@@ -641,6 +729,33 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       );
     }
 
+    Uri? nextImageUrl;
+    var clearsImage = false;
+    if (clearImage) {
+      if (product.imageUrl != null) {
+        clearsImage = true;
+        changes.add(
+          TenantProductFieldChange._(
+            field: TenantProductField.image,
+            previous: 'product image',
+            next: 'no image',
+          ),
+        );
+      }
+    } else if (imageUrl != null) {
+      final validated = _validatedProductImage(imageUrl)!;
+      if (validated != product.imageUrl) {
+        nextImageUrl = validated;
+        changes.add(
+          TenantProductFieldChange._(
+            field: TenantProductField.image,
+            previous: product.imageUrl == null ? 'no image' : 'product image',
+            next: 'replacement image',
+          ),
+        );
+      }
+    }
+
     if (changes.isEmpty) {
       throw const TenantCatalogManagementException('product_unchanged');
     }
@@ -656,6 +771,8 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
       clearsCost: clearsCost,
       categoryId: nextCategoryId,
       categoryName: nextCategoryName,
+      imageUrl: nextImageUrl,
+      clearsImage: clearsImage,
     );
   }
 
@@ -681,6 +798,14 @@ final class TenantCatalogManagementRepository extends TenantReadRepository {
 
   static void _requireRequestId(String requestId) =>
       requireTenantCatalogRequestId(requestId);
+}
+
+Uri? _validatedProductImage(Uri? imageUrl) {
+  if (imageUrl == null) return null;
+  if (imageUrl.scheme != 'https' || imageUrl.host.isEmpty) {
+    throw const TenantCatalogManagementException('invalid_product_image');
+  }
+  return imageUrl;
 }
 
 /// Refuses an idempotency key the server's `requireRequestId` would refuse.
@@ -739,6 +864,10 @@ abstract interface class TenantCatalogWriter {
     TenantProductCreateIntent intent,
   );
 
+  Future<TenantCatalogWriteResult> renameCategory(
+    TenantCategoryRenameIntent intent,
+  );
+
   Future<TenantCatalogWriteResult> retireProduct(
     TenantProductRetireIntent intent,
   );
@@ -746,6 +875,8 @@ abstract interface class TenantCatalogWriter {
 
 typedef TenantCatalogOnlineCheck = Future<bool> Function();
 typedef TenantCatalogDocumentCreator =
+    Future<void> Function(String path, Map<String, Object?> data);
+typedef TenantCatalogDocumentUpdater =
     Future<void> Function(String path, Map<String, Object?> data);
 typedef TenantCatalogDocumentRemover = Future<void> Function(String path);
 
@@ -763,6 +894,7 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
     Duration writeTimeout = const Duration(seconds: 20),
   }) : this._(
          create: _firestoreCreator(firestore ?? FirebaseFirestore.instance),
+         update: _firestoreUpdater(firestore ?? FirebaseFirestore.instance),
          remove: _firestoreRemover(firestore ?? FirebaseFirestore.instance),
          isOnline: isOnline,
          writeTimeout: writeTimeout,
@@ -770,11 +902,13 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
 
   FirebaseTenantCatalogWriter.forTesting({
     required TenantCatalogDocumentCreator create,
+    TenantCatalogDocumentUpdater? update,
     required TenantCatalogDocumentRemover remove,
     required TenantCatalogOnlineCheck isOnline,
     Duration writeTimeout = const Duration(seconds: 20),
   }) : this._(
          create: create,
+         update: update ?? _unsupportedUpdate,
          remove: remove,
          isOnline: isOnline,
          writeTimeout: writeTimeout,
@@ -782,10 +916,12 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
 
   FirebaseTenantCatalogWriter._({
     required TenantCatalogDocumentCreator create,
+    required TenantCatalogDocumentUpdater update,
     required TenantCatalogDocumentRemover remove,
     required TenantCatalogOnlineCheck isOnline,
     required Duration writeTimeout,
   }) : _create = create,
+       _update = update,
        _remove = remove,
        _isOnline = isOnline,
        _writeTimeout = writeTimeout {
@@ -805,6 +941,7 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
   };
 
   final TenantCatalogDocumentCreator _create;
+  final TenantCatalogDocumentUpdater _update;
   final TenantCatalogDocumentRemover _remove;
   final TenantCatalogOnlineCheck _isOnline;
   final Duration _writeTimeout;
@@ -836,6 +973,24 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
       () => _create(intent.path, <String, Object?>{
         ...intent.documentData(),
         'createdAt': FieldValue.serverTimestamp(),
+      }),
+    );
+  }
+
+  @override
+  Future<TenantCatalogWriteResult> renameCategory(
+    TenantCategoryRenameIntent intent,
+  ) {
+    if (TenantPaths(intent.tenantId).category(intent.categoryId) !=
+        intent.path) {
+      throw const TenantCatalogManagementException(
+        'catalog_path_escaped_tenant',
+      );
+    }
+    return _write(
+      () => _update(intent.path, <String, Object?>{
+        ...intent.documentData(),
+        'updatedAt': FieldValue.serverTimestamp(),
       }),
     );
   }
@@ -892,6 +1047,18 @@ final class FirebaseTenantCatalogWriter implements TenantCatalogWriter {
     FirebaseFirestore firestore,
   ) =>
       (path, data) => firestore.doc(path).set(data);
+
+  static TenantCatalogDocumentUpdater _firestoreUpdater(
+    FirebaseFirestore firestore,
+  ) =>
+      (path, data) => firestore.doc(path).update(data);
+
+  static Future<void> _unsupportedUpdate(
+    String path,
+    Map<String, Object?> data,
+  ) => Future<void>.error(
+    UnsupportedError('Category rename is not configured.'),
+  );
 
   static TenantCatalogDocumentRemover _firestoreRemover(
     FirebaseFirestore firestore,
@@ -1015,6 +1182,7 @@ final class TenantProductUpdateResult {
     required this.cost,
     required this.costMinor,
     required this.categoryId,
+    required this.imageUrl,
   });
 
   factory TenantProductUpdateResult.fromCallable(
@@ -1023,10 +1191,14 @@ final class TenantProductUpdateResult {
   }) {
     final data = _strictMap(value);
     if (data['tenantId'] != intent.tenantId) {
-      throw const FormatException('updateProduct answered for another business.');
+      throw const FormatException(
+        'updateProduct answered for another business.',
+      );
     }
     if (data['productId'] != intent.productId) {
-      throw const FormatException('updateProduct answered for another product.');
+      throw const FormatException(
+        'updateProduct answered for another product.',
+      );
     }
     final requested = intent.fields;
     final rawChanged = data['changedFields'];
@@ -1051,6 +1223,7 @@ final class TenantProductUpdateResult {
     final name = _requiredString(data, 'name');
     final sku = _requiredString(data, 'sku');
     final categoryId = _requiredCategoryId(data);
+    final imageUrl = _optionalCallableImage(data['image']);
     final price = data['price'];
     final priceMinor = data['priceMinor'];
     if (price is! num || priceMinor is! int) {
@@ -1093,6 +1266,12 @@ final class TenantProductUpdateResult {
     if (intent.categoryId != null && categoryId != intent.categoryId) {
       throw const FormatException('updateProduct did not apply the category.');
     }
+    if (intent.imageUrl != null && imageUrl != intent.imageUrl) {
+      throw const FormatException('updateProduct did not apply the image.');
+    }
+    if (intent.clearsImage && imageUrl != null) {
+      throw const FormatException('updateProduct did not clear the image.');
+    }
     return TenantProductUpdateResult._(
       updateId: _requiredString(data, 'updateId'),
       productId: intent.productId,
@@ -1104,6 +1283,7 @@ final class TenantProductUpdateResult {
       cost: cost,
       costMinor: costMinor,
       categoryId: categoryId,
+      imageUrl: imageUrl,
     );
   }
 
@@ -1135,6 +1315,19 @@ final class TenantProductUpdateResult {
   final int? costMinor;
 
   final String categoryId;
+  final Uri? imageUrl;
+}
+
+Uri? _optionalCallableImage(Object? value) {
+  if (value == null) return null;
+  if (value is! String) {
+    throw const FormatException('updateProduct returned an invalid image.');
+  }
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+    throw const FormatException('updateProduct returned an invalid image.');
+  }
+  return uri;
 }
 
 /// Reads a money pair that may legitimately be absent, proving the two agree.
@@ -1191,8 +1384,7 @@ final class TenantProductUpdateGateway {
   Future<TenantProductUpdateResult> submit(
     TenantProductUpdateIntent intent,
   ) async {
-    if (!canUpdateInSession(_session) ||
-        intent.tenantId != _session.tenantId) {
+    if (!canUpdateInSession(_session) || intent.tenantId != _session.tenantId) {
       throw const TenantProductUpdateException(
         TenantProductUpdateFailure.forbidden,
       );
@@ -1385,7 +1577,8 @@ int tenantCatalogPriceMinorUnits(
 }
 
 /// Formats exact minor units the way every amount in this app is written.
-String tenantCatalogMajorUnits(int minorUnits) => (minorUnits / 100).toStringAsFixed(2);
+String tenantCatalogMajorUnits(int minorUnits) =>
+    (minorUnits / 100).toStringAsFixed(2);
 
 final RegExp _whitespaceRun = RegExp(r'\s+');
 final RegExp _pricePattern = RegExp(r'^\d{1,12}(\.\d{1,2})?$');

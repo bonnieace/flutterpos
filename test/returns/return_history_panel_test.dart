@@ -251,31 +251,68 @@ void main() {
     expect(reader.queries, isEmpty);
   });
 
-  testWidgets('the route names the receipt it is reversing', (tester) async {
+  testWidgets('the sheet names the receipt it is reversing', (tester) async {
     final reader = _Reader()
       ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[]);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: TenantSessionScope(
-          controller: _controller(),
-          child: TenantSaleReturnsScreen(reader: reader, request: _request()),
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
+    await _pumpSheet(tester, _controller(), reader);
 
-    expect(find.text('Returns'), findsOne);
-    // §7's "Title appears once": the receipt moved from a second heading
-    // inside the page into the `PageHeader` that already names the route.
+    // §7's "Title appears once". **The header is the sheet's own since
+    // 2026-08-26**, where it used to be an `AppBar`'s: a sheet is a route with
+    // no app bar, so the title and the receipt it names moved into a
+    // `PageHeader` inside the sheet. The two facts are unchanged.
+    final header = find.byKey(const ValueKey('sale-returns-header'));
+    expect(header, findsOne);
     expect(
-      find.descendant(
-        of: find.byType(PageHeader),
-        matching: find.text(_receipt(1)),
-      ),
+      find.descendant(of: header, matching: find.text('Return')),
       findsOne,
     );
+    expect(
+      find.descendant(of: header, matching: find.text(_receipt(1))),
+      findsOne,
+    );
+    // And there is no app bar to repeat either of them.
+    expect(find.byType(AppBar), findsNothing);
+  });
+
+  testWidgets('the sale route shows only the return process', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _pending('ret-1'),
+      ]);
+
+    await _pumpSheet(
+      tester,
+      _controller(),
+      reader,
+      writer: _Writer(),
+      width: 411,
+    );
+
+    expect(find.byKey(const ValueKey('sale-returns-form')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('sale-returns-entry-ret-1')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('sale-returns-next')), findsNothing);
+    // **The three pieces of standing prose are one fold since 2026-08-26.** The
+    // sheet used to open with a paragraph, a `SectionHeading` repeating the
+    // header, and a second paragraph inside the form. All three sentences are
+    // kept, behind one summary.
+    expect(find.text('Record a return'), findsNothing);
+    expect(find.byKey(const ValueKey('sale-returns-scope')), findsNothing);
+    await tester.tap(find.text('What a return does'));
+    await tester.pumpAndSettle();
+    final scope = tester
+        .widget<Text>(find.byKey(const ValueKey('sale-returns-scope')))
+        .data!;
+    for (final sentence in <String>[
+      'Choose what the customer returned and record the reason.',
+      'Only what this sale still has available may be returned',
+      'Stock changes only after a manager verifies the return.',
+    ]) {
+      expect(scope, contains(sentence), reason: sentence);
+    }
   });
 
   testWidgets('without a writer the route stays read-only', (tester) async {
@@ -748,6 +785,49 @@ void main() {
       findsOne,
     );
   });
+
+  testWidgets('the home feed displays returns from every sale', (tester) async {
+    final reader = _Reader()
+      ..respond('tenants/tenant-a/returns', <TenantQueryDocumentSnapshot>[
+        _verified('ret-2'),
+        _pending('ret-1', overrides: <String, Object?>{'saleId': 'co-9'}),
+      ]);
+
+    await _pumpFeed(tester, _controller(role: TenantRole.manager), reader);
+
+    expect(find.byKey(const ValueKey('return-feed-entry-ret-2')), findsOne);
+    expect(find.byKey(const ValueKey('return-feed-entry-ret-1')), findsOne);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('return-feed-sale-ret-1')))
+          .data,
+      'co-9',
+    );
+    expect(reader.queries.single.equalityFilters, <String, Object?>{
+      'tenantId': 'tenant-a',
+    });
+  });
+}
+
+Future<void> _pumpFeed(
+  WidgetTester tester,
+  TenantSessionController controller,
+  _Reader reader,
+) async {
+  tester.view.physicalSize = const Size(1400, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TenantSessionScope(
+        controller: controller,
+        child: TenantReturnFeedScreen(reader: reader),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump();
 }
 
 Future<void> _pump(
@@ -791,6 +871,54 @@ Future<void> _pump(
   if (!settle) return;
   await tester.pump();
   await tester.pump();
+}
+
+/// Opens the return sheet the way the sales surfaces do, and settles it.
+///
+/// **It goes through `openTenantSaleReturnSheet` rather than pumping the panel
+/// bare**, so what these tests read is the composition a person actually gets:
+/// the sheet's own header, its drag controller reaching the list, and the
+/// cancel control that only exists when something can close the sheet.
+Future<void> _pumpSheet(
+  WidgetTester tester,
+  TenantSessionController controller,
+  _Reader reader, {
+  TenantReturnWriter? writer,
+  VerifyReturnCallable? verifyCallable,
+  double width = 1400,
+}) async {
+  tester.view.physicalSize = Size(width, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TenantSessionScope(
+        controller: controller,
+        child: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => openTenantSaleReturnSheet(
+                context,
+                reader: reader,
+                request: _request(),
+                actions: writer == null && verifyCallable == null
+                    ? null
+                    : TenantReturnActions(
+                        writer: writer,
+                        verifyCallable: verifyCallable,
+                      ),
+                requestIdFactory: () => 'return-abcdefgh',
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
 }
 
 /// Records every payload handed to the verification callable.

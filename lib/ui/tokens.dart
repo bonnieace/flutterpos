@@ -177,11 +177,19 @@ final class _ProfoundVerdant {
   /// tint's base.
   static const Color errorContainerTint20 = Color(0x3393000A);
 
-  /// [blue300] at 10%, for the info tier the design system has no colour for.
-  static const Color blueTint10 = Color(0x1A6FB7F2);
+  /// [secondary] at 10% - the informational background.
+  ///
+  /// **The info tier stopped being blue on 2026-08-23.** Profound Verdant has
+  /// no blue anywhere, and the export writes an informational notice as
+  /// `bg-surface-container border border-outline-variant
+  /// text-on-surface-variant` - a muted sage box, not a coloured one. The tier
+  /// was carried from `dark` while nothing had been drawn from the design;
+  /// once the compositions were the target, one blue callout on a green
+  /// landing route was the loudest thing on it.
+  static const Color secondaryTint10 = Color(0x1AB0CDBD);
 
-  /// [blue300] at 30%.
-  static const Color blueTint30 = Color(0x4D6FB7F2);
+  /// [secondary] at 30% - the informational edge.
+  static const Color secondaryTint30 = Color(0x4DB0CDBD);
 
   /// Money. Profound Verdant gives currency its own role; 182 uses across the
   /// export.
@@ -194,8 +202,9 @@ final class _ProfoundVerdant {
   static const Color currencyKes = Color(0xFF45F28D);
 
   // Carried forward. See the class doc: these are decisions, not quotations.
+  // `blue300` was one of them and is gone: the info tier reads [secondary]
+  // now, which is the design's own "Secondary / Muted Text" role.
   static const Color amber400 = _Primitive.amber400;
-  static const Color blue300 = _Primitive.blue300;
   static const Color sageDisabled = _Primitive.sageDisabled;
   static const Color green700 = _Primitive.green700;
 }
@@ -289,8 +298,17 @@ final class AppSurfaceRoles {
     field: _ProfoundVerdant.surfaceElevated,
     overlay: _ProfoundVerdant.surfaceElevated,
     scrim: Color.fromRGBO(0, 0, 0, 0.6),
-    borderSubtle: _ProfoundVerdant.outlineVariant,
-    borderStrong: _ProfoundVerdant.outline,
+    // **The two border roles moved down one tier on 2026-08-23**, because the
+    // exported screens use three border values and this set had the top two.
+    // A card edge is `border-surface-elevated` (`#132A1F`) in every composition
+    // that draws one, and a horizontal rule is the same value as a `bg` rather
+    // than a border - so the hairline row is that, not `outline-variant`.
+    // `outline-variant` (`#3D4A3D`) is what the design's own component CSS puts
+    // on an input and a secondary button, which is exactly [borderStrong]'s
+    // job. `outline` (`#869585`) is left to [AppTextRoles.tertiary], where the
+    // design uses it: muted text and muted glyphs, not edges.
+    borderSubtle: _ProfoundVerdant.surfaceElevated,
+    borderStrong: _ProfoundVerdant.outlineVariant,
   );
 
   static AppSurfaceRoles lerp(AppSurfaceRoles a, AppSurfaceRoles b, double t) =>
@@ -454,6 +472,26 @@ final class AppActionRole {
   Color pressedFill() =>
       pressedContainer ?? label.withValues(alpha: pressedOverlayOpacity ?? 0);
 
+  /// A hover tint to lay **over** existing content, never a container.
+  Color hoverWash() => label.withValues(alpha: hoverOverlayOpacity ?? 0);
+
+  /// A press tint to lay **over** existing content, never a container.
+  ///
+  /// **The difference between this and [pressedFill] is where the colour goes,
+  /// and getting it wrong is visible.** A button's whole body *is* its
+  /// container, so pressing it swaps that container - which is what
+  /// [pressedContainer] is, and why [pressedFill] prefers it. A card is a
+  /// composed surface with a glyph and two lines of text on it, and an overlay
+  /// there is stacked *on top*: a solid colour hides the card completely.
+  ///
+  /// **The home's module cards did exactly that.** They took [pressedFill],
+  /// which for the primary tier is an opaque green, and `PressSurface` paints
+  /// the overlay as a `Positioned.fill` - so a pressed card became a green
+  /// rectangle with nothing on it. It went unnoticed for as long as it did
+  /// because a tap normally navigates within a frame or two; a device with no
+  /// network holds on the tap long enough to see it.
+  Color pressedWash() => label.withValues(alpha: pressedOverlayOpacity ?? 0);
+
   static AppActionRole lerp(AppActionRole a, AppActionRole b, double t) =>
       AppActionRole(
         container: Color.lerp(a.container, b.container, t)!,
@@ -571,6 +609,13 @@ final class AppActionRoles {
       label: _Primitive.ink,
       hoverContainer: _Primitive.green300,
       pressedContainer: _Primitive.green400,
+      // **The containers above and these two are for different surfaces, and
+      // the tier needs both.** A primary *button* swaps its container; a
+      // primary *card* is composed content that an overlay sits on top of, and
+      // needs a wash. The figures are the same 0.08 / 0.12 the other three
+      // tiers already state rather than a pair invented for this one.
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
     ),
     secondary: AppActionRole(
       container: Colors.transparent,
@@ -624,11 +669,21 @@ final class AppActionRoles {
       label: _ProfoundVerdant.onPrimary,
       hoverContainer: _ProfoundVerdant.primaryFixed,
       pressedContainer: _ProfoundVerdant.primaryContainer,
+      // See the note on the dark set's primary tier: containers are for
+      // buttons, these are for the wash a card takes.
+      hoverOverlayOpacity: 0.08,
+      pressedOverlayOpacity: 0.12,
     ),
+    // **Filled, not transparent, since 2026-08-23.** Every secondary control in
+    // the export is `bg-surface-elevated border border-outline-variant
+    // text-on-surface` - the sign-in recovery button, the shift card's cash
+    // count, the catalog's row actions - and a transparent one appears nowhere.
+    // The tier keeps its overlay states, which now wash over a container rather
+    // than over the page.
     secondary: AppActionRole(
-      container: Colors.transparent,
-      label: _ProfoundVerdant.secondary,
-      border: _ProfoundVerdant.outline,
+      container: _ProfoundVerdant.surfaceElevated,
+      label: _ProfoundVerdant.onSurface,
+      border: _ProfoundVerdant.outlineVariant,
       hoverOverlayOpacity: 0.08,
       pressedOverlayOpacity: 0.12,
     ),
@@ -845,9 +900,9 @@ final class AppStatusRoles {
       border: _ProfoundVerdant.criticalTint30,
     ),
     info: AppStatusRole(
-      fg: _ProfoundVerdant.blue300,
-      bg: _ProfoundVerdant.blueTint10,
-      border: _ProfoundVerdant.blueTint30,
+      fg: _ProfoundVerdant.secondary,
+      bg: _ProfoundVerdant.secondaryTint10,
+      border: _ProfoundVerdant.secondaryTint30,
     ),
     neutral: AppStatusRole(
       fg: _ProfoundVerdant.onSurfaceVariant,
@@ -877,6 +932,57 @@ final class AppStatusRoles {
       );
 }
 
+/// What a chart is painted with. **Added 2026-08-27.**
+///
+/// **A role set of its own, because a chart is not a surface and not a status.**
+/// The weekly report draws bars, gridlines and axis labels, and until this
+/// existed there was no honest token for any of them: the old screen reached
+/// for `Colors.white10` and `Colors.white38` directly, which is exactly the
+/// hardcoding hard rule 2 forbids. Mapping them onto text or border roles would
+/// have been worse - a gridline is not a border and an axis label is not body
+/// text, and the first time either role moved the chart would have moved with
+/// it for no reason.
+@immutable
+final class AppChartRoles {
+  const AppChartRoles({
+    required this.bar,
+    required this.barEmphasis,
+    required this.gridLine,
+    required this.axisLabel,
+  });
+
+  /// An ordinary bar. The old screen's `mutedGreen`.
+  final Color bar;
+
+  /// The bar the eye is meant to land on - the week's best day. The old
+  /// screen's `accentGreen`, and the same hex the accent role carries.
+  final Color barEmphasis;
+
+  /// The horizontal rules behind the bars: present enough to read a height
+  /// against, faint enough not to compete with one.
+  final Color gridLine;
+
+  /// Day names and money along the two axes.
+  final Color axisLabel;
+
+  static const AppChartRoles dark = AppChartRoles(
+    bar: _Primitive.green700,
+    barEmphasis: _Primitive.mint400,
+    gridLine: _Primitive.green800,
+    axisLabel: _Primitive.sage200,
+  );
+
+  static const AppChartRoles profoundVerdant = dark;
+
+  static AppChartRoles lerp(AppChartRoles a, AppChartRoles b, double t) =>
+      AppChartRoles(
+        bar: Color.lerp(a.bar, b.bar, t)!,
+        barEmphasis: Color.lerp(a.barEmphasis, b.barEmphasis, t)!,
+        gridLine: Color.lerp(a.gridLine, b.gridLine, t)!,
+        axisLabel: Color.lerp(a.axisLabel, b.axisLabel, t)!,
+      );
+}
+
 /// Every colour role in one place. `design.md` §2.1.
 @immutable
 final class AppColorRoles {
@@ -885,12 +991,14 @@ final class AppColorRoles {
     required this.text,
     required this.action,
     required this.status,
+    required this.chart,
   });
 
   final AppSurfaceRoles surface;
   final AppTextRoles text;
   final AppActionRoles action;
   final AppStatusRoles status;
+  final AppChartRoles chart;
 
   /// The only palette `design.md` defines.
   ///
@@ -904,6 +1012,7 @@ final class AppColorRoles {
     text: AppTextRoles.dark,
     action: AppActionRoles.dark,
     status: AppStatusRoles.dark,
+    chart: AppChartRoles.dark,
   );
 
   /// The Profound Verdant palette - the second instance this class's doc above
@@ -926,6 +1035,7 @@ final class AppColorRoles {
     text: AppTextRoles.profoundVerdant,
     action: AppActionRoles.profoundVerdant,
     status: AppStatusRoles.profoundVerdant,
+    chart: AppChartRoles.profoundVerdant,
   );
 
   static AppColorRoles lerp(AppColorRoles a, AppColorRoles b, double t) =>
@@ -934,6 +1044,7 @@ final class AppColorRoles {
         text: AppTextRoles.lerp(a.text, b.text, t),
         action: AppActionRoles.lerp(a.action, b.action, t),
         status: AppStatusRoles.lerp(a.status, b.status, t),
+        chart: AppChartRoles.lerp(a.chart, b.chart, t),
       );
 }
 
@@ -987,6 +1098,7 @@ final class AppTypeRoles {
     required this.numericHero,
     required this.numericBody,
     required this.mono,
+    required this.numericCompact,
   });
 
   /// `headline-lg` 32 / 1.2, 700, -0.64 tracking. Screen title, expanded only.
@@ -1086,6 +1198,16 @@ final class AppTypeRoles {
   /// figures, because moving every price in the app into the mono face is a
   /// composition decision rather than a metric one and nothing has taken it.
   final TextStyle mono;
+
+  /// A headline figure on a surface too narrow for [numericHero].
+  ///
+  /// **The design measures this pairing directly.** A catalog card's stock and
+  /// price are `text-section-title font-data-mono` - 22 in JetBrains Mono -
+  /// where a reporting page's headline figure is `text-4xl`. Same job, two
+  /// sizes, chosen by how much room the surface has; `StatTile` takes this one
+  /// below `medium`, where [numericHero] at 30 is wide enough to force a grid
+  /// of figures into one column on a phone.
+  final TextStyle numericCompact;
 
   /// Hanken Grotesk, the interface face every role but [mono] is set in.
   ///
@@ -1210,18 +1332,44 @@ final class AppTypeRoles {
     ),
     // Derived: the design's `text-3xl`, 30 / 36, 44 occurrences and the size it
     // reaches for when a figure is the point of a card.
+    //
+    // **In [monoFamily] since 2026-08-23, and the design is explicit about
+    // it.** Its typography section: "For currency (KES) and numerical data
+    // (Stock counts, SKU numbers), JetBrains Mono is utilized to ensure
+    // tabular alignment and distinct character recognition in high-pressure
+    // environments." Every headline figure in the export is drawn that way -
+    // `text-4xl font-data-mono text-currency-kes` on a reporting KPI,
+    // `text-section-title font-data-mono` on a catalog card's stock and price.
+    // The size and weight are unchanged; only the face is.
+    //
+    // **The weight went 700 to 500 with the face, and that is a bundling fact
+    // rather than a taste.** `data-mono` states 500 and JetBrains Mono is
+    // bundled at 400 and 500 - the two weights `pubspec.yaml` declares. A role
+    // asking for 700 in a family bundled at 500 does not throw: the engine
+    // picks the nearest declared face and renders a 500 that claims to be a
+    // 700, which is exactly the silent mismatch
+    // `test/ui/tokens_test.dart`'s pubspec scan exists to catch. Some exported
+    // screens do pair this size with a 600; honouring that needs the face
+    // bundled first, and is recorded in `docs/stitch/OPEN_QUESTIONS.md` rather
+    // than asserted here.
     numericHero: TextStyle(
-      fontFamily: interfaceFamily,
+      fontFamily: monoFamily,
       fontSize: 30,
       height: 36 / 30,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w500,
       fontFeatures: _tabular,
     ),
-    // Unchanged. §2.2's 14 / 500 already matches `data-mono`'s size and weight;
-    // what it does not take is the mono *face*, deliberately - see the class
-    // note on where the design sets money in [mono] instead.
+    // §2.2's 14 / 500 already matched `data-mono`'s size and weight, and it
+    // takes the face too as of 2026-08-23, for the reason [numericHero] gives:
+    // the design sets *every* figure in JetBrains Mono, not only the ones a
+    // card is built around.
+    //
+    // **It is still not [mono], and the difference is the line box.** This
+    // carries a 20 / 14 leading because it sits in flowing text beside a label;
+    // `mono` is 14 / 14, which is `data-mono`'s own figure and is for a value
+    // in a tight cell. Same face, same size, same weight, two leadings.
     numericBody: TextStyle(
-      fontFamily: interfaceFamily,
+      fontFamily: monoFamily,
       fontSize: 14,
       height: 20 / 14,
       fontWeight: FontWeight.w500,
@@ -1235,6 +1383,15 @@ final class AppTypeRoles {
       height: 14 / 14,
       fontWeight: FontWeight.w500,
       letterSpacing: -0.14,
+    ),
+    // `section-title`'s 22 / 1.4 in `data-mono`'s family and weight, which is
+    // the pairing the export puts on a card's own figure.
+    numericCompact: TextStyle(
+      fontFamily: monoFamily,
+      fontSize: 22,
+      height: 30.8 / 22,
+      fontWeight: FontWeight.w500,
+      fontFeatures: _tabular,
     ),
   );
 
@@ -1255,6 +1412,7 @@ final class AppTypeRoles {
     'label.eyebrow': labelEyebrow,
     'caption': caption,
     'numeric.hero': numericHero,
+    'numeric.compact': numericCompact,
     'numeric.body': numericBody,
     'mono': mono,
   };
@@ -1272,6 +1430,7 @@ final class AppTypeRoles {
         labelEyebrow: TextStyle.lerp(a.labelEyebrow, b.labelEyebrow, t)!,
         caption: TextStyle.lerp(a.caption, b.caption, t)!,
         numericHero: TextStyle.lerp(a.numericHero, b.numericHero, t)!,
+        numericCompact: TextStyle.lerp(a.numericCompact, b.numericCompact, t)!,
         numericBody: TextStyle.lerp(a.numericBody, b.numericBody, t)!,
         mono: TextStyle.lerp(a.mono, b.mono, t)!,
       );
@@ -1383,6 +1542,25 @@ final class AppRadii {
   double get pill => 999;
 }
 
+/// Backdrop-blur strength for a translucent elevated surface.
+///
+/// One value rather than a scale: the app draws depth as a surface step, not
+/// a blur (see [AppSurfaceRoles]'s note), so this exists only for the one
+/// screen that composites over its own on-screen keyboard rather than over
+/// page content — the sign-in front door, restoring the glass pane its
+/// original layout drew. A widget that wants depth anywhere else reaches for
+/// a surface role instead of asking for a second one of these.
+@immutable
+final class AppEffects {
+  const AppEffects();
+
+  static const AppEffects standard = AppEffects();
+
+  /// `ImageFilter.blur`'s sigma on both axes. 12, the sign-in pane's own
+  /// figure before the token layer existed.
+  double get glassBlurSigma => 12;
+}
+
 // ---------------------------------------------------------------------------
 // Motion - design.md §2.4
 // ---------------------------------------------------------------------------
@@ -1436,6 +1614,8 @@ final class AppMotion {
     required this.short,
     required this.medium,
     required this.long,
+    required this.skeletonSweep,
+    required this.skeletonDelay,
     required this.pressScale,
     required this.routeParallax,
   });
@@ -1458,6 +1638,41 @@ final class AppMotion {
   final AppMotionDuration short;
   final AppMotionDuration medium;
   final AppMotionDuration long;
+
+  /// One pass of a skeleton's highlight across a block.
+  ///
+  /// **This app's own value, not §2.4's, and that is why it is not in
+  /// [durations].** That map is the four pairs §2.4 specifies and
+  /// `test/ui/tokens_test.dart` asserts its length against the specification;
+  /// folding a fifth in would make an assertion about `design.md` quietly start
+  /// meaning something else. This one postdates it - `docs/stitch/OPEN_QUESTIONS.md`
+  /// decision 35, 2026-08-27 - and is recorded there instead.
+  ///
+  /// **1200ms, which is an order of magnitude slower than [long] on purpose.**
+  /// The four above are transitions: a thing changing from one state to another,
+  /// where anything past a third of a second reads as lag. This is a loop on a
+  /// surface a person is *waiting* at, and at transition speed it strobes. It is
+  /// the one place in this app where slower is calmer.
+  final AppMotionDuration skeletonSweep;
+
+  /// How long a read may take before a skeleton is drawn for it at all.
+  ///
+  /// **The whole reason the till stopped flashing.** The catalog comes from a
+  /// Hive box on the device, so the common read resolves in a frame or two;
+  /// drawing a skeleton for it and tearing it down again is the same jitter
+  /// wearing a different coat. Nothing is painted until this elapses, so a warm
+  /// read shows its content directly and only a genuinely slow one shows a
+  /// skeleton.
+  ///
+  /// **100ms, which is the figure human-factors work has put on "instant" for
+  /// forty years** and is also about six frames at 60Hz - long enough to cover a
+  /// local read, short enough that a person waiting on a server is never left
+  /// looking at nothing.
+  ///
+  /// A threshold rather than an animation, so its curve is [Curves.linear] and
+  /// nothing reads it. It is an [AppMotionDuration] only so that every duration
+  /// in the app has the same type and lerps the same way.
+  final AppMotionDuration skeletonDelay;
 
   /// What a pressed surface scales to, from §2.4's replacement for the ink
   /// ripple: opacity plus scale at `spring.snappy`, and no expanding circle.
@@ -1497,6 +1712,14 @@ final class AppMotion {
       duration: Duration(milliseconds: 320),
       curve: Curves.easeInOutCubic,
     ),
+    skeletonSweep: AppMotionDuration(
+      duration: Duration(milliseconds: 1200),
+      curve: Curves.easeInOut,
+    ),
+    skeletonDelay: AppMotionDuration(
+      duration: Duration(milliseconds: 100),
+      curve: Curves.linear,
+    ),
     pressScale: 0.97,
     routeParallax: 0.3,
   );
@@ -1510,6 +1733,11 @@ final class AppMotion {
   };
 
   /// Every duration by its `design.md` name.
+  ///
+  /// **Which is four, and is deliberately not every duration on this class.**
+  /// [skeletonSweep] and [skeletonDelay] are this app's own and postdate §2.4;
+  /// each says on itself why it stays out. Read this map as "what the
+  /// specification names", which is what the test over it asserts.
   Map<String, AppMotionDuration> get durations => <String, AppMotionDuration>{
     'motion.instant': instant,
     'motion.short': short,
@@ -1532,6 +1760,8 @@ final class AppMotion {
       short: AppMotionDuration.lerp(a.short, b.short, t),
       medium: AppMotionDuration.lerp(a.medium, b.medium, t),
       long: AppMotionDuration.lerp(a.long, b.long, t),
+      skeletonSweep: AppMotionDuration.lerp(a.skeletonSweep, b.skeletonSweep, t),
+      skeletonDelay: AppMotionDuration.lerp(a.skeletonDelay, b.skeletonDelay, t),
       pressScale: lerpDouble(a.pressScale, b.pressScale, t)!,
       routeParallax: lerpDouble(a.routeParallax, b.routeParallax, t)!,
     );
@@ -1743,12 +1973,35 @@ final class AppLayout {
   /// §4.2's maximum for record lists and tables.
   double get records => 1200;
 
+  /// The width of a credential column — sign-in, and the tenant-entry screens
+  /// that are one card and nothing else.
+  ///
+  /// **Narrower than [reading], because the design draws it narrower.** The
+  /// export's sign-in hero is `max-w-md` (448) on a desktop and a `390` column
+  /// on a phone; 720 is the measure for a page of prose, and a two-field form
+  /// laid out at it reads as a form that lost its container.
+  double get credential => 448;
+
   /// The fixed width of the sale's cart pane. §4.2's third row.
   ///
   /// Declared here with the other two because it is the same kind of figure and
   /// the same table states it. **Nothing reads it yet**: the sale path is §11
   /// step 7 and is not this step's to touch.
   double get salePane => 420;
+
+  /// How tall a product image is drawn while somebody is choosing it.
+  ///
+  /// **350, which is the old catalog form's own figure** — `lib/pos/goods.dart`
+  /// drew `height: 350` in both the add and the correct dialogs, and the
+  /// 2026-08-25 reversal brings that presentation back. The Stitch form had
+  /// shrunk it to a 64px square, and a thumbnail that small is a size at which
+  /// a right photo and a wrong one look the same — which is the whole of what
+  /// an operator opens this form to judge.
+  ///
+  /// A maximum rather than a fixed height: the well gives the image the lesser
+  /// of this and a square of the width it was actually given, so a phone shows
+  /// a square rather than a letterbox.
+  double get productImagePreview => 350;
 
   /// Which band [width] falls in.
   ///
@@ -1814,6 +2067,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     required this.motion,
     required this.density,
     required this.layout,
+    this.effects = AppEffects.standard,
   });
 
   final AppColorRoles colors;
@@ -1847,6 +2101,12 @@ final class AppTokens extends ThemeExtension<AppTokens> {
   /// a constant, which is the difference between a token layer and a folder of
   /// numbers.
   final AppLayout layout;
+
+  /// See [AppEffects]. Defaulted rather than required so every existing
+  /// call site — [dark], [profoundVerdant], and every test that builds an
+  /// `AppTokens` directly — keeps compiling without naming a value it never
+  /// varies.
+  final AppEffects effects;
 
   /// The one token set `design.md` defines.
   static const AppTokens dark = AppTokens(
@@ -1951,6 +2211,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     AppMotion? motion,
     AppDensity? density,
     AppLayout? layout,
+    AppEffects? effects,
   }) => AppTokens(
     colors: colors ?? this.colors,
     typography: typography ?? this.typography,
@@ -1959,6 +2220,7 @@ final class AppTokens extends ThemeExtension<AppTokens> {
     motion: motion ?? this.motion,
     density: density ?? this.density,
     layout: layout ?? this.layout,
+    effects: effects ?? this.effects,
   );
 
   @override
@@ -1978,6 +2240,8 @@ final class AppTokens extends ThemeExtension<AppTokens> {
       // *while a theme animates*, so a screen could change shape mid-fade for
       // no reason a person could name.
       layout: t < 0.5 ? layout : other.layout,
+      // A single value, same reasoning as spacing and radius above.
+      effects: t < 0.5 ? effects : other.effects,
     );
   }
 }

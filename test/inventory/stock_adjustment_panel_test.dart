@@ -215,10 +215,20 @@ void main() {
     // which draws every recorded difference as a red `Callout`. A bare sentence
     // there read as part of the problem rather than as the answer to it.
     expect(noticeStatus(tester, 'product-stock-notice'), AppStatus.ok);
-    // The page is re-read, so what is shown is the server's evidence rather
-    // than an optimistic local figure. Counted on the ledger's own queries: this
-    // route reads the product's recorded differences on every load too.
-    expect(reader.movementQueries.length, 2);
+    // The quantity is re-read, so what is shown is the server's evidence rather
+    // than an optimistic local figure.
+    expect(reader.productReads, 2);
+    // **And the ledger is not read at all, which is the change of
+    // 2026-08-26.** The correction sheet draws no ledger and no reconciliation
+    // report, so reading either would spend a query per open on nothing.
+    expect(reader.movementQueries, isEmpty);
+    expect(
+      reader.queries.where(
+        (query) =>
+            query.collectionPath == 'tenants/tenant-a/reconciliation_anomalies',
+      ),
+      isEmpty,
+    );
   });
 
   testWidgets('a removal-only type never offers the add direction', (
@@ -277,9 +287,9 @@ void main() {
       noticeMessage(tester, 'product-stock-notice'),
       startsWith('The result is unknown.'),
     );
-    // The page is re-read after an unknown outcome, because only the server
+    // The quantity is re-read after an unknown outcome, because only the server
     // can say whether stock moved.
-    expect(reader.movementQueries.length, 2);
+    expect(reader.productReads, 2);
 
     await _submit(tester, units: '4', reason: 'Delivery received');
     expect(callable.payloads.map((payload) => payload['requestId']), <String>[
@@ -484,21 +494,26 @@ void main() {
         _stockAnomaly('stock_a'),
       ]);
 
-    await _pump(
-      tester,
-      _controller(),
-      reader,
-      callable: _Callable(_response()),
-    );
+    // **All three describing the figure now live on the reading route, and the
+    // correcting sheet carries exactly one.** 2026-08-25 split the four across
+    // two routes and left the quantity note and the differences note on both
+    // halves; 2026-08-26 took the sheet down to the form it is for, so the two
+    // notes about what a stock figure *is* belong to the surface that exists to
+    // explain one. Each is still folded, which is what this test is about.
+    await _pump(tester, _controller(), reader);
 
     for (final key in <String>[
       'product-stock-quantity-disclosure',
       'product-stock-differences-scope-disclosure',
       'product-stock-ledger-disclosure',
-      'product-stock-adjustment-disclosure',
     ]) {
       expect(find.byKey(ValueKey<String>(key)), findsOne, reason: key);
     }
+    expect(
+      find.byKey(const ValueKey('product-stock-adjustment-disclosure')),
+      findsNothing,
+      reason: 'the adjustment explanation belongs to the correction sheet',
+    );
     // Closed means gone from the tree rather than clipped to nothing.
     for (final key in <String>[
       'product-stock-quantity-scope',
@@ -512,6 +527,31 @@ void main() {
       _text(tester, 'product-stock-ledger-scope'),
       startsWith('Every sale, verified return, and manual adjustment'),
     );
+
+    // And the correcting sheet carries its own and nothing else: the three
+    // above are what *View stock* is for, and repeating them over a form was
+    // the redundancy this sheet was cut down to remove.
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      callable: _Callable(_response()),
+    );
+    expect(
+      find.byKey(const ValueKey('product-stock-adjustment-disclosure')),
+      findsOne,
+    );
+    for (final key in <String>[
+      'product-stock-quantity-disclosure',
+      'product-stock-differences-scope-disclosure',
+      'product-stock-ledger-disclosure',
+    ]) {
+      expect(
+        find.byKey(ValueKey<String>(key)),
+        findsNothing,
+        reason: '$key belongs to the reading route',
+      );
+    }
   });
 
   testWidgets('every explanation on this route fits its one line on a phone', (
@@ -542,10 +582,22 @@ void main() {
       width: 411,
     );
 
-    final summaries = tester
-        .widgetList<Disclosure>(find.byType(Disclosure))
-        .map((disclosure) => disclosure.summary)
-        .toList();
+    // **Both halves are measured, since the four are split across two routes.**
+    // Pinning a count to one route would let a summary added to the other slip
+    // past the guard, which is the opposite of what this test is for.
+    final summaries = <String>{
+      ...tester
+          .widgetList<Disclosure>(find.byType(Disclosure))
+          .map((disclosure) => disclosure.summary),
+    };
+
+    await _pump(tester, _controller(), reader, width: 411);
+    summaries.addAll(
+      tester
+          .widgetList<Disclosure>(find.byType(Disclosure))
+          .map((disclosure) => disclosure.summary),
+    );
+
     expect(summaries, hasLength(4));
     for (final summary in summaries) {
       expect(
@@ -750,19 +802,30 @@ Future<void> _pump(
     MaterialApp(
       home: TenantSessionScope(
         controller: controller,
+        // **Two panels since 2026-08-26, not one with a mode.** A test that
+        // supplies a callable is a test about correcting stock, and correcting
+        // is its own panel now - the one the sheet holds. The rest read the
+        // ledger, which is the panel that no longer corrects anything.
+        //
+        // Neither is pumped inside a sheet here: `onCompleted` is left null so
+        // every outcome renders in place, which is what these assertions read.
+        // The sheet's own closing behaviour is asserted separately.
         child: Scaffold(
-          body: TenantProductStockPanel(
-            reader: reader,
-            product: _product(),
-            pageSize: pageSize,
-            actions: callable == null
-                ? null
-                : TenantStockActions(adjustCallable: callable),
-            requestIdFactory: () =>
-                requestIds[index++ < requestIds.length
-                    ? index - 1
-                    : requestIds.length - 1],
-          ),
+          body: callable == null
+              ? TenantProductStockPanel(
+                  reader: reader,
+                  product: _product(),
+                  pageSize: pageSize,
+                )
+              : TenantProductStockAdjustmentPanel(
+                  reader: reader,
+                  product: _product(),
+                  actions: TenantStockActions(adjustCallable: callable),
+                  requestIdFactory: () =>
+                      requestIds[index++ < requestIds.length
+                          ? index - 1
+                          : requestIds.length - 1],
+                ),
         ),
       ),
     ),
@@ -1009,6 +1072,16 @@ final class _Reader implements TenantDataReader {
   List<TenantCollectionQuery> get movementQueries => queries
       .where((query) => query.collectionPath.endsWith('/stock_movements'))
       .toList();
+
+  /// How many times the canonical product document was read.
+  ///
+  /// **This is what "re-reads" means on the correction sheet.** That surface
+  /// shows no ledger and no differences, so it reads neither: the only read it
+  /// makes is the quantity its form is about, and counting movement queries
+  /// there would be counting a read that correctly no longer happens.
+  int get productReads => documentPaths
+      .where((path) => path == 'tenants/tenant-a/products/product-1')
+      .length;
 
   TenantCollectionQuery get anomalyQuery => queries
       .where(

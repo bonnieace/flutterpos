@@ -1,71 +1,37 @@
-/// `HomeNavigation`: `design.md` §11 step **5b**, first half.
+/// `HomeNavigation`: the landing route's destinations, as one column of rows.
 ///
-/// **This is §4.4 after v0.5 replaced it, and the replacement is why the
-/// component exists at all.** The section opened by objecting to a `Wrap` of
-/// eleven identical pills, and its original answer was a bottom bar with four
-/// destinations. That answer was drawn before it was rejected: mapping this
-/// route's eleven controls onto *Sell / Stock / Money / More* put **five of them
-/// in `More`**, which made the overflow bucket the largest destination in the
-/// app against one control in *Sell*. v0.5 replaced it with a card grid below
-/// 1024 and a side menu at or above it, and **no overflow bucket at any band**
-/// is the property it exists to hold.
+/// **The destinations left the body on 2026-08-23, at the product owner's
+/// direction.** The home used to *be* its navigation - first a `Wrap` of
+/// eleven pills, then a card grid, then a column of full-width rows - and the
+/// design it is now built to does none of those: `manager_dashboard` puts
+/// figures, two calls to action and recent activity in the body, and reaches
+/// its destinations through the top bar's `menu` button. So this component
+/// draws one thing in two hosts:
 ///
-/// **One component, two renderings, chosen by band** - §4.3's own construction,
-/// the same one `RecordList` is built on. The route stack is identical either
-/// side of the boundary, so a window dragged across 1024 changes the shape of
-/// the navigation and nothing about where a person is.
+/// - **[HomeNavigation.drawer]** at `compact` and `medium`, inside
+///   `AppScaffold`'s drawer, opened from the toolbar's own hamburger.
+/// - **[HomeNavigation.menu]** at `expanded`, as the persistent column the
+///   export's desktop sidebar draws beside the page.
 ///
-/// **What a card does that a pill could not is carry its own condition.**
-/// [HomeDestination.status] is the whole argument for this model over a tab bar:
-/// a badge counts, where a line of words can say *3 unresolved differences* or
-/// *shift open, 17 sales* on the surface a person is already looking at. A card
-/// with no status is a button, and eleven of those is what §4.4 opened by
-/// objecting to.
+/// Both are the same rows, so a window dragged across 1024 changes where the
+/// navigation lives and nothing about what is in it.
 ///
-/// **Every measurement here is read from a §2 row written for something else**,
-/// which is the treatment `AppSelect` and `Callout` already take and which
-/// `PLAN.md` carries as an open question against §5.2 rather than this file:
-/// `radius.md`, `surface.raised` and a `border.subtle` hairline from §2.3's and
-/// §2.1's "cards, rows, sheets" rows, which is what a card is made of everywhere
-/// else in this app; `space.16` for padding and for the gutter §4.4 names;
-/// `title.md` for the label, which §2.2 gives to "card title"; `caption` /
-/// `text.tertiary` for the status line. The glyph is **18**, which is §5.2's
-/// leading-icon row and the nearest named size - the same borrowing `Callout`,
-/// `Disclosure` and `RecordActionSet` each made.
+/// **A bottom bar was the other candidate and was not taken.** The export's
+/// `manager_dashboard` render has one - *Sale / Orders / History / Sync* - and
+/// four slots cannot hold an owner's eleven destinations without an overflow
+/// bucket larger than the bar. A drawer holds all of them, named, which is the
+/// property this component has had since it replaced the pills. The product
+/// owner chose the drawer over the bar on 2026-08-23.
 ///
-/// **The one figure with no row anywhere is the menu's width.** §4.2 states
-/// content maxima and §2.3's scale stops at 64; neither describes a navigation
-/// column. [HomeNavigation.menuWidth] is a component decision on that scale and
-/// is recorded in `PLAN.md` beside `AppScaffold.horizontalInset`, which is the
-/// same gap and was answered the same way.
+/// **What a row carries beyond its label is its own condition.**
+/// [HomeDestination.status] is why this is a menu rather than a tab strip: it
+/// can say *2 waiting to send* on the surface a person is already looking at.
 ///
-/// **Step 5b's second half moved the menu into the frame, and that is why there
-/// are two constructors.** §4.4 puts the side menu in `AppScaffold` rather than
-/// in a page's body, so the two renderings this component owns now have two
-/// different *hosts*: the cards are content and sit in the page, below the shift
-/// panel, where the home puts them; the menu is chrome and sits beside the page,
-/// outside its content maximum and outside its scroll, where only the frame can
-/// put it. A single constructor cannot say which host is asking, and a widget
-/// that drew the menu inside the body would put a navigation column inside the
-/// page's 1200 maximum.
-///
-/// **The band still owns the form and the host owns nothing but placement**,
-/// which is the property §4.3 asks for. [HomeNavigation.cards] draws the grid
-/// below 1024 and *nothing* at 1024 and above; [HomeNavigation.menu] draws the
-/// menu at 1024 and above and *nothing* below it. The pair is exhaustive and
-/// disjoint at every width, so no caller can choose a rendering and no width
-/// gets both or neither.
-///
-/// **The menu draws on the home and on no other route, and that is a decision
-/// with evidence rather than an unfinished sweep.** §4.4 asks for it on every
-/// route on the grounds that "`Navigator.pop` keeps meaning what it means", and
-/// on a pushed route it does not: a menu press is a `push`, so pressing three
-/// destinations leaves a back arrow three routes deep and a destination pressed
-/// while standing on it opens a second copy of itself. The two repairs are a
-/// nested `Navigator`, which §4.4 forbids by name, and popping to the home
-/// before pushing, which is a routing condition and is `claude.md` hard rule 1.
-/// The slot is in `AppScaffold` so the answer is one call site away once the
-/// product owner picks one; see `PLAN.md`'s open decision.
+/// **Every measurement is a role**: `radius.sm` on a row, `space.16` of inset,
+/// `body.lg` for the label, `caption` / `text.tertiary` for the condition, and
+/// §5.2's named 18 for the glyph. The marked row takes `surface.field` and a
+/// four-pixel accent bar, which is the design system's own words for a
+/// selection - "a sharp vertical bar (4px wide) ... in Primary Green".
 library;
 
 import 'package:flutter/material.dart';
@@ -77,11 +43,11 @@ import 'tokens.dart';
 /// before they go.
 ///
 /// **[onPressed] is nullable and that is a state rather than a refusal.** The
-/// home carries one control - *Default business* - which is disabled because the
-/// business already is the default, so there is nothing to press. §2.1's
-/// disabled row paints it; it is not an error and says nothing about permission.
-/// A destination a session may not reach is not built at all, which is the
-/// caller's decision and stays the caller's.
+/// home carries one control - *Default business* - which is disabled because
+/// the business already is the default, so there is nothing to press. §2.1's
+/// disabled row paints it; it is not an error and says nothing about
+/// permission. A destination a session may not reach is not built at all,
+/// which is the caller's decision and stays the caller's.
 final class HomeDestination {
   const HomeDestination({
     required this.label,
@@ -90,7 +56,20 @@ final class HomeDestination {
     this.status,
     this.isPrimary = false,
     this.destinationKey,
+    this.group,
+    this.description,
   });
+
+  /// One sentence saying what is behind this destination, for the surface that
+  /// has room to say it.
+  ///
+  /// **Read by [HomeModuleGrid] and by nothing else.** A menu row is a label
+  /// and its own condition; a module card is the old hub's shape and carries a
+  /// line of description under the name — *"Process sales, manage orders, and
+  /// handle customer transactions."* The two renderings share a destination
+  /// list, so the sentence lives here rather than in a second list the grid
+  /// would have to keep in step.
+  final String? description;
 
   /// What the destination is called, in the shopkeeper's words. §8 rule 3: a
   /// control names its effect.
@@ -104,285 +83,275 @@ final class HomeDestination {
   final VoidCallback? onPressed;
 
   /// This destination's own condition, in words - *3 unresolved differences*,
-  /// *shift open, 17 sales*, *2 waiting to send*.
+  /// *2 waiting to send*.
   ///
   /// **Optional in the strong sense.** A status that restates the label is
   /// noise, and §8 rule 2 asks a screen to state what is true rather than what
-  /// is available. Give it a line only where the destination knows something the
-  /// person has not been told yet.
+  /// is available. Give it a line only where the destination knows something
+  /// the person has not been told yet. Where it is absent the row draws a
+  /// chevron instead, which is what the export does.
   final String? status;
 
   /// Whether this is the one `action.primary` §2.1 permits per screen region.
   ///
-  /// **Exactly one destination sets it, and §4.4 names which**: *New sale*. It
-  /// ceases to be a button among eleven by outranking them rather than by
-  /// leaving the page, which is the half of the original model v0.5 kept.
+  /// **Exactly one destination sets it**: *New sale*. It outranks the others
+  /// rather than leaving the page - a filled accent row at the top of the
+  /// column, which is how the export draws it.
   final bool isPrimary;
 
-  /// A key for the rendered card or menu row, so a test and a screenshot can
-  /// reach a destination by name rather than by position.
+  /// A key for the rendered row, so a test and a screenshot can reach a
+  /// destination by name rather than by position.
   final Key? destinationKey;
+
+  /// The area this destination belongs to, or null for a row that stands on
+  /// its own above every heading.
+  ///
+  /// **This is what turns a list of pages into a menu.** The destinations were
+  /// twelve peers in one column, so a person reading them had to know the
+  /// product to know which two were the same subject. A group is drawn once,
+  /// above the first row that carries it, and every following row with the
+  /// same group joins it - so the heading a role sees is derived from the
+  /// destinations that role was actually given. **A group whose every
+  /// destination is withheld draws no heading at all**, which is the property
+  /// that keeps an empty area off a cashier's menu without anybody
+  /// enumerating roles here.
+  ///
+  /// Rows are grouped **in the order the caller gives them**. This does not
+  /// sort: a caller that interleaves two groups gets the heading twice, which
+  /// is a defect in the list rather than something for this component to
+  /// repair silently.
+  final String? group;
 }
 
-/// Which of the two hosts §4.4 gives this component is drawing it.
+/// Which of the two hosts is drawing this component.
 ///
-/// Private because it is not a choice: a page cannot ask for the menu and the
-/// frame cannot ask for the cards. It is the constructor's own record of where
+/// Private because it is not a choice: the frame decides which host it is
+/// building from the width it has. It is the constructor's own record of where
 /// it was called from.
-enum _HomeNavigationHost { page, frame }
+enum _HomeNavigationHost { drawer, frame }
 
-/// The home's navigation: a card grid below 1024, a side menu at or above it.
+/// The home's navigation: a drawer below 1024, a persistent column at or above.
 final class HomeNavigation extends StatelessWidget {
-  /// The page's rendering: §4.4's card grid, in the body, where the home puts
-  /// it - below the shift, because what a person came here to do outranks where
-  /// they might go next.
+  /// The drawer's rendering, at `compact` and `medium`.
   ///
-  /// Draws **nothing at `expanded`**, where the destinations are in the frame's
-  /// menu instead. §4.4: "at expanded it keeps its content and loses its cards".
-  const HomeNavigation.cards({super.key, required this.destinations})
-    : _host = _HomeNavigationHost.page;
+  /// Draws at **every** width, unlike [menu], because the frame decides
+  /// whether to build a drawer at all - a `Drawer` that rendered nothing would
+  /// still be openable, and an empty panel sliding in is worse than no
+  /// hamburger.
+  const HomeNavigation.drawer({super.key, required this.destinations})
+    : _host = _HomeNavigationHost.drawer;
 
-  /// The frame's rendering: §4.4's side menu, beside the page rather than
-  /// inside it, which is what puts it outside the content maximum and outside
-  /// the page's scroll. `AppScaffold.navigation` is the only caller.
+  /// The frame's rendering: the side menu, beside the page rather than inside
+  /// it, which is what puts it outside the content maximum and outside the
+  /// page's scroll. `AppScaffold.navigation` is the only caller.
   ///
-  /// Draws **nothing below `expanded`**, where the destinations are the page's
-  /// cards instead.
+  /// Draws **nothing below `expanded`**, where the destinations are in the
+  /// drawer instead.
   const HomeNavigation.menu({super.key, required this.destinations})
     : _host = _HomeNavigationHost.frame;
 
-  /// Everywhere the home can go, in the order §4.4 asks for: the primary first,
-  /// then by frequency. **Never alphabetically** - that is the ordering a `Wrap`
-  /// of identical pills has, and it is the one this section replaced.
+  /// Everywhere the home can go: the primary first, then by frequency.
+  /// **Never alphabetically** - that is the ordering a `Wrap` of identical
+  /// pills has, and it is the one this replaced.
   final List<HomeDestination> destinations;
 
   final _HomeNavigationHost _host;
 
-  /// A side menu's width. See the library note: a component decision, not a
-  /// token, because no section of `design.md` describes a navigation column.
+  /// A side menu's width.
   ///
-  /// **Public because the frame allocates the column and the component draws
-  /// it**, and two declarations of one width is the drift §4.1 spent step 6
-  /// removing.
-  static const double menuWidth = 256;
+  /// **288, which is the export's `w-72`**, and it was 256 while this
+  /// component had no picture to measure against. Public because the frame
+  /// allocates the column and the component draws it, and two declarations of
+  /// one width is the drift §4.1 spent step 6 removing.
+  static const double menuWidth = 288;
 
-  /// How many columns a band's card grid has. §4.4's table.
-  ///
-  /// Exposed so a test can ask the question the widget asks rather than
-  /// asserting a pixel width and hoping the two agree - the same reason
-  /// `PageHeader.showsDisplayTitle` is a static.
-  static int columnsFor(AppBreakpoint band) =>
-      band == AppBreakpoint.compact ? 2 : 3;
-
-  /// Whether [screenWidth] draws the menu instead of the grid.
+  /// Whether [screenWidth] carries the persistent column rather than a drawer.
   static bool showsMenu(double screenWidth) =>
       AppLayout.contract.isAtLeast(screenWidth, AppBreakpoint.expanded);
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final width = MediaQuery.sizeOf(context).width;
-    // A screen's width, not this widget's box. §4.1's bands describe the
-    // surface a person is looking at, and resolving them inside an already
-    // padded page invents a fourth boundary by arithmetic - `PageHeader` says
-    // the same thing at more length and for the same reason.
-    final band = tokens.layout.breakpointOf(width);
 
     // A role with no destinations at all draws nothing rather than an empty
-    // frame. §5.1 gives that case to `EmptyState`, which does not exist; a
-    // bordered box containing nothing would be a fourth implementation of one.
+    // frame.
     if (destinations.isEmpty) return const SizedBox.shrink();
 
-    // **The band picks the form; the host only says who is asking.** The two
-    // constructors partition every width between them, so exactly one of them
-    // draws at any width and the other draws nothing - which is what stops the
-    // home showing its destinations twice at 1024, once in the frame's menu and
-    // once in its own body.
-    if (band == AppBreakpoint.expanded) {
-      if (_host == _HomeNavigationHost.page) return const SizedBox.shrink();
-      return _HomeMenu(destinations: destinations, tokens: tokens);
+    // **The persistent column is the only one the band gates.** A drawer is
+    // built by the frame or it is not, so by the time this is asked the
+    // question is already answered; a column beside the page at 900 would
+    // simply take half the window.
+    if (_host == _HomeNavigationHost.frame &&
+        !showsMenu(MediaQuery.sizeOf(context).width)) {
+      return const SizedBox.shrink();
     }
-    if (_host == _HomeNavigationHost.frame) return const SizedBox.shrink();
-    return _HomeGrid(
-      destinations: destinations,
-      columns: columnsFor(band),
-      tokens: tokens,
-    );
+    return _HomeMenu(destinations: destinations, tokens: tokens);
   }
+
+  /// The primary first, then everything else in the order it was given.
+  ///
+  /// Shared by both renderings so a destination cannot be hoisted in one band
+  /// and not the other.
+  static List<HomeDestination> _ordered(List<HomeDestination> destinations) =>
+      <HomeDestination>[
+        ...destinations.where((d) => d.isPrimary),
+        ...destinations.where((d) => !d.isPrimary),
+      ];
 }
 
-/// The card grid, at `compact` and `medium`.
-final class _HomeGrid extends StatelessWidget {
-  const _HomeGrid({
-    required this.destinations,
-    required this.columns,
-    required this.tokens,
-  });
+/// The column of rows, in a drawer below 1024 and beside the page above it.
+///
+/// **Every destination is labelled and none is hidden**, which is the whole
+/// reason a menu was chosen over the export's bottom bar: a column has room to
+/// name eleven things where four slots have room for three and a bucket.
+final class _HomeMenu extends StatelessWidget {
+  const _HomeMenu({required this.destinations, required this.tokens});
 
   final List<HomeDestination> destinations;
-  final int columns;
   final AppTokens tokens;
 
   @override
   Widget build(BuildContext context) {
-    final gutter = tokens.spacing.s16;
-    final primary = destinations.where((d) => d.isPrimary).toList();
-    final rest = destinations.where((d) => !d.isPrimary).toList();
+    final ordered = HomeNavigation._ordered(destinations);
+
+    // **The heading is derived, never declared.** Walking the ordered rows and
+    // opening a heading whenever the group changes means the caller supplies
+    // destinations and nothing else; which headings exist, and whether one
+    // exists at all, falls out of what survived the caller's role checks.
     final rows = <Widget>[];
-
-    // The primary spans the row it is on, at every band. §4.4: it outranks the
-    // others rather than leaving the page, and a mint card the width of two is
-    // how that reads on a phone.
-    for (final destination in primary) {
-      rows.add(_HomeCard(destination: destination, tokens: tokens));
+    String? lastGroup;
+    for (final destination in ordered) {
+      final group = destination.group;
+      if (group != null && group != lastGroup) {
+        // A heading owes the group above it more air than a row owes its
+        // neighbour, so the column reads as areas rather than as one run.
+        if (rows.isNotEmpty) rows.add(SizedBox(height: tokens.spacing.s16));
+        rows.add(_HomeMenuGroupHeading(text: group, tokens: tokens));
+        rows.add(SizedBox(height: tokens.spacing.s8));
+      } else if (rows.isNotEmpty) {
+        rows.add(SizedBox(height: tokens.spacing.s4));
+      }
+      rows.add(_HomeMenuRow(destination: destination, tokens: tokens));
+      lastGroup = group;
     }
 
-    // **Rows of `Expanded`, not a `Wrap`.** A `Wrap` sizes each child to its own
-    // content, so a row of cards whose labels differ in length comes out ragged
-    // and the grid stops being a grid. Building the rows explicitly is what
-    // makes every column the same width, and padding the last row with an empty
-    // slot is what stops a lone trailing card stretching across the page.
-    for (var start = 0; start < rest.length; start += columns) {
-      final slice = rest.skip(start).take(columns).toList();
-      rows.add(
-        // **`IntrinsicHeight`, because a grid whose cards are different heights
-        // is not a grid.** `CrossAxisAlignment.stretch` alone asks the `Row` for
-        // its own height, and this column sits inside a scroll view, so that
-        // height is unbounded - which is an infinite-constraint crash rather
-        // than a ragged row. Wrapping bounds it to the tallest card, which is
-        // what "the same width and the same height" needs. It is an O(n) layout
-        // pass over at most three children.
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              for (var column = 0; column < columns; column++) ...<Widget>[
-                if (column > 0) SizedBox(width: gutter),
-                Expanded(
-                  child: column < slice.length
-                      ? _HomeCard(
-                          destination: slice[column],
-                          tokens: tokens,
-                          stretchHeight: true,
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ],
-            ],
-          ),
+    return Align(
+      // **`Align` first, and it is not decoration.** A vertical scroll view
+      // hands its child a *tight* width, and a `SizedBox` cannot shrink under a
+      // tight constraint - the menu came out 1156 wide in its own first
+      // screenshot. `Align` re-loosens the constraint so the width below is the
+      // width drawn. In a drawer the panel is already this wide, so the
+      // `SizedBox` is a no-op there rather than a second opinion.
+      alignment: AlignmentDirectional.centerStart,
+      child: SizedBox(
+        width: HomeNavigation.menuWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: rows,
         ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        for (var index = 0; index < rows.length; index++) ...<Widget>[
-          if (index > 0) SizedBox(height: gutter),
-          rows[index],
-        ],
-      ],
+      ),
     );
   }
 }
 
-/// One destination as a card.
+/// One destination as a menu row.
 ///
-/// **The states are `PressSurface`'s, deliberately.** Hover, pressed and
-/// focus-visible are §2.1's overlay rows and §9's ring, and every other
-/// pressable surface in this app gets them from the same widget. Painting them
-/// here would be a second opinion about what a press looks like. `disabled` is
-/// this component's, because `PressSurface` refuses it on the stated grounds
-/// that a component knows what its own disabled label looks like.
-final class _HomeCard extends StatelessWidget {
-  const _HomeCard({
-    required this.destination,
-    required this.tokens,
-    this.stretchHeight = false,
-  });
+/// The export's sidebar row: `h-12 px-4 rounded-lg`, a glyph and a label at
+/// `body.md`, and the current destination marked by its own surface and a
+/// four-pixel accent bar at the trailing edge rather than by a filled block.
+final class _HomeMenuRow extends StatelessWidget {
+  const _HomeMenuRow({required this.destination, required this.tokens});
 
   final HomeDestination destination;
   final AppTokens tokens;
 
-  /// Whether this card fills the height it is offered.
-  ///
-  /// **True inside a row, false for the primary, and the asymmetry is a
-  /// constraint rather than a preference.** A row is wrapped in
-  /// `IntrinsicHeight`, so its maximum height is bounded and `double.infinity`
-  /// resolves to the tallest card in that row - which is what makes the pair
-  /// match. The primary sits directly in a `Column`, where the main axis is
-  /// unbounded and asking for infinite height is a crash rather than a stretch.
-  final bool stretchHeight;
+  /// The width of the accent bar on the marked row. The design system's own
+  /// figure - "a sharp vertical bar (4px wide) ... in Primary Green" - and it
+  /// is `space.4`.
+  static double _barWidth(AppSpacing spacing) => spacing.s4;
 
   @override
   Widget build(BuildContext context) {
     final enabled = destination.onPressed != null;
     final colors = tokens.colors;
-    final role = destination.isPrimary
-        ? colors.action.primary
-        : colors.action.secondary;
+    final primary = destination.isPrimary;
+    final role = primary ? colors.action.primary : colors.action.secondary;
 
     final Color container;
     final Color foreground;
-    final Color? edge;
     if (!enabled) {
-      // §2.1's disabled row, both tiers: container `#1E3A2B`, label `#5D7468`.
-      container = colors.surface.field;
+      container = Colors.transparent;
       foreground = colors.text.disabled;
-      edge = colors.surface.borderSubtle;
-    } else if (destination.isPrimary) {
-      container = role.container;
-      foreground = role.label;
-      edge = null;
+    } else if (primary) {
+      container = colors.surface.field;
+      foreground = role.container;
     } else {
-      // The ordinary card is `surface.raised` with a hairline, which is what a
-      // card is made of everywhere else here - not `action.secondary`'s
-      // transparent container, because this is a card that is pressable rather
-      // than a button that is card-shaped.
-      container = colors.surface.raised;
-      foreground = colors.text.primary;
-      edge = colors.surface.borderSubtle;
+      container = Colors.transparent;
+      foreground = colors.text.secondary;
     }
 
-    final radius = BorderRadius.circular(tokens.radius.md);
-    final body = Container(
-      // **`PressSurface.fillWidth` fills the hit area, not the paint.** Its
-      // `Align` hands the child loose constraints, so without this the card
-      // shrink-wraps its label and floats in the middle of a slot that is the
-      // right width - which measures correctly and looks wrong, and is exactly
-      // what the first screenshot of this component showed.
-      width: double.infinity,
-      height: stretchHeight ? double.infinity : null,
+    final radius = BorderRadius.circular(tokens.radius.sm);
+    final row = Container(
+      constraints: BoxConstraints(
+        minHeight: tokens.density.minimumTapTarget.height,
+      ),
       decoration: BoxDecoration(
         color: container,
         borderRadius: radius,
-        border: edge == null ? null : Border.all(color: edge),
+        border: primary && enabled
+            ? BorderDirectional(
+                end: BorderSide(
+                  color: role.container,
+                  width: _barWidth(tokens.spacing),
+                ),
+              )
+            : null,
       ),
-      padding: EdgeInsets.all(tokens.spacing.s16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      padding: EdgeInsetsDirectional.only(
+        start: tokens.spacing.s16,
+        // The bar eats into the inset rather than adding to it, so a marked
+        // row and an unmarked one are the same width.
+        end: primary && enabled
+            ? tokens.spacing.s16 - _barWidth(tokens.spacing)
+            : tokens.spacing.s16,
+        top: tokens.spacing.s8,
+        bottom: tokens.spacing.s8,
+      ),
+      child: Row(
         children: <Widget>[
           Icon(destination.icon, size: 18, color: foreground),
-          SizedBox(height: tokens.spacing.s12),
-          Text(
-            destination.label,
-            style: tokens.typography.titleMedium.copyWith(color: foreground),
+          SizedBox(width: tokens.spacing.s12),
+          // **Three shares to the label and two to its condition.** An even
+          // split is what a bare `Expanded` and `Flexible` give, and in a
+          // 288-wide panel that is about 120 each - short of what `Receipts
+          // waiting` needs at `body.lg`, so the destination's own name wrapped
+          // while its condition sat on one line beside it. The label is what
+          // the row is for and outranks what the row has to say about it.
+          Expanded(
+            flex: 3,
+            child: Text(
+              destination.label,
+              style: tokens.typography.bodyLarge.copyWith(
+                color: foreground,
+                fontWeight: primary ? FontWeight.w700 : null,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           if (destination.status case final line?) ...<Widget>[
-            SizedBox(height: tokens.spacing.s4),
-            Text(
-              line,
-              style: tokens.typography.caption.copyWith(
-                // On the mint card the caption reads against `action.primary`'s
-                // own label colour; `text.tertiary` is a page colour and would
-                // be close to invisible there.
-                color: destination.isPrimary
-                    ? foreground
-                    : enabled
-                    ? colors.text.tertiary
-                    : foreground,
+            SizedBox(width: tokens.spacing.s8),
+            Flexible(
+              flex: 2,
+              child: Text(
+                line,
+                style: tokens.typography.caption.copyWith(
+                  color: enabled ? colors.text.tertiary : foreground,
+                ),
+                textAlign: TextAlign.end,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -401,138 +370,10 @@ final class _HomeCard extends StatelessWidget {
           key: destination.destinationKey,
           borderRadius: radius,
           onPressed: destination.onPressed,
-          hoverOverlay: role.hoverFill(),
-          pressedOverlay: role.pressedFill(),
-          minimumTapTarget: tokens.density.minimumTapTarget,
-          // **Both, and neither is cosmetic.** Without `fillWidth` the primary
-          // card shrink-wraps its label and floats in the middle of the row it
-          // is supposed to span; without `fillHeight` two cards beside each
-          // other are centred at different heights inside slots that *are* the
-          // same height, which is a grid that only measures like a grid.
-          fillWidth: true,
-          fillHeight: true,
-          child: body,
-        ),
-      ),
-    );
-  }
-}
-
-/// The side menu, at `expanded`.
-///
-/// **Every destination is labelled and none is hidden**, which is the whole
-/// reason §4.4 chose a menu here rather than carrying the grid up: a column has
-/// room to name eleven things where a bottom bar has room for four and a bucket.
-final class _HomeMenu extends StatelessWidget {
-  const _HomeMenu({required this.destinations, required this.tokens});
-
-  final List<HomeDestination> destinations;
-  final AppTokens tokens;
-
-  @override
-  Widget build(BuildContext context) => Align(
-    // **`Align` first, and it is not decoration.** A vertical scroll view hands
-    // its child a *tight* width, and a `SizedBox` cannot shrink under a tight
-    // constraint - the menu came out 1156 wide in its own first screenshot.
-    // `Align` re-loosens the constraint so the width below is the width drawn,
-    // and starts the column at the leading edge rather than centring a
-    // navigation column in the middle of the page.
-    alignment: AlignmentDirectional.centerStart,
-    child: SizedBox(
-      width: HomeNavigation.menuWidth,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          for (var index = 0; index < destinations.length; index++) ...<Widget>[
-            if (index > 0) SizedBox(height: tokens.spacing.s8),
-            _HomeMenuRow(destination: destinations[index], tokens: tokens),
-          ],
-        ],
-      ),
-    ),
-  );
-}
-
-/// One destination as a menu row.
-final class _HomeMenuRow extends StatelessWidget {
-  const _HomeMenuRow({required this.destination, required this.tokens});
-
-  final HomeDestination destination;
-  final AppTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = destination.onPressed != null;
-    final colors = tokens.colors;
-    final role = destination.isPrimary
-        ? colors.action.primary
-        : colors.action.secondary;
-
-    final Color container;
-    final Color foreground;
-    if (!enabled) {
-      container = colors.surface.field;
-      foreground = colors.text.disabled;
-    } else if (destination.isPrimary) {
-      container = role.container;
-      foreground = role.label;
-    } else {
-      container = Colors.transparent;
-      foreground = colors.text.secondary;
-    }
-
-    final radius = BorderRadius.circular(tokens.radius.md);
-    final row = Container(
-      decoration: BoxDecoration(color: container, borderRadius: radius),
-      padding: EdgeInsets.symmetric(
-        horizontal: tokens.spacing.s16,
-        vertical: tokens.spacing.s12,
-      ),
-      child: Row(
-        children: <Widget>[
-          Icon(destination.icon, size: 18, color: foreground),
-          SizedBox(width: tokens.spacing.s12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  destination.label,
-                  style: tokens.density
-                      .body(tokens.typography)
-                      .copyWith(color: foreground),
-                ),
-                if (destination.status case final line?)
-                  Text(
-                    line,
-                    style: tokens.typography.caption.copyWith(
-                      color: destination.isPrimary || !enabled
-                          ? foreground
-                          : colors.text.tertiary,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: destination.status == null
-          ? destination.label
-          : '${destination.label}. ${destination.status}',
-      child: ExcludeSemantics(
-        child: PressSurface(
-          key: destination.destinationKey,
-          borderRadius: radius,
-          onPressed: destination.onPressed,
-          hoverOverlay: role.hoverFill(),
-          pressedOverlay: role.pressedFill(),
+          // A row is content with an overlay stacked on it, not a container
+          // the press replaces - so it takes the wash. See `pressedWash`.
+          hoverOverlay: role.hoverWash(),
+          pressedOverlay: role.pressedWash(),
           minimumTapTarget: tokens.density.minimumTapTarget,
           // A menu row spans the column it is in. It does not fill height -
           // rows are as tall as what they say.
@@ -542,4 +383,383 @@ final class _HomeMenuRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The home's destinations as the old hub's module cards.
+///
+/// **The pre-multitenancy app's shape, restored 2026-08-25.** Its `MainHub`
+/// was a grid of cards — a glyph in a tinted well, the module's name, and a
+/// sentence saying what was behind it — and that grid *was* the navigation.
+/// Existing customers know it; [HomeNavigation]'s menu is kept alongside as
+/// chrome rather than replacing it, so nothing that was reachable stops being
+/// reachable.
+///
+/// **It reads the same [HomeDestination] list the menu does.** Role gating,
+/// the closures, and the conditions all stay where they were: a destination a
+/// session may not reach was never built, so it cannot appear here either.
+///
+/// **The column count follows the band rather than the role.** The old grid
+/// picked its columns from a role *and* a width — cashiers two, managers
+/// three, everyone else four — which put one person's four cards in a layout
+/// nobody else saw. Here the band decides and the count of cards falls out of
+/// what the role was given, which is the same information without the
+/// per-role branch.
+final class HomeModuleGrid extends StatelessWidget {
+  const HomeModuleGrid({super.key, required this.destinations});
+
+  final List<HomeDestination> destinations;
+
+  /// Columns at [width]. Phones use an Android-style four-across launcher;
+  /// larger bands use the roomier information cards.
+  static int columnsFor(double width) {
+    final contract = AppLayout.contract;
+    if (!contract.isAtLeast(width, AppBreakpoint.medium)) return 4;
+    if (!contract.isAtLeast(width, AppBreakpoint.expanded)) return 2;
+    return 3;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    if (destinations.isEmpty) return const SizedBox.shrink();
+
+    final ordered = HomeNavigation._ordered(destinations);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final compact = !AppLayout.contract.isAtLeast(
+      screenWidth,
+      AppBreakpoint.medium,
+    );
+    final columns = columnsFor(screenWidth);
+    final gap = compact ? tokens.spacing.s8 : tokens.spacing.s16;
+
+    // **Explicit rows under an `IntrinsicHeight`, not a `Wrap`.** A `Wrap`
+    // gives every card its own natural height, so a row came out ragged
+    // wherever one description ran to three lines and its neighbour to one —
+    // which the old hub never did, because its `GridView` gave every tile the
+    // same aspect ratio. `IntrinsicHeight` restores that without pinning a
+    // height nobody measured: the tallest card in a row sets the row, and the
+    // rest stretch to it.
+    final rows = <List<HomeDestination>>[
+      for (int start = 0; start < ordered.length; start += columns)
+        ordered.sublist(
+          start,
+          start + columns > ordered.length ? ordered.length : start + columns,
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        for (final (index, row) in rows.indexed) ...<Widget>[
+          if (index > 0) SizedBox(height: gap),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                for (final (column, destination) in row.indexed) ...<Widget>[
+                  if (column > 0) SizedBox(width: gap),
+                  Expanded(
+                    child: _HomeModuleCard(
+                      destination: destination,
+                      tokens: tokens,
+                      compact: compact,
+                      accent:
+                          _moduleAccents[(index * columns + column) %
+                              _moduleAccents.length],
+                    ),
+                  ),
+                ],
+                // A short final row keeps its cards the width of every other
+                // row's rather than stretching two cards across three columns.
+                for (
+                  int filler = row.length;
+                  filler < columns;
+                  filler++
+                ) ...<Widget>[
+                  SizedBox(width: gap),
+                  const Expanded(child: SizedBox.shrink()),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The old hub distinguished its modules with blue, teal, orange, purple,
+/// pink, and green glyphs. These are the accessible 400 tones of that same
+/// palette, used decoratively and never as a status signal.
+const List<Color> _moduleAccents = <Color>[
+  Color(0xFF42A5F5),
+  Color(0xFF26A69A),
+  Color(0xFFFFA726),
+  Color(0xFFAB47BC),
+  Color(0xFFEC407A),
+  Color(0xFF66BB6A),
+];
+
+/// One destination as a card.
+final class _HomeModuleCard extends StatelessWidget {
+  const _HomeModuleCard({
+    required this.destination,
+    required this.tokens,
+    required this.compact,
+    required this.accent,
+  });
+
+  final HomeDestination destination;
+  final AppTokens tokens;
+  final bool compact;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = destination.onPressed != null;
+    final colors = tokens.colors;
+    final primary = destination.isPrimary;
+    final role = primary ? colors.action.primary : colors.action.secondary;
+
+    // Every module is a card on the same raised surface. The till stays first
+    // and keeps its strong icon and title weight, but no longer becomes a
+    // bright green slab that looks selected before it has been pressed.
+    final container = colors.surface.raised;
+    final titleColor = enabled ? colors.text.primary : colors.text.disabled;
+    final bodyColor = enabled ? colors.text.secondary : colors.text.disabled;
+
+    final radius = BorderRadius.circular(
+      compact ? tokens.radius.md : tokens.radius.lg,
+    );
+
+    if (compact) {
+      final launcher = Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: tokens.spacing.s4,
+          vertical: tokens.spacing.s8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              key: ValueKey('home-module-icon-${destination.label}'),
+              width: _compactGlyphWell,
+              height: _compactGlyphWell,
+              decoration: BoxDecoration(
+                color: enabled
+                    ? accent.withValues(alpha: 0.14)
+                    : colors.surface.sunken,
+                borderRadius: BorderRadius.circular(tokens.radius.lg),
+                border: Border.all(
+                  color: enabled
+                      ? accent.withValues(alpha: 0.38)
+                      : colors.surface.borderSubtle,
+                ),
+              ),
+              child: Icon(
+                destination.icon,
+                size: _compactGlyphSize,
+                color: enabled ? accent : colors.text.disabled,
+              ),
+            ),
+            SizedBox(height: tokens.spacing.s8),
+            Text(
+              destination.label,
+              textAlign: TextAlign.center,
+              style: tokens.typography.bodyMedium.copyWith(
+                color: titleColor,
+                fontWeight: primary ? FontWeight.w700 : FontWeight.w600,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      );
+
+      return _pressable(
+        enabled: enabled,
+        role: role,
+        radius: radius,
+        child: launcher,
+      );
+    }
+
+    final card = Container(
+      padding: EdgeInsets.all(tokens.spacing.s20),
+      decoration: BoxDecoration(
+        color: container,
+        borderRadius: radius,
+        border: Border.all(color: colors.surface.borderStrong),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: colors.surface.scrim.withValues(alpha: 0.42),
+            blurRadius: 14,
+            spreadRadius: 1,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      // **The glyph at the top and the words at the bottom**, which is the old
+      // card's own arrangement — it drew the icon, then a `Spacer`, then the
+      // name and its sentence. `spaceBetween` says the same thing without an
+      // `Expanded` inside the `IntrinsicHeight` the grid wraps this in.
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          // The glyph sits in its own well, which is the old card's shape and
+          // is a surface step rather than the old screen's black wash.
+          Container(
+            padding: EdgeInsets.all(tokens.spacing.s12),
+            decoration: BoxDecoration(
+              color: enabled
+                  ? accent.withValues(alpha: 0.14)
+                  : colors.surface.field,
+              borderRadius: BorderRadius.circular(tokens.radius.md),
+              border: Border.all(
+                color: enabled
+                    ? accent.withValues(alpha: 0.34)
+                    : colors.surface.borderSubtle,
+              ),
+            ),
+            child: Icon(
+              destination.icon,
+              size: _glyphSize,
+              color: enabled ? accent : colors.text.disabled,
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: tokens.spacing.s16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  destination.label,
+                  style: tokens.typography.titleMedium.copyWith(
+                    color: titleColor,
+                    fontWeight: primary ? FontWeight.w700 : null,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (destination.description case final sentence?) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s4),
+                  Text(
+                    sentence,
+                    style: tokens.typography.bodyMedium.copyWith(
+                      color: bodyColor,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                // A destination's own condition — *2 waiting to send* — is
+                // drawn here as well as in the menu, because a card a person
+                // is looking at should not be the one surface that does not
+                // say it.
+                if (destination.status case final line?) ...<Widget>[
+                  SizedBox(height: tokens.spacing.s8),
+                  Text(
+                    line,
+                    style: tokens.typography.caption.copyWith(
+                      color: enabled
+                          ? colors.text.tertiary
+                          : colors.text.disabled,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return _pressable(
+      enabled: enabled,
+      role: role,
+      radius: radius,
+      child: card,
+    );
+  }
+
+  Widget _pressable({
+    required bool enabled,
+    required AppActionRole role,
+    required BorderRadius radius,
+    required Widget child,
+  }) => Semantics(
+    button: true,
+    enabled: enabled,
+    label: <String?>[
+      destination.label,
+      destination.description,
+      destination.status,
+    ].whereType<String>().join('. '),
+    child: ExcludeSemantics(
+      child: PressSurface(
+        key: destination.destinationKey,
+        borderRadius: radius,
+        onPressed: destination.onPressed,
+        // The card is a glyph, a name and a sentence; a solid overlay covers
+        // all three. See `pressedWash` for what that looked like.
+        hoverOverlay: role.hoverWash(),
+        pressedOverlay: role.pressedWash(),
+        minimumTapTarget: tokens.density.minimumTapTarget,
+        fillWidth: true,
+        child: child,
+      ),
+    ),
+  );
+
+  /// The card's glyph. Larger than a menu row's 18 because a card has room
+  /// for it and the old hub drew it that way.
+  static const double _glyphSize = 24;
+  static const double _compactGlyphSize = 28;
+  static const double _compactGlyphWell = 56;
+}
+
+/// One area's name, above the first row that belongs to it.
+///
+/// **`label.eyebrow` is the role, and this is the first surface in `lib/` to
+/// read it.** §2.2 restricts it to "field group labels only" and it had no
+/// caller outside the screenshot harness, because the app had no grouped
+/// anything. A menu area is a field group in every sense the role cares about,
+/// and it is also the one place §2.2 permits uppercase - so the case is
+/// applied here, at the caller, exactly as that token's own note says it must
+/// be.
+///
+/// **It is a header to a screen reader and not a destination.** A heading that
+/// announced as a button would put six unreachable stops in front of somebody
+/// arrowing to *New sale*.
+final class _HomeMenuGroupHeading extends StatelessWidget {
+  const _HomeMenuGroupHeading({required this.text, required this.tokens});
+
+  final String text;
+  final AppTokens tokens;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    // The heading lines up with its rows' labels rather than with their
+    // glyphs, so the column has one left edge instead of two.
+    padding: EdgeInsetsDirectional.only(
+      start: tokens.spacing.s16,
+      end: tokens.spacing.s16,
+      bottom: tokens.spacing.s4,
+    ),
+    child: Semantics(
+      header: true,
+      child: Text(
+        text.toUpperCase(),
+        style: tokens.typography.labelEyebrow.copyWith(
+          color: tokens.colors.text.tertiary,
+        ),
+      ),
+    ),
+  );
 }

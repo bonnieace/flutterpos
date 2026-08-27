@@ -39,6 +39,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'buttons.dart';
+import 'status.dart';
 import 'tokens.dart';
 
 /// One dialog surface, worn by both components in this file.
@@ -109,22 +110,12 @@ final class _DialogFrame extends StatelessWidget {
               ),
             ),
       content: body,
-      // **A `Wrap`, not a `Row`**, and for the reason the staff forms already
-      // recorded: two 48-high pills with verb phrases on them do not fit a
-      // phone beside each other, and a `Row` answers that by overflowing.
-      // `end` alignment keeps the confirm at the trailing edge on one line and
-      // puts it on top when they stack, which is the order a person reads them
-      // in.
+      // A question remains one horizontal sentence at every width: safe answer
+      // first, committing or destructive answer last. `AppActionRow` lets long
+      // labels contract without changing that order into a vertical stack.
       actions: actions.isEmpty
           ? null
-          : <Widget>[
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: tokens.spacing.s12,
-                runSpacing: tokens.spacing.s8,
-                children: actions,
-              ),
-            ],
+          : <Widget>[AppActionRow(actions: actions)],
     );
   }
 }
@@ -394,3 +385,116 @@ Future<bool> showConfirmDialog(
   );
   return answer ?? false;
 }
+
+/// One answer, because there is only one: an outcome a person has to see.
+///
+/// **The third way this app reports a write, and the narrowest.** A `Callout`
+/// is for a sentence about the state of a page that stays true while the page
+/// is up. `AppSnackBar` is for a momentary answer nobody has to act on. This is
+/// for the outcome in between — one a person **must** deal with before carrying
+/// on, and which a snack bar would take off the screen before they had.
+///
+/// **It is a modal on purpose and that is the cost it is worth.** The till's
+/// saved-sale confirmation used to be an inline `Callout` that stayed until it
+/// was closed, which pushed the cart down the screen for every sale — the
+/// common case paying the price of the rare one. Success is a snack bar now;
+/// this is what the rare one gets instead, so the sale screen keeps its shape
+/// and the exception still cannot be missed.
+///
+/// It carries the status the way every other notice surface does: §2.1's
+/// container, glyph and word, out of the [AppNotice] the caller already built.
+final class NoticeDialog extends StatelessWidget {
+  const NoticeDialog({
+    super.key,
+    required this.title,
+    required this.notice,
+    this.stillTrue,
+    this.dismissLabel = 'Close',
+    this.onDismiss,
+    this.dismissKey,
+  });
+
+  /// What happened, as a phrase rather than a question. §8 rule 4: this dialog
+  /// asks nothing, so its title states rather than asks.
+  final String title;
+
+  /// The outcome itself, which decides the container and the glyph.
+  final AppNotice notice;
+
+  /// What is **not** affected. §8 rule 6, and it matters more here than on a
+  /// question: this dialog exists because something went sideways, and the
+  /// first thing a person needs is the bound on it.
+  final String? stillTrue;
+
+  final String dismissLabel;
+  final VoidCallback? onDismiss;
+  final Key? dismissKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return _DialogFrame(
+      title: title,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // The `Callout` rather than a bare paragraph, so the status reaches a
+          // reader as a container and a glyph rather than as the tone of the
+          // sentence. The same component the page would have used inline.
+          Callout(
+            key: const ValueKey('notice-dialog-notice'),
+            status: notice.status,
+            message: notice.message,
+          ),
+          if (stillTrue case final reassurance?) ...<Widget>[
+            SizedBox(height: tokens.spacing.s12),
+            Text(
+              reassurance,
+              style: tokens.typography.bodyMedium.copyWith(
+                color: tokens.colors.text.tertiary,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: <Widget>[
+        AppButton(
+          key: dismissKey ?? const ValueKey('notice-dialog-dismiss'),
+          label: dismissLabel,
+          // `primary`: it is the only control here, and §2.1 permits exactly
+          // one primary per region. A lone `tertiary` would read as though the
+          // dialog had a second answer somewhere off screen.
+          tier: AppButtonTier.primary,
+          onPressed: onDismiss,
+        ),
+      ],
+    );
+  }
+}
+
+/// Shows [notice] as a modal that has to be dismissed before anything else.
+///
+/// **The barrier does not dismiss it.** Every other route out of this dialog is
+/// a deliberate press, because the whole reason it is a modal rather than a
+/// snack bar is that the outcome must not be able to disappear unnoticed.
+Future<void> showAppNoticeDialog(
+  BuildContext context, {
+  required String title,
+  required AppNotice notice,
+  String? stillTrue,
+  String dismissLabel = 'Close',
+  Key? dismissKey,
+}) => showDialog<void>(
+  context: context,
+  barrierDismissible: false,
+  barrierColor: AppTokens.componentOf(context).colors.surface.scrim,
+  builder: (context) => NoticeDialog(
+    title: title,
+    notice: notice,
+    stillTrue: stillTrue,
+    dismissLabel: dismissLabel,
+    dismissKey: dismissKey,
+    onDismiss: () => Navigator.of(context).pop(),
+  ),
+);

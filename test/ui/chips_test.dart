@@ -123,29 +123,34 @@ void main() {
       expect(size.height, greaterThanOrEqualTo(48));
     });
 
-    testWidgets('is a pill, which is design.md v0.7 and not the old row', (
-      tester,
-    ) async {
-      await _pump(tester, size: const Size(900, 800));
+    testWidgets(
+      'takes the design\'s rounded-full, which is 12 and not a pill',
+      (tester) async {
+        await _pump(tester, size: const Size(900, 800));
 
-      final tokens = spiritTheme.extension<AppTokens>()!;
-      final decorated = tester
-          .widgetList<DecoratedBox>(find.byType(DecoratedBox))
-          .map((box) => box.decoration)
-          .whereType<BoxDecoration>()
-          .where((d) => d.borderRadius != null);
-      // **`radius.pill` since 2026-08-23, at the product owner's
-      // direction.** The evidence this replaces was real and points the
-      // other way - Profound Verdant's CSS, its status chips and its
-      // rendered screens are all square-cornered - and the override is
-      // recorded as an override in `OPEN_QUESTIONS.md` decision 26. A shape
-      // is the owner's to choose; what this test holds is that the choice
-      // reaches the widget from the token layer rather than from a literal.
-      expect(
-        decorated.first.borderRadius,
-        BorderRadius.circular(tokens.radius.pill),
-      );
-    });
+        final tokens = spiritTheme.extension<AppTokens>()!;
+        final decorated = tester
+            .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+            .map((box) => box.decoration)
+            .whereType<BoxDecoration>()
+            .where((d) => d.borderRadius != null);
+        // A selectable chip in the export is `px-3 py-1.5 rounded-full`, and
+        // the served config resolves `full` to `0.75rem` - so 12 on a ~30-high
+        // chip is a soft rectangle rather than a capsule. `radius.lg` is that
+        // value. `StatusBadge` carried the bare `rounded` the export draws in
+        // 78 of 82 places until 2026-08-26, when the product owner moved it to
+        // `radius.md` - still not a capsule, and no longer sharper than the
+        // card it sits inside.
+        expect(
+          decorated.first.borderRadius,
+          BorderRadius.circular(tokens.radius.lg),
+        );
+        expect(
+          decorated.first.borderRadius,
+          isNot(BorderRadius.circular(tokens.radius.pill)),
+        );
+      },
+    );
   });
 }
 

@@ -184,7 +184,11 @@ void main() {
         findsNothing,
       );
 
-      await _tapVisibleThenPump(tester, 'cancel-staff-invitation-staff-a');
+      await _chooseDirectoryAction(
+        tester,
+        targetUid: 'staff-a',
+        actionKey: 'cancel-staff-invitation-staff-a',
+      );
       expect(find.text('Cancel invitation for Staff Person?'), findsOneWidget);
       await tester.enterText(
         find.byKey(const ValueKey('cancel-staff-invitation-reason')),
@@ -627,5 +631,15 @@ Future<void> _tapVisibleAndSettle(WidgetTester tester, String key) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseDirectoryAction(
+  WidgetTester tester, {
+  required String targetUid,
+  required String actionKey,
+}) async {
+  await _tapVisibleAndSettle(tester, 'staff-actions-$targetUid');
+  await tester.tap(find.byKey(ValueKey(actionKey)));
   await tester.pumpAndSettle();
 }

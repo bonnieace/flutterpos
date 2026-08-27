@@ -31,11 +31,7 @@ import 'harness.dart';
 /// A page with enough structure that a 30% shift is visible rather than
 /// inferred.
 class _Page extends StatelessWidget {
-  const _Page({
-    required this.title,
-    required this.lines,
-    this.onOpen,
-  });
+  const _Page({required this.title, required this.lines, this.onOpen});
 
   final String title;
   final List<String> lines;
@@ -136,9 +132,7 @@ void main() {
     afterPump: (tester) async {
       await tester.tap(find.byKey(const ValueKey('open-detail')));
       await tester.pumpAndSettle();
-      Navigator.of(
-        tester.element(find.byType(AppBar).last),
-      ).pop();
+      Navigator.of(tester.element(find.byType(AppBar).last)).pop();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 90));
     },

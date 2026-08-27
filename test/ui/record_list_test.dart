@@ -546,9 +546,22 @@ void main() {
       );
       TextStyle styleOf(String text) => tester.widget<Text>(find.text(text)).style!;
       // §5.2's five rows, each in the role the document gives it.
-      expect(styleOf('Amina Odhiambo').fontSize, _tokens.typography.titleMedium.fontSize);
+      //
+      // **The identity is `body.lg` at 600 since 2026-08-23, not `title.md`.**
+      // Every record heading in the export is `font-body-md font-bold` - 16 -
+      // with the *section* above it at 22; 18 / 500 was neither.
+      expect(
+        styleOf('Amina Odhiambo').fontSize,
+        _tokens.typography.bodyLarge.fontSize,
+      );
+      expect(styleOf('Amina Odhiambo').fontWeight, FontWeight.w600);
       expect(styleOf('Amina Odhiambo').color, _tokens.colors.text.primary);
       expect(styleOf('manager').color, _tokens.colors.text.secondary);
+      // An attribute's key is `label.eyebrow`, uppercased - the export's
+      // `text-label-caps ... uppercase` on a figure's label inside a card.
+      expect(find.text('ROLE'), findsOneWidget);
+      expect(styleOf('ROLE').fontSize, _tokens.typography.labelEyebrow.fontSize);
+      expect(styleOf('ROLE').color, _tokens.colors.text.tertiary);
       expect(
         styleOf('Recorded 2026-08-01 09:00 UTC by You').fontSize,
         _tokens.typography.caption.fontSize,

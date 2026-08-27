@@ -1,46 +1,22 @@
-/// The sign-in screen. `design.md` §11 step 9, and the last unmigrated surface
-/// the app's root reaches.
+/// The sign-in screen.
 ///
-/// **It is a `Scaffold` rather than an `AppScaffold`, and that is the one
-/// framing decision here worth arguing with.** `AppScaffold` is a toolbar, a
-/// [PageHeader] and a §4.2-capped body, in that order and spanning the page.
-/// Sign-in has nothing for a toolbar — there is no way back from the app's front
-/// door and there is nothing to sign out of — so it would draw 56 logical pixels
-/// of empty chrome above the title. More decisively, on a wide window this
-/// screen is two panes and **the title belongs to the form**, not to a header
-/// spanning a form and a keypad. `AppScaffold` cannot express that; [PageHeader]
-/// inside the form column can, and it is the part of §7's page pattern that
-/// carries the defect §7 names. So the pattern is kept and the frame is not.
+/// **Reverted to the pre-multitenancy app's look and flow on 2026-08-25** — see
+/// the plan at `C:\Users\BonifaceMasota\.claude\plans\look-at-the-old-expressive-sutton.md`.
+/// Existing customers know the old two-pane, pill-and-glass front door; this
+/// screen recreates it, styled entirely from [AppTokens] rather than the old
+/// screen's hardcoded colors, so the shape is old but nothing here is a literal.
+/// The sign-in boundary itself ([_submit], the notice model, the keyboard
+/// wiring) is unchanged from the prior Stitch-era version of this file — only
+/// the widget tree changed.
 ///
-/// **What §7's order does and does not decide here.** The pattern is
-/// *`PageHeader` → optional `Callout` → filters → content*, and the notice on
-/// this screen is not that `Callout`: §7's slot is for a standing fact about the
-/// page — read-only, offline — and this one is what the identity provider
-/// answered a moment ago. It therefore sits with the control that produced it,
-/// where the seven back-office surfaces put theirs, and where this screen has
-/// always drawn it.
-///
-/// **The defects this closes are `DESIGN-AUDIT.md` §4.4's, plus two it did not
-/// have.** Uppercase field labels where §2.2 permits uppercase only on
-/// `label.eyebrow`; a radius-32 well where §2.3 says `radius.sm`; a green glow
-/// `BoxShadow` where §9 requires a 2px ring at a 2px offset; `Colors.green` for
-/// the remember checkbox, a different green from the accent; `Colors.red` for
-/// the refusal rather than §2.1's `problem`; and `"UNLOCK REGISTER →"`, which
-/// §8 rule 3 names in its own words as the thing a control must not say. The two
-/// it did not have are the **double border** every field has drawn since commit
-/// `1b2b13b` — `InputDecorator` prefers `enabledBorder` over the
-/// `border: InputBorder.none` `PillInput` set, and the theme supplies one — and
-/// the **notice model**, which the 2026-08-15 sweep missed because this screen
-/// names its state `login-error` rather than a notice.
-///
-/// **The keypad's boundary is measured rather than declared**, and it replaces
-/// `width < 768`. §9 makes a key 48 wide, ten of them plus their gaps, the
-/// card's inset and the pane's margin need [PosKeyboard.minimumWidth], and the
-/// two panes share the window — so the question "is there room" is arithmetic
-/// this screen can do rather than a band it can look up. See [showsKeypad], which
-/// also records what the old boundary cost. Below it the form is one centred
-/// column, which is §4.3's `Form` row at every band.
+/// **The keypad's boundary is still measured rather than declared.** §9 makes a
+/// key 48 wide, ten of them plus their gaps, the pane's own inset need
+/// [PosKeyboard.minimumWidth], and the two panes share the window — so "is
+/// there room" is arithmetic this screen can do rather than a band it looks up.
+/// See [showsKeypad].
 library;
+
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -48,10 +24,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'keyboard_controller.dart';
 import 'keyboard_scope.dart';
 import 'tenancy/sign_in.dart';
-import 'ui/buttons.dart';
-import 'ui/fields.dart';
 import 'ui/press.dart';
-import 'ui/scaffold.dart';
 import 'ui/status.dart';
 import 'ui/tokens.dart';
 import 'widgets/pos_keyboard.dart';
@@ -279,17 +252,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: <Widget>[
                     Expanded(child: _form(tokens)),
                     Expanded(
-                      // No padding here, deliberately: the keypad's margin is
-                      // inside `PosKeyboard.minimumWidth`'s sum, and a second
-                      // inset added out here is a term that answer does not know
-                      // about. The cap is §4.2's form width, so the two panes
-                      // are the same measure on a window wider than 1440.
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: tokens.layout.reading,
+                      // **No padding around the pane, deliberately.** The
+                      // keypad's own margin is inside
+                      // `PosKeyboard.minimumWidth`'s sum, and an inset added
+                      // out here is a term that answer does not know about —
+                      // which is exactly how the old layout came to draw
+                      // 43-pixel keys against a component promising 48.
+                      child: _GlassPane(
+                        tokens: tokens,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: tokens.layout.reading,
+                            ),
+                            child: const PosKeyboard(),
                           ),
-                          child: const PosKeyboard(),
                         ),
                       ),
                     ),
@@ -301,56 +278,41 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  /// The form column, at §4.2's width for a form and centred in its pane.
-  ///
-  /// `Center` around the scroll view rather than inside it: a form shorter than
-  /// the window sits in the middle of it and a taller one scrolls, which is what
-  /// this screen has always done.
+  /// The credential column: a title, a sentence, and the pill form under them.
   Widget _form(AppTokens tokens) {
-    final inset = AppScaffold.horizontalInset(tokens.spacing);
     return Center(
       child: SingleChildScrollView(
         padding: EdgeInsets.symmetric(
-          horizontal: inset,
+          horizontal: tokens.spacing.s24,
           vertical: tokens.spacing.s32,
         ),
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: tokens.layout.reading),
+          constraints: BoxConstraints(maxWidth: tokens.layout.credential),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              // §7's first row, and §2.2's two screen-title roles. The subtitle
-              // is the sentence that was already under the title, moved into the
-              // slot built for it rather than reworded — which is the ruling
-              // §7's title chunk made on 2026-08-15.
-              const PageHeader(
-                title: 'Welcome back',
-                subtitle: 'Sign in to your account.',
+              Semantics(
+                header: true,
+                child: Text(
+                  'Welcome back',
+                  style: tokens.typography.display.copyWith(
+                    color: tokens.colors.text.primary,
+                  ),
+                ),
               ),
-              SizedBox(height: tokens.density.sectionGap),
-              AppTextField(
+              SizedBox(height: tokens.spacing.s8),
+              Text(
+                'Sign in to your account.',
+                style: tokens.typography.bodyLarge.copyWith(
+                  color: tokens.colors.text.secondary,
+                ),
+              ),
+              SizedBox(height: tokens.spacing.s40),
+              _PillField(
                 key: const ValueKey('login-email'),
-                // Sentence case, not new words. §2.2 restricts uppercase to
-                // `label.eyebrow` and §8 rule 7 asks for sentence case
-                // everywhere else; *what* this field should be called is a copy
-                // question and §11 step 11 is the copy pass.
-                // **It was not merely wordy, it was false.** This screen signs
-                // in through `signInWithEmailAndPassword` and nothing anywhere
-                // accepts a user ID, so half the label named a credential this
-                // app has never had - the same class of defect as the heading
-                // that told every reader the staff directory was read-only.
-                label: 'Email address',
-                // §5.2's leading icon, back where the original had it. These two
-                // are the clearest case the section describes: an envelope and a
-                // padlock say which of the two boxes is which before the labels
-                // are read, which is what a person signing in twice a day wants.
+                label: 'EMAIL / USER ID',
                 leading: Icons.email_outlined,
-                // `spiritpos.com` is not this product and never was - it is
-                // Chilltent. The replacement names no domain at all rather than
-                // swapping one for another: `example.com` is reserved by
-                // RFC 2606, so it cannot ever be a real business's address, and
-                // §5.2 asks a placeholder to be an example rather than a claim.
                 placeholder: 'name@example.com',
                 controller: emailController,
                 focusNode: emailFocus,
@@ -359,30 +321,24 @@ class _LoginScreenState extends State<LoginScreen> {
                 autocorrect: false,
                 enableSuggestions: false,
                 error: _errorFor(SignInInputDefect.missingEmail),
+                errorKey: const ValueKey('login-email-error'),
               ),
-              SizedBox(height: tokens.spacing.s16),
-              AppTextField(
+              SizedBox(height: tokens.spacing.s24),
+              _PillField(
                 key: const ValueKey('login-password'),
-                label: 'Password',
+                label: 'PASSWORD',
                 leading: Icons.lock_outline,
-                // **Asterisks, at the product owner's direction (2026-08-23),
-                // and they are an example rather than a restatement.** §5.2
-                // permits a placeholder that shows the shape of the value and
-                // forbids one that repeats the label - which is why the note
-                // this replaces was right to delete "Enter Password" and wrong
-                // to conclude the field could carry nothing at all. Eight
-                // asterisks are what this box will look like once somebody
-                // types in it, so the placeholder and `obscuringCharacter`
-                // below are deliberately the same glyph.
                 placeholder: '********',
                 controller: passwordController,
                 focusNode: passwordFocus,
                 obscureText: _passwordHidden,
+                obscuringCharacter: '*',
                 autocorrect: false,
                 enableSuggestions: false,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(),
                 error: _errorFor(SignInInputDefect.missingPassword),
+                errorKey: const ValueKey('login-password-error'),
                 trailing: _revealToggle(tokens),
               ),
               SizedBox(height: tokens.spacing.s16),
@@ -395,16 +351,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   message: answer.message,
                 ),
               ],
-              SizedBox(height: tokens.spacing.s24),
-              AppButton(
+              SizedBox(height: tokens.spacing.s32),
+              _PillSubmitButton(
                 key: const ValueKey('login-submit'),
-                // §8 rule 3: a control names its effect. §8's own list of what a
-                // control must never say has "Unlock register" on it.
                 label: 'Sign in',
-                tier: AppButtonTier.primary,
-                expand: true,
                 loading: isLoading,
                 onPressed: _submit,
+                tokens: tokens,
               ),
             ],
           ),
@@ -418,16 +371,6 @@ class _LoginScreenState extends State<LoginScreen> {
       _defect == defect ? signInInputDefectMessage(defect) : null;
 
   /// The reveal toggle inside the password well.
-  ///
-  /// A [PressSurface] rather than an `IconButton`: §9 wants a 48 x 48 target and
-  /// a semantic label on an icon-only control, and `PressSurface` is the only
-  /// thing in this app that gives both. It fits inside §5.2's 48-high well
-  /// because the target is the box rather than an inset around the glyph.
-  ///
-  /// **At [AppButton.iconSize]**, which is one of the two icon sizes §5.2 names.
-  /// A field's trailing control has no size row of its own, so it borrows a named
-  /// one rather than inventing a third — the same gap `Callout.glyphSize` and
-  /// `Disclosure.glyphSize` record, and the same answer.
   Widget _revealToggle(AppTokens tokens) => PressSurface(
     borderRadius: BorderRadius.circular(tokens.radius.sm),
     onPressed: _toggleReveal,
@@ -436,7 +379,7 @@ class _LoginScreenState extends State<LoginScreen> {
     semanticLabel: _passwordHidden ? 'Show the password' : 'Hide the password',
     child: Icon(
       _passwordHidden ? Icons.visibility_off : Icons.visibility,
-      size: AppButton.iconSize,
+      size: _pillIconSize,
       color: tokens.colors.text.tertiary,
     ),
   );
@@ -444,33 +387,326 @@ class _LoginScreenState extends State<LoginScreen> {
   void _toggleReveal() {
     setState(() {
       _passwordHidden = !_passwordHidden;
-      // Restore cursor to end after toggling.
       passwordController.selection = TextSelection.collapsed(
         offset: passwordController.text.length,
       );
     });
   }
 
-  Widget _rememberRow(AppTokens tokens) => Row(
-    children: <Widget>[
-      Checkbox(
-        value: rememberMe,
-        onChanged: (value) {
-          setState(() {
-            rememberMe = value ?? true;
-          });
-        },
-      ),
-      SizedBox(width: tokens.spacing.s8),
-      Text(
-        // Sentence case, §8 rule 7.
-        'Remember me',
-        style: tokens.density
-            .body(tokens.typography)
-            .copyWith(color: tokens.colors.text.secondary),
-      ),
-    ],
+  Widget _rememberRow(AppTokens tokens) => SizedBox(
+    height: tokens.density.minimumTapTarget.height,
+    child: Row(
+      children: <Widget>[
+        Checkbox(
+          value: rememberMe,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+          activeColor: tokens.colors.action.primary.container,
+          onChanged: (value) {
+            setState(() {
+              rememberMe = value ?? true;
+            });
+          },
+        ),
+        SizedBox(width: tokens.spacing.s12),
+        Text(
+          'Remember me',
+          style: tokens.typography.bodyMedium.copyWith(
+            color: tokens.colors.text.secondary,
+          ),
+        ),
+      ],
+    ),
   );
+}
+
+/// The icon size a pill field's leading glyph and trailing toggle share.
+///
+/// [AppButton.iconSize] would be the usual borrow, but this screen no longer
+/// imports `buttons.dart` — its controls are pill-shaped, not that
+/// component's — so the figure is named here instead of duplicated.
+const double _pillIconSize = 20;
+
+/// A label, an icon, and a pill-shaped well — the old front door's field,
+/// redrawn from [AppTokens] instead of the hardcoded colors it used to read.
+///
+/// Deliberately not a restyled [AppFieldWell]: that component is `radius.md`
+/// everywhere else in the app on purpose, and forking its shape here would
+/// either fork the component or change every field in the app. This is the
+/// same trade the old app made with its own `PillInput`, purpose-built for one
+/// screen.
+final class _PillField extends StatefulWidget {
+  const _PillField({
+    super.key,
+    required this.label,
+    required this.leading,
+    required this.controller,
+    required this.focusNode,
+    this.placeholder,
+    this.obscureText = false,
+    this.obscuringCharacter = '*',
+    this.keyboardType,
+    this.textInputAction,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
+    this.onSubmitted,
+    this.error,
+    this.errorKey,
+    this.trailing,
+  });
+
+  /// Addresses the error line, so a test reads the sentence a person reads
+  /// rather than a field's private state.
+  final Key? errorKey;
+
+  final String label;
+  final IconData leading;
+  final String? placeholder;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool obscureText;
+  final String obscuringCharacter;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final bool autocorrect;
+  final bool enableSuggestions;
+  final ValueChanged<String>? onSubmitted;
+  final String? error;
+  final Widget? trailing;
+
+  @override
+  State<_PillField> createState() => _PillFieldState();
+}
+
+class _PillFieldState extends State<_PillField> {
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_handleFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_handleFocusChanged);
+    super.dispose();
+  }
+
+  void _handleFocusChanged() {
+    if (!mounted || _focused == widget.focusNode.hasFocus) return;
+    setState(() => _focused = widget.focusNode.hasFocus);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final colors = tokens.colors;
+    final failed = widget.error != null;
+    final borderColor = failed
+        ? colors.status.problem.fg
+        : _focused
+        ? colors.action.focusRing.color
+        : Colors.transparent;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          widget.label,
+          style: tokens.typography.labelEyebrow.copyWith(
+            color: colors.text.tertiary,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.s8),
+        Container(
+          constraints: BoxConstraints(
+            minHeight: tokens.density.minimumTapTarget.height,
+          ),
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s20),
+          decoration: BoxDecoration(
+            color: colors.surface.field,
+            borderRadius: BorderRadius.circular(tokens.radius.pill),
+            border: Border.all(color: borderColor, width: 2),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(widget.leading, size: _pillIconSize, color: colors.text.tertiary),
+              SizedBox(width: tokens.spacing.s12),
+              Expanded(
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: widget.focusNode,
+                  obscureText: widget.obscureText,
+                  obscuringCharacter: widget.obscuringCharacter,
+                  keyboardType: widget.keyboardType,
+                  textInputAction: widget.textInputAction,
+                  autocorrect: widget.autocorrect,
+                  enableSuggestions: widget.enableSuggestions,
+                  onSubmitted: widget.onSubmitted,
+                  style: tokens.typography.bodyLarge.copyWith(
+                    color: colors.text.primary,
+                  ),
+                  cursorColor: colors.action.focusRing.color,
+                  // **All six border slots, not just `border`.** An
+                  // `InputDecorator` prefers `enabledBorder`/`focusedBorder`
+                  // over `border`, and the theme supplies both — so setting
+                  // only `border` leaves the theme's outline painted inside
+                  // this pill's own well. That is the `1b2b13b` defect, and
+                  // it came straight back the first time this screen was
+                  // reverted.
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    filled: false,
+                    isCollapsed: true,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: widget.placeholder,
+                    hintStyle: tokens.typography.bodyLarge.copyWith(
+                      color: colors.text.secondary,
+                    ),
+                  ),
+                ),
+              ),
+              if (widget.trailing case final trailing?) ...<Widget>[
+                SizedBox(width: tokens.spacing.s8),
+                trailing,
+              ],
+            ],
+          ),
+        ),
+        if (widget.error case final message?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s4),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s4),
+            child: Text(
+              message,
+              key: widget.errorKey,
+              style: tokens.typography.caption.copyWith(
+                color: colors.status.problem.fg,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The old front door's filled pill button, drawn in the primary action role.
+final class _PillSubmitButton extends StatelessWidget {
+  const _PillSubmitButton({
+    super.key,
+    required this.label,
+    required this.loading,
+    required this.onPressed,
+    required this.tokens,
+  });
+
+  final String label;
+  final bool loading;
+  final VoidCallback? onPressed;
+  final AppTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final role = tokens.colors.action.primary;
+    final enabled = onPressed != null && !loading;
+    final radius = BorderRadius.circular(tokens.radius.pill);
+
+    Widget content = Text(
+      label,
+      style: tokens.typography.labelLarge.copyWith(color: role.label),
+    );
+    if (loading) {
+      content = Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          Opacity(opacity: 0, child: content),
+          SizedBox(
+            width: tokens.colors.action.loadingIndicatorSize,
+            height: tokens.colors.action.loadingIndicatorSize,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(role.label),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: enabled,
+      label: loading ? '$label, working' : label,
+      onTap: enabled ? onPressed : null,
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: radius,
+        onPressed: enabled ? onPressed : null,
+        hoverOverlay: role.hoverFill(),
+        pressedOverlay: role.pressedFill(),
+        fillWidth: true,
+        excludeSemantics: true,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: role.container, borderRadius: radius),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: tokens.density.minimumTapTarget.height,
+            ),
+            child: Center(child: content),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The blurred, gradient-tinted pane the old front door drew its on-screen
+/// keyboard inside. See [AppEffects.glassBlurSigma].
+///
+/// No `BoxShadow`: [AppSurfaceRoles]'s own note is that depth here is a
+/// surface step, never a drop shadow, and this pane keeps that rule rather
+/// than reintroducing the old screen's blurred black shadow.
+final class _GlassPane extends StatelessWidget {
+  const _GlassPane({required this.tokens, required this.child});
+
+  final AppTokens tokens;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(tokens.radius.lg);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            tokens.colors.surface.raised,
+            tokens.colors.surface.overlay,
+          ],
+        ),
+        border: Border.all(color: tokens.colors.surface.borderSubtle),
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: tokens.effects.glassBlurSigma,
+            sigmaY: tokens.effects.glassBlurSigma,
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
 }
 
 /// Which §2.1 status a sign-in failure is drawn as.

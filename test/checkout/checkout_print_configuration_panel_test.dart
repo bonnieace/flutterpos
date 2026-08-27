@@ -35,10 +35,18 @@ void main() {
 
     await _pump(tester, _controller(), reader, writer: _Writer());
 
+    // **A `Callout` since 2026-08-26, where this was a loose grey paragraph.**
+    // Whether receipts are going anywhere is the screen's standing rather than
+    // prose about it, and §2.1 wants a container, a glyph and a word for that.
+    // `attention` is its "awaiting": a setup step nobody has taken.
     expect(
-      _text(tester, 'printer-configuration-current'),
+      noticeMessage(tester, 'printer-configuration-current'),
       'No printer is set up, so receipts are not sent anywhere. Sales are '
           'recorded as normal.',
+    );
+    expect(
+      noticeStatus(tester, 'printer-configuration-current'),
+      AppStatus.attention,
     );
     expect(reader.requested.single, _printerPath);
     // Nothing to replace, so the button says what it does rather than what it
@@ -54,8 +62,13 @@ void main() {
     await _pump(tester, _controller(), reader, writer: _Writer());
 
     expect(
-      _text(tester, 'printer-configuration-current'),
+      noticeMessage(tester, 'printer-configuration-current'),
       'Receipts go to 192.168.1.50:9100 on 48-column paper.',
+    );
+    // Nothing is wrong and nothing is pending: §2.1's "informational".
+    expect(
+      noticeStatus(tester, 'printer-configuration-current'),
+      AppStatus.info,
     );
     expect(
       _buttonLabel(tester, 'printer-configuration-submit'),
@@ -74,9 +87,15 @@ void main() {
     await _pump(tester, _controller(), reader);
 
     expect(
-      _text(tester, 'printer-configuration-current'),
+      noticeMessage(tester, 'printer-configuration-current'),
       'The saved printer settings cannot be read, so receipts are not sent '
           'anywhere. Saving a printer here replaces them.',
+    );
+    // §2.1 gives `problem` the meaning "difference found, **unreadable**, out
+    // of stock", and settings that cannot be read is exactly that.
+    expect(
+      noticeStatus(tester, 'printer-configuration-current'),
+      AppStatus.problem,
     );
   });
 
@@ -266,9 +285,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(probed.single.host, '192.168.1.99');
+      // **A snack bar since 2026-08-26.** A probe changes nothing, so its
+      // answer is not the state of this page and no longer sits in the same
+      // block as the record of a save.
       expect(
-        noticeMessage(tester, 'printer-configuration-notice'),
+        snackNotice(tester).message,
         'The printer answered. Nothing was printed.',
+      );
+      expect(
+        find.byKey(const ValueKey('printer-configuration-notice')),
+        findsNothing,
       );
     });
 
@@ -287,10 +313,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('printer-configuration-test')));
       await tester.pumpAndSettle();
 
-      expect(
-        noticeMessage(tester, 'printer-configuration-notice'),
-        contains('Nothing was printed'),
-      );
+      expect(snackNotice(tester).message, contains('Nothing was printed'));
+      expect(snackNotice(tester).status, AppStatus.ok);
     });
 
     testWidgets('maps a failure through the transports own vocabulary', (
@@ -311,7 +335,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        noticeMessage(tester, 'printer-configuration-notice'),
+        snackNotice(tester).message,
         PrinterFailureNotice.of(PrinterTransportCode.connectTimeout).message,
       );
     });

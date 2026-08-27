@@ -69,33 +69,49 @@ final class ShiftBanner extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final role = status.role(tokens);
     final radius = BorderRadius.circular(tokens.radius.md);
+    // **A card, with the status on the words rather than on the box, since
+    // 2026-08-23.** The export draws this exact panel as
+    // `bg-surface-card border border-surface-elevated rounded-xl p-4
+    // flex flex-col gap-4`: a plain card holding a coloured status line, a
+    // figure, and one full-width control beneath. Tinting the whole container
+    // made the busiest surface on the landing route a coloured slab, and it
+    // put the shift's own action on the same row as its reading.
     final body = Padding(
       padding: EdgeInsets.all(tokens.spacing.s16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(icon ?? status.defaultIcon, size: Callout.glyphSize, color: role.fg),
-          SizedBox(width: tokens.spacing.s12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  heading,
-                  style: tokens.typography.labelLarge.copyWith(color: role.fg),
-                ),
-                SizedBox(height: tokens.spacing.s4),
-                Text(
-                  detail,
-                  style: tokens.typography.caption.copyWith(
-                    color: tokens.colors.text.tertiary,
+          Row(
+            children: <Widget>[
+              Icon(
+                icon ?? status.defaultIcon,
+                size: Callout.glyphSize,
+                color: role.fg,
+              ),
+              SizedBox(width: tokens.spacing.s8),
+              Expanded(
+                child: Text(
+                  // The export sets this line in `label-caps`, uppercased.
+                  // §2.2 permits uppercase on `label.eyebrow` and on nothing
+                  // else, and this is that role.
+                  heading.toUpperCase(),
+                  style: tokens.typography.labelEyebrow.copyWith(
+                    color: role.fg,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.s8),
+          Text(
+            detail,
+            style: tokens.typography.bodyMedium.copyWith(
+              color: tokens.colors.text.secondary,
             ),
           ),
           if (action case final control?) ...<Widget>[
-            SizedBox(width: tokens.spacing.s12),
+            SizedBox(height: tokens.spacing.s16),
             control,
           ],
         ],
@@ -108,8 +124,8 @@ final class ShiftBanner extends StatelessWidget {
       label: '$heading. $detail',
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: role.bg,
-          border: Border.all(color: role.border),
+          color: tokens.colors.surface.raised,
+          border: Border.all(color: tokens.colors.surface.borderSubtle),
           borderRadius: radius,
         ),
         child: onOpenDetails == null

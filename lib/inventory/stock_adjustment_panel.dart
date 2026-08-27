@@ -14,16 +14,24 @@ import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
+import '../ui/sheet.dart';
+import '../ui/snackbar.dart';
 import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'stock_actions.dart';
 import 'stock_adjustment.dart';
+import 'product_visual.dart';
 import 'stock_adjustment_feed_panel.dart';
 import 'stock_movement_labels.dart';
 import 'stock_movements.dart';
 
-/// Read-and-correct stock route for one product in the selected tenant.
+/// The reading route for one product's stock in the selected tenant.
+///
+/// **A route again rather than half of one, since 2026-08-26.** The split of
+/// 2026-08-25 gave correcting its own screen and left the two halves sharing a
+/// `mode`; the correction is now [openTenantProductStockAdjustmentSheet], so
+/// this is the ledger and nothing else and needs no flag to say which it is.
 final class TenantProductStockScreen extends StatelessWidget {
   const TenantProductStockScreen({
     super.key,
@@ -50,6 +58,54 @@ final class TenantProductStockScreen extends StatelessWidget {
       actions: actions,
     ),
   );
+}
+
+/// Opens the correction form as a sheet over the surface that asked for it.
+///
+/// **A sheet rather than a route, at the product owner's direction on
+/// 2026-08-26.** Correcting a figure is one short errand with one answer, and
+/// pushing a whole screen for it took a person away from the catalog they were
+/// working down and made them navigate back to carry on. The sheet keeps that
+/// list on screen behind the scrim.
+///
+/// **The answer lands on the surface underneath, not in here.** A confirmed
+/// adjustment closes the sheet and the sentence is shown by [showAppSnackBar]
+/// over the catalog — see [TenantProductStockAdjustmentPanel.onCompleted] for
+/// why a refusal deliberately does not.
+Future<void> openTenantProductStockAdjustmentSheet(
+  BuildContext context, {
+  required TenantDataReader reader,
+  required TenantProduct product,
+  TenantStockActions? actions,
+  String Function()? requestIdFactory,
+}) async {
+  // The same scope the catalog was authorized against, captured before the
+  // sheet exists: a sheet is a route of its own and inherits nothing from the
+  // page it covers, so without this the guard inside it would find no session.
+  final sessions = TenantSessionScope.of(context);
+  final answer = await showAppSheet<AppNotice>(
+    context,
+    // The form is a select, a direction, two fields and a pair of buttons. At
+    // `half` the submit control sits below the fold on a phone, which is the
+    // trap `AppSheetDetent.half`'s own doc records against the till's cart.
+    initialDetent: AppSheetDetent.full,
+    builder: (sheetContext, controller) => TenantSessionScope(
+      controller: sessions,
+      child: TenantProductStockAdjustmentPanel(
+        reader: reader,
+        product: product,
+        actions: actions,
+        requestIdFactory: requestIdFactory,
+        scrollController: controller,
+        onCompleted: (notice) => Navigator.of(sheetContext).pop(notice),
+        onCancel: () => Navigator.of(sheetContext).pop(),
+      ),
+    ),
+  );
+  // `context.mounted` because the await above spans the whole life of the
+  // sheet, and the catalog under it can be disposed by a tenant switch while
+  // it is up. Announcing a stock change over a torn-down page would throw.
+  if (answer != null && context.mounted) showAppSnackBar(context, answer);
 }
 
 /// How many of a product's recorded differences this route reads.
@@ -101,11 +157,17 @@ final class _StockView {
   final _ProductDifferences differences;
 }
 
-/// Shows one product's recorded stock, pages its server-written ledger, and
-/// records a management-only adjustment behind [TenantRouteGuard].
+/// Shows one product's recorded stock and pages its server-written ledger,
+/// behind [TenantRouteGuard].
+///
+/// **Reading only, since the correction became a sheet on 2026-08-26.** It used
+/// to carry the adjustment gateway too, behind a `mode` flag that decided which
+/// half of itself to draw; that half is [TenantProductStockAdjustmentPanel] now,
+/// which is why the busy flag, the notice and the retained request ID have all
+/// left this class rather than being duplicated into it.
 ///
 /// The guard owns authorization and stale-session rejection: a tenant switch
-/// during an outstanding page or call discards it before it can update the UI.
+/// during an outstanding page discards it before it can update the UI.
 final class TenantProductStockPanel extends StatefulWidget {
   const TenantProductStockPanel({
     super.key,
@@ -113,16 +175,16 @@ final class TenantProductStockPanel extends StatefulWidget {
     required this.product,
     this.actions,
     this.pageSize = 20,
-    this.requestIdFactory,
   });
 
   final TenantDataReader reader;
   final TenantProduct product;
-  final TenantStockActions? actions;
-  final int pageSize;
 
-  /// One fresh request ID per confirmation intent.
-  final String Function()? requestIdFactory;
+  /// Retained so the composition root's wiring is unchanged and so this route
+  /// still knows whether correcting is available at all. Nothing here calls it.
+  final TenantStockActions? actions;
+
+  final int pageSize;
 
   @override
   State<TenantProductStockPanel> createState() =>
@@ -133,13 +195,6 @@ final class _TenantProductStockPanelState
     extends State<TenantProductStockPanel> {
   List<String?> _cursors = <String?>[null];
   int _pageIndex = 0;
-  int _generation = 0;
-  bool _busy = false;
-  AppNotice? _notice;
-
-  /// Retained only across an ambiguous attempt, so a retry addresses the same
-  /// idempotency record instead of moving the same stock twice.
-  String? _requestId;
   TenantStaffNameResolver? _staffNames;
   String? _staffNamesSessionKey;
 
@@ -173,24 +228,8 @@ final class _TenantProductStockPanelState
     setState(() => _pageIndex--);
   }
 
-  /// Restarts the guarded load from the first page.
-  void _reload() {
-    setState(() {
-      _cursors = <String?>[null];
-      _pageIndex = 0;
-      _generation++;
-    });
-  }
-
-  /// Whether the session this work was authorized against is still selected.
-  bool _stillCurrent(String capturedKey) {
-    if (!mounted) return false;
-    final current = TenantSessionScope.of(context).session;
-    return current != null && _sessionKey(current) == capturedKey;
-  }
-
   /// One loader per guard key; a closure rebuilt every frame would reload on
-  /// every `setState` and discard the half-filled adjustment form.
+  /// every `setState`.
   TenantGuardedLoader<_StockView> _loaderFor(String key) {
     if (key == _loaderKey && _loader != null) return _loader!;
     _loaderKey = key;
@@ -250,6 +289,150 @@ final class _TenantProductStockPanelState
   String? _loaderKey;
   TenantGuardedLoader<_StockView>? _loader;
 
+  @override
+  Widget build(BuildContext context) {
+    final cursor = _cursors[_pageIndex];
+    final guardKey = '${widget.product.id}:$_pageIndex:$cursor';
+    return TenantRouteGuard<_StockView>(
+      key: ValueKey(guardKey),
+      allowedRoles: TenantProductStockRepository.allowedRoles,
+      load: _loaderFor(guardKey),
+      denied: const Center(
+        key: ValueKey('product-stock-denied'),
+        child: Text('Stock is unavailable for this business.'),
+      ),
+      failure: (context, error) => const Center(
+        key: ValueKey('product-stock-failure'),
+        child: Text('This product\'s stock could not be loaded.'),
+      ),
+      builder: (context, session, view) => _ProductStockContents(
+        view: view,
+        selfUid: session.uid,
+        pageIndex: _pageIndex,
+        // The same domain owns both surfaces, so this route needs no injection
+        // from the composition root; it opens under this route's own scope.
+        onOpenAdjustments: () => openTenantStockAdjustmentFeed(
+          context,
+          reader: widget.reader,
+          product: view.stock.product,
+        ),
+        onNextPage: () => _nextPage(view.stock.movements.nextCursor),
+        onPreviousPage: _previousPage,
+      ),
+    );
+  }
+}
+
+/// Records one management-only stock correction behind [TenantRouteGuard].
+///
+/// **It re-reads the quantity and nothing else, and that is the change of
+/// 2026-08-26.** While this was the second half of the ledger route it shared
+/// that route's load: a page of twenty stock movements and a reconciliation
+/// query, both drawn above the form. The sheet shows neither, so reading them
+/// would spend two reads per open on nothing — [TenantProductStockRepository.
+/// readProduct] is the same guarded, tenant-checked read `loadStock` begins
+/// with, without the ledger page hanging off it.
+///
+/// The quantity is still never carried in from the catalog. The figure the form
+/// states, and the one the confirmation arithmetic is done against, is read from
+/// the canonical document when the sheet opens.
+final class TenantProductStockAdjustmentPanel extends StatefulWidget {
+  const TenantProductStockAdjustmentPanel({
+    super.key,
+    required this.reader,
+    required this.product,
+    this.actions,
+    this.requestIdFactory,
+    this.scrollController,
+    this.onCompleted,
+    this.onCancel,
+  });
+
+  final TenantDataReader reader;
+
+  /// The catalog record this was opened for. Only its ID is used to read.
+  final TenantProduct product;
+
+  final TenantStockActions? actions;
+
+  /// One fresh request ID per confirmation intent.
+  final String Function()? requestIdFactory;
+
+  /// The sheet's own controller, which must reach the scrollable this builds or
+  /// dragging the form scrolls the form and the sheet never moves. Null when
+  /// this panel is pumped outside a sheet, which is how its tests reach it.
+  final ScrollController? scrollController;
+
+  /// Called with the confirmation once, and only once, a correction commits.
+  ///
+  /// **Only a commit reports out, and a refusal deliberately does not.** The
+  /// sheet closes on this callback, so handing it a refusal would throw away a
+  /// half-typed reason and a chosen type at the exact moment a person needs
+  /// them to fix what was wrong. A refusal stays here as a [Callout] over the
+  /// form that produced it; an ambiguous outcome does too, because the figure
+  /// above it has just been re-read and is the answer.
+  ///
+  /// Null renders every outcome in place, which is what a test pumping this
+  /// panel bare sees.
+  final void Function(AppNotice notice)? onCompleted;
+
+  /// Abandons the correction. Null draws no cancel control.
+  final VoidCallback? onCancel;
+
+  @override
+  State<TenantProductStockAdjustmentPanel> createState() =>
+      _TenantProductStockAdjustmentPanelState();
+}
+
+final class _TenantProductStockAdjustmentPanelState
+    extends State<TenantProductStockAdjustmentPanel> {
+  int _generation = 0;
+  bool _busy = false;
+  AppNotice? _notice;
+
+  /// Retained only across an ambiguous attempt, so a retry addresses the same
+  /// idempotency record instead of moving the same stock twice.
+  String? _requestId;
+
+  static String _sessionKey(TenantSession session) =>
+      '${session.uid}:${session.tenantId}:${session.epoch}';
+
+  /// Restarts the guarded read of the canonical quantity.
+  void _reload() => setState(() => _generation++);
+
+  /// Whether the session this work was authorized against is still selected.
+  bool _stillCurrent(String capturedKey) {
+    if (!mounted) return false;
+    final current = TenantSessionScope.of(context).session;
+    return current != null && _sessionKey(current) == capturedKey;
+  }
+
+  String? _loaderKey;
+  TenantGuardedLoader<TenantProduct>? _loader;
+
+  /// One loader per guard key, for the reason the ledger's own has: a closure
+  /// rebuilt every frame would re-read on every keystroke in the reason field
+  /// and discard the half-filled form.
+  TenantGuardedLoader<TenantProduct> _loaderFor(String key) {
+    if (key == _loaderKey && _loader != null) return _loader!;
+    _loaderKey = key;
+    final productId = widget.product.id;
+    return _loader = (session) => TenantProductStockRepository(
+      session: session,
+      reader: widget.reader,
+    ).readProduct(productId);
+  }
+
+  /// Reports [notice] the way this panel was wired to, and nothing more.
+  void _answer(AppNotice notice) {
+    final completed = widget.onCompleted;
+    if (notice.status == AppStatus.ok && completed != null) {
+      completed(notice);
+      return;
+    }
+    setState(() => _notice = notice);
+  }
+
   /// Adjusts this product's stock through the session- and product-bound
   /// gateway, then re-reads so what is shown is the server's own figure rather
   /// than an optimistic local one.
@@ -284,28 +467,31 @@ final class _TenantProductStockPanelState
       );
       if (!_stillCurrent(capturedKey)) return;
       _requestId = null;
-      setState(
-        () => _notice = AppNotice.confirmed(
-          'Stock changed from ${result.previousQuantity} to '
-          '${result.quantity}.',
-        ),
+      // **The re-read is skipped when the sheet is closing**, and that is not a
+      // shortcut: `_answer` pops the route, so a `_reload` after it would start
+      // a guarded read against a deactivated element. The figure this sheet was
+      // showing is gone from the screen either way; the sentence carries the
+      // server's own before-and-after.
+      final confirmation = AppNotice.confirmed(
+        'Stock changed from ${result.previousQuantity} to ${result.quantity}.',
       );
-      _reload();
+      _answer(confirmation);
+      if (widget.onCompleted == null) _reload();
     } on TenantStockAdjustmentException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
       // Only an unknown outcome may have moved stock, so only it keeps the
       // request ID. Every other refusal left nothing behind, and reusing its ID
       // would make an edited retry fail as a duplicate.
       if (!error.mayHaveCommitted) _requestId = null;
-      setState(() => _notice = _adjustmentNotice(error.failure));
+      _answer(_adjustmentNotice(error.failure));
       if (error.mayHaveCommitted) _reload();
     } on FormatException {
       if (!_stillCurrent(capturedKey)) return;
       // The call may well have moved stock; only its answer was unusable.
-      setState(
-        () => _notice = const AppNotice.unknown(
-          'The adjustment response could not be trusted. Reload this page to '
-          'see what the server recorded.',
+      _answer(
+        const AppNotice.unknown(
+          'The adjustment response could not be trusted. Close this and open '
+          'the product\'s stock to see what the server recorded.',
         ),
       );
       _reload();
@@ -316,9 +502,8 @@ final class _TenantProductStockPanelState
 
   @override
   Widget build(BuildContext context) {
-    final cursor = _cursors[_pageIndex];
-    final guardKey = '${widget.product.id}:$_generation:$_pageIndex:$cursor';
-    return TenantRouteGuard<_StockView>(
+    final guardKey = '${widget.product.id}:$_generation';
+    return TenantRouteGuard<TenantProduct>(
       key: ValueKey(guardKey),
       allowedRoles: TenantProductStockRepository.allowedRoles,
       load: _loaderFor(guardKey),
@@ -330,26 +515,17 @@ final class _TenantProductStockPanelState
         key: ValueKey('product-stock-failure'),
         child: Text('This product\'s stock could not be loaded.'),
       ),
-      builder: (context, session, view) => _ProductStockContents(
-        view: view,
-        selfUid: session.uid,
-        pageIndex: _pageIndex,
+      builder: (context, session, product) => _AdjustStockContents(
+        product: product,
         busy: _busy,
         notice: _notice,
-        // The same domain owns both surfaces, so this route needs no injection
-        // from the composition root; it opens under this route's own scope.
-        onOpenAdjustments: () => openTenantStockAdjustmentFeed(
-          context,
-          reader: widget.reader,
-          product: view.stock.product,
-        ),
         canAdjust:
             widget.actions?.adjustCallable != null &&
             TenantStockAdjustmentGateway.canAdjustInSession(session),
-        onNextPage: () => _nextPage(view.stock.movements.nextCursor),
-        onPreviousPage: _previousPage,
+        scrollController: widget.scrollController,
+        onCancel: widget.onCancel,
         onAdjust: (type, quantityDelta, reason) =>
-            _adjust(session, view.stock.product, type, quantityDelta, reason),
+            _adjust(session, product, type, quantityDelta, reason),
       ),
     );
   }
@@ -436,33 +612,19 @@ final class _ProductStockContents extends StatelessWidget {
     required this.view,
     required this.selfUid,
     required this.pageIndex,
-    required this.busy,
-    required this.notice,
-    required this.canAdjust,
     required this.onNextPage,
     required this.onPreviousPage,
     required this.onOpenAdjustments,
-    required this.onAdjust,
   });
 
   final _StockView view;
   final String selfUid;
   final int pageIndex;
-  final bool busy;
-  final AppNotice? notice;
-  final bool canAdjust;
   final VoidCallback onNextPage;
   final VoidCallback onPreviousPage;
 
   /// Opens the manual-correction feed narrowed to this product.
   final VoidCallback onOpenAdjustments;
-
-  final void Function(
-    TenantStockAdjustmentType type,
-    int quantityDelta,
-    String reason,
-  )
-  onAdjust;
 
   TenantProduct get product => view.stock.product;
   TenantStockMovementPage get page => view.stock.movements;
@@ -480,7 +642,24 @@ final class _ProductStockContents extends StatelessWidget {
         // `display` and *White bread loaf* again directly under it. The
         // `AppScaffold` title is this same `product.name`.
         SizedBox(height: tokens.spacing.s4),
-        Text('SKU ${product.sku}'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            SizedBox.square(
+              dimension: tokens.spacing.s64,
+              child: TenantProductVisual(product: product),
+            ),
+            SizedBox(width: tokens.spacing.s12),
+            Expanded(
+              child: Text(
+                'SKU ${product.sku}',
+                style: tokens.typography.mono.copyWith(
+                  color: tokens.colors.text.secondary,
+                ),
+              ),
+            ),
+          ],
+        ),
         SizedBox(height: tokens.spacing.s16),
         // The headline figures. `product-stock-quantity` now keys the number
         // itself rather than a sentence containing it, because the caption is
@@ -530,28 +709,13 @@ final class _ProductStockContents extends StatelessWidget {
             'here afterwards.',
           ),
         ),
-        // **This one sits directly above the "Reconciliation found" section**,
-        // which draws every recorded difference as a red `Callout`. A bare
-        // sentence saying "Stock changed from 10 to 7." immediately above a stack
-        // of red blocks reads as part of the problem rather than as the answer to
-        // it, which is the sharpest case in the family for a notice carrying its
-        // own status.
-        if (notice case final answer?) ...[
-          SizedBox(height: tokens.spacing.s12),
-          Callout(
-            key: const ValueKey('product-stock-notice'),
-            status: answer.status,
-            message: answer.message,
-          ),
-        ],
+        // **No notice block here any more.** This route writes nothing, so
+        // there is never an answer to report on it; the one place a stock
+        // sentence appears is over the surface the correction sheet closed on
+        // to. See `_AdjustStockContents` for the notice that stayed behind.
         ..._differencesSection(context),
         SizedBox(height: tokens.spacing.s24),
-        Text(
-          'Stock ledger',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Stock ledger'),
         SizedBox(height: tokens.spacing.s4),
         const Disclosure(
           key: ValueKey('product-stock-ledger-disclosure'),
@@ -587,12 +751,14 @@ final class _ProductStockContents extends StatelessWidget {
           ),
         ),
         SizedBox(height: tokens.spacing.s16),
-        // **Pagination is secondary, and it used to be a primary.** §2.1
-        // permits exactly one primary per screen region and on this route that
-        // is `Adjust stock`; "Next page" competing with it for the eye is the
-        // tier system not being applied rather than a taste call. The same
-        // repoint is made on every paginated feed - and as of `Pagination` it
-        // is made once, in the component, rather than on thirteen screens.
+        // **Pagination is secondary.** §2.1 permits exactly one primary per
+        // screen region, and "Next page" competing for the eye is the tier
+        // system not being applied rather than a taste call. The same repoint
+        // is made on every paginated feed - and as of `Pagination` it is made
+        // once, in the component, rather than on thirteen screens.
+        //
+        // It used to say `Adjust stock` was this region's primary. That control
+        // is a sheet over the catalog now and this route has no primary at all.
         Pagination(
           pageNumber: pageIndex + 1,
           previousKey: const ValueKey('product-stock-previous'),
@@ -618,17 +784,6 @@ final class _ProductStockContents extends StatelessWidget {
             onPressed: onOpenAdjustments,
           ),
         ),
-        if (canAdjust) ...[
-          SizedBox(height: tokens.spacing.s24),
-          const Divider(),
-          SizedBox(height: tokens.spacing.s12),
-          _AdjustStockForm(
-            key: const ValueKey('product-stock-form'),
-            quantity: product.quantity,
-            busy: busy,
-            onAdjust: onAdjust,
-          ),
-        ],
       ],
     );
   }
@@ -668,12 +823,7 @@ final class _ProductStockContents extends StatelessWidget {
     if (differences.items.isEmpty) return const <Widget>[];
     return <Widget>[
       SizedBox(height: tokens.spacing.s24),
-      Text(
-        'Reconciliation found',
-        style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        ),
-      ),
+      SectionHeading('Reconciliation found'),
       SizedBox(height: tokens.spacing.s4),
       // A permanent helper paragraph: it is true of every difference this screen
       // will ever show, so it folds. The distinction it draws is what keeps the
@@ -738,6 +888,129 @@ final class _ProductStockContents extends StatelessWidget {
   );
 }
 
+/// The correction sheet: the figure being corrected, and the form that
+/// corrects it.
+///
+/// **What is not here is the point of the change.** Until 2026-08-26 this was
+/// the reading route with a form appended, so a person who pressed *Adjust
+/// stock* got the product's picture, its SKU, how many ledger entries were on
+/// the current page, a fold explaining why stock can be negative, and the whole
+/// reconciliation exception report — every one of them a second copy of what
+/// *View stock* is for, above the two fields they had actually come to fill in.
+///
+/// **The recorded quantity stays, and it is the only thing that did.** It is
+/// not context about the product; it is the operand. The confirmation says "from
+/// the quantity recorded now, that is 12 to 9", and a person cannot check that
+/// arithmetic against a figure they cannot see.
+final class _AdjustStockContents extends StatelessWidget {
+  const _AdjustStockContents({
+    required this.product,
+    required this.busy,
+    required this.notice,
+    required this.canAdjust,
+    required this.scrollController,
+    required this.onAdjust,
+    required this.onCancel,
+  });
+
+  final TenantProduct product;
+  final bool busy;
+  final AppNotice? notice;
+  final bool canAdjust;
+
+  /// The sheet's drag controller. See
+  /// [TenantProductStockAdjustmentPanel.scrollController].
+  final ScrollController? scrollController;
+
+  final void Function(
+    TenantStockAdjustmentType type,
+    int quantityDelta,
+    String reason,
+  )
+  onAdjust;
+
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return ListView(
+      key: const ValueKey('product-stock-adjust'),
+      controller: scrollController,
+      // No top inset: the sheet's own handle already sits above this, and
+      // `AppSheetDetent` pads it. The bottom is the sheet's rather than a
+      // page's, so the submit control clears the sheet's edge.
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.s20,
+        0,
+        tokens.spacing.s20,
+        tokens.spacing.s24,
+      ),
+      children: <Widget>[
+        // **The sheet's own title, carrying what `AppScaffold` used to.** §7's
+        // "title appears once": the errand names the header and the product
+        // names the subtitle, which is exactly what the adjust *route*'s app bar
+        // said before it became this. The `SectionHeading` that used to repeat
+        // `Adjust stock` inside the form below is gone for the same rule.
+        PageHeader(
+          key: const ValueKey('product-stock-adjust-header'),
+          title: 'Adjust stock',
+          subtitle: product.name,
+        ),
+        SizedBox(height: tokens.spacing.s16),
+        // The figure the form is about, re-read canonically when the sheet
+        // opened. `StatRow` rather than a bare number because this is a
+        // headline figure and §2.1's negative case needs a container, a glyph
+        // and a word - a red number alone is §9's own counter-example.
+        StatRow(
+          tiles: <StatTile>[
+            StatTile(
+              valueKey: const ValueKey('product-stock-quantity'),
+              label: 'Recorded stock',
+              value: '${product.quantity}',
+              icon: Icons.inventory_2_outlined,
+              detail: 'held by the server',
+              status: product.quantity < 0 ? AppStatus.problem : null,
+              statusLabel: product.quantity < 0 ? 'Below zero' : null,
+            ),
+          ],
+        ),
+        if (notice case final answer?) ...<Widget>[
+          SizedBox(height: tokens.spacing.s16),
+          // Only a refusal or an unknown outcome reaches here: a commit closes
+          // the sheet and is announced over the catalog instead. See
+          // [TenantProductStockAdjustmentPanel.onCompleted].
+          Callout(
+            key: const ValueKey('product-stock-notice'),
+            status: answer.status,
+            message: answer.message,
+          ),
+        ],
+        SizedBox(height: tokens.spacing.s16),
+        if (canAdjust)
+          _AdjustStockForm(
+            key: const ValueKey('product-stock-form'),
+            quantity: product.quantity,
+            busy: busy,
+            onAdjust: onAdjust,
+            onCancel: onCancel,
+          )
+        else
+          // A session that may not adjust must never be offered the control
+          // that opens this sheet - the catalog withholds it - so arriving here
+          // without the permission is a wiring fault rather than a state to
+          // design for, and it says so instead of drawing an empty sheet.
+          const Callout(
+            key: ValueKey('product-stock-adjust-denied'),
+            status: AppStatus.problem,
+            message: 'Only an owner, administrator, or manager may correct '
+                'stock.',
+          ),
+      ],
+    );
+  }
+}
+
 /// Chooses one typed adjustment and requires an explicit confirmation.
 ///
 /// The direction offered is decided by the type, because the server binds them:
@@ -750,6 +1023,7 @@ final class _AdjustStockForm extends StatefulWidget {
     required this.quantity,
     required this.busy,
     required this.onAdjust,
+    this.onCancel,
   });
 
   final int quantity;
@@ -760,6 +1034,15 @@ final class _AdjustStockForm extends StatefulWidget {
     String reason,
   )
   onAdjust;
+
+  /// Abandons the correction without recording anything.
+  ///
+  /// **The sheet is dismissible and still draws this**, which is not a
+  /// duplicate control. Dragging a sheet down is a gesture, and §9's target
+  /// rules are about things a person can aim at: a reachable, labelled way out
+  /// is what a switch or a keyboard has, and the drag handle is not one. It is
+  /// `secondary` so §2.1's one-primary-per-region still names `Adjust stock`.
+  final VoidCallback? onCancel;
 
   @override
   State<_AdjustStockForm> createState() => _AdjustStockFormState();
@@ -842,13 +1125,10 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Adjust stock',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s4),
+        // **No `SectionHeading` here since 2026-08-26.** It read `Adjust stock`
+        // directly under a sheet header reading `Adjust stock`, which is the
+        // §7 violation this form was the last instance of on this surface.
+        //
         // §5.2 names the stock-adjustment explanation as prose to keep and move
         // inside a `Disclosure`. The words are unchanged; the summary above them
         // is new because the component requires one.
@@ -911,12 +1191,38 @@ final class _AdjustStockFormState extends State<_AdjustStockForm> {
           onChanged: (_) => setState(() {}),
           label: 'Reason for this adjustment',
         ),
-        SizedBox(height: tokens.spacing.s12),
-        AppButton(
-          key: const ValueKey('product-stock-submit'),
-          label: 'Adjust stock',
-          tier: AppButtonTier.primary,
-          onPressed: _canSubmit ? _confirm : null,
+        SizedBox(height: tokens.spacing.s16),
+        // **Right-aligned, with the primary last, since 2026-08-26.** Owner
+        // direction and the reason is the hand: a sheet is a phone surface, most
+        // people hold it right-handed, and the control they will press is the
+        // one under the thumb rather than the one furthest from it. `Cancel`
+        // first also puts the destructive-by-omission choice where a
+        // right-handed thumb has to travel to reach it.
+        //
+        // `AppActionRow` rather than the `Wrap` this shipped with: it is the
+        // app's own footer row, it already defaults to `MainAxisAlignment.end`,
+        // and its `Flexible` children contract and ellipsize rather than
+        // wrapping - so a large text scale shortens a label instead of dropping
+        // a button onto its own line.
+        AppActionRow(
+          actions: <Widget>[
+            if (widget.onCancel case final cancel?)
+              AppButton(
+                key: const ValueKey('product-stock-cancel-adjust'),
+                label: 'Cancel',
+                tier: AppButtonTier.secondary,
+                // Disabled while a call is outstanding: the write is already on
+                // its way and closing the sheet would throw away the answer to
+                // it, which is the one thing this form must never do with money.
+                onPressed: widget.busy ? null : cancel,
+              ),
+            AppButton(
+              key: const ValueKey('product-stock-submit'),
+              label: 'Adjust stock',
+              tier: AppButtonTier.primary,
+              onPressed: _canSubmit ? _confirm : null,
+            ),
+          ],
         ),
       ],
     );

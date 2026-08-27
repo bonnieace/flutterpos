@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/landing_drawer.dart';
 
 void main() {
   group('TenantDefaultGateway', () {
@@ -96,6 +97,7 @@ void main() {
     );
     await tester.pump();
 
+    await openLandingDrawer(tester);
     await tester.tap(find.byKey(const ValueKey('make-default-tenant')));
     await tester.pumpAndSettle();
     expect(
@@ -109,6 +111,7 @@ void main() {
     expect(callable.payloads, isEmpty);
     expect(refreshes, 0);
 
+    await openLandingDrawer(tester);
     await tester.tap(find.byKey(const ValueKey('make-default-tenant')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('set-default-tenant-confirm')));

@@ -45,5 +45,24 @@
           does not name.
         -->
         <domain includeSubdomains="false">192.168.100.5</domain>
+        <!--
+          MANAGED BY tool/lan_debug_build.dart - that script rewrites the
+          address on the next line to whatever this machine's current IPv4 is,
+          and touches nothing else in this file.
+
+          The same again for the phone hotspot's lease. It carries the identical
+          caveat: it is a DHCP lease, nothing derives or tests it, it is safe to
+          delete, and it stops working the moment the lease changes. That failure
+          is silent on the wire, so check this list first when a device run signs
+          in badly or cannot open its business.
+
+          **Updated in place rather than appended to, and that is the rule for
+          this entry.** It was 10.193.49.54 earlier on 2026-08-27 and the same
+          hotspot handed out 10.170.85.53 a few hours later. One line per
+          network, holding whatever that network's current lease is, or this
+          list grows a dead address every time somebody rebuilds. The home LAN
+          above is a different network and keeps its own line.
+        -->
+        <domain includeSubdomains="false">10.170.85.53</domain>
     </domain-config>
 </network-security-config>

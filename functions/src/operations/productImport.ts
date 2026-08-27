@@ -9,6 +9,7 @@ import {
   assertProductUpdateAuthorized,
   readProductUpdateInput,
   readSellableProduct,
+  productSearchFields,
 } from "./productUpdate";
 
 /**
@@ -247,7 +248,7 @@ export interface ProductImportRowWrite {
    * The product document's own keys, `createdBy` and the server timestamps
    * excluded because the writer owns those.
    */
-  documentData: Record<string, string | number>;
+  documentData: Record<string, string | number | readonly string[]>;
   product: ProductImportRowProduct;
 }
 
@@ -663,6 +664,7 @@ export function planProductImport(options: {
         product,
       });
       if (commits) {
+        const search = productSearchFields(product.name, product.sku);
         writes.push({
           rowIndex: row.index,
           productId: ids.productId,
@@ -679,6 +681,8 @@ export function planProductImport(options: {
             ...(product.cost === null ? {} : {cost: product.cost}),
             quantity: product.quantity,
             categoryId: product.categoryId,
+            searchName: search.searchName,
+            searchPrefixes: search.searchPrefixes,
           },
           product,
         });

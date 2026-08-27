@@ -5,6 +5,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'invitation_acceptance_failure.dart';
@@ -368,11 +370,10 @@ final class _TenantVisibleInvitationAcceptanceFormState
       return;
     }
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Invitation accepted for ${widget.membership.tenantName}.',
-        ),
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed(
+        'Invitation accepted for ${widget.membership.tenantName}.',
       ),
     );
     widget.onSuccess();
@@ -398,12 +399,7 @@ final class _TenantVisibleInvitationAcceptanceFormState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Accept invitation to ${widget.membership.tenantName}?',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Accept invitation to ${widget.membership.tenantName}?'),
         SizedBox(height: tokens.spacing.s8),
         Text('Invited role: ${tenantRoleLabel(widget.membership.role)}'),
         if (_safeError != null) ...[

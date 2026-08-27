@@ -8,6 +8,7 @@ library;
 
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/audit/audit.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
@@ -16,6 +17,8 @@ import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/sales/sales.dart';
 import 'package:flutter_application_1/shift/shift.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/ui/scaffold.dart';
+import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -78,23 +81,47 @@ void main() {
         ],
         onSwitchTenant: (membership) async =>
             TenantSwitchResult.switched(membership),
-        shiftPanel: TenantShiftPanel(
-          historyReader: reader,
-          returnActions: returnActions,
-          controllerFactory: (controller) => fakeShiftController(
-            sessions: controller,
-            localState: shiftState,
-            server: shiftServer,
-          ),
+        // Yesterday took more than today, so the greeting draws its fall:
+        // the arrow, the percentage, and the word. `checkoutBusinessDate` is
+        // what stamps a sale, so the two dates here are the two the home asks
+        // for.
+        salesTotalsCallable: FakeSalesComparisonCallable(
+          salesByBusinessDate: <String, double>{
+            checkoutBusinessDate(DateTime.now().toUtc()): 18400,
+            checkoutBusinessDate(
+              DateTime.now().toUtc().subtract(const Duration(days: 1)),
+            ): 24800,
+          },
         ),
         pendingCheckoutPanel: CheckoutPendingEvidencePanel(
           source: const FakeEvidenceSource(
             CheckoutEvidenceSummary(savedOffline: 2, confirmed: 11),
           ),
         ),
-        checkoutRoute: (_) => TenantCheckoutScreen(
-          cache: FakeCatalogSource(),
-          drafts: FakeDraftSink(),
+        checkoutRoute: (_) => TenantShiftGate(
+          controllerFactory: (controller) => fakeShiftController(
+            sessions: controller,
+            localState: shiftState,
+            server: shiftServer,
+          ),
+          shiftManagerBuilder: (context) => AppScaffold(
+            title: 'Close shift',
+            contentWidth: AppContentWidth.records,
+            body: TenantShiftPanel(
+              currency: TenantReportingCurrency.unknown,
+              historyReader: reader,
+              returnActions: returnActions,
+              controllerFactory: (controller) => fakeShiftController(
+                sessions: controller,
+                localState: shiftState,
+                server: shiftServer,
+              ),
+            ),
+          ),
+          child: TenantCheckoutScreen(
+            cache: FakeCatalogSource(),
+            drafts: FakeDraftSink(),
+          ),
         ),
         checkoutConfigurationRoute: (reader) =>
             TenantCheckoutConfigurationScreen(reader: reader),
@@ -147,13 +174,89 @@ void main() {
     build: () => landing(role: TenantRole.cashier, uid: cashierUid),
   );
 
+  // The destinations, which left the body on 2026-08-23. Below `expanded` they
+  // are behind the toolbar's hamburger, so the only way to photograph them on
+  // a phone is to open the panel the way a person does.
   screenshotCase(
-    '12-shift-open-and-counted',
+    '10b-business-home-destinations',
     build: () => landing(),
     afterPump: (tester) async {
-      await tester.tap(find.byKey(const ValueKey('open-shift')));
+      // At `expanded` there is no drawer and no hamburger - the destinations
+      // are already beside the page in the frame's own column - so this
+      // capture is the panel on the bands that have one and the ordinary page
+      // on the band that does not.
+      final hamburger = find.byTooltip(
+        const DefaultMaterialLocalizations().openAppDrawerTooltip,
+      );
+      if (hamburger.evaluate().isEmpty) return;
+      await tester.tap(hamburger);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('start-cash-count')));
+    },
+  );
+
+  // **The shift gate, which is where the shift lives as of 2026-08-25.** It
+  // was a card on the home until then; the old app opened a shift on the way
+  // into the till and this capture follows it there. Opening *New sale* with
+  // no shift open is the whole of the state: a modal that cannot be dismissed,
+  // over a till that is deliberately not drawn behind it.
+  screenshotCase(
+    '12-shift-gate-at-the-till',
+    build: () => landing(),
+    afterPump: (tester) async {
+      await tester.ensureVisible(find.byKey(const ValueKey('start-checkout')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('start-checkout')));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  // **The twenty-four hour cap, which is the till's other closed state.**
+  // A shift opened more than a day ago stops taking sales: the product owner
+  // set that on 2026-08-26, and it is also what bounds how long a device may
+  // trade offline, because counting a shift off needs the server. The screen
+  // has to say both halves - why it stopped, and what is still safe - so this
+  // captures it rather than leaving the state to the description alone.
+  screenshotCase(
+    '12c-shift-gate-past-the-cap',
+    build: () => landing(),
+    // The record has to exist before the gate reads it, which it does on the
+    // way up rather than after the first frame.
+    beforePump: () async {
+      final openedAt = DateTime.now().toUtc().subtract(
+        TenantShiftController.maximumShiftDuration + const Duration(hours: 1),
+      );
+      // The canonical shift too: `_settle` clears a confirmed record the
+      // server has no shift for, which is correct and would otherwise leave
+      // this capture showing *Start your shift*.
+      shiftServer.shifts['tenants/$seedTenantId/shifts/shift-overrun'] =
+          <String, Object?>{
+            'shiftId': 'shift-overrun',
+            'tenantId': seedTenantId,
+            'staffId': ownerUid,
+            'deviceId': seedDeviceId,
+            'businessDate': checkoutBusinessDate(openedAt),
+            'status': 'open',
+            'startTime': Timestamp.fromDate(openedAt),
+          };
+      await shiftState.save(
+        TenantShiftLocalRecord(
+          uid: ownerUid,
+          tenantId: seedTenantId,
+          shiftId: 'shift-overrun',
+          businessDate: checkoutBusinessDate(openedAt),
+          deviceId: seedDeviceId,
+          serverConfirmedOpen: true,
+          closeInProgress: false,
+          updatedAt: openedAt,
+          openedAt: openedAt,
+        ),
+      );
+    },
+    afterPump: (tester) async {
+      await tester.ensureVisible(find.byKey(const ValueKey('start-checkout')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('start-checkout')));
+      await tester.pumpAndSettle();
     },
   );
 

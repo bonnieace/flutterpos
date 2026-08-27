@@ -110,16 +110,11 @@ void main() {
       uid: 'user-a',
       tenantId: 'tenant-a',
       checkoutId: 'checkout-legacy',
-      payload: _payload('checkout-legacy', totalMinor: 100)
-        ..remove('shiftId'),
+      payload: _payload('checkout-legacy', totalMinor: 100)..remove('shiftId'),
     );
 
     await expectLater(
-      ledger.summarize(
-        uid: 'user-a',
-        tenantId: 'tenant-a',
-        shiftId: 'shift-a',
-      ),
+      ledger.summarize(uid: 'user-a', tenantId: 'tenant-a', shiftId: 'shift-a'),
       throwsA(
         isA<ShiftSalesLedgerException>().having(
           (error) => error.code,
@@ -134,11 +129,7 @@ void main() {
     await _confirm(outbox, 'checkout-a', totalMinor: -5);
 
     await expectLater(
-      ledger.summarize(
-        uid: 'user-a',
-        tenantId: 'tenant-a',
-        shiftId: 'shift-a',
-      ),
+      ledger.summarize(uid: 'user-a', tenantId: 'tenant-a', shiftId: 'shift-a'),
       throwsA(
         isA<ShiftSalesLedgerException>().having(
           (error) => error.code,
@@ -149,33 +140,51 @@ void main() {
     );
   });
 
-  test('splits confirmed takings across the recorded payment methods', () async {
-    await _confirm(outbox, 'checkout-cash-a', totalMinor: 25000, tender: 'cash');
-    await _confirm(outbox, 'checkout-cash-b', totalMinor: 500, tender: 'cash');
-    await _confirm(outbox, 'checkout-mpesa', totalMinor: 15500, tender: 'mpesa');
-    await _confirm(outbox, 'checkout-card', totalMinor: 9000, tender: 'card');
+  test(
+    'splits confirmed takings across the recorded payment methods',
+    () async {
+      await _confirm(
+        outbox,
+        'checkout-cash-a',
+        totalMinor: 25000,
+        tender: 'cash',
+      );
+      await _confirm(
+        outbox,
+        'checkout-cash-b',
+        totalMinor: 500,
+        tender: 'cash',
+      );
+      await _confirm(
+        outbox,
+        'checkout-mpesa',
+        totalMinor: 15500,
+        tender: 'mpesa',
+      );
+      await _confirm(outbox, 'checkout-card', totalMinor: 9000, tender: 'card');
 
-    final summary = await ledger.summarize(
-      uid: 'user-a',
-      tenantId: 'tenant-a',
-      shiftId: 'shift-a',
-    );
-    final split = summary.tenders;
+      final summary = await ledger.summarize(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        shiftId: 'shift-a',
+      );
+      final split = summary.tenders;
 
-    expect(split.cash.totalMinor, 25500);
-    expect(split.cash.transactionCount, 2);
-    expect(split.bucket(CheckoutTender.mpesa).totalMinor, 15500);
-    expect(split.bucket(CheckoutTender.mpesa).transactionCount, 1);
-    expect(split.bucket(CheckoutTender.card).totalMinor, 9000);
-    expect(split.unattributed.isEmpty, isTrue);
-    expect(split.hasRecordedTenders, isTrue);
-    // The buckets are filled from the same validated figure, in the same pass
-    // that grows the total, so they add up by construction and not by two
-    // implementations staying in step.
-    expect(summary.tendersDescribeTakings, isTrue);
-    expect(split.totalMinor, summary.totalMinor);
-    expect(split.transactionCount, summary.transactionCount);
-  });
+      expect(split.cash.totalMinor, 25500);
+      expect(split.cash.transactionCount, 2);
+      expect(split.bucket(CheckoutTender.mpesa).totalMinor, 15500);
+      expect(split.bucket(CheckoutTender.mpesa).transactionCount, 1);
+      expect(split.bucket(CheckoutTender.card).totalMinor, 9000);
+      expect(split.unattributed.isEmpty, isTrue);
+      expect(split.hasRecordedTenders, isTrue);
+      // The buckets are filled from the same validated figure, in the same pass
+      // that grows the total, so they add up by construction and not by two
+      // implementations staying in step.
+      expect(summary.tendersDescribeTakings, isTrue);
+      expect(split.totalMinor, summary.totalMinor);
+      expect(split.transactionCount, summary.transactionCount);
+    },
+  );
 
   test('an absent and a stored null tender are the same fact', () async {
     // A sale written before payment methods were captured. Both spellings of
@@ -198,46 +207,49 @@ void main() {
     expect(summary.tendersDescribeTakings, isTrue);
   });
 
-  test('an unmodelled tender is bucketed rather than failing the close', () async {
-    // The same near misses the server's bucketing is pinned against. None of
-    // them may be coerced into `cash`, and none of them may deny a cashier the
-    // close of a shift whose total is perfectly well known.
-    const unmodelled = <Object?>[
-      'Cash',
-      ' cash',
-      'CASH',
-      'cheque',
-      '',
-      7,
-      true,
-      <String, Object?>{'kind': 'cash'},
-      <Object?>['cash'],
-    ];
-    for (var index = 0; index < unmodelled.length; index++) {
-      await _confirm(
-        outbox,
-        'checkout-odd-$index',
-        totalMinor: 100,
-        tender: unmodelled[index],
+  test(
+    'an unmodelled tender is bucketed rather than failing the close',
+    () async {
+      // The same near misses the server's bucketing is pinned against. None of
+      // them may be coerced into `cash`, and none of them may deny a cashier the
+      // close of a shift whose total is perfectly well known.
+      const unmodelled = <Object?>[
+        'Cash',
+        ' cash',
+        'CASH',
+        'cheque',
+        '',
+        7,
+        true,
+        <String, Object?>{'kind': 'cash'},
+        <Object?>['cash'],
+      ];
+      for (var index = 0; index < unmodelled.length; index++) {
+        await _confirm(
+          outbox,
+          'checkout-odd-$index',
+          totalMinor: 100,
+          tender: unmodelled[index],
+        );
+      }
+      await _confirm(outbox, 'checkout-cash', totalMinor: 2500, tender: 'cash');
+
+      final summary = await ledger.summarize(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        shiftId: 'shift-a',
       );
-    }
-    await _confirm(outbox, 'checkout-cash', totalMinor: 2500, tender: 'cash');
 
-    final summary = await ledger.summarize(
-      uid: 'user-a',
-      tenantId: 'tenant-a',
-      shiftId: 'shift-a',
-    );
-
-    expect(summary.isComplete, isTrue);
-    expect(summary.tenders.unrecognised.transactionCount, unmodelled.length);
-    expect(summary.tenders.unrecognised.totalMinor, 100 * unmodelled.length);
-    expect(summary.tenders.unrecorded.isEmpty, isTrue);
-    expect(summary.tenders.cash.totalMinor, 2500);
-    // Their money is still inside the shift total, which is the whole reason
-    // bucketing them is safe.
-    expect(summary.tendersDescribeTakings, isTrue);
-  });
+      expect(summary.isComplete, isTrue);
+      expect(summary.tenders.unrecognised.transactionCount, unmodelled.length);
+      expect(summary.tenders.unrecognised.totalMinor, 100 * unmodelled.length);
+      expect(summary.tenders.unrecorded.isEmpty, isTrue);
+      expect(summary.tenders.cash.totalMinor, 2500);
+      // Their money is still inside the shift total, which is the whole reason
+      // bucketing them is safe.
+      expect(summary.tendersDescribeTakings, isTrue);
+    },
+  );
 
   test('unattributed takings combine both unaccountable buckets', () async {
     await _confirm(outbox, 'checkout-legacy', totalMinor: 4000);
@@ -256,23 +268,26 @@ void main() {
     expect(summary.tenders.cash.totalMinor, 1000);
   });
 
-  test('an unconfirmed sale is outside the split as well as the total', () async {
-    await _confirm(outbox, 'checkout-cash', totalMinor: 2500, tender: 'cash');
-    await _save(outbox, 'checkout-queued', totalMinor: 9999, tender: 'cash');
+  test(
+    'an unconfirmed sale is outside the split as well as the total',
+    () async {
+      await _confirm(outbox, 'checkout-cash', totalMinor: 2500, tender: 'cash');
+      await _save(outbox, 'checkout-queued', totalMinor: 9999, tender: 'cash');
 
-    final summary = await ledger.summarize(
-      uid: 'user-a',
-      tenantId: 'tenant-a',
-      shiftId: 'shift-a',
-    );
+      final summary = await ledger.summarize(
+        uid: 'user-a',
+        tenantId: 'tenant-a',
+        shiftId: 'shift-a',
+      );
 
-    expect(summary.isComplete, isFalse);
-    expect(summary.tenders.cash.totalMinor, 2500);
-    expect(summary.tenders.cash.transactionCount, 1);
-    // The split describes exactly the sales the total covers, so an incomplete
-    // shift has an incomplete split for the same reason - and still adds up.
-    expect(summary.tendersDescribeTakings, isTrue);
-  });
+      expect(summary.isComplete, isFalse);
+      expect(summary.tenders.cash.totalMinor, 2500);
+      expect(summary.tenders.cash.transactionCount, 1);
+      // The split describes exactly the sales the total covers, so an incomplete
+      // shift has an incomplete split for the same reason - and still adds up.
+      expect(summary.tendersDescribeTakings, isTrue);
+    },
+  );
 
   test('another shift and another business never reach the split', () async {
     await _confirm(outbox, 'checkout-cash', totalMinor: 2500, tender: 'cash');
@@ -367,11 +382,9 @@ void main() {
       ),
     );
 
-    final summary = await CheckoutOutboxShiftSalesLedger(reopened).summarize(
-      uid: 'user-a',
-      tenantId: 'tenant-a',
-      shiftId: 'shift-a',
-    );
+    final summary = await CheckoutOutboxShiftSalesLedger(
+      reopened,
+    ).summarize(uid: 'user-a', tenantId: 'tenant-a', shiftId: 'shift-a');
     expect(summary.transactionCount, 1);
     expect(summary.totalMinor, 25000);
   });

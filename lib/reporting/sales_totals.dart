@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../checkout/checkout_draft.dart';
+import '../checkout/checkout_receipt.dart';
 import '../checkout/checkout_tender.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_session.dart';
@@ -342,6 +343,34 @@ final class TenantSalesTotals {
     );
   }
 
+  /// Adds several answers into one, for a span assembled day by day.
+  ///
+  /// **Not a decode, and it does not pretend to be one.** Every field here is
+  /// already a validated server figure; what this builds is their sum, which
+  /// is why it skips the cross-checks `fromCallable` runs - there is no
+  /// `scannedTransactions` for a total that was never one read, and asserting
+  /// one would be asserting something no server said. [scannedTransactions]
+  /// therefore reports the transactions counted, which is what it is.
+  ///
+  /// [tenderBreakdown] is deliberately dropped: two breakdowns do not add up
+  /// without re-checking them against the sum, and nothing that calls this
+  /// draws one.
+  factory TenantSalesTotals.summed({
+    required TenantSalesTotalsQuery query,
+    required double sales,
+    required double profit,
+    required int transactions,
+    required int incompleteCostLineCount,
+  }) => TenantSalesTotals._(
+    query: query,
+    scannedTransactions: transactions,
+    sales: sales,
+    profit: profit,
+    transactions: transactions,
+    incompleteCostLineCount: incompleteCostLineCount,
+    tenderBreakdown: null,
+  );
+
   /// The server's `SALES_QUERY_LIMIT`; a period holding more is refused
   /// outright rather than answered from a truncated read.
   static const int maximumTransactions = 5000;
@@ -468,6 +497,147 @@ final class TenantSalesTotalsGateway {
     );
   }
 
+  /// Resolves one explicitly selected Nairobi business day.
+  ///
+  /// The callable already accepts inclusive start and end dates, so a daily
+  /// report is the existing wire request with both fields set to the same day.
+  /// Future days are refused locally rather than presented as empty reports.
+  TenantSalesTotalsQuery createBusinessDateQuery({
+    required String businessDate,
+    String? soldById,
+    String? categoryId,
+  }) {
+    if (!canReadInSession(_session)) {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.forbidden,
+      );
+    }
+    final String date;
+    try {
+      date = validateCheckoutBusinessDate(businessDate);
+    } on ArgumentError {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.invalidRequest,
+      );
+    }
+    if (date.compareTo(checkoutBusinessDate(_clock().toUtc())) > 0) {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.invalidRequest,
+      );
+    }
+    final member = soldById == null ? null : _validatedUid(soldById);
+    return TenantSalesTotalsQuery._(
+      tenantId: _session.tenantId,
+      period: TenantSalesPeriod.today,
+      scope: switch (member) {
+        null => TenantSalesScope.everyone,
+        final uid when uid == _session.uid => TenantSalesScope.mine,
+        _ => TenantSalesScope.oneMember,
+      },
+      startDate: date,
+      endDate: date,
+      soldById: member,
+      categoryId: categoryId == null ? null : _validatedCategoryId(categoryId),
+    );
+  }
+
+  /// Resolves one explicit inclusive span of Nairobi business days.
+  ///
+  /// **A range rather than a fifth [TenantSalesPeriod], for the reason
+  /// [createBusinessDateQuery] gives about a fourth.** Every value in that enum
+  /// ends *today* and is offered to a person choosing one; a week that ended a
+  /// fortnight ago is neither. The wire has always accepted an inclusive start
+  /// and end, so this is the existing request with both named - which is what
+  /// lets the weekly report compare one week against the one before it.
+  ///
+  /// Future days are refused locally rather than answered as an empty report.
+  TenantSalesTotalsQuery createRangeQuery({
+    required String startBusinessDate,
+    required String endBusinessDate,
+    String? soldById,
+    String? categoryId,
+  }) {
+    if (!canReadInSession(_session)) {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.forbidden,
+      );
+    }
+    final String start;
+    final String end;
+    try {
+      start = validateCheckoutBusinessDate(startBusinessDate);
+      end = validateCheckoutBusinessDate(endBusinessDate);
+    } on ArgumentError {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.invalidRequest,
+      );
+    }
+    if (start.compareTo(end) > 0 ||
+        end.compareTo(checkoutBusinessDate(_clock().toUtc())) > 0) {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.invalidRequest,
+      );
+    }
+    final member = soldById == null ? null : _validatedUid(soldById);
+    return TenantSalesTotalsQuery._(
+      tenantId: _session.tenantId,
+      // The nearest standing period this span belongs to. Nothing reads it for
+      // a range request, and inventing a `custom` value would put a word in
+      // the period chooser that no one may pick.
+      period: TenantSalesPeriod.last7Days,
+      scope: switch (member) {
+        null => TenantSalesScope.everyone,
+        final uid when uid == _session.uid => TenantSalesScope.mine,
+        _ => TenantSalesScope.oneMember,
+      },
+      startDate: start,
+      endDate: end,
+      soldById: member,
+      categoryId: categoryId == null ? null : _validatedCategoryId(categoryId),
+    );
+  }
+
+  /// The same request over the single business day **before** today.
+  ///
+  /// **A method rather than a fifth [TenantSalesPeriod]**, and the distinction
+  /// is not cosmetic: every value in that enum ends today and is *offered to a
+  /// person choosing one*, so adding `yesterday` there would put a filter in
+  /// the Sales screen's choosers that nobody asked for. This range is never
+  /// chosen - it exists so the home can say how today compares with the day
+  /// before, which is the one thing a shopkeeper asks before any of the four.
+  ///
+  /// **[TenantSalesTotalsQuery.period] is [TenantSalesPeriod.today] and that
+  /// is honest on the wire**, because the period is not on the wire: only
+  /// `previousStartDate` and `previousEndDate` are sent, and both name
+  /// yesterday here. The field stays a client-side label for a length of time,
+  /// and this query is one day long.
+  TenantSalesTotalsQuery createPreviousDayQuery({String? soldById}) {
+    if (!canReadInSession(_session)) {
+      throw const TenantSalesTotalsException(
+        TenantSalesTotalsFailure.forbidden,
+      );
+    }
+    // One whole day back from the same UTC instant `createQuery` uses, so the
+    // two queries cannot straddle the business-day boundary differently.
+    final businessDate = checkoutBusinessDate(
+      _clock().toUtc().subtract(const Duration(days: 1)),
+    );
+    final member = soldById == null ? null : _validatedUid(soldById);
+    return TenantSalesTotalsQuery._(
+      tenantId: _session.tenantId,
+      period: TenantSalesPeriod.today,
+      scope: switch (member) {
+        null => TenantSalesScope.everyone,
+        final uid when uid == _session.uid => TenantSalesScope.mine,
+        _ => TenantSalesScope.oneMember,
+      },
+      startDate: businessDate,
+      endDate: businessDate,
+      soldById: member,
+      categoryId: null,
+    );
+  }
+
   /// The signed-in member's own UID, for a caller asking only for its own
   /// sales without consulting any directory.
   String get selfUid => _session.uid;
@@ -531,23 +701,24 @@ final class TenantSalesTotalsGateway {
 /// The code alone decides the outcome. An unmodelled code degrades to
 /// [TenantSalesTotalsFailure.refused] rather than to a transport failure,
 /// because a refusal a retry cannot fix must not be presented as one that can.
-TenantSalesTotalsFailure _classify(FirebaseFunctionsException error) =>
-    switch (error.code) {
-      'permission-denied' ||
-      'unauthenticated' => TenantSalesTotalsFailure.forbidden,
-      'resource-exhausted' => TenantSalesTotalsFailure.periodTooLarge,
-      'invalid-argument' => TenantSalesTotalsFailure.invalidRequest,
-      // The aggregation helpers raise this when a stored sale amount is out of
-      // range or cannot be added exactly. It is a data problem in the business's
-      // own sales, not a transport one, and asking again will not change it.
-      'failed-precondition' => TenantSalesTotalsFailure.unusableSaleData,
-      'unavailable' ||
-      'deadline-exceeded' ||
-      'internal' ||
-      'aborted' ||
-      'unknown' => TenantSalesTotalsFailure.unavailable,
-      _ => TenantSalesTotalsFailure.refused,
-    };
+TenantSalesTotalsFailure _classify(
+  FirebaseFunctionsException error,
+) => switch (error.code) {
+  'permission-denied' ||
+  'unauthenticated' => TenantSalesTotalsFailure.forbidden,
+  'resource-exhausted' => TenantSalesTotalsFailure.periodTooLarge,
+  'invalid-argument' => TenantSalesTotalsFailure.invalidRequest,
+  // The aggregation helpers raise this when a stored sale amount is out of
+  // range or cannot be added exactly. It is a data problem in the business's
+  // own sales, not a transport one, and asking again will not change it.
+  'failed-precondition' => TenantSalesTotalsFailure.unusableSaleData,
+  'unavailable' ||
+  'deadline-exceeded' ||
+  'internal' ||
+  'aborted' ||
+  'unknown' => TenantSalesTotalsFailure.unavailable,
+  _ => TenantSalesTotalsFailure.refused,
+};
 
 Map<String, Object?> _strictMap(Object? value, String field) {
   if (value is! Map) {

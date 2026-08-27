@@ -120,6 +120,17 @@ final class _TenantReconciliationAnomalyPanelState
   bool _busy = false;
   AppNotice? _notice;
 
+  // **This surface keeps every outcome inline, and it is the one exception to
+  // the sweep of 2026-08-26.** `noticeIsTransient` sends a confirmation to a
+  // snack bar everywhere else; here the confirmation carries the *View this
+  // shift's corrections* control in `Callout.action`, and it carries it because
+  // the row the sentence is about has just been deleted from the list - so that
+  // button is the only way back to what was recorded.
+  //
+  // A snack bar can hold an action, but it withdraws itself after four seconds,
+  // and a control worth putting on a confirmation is one worth being able to
+  // find. So the trail keeps its `Callout` and this state keeps `_notice`.
+
   /// The shift the current notice is about, when its corrections trail is worth
   /// offering beside it.
   ///

@@ -364,6 +364,7 @@ final class _SalesTotalsContents extends StatelessWidget {
                     tiles: [
                       StatTile(
                         label: 'Sales',
+                        money: true,
                         value: _currency.format(answer.sales),
                         icon: Icons.payments_outlined,
                         detail: _salesDetail(answer),
@@ -516,12 +517,7 @@ final class _TenderBreakdown extends StatelessWidget {
       key: const ValueKey('sales-totals-tender'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Paid by',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Paid by'),
         SizedBox(height: tokens.spacing.s4),
         // **Five sentences became five figures in a column**, which is what §2.2
         // makes mandatory "anywhere numbers stack vertically" and what
@@ -603,5 +599,6 @@ final class _TenderBreakdown extends StatelessWidget {
             '${totals.transactions == 1 ? 'sale' : 'sales'}',
         value: currency.format(totals.sales),
         valueKey: valueKey,
+        money: true,
       );
 }

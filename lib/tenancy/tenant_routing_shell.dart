@@ -2,12 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../reporting/daily_metrics.dart';
+import '../reporting/reporting_currency.dart';
+import '../reporting/profit_report.dart';
+import '../reporting/sales_totals.dart';
 import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/home_navigation.dart';
+import '../ui/measure.dart';
 import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
+import '../ui/stats.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'account_verification.dart';
@@ -20,12 +26,14 @@ import 'tenant_bootstrap.dart';
 import 'tenant_branding.dart';
 import 'tenant_catalog.dart';
 import 'tenant_default_tenant.dart';
+import 'tenant_directory.dart';
 import 'tenant_invitation_acceptance.dart';
 import 'tenant_membership.dart';
 import 'tenant_membership_labels.dart';
 import 'tenant_repository.dart';
 import 'tenant_request.dart';
 import 'tenant_route_guard.dart';
+import 'tenant_session.dart';
 import 'tenant_session_controller.dart';
 import 'tenant_staff_directory.dart';
 import 'tenant_switch.dart';
@@ -101,12 +109,15 @@ final class TenantRoutingShell extends StatefulWidget {
     this.catalogManagementRoute,
     this.catalogManagementRoles = const <TenantRole>[],
     this.memberName,
+    this.salesTotalsCallable,
     this.pendingCheckoutPanel,
     this.shiftPanel,
     this.dailySummaryRoute,
     this.dailySummaryRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
+    this.returnFeedRoute,
+    this.returnFeedRoles = const <TenantRole>[],
     this.productStockRoute,
     this.productStockRoles = const <TenantRole>[],
     this.stockAdjustmentFeedRoute,
@@ -165,6 +176,10 @@ final class TenantRoutingShell extends StatefulWidget {
   platformTenantReviewRequestIdFactory;
   final TenantDataReader? tenantDataReader;
   final TenantRouteBuilder? tenantRouteBuilder;
+
+  /// Totals the home's comparison line is built from. See
+  /// `TenantSafeLandingScreen.salesTotalsCallable`.
+  final SalesTotalsCallable? salesTotalsCallable;
 
   /// Optional read-only local-work evidence rendered on the safe landing
   /// route. It is supplied by the composition root so tenancy code stays
@@ -243,7 +258,9 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// Optional shift lifecycle surface rendered on the safe landing route. It is
   /// injected for the same reason: tenancy code owns routing, not operations.
-  final Widget? shiftPanel;
+  /// Built with the business's currency, because the shift's own figures are
+  /// money and this is the only layer that knows what the money is called.
+  final Widget Function(TenantReportingCurrency currency)? shiftPanel;
 
   /// Optional read-only reporting route, injected for the same reason.
   final Widget Function(TenantDataReader reader)? dailySummaryRoute;
@@ -256,6 +273,12 @@ final class TenantRoutingShell extends StatefulWidget {
 
   /// The roles that route is offered to, decided by the sales domain.
   final List<TenantRole> receiptLookupRoles;
+
+  /// Optional business-wide returns record shown from the home.
+  final Widget Function(TenantDataReader reader)? returnFeedRoute;
+
+  /// The roles that may review the business-wide returns record.
+  final List<TenantRole> returnFeedRoles;
 
   /// Optional guarded per-product stock route, reached from the read-only
   /// catalog and injected for the same reason.
@@ -810,6 +833,7 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       switchCandidates: _bootstrapResult?.selection.visible ?? const [],
       onSwitchTenant: _switchTenant,
       memberName: widget.memberName?.call(),
+      salesTotalsCallable: widget.salesTotalsCallable,
       checkoutRoute: widget.checkoutRoute,
       checkoutConfigurationRoute: widget.checkoutConfigurationRoute,
       checkoutConfigurationRoles: widget.checkoutConfigurationRoles,
@@ -825,6 +849,8 @@ final class _TenantRoutingShellState extends State<TenantRoutingShell> {
       dailySummaryRoles: widget.dailySummaryRoles,
       receiptLookupRoute: widget.receiptLookupRoute,
       receiptLookupRoles: widget.receiptLookupRoles,
+      returnFeedRoute: widget.returnFeedRoute,
+      returnFeedRoles: widget.returnFeedRoles,
       productStockRoute: widget.productStockRoute,
       productStockRoles: widget.productStockRoles,
       stockAdjustmentFeedRoute: widget.stockAdjustmentFeedRoute,
@@ -1407,7 +1433,16 @@ final class _LandingScrollAreaState extends State<_LandingScrollArea> {
         children: [
           // The scroll view is the only unpositioned child, so it sizes the
           // stack and the fade is measured against it.
-          Center(
+          //
+          // **Top-aligned since 2026-08-23, and it was `Center`.** Nothing
+          // about this route wants its content in the middle of the window,
+          // and at `expanded` - where the destinations are in the frame's menu
+          // and the body is three short sections - centring left roughly 270
+          // pixels of ground between the business name and the first thing
+          // under it. Below `expanded` the content overflows, so the two
+          // alignments were identical and the difference never showed.
+          Align(
+            alignment: Alignment.topCenter,
             child: SingleChildScrollView(
               controller: _controller,
               child: widget.child,
@@ -1440,6 +1475,535 @@ final class _LandingScrollAreaState extends State<_LandingScrollArea> {
   }
 }
 
+/// What the landing route reads for its own body.
+///
+/// **Three reads where there was one, at the product owner's direction on
+/// 2026-08-23.** The home was one branding document and nothing else, and the
+/// design it is now built to opens on figures: `manager_dashboard` leads with a
+/// grid of them and a list of recent activity. There is no honest way to draw
+/// that from a page that reads nothing, so the page reads.
+///
+/// **Every part degrades on its own.** A home that went blank because the day
+/// had not reconciled, or because a cashier may not read revenue, would be a
+/// worse page than the one this replaces - so each field is null or empty on
+/// failure and the sections that depend on it simply do not draw. The branding
+/// read keeps exactly the behaviour it had.
+final class _HomeOverview {
+  const _HomeOverview({
+    this.branding,
+    this.today,
+    this.todaySales,
+    this.previousDaySales,
+    this.currency,
+    this.showProfit = false,
+  });
+
+  /// Today's takings and the day before's, as the server currently adds them
+  /// up. Both null where no totals callable was supplied, where the session
+  /// may not read revenue, or where the read failed - and the greeting then
+  /// states no comparison.
+  final double? todaySales;
+  final double? previousDaySales;
+
+  final TenantBranding? branding;
+
+  /// Today's business day, reconciled or not. Null where the session may not
+  /// read business revenue - `TenantDailyMetricsRepository.allowedRoles` is
+  /// owner, admin and manager - or where the read failed.
+  final TenantDailyMetricsDay? today;
+
+  /// What the business prices in, read only when [today] was.
+  final TenantReportingCurrency? currency;
+
+  /// Whether this member may be shown the margin at all.
+  ///
+  /// **The home was the one surface that never asked.** `daily_metrics` is
+  /// readable by owner, administrator *and* manager, so a manager's overview
+  /// arrives carrying `profitReport` - and this grid printed it. But
+  /// `TenantProfitReport.allowedRoles` is owner and administrator only, and
+  /// says in as many words that what the cost tier buys is that no manager is
+  /// shown the margin. `daily_metrics_panel.dart` and `sales_totals_panel.dart`
+  /// both gate on `canSeeInSession`; this now does too.
+  final bool showProfit;
+}
+
+/// The old hub's greeting: the time of day, who is signed in, and what the
+/// screen is for.
+///
+/// **Restored 2026-08-25.** The pre-multitenancy app opened with *"Good
+/// Morning, {Name}"* over *"Select a module to begin."*, and that pair is what
+/// existing customers read first. The old screen's second line — a
+/// today-against-yesterday sales percentage with a trend arrow — is
+/// deliberately **not** rebuilt here: it came from an unscoped `shifts` query
+/// this screen has no tenant-safe equivalent for, and inventing one would be a
+/// behaviour change in a visual revert. The figures under the grid say what
+/// this app can honestly say about the day.
+///
+/// **The name is optional and the sentence does not depend on it.** A session
+/// whose member name has not resolved greets the business rather than printing
+/// a gap or the word `null`, which is what the old screen did when its `staff`
+/// document was slow.
+///
+/// **Centred, which is the old hub's own arrangement.** Its `_GreetingSection`
+/// was a `Column` at the default `crossAxisAlignment.center` with its
+/// performance row centred inside that, so the whole block sat in the middle of
+/// the page rather than against its left edge.
+final class _LandingGreeting extends StatelessWidget {
+  const _LandingGreeting({
+    required this.memberName,
+    required this.businessName,
+    this.todaySales,
+    this.previousDaySales,
+    this.isOwnFigures = false,
+  });
+
+  final String? memberName;
+  final String businessName;
+
+  /// Today's takings and the day before's. Either being absent means there is
+  /// no comparison to state.
+  final double? todaySales;
+  final double? previousDaySales;
+
+  /// Whether the figures being compared are this member's own rather than the
+  /// whole business's. The old screen said *Shift performance* to a cashier
+  /// and *Store performance* to an admin, and the distinction is real: the two
+  /// sentences are about different money.
+  final bool isOwnFigures;
+
+  /// The old screen's three bands, at its own boundaries.
+  ///
+  /// **Static and given the time rather than reading it**, so a test asserts
+  /// the boundaries without waiting for an hour to come round.
+  static String greetingAt(DateTime now) {
+    if (now.hour < 12) return 'Good morning';
+    if (now.hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  /// How much narrower each line is than the one above it.
+  ///
+  /// **One constant applied twice, rather than three widths.** The product
+  /// owner asked for a block that trickles down - greeting widest, the
+  /// performance line inside it, the prompt inside that - and three chosen
+  /// numbers would be three things to keep in step. This is a ratio, so the
+  /// funnel holds its proportions at every width instead of only at the one it
+  /// was tuned on.
+  ///
+  /// Named here rather than tokenised, for the reason `EmptyState.markSize`
+  /// gives: no source this app has states a heading funnel, and inventing
+  /// `layout.funnelStep` would be inventing a token, which `CLAUDE.md` forbids
+  /// one rule before it forbids magic numbers.
+  static const double funnelStep = 0.8;
+
+  /// The old hub's second line, verbatim.
+  static const String _prompt = 'Select a module to begin.';
+
+  /// The greeting, shortened only as far as it has to be to stay on one line.
+  ///
+  /// **A ladder, not a truncation.** The old hub put the greeting on one line
+  /// and a wrapped one reads as a mistake rather than as a long name, so this
+  /// tries the full sentence, then the first name, then the smaller display
+  /// role, and only ellipsises when a single name will not fit a phone. That is
+  /// the product owner's *"first name only if suitable"*: suitable means the
+  /// full one did not fit, measured rather than guessed.
+  ///
+  /// **This is [fitToOneLine] with the greeting's three rungs named** —
+  /// `display` (32) → `displayCompact` (28) → `titleLarge` (22), all roles this
+  /// app already sets headings in. The measuring, the ordering, and the reason
+  /// none of it is a scale factor, are all written on that function.
+  ///
+  /// **`titleLarge` is the floor and it earns its place.** Without it a business
+  /// name long enough to overflow `displayCompact` fell straight to the
+  /// ellipsis, and the first capture showed the result: *Good morning, Dev
+  /// Corner…* on a shop called Dev Corner Shop. A greeting that cannot name the
+  /// business is worse than a slightly smaller one.
+  static ({String text, TextStyle style}) _fit({
+    required String full,
+    required String? shortened,
+    required TextStyle display,
+    required TextStyle compact,
+    required TextStyle floor,
+    required double maxWidth,
+    required TextScaler scaler,
+    required TextStyle ambient,
+  }) => fitToOneLine(
+    // Shortening the name is preferred to shrinking the type at each size,
+    // which is the product owner's ordering: *first name only if suitable*
+    // comes before making the whole line smaller.
+    texts: <String>[full, if (shortened != null) shortened],
+    styles: <TextStyle>[display, compact, floor],
+    maxWidth: maxWidth,
+    scaler: scaler,
+    ambient: ambient,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final now = DateTime.now();
+    final who = memberName?.trim();
+    final salutation = greetingAt(now);
+    final subject = who == null || who.isEmpty ? businessName : who;
+    final greeting = '$salutation, $subject';
+    // The first word of a name, where there is more than one. A business name
+    // is never cut down this way - "Good morning, Chill" for *Chill Tent
+    // Supplies* names nothing a shopkeeper would recognise.
+    final firstName = who == null || who.isEmpty
+        ? null
+        : switch (who.split(RegExp(r'\s+'))) {
+            [final first, _, ...] => '$salutation, $first',
+            _ => null,
+          };
+    final wide = PageHeader.showsDisplayTitle(MediaQuery.sizeOf(context).width);
+    final display = (wide
+            ? tokens.typography.display
+            : tokens.typography.displayCompact)
+        .copyWith(color: tokens.colors.text.primary);
+    final compact = tokens.typography.displayCompact.copyWith(
+      color: tokens.colors.text.primary,
+    );
+    final floor = tokens.typography.titleLarge.copyWith(
+      color: tokens.colors.text.primary,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth;
+        // The funnel: each line inside the one above it.
+        final trendWidth = available * funnelStep;
+        final promptWidth = trendWidth * funnelStep;
+        final fitted = _fit(
+          full: greeting,
+          shortened: firstName,
+          display: display,
+          compact: compact,
+          floor: floor,
+          maxWidth: available,
+          scaler: MediaQuery.textScalerOf(context),
+          ambient: DefaultTextStyle.of(context).style,
+        );
+        return Column(
+          // The old hub's own alignment - its `Column` took the default.
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Semantics(
+              header: true,
+              // **The whole greeting, whatever the line ended up saying.**
+              // Shortening for width must not shorten what a blind person is
+              // told: the visible text may be *Good morning, Amina* where the
+              // sentence is *Good morning, Amina Wanjiru*, and the second is
+              // what is read out.
+              label: greeting,
+              // **The painted text is excluded, or it would win.** A `Text`
+              // under a labelled `Semantics` contributes its own string as
+              // well, so the node would announce the shortened line - which is
+              // the opposite of the point.
+              child: ExcludeSemantics(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: available),
+                  child: Text(
+                    fitted.text,
+                    key: const ValueKey('home-greeting'),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: fitted.style,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: tokens.spacing.s8),
+            if (_TrendReading.from(
+              today: todaySales,
+              previous: previousDaySales,
+            )
+                case final reading?) ...<Widget>[
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: trendWidth),
+                child: _LandingTrendLine(
+                  reading: reading,
+                  isOwnFigures: isOwnFigures,
+                  maxWidth: trendWidth,
+                ),
+              ),
+              SizedBox(height: tokens.spacing.s4),
+            ],
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: promptWidth),
+              // The narrowest of the three, so it is the likeliest to have to
+              // give ground - and it takes the same ladder as the two above it
+              // rather than a rule of its own.
+              child: Text(
+                _prompt,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: fitToOneLine(
+                  texts: const <String>[_prompt],
+                  styles: <TextStyle>[
+                    tokens.typography.bodyLarge,
+                    tokens.typography.bodyMedium,
+                    tokens.typography.caption,
+                  ],
+                  maxWidth: promptWidth,
+                  scaler: MediaQuery.textScalerOf(context),
+                  ambient: DefaultTextStyle.of(context).style,
+                ).style.copyWith(color: tokens.colors.text.secondary),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The largest text and type role from [texts] and [styles] that fits one line.
+///
+/// **All three lines of the home header use this, which is the point of it
+/// being one function.** The product owner asked for a block where every line
+/// sits on a single row and each is narrower than the one above; that only
+/// works if every line can give ground the same way, and three separate
+/// implementations of "make it fit" would give ground differently.
+///
+/// **[styles] are type roles, largest first, and never a scale factor.** A
+/// `FittedBox` fits any string by inventing a font size, which is hard rule 2's
+/// own complaint: 26.4 is not on §2.2's scale and nothing else on the page would
+/// share it. Every rung here is a role this app already sets text in.
+///
+/// **[texts] are alternative wordings, preferred first.** Only the greeting has
+/// one - a person's first name in place of their full one - and the ordering is
+/// text-inside-style, so a shorter wording is tried before a smaller size.
+///
+/// **[reserved] is room this line needs for something that is not text**: the
+/// trend line's arrow, which sits inside the same row and is measured in
+/// nothing this function can see.
+///
+/// **The measurement passes the ambient style**, which `measure.dart` is
+/// emphatic about: this app's `ThemeData` carries Material's `letterSpacing` on
+/// roles the token layer does not set one for, and a string measured without it
+/// comes out a quarter of a pixel per character too narrow - which is how a line
+/// calculated to fit wraps anyway.
+({String text, TextStyle style}) fitToOneLine({
+  required List<String> texts,
+  required List<TextStyle> styles,
+  required double maxWidth,
+  required TextScaler scaler,
+  required TextStyle ambient,
+  double reserved = 0,
+}) {
+  final room = maxWidth - reserved;
+  for (final style in styles) {
+    for (final text in texts) {
+      final width = measureTextWidth(
+        text,
+        style,
+        textScaler: scaler,
+        ambient: ambient,
+      );
+      if (width <= room) return (text: text, style: style);
+    }
+  }
+  // Nothing fits even at the smallest rung, so the shortest wording takes the
+  // ellipsis. A string this long on a screen this narrow has to lose something;
+  // it loses the least.
+  return (text: texts.last, style: styles.last);
+}
+
+/// Today's takings against yesterday's, as a direction and a percentage.
+///
+/// **Built only where both days are reconciled**, which is the honest reading
+/// of the figures this app holds: today is normally unreconciled, and a
+/// comparison against a day that has not been added up is a number nobody
+/// should act on. `null` means the greeting says nothing rather than printing
+/// a plausible zero - the same rule the stat tiles follow with their em dash.
+@immutable
+final class _TrendReading {
+  const _TrendReading({required this.percent, required this.direction});
+
+  /// The size of the change, never negative. The sign is in [direction].
+  final double percent;
+  final _TrendDirection direction;
+
+  static _TrendReading? from({
+    required double? today,
+    required double? previous,
+  }) {
+    final now = today;
+    final before = previous;
+    if (now == null || before == null) return null;
+    if (before == 0) {
+      // **No percentage against a day that took nothing.** Dividing by it
+      // yields either infinity or an arbitrary 100%, and the old screen printed
+      // the arbitrary one. A day that went from nothing to something is level
+      // as far as a *percentage* is concerned; the figure itself is in the tile.
+      return now == 0
+          ? const _TrendReading(percent: 0, direction: _TrendDirection.level)
+          : null;
+    }
+    final change = ((now - before) / before) * 100;
+    return _TrendReading(
+      percent: change.abs(),
+      direction: change == 0
+          ? _TrendDirection.level
+          : change > 0
+          ? _TrendDirection.up
+          : _TrendDirection.down,
+    );
+  }
+}
+
+enum _TrendDirection { up, down, level }
+
+/// The old hub's second greeting line: *Store performance is up 12% today.*
+///
+/// **The percentage animates in and the sentence around it does not**, which is
+/// what the old screen did: an `AnimatedSwitcher` slid the figure in from below
+/// when it rose and from above when it fell, so the direction was legible
+/// before the arrow was read. That motion is kept and its duration and curve
+/// come from `tokens.motion` rather than the old hardcoded 400ms.
+///
+/// **Direction is never colour alone.** §9 and `DESIGN_RULES.md` both require
+/// it: the arrow glyph points, the word says *up* or *down*, and the semantic
+/// label reads the whole sentence. Colour is the third signal, not the only
+/// one.
+final class _LandingTrendLine extends StatelessWidget {
+  const _LandingTrendLine({
+    required this.reading,
+    required this.isOwnFigures,
+    required this.maxWidth,
+  });
+
+  final _TrendReading reading;
+  final bool isOwnFigures;
+
+  /// The funnel's second step, so this line can size itself to fit it.
+  ///
+  /// **It has to fit on one row, which is the product owner's direction of
+  /// 2026-08-27.** Sitting inside the funnel makes this line narrower than the
+  /// greeting above it, and at `body.lg` on a phone the sentence did not fit -
+  /// the words wrapped and left the arrow and the percentage stranded on the
+  /// first line's right edge. So it takes the same ladder the greeting takes,
+  /// down the body roles rather than the display ones.
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final subject = isOwnFigures ? 'Shift performance' : 'Store performance';
+    final (word, glyph, colour) = switch (reading.direction) {
+      _TrendDirection.up => (
+        'up',
+        Icons.trending_up,
+        tokens.colors.status.ok.fg,
+      ),
+      _TrendDirection.down => (
+        'down',
+        Icons.trending_down,
+        tokens.colors.status.problem.fg,
+      ),
+      _TrendDirection.level => (
+        'level with',
+        Icons.trending_flat,
+        tokens.colors.text.tertiary,
+      ),
+    };
+    final figure = '${reading.percent.toStringAsFixed(0)}%';
+    final sentence = reading.direction == _TrendDirection.level
+        ? '$subject is level with yesterday.'
+        : '$subject is $word $figure today.';
+
+    // The whole sentence is measured, not the fragment this row starts with:
+    // the arrow, the figure and the trailing `today.` are all on the same line
+    // and all have to fit beside it.
+    final body = fitToOneLine(
+      texts: <String>[sentence],
+      styles: <TextStyle>[
+        tokens.typography.bodyLarge,
+        tokens.typography.bodyMedium,
+        tokens.typography.caption,
+      ],
+      maxWidth: maxWidth,
+      scaler: MediaQuery.textScalerOf(context),
+      ambient: DefaultTextStyle.of(context).style,
+      // The arrow and the gap after it, which are not text and so are invisible
+      // to a measurement of one.
+      reserved: _glyphSize + tokens.spacing.s4,
+    ).style.copyWith(color: tokens.colors.text.secondary);
+
+    return Semantics(
+      label: sentence,
+      excludeSemantics: true,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // **One line, and an ellipsis rather than an overflow if the ladder
+          // ran out.** The prose is what gives way; the figure beside it never
+          // does, because a truncated percentage is a wrong number rather than
+          // a shortened sentence.
+          Flexible(
+            child: Text(
+              '$subject is $word ',
+              style: body,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (reading.direction != _TrendDirection.level) ...<Widget>[
+            ClipRect(
+              child: AnimatedSwitcher(
+                duration: tokens.motion.short.duration,
+                switchInCurve: tokens.motion.short.curve,
+                transitionBuilder: (child, animation) => SlideTransition(
+                  // Rising figures arrive from below and falling ones from
+                  // above, so the motion itself carries the direction.
+                  position:
+                      Tween<Offset>(
+                        begin: Offset(
+                          0,
+                          reading.direction == _TrendDirection.up ? 1 : -1,
+                        ),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: tokens.motion.short.curve,
+                        ),
+                      ),
+                  child: FadeTransition(opacity: animation, child: child),
+                ),
+                child: Row(
+                  key: ValueKey<String>('$word$figure'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(glyph, size: _glyphSize, color: colour),
+                    SizedBox(width: tokens.spacing.s4),
+                    Text(
+                      figure,
+                      style: tokens.typography.numericBody.copyWith(
+                        color: colour,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Text(' today.', style: body),
+          ] else
+            Text('yesterday.', style: body),
+        ],
+      ),
+    );
+  }
+
+  /// Matches the trend figure's cap height beside `body.lg`.
+  static const double _glyphSize = 18;
+}
+
 final class TenantSafeLandingScreen extends StatelessWidget {
   const TenantSafeLandingScreen({
     super.key,
@@ -1464,10 +2028,13 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.memberName,
     this.pendingCheckoutPanel,
     this.shiftPanel,
+    this.salesTotalsCallable,
     this.dailySummaryRoute,
     this.dailySummaryRoles = const <TenantRole>[],
     this.receiptLookupRoute,
     this.receiptLookupRoles = const <TenantRole>[],
+    this.returnFeedRoute,
+    this.returnFeedRoles = const <TenantRole>[],
     this.productStockRoute,
     this.productStockRoles = const <TenantRole>[],
     this.stockAdjustmentFeedRoute,
@@ -1477,6 +2044,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     this.auditLogRoute,
     this.auditLogRoles = const <TenantRole>[],
   });
+
+  /// Totals the greeting's comparison line is built from, supplied by the
+  /// composition root. Absent, the home simply states no comparison - the
+  /// route is never gated on it.
+  final SalesTotalsCallable? salesTotalsCallable;
 
   final TenantMembership membership;
   final TenantDataReader reader;
@@ -1528,7 +2100,9 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   /// The roles that route is offered to, decided by the inventory domain.
   final List<TenantRole> catalogManagementRoles;
 
-  final Widget? shiftPanel;
+  /// Built with the business's currency, because the shift's own figures are
+  /// money and this is the only layer that knows what the money is called.
+  final Widget Function(TenantReportingCurrency currency)? shiftPanel;
 
   /// Builds the read-only reporting route. Supplied by the composition root so
   /// tenancy code keeps owning routing rather than the reporting domain; the
@@ -1543,6 +2117,11 @@ final class TenantSafeLandingScreen extends StatelessWidget {
 
   /// The roles that route is offered to, decided by the sales domain.
   final List<TenantRole> receiptLookupRoles;
+
+  /// Optional business-wide returns record shown as its own home module.
+  final Widget Function(TenantDataReader reader)? returnFeedRoute;
+
+  final List<TenantRole> returnFeedRoles;
 
   /// Optional guarded per-product stock route, opened from the read-only
   /// catalog rather than from this screen.
@@ -1575,42 +2154,117 @@ final class TenantSafeLandingScreen extends StatelessWidget {
   final List<TenantRole> auditLogRoles;
 
   @override
-  Widget build(BuildContext context) => TenantRouteGuard<TenantBranding?>(
-    // **The read `TenantBrandingPanel` used to make, one level up.** §11 step 5b
-    // titles this page `branding.companyName`, and a title cannot be resolved
-    // below the header that draws it. Nothing new is fetched and no call site
-    // moved: the panel no longer loads the document it used to load, so this
-    // route makes exactly the one read it always made.
-    load: (session) =>
-        TenantBrandingRepository(session: session, reader: reader).load(),
-    // **The page is never gated on the document, and that is the point of
-    // giving every phase the same builder.** A business that has published no
+  Widget build(BuildContext context) => TenantRouteGuard<_HomeOverview>(
+    load: _readOverview,
+    // **The page is never gated on any of it, and that is the point of giving
+    // every phase the same builder.** A business that has published no
     // branding, a read that failed, a read still in flight and a denied session
-    // all draw the home with `membership.tenantName` - which is the fallback
-    // §4.4 names and the string this toolbar carried before this step. The
-    // worst case is the previous behaviour rather than a spinner where a shop
-    // expects its own front page.
-    loading: _page(context, null),
-    denied: _page(context, null),
-    failure: (context, _) => _page(context, null),
-    builder: (context, session, branding) => _page(context, branding),
+    // all draw the home with `membership.tenantName` and no figures - which is
+    // the behaviour this page had before it read anything. The worst case is
+    // the previous page rather than a spinner where a shop expects its own
+    // front door.
+    loading: _page(context, const _HomeOverview()),
+    denied: _page(context, const _HomeOverview()),
+    failure: (context, _) => _page(context, const _HomeOverview()),
+    builder: (context, session, overview) => _page(context, overview),
   );
 
-  /// The home, titled by [branding] where the business has published one.
-  Widget _page(BuildContext context, TenantBranding? branding) {
+  /// Reads the three documents the body draws from, concurrently.
+  ///
+  /// **Each is swallowed on its own.** `Future.wait` would fail the set on the
+  /// first refusal, and the refusals here are ordinary: a day is normally
+  /// unreconciled, a cashier may not read revenue at all, and a business with
+  /// no published currency answers `unknown`. None of those is a reason for a
+  /// shop to open on an error.
+  Future<_HomeOverview> _readOverview(TenantSession session) async {
+    final branding = _quiet(
+      () => TenantBrandingRepository(session: session, reader: reader).load(),
+    );
+    // The repository enforces this itself and throws `metrics_forbidden`; the
+    // gate is here as well so a cashier's home does not spend a read finding
+    // out. The currency is read on the same condition, because it exists only
+    // to format the figures that read produces.
+    final mayReadRevenue = session.canAccess(
+      allowedRoles: TenantDailyMetricsRepository.allowedRoles,
+    );
+    final recentDays = mayReadRevenue
+        ? _quiet(
+            () => TenantDailyMetricsRepository(
+              session: session,
+              reader: reader,
+            ).loadRecentDays(days: 1),
+          )
+        : Future<List<TenantDailyMetricsDay>?>.value();
+    // **The greeting's comparison comes from the totals callable, not from
+    // these days.** `TenantDailyMetricsRepository` reports what nightly
+    // reconciliation regenerated, and today is normally unreconciled - so a
+    // trend built on it would say nothing on exactly the day somebody is
+    // asking about, which is what the first attempt at this line did. The
+    // totals gateway adds up the sales the server currently holds, which is
+    // the live figure the old hub summed out of open shifts.
+    final trend = mayReadRevenue && salesTotalsCallable != null
+        ? _quiet(() async {
+            final gateway = TenantSalesTotalsGateway(
+              session: session,
+              callable: salesTotalsCallable!,
+            );
+            final today = await gateway.load(
+              gateway.createQuery(period: TenantSalesPeriod.today),
+            );
+            final before = await gateway.load(gateway.createPreviousDayQuery());
+            return (today: today.sales, previous: before.sales);
+          })
+        : Future<({double today, double previous})?>.value();
+    final currency = mayReadRevenue
+        ? _quiet(
+            () =>
+                TenantReportingCurrency.read(session: session, reader: reader),
+          )
+        : Future<TenantReportingCurrency?>.value();
+    final days = await recentDays ?? const <TenantDailyMetricsDay>[];
+    final comparison = await trend;
+    return _HomeOverview(
+      branding: await branding,
+      today: days.isEmpty ? null : days.first,
+      todaySales: comparison?.today,
+      previousDaySales: comparison?.previous,
+      currency: await currency,
+      showProfit: TenantProfitReport.canSeeInSession(session),
+    );
+  }
+
+  // **No recent-sales read since 2026-08-27.** The product owner removed the
+  // section: the same sales are the whole subject of the Sales route, and a
+  // three-row copy of its first page cost a query on every home load to repeat
+  // what a tap away already said in full.
+
+  static Future<T?> _quiet<T>(Future<T> Function() read) async {
+    try {
+      return await read();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The home, titled by the branding where the business has published one.
+  Widget _page(BuildContext context, _HomeOverview overview) {
+    final branding = overview.branding;
     final tokens = AppTokens.componentOf(context);
     final inset = AppScaffold.horizontalInset(tokens.spacing);
-    // §4.4's two renderings have two hosts as of step 5b's second half: the
-    // cards are content and stay in the body, the menu is chrome and belongs to
-    // the frame. The list is built once and handed to both, so a destination
-    // cannot appear in one band and not the other.
+    // **One navigation, and it is the grid.** The destinations had two hosts
+    // — the body's cards and the frame's drawer/side menu — until 2026-08-25,
+    // when the old hub's card grid came back as the body. Keeping both put
+    // every destination on the screen twice at `expanded` (and two widgets
+    // under one key), which is duplication a person sees rather than only a
+    // test. The old app navigated by its grid alone, so the frame's menu is
+    // withdrawn here; `AppScaffold` still offers it to any other screen that
+    // wants one.
     final destinations = _destinations(context);
     return AppScaffold(
-      navigation: destinations,
       title: branding?.companyName ?? membership.tenantName,
-      // §4.2's record row rather than its reading row: this page is a grid of
-      // destinations at two of its three bands, and 720 would put a
-      // three-column grid on a tablet into a column narrower than the screen.
+      // §4.2's record row rather than its reading row: the grid wants the
+      // wider measure, and 720 would narrow the page under the shift panel it
+      // sits below.
       contentWidth: AppContentWidth.records,
       // §4.4's top bar, in the two slots that need no data the home is not
       // given. The queue button is `CheckoutPendingEvidencePanel` itself,
@@ -1618,69 +2272,75 @@ final class TenantSafeLandingScreen extends StatelessWidget {
       // into `SyncIndicator` put the badge in reach of the bar without the
       // number being hoisted anywhere. See `PLAN.md` for the two slots of the
       // mockup that are still short - the member's name and the switcher.
+      // **Two glyphs, and no words.** The bar carries the hamburger, the
+      // screen's own name, and the two controls that are true of every screen:
+      // what this device still has to send, and the way out. *Sign out* was a
+      // text button, and on a 360 handset the words left nothing for the title
+      // beside them.
       actions: [
         if (pendingCheckoutPanel != null) pendingCheckoutPanel!,
-        AppButton(
-          label: 'Sign out',
+        AppIconButton(
+          key: const ValueKey('sign-out'),
+          icon: Icons.logout,
+          semanticLabel: 'Sign out',
           tier: AppButtonTier.tertiary,
-          onPressed: onSignOut,
+          bordered: false,
+          onPressed: () => unawaited(onSignOut()),
         ),
       ],
-      // §4.4: "the signed-in member and their role". The role is what this page
-      // holds - a member's *name* is read by the staff directory and by nothing
-      // else - so the subtitle states what is true rather than what the mockup
-      // draws, and `PLAN.md` carries the difference.
-      // §4.4 v0.7: "the signed-in member and their role". Both where the
-      // identity has a display name, and the role alone where it does not -
-      // which is common, since an identity created by an emailed invitation
-      // carries none until somebody types one. A placeholder would be worse
-      // than the shorter sentence.
-      subtitle: memberName == null
-          ? 'Signed in as ${tenantRoleLabel(membership.role)}'
-          : '$memberName - ${tenantRoleLabel(membership.role)}',
-      // Everything in the *body* scrolls together, the cards included.
+      // **No subtitle, since 2026-08-23.** It said `Dev Owner - Owner` under
+      // a title that already named the business, and between them they cost
+      // about 130 logical pixels of every route before a single figure. The
+      // signed-in member is named in the drawer, which is where the account
+      // controls are.
+      // **The body is the dashboard the design draws, and the destinations
+      // are not in it any more.** `manager_dashboard` opens on a grid of
+      // figures, then the two things a person came to do, then what has
+      // happened recently; its navigation is behind the top bar's `menu`
+      // button. So the eleven destinations moved into `AppScaffold`'s drawer -
+      // and at `expanded` into its persistent column - and what is left here is
+      // the page itself.
       //
-      // The destinations used to be pinned outside the scrollable, and on a
-      // phone that was measured rather than argued about: an owner sees eight of
-      // them, they did not pair up at 411 logical pixels wide, and the row took
-      // **288 of the 631** pixels the body has. The scrollable was left 339,
-      // which put "Open shift" - the thing somebody about to trade came here for
-      // - below the fold, behind seven navigation buttons. A cashier lost 108 to
-      // the same row.
+      // Everything in it scrolls together.
+      // **The old hub's body, restored 2026-08-25.** The pre-multitenancy app
+      // opened on a greeting, a grid of module cards, and a bar of figures,
+      // and that grid was how a person got anywhere. The Stitch pass moved
+      // the destinations behind a hamburger and opened on figures instead;
+      // existing customers found the result unfamiliar, so the cards are back
+      // in the body. The drawer stays as chrome — an addition rather than a
+      // replacement — so nothing that was reachable stops being reachable.
       //
-      // **§11 step 5b changed what is in that space and not this decision.** A
-      // two-column grid pairs where a `Wrap` of pills would not, so the same
-      // eleven destinations cost fewer rows than they did; they are still below
-      // the shift, because what a person came here to do outranks where they
-      // might go next.
-      //
-      // **The menu is the exception and it is a different surface rather than
-      // an exception to this argument.** At `expanded` the destinations are not
-      // in the body at all - the frame draws them in a column of its own, with
-      // its own scroll - and the reason a phone must not pin them is a phone's
-      // 631 pixels of height, which a 1024-wide window is not short of.
+      // Everything in it scrolls together.
       body: Padding(
         padding: EdgeInsets.fromLTRB(inset, 0, inset, tokens.spacing.s24),
         child: _LandingScrollArea(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              TenantBrandingPanel(branding: branding),
+              _LandingGreeting(
+                memberName: memberName,
+                businessName: branding?.companyName ?? membership.tenantName,
+                todaySales: overview.todaySales,
+                previousDaySales: overview.previousDaySales,
+                // The figures come from `TenantDailyMetricsRepository`, whose
+                // allowed roles are the business-wide ones - so whenever there
+                // is a comparison to state at all, it is the store's. A
+                // cashier is never given these days in the first place, which
+                // is why this is false rather than derived from the role.
+                isOwnFigures: false,
+              ),
+              SizedBox(height: tokens.spacing.s32),
+              HomeModuleGrid(destinations: destinations),
+              if (_figures(context, overview) case final grid?) ...[
+                SizedBox(height: tokens.spacing.s32),
+                grid,
+              ],
               if (shiftPanel != null) ...[
                 SizedBox(height: tokens.spacing.s24),
-                shiftPanel!,
-              ],
-
-              // **The cards, and only below 1024**, where the frame is drawing
-              // no menu. §4.4: at `expanded` the home "keeps its content and
-              // loses its cards", so the gap above them goes with them - a page
-              // whose last section is absent should not end on the space that
-              // used to separate it.
-              if (!HomeNavigation.showsMenu(
-                MediaQuery.sizeOf(context).width,
-              )) ...[
-                SizedBox(height: tokens.spacing.s24),
-                HomeNavigation.cards(destinations: destinations),
+                shiftPanel!(
+                  overview.currency ?? TenantReportingCurrency.unknown,
+                ),
               ],
             ],
           ),
@@ -1689,259 +2349,418 @@ final class TenantSafeLandingScreen extends StatelessWidget {
     );
   }
 
-  /// Everywhere this session may go from the home, in the order §4.4 asks for:
-  /// the primary first, then by frequency, **never alphabetically**, with the
-  /// two account controls last.
+  /// The grid of figures the design opens on, or null where there are none.
   ///
-  /// **The order is the only thing step 5b's second half changed here.** Every
-  /// condition, every role check and every closure below is byte-for-byte what
-  /// it was when these were eleven pills in a `Wrap` - and source order is
-  /// exactly what a `Wrap` renders, which is why the ordering §4.4 asks for had
-  /// to be applied to this list rather than to a layout. The order below is the
-  /// one `tool/screenshots/home_navigation_test.dart` has been photographing
-  /// since the first half, so the pictures and the route now agree.
-  List<HomeDestination> _destinations(BuildContext context) =>
-      <HomeDestination>[
-        // The till. It is the only write-capable operational route on this
-        // screen, and it opens under the same session scope as every other one,
-        // so a business switch invalidates a sale in progress exactly as it
-        // invalidates a read.
-        if (checkoutRoute != null)
-          // §2.1 permits exactly one primary action per screen region, and on
-          // the landing route this is it: everything else here opens something
-          // to read, and this one sells.
-          HomeDestination(
-            destinationKey: const ValueKey('start-checkout'),
-            label: 'New sale',
-            icon: Icons.point_of_sale,
-            isPrimary: true,
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: checkoutRoute!(controller),
-                  ),
-                ),
-              );
-            },
-          ),
-        // Beside the till rather than beside the settings, and carrying no
-        // role list: a receipt that did not come out is discovered by whoever
-        // is standing at the counter, and the queue is this device's own.
-        if (printQueueRoute != null)
-          HomeDestination(
-            destinationKey: const ValueKey('receipts-waiting'),
-            label: 'Receipts waiting',
-            icon: Icons.receipt_long_outlined,
-            status: printQueueStatus?.call(),
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: printQueueRoute!(),
-                  ),
-                ),
-              );
-            },
-          ),
-        HomeDestination(
-          label: 'View read-only catalog',
-          icon: Icons.inventory_2_outlined,
-          onPressed: () {
-            final controller = TenantSessionScope.of(context);
-            Navigator.of(context).push(
-              AppPageRoute<void>(
-                builder: (_) => TenantSessionScope(
-                  controller: controller,
-                  child: TenantCatalogScreen(
-                    reader: reader,
-                    productStockRoute: productStockRoute == null
-                        ? null
-                        : (product) => productStockRoute!(reader, product),
-                    productStockRoles: productStockRoles,
-                    adjustmentFeedRoute: stockAdjustmentFeedRoute == null
-                        ? null
-                        : () => stockAdjustmentFeedRoute!(reader),
-                    adjustmentFeedRoles: stockAdjustmentFeedRoles,
-                    movementFeedRoute: stockMovementFeedRoute == null
-                        ? null
-                        : () => stockMovementFeedRoute!(reader),
-                    movementFeedRoles: stockMovementFeedRoles,
-                  ),
-                ),
-              ),
-            );
-          },
+  /// **Only figures this app actually holds.** The export's fourth tile is
+  /// *Low stock — 5 items*, and there is no low-stock reading anywhere in this
+  /// product: `test/dev/reachable_lib_test.dart` records the reorder model as
+  /// unreachable and `DESIGN_RULES.md` forbids drawing a control the code does
+  /// not support. Receipts waiting is a real count this page already held, so
+  /// it takes the fourth slot.
+  ///
+  /// **A cashier gets the print queue and nothing else.** Business revenue is
+  /// owner, admin and manager by `TenantDailyMetricsRepository.allowedRoles`,
+  /// so a cashier's overview carries no day at all and three of the four tiles
+  /// have nothing honest to say.
+  Widget? _figures(BuildContext context, _HomeOverview overview) {
+    final tokens = AppTokens.componentOf(context);
+    final day = overview.today;
+    final metrics = day?.metrics;
+    final report = metrics?.profitReport;
+    final currency = overview.currency ?? TenantReportingCurrency.unknown;
+    final tiles = <StatTile>[
+      if (day != null) ...<StatTile>[
+        StatTile(
+          key: const ValueKey('home-today-sales'),
+          label: "Today's sales",
+          // **An em dash, not a zero.** An unreconciled day is not a day with
+          // no takings in it - today is normally unreconciled, and printing
+          // `KES 0.00` over a morning's trade would be the worst kind of
+          // wrong figure: a plausible one.
+          value: metrics == null ? '—' : currency.format(metrics.sales),
+          money: metrics != null,
+          icon: Icons.payments_outlined,
+          detail: metrics == null
+              ? 'Not reconciled yet'
+              : 'Reconciled ${day.businessDate}',
         ),
-        // Beside the read-only catalog, because it is the same catalog seen by
-        // the one person who may change it. Nothing else in the app can put a
-        // product in, so a business with an empty catalog reaches its till
-        // through here first.
-        if (catalogManagementRoute != null &&
-            membership.role.canAccess(catalogManagementRoles))
-          HomeDestination(
-            destinationKey: const ValueKey('manage-catalog'),
-            label: 'Manage catalog',
-            icon: Icons.edit_note_outlined,
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: catalogManagementRoute!(reader),
-                  ),
-                ),
-              );
-            },
+        StatTile(
+          key: const ValueKey('home-today-transactions'),
+          label: 'Transactions',
+          value: metrics == null ? '—' : '${metrics.transactions}',
+          icon: Icons.receipt_long_outlined,
+          detail: metrics == null ? 'Not reconciled yet' : 'Counted today',
+        ),
+        StatTile(
+          key: const ValueKey('home-today-shifts'),
+          label: 'Shifts',
+          value: metrics == null ? '—' : '${metrics.shiftCount}',
+          icon: Icons.schedule_outlined,
+          detail: metrics == null ? 'Not reconciled yet' : 'Closed today',
+        ),
+        // **Profit, which is the fourth figure this app actually holds.** The
+        // export's fourth tile is *Low stock — 5 items* and there is no
+        // low-stock reading anywhere in this product;
+        // `test/dev/reachable_lib_test.dart` records the reorder model as
+        // unreachable and `DESIGN_RULES.md` forbids drawing a control the code
+        // does not support.
+        //
+        // **`isShowable` is the reason it is not simply `metrics.profit`.** A
+        // day whose sale lines are missing their cost produces a profit figure
+        // the server did compute and nobody should read; `TenantProfitReport`
+        // is what decides that, and the daily summary already defers to it.
+        // An unshowable profit says so rather than printing a number.
+        if (overview.showProfit)
+          StatTile(
+            key: const ValueKey('home-today-profit'),
+            label: 'Profit',
+            value: report == null || !report.isShowable
+                ? '—'
+                : currency.format(report.profit),
+            money: report != null && report.isShowable,
+            icon: Icons.trending_up,
+            detail: metrics == null
+                ? 'Not reconciled yet'
+                : report != null && report.isShowable
+                ? 'After cost of goods'
+                : 'Some lines carry no cost',
           ),
-        if (dailySummaryRoute != null &&
-            membership.role.canAccess(dailySummaryRoles))
-          HomeDestination(
-            destinationKey: const ValueKey('view-daily-summary'),
-            label: 'View daily summary',
-            icon: Icons.insights_outlined,
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: dailySummaryRoute!(reader),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (receiptLookupRoute != null &&
-            membership.role.canAccess(receiptLookupRoles))
-          HomeDestination(
-            destinationKey: const ValueKey('find-receipt'),
-            label: 'Find a receipt',
-            icon: Icons.receipt_long_outlined,
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: receiptLookupRoute!(reader),
-                  ),
-                ),
-              );
-            },
-          ),
-        // Beside the catalog rather than beside the till: this decides what
-        // every price in that catalog means, and the person who opens it is not
-        // the person standing at the till.
-        if (checkoutConfigurationRoute != null &&
-            membership.role.canAccess(checkoutConfigurationRoles))
-          HomeDestination(
-            destinationKey: const ValueKey('checkout-configuration'),
-            label: 'Checkout settings',
-            icon: Icons.tune_outlined,
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: checkoutConfigurationRoute!(reader),
-                  ),
-                ),
-              );
-            },
-          ),
-        // Beside the checkout settings it sits next to in Firestore, and
-        // guarded by the same roles: both decide something about the business
-        // rather than about a sale, and neither is an operational act.
-        if (printerConfigurationRoute != null &&
-            membership.role.canAccess(printerConfigurationRoles))
-          HomeDestination(
-            destinationKey: const ValueKey('printer-configuration'),
-            label: 'Printer',
-            icon: Icons.print_outlined,
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: printerConfigurationRoute!(reader),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (auditLogRoute != null && membership.role.canAccess(auditLogRoles))
-          HomeDestination(
-            destinationKey: const ValueKey('view-audit-log'),
-            label: 'View activity log',
-            icon: Icons.fact_check_outlined,
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: auditLogRoute!(reader),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (membership.role.canAccess(TenantStaffDirectoryScreen.allowedRoles))
-          HomeDestination(
-            label: 'View staff directory',
-            icon: Icons.people_outline,
-            onPressed: () {
-              final controller = TenantSessionScope.of(context);
-              Navigator.of(context).push(
-                AppPageRoute<void>(
-                  builder: (_) => TenantSessionScope(
-                    controller: controller,
-                    child: TenantStaffDirectoryScreen(reader: reader),
-                  ),
-                ),
-              );
-            },
-          ),
-        // **The two account controls are last, and §4.4 says so by name.**
-        // Neither of them is where a shop goes to trade; they are where a
-        // person goes once, to change which business this is.
-        if (onSwitchTenant != null &&
-            switchCandidates.any(
-              (candidate) =>
-                  candidate.canAccess() &&
-                  candidate.tenantId != membership.tenantId,
-            ))
-          HomeDestination(
-            destinationKey: const ValueKey('change-business'),
-            label: 'Change business',
-            icon: Icons.swap_horiz,
-            onPressed: () => _showBusinessSwitcher(context),
-          ),
-        if (isDefaultTenant)
-          // The one disabled control on this route, and it is a state rather
-          // than a refusal: this business already is the default, so there is
-          // nothing to press.
-          const HomeDestination(
-            label: 'Default business',
-            icon: Icons.star,
-            onPressed: null,
-          )
-        else
-          HomeDestination(
-            destinationKey: const ValueKey('make-default-tenant'),
-            label: 'Make default',
-            icon: Icons.star_outline,
-            onPressed: () => _showDefaultConfirmation(context),
-          ),
-      ];
+      ],
+      // **Receipts waiting is not a tile, and that is a measurement rather
+      // than a preference.** `printQueueStatus` answers a *sentence* -
+      // `2 waiting to send` - and a tile's value slot is a figure: the
+      // sentence set at the figure role was 300 pixels wide and forced the
+      // whole grid into one column. The count itself is not exposed, so there
+      // is no honest figure to put here. The queue keeps the toolbar badge it
+      // already had and its own row in the drawer, both of which carry the
+      // same sentence in a slot shaped for one.
+    ];
+    if (tiles.isEmpty) return null;
+    // **One bar around the figures, which is the old hub's shape.** Its
+    // `_StatsBar` was a single bordered panel holding every tile, not four
+    // cards standing apart - so the figures read as one row of the day's
+    // numbers rather than as four unrelated things. `StatRow` still lays the
+    // tiles out and still does its own width arithmetic; this only supplies
+    // the container it used to sit inside.
+    //
+    // **No drop shadow.** The old panel had a 30-blur black one;
+    // `AppSurfaceRoles` is explicit that depth here is a surface step, and on
+    // a near-black ground the shadow costs raster time to be invisible.
+    return Padding(
+      padding: EdgeInsets.only(top: tokens.spacing.s8),
+      child: Container(
+        // **`space.8`, not `space.16`, and the difference is a defect rather
+        // than taste.** A `StatTile` already carries its own `space.16`
+        // horizontal inset - `StatRow.minimumTileWidth` composes its
+        // arithmetic from it - so a panel that added another 16 a side was
+        // insetting every figure twice and taking 32 pixels out of the width
+        // the labels were measured against. On a 360 handset that truncated
+        // them to "TODAY'S S…" and "TRANSACTI…".
+        padding: EdgeInsets.all(tokens.spacing.s8),
+        decoration: BoxDecoration(
+          color: tokens.colors.surface.raised,
+          borderRadius: BorderRadius.circular(tokens.radius.lg),
+          border: Border.all(color: tokens.colors.surface.borderSubtle),
+        ),
+        child: StatRow(tiles: tiles),
+      ),
+    );
+  }
+
+  // **`_startSale` was retired 2026-08-25 with the return of the old hub.**
+  // *New sale* is the primary card at the head of the grid, which is where
+  // the old app put the register, so a second full-width copy of it under the
+  // figures would be the same destination drawn twice on one screen. The
+  // argument for the full-width button, kept because it is what has to be
+  // answered if anyone puts it back: the Stitch export gives *Start New Sale*
+  // the width of the page because it is what the screen is for, and a till
+  // behind a hamburger is a till nobody reaches in a hurry. The card grid
+  // answers it — the till is not behind a hamburger any more.
+
+  /// Everywhere this session may go from the home: the primary first, then
+  /// five areas, **never alphabetically**, with the two account controls last.
+  ///
+  /// **The list became a menu on 2026-08-23, and only its order and its
+  /// groups changed.** Every condition, every role check and every closure
+  /// below is still byte-for-byte what it was when these were eleven pills in
+  /// a `Wrap`. What moved: *Find a receipt* came up beside *Receipts waiting*
+  /// and *View staff directory* came up beside *View activity log*, because
+  /// [HomeDestination.group] draws a heading once and then joins every
+  /// following row to it - so two rows of one area separated by three rows of
+  /// another would print that area's heading twice. Clustering here is what
+  /// keeps the headings honest; the component deliberately does not sort.
+  ///
+  /// **The areas are the five the redesign's shell names**, and they are the
+  /// order a shop uses them in rather than the order the code grew in: the
+  /// till, then *Sales*, *Inventory*, *Reports*, *Settings*, and *Business*
+  /// last. *New sale* carries no group at all - it is the one primary, and it
+  /// sits above every heading rather than inside one.
+  ///
+  /// **Nothing here decides what a role may see.** A group's heading exists
+  /// only where that role was given a row that carries it, so a cashier's menu
+  /// simply has no *Settings* heading rather than an empty one. The order
+  /// below is what `tool/screenshots/home_navigation_test.dart` photographs.
+  List<HomeDestination> _destinations(
+    BuildContext context,
+  ) => <HomeDestination>[
+    // The till. It is the only write-capable operational route on this
+    // screen, and it opens under the same session scope as every other one,
+    // so a business switch invalidates a sale in progress exactly as it
+    // invalidates a read.
+    if (checkoutRoute != null)
+      // §2.1 permits exactly one primary action per screen region, and on
+      // the landing route this is it: everything else here opens something
+      // to read, and this one sells.
+      HomeDestination(
+        destinationKey: const ValueKey('start-checkout'),
+        label: 'New sale',
+        description:
+            'Process sales, manage orders, and handle customer transactions.',
+        icon: Icons.point_of_sale,
+        isPrimary: true,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: checkoutRoute!(controller),
+              ),
+            ),
+          );
+        },
+      ),
+    if (receiptLookupRoute != null &&
+        membership.role.canAccess(receiptLookupRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('sales'),
+        label: 'Sales',
+        description:
+            'View sales reports, payment breakdowns, and transaction history.',
+        group: 'Sales',
+        icon: Icons.bar_chart_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: receiptLookupRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    if (returnFeedRoute != null && membership.role.canAccess(returnFeedRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('returns'),
+        label: 'Returns',
+        description: 'Review pending and verified returns across every sale.',
+        group: 'Sales',
+        icon: Icons.assignment_return_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: returnFeedRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // In *Sales* rather than in *Settings*, and carrying no role list: a
+    // receipt that did not come out is discovered by whoever is standing
+    // at the counter, and the queue is this device's own. It sits under
+    // the receipt lookup because both are somebody asking what happened to
+    // a receipt - one that exists, and one that has not printed yet.
+    if (printQueueRoute != null)
+      HomeDestination(
+        destinationKey: const ValueKey('receipts-waiting'),
+        label: 'Receipts waiting',
+        description: 'Receipts this device has not sent to the printer yet.',
+        group: 'Sales',
+        icon: Icons.receipt_long_outlined,
+        status: printQueueStatus?.call(),
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: printQueueRoute!(),
+              ),
+            ),
+          );
+        },
+      ),
+    // One inventory destination for every active member. The route derives
+    // write actions from the guarded live session.
+    if (catalogManagementRoute != null)
+      HomeDestination(
+        destinationKey: const ValueKey('inventory'),
+        label: 'Inventory',
+        description: 'View all products, manage SKUs, pricing, and categories.',
+        group: 'Inventory',
+        icon: Icons.inventory_2_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: catalogManagementRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    if (dailySummaryRoute != null &&
+        membership.role.canAccess(dailySummaryRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('view-daily-summary'),
+        // **Renamed on 2026-08-27, and the route behind it changed with the
+        // name.** The daily figures it used to open are the whole subject of
+        // the Sales route, so this said the same thing twice; it now opens the
+        // weekly report the old app had, which nothing else in this product
+        // shows.
+        label: 'Reports',
+        description:
+            'Weekly sales, profit and best sellers, against the week before.',
+        group: 'Reports',
+        icon: Icons.insights_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: dailySummaryRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // Beside the catalog rather than beside the till: this decides what
+    // every price in that catalog means, and the person who opens it is not
+    // the person standing at the till.
+    if (checkoutConfigurationRoute != null &&
+        membership.role.canAccess(checkoutConfigurationRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('checkout-configuration'),
+        label: 'Checkout settings',
+        description: 'Decide what every price in the catalog means.',
+        group: 'Settings',
+        icon: Icons.tune_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: checkoutConfigurationRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // Beside the checkout settings it sits next to in Firestore, and
+    // guarded by the same roles: both decide something about the business
+    // rather than about a sale, and neither is an operational act.
+    if (printerConfigurationRoute != null &&
+        membership.role.canAccess(printerConfigurationRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('printer-configuration'),
+        label: 'Printer',
+        description: 'Choose the hardware receipts are printed on.',
+        group: 'Settings',
+        icon: Icons.print_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: printerConfigurationRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    if (membership.role.canAccess(TenantStaffDirectoryScreen.allowedRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('staff'),
+        label: 'Staff',
+        description:
+            'Manage employee profiles, permissions, and access control.',
+        group: 'Settings',
+        icon: Icons.people_outline,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: TenantStaffDirectoryScreen(reader: reader),
+              ),
+            ),
+          );
+        },
+      ),
+    if (auditLogRoute != null && membership.role.canAccess(auditLogRoles))
+      HomeDestination(
+        destinationKey: const ValueKey('view-audit-log'),
+        label: 'View activity log',
+        group: 'Settings',
+        icon: Icons.fact_check_outlined,
+        onPressed: () {
+          final controller = TenantSessionScope.of(context);
+          Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => TenantSessionScope(
+                controller: controller,
+                child: auditLogRoute!(reader),
+              ),
+            ),
+          );
+        },
+      ),
+    // **The two account controls are last, and §4.4 says so by name.**
+    // Neither of them is where a shop goes to trade; they are where a
+    // person goes once, to change which business this is.
+    if (onSwitchTenant != null &&
+        switchCandidates.any(
+          (candidate) =>
+              candidate.canAccess() &&
+              candidate.tenantId != membership.tenantId,
+        ))
+      HomeDestination(
+        destinationKey: const ValueKey('change-business'),
+        label: 'Change business',
+        group: 'Business',
+        icon: Icons.swap_horiz,
+        onPressed: () => _showBusinessSwitcher(context),
+      ),
+    if (isDefaultTenant)
+      // The one disabled control on this route, and it is a state rather
+      // than a refusal: this business already is the default, so there is
+      // nothing to press.
+      const HomeDestination(
+        label: 'Default business',
+        group: 'Business',
+        icon: Icons.star,
+        onPressed: null,
+      )
+    else
+      HomeDestination(
+        destinationKey: const ValueKey('make-default-tenant'),
+        label: 'Make default',
+        group: 'Business',
+        icon: Icons.star_outline,
+        onPressed: () => _showDefaultConfirmation(context),
+      ),
+  ];
 
   Future<void> _showDefaultConfirmation(BuildContext context) async {
     final controller = TenantSessionScope.read(context);
@@ -2160,26 +2979,61 @@ final class TenantBootstrapFailure extends StatelessWidget {
   /// business this person has not been shown yet; the only string available is
   /// a UID, and printing one at somebody is §8 rule 1's worked example of what
   /// not to do.
+  /// Whether the server could not be reached, as opposed to refusing.
+  ///
+  /// **The two need different words and used to get the same ones.** A device
+  /// with no signal was told "we could not open your business account", which
+  /// names a fault in the account and sends a shopkeeper looking for one that
+  /// does not exist. `TenantDirectoryUnavailable` reaching this screen means
+  /// the opposite: the account is presumably fine and this device has simply
+  /// never been online with it, so there is nothing saved here to open.
+  bool get _isUnreachable => error is TenantDirectoryUnavailable;
+
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: ErrorState(
-        badgeLabel: 'Not opened',
-        statement: 'We could not open your business account.',
-        detail: _safeBootstrapError(error),
-        // §8 rule 6, and the reason *Sign out* is offered beside *Retry*: the
-        // sign-in survived, so the failure is about the account rather than
-        // about the person, and there is something to retry.
-        stillTrue: 'You are still signed in, and nothing has been changed.',
-        actions: <Widget>[
-          AppButton(
-            label: 'Retry',
-            tier: AppButtonTier.primary,
-            onPressed: onRetry,
-          ),
-          AppButton(label: 'Sign out', onPressed: onSignOut),
-        ],
-      ),
+      child: _isUnreachable
+          ? ErrorState(
+              // `attention`, not `problem`: nothing is broken and nothing is
+              // lost - §2.1 reserves `problem` for a difference found or a
+              // record unreadable, and this is neither.
+              status: AppStatus.attention,
+              badgeLabel: 'Offline',
+              statement: 'This device cannot reach your business account.',
+              detail:
+                  'It has not been online with this account yet, so there is '
+                  'nothing saved here to open.',
+              stillTrue:
+                  'You are still signed in. Connect once and this device will '
+                  'open on its own afterwards.',
+              actions: <Widget>[
+                AppButton(
+                  label: 'Retry',
+                  tier: AppButtonTier.primary,
+                  onPressed: onRetry,
+                ),
+                AppButton(label: 'Sign out', onPressed: onSignOut),
+              ],
+            )
+          : ErrorState(
+              badgeLabel: 'Not opened',
+              statement: 'We could not open your business account.',
+              detail: _safeBootstrapError(error),
+              // §8 rule 6, and the reason *Sign out* is offered beside
+              // *Retry*: the sign-in survived, so the failure is about the
+              // account rather than about the person, and there is something
+              // to retry.
+              stillTrue:
+                  'You are still signed in, and nothing has been changed.',
+              actions: <Widget>[
+                AppButton(
+                  label: 'Retry',
+                  tier: AppButtonTier.primary,
+                  onPressed: onRetry,
+                ),
+                AppButton(label: 'Sign out', onPressed: onSignOut),
+              ],
+            ),
     ),
   );
 }

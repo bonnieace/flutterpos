@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_types.dart';
 
 /// Raised when a canonical return document cannot be trusted for display.
 final class TenantReturnException implements Exception {
@@ -236,6 +237,53 @@ final class TenantReturnHistoryRepository extends TenantReadRepository {
        super(reader: reader);
 
   final TenantCollectionReader _collectionReader;
+
+  /// Every active business member may review returns. This matches the tenant
+  /// rules and lets the home expose one complete returns record to the same
+  /// people who can record a return from a sale.
+  static const List<TenantRole> allowedRoles = <TenantRole>[
+    TenantRole.owner,
+    TenantRole.admin,
+    TenantRole.manager,
+    TenantRole.cashier,
+  ];
+
+  /// Pages every return recorded by the selected business.
+  Future<TenantReturnPage> loadReturns({
+    int pageSize = 20,
+    String? cursor,
+  }) async {
+    final page = await readCollectionPage(
+      TenantCollection.returns,
+      collectionReader: _collectionReader,
+      pageSize: pageSize,
+      cursor: cursor,
+      descending: true,
+      // The generic boundary deliberately refuses an unrestricted descending
+      // key scan. Returns repeat the tenant ID bound by their own path and
+      // rules, so that same identity is the honest scope/index anchor here.
+      equalityFilters: <String, Object?>{
+        TenantReadRepository.tenantIdField: session.tenantId,
+      },
+    );
+
+    final items = <TenantReturn>[];
+    for (final snapshot in page.items) {
+      final record = TenantReturn.fromDocument(
+        path: snapshot.path,
+        data: snapshot.data,
+      );
+      if (record.tenantId != session.tenantId) {
+        throw const TenantReturnException('cross_tenant_return');
+      }
+      items.add(record);
+    }
+    return TenantReturnPage(
+      items: items,
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
+    );
+  }
 
   /// Pages the returns recorded against one immutable sale.
   Future<TenantReturnPage> loadSaleReturns({

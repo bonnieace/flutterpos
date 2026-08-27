@@ -189,10 +189,7 @@ final class CheckoutOutboxShiftSalesLedger implements ShiftSalesLedger {
     required String tenantId,
     required String shiftId,
   }) async {
-    final safeShiftId = validateTenantDocumentId(
-      shiftId,
-      fieldName: 'shiftId',
-    );
+    final safeShiftId = validateTenantDocumentId(shiftId, fieldName: 'shiftId');
     final records = await _outbox.recordsForSession(
       uid: uid,
       tenantId: tenantId,

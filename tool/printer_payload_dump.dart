@@ -138,8 +138,16 @@ CheckoutSalePayload _sale() {
       'quantity': 1,
       'unitPriceMinor': 13500,
     },
+    // The long-name branch, so this dump previews the same paper
+    // `printer_receipt_smoke.dart` sends. See its own note on the arithmetic.
+    <String, Object?>{
+      'productId': 'product-c',
+      'name': 'Sunflower cooking oil 5 litre refined',
+      'quantity': 1,
+      'unitPriceMinor': 89900,
+    },
   ];
-  const subtotalMinor = 2 * 13550 + 13500;
+  const subtotalMinor = 2 * 13550 + 13500 + 89900;
   const discountMinor = 2000;
   final payload = <String, Object?>{
     'schemaVersion': checkoutSalePayloadSchemaVersion,

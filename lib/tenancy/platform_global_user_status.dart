@@ -967,10 +967,8 @@ final class _PlatformGlobalUserStatusFormState
           ),
         ],
         SizedBox(height: tokens.spacing.s12),
-        Wrap(
-          spacing: 12,
-          alignment: WrapAlignment.end,
-          children: [
+        AppActionRow(
+          actions: <Widget>[
             AppButton(
               key: const ValueKey('platform-global-status-cancel'),
               label: 'Cancel',

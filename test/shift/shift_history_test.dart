@@ -125,10 +125,7 @@ void main() {
       final entry = TenantShiftHistoryEntry.fromDocument(
         path: 'tenants/tenant-a/shifts/shift-a',
         data: _closed(
-          overrides: <String, Object?>{
-            ..._amended(),
-            'summaryAmendedAt': null,
-          },
+          overrides: <String, Object?>{..._amended(), 'summaryAmendedAt': null},
         ),
       );
 
@@ -240,60 +237,69 @@ void main() {
   });
 
   group('shift history repository', () {
-    test('pages a cashier own closed shifts, newest document ID first', () async {
-      final reader = _Reader(<String, Map<String, Object?>>{
-        'tenants/tenant-a/shifts/shift-a': _closed(),
-        'tenants/tenant-a/shifts/shift-b': _closed(shiftId: 'shift-b'),
-        'tenants/tenant-a/shifts/shift-c': _closed(shiftId: 'shift-c'),
-      });
+    test(
+      'pages a cashier own closed shifts, newest document ID first',
+      () async {
+        final reader = _Reader(<String, Map<String, Object?>>{
+          'tenants/tenant-a/shifts/shift-a': _closed(),
+          'tenants/tenant-a/shifts/shift-b': _closed(shiftId: 'shift-b'),
+          'tenants/tenant-a/shifts/shift-c': _closed(shiftId: 'shift-c'),
+        });
 
-      final page = await _repository(reader).loadPage(pageSize: 20);
+        final page = await _repository(reader).loadPage(pageSize: 20);
 
-      expect(page.scope, TenantShiftHistoryScope.ownShifts);
-      expect(
-        page.items.map((entry) => entry.id),
-        <String>['shift-c', 'shift-b', 'shift-a'],
-      );
-      final query = reader.queries.single;
-      expect(query.collectionPath, 'tenants/tenant-a/shifts');
-      expect(query.equalityFilters, <String, Object?>{
-        'status': 'closed',
-        'staffId': 'user-a',
-      });
-      expect(query.descending, isTrue);
-      expect(query.limit, 21);
-      expect(page.hasMore, isFalse);
-      expect(page.nextCursor, isNull);
-    });
+        expect(page.scope, TenantShiftHistoryScope.ownShifts);
+        expect(page.items.map((entry) => entry.id), <String>[
+          'shift-c',
+          'shift-b',
+          'shift-a',
+        ]);
+        final query = reader.queries.single;
+        expect(query.collectionPath, 'tenants/tenant-a/shifts');
+        expect(query.equalityFilters, <String, Object?>{
+          'status': 'closed',
+          'staffId': 'user-a',
+        });
+        expect(query.descending, isTrue);
+        expect(query.limit, 21);
+        expect(page.hasMore, isFalse);
+        expect(page.nextCursor, isNull);
+      },
+    );
 
-    test('reports an exact pagination boundary and resumes from its cursor', () async {
-      final documents = <String, Map<String, Object?>>{
-        for (var index = 0; index < 3; index++)
-          'tenants/tenant-a/shifts/shift-$index': _closed(
-            shiftId: 'shift-$index',
-          ),
-      };
+    test(
+      'reports an exact pagination boundary and resumes from its cursor',
+      () async {
+        final documents = <String, Map<String, Object?>>{
+          for (var index = 0; index < 3; index++)
+            'tenants/tenant-a/shifts/shift-$index': _closed(
+              shiftId: 'shift-$index',
+            ),
+        };
 
-      final full = await _repository(_Reader(documents)).loadPage(pageSize: 3);
-      expect(full.hasMore, isFalse, reason: 'exactly one page');
-      expect(full.nextCursor, isNull);
+        final full = await _repository(
+          _Reader(documents),
+        ).loadPage(pageSize: 3);
+        expect(full.hasMore, isFalse, reason: 'exactly one page');
+        expect(full.nextCursor, isNull);
 
-      final reader = _Reader(documents);
-      final first = await _repository(reader).loadPage(pageSize: 2);
-      expect(first.items.map((entry) => entry.id), <String>[
-        'shift-2',
-        'shift-1',
-      ]);
-      expect(first.hasMore, isTrue);
-      expect(first.nextCursor, 'shift-1');
+        final reader = _Reader(documents);
+        final first = await _repository(reader).loadPage(pageSize: 2);
+        expect(first.items.map((entry) => entry.id), <String>[
+          'shift-2',
+          'shift-1',
+        ]);
+        expect(first.hasMore, isTrue);
+        expect(first.nextCursor, 'shift-1');
 
-      final second = await _repository(
-        reader,
-      ).loadPage(pageSize: 2, cursor: first.nextCursor);
-      expect(second.items.map((entry) => entry.id), <String>['shift-0']);
-      expect(second.hasMore, isFalse);
-      expect(reader.queries.last.startAfterDocumentId, 'shift-1');
-    });
+        final second = await _repository(
+          reader,
+        ).loadPage(pageSize: 2, cursor: first.nextCursor);
+        expect(second.items.map((entry) => entry.id), <String>['shift-0']);
+        expect(second.hasMore, isFalse);
+        expect(reader.queries.last.startAfterDocumentId, 'shift-1');
+      },
+    );
 
     test('management may page every cashier and a cashier may not', () async {
       final reader = _Reader(<String, Map<String, Object?>>{
@@ -304,9 +310,10 @@ void main() {
         ),
       });
 
-      final page = await _repository(reader, role: TenantRole.manager).loadPage(
-        scope: TenantShiftHistoryScope.everyCashier,
-      );
+      final page = await _repository(
+        reader,
+        role: TenantRole.manager,
+      ).loadPage(scope: TenantShiftHistoryScope.everyCashier);
       expect(page.items.map((entry) => entry.staffId), <String>[
         'user-b',
         'user-a',
@@ -403,17 +410,11 @@ TenantShiftHistoryRepository _repository(
   TenantRole role = TenantRole.cashier,
 }) => TenantShiftHistoryRepository(session: _session(role), reader: reader);
 
-TenantSession _session(TenantRole role) => TenantSession.active(
-  uid: 'user-a',
-  tenantId: 'tenant-a',
-  role: role,
-);
+TenantSession _session(TenantRole role) =>
+    TenantSession.active(uid: 'user-a', tenantId: 'tenant-a', role: role);
 
-Matcher _shiftCode(String code) => isA<TenantShiftException>().having(
-  (error) => error.code,
-  'code',
-  code,
-);
+Matcher _shiftCode(String code) =>
+    isA<TenantShiftException>().having((error) => error.code, 'code', code);
 
 Matcher _code(String code) => throwsA(_shiftCode(code));
 
@@ -472,9 +473,7 @@ final class _Reader implements TenantDataReader {
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
     final data = _documents[path];
-    return data == null
-        ? null
-        : TenantDocumentSnapshot(path: path, data: data);
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
   @override

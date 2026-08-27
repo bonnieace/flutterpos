@@ -5,6 +5,7 @@ import { initializeTestEnvironment } from "@firebase/rules-unit-testing";
 import { Timestamp, doc, setDoc } from "firebase/firestore";
 
 const RULES_PATH = new URL("../../firestore.rules", import.meta.url);
+const STORAGE_RULES_PATH = new URL("../../storage.rules", import.meta.url);
 const DEMO_PROJECT_ID = "demo-multitenant-rules";
 
 function firestoreEmulatorAddress() {
@@ -30,6 +31,24 @@ function firestoreEmulatorAddress() {
   return { host: match[1] ?? match[2], port };
 }
 
+function storageEmulatorAddress() {
+  const value = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+  if (!value) {
+    throw new Error(
+      "FIREBASE_STORAGE_EMULATOR_HOST is required. Start the Storage emulator before running this suite.",
+    );
+  }
+
+  const match = /^(?:\[([^\]]+)\]|([^:]+)):(\d+)$/.exec(value);
+  if (!match) {
+    throw new Error(
+      `Invalid FIREBASE_STORAGE_EMULATOR_HOST ${JSON.stringify(value)}; expected host:port.`,
+    );
+  }
+
+  return { host: match[1] ?? match[2], port: Number(match[3]) };
+}
+
 export async function createRulesTestEnvironment() {
   const projectId = DEMO_PROJECT_ID;
   if (!projectId.startsWith("demo-")) {
@@ -47,6 +66,22 @@ export async function createRulesTestEnvironment() {
   return testEnvironment;
 }
 
+export async function createStorageRulesTestEnvironment() {
+  const projectId = DEMO_PROJECT_ID;
+  const firestoreRules = await readFile(RULES_PATH, "utf8");
+  const storageRules = await readFile(STORAGE_RULES_PATH, "utf8");
+  const firestore = firestoreEmulatorAddress();
+  const storage = storageEmulatorAddress();
+  const testEnvironment = await initializeTestEnvironment({
+    projectId,
+    firestore: { ...firestore, rules: firestoreRules },
+    storage: { ...storage, rules: storageRules },
+  });
+  await testEnvironment.clearFirestore();
+  await testEnvironment.clearStorage();
+  return testEnvironment;
+}
+
 export async function seedDocuments(testEnvironment, documents) {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     const firestore = context.firestore();
@@ -60,6 +95,10 @@ export async function seedDocuments(testEnvironment, documents) {
 
 export function authenticatedFirestore(testEnvironment, uid, token = {}) {
   return testEnvironment.authenticatedContext(uid, token).firestore();
+}
+
+export function authenticatedStorage(testEnvironment, uid, token = {}) {
+  return testEnvironment.authenticatedContext(uid, token).storage();
 }
 
 /**

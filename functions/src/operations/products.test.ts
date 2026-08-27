@@ -580,13 +580,15 @@ test("an imported product with opening stock writes four documents", async () =>
   const product = db.read(productPath(ids.productId));
   assert.deepEqual(Object.keys(product ?? {}).sort(), [
     "SKU", "categoryId", "cost", "createdAt", "createdBy", "name", "price",
-    "quantity", "updatedAt",
+    "quantity", "searchName", "searchPrefixes", "updatedAt",
   ]);
   assert.equal(product?.name, "Cola 500ml");
   assert.equal(product?.price, 19.99);
   assert.equal(product?.cost, 12.5);
   assert.equal(product?.quantity, 24);
   assert.equal(product?.createdBy, ACTOR);
+  assert.equal(product?.searchName, "cola 500ml");
+  assert.ok(Array.isArray(product?.searchPrefixes));
   assert.ok(product?.createdAt instanceof Timestamp);
   // Written so the nightly stock verification defers a product whose ledger
   // entry may not be visible to its query yet.

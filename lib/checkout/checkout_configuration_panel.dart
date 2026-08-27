@@ -8,6 +8,7 @@ import '../ui/buttons.dart';
 import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'checkout_configuration.dart';
@@ -88,6 +89,19 @@ final class _TenantCheckoutConfigurationPanelState
   bool _busy = false;
   AppNotice? _notice;
 
+  /// Reports one write outcome, on the surface its kind belongs to.
+  ///
+  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
+  /// that names a next step stays where it was drawn.
+  void _report(AppNotice notice) {
+    if (noticeIsTransient(notice)) {
+      showAppSnackBar(context, notice);
+      return;
+    }
+    setState(() => _notice = notice);
+  }
+
+
   /// Restarts the guarded read, so what is shown is the server's own document
   /// rather than the value that was just typed.
   void _reload() => setState(() => _generation++);
@@ -122,7 +136,7 @@ final class _TenantCheckoutConfigurationPanelState
         reader: widget.reader,
       ).buildUpdateIntent(currency: currency, published: published);
     } on TenantCheckoutConfigurationException catch (error) {
-      setState(() => _notice = _refusalNotice(error.code));
+      _report(_refusalNotice(error.code));
       return;
     }
     if (!await _confirmed(intent) || !_stillCurrent(capturedKey)) return;
@@ -134,7 +148,7 @@ final class _TenantCheckoutConfigurationPanelState
     try {
       final result = await writer.publish(intent);
       if (!_stillCurrent(capturedKey)) return;
-      setState(() => _notice = _resultNotice(result));
+      _report(_resultNotice(result));
       // A committed change and an unknown one are both re-read: the second
       // because only the server can say what is published, and the first because
       // the document is what a till will price with, not the typed value.
@@ -146,7 +160,7 @@ final class _TenantCheckoutConfigurationPanelState
       }
     } on TenantCheckoutConfigurationException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
-      setState(() => _notice = _refusalNotice(error.code));
+      _report(_refusalNotice(error.code));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -314,12 +328,7 @@ final class _ConfigurationContentsState extends State<_ConfigurationContents> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Currency',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Currency'),
         SizedBox(height: tokens.spacing.s4),
         Text(
           key: const ValueKey('checkout-configuration-current'),

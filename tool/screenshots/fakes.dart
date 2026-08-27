@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
@@ -134,6 +135,7 @@ const Map<String, Map<String, Object?>> seedProducts =
         'cost': 112,
         'quantity': 24,
         'categoryId': 'cat-household',
+        'image': 'https://inventory.test/products/bar-soap.png',
       },
       'pd-bread-white': <String, Object?>{
         'name': 'White bread loaf',
@@ -142,6 +144,7 @@ const Map<String, Map<String, Object?>> seedProducts =
         'cost': 48,
         'quantity': 40,
         'categoryId': 'cat-bakery',
+        'image': 'https://inventory.test/products/white-bread.png',
       },
       'pd-charcoal-2kg': <String, Object?>{
         'name': 'Charcoal 2kg',
@@ -220,6 +223,10 @@ Map<String, Map<String, Object?>> seedStaff() => <String, Map<String, Object?>>{
     'role': 'owner',
     'status': 'active',
     'invitationStatus': 'accepted',
+    'searchPrefixes': _seedStaffSearchPrefixes(
+      'Grace Wanjiru',
+      'grace@devcorner.test',
+    ),
   },
   adminUid: <String, Object?>{
     'uid': adminUid,
@@ -229,6 +236,10 @@ Map<String, Map<String, Object?>> seedStaff() => <String, Map<String, Object?>>{
     'role': 'admin',
     'status': 'active',
     'invitationStatus': 'accepted',
+    'searchPrefixes': _seedStaffSearchPrefixes(
+      'Peter Otieno',
+      'peter@devcorner.test',
+    ),
   },
   managerUid: <String, Object?>{
     'uid': managerUid,
@@ -238,6 +249,10 @@ Map<String, Map<String, Object?>> seedStaff() => <String, Map<String, Object?>>{
     'role': 'manager',
     'status': 'active',
     'invitationStatus': 'accepted',
+    'searchPrefixes': _seedStaffSearchPrefixes(
+      'Amina Hassan',
+      'amina@devcorner.test',
+    ),
   },
   cashierUid: <String, Object?>{
     'uid': cashierUid,
@@ -247,6 +262,10 @@ Map<String, Map<String, Object?>> seedStaff() => <String, Map<String, Object?>>{
     'role': 'cashier',
     'status': 'active',
     'invitationStatus': 'accepted',
+    'searchPrefixes': _seedStaffSearchPrefixes(
+      'Brian Kimani',
+      'brian@devcorner.test',
+    ),
   },
   'pending-dev': <String, Object?>{
     'uid': 'pending-dev',
@@ -256,8 +275,29 @@ Map<String, Map<String, Object?>> seedStaff() => <String, Map<String, Object?>>{
     'role': 'cashier',
     'status': 'pending',
     'invitationStatus': 'pending',
+    'searchPrefixes': _seedStaffSearchPrefixes(
+      'Faith Njeri',
+      'newhire@devcorner.test',
+    ),
   },
 };
+
+List<String> _seedStaffSearchPrefixes(String name, String email) {
+  final values = <String>{};
+  final sources = <String>[
+    name.toLowerCase(),
+    ...name.toLowerCase().split(RegExp(r'\s+')),
+    email.toLowerCase(),
+    ...email.toLowerCase().split(RegExp(r'[@.]')),
+  ];
+  for (final source in sources) {
+    for (var length = 2; length <= source.length && length <= 120; length++) {
+      values.add(source.substring(0, length));
+    }
+  }
+  final sorted = values.toList()..sort();
+  return sorted;
+}
 
 /// Every staff member's display name, for the surfaces that resolve an actor
 /// UID to a person.
@@ -796,7 +836,11 @@ Map<String, Map<String, Object?>> seedShiftAmendments() =>
 /// of plain maps, honouring the exact cursor, bound, ordering, and equality
 /// filters the guarded repositories construct.
 final class FakeTenantReader
-    implements TenantDataReader, TenantCollectionGroupReader {
+    implements
+        TenantDataReader,
+        TenantCollectionGroupReader,
+        TenantStaffDirectoryQueryReader,
+        TenantSalesHistoryQueryReader {
   FakeTenantReader({
     Map<String, Map<String, Object?>> documents =
         const <String, Map<String, Object?>>{},
@@ -954,6 +998,84 @@ final class FakeTenantReader
     }
     return results;
   }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantStaff(
+    TenantStaffDirectoryQuery query,
+  ) async {
+    final source = collections[query.collectionPath];
+    if (source == null) return const <TenantQueryDocumentSnapshot>[];
+    final ids = source.keys.toList()..sort();
+    final results = <TenantQueryDocumentSnapshot>[];
+    for (final id in ids) {
+      if (query.startAfter != null &&
+          id.compareTo(query.startAfter!.documentId) <= 0) {
+        continue;
+      }
+      final data = source[id]!;
+      if (query.role != null && data['role'] != query.role ||
+          query.status != null && data['status'] != query.status) {
+        continue;
+      }
+      if (query.searchPrefix != null) {
+        final prefixes = data['searchPrefixes'];
+        if (prefixes is! List<Object?> ||
+            !prefixes.contains(query.searchPrefix)) {
+          continue;
+        }
+      }
+      results.add(
+        TenantQueryDocumentSnapshot(
+          path: '${query.collectionPath}/$id',
+          data: data,
+        ),
+      );
+      if (results.length >= query.limit) break;
+    }
+    return results;
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  ) async {
+    final source = collections[query.collectionPath];
+    if (source == null) return const <TenantQueryDocumentSnapshot>[];
+    final entries =
+        source.entries.where((entry) {
+          final businessDate = entry.value['businessDate'];
+          return businessDate is String &&
+              businessDate.compareTo(query.startBusinessDate) >= 0 &&
+              businessDate.compareTo(query.endBusinessDate) <= 0 &&
+              (query.soldById == null ||
+                  entry.value['soldById'] == query.soldById);
+        }).toList()..sort((left, right) {
+          final dateOrder = (right.value['businessDate']! as String).compareTo(
+            left.value['businessDate']! as String,
+          );
+          return dateOrder != 0 ? dateOrder : right.key.compareTo(left.key);
+        });
+    final results = <TenantQueryDocumentSnapshot>[];
+    for (final entry in entries) {
+      final position = query.startAfter;
+      if (position != null) {
+        final businessDate = entry.value['businessDate']! as String;
+        final isAfter =
+            businessDate.compareTo(position.businessDate) < 0 ||
+            businessDate == position.businessDate &&
+                entry.key.compareTo(position.documentId) < 0;
+        if (!isAfter) continue;
+      }
+      results.add(
+        TenantQueryDocumentSnapshot(
+          path: '${query.collectionPath}/${entry.key}',
+          data: entry.value,
+        ),
+      );
+      if (results.length >= query.limit) break;
+    }
+    return results;
+  }
 }
 
 Map<String, Map<String, Object?>> seedReconciliationJobs() =>
@@ -1035,6 +1157,52 @@ final class FakeCallable
   Future<Object?> call(Map<String, Object?> payload) async {
     payloads.add(payload);
     return answer;
+  }
+}
+
+/// `getSalesComparison`, answering a **different** total per business day.
+///
+/// **[FakeCallable] cannot photograph the home's trend line and that is why
+/// this exists.** That fake answers every call with one fixed map, so today
+/// and the day before come back identical and the greeting can only ever draw
+/// *level with yesterday* - the one state of the three that says least. This
+/// one keys its answer off `previousStartDate`, which is the only thing that
+/// differs between the home's two requests, so a capture shows a real rise or
+/// fall with its arrow and its percentage.
+final class FakeSalesComparisonCallable implements SalesTotalsCallable {
+  FakeSalesComparisonCallable({
+    required this.salesByBusinessDate,
+    this.fallbackSales = 0,
+  });
+
+  /// Takings per `yyyy-MM-dd` business date, as the server would add them up.
+  final Map<String, double> salesByBusinessDate;
+
+  /// What a day nobody listed took. Zero is a real answer - a shop that was
+  /// shut - and the greeting refuses to divide by it rather than printing an
+  /// arbitrary 100%.
+  final double fallbackSales;
+
+  final List<Map<String, Object?>> payloads = <Map<String, Object?>>[];
+
+  @override
+  Future<Object?> call(Map<String, Object?> payload) async {
+    payloads.add(payload);
+    final date = payload['previousStartDate'] as String?;
+    final sales = salesByBusinessDate[date] ?? fallbackSales;
+    // One transaction per 100 taken, so `transactions` and
+    // `scannedTransactions` agree - the decoder refuses an answer whose counts
+    // disagree with what it claims to have read.
+    final transactions = sales == 0 ? 0 : (sales / 100).ceil();
+    return <String, Object?>{
+      'scannedTransactions': transactions,
+      'previous': <String, Object?>{
+        'transactions': transactions,
+        'sales': sales,
+        'profit': sales / 4,
+        'incompleteCostLineCount': 0,
+      },
+    };
   }
 }
 
@@ -1144,6 +1312,11 @@ final class FakeCatalogWriter implements TenantCatalogWriter {
   @override
   Future<TenantCatalogWriteResult> createProduct(
     TenantProductCreateIntent intent,
+  ) async => const TenantCatalogWriteResult.committed();
+
+  @override
+  Future<TenantCatalogWriteResult> renameCategory(
+    TenantCategoryRenameIntent intent,
   ) async => const TenantCatalogWriteResult.committed();
 
   @override
@@ -1646,6 +1819,105 @@ final class FakeDraftSink implements CheckoutDraftSink {
         sequence: _sequence,
       ),
       receiptPrintFailure: printFailure,
+    );
+  }
+}
+
+/// Answers the catalog form's file picker with one deterministic photograph.
+///
+/// The bytes are the same picture `screenshotProductImage()` draws for the
+/// catalog rows, so a capture of the chosen state and a capture of the saved
+/// state show the same product rather than two unrelated pictures.
+final class FakeProductImagePicker extends FilePicker {
+  FakeProductImagePicker(this.bytes);
+
+  final Uint8List bytes;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = false,
+    int compressionQuality = 0,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async => FilePickerResult(<PlatformFile>[
+    PlatformFile(name: 'shelf.png', size: bytes.length, bytes: bytes),
+  ]);
+}
+
+/// Accepts a product photograph and hands back an address, storing nothing.
+final class FakeProductImageStore implements TenantProductImageStore {
+  const FakeProductImageStore();
+
+  @override
+  Future<TenantProductImageUpload> upload({
+    required String tenantId,
+    required String productId,
+    required TenantProductImageCandidate candidate,
+  }) async => TenantProductImageUpload(
+    url: Uri.parse(
+      'https://storage.test/tenantProductImages/$tenantId/$productId/image.png',
+    ),
+    objectPath: 'tenantProductImages/$tenantId/$productId/image.png',
+  );
+
+  @override
+  Future<void> removeOwned({
+    required String tenantId,
+    required String productId,
+    required Uri imageUrl,
+  }) async {}
+}
+
+/// Stands in for the background-removal service, in each of the three states
+/// the catalog form draws it in.
+///
+/// [FakeBackgroundRemover.holding] never answers, which is how the *in flight*
+/// capture is taken - that case is rendered with `settle: false`, because a
+/// spinner never reaches a quiet frame.
+final class FakeBackgroundRemover implements TenantProductBackgroundRemover {
+  const FakeBackgroundRemover(this.cutOut) : failure = null, _holds = false;
+
+  const FakeBackgroundRemover.refusing(this.failure)
+    : cutOut = null,
+      _holds = false;
+
+  const FakeBackgroundRemover.holding()
+    : cutOut = null,
+      failure = null,
+      _holds = true;
+
+  final Uint8List? cutOut;
+  final TenantBackgroundRemovalFailure? failure;
+  final bool _holds;
+
+  @override
+  bool canRemoveInSession(TenantSession session) => true;
+
+  @override
+  Future<TenantProductImageCandidate> remove({
+    required TenantSession session,
+    required TenantProductImageCandidate candidate,
+  }) {
+    if (_holds) return Completer<TenantProductImageCandidate>().future;
+    final refusal = failure;
+    if (refusal != null) {
+      return Future<TenantProductImageCandidate>.error(
+        TenantBackgroundRemovalException(refusal),
+      );
+    }
+    return Future<TenantProductImageCandidate>.value(
+      TenantProductImageCandidate(
+        bytes: cutOut!,
+        fileName: cutOutFileName(candidate.fileName),
+      ),
     );
   }
 }

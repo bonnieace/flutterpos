@@ -1,10 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/inventory/inventory.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
+import 'package:flutter_application_1/theme.dart';
+import 'package:flutter_application_1/ui/buttons.dart';
+import 'package:flutter_application_1/ui/fields.dart';
+import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -16,7 +24,9 @@ const String _productsPath = 'tenants/tenant-a/products';
 const String _categoriesPath = 'tenants/tenant-a/categories';
 
 void main() {
-  testWidgets('a cashier is refused the whole route', (tester) async {
+  testWidgets('a cashier can read inventory but sees no write actions', (
+    tester,
+  ) async {
     await _pump(
       tester,
       _controller(role: TenantRole.cashier),
@@ -24,34 +34,21 @@ void main() {
       writer: _Writer(),
     );
 
-    expect(find.byKey(const ValueKey('catalog-management-denied')), findsOne);
-    expect(
-      find.byKey(const ValueKey('catalog-management-add-product')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('inventory-search')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inventory-add-product')), findsNothing);
+    expect(find.byKey(const ValueKey('inventory-categories')), findsNothing);
+    expect(find.byKey(const ValueKey('inventory-actions-pd-1')), findsNothing);
   });
 
-  testWidgets('a build with no writer states the catalog and offers nothing', (
+  testWidgets('a build with no writer remains a useful read-only inventory', (
     tester,
   ) async {
     await _pump(tester, _controller(), _Reader.seeded());
 
-    expect(
-      find.byKey(const ValueKey('catalog-management-read-only')),
-      findsOne,
-    );
-    expect(
-      find.byKey(const ValueKey('catalog-management-add-product')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey('catalog-management-category-name')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey('catalog-management-retire-pd-1')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('inventory-search')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inventory-add-product')), findsNothing);
+    expect(find.byKey(const ValueKey('inventory-categories')), findsNothing);
+    expect(find.byKey(const ValueKey('inventory-actions-pd-1')), findsNothing);
   });
 
   testWidgets('every notice on this route is a status, and all of them read '
@@ -68,23 +65,8 @@ void main() {
       _Reader.seeded(),
     );
 
-    for (final key in const <String>[
-      'catalog-management-read-only',
-      'catalog-management-product-read-only',
-      'catalog-management-retire-unavailable',
-    ]) {
-      final finder = find.byKey(ValueKey(key));
-      await tester.ensureVisible(finder);
-      expect(
-        tester.widget<Callout>(finder).status,
-        AppStatus.info,
-        reason: key,
-      );
-    }
-    expect(
-      _callout(tester, 'catalog-management-retire-unavailable'),
-      'Only an owner or administrator may retire a product.',
-    );
+    expect(find.byType(Callout), findsNothing);
+    expect(find.byKey(const ValueKey('inventory-search')), findsOneWidget);
   });
 
   testWidgets('every explanation on this route fits its one line on a phone', (
@@ -103,18 +85,171 @@ void main() {
       width: 411,
     );
 
-    final summaries = tester
-        .widgetList<Disclosure>(find.byType(Disclosure))
-        .map((disclosure) => disclosure.summary)
-        .toList();
-    expect(summaries, hasLength(2));
-    for (final summary in summaries) {
+    final add = tester.getRect(
+      find.byKey(const ValueKey('inventory-add-product')),
+    );
+    final bulk = tester.getRect(
+      find.byKey(const ValueKey('catalog-management-bulk')),
+    );
+    final categories = tester.getRect(
+      find.byKey(const ValueKey('inventory-categories')),
+    );
+    // The primary action takes the whole width, and the other two share the
+    // row beneath it rather than stacking one per row.
+    expect(add.width, greaterThan(bulk.width));
+    expect(add.top, lessThan(bulk.top));
+    expect(bulk.top, categories.top);
+    expect(bulk.width, categories.width);
+  });
+
+  testWidgets('legacy cards switch to the image table at 768 pixels', (
+    tester,
+  ) async {
+    for (final width in <double>[411, 767]) {
+      await _pump(
+        tester,
+        _controller(),
+        _Reader.seeded(),
+        writer: _Writer(),
+        width: width,
+      );
       expect(
-        summary.length,
-        lessThanOrEqualTo(Disclosure.summaryCharacterBudget),
-        reason: summary,
+        find.byKey(const ValueKey('inventory-product-cards')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('inventory-product-table')),
+        findsNothing,
+      );
+      expect(
+        tester.getSize(find.byType(TenantProductVisual).first),
+        const Size.square(64),
       );
     }
+
+    for (final width in <double>[768, 834, 1024, 1440]) {
+      await _pump(
+        tester,
+        _controller(),
+        _Reader.seeded(),
+        writer: _Writer(),
+        width: width,
+      );
+      expect(
+        find.byKey(const ValueKey('inventory-product-table')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('inventory-product-cards')),
+        findsNothing,
+      );
+      expect(
+        tester.getSize(find.byType(TenantProductVisual).first),
+        const Size.square(48),
+      );
+      expect(find.text('CATEGORY'), width < 1024 ? findsNothing : findsOne);
+      expect(find.text('UNIT COST'), width < 1200 ? findsNothing : findsOne);
+      expect(find.text('RETAIL VALUE'), width < 1200 ? findsNothing : findsOne);
+    }
+  });
+
+  testWidgets('phone filters keep both dropdowns compact on one row', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      width: 411,
+    );
+
+    final search = tester.getRect(
+      find.byKey(const ValueKey('inventory-search')),
+    );
+    final category = tester.getRect(
+      find.byKey(const ValueKey('inventory-category-filter')),
+    );
+    final stock = tester.getRect(
+      find.byKey(const ValueKey('inventory-stock-filter')),
+    );
+    expect(category.top, stock.top);
+    expect(category.width, closeTo(stock.width, 0.01));
+    expect(category.width, lessThan(search.width));
+    expect(category.right, lessThan(stock.left));
+    expect(find.text('Products'), findsNothing);
+    expect(find.text(tenantCatalogStockNeverBlocks), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide cost visibility follows owner and administrator roles', (
+    tester,
+  ) async {
+    for (final role in TenantRole.values) {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await _pump(
+        tester,
+        _controller(role: role),
+        _Reader.seeded(),
+        writer: _Writer(),
+        callable: _Callable(),
+        width: 1440,
+      );
+      final maySeeCost = role == TenantRole.owner || role == TenantRole.admin;
+      expect(find.text('UNIT COST'), maySeeCost ? findsOne : findsNothing);
+      expect(find.text('RETAIL VALUE'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('inventory-actions-pd-1')),
+        role == TenantRole.cashier ? findsNothing : findsOneWidget,
+      );
+    }
+  });
+
+  testWidgets('mobile product actions use one ordered accessible menu', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+      width: 411,
+      productStockRoute: (product) =>
+          Scaffold(body: Text('Viewing ${product.id}')),
+      // The correction is a sheet rather than a route since 2026-08-26, so what
+      // decides whether the menu offers it is this opener, not the builder
+      // above. The entry is what this test is about; opening it is not.
+      adjustStockSheet: (context, product) async {},
+      productStockRoles: const <TenantRole>[TenantRole.owner],
+    );
+
+    final menu = find.byKey(const ValueKey('inventory-actions-pd-1'));
+    expect(menu, findsOneWidget);
+    expect(find.byTooltip('Product actions'), findsWidgets);
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+
+    final view = find.byKey(const ValueKey('inventory-view-pd-1'));
+    final adjust = find.byKey(const ValueKey('inventory-adjust-pd-1'));
+    final correct = find.byKey(const ValueKey('catalog-management-edit-pd-1'));
+    final retire = find.byKey(const ValueKey('catalog-management-retire-pd-1'));
+    // **Four entries since 2026-08-25**, when reading a product's stock and
+    // correcting it became two routes rather than one screen with a form
+    // appended under the ledger.
+    expect(find.text('View stock'), findsOneWidget);
+    expect(find.text('Adjust stock'), findsOneWidget);
+    expect(find.text('Correct product'), findsOneWidget);
+    expect(find.text('Retire product'), findsOneWidget);
+    // Reading first, then the two that change something, destructive last.
+    expect(tester.getCenter(view).dy, lessThan(tester.getCenter(adjust).dy));
+    expect(tester.getCenter(adjust).dy, lessThan(tester.getCenter(correct).dy));
+    expect(tester.getCenter(correct).dy, lessThan(tester.getCenter(retire).dy));
+
+    await tester.tap(view);
+    await tester.pumpAndSettle();
+    expect(find.text('Viewing pd-1'), findsOneWidget);
   });
 
   testWidgets('the bulk explanation is kept, and it starts out of the way', (
@@ -136,12 +271,11 @@ void main() {
     );
 
     expect(find.text(explanation), findsNothing);
-    await tester.tap(find.text('How bulk changes and import work'));
-    await tester.pumpAndSettle();
-    expect(find.text(explanation), findsOneWidget);
-    // Opening an explanation reads nothing and writes nothing - it is a visual
-    // change, which is the whole reason it fits inside this step.
-    expect(find.byKey(const ValueKey('catalog-management-bulk')), findsOne);
+    expect(find.byType(Disclosure), findsNothing);
+    expect(
+      find.byKey(const ValueKey('catalog-management-bulk')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the bulk route is offered only when the build carries one', (
@@ -175,22 +309,87 @@ void main() {
     expect(reader.pages.length, greaterThan(readsBefore));
   });
 
+  testWidgets(
+    'search is debounced, normalized, and resets the backend cursor',
+    (tester) async {
+      final searchReader = _SearchReader.seeded(productCount: 3);
+      await _pump(
+        tester,
+        _controller(),
+        _Reader.seeded(productCount: 3),
+        writer: _Writer(),
+        productSearchReader: searchReader,
+        pageSize: 1,
+      );
+
+      expect(searchReader.queries.single.searchPrefix, isNull);
+      await tester.tap(
+        find.byKey(const ValueKey('catalog-management-next-page')),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(searchReader.queries.last.startAfter, isNotNull);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('inventory-search')),
+        '  BR  ',
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(searchReader.queries.last.searchPrefix, isNull);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+
+      expect(searchReader.queries.last.searchPrefix, 'br');
+      expect(searchReader.queries.last.startAfter, isNull);
+      expect(_text(tester, 'catalog-management-page'), 'Page 1');
+    },
+  );
+
+  testWidgets(
+    'category and stock controls re-query the backend from page one',
+    (tester) async {
+      final searchReader = _SearchReader.seeded(productCount: 2);
+      await _pump(
+        tester,
+        _controller(),
+        _Reader.seeded(),
+        writer: _Writer(),
+        productSearchReader: searchReader,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('inventory-category-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bakery').last);
+      await tester.pumpAndSettle();
+      expect(searchReader.queries.last.categoryId, 'cat-bakery');
+      expect(searchReader.queries.last.startAfter, isNull);
+
+      await tester.tap(find.byKey(const ValueKey('inventory-stock-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('At/below zero').last);
+      await tester.pumpAndSettle();
+      expect(
+        searchReader.queries.last.stock,
+        TenantProductStockFilter.atOrBelowZero,
+      );
+      expect(searchReader.queries.last.categoryId, 'cat-bakery');
+      expect(searchReader.queries.last.startAfter, isNull);
+    },
+  );
+
   testWidgets('a business with no categories is told what comes first', (
     tester,
   ) async {
     await _pump(tester, _controller(), _Reader.empty(), writer: _Writer());
 
     expect(
-      find.byKey(const ValueKey('catalog-management-no-categories')),
-      findsOne,
+      find.byKey(const ValueKey('inventory-empty-catalog')),
+      findsOneWidget,
     );
-    expect(
-      _text(tester, 'catalog-management-selected-category'),
-      'Add a category before adding a product.',
-    );
-    // Every product names a category, so adding one is not offered until there
-    // is a category to name.
-    expect(_enabled(tester, 'catalog-management-add-product'), isFalse);
+    expect(_enabled(tester, 'inventory-add-product'), isTrue);
+    await tester.tap(find.byKey(const ValueKey('inventory-categories')));
+    await tester.pumpAndSettle();
+    expect(find.text('No categories on this page.'), findsOneWidget);
     expect(_enabled(tester, 'catalog-management-add-category'), isFalse);
   });
 
@@ -206,6 +405,8 @@ void main() {
       writer: writer,
       onChanged: () => syncs++,
     );
+    await tester.tap(find.byKey(const ValueKey('inventory-categories')));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('catalog-management-category-name')),
       '  Cold  drinks  ',
@@ -216,24 +417,55 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('It cannot be renamed or removed'), findsOne);
+    expect(find.textContaining('It can be renamed later'), findsOne);
     await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
 
     expect(writer.categories.single.name, 'Cold drinks');
     expect(writer.categories.single.path, startsWith('$_categoriesPath/'));
     expect(syncs, 1);
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('Category added.'),
     );
     // **This screen writes six different things and reported every outcome of
     // all six as the same black sentence in the same position.** The notice
     // carries which it is now.
-    expect(noticeStatus(tester, 'catalog-management-notice'), AppStatus.ok);
+    expect(snackNotice(tester).status, AppStatus.ok);
     // Two reads of each collection: the first render, and the re-read a commit
     // asks for, so what is listed is the server's catalog and not the typing.
-    expect(reader.pages.where((path) => path == _categoriesPath).length, 2);
+    expect(
+      reader.pages.where((path) => path == _categoriesPath).length,
+      greaterThanOrEqualTo(2),
+    );
+  });
+
+  testWidgets('renaming a category preserves its document identity', (
+    tester,
+  ) async {
+    final writer = _Writer();
+    await _pump(tester, _controller(), _Reader.seeded(), writer: writer);
+
+    await tester.tap(find.byKey(const ValueKey('inventory-categories')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inventory-rename-cat-bakery')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('catalog-management-rename-category-name')),
+      'Breads and pastries',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('catalog-management-rename-category-save')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('keeps the same identity'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(writer.renamed.single.categoryId, 'cat-bakery');
+    expect(writer.renamed.single.name, 'Breads and pastries');
   });
 
   testWidgets('a product is filed, priced, and created holding nothing', (
@@ -279,12 +511,101 @@ void main() {
     expect(intent.documentData()['quantity'], 0);
     expect(syncs, 1);
     // The form is emptied, so the next product is not a near-copy of this one.
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
     expect(_field(tester, 'catalog-management-product-name'), '');
     expect(_field(tester, 'catalog-management-product-sku'), '');
     expect(
-      _text(tester, 'catalog-management-selected-category'),
-      'Choose the category this product is filed under.',
+      tester
+          .widget<AppSelect<String>>(
+            find.byKey(const ValueKey('catalog-management-product-category')),
+          )
+          .value,
+      '',
     );
+  });
+
+  testWidgets('a failed product write removes its staged owned image', (
+    tester,
+  ) async {
+    final bytes = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+'
+      'A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    FilePicker.platform = _FilePicker(bytes);
+    final imageStore = _ImageStore();
+    final writer = _Writer.answering(
+      const TenantCatalogWriteResult.rejected('permission-denied'),
+    );
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: writer,
+      imageStore: imageStore,
+    );
+
+    await _fillProduct(tester, name: 'Mandazi', sku: 'M-1', price: '20');
+    await tester.tap(
+      find.byKey(const ValueKey('inventory-choose-product-image')),
+    );
+    await tester.pumpAndSettle();
+    await _confirmProduct(tester);
+
+    expect(imageStore.uploads, hasLength(1));
+    expect(writer.products.single.imageUrl, imageStore.uploads.single.url);
+    expect(imageStore.removed, <Uri>[imageStore.uploads.single.url]);
+  });
+
+  testWidgets('a committed replacement removes the superseded owned image', (
+    tester,
+  ) async {
+    final bytes = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+'
+      'A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    FilePicker.platform = _FilePicker(bytes);
+    final oldImage = Uri.parse(
+      'https://storage.test/tenantProductImages/tenant-a/pd-1/old.png',
+    );
+    final reader = _Reader(<String, Map<String, Map<String, Object?>>>{
+      _categoriesPath: <String, Map<String, Object?>>{
+        'cat-bakery': <String, Object?>{'name': 'Bakery'},
+      },
+      _productsPath: <String, Map<String, Object?>>{
+        'pd-1': <String, Object?>{
+          'name': 'White bread loaf',
+          'SKU': '6161100000019',
+          'price': 65,
+          'quantity': 40,
+          'categoryId': 'cat-bakery',
+          'image': oldImage.toString(),
+        },
+      },
+    });
+    final imageStore = _ImageStore();
+    final callable = _Callable();
+    await _pump(
+      tester,
+      _controller(),
+      reader,
+      writer: _Writer(),
+      callable: callable,
+      imageStore: imageStore,
+    );
+
+    await _openCorrection(tester, 'pd-1');
+    await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
+    await tester.pumpAndSettle();
+    await _review(tester);
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(
+      callable.payloads.single['image'],
+      imageStore.uploads.single.url.toString(),
+    );
+    expect(imageStore.removed, <Uri>[oldImage]);
   });
 
   testWidgets('a price the till could not record is refused where typed', (
@@ -330,6 +651,8 @@ void main() {
       findsNothing,
     );
     // The typing survives a cancellation, because cancelling is not a mistake.
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
     expect(_field(tester, 'catalog-management-product-name'), 'Mandazi');
   });
 
@@ -383,20 +706,23 @@ void main() {
       _controller(role: TenantRole.manager),
       _Reader.seeded(),
       writer: _Writer(),
+      callable: _Callable(),
     );
 
+    expect(find.byKey(const ValueKey('inventory-add-product')), findsOne);
+    await _openProductActions(tester, 'pd-1');
     expect(
-      find.byKey(const ValueKey('catalog-management-add-product')),
-      findsOne,
+      find.byKey(const ValueKey('catalog-management-edit-pd-1')),
+      findsOneWidget,
     );
     expect(
       find.byKey(const ValueKey('catalog-management-retire-pd-1')),
       findsNothing,
     );
-    expect(
-      find.byKey(const ValueKey('catalog-management-retire-unavailable')),
-      findsOne,
-    );
+    await tester.tapAt(const Offset(1, 1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
     // A manager stocks the catalog without being shown the margin. Every active
     // member can read a product document, so this is a surface boundary rather
     // than a secrecy guarantee - but it is the boundary that decides whether a
@@ -485,24 +811,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Two actions, so §4.3's `(>3)` overflow rule does not apply and both are
-    // inline at every band - it is the card that is narrow here, not the set.
-    //
-    // Scrolled to rather than `ensureVisible`d: the route is one long
-    // `ListView`, so a record below the fold has not been built yet and there
-    // is nothing for `ensureVisible` to find. It is also what a person does.
-    for (final key in const <String>[
-      'catalog-management-edit-pd-1',
-      'catalog-management-retire-pd-1',
-    ]) {
-      await tester.scrollUntilVisible(
-        find.byKey(ValueKey(key)),
-        300,
-        scrollable: find.byType(Scrollable).first,
-        maxScrolls: 30,
-      );
-      expect(find.byKey(ValueKey(key)), findsOneWidget);
-    }
+    // One compact trigger keeps all available operations reachable without
+    // making the card footer carry three competing controls.
+    final menu = find.byKey(const ValueKey('inventory-actions-pd-1'));
+    await tester.scrollUntilVisible(
+      menu,
+      300,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 30,
+    );
+    expect(menu, findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // `scrollUntilVisible` stops when the widget is *built*, which on this route
@@ -510,9 +828,15 @@ void main() {
     // scope paragraph learned to fold, and the tap then landed at y=912 in an
     // 891-high viewport. Scrolling it fully into view is what a person does and
     // is what the assertion below is actually about.
-    final retire = find.byKey(const ValueKey('catalog-management-retire-pd-1'));
-    await tester.ensureVisible(retire);
+    await tester.ensureVisible(menu);
     await tester.pumpAndSettle();
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('catalog-management-edit-pd-1')),
+      findsOneWidget,
+    );
+    final retire = find.byKey(const ValueKey('catalog-management-retire-pd-1'));
     await tester.tap(retire);
     await tester.pumpAndSettle();
     expect(find.textContaining('It still holds 40 in stock'), findsOne);
@@ -522,6 +846,9 @@ void main() {
     tester,
   ) async {
     await _pump(tester, _controller(), _Reader.seeded(), writer: _Writer());
+
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
 
     expect(
       find.byKey(const ValueKey('catalog-management-product-cost')),
@@ -542,10 +869,7 @@ void main() {
       writer: writer,
       onChanged: () => syncs++,
     );
-    await tester.tap(
-      find.byKey(const ValueKey('catalog-management-retire-pd-1')),
-    );
-    await tester.pumpAndSettle();
+    await _tapProductAction(tester, 'pd-1', 'catalog-management-retire-pd-1');
 
     // The ledger outlives the product, every sale line still names it, and it
     // is never the way a mistake is corrected.
@@ -562,7 +886,7 @@ void main() {
     expect(writer.retired.single.quantity, 40);
     expect(syncs, 1);
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('White bread loaf is retired.'),
     );
   });
@@ -576,10 +900,7 @@ void main() {
     final reader = _Reader.seeded();
 
     await _pump(tester, _controller(), reader, writer: writer);
-    await tester.tap(
-      find.byKey(const ValueKey('catalog-management-retire-pd-1')),
-    );
-    await tester.pumpAndSettle();
+    await _tapProductAction(tester, 'pd-1', 'catalog-management-retire-pd-1');
     await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
     await tester.pumpAndSettle();
 
@@ -622,10 +943,7 @@ void main() {
     await _pump(tester, _controller(), reader, writer: writer, pageSize: 2);
 
     expect(_text(tester, 'catalog-management-page'), 'Page 1');
-    expect(
-      find.byKey(const ValueKey('catalog-management-retire-pd-3')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('inventory-actions-pd-3')), findsNothing);
     await tester.tap(
       find.byKey(const ValueKey('catalog-management-next-page')),
     );
@@ -633,10 +951,7 @@ void main() {
 
     expect(_text(tester, 'catalog-management-page'), 'Page 2');
     expect(reader.cursors.last, 'pd-2');
-    expect(
-      find.byKey(const ValueKey('catalog-management-retire-pd-3')),
-      findsOne,
-    );
+    expect(find.byKey(const ValueKey('inventory-actions-pd-3')), findsOne);
     await tester.tap(
       find.byKey(const ValueKey('catalog-management-previous-page')),
     );
@@ -682,15 +997,16 @@ void main() {
   ) async {
     await _pump(tester, _controller(), _Reader.seeded(), writer: _Writer());
 
+    await _openProductActions(tester, 'pd-1');
     expect(
       find.byKey(const ValueKey('catalog-management-edit-pd-1')),
       findsNothing,
     );
-    await _open(tester, 'catalog-management-scope-disclosure');
     expect(
-      _text(tester, 'catalog-management-scope'),
-      contains('are permanent'),
+      find.byKey(const ValueKey('catalog-management-retire-pd-1')),
+      findsOneWidget,
     );
+    expect(find.byKey(const ValueKey('inventory-search')), findsOneWidget);
   });
 
   testWidgets('a correction states the before and after, then sends it', (
@@ -709,16 +1025,6 @@ void main() {
       onChanged: () => syncs++,
     );
 
-    // The route stops claiming a product is permanent the moment it can correct
-    // one, because that sentence is what a mistyped price is read against.
-    await _open(tester, 'catalog-management-scope-disclosure');
-    expect(
-      _text(tester, 'catalog-management-scope'),
-      contains('can be corrected afterwards'),
-    );
-    // Closed again, so the correction below is opened from the page a person
-    // actually meets rather than from one this test left expanded.
-    await _open(tester, 'catalog-management-scope-disclosure');
     await _openCorrection(tester, 'pd-1');
 
     // Every field is offered at once and prefilled with what the product holds:
@@ -747,7 +1053,7 @@ void main() {
       'price': 70.0,
     });
     expect(
-      noticeMessage(tester, 'catalog-management-notice'),
+      snackNotice(tester).message,
       startsWith('Corrected: unit price.'),
     );
     // The catalog is re-read and the till is asked to re-read its own copy,
@@ -1147,6 +1453,210 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'the correction form draws the photograph, not a thumbnail of it',
+    (tester) async {
+      // **The 2026-08-25 reversal.** The old catalog form drew the picture 350
+      // high in a bordered well headed *Product image*; the Stitch pass had
+      // replaced it with a 64px square, which is a size at which the wrong
+      // photograph and the right one are the same picture.
+      FilePicker.platform = _FilePicker(_onePixelPng);
+      await _pump(
+        tester,
+        _controller(),
+        _Reader.seeded(),
+        writer: _Writer(),
+        callable: _Callable(),
+        imageStore: _ImageStore(),
+      );
+
+      await _openCorrection(tester, 'pd-1');
+
+      // **No `Product image` heading since 2026-08-26.** It named what the
+      // reader could already see - a picture, or the words below saying there
+      // is none - which is §7's own complaint about a heading. On the compact
+      // sheet the picture is the masthead and needs no label either.
+      expect(find.text('Product image'), findsNothing);
+      // Nothing chosen and nothing saved, and the well says so in words rather
+      // than by drawing an empty box.
+      expect(
+        find.byKey(const ValueKey('inventory-product-image-empty')),
+        findsOne,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
+      await tester.pumpAndSettle();
+
+      final preview = tester.widget<Image>(
+        find.byKey(const ValueKey('inventory-product-image-preview')),
+      );
+      expect((preview.image as MemoryImage).bytes, _onePixelPng);
+      // 350 is the old form's own figure, and it reaches the widget through the
+      // token layer rather than as a literal here.
+      expect(
+        tester.getSize(find.byType(AspectRatio)).height,
+        lessThanOrEqualTo(
+          spiritTheme.extension<AppTokens>()!.layout.productImagePreview,
+        ),
+      );
+    },
+  );
+
+  testWidgets('a build with no cut-out service offers no cut-out', (
+    tester,
+  ) async {
+    // The remover is absent wherever the deployment never bought one, and an
+    // absent capability draws nothing at all - the same rule the writer, the
+    // update callable and the bulk route are all injected under.
+    FilePicker.platform = _FilePicker(_onePixelPng);
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+      imageStore: _ImageStore(),
+    );
+
+    await _openCorrection(tester, 'pd-1');
+
+    expect(
+      find.byKey(const ValueKey('inventory-remove-background')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('the cut-out waits for a photograph, disabled rather than gone', (
+    tester,
+  ) async {
+    // §5's matrix has a `disabled` row, and the reason `Pagination` states
+    // applies here too: a control that vanishes moves everything under it, so
+    // the button a person is reaching for slides as they reach.
+    FilePicker.platform = _FilePicker(_onePixelPng);
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+      imageStore: _ImageStore(),
+      backgroundRemover: _BackgroundRemover(answer: _twoPixelPng),
+    );
+
+    await _openCorrection(tester, 'pd-1');
+
+    final removal = find.byKey(const ValueKey('inventory-remove-background'));
+    expect(removal, findsOne);
+    expect(tester.widget<AppIconButton>(removal).onPressed, isNull);
+
+    await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<AppIconButton>(removal).onPressed, isNotNull);
+  });
+
+  testWidgets('a cut-out replaces the photograph the form will save', (
+    tester,
+  ) async {
+    FilePicker.platform = _FilePicker(_onePixelPng);
+    final remover = _BackgroundRemover(answer: _twoPixelPng);
+    final imageStore = _ImageStore();
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+      imageStore: imageStore,
+      backgroundRemover: remover,
+    );
+
+    await _openCorrection(tester, 'pd-1');
+    await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inventory-remove-background')));
+    await tester.pumpAndSettle();
+
+    expect(remover.calls, 1);
+    // What the well shows and what the correction would upload are the cut-out,
+    // not the photograph that went into it.
+    final preview = tester.widget<Image>(
+      find.byKey(const ValueKey('inventory-product-image-preview')),
+    );
+    expect((preview.image as MemoryImage).bytes, _twoPixelPng);
+
+    await _review(tester);
+    await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(imageStore.uploaded.single, _twoPixelPng);
+  });
+
+  testWidgets('a refused cut-out says the chosen photograph is unchanged', (
+    tester,
+  ) async {
+    // The one thing an operator needs after a failed cut-out is whether they
+    // still have the photograph they picked. Every refusal says so, and this
+    // asserts the form still holds it as well as saying it.
+    FilePicker.platform = _FilePicker(_onePixelPng);
+    final remover = _BackgroundRemover(
+      failure: TenantBackgroundRemovalFailure.allowanceSpent,
+    );
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+      imageStore: _ImageStore(),
+      backgroundRemover: remover,
+    );
+
+    await _openCorrection(tester, 'pd-1');
+    await tester.tap(find.byKey(const ValueKey('inventory-replace-image')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inventory-remove-background')));
+    await tester.pumpAndSettle();
+
+    final callout = tester.widget<Callout>(
+      find.byKey(const ValueKey('inventory-remove-background-failed')),
+    );
+    expect(callout.status, AppStatus.problem);
+    expect(callout.message, contains('used up its background removals'));
+    expect(callout.message, contains('unchanged'));
+    final preview = tester.widget<Image>(
+      find.byKey(const ValueKey('inventory-product-image-preview')),
+    );
+    expect((preview.image as MemoryImage).bytes, _onePixelPng);
+  });
+
+  testWidgets('a session that may not correct products is offered no cut-out', (
+    tester,
+  ) async {
+    // Asked of the remover rather than answered here, so one role list decides
+    // it - and the callable enforces the same list server-side.
+    FilePicker.platform = _FilePicker(_onePixelPng);
+    await _pump(
+      tester,
+      _controller(),
+      _Reader.seeded(),
+      writer: _Writer(),
+      callable: _Callable(),
+      imageStore: _ImageStore(),
+      backgroundRemover: _BackgroundRemover(
+        answer: _twoPixelPng,
+        allowed: false,
+      ),
+    );
+
+    await _openCorrection(tester, 'pd-1');
+
+    expect(
+      find.byKey(const ValueKey('inventory-remove-background')),
+      findsNothing,
+    );
+  });
 }
 
 Future<void> _pump(
@@ -1159,6 +1669,12 @@ Future<void> _pump(
   VoidCallback? onChanged,
   int pageSize = 20,
   double width = 1400,
+  TenantProductSearchReader? productSearchReader,
+  TenantProductImageStore? imageStore,
+  TenantProductBackgroundRemover? backgroundRemover,
+  TenantProductRouteBuilder? productStockRoute,
+  TenantProductAdjustStockOpener? adjustStockSheet,
+  List<TenantRole> productStockRoles = const <TenantRole>[],
 }) async {
   tester.view.physicalSize = Size(width, 3600);
   tester.view.devicePixelRatio = 1;
@@ -1177,6 +1693,12 @@ Future<void> _pump(
             onChanged: onChanged,
             pageSize: pageSize,
             requestIdFactory: _requestIds().call,
+            productSearchReader: productSearchReader,
+            imageStore: imageStore,
+            backgroundRemover: backgroundRemover,
+            productStockRoute: productStockRoute,
+            adjustStockSheet: adjustStockSheet,
+            productStockRoles: productStockRoles,
           ),
         ),
       ),
@@ -1187,7 +1709,30 @@ Future<void> _pump(
 }
 
 Future<void> _openCorrection(WidgetTester tester, String productId) async {
-  await tester.tap(find.byKey(ValueKey('catalog-management-edit-$productId')));
+  await _tapProductAction(
+    tester,
+    productId,
+    'catalog-management-edit-$productId',
+  );
+  expect(
+    find.byKey(const ValueKey('catalog-management-edit-screen')),
+    findsOneWidget,
+  );
+  expect(find.byType(AlertDialog), findsNothing);
+}
+
+Future<void> _openProductActions(WidgetTester tester, String productId) async {
+  await tester.tap(find.byKey(ValueKey('inventory-actions-$productId')));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _tapProductAction(
+  WidgetTester tester,
+  String productId,
+  String actionKey,
+) async {
+  await _openProductActions(tester, productId);
+  await tester.tap(find.byKey(ValueKey(actionKey)));
   await tester.pumpAndSettle();
 }
 
@@ -1199,6 +1744,13 @@ Future<void> _review(WidgetTester tester) async {
 }
 
 /// Opens the correction form, changes one field, and confirms it.
+///
+/// **It waits the confirmation out before returning**, which is not tidiness. A
+/// committed correction is a floating snack bar since 2026-08-26, and a
+/// floating snack bar sits over the bottom of the surface - so a second
+/// `_correct` in the same test found its *Review* control covered and `tap`
+/// reported that the offset "would not hit test". Waiting leaves the catalog in
+/// the state the next action expects.
 Future<void> _correct(
   WidgetTester tester,
   String productId, {
@@ -1211,6 +1763,22 @@ Future<void> _correct(
   );
   await _review(tester);
   await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
+  await tester.pumpAndSettle();
+  await _waitOutSnackBar(tester);
+}
+
+/// Advances past a snack bar's dwell and waits for it to leave.
+///
+/// One jump past the dwell, then real frames until it goes: `ScaffoldMessenger`
+/// schedules the dismissal timer inside a `.then()` on the entrance animation,
+/// so a single large `pump` produces one frame later on with no timer ever set.
+Future<void> _waitOutSnackBar(WidgetTester tester) async {
+  if (find.byType(AppSnackBar).evaluate().isEmpty) return;
+  await tester.pump(AppSnackBar.dwell + const Duration(seconds: 1));
+  for (var frame = 0; frame < 40; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (find.byType(AppSnackBar).evaluate().isEmpty) return;
+  }
   await tester.pumpAndSettle();
 }
 
@@ -1231,10 +1799,24 @@ Future<void> _fillProduct(
   required String sku,
   required String price,
 }) async {
-  await tester.tap(
-    find.byKey(const ValueKey('catalog-management-category-cat-bakery')),
+  if (find
+      .byKey(const ValueKey('catalog-management-product-name'))
+      .evaluate()
+      .isEmpty) {
+    await tester.tap(find.byKey(const ValueKey('inventory-add-product')));
+    await tester.pumpAndSettle();
+  }
+  expect(
+    find.byKey(const ValueKey('catalog-management-add-screen')),
+    findsOneWidget,
   );
-  await tester.pump();
+  expect(find.byType(AlertDialog), findsNothing);
+  await tester.tap(
+    find.byKey(const ValueKey('catalog-management-product-category')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Bakery').last);
+  await tester.pumpAndSettle();
   await tester.enterText(
     find.byKey(const ValueKey('catalog-management-product-name')),
     name,
@@ -1257,6 +1839,9 @@ Future<void> _confirmProduct(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const ValueKey('catalog-management-confirm')));
   await tester.pumpAndSettle();
+  // See `_correct`: a committed write is a floating snack bar now, and it sits
+  // over the bottom of the surface the next action reaches for.
+  await _waitOutSnackBar(tester);
 }
 
 String _text(WidgetTester tester, String key) =>
@@ -1273,10 +1858,6 @@ Future<void> _open(WidgetTester tester, String key) async {
   await tester.tap(finder);
   await tester.pumpAndSettle();
 }
-
-/// One [Callout]'s message, read off the component rather than off a `Text`.
-String _callout(WidgetTester tester, String key) =>
-    tester.widget<Callout>(find.byKey(ValueKey(key))).message;
 
 /// Every rendered string carrying the shape of a category document ID, over the
 /// whole tree rather than over one slot: the point of the assertion is that no
@@ -1335,6 +1916,8 @@ final class _Writer implements TenantCatalogWriter {
       <TenantProductCreateIntent>[];
   final List<TenantCategoryCreateIntent> categories =
       <TenantCategoryCreateIntent>[];
+  final List<TenantCategoryRenameIntent> renamed =
+      <TenantCategoryRenameIntent>[];
   final List<TenantProductRetireIntent> retired = <TenantProductRetireIntent>[];
   final List<Completer<TenantCatalogWriteResult>> _pending =
       <Completer<TenantCatalogWriteResult>>[];
@@ -1364,6 +1947,14 @@ final class _Writer implements TenantCatalogWriter {
     TenantProductCreateIntent intent,
   ) {
     products.add(intent);
+    return _answered();
+  }
+
+  @override
+  Future<TenantCatalogWriteResult> renameCategory(
+    TenantCategoryRenameIntent intent,
+  ) {
+    renamed.add(intent);
     return _answered();
   }
 
@@ -1429,6 +2020,7 @@ final class _Callable implements UpdateProductCallable {
             'price',
             'cost',
             'categoryId',
+            'image',
           ])
             if (payload.containsKey(field)) field,
         ],
@@ -1437,6 +2029,7 @@ final class _Callable implements UpdateProductCallable {
         'price': payload['price'] ?? 65.0,
         'priceMinor': ((payload['price'] as double? ?? 65.0) * 100).round(),
         'categoryId': payload['categoryId'] ?? 'cat-bakery',
+        'image': payload.containsKey('image') ? payload['image'] : null,
         ..._overrides,
       };
 
@@ -1528,5 +2121,143 @@ final class _Reader implements TenantDataReader {
             data: documents[id]!,
           ),
     ].take(query.limit).toList();
+  }
+}
+
+final class _SearchReader implements TenantProductSearchReader {
+  _SearchReader(this._products);
+
+  factory _SearchReader.seeded({required int productCount}) =>
+      _SearchReader(<TenantQueryDocumentSnapshot>[
+        for (var index = 1; index <= productCount; index++)
+          TenantQueryDocumentSnapshot(
+            path: '$_productsPath/pd-$index',
+            data: <String, Object?>{
+              'name': index == 1 ? 'Brown bread' : 'Product $index',
+              'SKU': index == 1 ? 'BR-1' : 'PD-$index',
+              'price': 65,
+              'quantity': index == 1 ? 0 : index,
+              'categoryId': 'cat-bakery',
+              'searchName': index == 1 ? 'brown bread' : 'product $index',
+            },
+          ),
+      ]);
+
+  final List<TenantQueryDocumentSnapshot> _products;
+  final List<TenantProductSearchQuery> queries = <TenantProductSearchQuery>[];
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
+    TenantProductSearchQuery query,
+  ) async {
+    queries.add(query);
+    final cursor = query.startAfter?.documentId;
+    return <TenantQueryDocumentSnapshot>[
+      for (final product in _products)
+        if (cursor == null ||
+            product.path.split('/').last.compareTo(cursor) > 0)
+          product,
+    ].take(query.limit).toList(growable: false);
+  }
+}
+
+final class _ImageStore implements TenantProductImageStore {
+  final List<TenantProductImageUpload> uploads = <TenantProductImageUpload>[];
+  final List<Uri> removed = <Uri>[];
+
+  /// The bytes each upload carried, so a test can assert *which* photograph a
+  /// correction saved rather than only that it saved one.
+  final List<Uint8List> uploaded = <Uint8List>[];
+
+  @override
+  Future<TenantProductImageUpload> upload({
+    required String tenantId,
+    required String productId,
+    required TenantProductImageCandidate candidate,
+  }) async {
+    final upload = TenantProductImageUpload(
+      url: Uri.parse(
+        'https://storage.test/tenantProductImages/$tenantId/$productId/image.png',
+      ),
+      objectPath: 'tenantProductImages/$tenantId/$productId/image.png',
+    );
+    uploads.add(upload);
+    uploaded.add(candidate.bytes);
+    return upload;
+  }
+
+  @override
+  Future<void> removeOwned({
+    required String tenantId,
+    required String productId,
+    required Uri imageUrl,
+  }) async {
+    removed.add(imageUrl);
+  }
+}
+
+final class _FilePicker extends FilePicker {
+  _FilePicker(this.bytes);
+
+  final Uint8List bytes;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = false,
+    int compressionQuality = 0,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async => FilePickerResult(<PlatformFile>[
+    PlatformFile(name: 'product.png', size: bytes.length, bytes: bytes),
+  ]);
+}
+
+/// A 1x1 PNG, small enough to be a literal and real enough to pass the
+/// candidate's magic-number check.
+final Uint8List _onePixelPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+'
+  'A8AAQUBAScY42YAAAAASUVORK5CYII=',
+);
+
+/// A different real PNG, so "the cut-out replaced the photograph" is an
+/// assertion about bytes rather than about a call having happened.
+final Uint8List _twoPixelPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAE0lEQVR4nGP4z8DwnwGM'
+  '/zMwAAAf7gP9NRsAMwAAAABJRU5ErkJggg==',
+);
+
+/// Stands in for the callable-backed remover, answering with a cut-out or with
+/// one of its refusals.
+final class _BackgroundRemover implements TenantProductBackgroundRemover {
+  _BackgroundRemover({this.answer, this.failure, this.allowed = true});
+
+  final Uint8List? answer;
+  final TenantBackgroundRemovalFailure? failure;
+  final bool allowed;
+  int calls = 0;
+
+  @override
+  bool canRemoveInSession(TenantSession session) => allowed;
+
+  @override
+  Future<TenantProductImageCandidate> remove({
+    required TenantSession session,
+    required TenantProductImageCandidate candidate,
+  }) async {
+    calls += 1;
+    final refusal = failure;
+    if (refusal != null) throw TenantBackgroundRemovalException(refusal);
+    return TenantProductImageCandidate(
+      bytes: answer!,
+      fileName: cutOutFileName(candidate.fileName),
+    );
   }
 }

@@ -1,4 +1,5 @@
 import '../checkout/checkout_receipt.dart';
+import '../tenancy/tenant_id.dart';
 import '../tenancy/tenant_paths.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_types.dart';
@@ -64,6 +65,60 @@ final class TenantReceiptQuery {
   final int sequence;
 }
 
+/// A daily receipt sequence entered without the predictable receipt prefix.
+///
+/// Receipt sequences restart for every device and business day, so this query
+/// always carries the selected day and may legitimately match several tills.
+final class TenantReceiptEndingQuery {
+  factory TenantReceiptEndingQuery.parse({
+    required String businessDate,
+    required String ending,
+    String? maximumBusinessDate,
+  }) {
+    final String date;
+    try {
+      date = validateCheckoutBusinessDate(businessDate);
+      if (maximumBusinessDate case final maximum?) {
+        final upperBound = validateCheckoutBusinessDate(maximum);
+        if (date.compareTo(upperBound) > 0) {
+          throw const TenantReceiptLookupException('future_business_date');
+        }
+      }
+    } on TenantReceiptLookupException {
+      rethrow;
+    } on ArgumentError {
+      throw const TenantReceiptLookupException('invalid_business_date');
+    }
+
+    final normalized = ending.trim();
+    if (!RegExp(r'^\d{1,6}$').hasMatch(normalized)) {
+      throw const TenantReceiptLookupException('invalid_receipt_ending');
+    }
+    final sequence = int.parse(normalized);
+    if (sequence < 1 || sequence > maximumCheckoutReceiptSequence) {
+      throw const TenantReceiptLookupException('invalid_receipt_ending');
+    }
+    return TenantReceiptEndingQuery._(
+      businessDate: date,
+      sequence: sequence,
+      displayEnding: sequence.toString().padLeft(
+        checkoutReceiptSequenceDigits,
+        '0',
+      ),
+    );
+  }
+
+  const TenantReceiptEndingQuery._({
+    required this.businessDate,
+    required this.sequence,
+    required this.displayEnding,
+  });
+
+  final String businessDate;
+  final int sequence;
+  final String displayEnding;
+}
+
 /// What one receipt lookup found.
 ///
 /// More than one sale is a real possibility rather than an error: the device
@@ -88,6 +143,22 @@ final class TenantReceiptLookupResult {
   TenantSale get sale => matches.single;
 }
 
+/// Every authorized sale carrying one daily receipt ending.
+final class TenantReceiptEndingLookupResult {
+  TenantReceiptEndingLookupResult._({
+    required this.query,
+    required List<TenantSale> matches,
+  }) : matches = List<TenantSale>.unmodifiable(matches);
+
+  final TenantReceiptEndingQuery query;
+  final List<TenantSale> matches;
+
+  bool get isFound => matches.length == 1;
+  bool get isMissing => matches.isEmpty;
+  bool get isAmbiguous => matches.length > 1;
+  TenantSale get sale => matches.single;
+}
+
 /// Guarded lookup from a customer's receipt to its immutable sale.
 final class TenantReceiptLookupRepository extends TenantReadRepository {
   TenantReceiptLookupRepository({
@@ -96,12 +167,9 @@ final class TenantReceiptLookupRepository extends TenantReadRepository {
   }) : _collectionReader = reader,
        super(reader: reader);
 
-  /// Every active member may look up a receipt.
-  ///
-  /// The sale read rule is already business-wide, and a receipt lookup is the
-  /// counter operation a customer initiates: whoever is at the till must be
-  /// able to find it. Recording a return from it is open to the same roles;
-  /// restoring stock stays management-only.
+  /// Every active member may open receipt search, but the repository narrows a
+  /// cashier to receipts they issued. Management may search the whole business
+  /// or one selected member.
   static const List<TenantRole> allowedRoles = <TenantRole>[
     TenantRole.owner,
     TenantRole.admin,
@@ -109,26 +177,87 @@ final class TenantReceiptLookupRepository extends TenantReadRepository {
     TenantRole.cashier,
   ];
 
-  /// The most colliding sales one lookup will report before giving up.
-  static const int maximumMatches = 5;
+  static const List<TenantRole> managementRoles = <TenantRole>[
+    TenantRole.owner,
+    TenantRole.admin,
+    TenantRole.manager,
+  ];
+
+  /// The most colliding sales one lookup will report before failing closed.
+  ///
+  /// The repository never returns a partial collision set: `hasMore` becomes a
+  /// refusal so a person cannot mistake the first page for every matching till.
+  static const int maximumMatches = 50;
 
   final TenantCollectionReader _collectionReader;
 
-  Future<TenantReceiptLookupResult> findByReceipt(String receiptNumber) async {
+  Future<TenantReceiptLookupResult> findByReceipt(
+    String receiptNumber, {
+    String? soldById,
+  }) async {
     final query = TenantReceiptQuery.parse(receiptNumber);
+    final effectiveSoldById = _effectiveSoldById(soldById);
+    final matches = await _findMatches(
+      filters: <String, Object?>{
+        'receiptNumber': query.receiptNumber,
+        if (effectiveSoldById != null) 'soldById': effectiveSoldById,
+      },
+      verify: (sale) => sale.receiptNumber == query.receiptNumber,
+    );
+    return TenantReceiptLookupResult._(query: query, matches: matches);
+  }
+
+  Future<TenantReceiptEndingLookupResult> findByEnding({
+    required String businessDate,
+    required String ending,
+    String? soldById,
+    String? maximumBusinessDate,
+  }) async {
+    final query = TenantReceiptEndingQuery.parse(
+      businessDate: businessDate,
+      ending: ending,
+      maximumBusinessDate: maximumBusinessDate,
+    );
+    final effectiveSoldById = _effectiveSoldById(soldById);
+    final matches = await _findMatches(
+      filters: <String, Object?>{
+        'businessDate': query.businessDate,
+        'receiptSequence': query.sequence,
+        if (effectiveSoldById != null) 'soldById': effectiveSoldById,
+      },
+      verify: (sale) =>
+          sale.businessDate == query.businessDate &&
+          sale.receiptSequence == query.sequence,
+    );
+    return TenantReceiptEndingLookupResult._(query: query, matches: matches);
+  }
+
+  String? _effectiveSoldById(String? requested) {
     if (!session.canAccess(allowedRoles: allowedRoles)) {
       throw const TenantReceiptLookupException('receipt_lookup_forbidden');
     }
-    // An equality filter on one field with the default ascending key order is
-    // served by Firestore's automatic single-field index, so this page needs no
-    // composite index. A descending page would need one, and would buy nothing.
+    if (!session.canAccess(allowedRoles: managementRoles)) return session.uid;
+    if (requested == null) return null;
+    try {
+      return validateTenantDocumentId(requested, fieldName: 'soldById');
+    } on ArgumentError {
+      throw const TenantReceiptLookupException('invalid_receipt_scope');
+    }
+  }
+
+  Future<List<TenantSale>> _findMatches({
+    required Map<String, Object?> filters,
+    required bool Function(TenantSale sale) verify,
+  }) async {
     final page = await readCollectionPage(
       TenantCollection.sales,
       collectionReader: _collectionReader,
       pageSize: maximumMatches,
-      equalityFilters: <String, Object?>{'receiptNumber': query.receiptNumber},
+      equalityFilters: filters,
     );
-
+    if (page.hasMore) {
+      throw const TenantReceiptLookupException('too_many_matches');
+    }
     final matches = <TenantSale>[];
     for (final snapshot in page.items) {
       final sale = TenantSale.fromDocument(
@@ -138,15 +267,15 @@ final class TenantReceiptLookupRepository extends TenantReadRepository {
       if (sale.tenantId != session.tenantId) {
         throw const TenantReceiptLookupException('cross_tenant_sale');
       }
-      // The sale model already re-derives the receipt from the sale's own
-      // device, business date, and sequence. Comparing it to the requested one
-      // proves a transport that ignored the filter cannot answer with a
-      // different customer's sale.
-      if (sale.receiptNumber != query.receiptNumber) {
+      if (!verify(sale)) {
         throw const TenantReceiptLookupException('receipt_mismatch');
+      }
+      final soldById = filters['soldById'];
+      if (soldById != null && sale.soldById != soldById) {
+        throw const TenantReceiptLookupException('receipt_scope_mismatch');
       }
       matches.add(sale);
     }
-    return TenantReceiptLookupResult._(query: query, matches: matches);
+    return matches;
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
@@ -204,6 +206,7 @@ List<RecordAttribute> tenantProductAttributes(
   RecordAttribute(
     label: 'Code',
     value: product.sku,
+    kind: RecordValueKind.code,
     valueKey: ValueKey('$keyPrefix-code-${product.id}'),
     // **Twice an ordinary column, and the first render is why.** A code is
     // §2.2's "compared character by character" string and a real one is a
@@ -216,11 +219,13 @@ List<RecordAttribute> tenantProductAttributes(
   RecordAttribute(
     label: 'In stock',
     value: '${product.quantity}',
+    kind: RecordValueKind.code,
     valueKey: ValueKey('$keyPrefix-stock-${product.id}'),
   ),
   RecordAttribute(
     label: 'Unit price',
     value: product.price.toStringAsFixed(2),
+    kind: RecordValueKind.money,
     valueKey: ValueKey('$keyPrefix-price-${product.id}'),
   ),
 ];
@@ -254,10 +259,17 @@ final class TenantCatalogRepository extends TenantReadRepository {
   TenantCatalogRepository({
     required super.session,
     required TenantDataReader reader,
+    TenantProductSearchReader? productSearchReader,
   }) : _collectionReader = reader,
+       _productSearchReader =
+           productSearchReader ??
+           (reader is TenantProductSearchReader
+               ? reader as TenantProductSearchReader
+               : null),
        super(reader: reader);
 
   final TenantCollectionReader _collectionReader;
+  final TenantProductSearchReader? _productSearchReader;
 
   Future<TenantCatalogPage<TenantCategory>> loadCategories({
     int pageSize = 20,
@@ -293,6 +305,94 @@ final class TenantCatalogRepository extends TenantReadRepository {
     );
   }
 
+  /// Reads one stable backend page for the inventory search and filters.
+  ///
+  /// Unlike [loadProducts], this never routes through the generic collection
+  /// reader: its array membership predicate, quantity range, and ordered cursor
+  /// belong to the dedicated product-search boundary.
+  Future<TenantCatalogPage<TenantProduct>> searchProducts({
+    int pageSize = 20,
+    String? cursor,
+    String? searchPrefix,
+    String? categoryId,
+    TenantProductStockFilter stock = TenantProductStockFilter.all,
+  }) async {
+    if (pageSize < 1 || pageSize > 50) {
+      throw RangeError.range(pageSize, 1, 50, 'pageSize');
+    }
+    final searchReader = _productSearchReader;
+    if (searchReader == null) {
+      throw StateError('This reader does not support tenant product search.');
+    }
+    final prefix = searchPrefix?.trim();
+    if (prefix != null &&
+        (prefix.length < 2 || prefix != prefix.toLowerCase())) {
+      throw ArgumentError.value(
+        searchPrefix,
+        'searchPrefix',
+        'Must be a normalized prefix of at least two characters.',
+      );
+    }
+    final safeCategoryId = categoryId == null
+        ? null
+        : validateTenantDocumentId(categoryId, fieldName: 'categoryId');
+    final position = cursor == null ? null : _decodeProductCursor(cursor);
+    if (stock != TenantProductStockFilter.all &&
+        position != null &&
+        position.quantity == null) {
+      throw const FormatException('The product cursor has no stock position.');
+    }
+    final collectionPath = paths.collectionPath(TenantCollection.products);
+    final snapshots = await searchReader.searchTenantProducts(
+      TenantProductSearchQuery.scoped(
+        collectionPath: collectionPath,
+        limit: pageSize + 1,
+        stock: stock,
+        searchPrefix: prefix,
+        categoryId: safeCategoryId,
+        startAfter: position,
+      ),
+    );
+    if (snapshots.length > pageSize + 1) {
+      throw const TenantScopeViolation(
+        'Product search returned more documents than requested.',
+      );
+    }
+    final expectedPrefix = '$collectionPath/';
+    final seen = <String>{};
+    for (final snapshot in snapshots) {
+      if (!snapshot.path.startsWith(expectedPrefix) ||
+          snapshot.path.substring(expectedPrefix.length).contains('/')) {
+        throw TenantScopeViolation(
+          'Product search escaped $collectionPath with ${snapshot.path}.',
+        );
+      }
+      if (!seen.add(snapshot.path)) {
+        throw const TenantScopeViolation(
+          'Product search returned the same document twice.',
+        );
+      }
+    }
+    final hasMore = snapshots.length > pageSize;
+    final visible = snapshots.take(pageSize).toList(growable: false);
+    final last = visible.isEmpty ? null : visible.last;
+    return TenantCatalogPage<TenantProduct>(
+      items: visible.map(TenantProduct.fromSnapshot).toList(growable: false),
+      nextCursor: hasMore && last != null
+          ? _encodeProductCursor(
+              TenantProductSearchPosition(
+                searchName: _requiredTrimmedString(last.data, 'searchName'),
+                documentId: last.path.substring(expectedPrefix.length),
+                quantity: stock == TenantProductStockFilter.all
+                    ? null
+                    : _signedSafeInteger(last.data, 'quantity'),
+              ),
+            )
+          : null,
+      hasMore: hasMore,
+    );
+  }
+
   Future<TenantCatalogSnapshot> loadInitial() async {
     final pages = await Future.wait<Object>([
       loadCategories(pageSize: 50),
@@ -305,12 +405,67 @@ final class TenantCatalogRepository extends TenantReadRepository {
   }
 }
 
+String _encodeProductCursor(TenantProductSearchPosition position) =>
+    base64Url.encode(
+      utf8.encode(
+        jsonEncode(<String, Object?>{
+          'v': 1,
+          'name': position.searchName,
+          'id': position.documentId,
+          if (position.quantity != null) 'quantity': position.quantity,
+        }),
+      ),
+    );
+
+TenantProductSearchPosition _decodeProductCursor(String encoded) {
+  try {
+    final decoded = jsonDecode(
+      utf8.decode(base64Url.decode(base64Url.normalize(encoded))),
+    );
+    if (decoded is! Map<String, dynamic> || decoded['v'] != 1) {
+      throw const FormatException();
+    }
+    final name = decoded['name'];
+    final id = decoded['id'];
+    final quantity = decoded['quantity'];
+    if (name is! String ||
+        name.isEmpty ||
+        id is! String ||
+        (quantity != null && quantity is! int)) {
+      throw const FormatException();
+    }
+    return TenantProductSearchPosition(
+      searchName: name,
+      documentId: validateTenantDocumentId(id, fieldName: 'cursor.id'),
+      quantity: quantity as int?,
+    );
+  } catch (_) {
+    throw const FormatException('The product page cursor is invalid.');
+  }
+}
+
 /// Builds the per-product stock route for one already-decoded product.
 ///
 /// The composition root supplies it; the catalog only passes the product it
 /// already proved. While it is absent the route stays unreachable and the
 /// catalog is exactly the read-only surface it was before.
+///
+/// **It carried a `TenantProductStockMode` between 2026-08-25 and 2026-08-26**,
+/// so that one builder could open either half of a route that has since stopped
+/// having halves. Correcting is [TenantProductAdjustStockOpener] now — not a
+/// route at all — and this builds the ledger and only the ledger.
 typedef TenantProductRouteBuilder = Widget Function(TenantProduct product);
+
+/// Opens the per-product stock **correction** over the surface that asked.
+///
+/// **A different shape from the builder above, because a sheet is not a
+/// route.** A route builder answers with a widget for somebody else to push;
+/// a sheet owns its own presentation, its own dismissal and the snack bar it
+/// leaves behind, so what the composition root supplies here is the errand
+/// rather than the screen. It takes the calling `BuildContext` for the same
+/// reason: the sheet is shown over that surface and reports back to it.
+typedef TenantProductAdjustStockOpener =
+    Future<void> Function(BuildContext context, TenantProduct product);
 
 /// Builds the business-wide stock adjustment feed route.
 ///
@@ -481,12 +636,7 @@ final class _CatalogContents extends StatelessWidget {
           ),
         ],
         SizedBox(height: tokens.spacing.s20),
-        Text(
-          'Categories',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Categories'),
         SizedBox(height: tokens.spacing.s8),
         if (snapshot.categories.items.isEmpty)
           const EmptyState(
@@ -508,12 +658,7 @@ final class _CatalogContents extends StatelessWidget {
             child: const Text('More categories are available.'),
           ),
         SizedBox(height: tokens.spacing.s24),
-        Text(
-          'Products',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Products'),
         SizedBox(height: tokens.spacing.s4),
         // §2.2's `caption` in `text.tertiary`, which is the weight the till
         // gives the same fact: standing context a person needs beside a figure

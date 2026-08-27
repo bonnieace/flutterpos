@@ -59,11 +59,7 @@ void main() {
     test('rejects owners and accepted memberships without calls', () {
       final session = _session('tenant-a', role: TenantRole.admin);
       for (final target in [
-        _acceptedSummary(
-          'tenant-a',
-          'owner-a',
-          role: TenantRole.owner,
-        ),
+        _acceptedSummary('tenant-a', 'owner-a', role: TenantRole.owner),
         _acceptedSummary('tenant-a', 'active-a'),
         _acceptedSummary(
           'tenant-a',
@@ -161,11 +157,12 @@ void main() {
         findsNothing,
       );
 
-      await _tapVisibleThenPump(tester, 'resend-staff-invitation-staff-a');
-      expect(
-        find.text('Resend invitation to Staff Person?'),
-        findsOneWidget,
+      await _chooseDirectoryAction(
+        tester,
+        targetUid: 'staff-a',
+        actionKey: 'resend-staff-invitation-staff-a',
       );
+      expect(find.text('Resend invitation to Staff Person?'), findsOneWidget);
       expect(callable.payloads, isEmpty);
 
       await _tapVisibleAndSettle(tester, 'resend-staff-invitation-confirm');
@@ -437,10 +434,7 @@ Map<String, Object?> _resendResponse(String tenantId, String uid) =>
       'uid': uid,
       'invitationStatus': 'pending',
       'invitationVersion': 4,
-      'delivery': {
-        'deliveryId': 'delivery-$uid',
-        'status': 'pending_enqueue',
-      },
+      'delivery': {'deliveryId': 'delivery-$uid', 'status': 'pending_enqueue'},
     };
 
 TenantStaffSummary _pendingSummary(
@@ -585,5 +579,15 @@ Future<void> _tapVisibleAndSettle(WidgetTester tester, String key) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseDirectoryAction(
+  WidgetTester tester, {
+  required String targetUid,
+  required String actionKey,
+}) async {
+  await _tapVisibleAndSettle(tester, 'staff-actions-$targetUid');
+  await tester.tap(find.byKey(ValueKey(actionKey)));
   await tester.pumpAndSettle();
 }

@@ -285,7 +285,9 @@ void main() {
     final binder = TenantShiftCheckoutBinder(shiftState);
 
     expect(
-      (await binder.bindCheckoutShift(_session(TenantRole.cashier))).refusalCode,
+      (await binder.bindCheckoutShift(
+        _session(TenantRole.cashier),
+      )).refusalCode,
       'other_tenant_shift_open',
     );
     for (final role in <TenantRole>[
@@ -334,11 +336,8 @@ CheckoutDraftRequest _request() => CheckoutDraftRequest(
   lines: const [CheckoutDraftLineRequest(productId: 'product-a', quantity: 1)],
 );
 
-Matcher _draftCode(String code) => isA<CheckoutDraftException>().having(
-  (error) => error.code,
-  'code',
-  code,
-);
+Matcher _draftCode(String code) =>
+    isA<CheckoutDraftException>().having((error) => error.code, 'code', code);
 
 TenantSession _session(TenantRole role) =>
     TenantSession.active(uid: 'user-a', tenantId: 'tenant-a', role: role);
@@ -351,6 +350,7 @@ TenantShiftLocalRecord _record({
   String businessDate = _businessDate,
   bool serverConfirmedOpen = true,
   bool closeInProgress = false,
+  DateTime? openedAt,
 }) => TenantShiftLocalRecord(
   uid: uid,
   tenantId: tenantId,
@@ -360,6 +360,7 @@ TenantShiftLocalRecord _record({
   serverConfirmedOpen: serverConfirmedOpen,
   closeInProgress: closeInProgress,
   updatedAt: DateTime.utc(2026, 7, 31, 9),
+  openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),
 );
 
 TenantProduct _product(String tenantId, String productId) =>

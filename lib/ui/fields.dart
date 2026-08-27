@@ -492,17 +492,6 @@ final class AppFieldWell extends StatelessWidget {
     this.focused = false,
   });
 
-  /// §5.2's focus glow, new in `design.md` v0.4.
-  ///
-  /// The original sign-in's figures - `accentGreen` at 30%, blurred 8, spread 1
-  /// - carried across rather than re-chosen, because "the glow that was there
-  /// before" is what was asked for. They are three numbers §2 does not name and
-  /// they are here rather than in the token layer for that reason: a glow is one
-  /// component's interaction state, not a role anything else reads.
-  static const double _focusGlowOpacity = 0.3;
-  static const double _focusGlowBlur = 8;
-  static const double _focusGlowSpread = 1;
-
   final String label;
   final Widget child;
   final String? helper;
@@ -541,10 +530,19 @@ final class AppFieldWell extends StatelessWidget {
     final ring = colors.action.focusRing;
     final failed = error != null;
 
+    // **Focused takes the accent, which is the design's own input rule.** Its
+    // component CSS reads `border: 1px solid outline-variant` at rest and
+    // `border-color: primary` on focus, so the well's own outline is part of
+    // the focus signal rather than a constant the ring is drawn outside of.
     final borderColor = !enabled
         ? colors.action.disabledBorder
         : failed
-        ? colors.status.problem.border
+        // `status.problem.fg`, not its 30%-alpha border: the same value the
+        // theme's own `errorBorder` uses, and the tint is a chip background's
+        // edge rather than an outline that has to be seen on a dark well.
+        ? colors.status.problem.fg
+        : focused
+        ? colors.action.focusRing.color
         : colors.surface.borderStrong;
 
     // §5.2: 48h at comfortable density. §3's own figure for the same surface is
@@ -552,22 +550,33 @@ final class AppFieldWell extends StatelessWidget {
     // declared twice - and a compact back-office field is 32 for the same
     // reason its rows are.
     final height = tokens.density.minimumTapTarget.height;
-    // §2.3 as amended in v0.4: an input is a pill. The shape is the product
-    // owner's, and the reason it is not simply `AppButton`'s row is that §2.3
-    // still restricts the pill to buttons *and inputs* - a chip does not get it.
-    // **`radius.pill` since 2026-08-23, and it is the product owner's
-    // direction rather than a reading of the design.** Stated plainly
-    // because the evidence below is real and points the other way: the
-    // Profound Verdant export renders square-cornered controls throughout,
-    // and the note it replaces was right about that. The owner asked for
-    // the pill back; a shape is theirs to choose, and `OPEN_QUESTIONS.md`
-    // decision 26 records the override with the evidence it overrides.
-    // This is the third time this one value has moved: v0.4 made it a pill at
-    // the owner's request, 2026-08-22 took it back to the design's corner,
-    // and this restores it. `StatusBadge` still keeps `radius.sm` - it is
-    // read rather than pressed, and nothing about it is a pill.
-    final radius = BorderRadius.circular(tokens.radius.pill);
+    // **`radius.md`, the same 8 `AppButton` takes and for the same reason.**
+    // The design's `input[type=...]` rule is `border-radius:
+    // theme('borderRadius.xl')`, which the served config resolves to `0.5rem`.
+    // The pill override of 2026-08-23 is withdrawn; the Stitch render is the
+    // target.
+    final radius = BorderRadius.circular(tokens.radius.md);
     final gutter = ring.width + ring.offset;
+    // **A focused field is one 2px outline, not an outline and a ring.**
+    //
+    // The design writes focus as `border-color: primary` plus
+    // `box-shadow: 0 0 0 1px primary` - two adjacent pixels of accent that
+    // composite into a single crisp edge. This app was drawing the accent
+    // border *and* §9's ring at its own 2px, 2px clear of the well, which
+    // spans ten device pixels on a 2x phone and reads as a lit box rather
+    // than a focused one. The product owner called it thick on 2026-08-23 and
+    // it was.
+    //
+    // **§9 is met by the outline rather than by the ring**: WCAG 2.2's focus
+    // appearance asks for a 2px perimeter, and this is one, contiguous, in the
+    // accent, against a well that is otherwise `outline-variant`. A **button**
+    // keeps `PressSurface`'s offset ring, because a button has no border of
+    // its own for the accent to move onto.
+    //
+    // `strokeAlignOutside` is what keeps it free: the second pixel is painted
+    // into the gutter that was already reserved for the ring, so a field does
+    // not reflow when the focus arrives.
+    final focusedNow = focused && enabled;
 
     Widget well = DecoratedBox(
       decoration: BoxDecoration(
@@ -576,28 +585,28 @@ final class AppFieldWell extends StatelessWidget {
         // the table header and the code block, which genuinely are recessed.
         color: colors.surface.field,
         borderRadius: radius,
-        border: Border.all(color: borderColor, width: 1),
-        // §2.1 permits exactly one shadow and this is it: the focus glow the
-        // original sign-in drew, kept *behind* §9's ring rather than instead of
-        // it. A glow is an interaction state and not depth, which is why it does
-        // not contradict "depth is a surface step, never a drop shadow".
-        boxShadow: focused && enabled
-            ? <BoxShadow>[
-                BoxShadow(
-                  color: ring.color.withValues(alpha: _focusGlowOpacity),
-                  blurRadius: _focusGlowBlur,
-                  spreadRadius: _focusGlowSpread,
-                ),
-              ]
-            : null,
+        border: Border.all(
+          color: borderColor,
+          width: focusedNow ? ring.width : 1,
+          strokeAlign: focusedNow
+              ? BorderSide.strokeAlignOutside
+              : BorderSide.strokeAlignInside,
+        ),
+        // **No glow since 2026-08-23.** The design draws focus as
+        // `border-color: primary` plus `box-shadow: 0 0 0 1px primary` - two
+        // crisp lines and no blur - and the blurred halo this used to paint
+        // read as a lit field rather than a focused one beside §9's ring. The
+        // border above takes the accent on focus and the ring below is the
+        // second line; nothing here spreads.
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: height),
         child: Padding(
-          // §5.2 names `space.20` for a pill: content off the curve, and it is
-          // `AppButton`'s figure for the same shape. It was `space.12` while the
-          // well was a rectangle at `radius.sm`.
-          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s20),
+          // The design's input rule is `padding: 12px 16px`; the vertical half
+          // is the well's own 48 minimum, and this is the horizontal one. It
+          // was `space.20` while the well was a pill and content had to clear
+          // the curve.
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.s16),
           child: Center(
             heightFactor: 1,
             child: leading == null
@@ -639,26 +648,7 @@ final class AppFieldWell extends StatelessWidget {
     // `EditableText` state with it, and drop the platform input connection -
     // the field would take focus and then refuse every keystroke. Found by a
     // test that could not type into it.
-    well = Stack(
-      children: <Widget>[
-        Padding(padding: EdgeInsets.all(gutter), child: well),
-        Positioned.fill(
-          child: IgnorePointer(
-            child: Padding(
-              padding: EdgeInsets.all(ring.offset),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: focused && enabled
-                      ? Border.all(color: ring.color, width: ring.width)
-                      : null,
-                  borderRadius: radius + BorderRadius.circular(ring.offset),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    well = Padding(padding: EdgeInsets.all(gutter), child: well);
 
     // **A caller may own the message and still want the border.** §5.2 gives a
     // field one slot holding either the helper or the error, and that is right

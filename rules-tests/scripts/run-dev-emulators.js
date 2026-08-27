@@ -29,7 +29,7 @@ const config = JSON.parse(
   readFileSync(fileURLToPath(new URL("../../firebase.json", import.meta.url)), "utf8"),
 );
 const emulators = config.emulators;
-for (const service of ["auth", "firestore", "functions"]) {
+for (const service of ["auth", "firestore", "functions", "storage"]) {
   if (!Number.isInteger(emulators?.[service]?.port)) {
     throw new Error(`firebase.json declares no ${service} emulator port.`);
   }
@@ -111,7 +111,7 @@ try {
       "--project",
       projectId,
       "--only",
-      "auth,firestore,functions",
+      "auth,firestore,functions,storage",
       seedCommand,
     ],
     {

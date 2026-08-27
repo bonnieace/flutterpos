@@ -23,18 +23,33 @@ import 'reporting/reporting.dart';
 import 'returns/returns.dart';
 import 'sales/sales.dart';
 import 'shift/shift.dart';
+import 'ui/scaffold.dart';
+import 'ui/tokens.dart';
 
 Future<void> main() async {
   await SentryFlutter.init(
     (options) {
-      options.dsn =
-          'http://f620ef1faeb840549bc58d8bb3d52ac5@glitchtip-oaeu77z41o045sbhwwdwngfk.5.189.157.23.sslip.io/1';
-      options.tracesSampleRate = 1.0;
-      options.profilesSampleRate = 1.0;
-      options.replay.sessionSampleRate = 1.0;
-      options.replay.onErrorSampleRate = 1.0;
-      options.privacy.maskAllImages = false;
-      options.privacy.maskAllText = false;
+      if (!firebaseEmulatorsRequested) {
+        options.dsn =
+            'http://f620ef1faeb840549bc58d8bb3d52ac5@glitchtip-oaeu77z41o045sbhwwdwngfk.5.189.157.23.sslip.io/1';
+        options.tracesSampleRate = 1.0;
+        options.profilesSampleRate = 1.0;
+        options.replay.sessionSampleRate = 1.0;
+        options.replay.onErrorSampleRate = 1.0;
+        options.privacy.maskAllImages = false;
+        options.privacy.maskAllText = false;
+      } else {
+        // **The empty string is what disables Sentry; leaving the DSN unset
+        // does not.** An emulator run has no crash reporter by design - the
+        // events would be a developer's own local noise, and the transport
+        // cannot reach the collector over cleartext from a handset anyway. But
+        // `SentryFlutter.init` throws `Invalid argument(s): DSN is required.`
+        // on a null DSN, and it throws it *before* `appRunner`, so the app
+        // never reached its first frame: a device run against the emulators
+        // stopped on the splash screen with nothing on screen to say why.
+        // An empty DSN is the SDK's own documented "run disabled".
+        options.dsn = '';
+      }
     },
     appRunner: () async {
       WidgetsFlutterBinding.ensureInitialized();
@@ -145,7 +160,13 @@ Future<void> main() async {
       final tenantGateway = FirebaseTenantGateway();
       final bootstrapService = TenantBootstrapService(
         rootGateway: tenantGateway,
-        directory: TenantDirectory(tenantGateway),
+        // **The cache shares the selection box on purpose.** Which business to
+        // open and what is needed to open it are two halves of one fact, and a
+        // second box would be another `await` on the startup path for nothing.
+        directory: TenantDirectory(
+          tenantGateway,
+          cache: HiveTenantDirectoryCache(tenantSelectionBox),
+        ),
         selectionStore: HiveTenantSelectionStore(tenantSelectionBox),
       );
 
@@ -221,6 +242,12 @@ Future<String?> _receiptBusinessName(
     return null;
   }
 }
+
+/// The shift controller each session is already using, if it has one.
+///
+/// See `shiftControllerFactory` for why this is cached and why it is weak.
+final Expando<TenantShiftController> _shiftControllers =
+    Expando<TenantShiftController>();
 
 class SpiritPOSApp extends StatelessWidget {
   const SpiritPOSApp({
@@ -298,6 +325,7 @@ class SpiritPOSApp extends StatelessWidget {
           ? null
           : result.reasonCode;
     }
+
     // Recording a pending return changes no stock and is open to every active
     // member; restoring it is management-only and runs through the callable, so
     // the two stay a deliberate two-person control. The same actions reach the
@@ -329,6 +357,40 @@ class SpiritPOSApp extends StatelessWidget {
     // rather than the reconciled figures. It is management-only, which the
     // callable itself enforces, and it can name no business but the session's.
     final salesTotalsCallable = FirebaseSalesTotalsCallable();
+    // **One construction, two hosts.** The till's gate opens the shift and the
+    // close panel it pushes counts the cash; both must bind to the same local
+    // state, writer and sales ledger, or a shift opened by one would be
+    // invisible to the other. Declared here rather than inlined twice for
+    // exactly that reason.
+    //
+    // **One per session, not one per mount, since 2026-08-26.** The gate is
+    // rebuilt every time a person opens the till, and a fresh controller starts
+    // at `TenantShiftPhase.unknown` - so every *New sale* drew the gate's
+    // loading state, read the canonical shift again, and only then drew a till.
+    // That flash is what the product owner reported as jitter. Keyed off the
+    // session controller, the second entry starts from the phase the first one
+    // established and `restore` refreshes underneath it.
+    //
+    // **An `Expando`, so the cache cannot outlive the session.** A `Map` here
+    // would hold every session controller this process ever built alive; an
+    // expando's key is weak, so a session that is gone takes its shift
+    // controller with it.
+    TenantShiftController shiftControllerFactory(
+      TenantSessionController sessions,
+    ) => _shiftControllers[sessions] ??= TenantShiftController(
+      sessionController: sessions,
+      localState: tenantShiftState,
+      reader: tenantDataReader,
+      writer: FirebaseTenantShiftWriter(
+        firestore: FirebaseFirestore.instance,
+        isOnline: isOnline,
+      ),
+      // The outbox is the only local record of what this device sold, so it is
+      // also the only evidence a closing summary may be built from.
+      salesLedger: CheckoutOutboxShiftSalesLedger(checkoutOutbox),
+      deviceId: deviceId,
+      isOnline: isOnline,
+    );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -339,6 +401,10 @@ class SpiritPOSApp extends StatelessWidget {
       // three hundred list views can be trusted to remember.
       scrollBehavior: const SpiritScrollBehavior(),
       home: TenantRoutingShell(
+        // The home's greeting states how today compares with yesterday, and
+        // this is what it adds the two days up with. The same callable the
+        // sales totals route already uses.
+        salesTotalsCallable: salesTotalsCallable,
         authUidChanges: FirebaseAuth.instance.authStateChanges().map(
           (user) => user?.uid,
         ),
@@ -350,8 +416,7 @@ class SpiritPOSApp extends StatelessWidget {
         // does not change when the user follows the link in their mailbox.
         // Reloading is the only way the app can observe a verification it did
         // not itself perform, which is what makes "I have verified" honest.
-        reloadIdentity: () async =>
-            FirebaseAuth.instance.currentUser?.reload(),
+        reloadIdentity: () async => FirebaseAuth.instance.currentUser?.reload(),
         // Turns a silent non-delivery into a stated one. Without it a user
         // whose address is suppressed sees the request accepted and taps send
         // again indefinitely.
@@ -417,31 +482,33 @@ class SpiritPOSApp extends StatelessWidget {
         // the state it is. The explanation is reached from the summary itself
         // rather than from the landing screen, because that is where a manager
         // already asks whether a day is reconciled.
-        dailySummaryRoute: (reader) => TenantDailySummaryScreen(
+        // **The old app's weekly Reports & Analytics page**, which replaced the
+        // daily summary on this slot on 2026-08-27: those figures are the whole
+        // subject of the Sales route, and the week-against-week comparison is
+        // the reading this product did not otherwise have.
+        dailySummaryRoute: (reader) => TenantWeeklyReportScreen(
           reader: reader,
-          reconciliationRoute: (businessDate) =>
-              TenantReconciliationStatusScreen(
-                reader: reader,
-                businessDate: businessDate,
-                actions: reconciliationActions,
-              ),
-          reconciliationRoles:
-              TenantReconciliationStatusRepository.allowedRoles,
-          // Reached from the summary rather than the landing screen for the
-          // same reason: the summary is where somebody learns that today has
-          // no reconciled figures yet, and this is the answer to that.
-          salesTotalsRoute: () => TenantSalesTotalsScreen(
-            callable: salesTotalsCallable,
+          callable: salesTotalsCallable,
+          // The sale-line roll-up behind *Top selling items* and *Recent
+          // transactions* needs the history reader, which the plain
+          // constructor cannot reach.
+          salesRepositoryFactory: (session) => TenantSaleHistoryRepository(
+            session: session,
             reader: reader,
+            reportReader: tenantDataReader,
           ),
-          salesTotalsRoles: TenantSalesTotalsGateway.allowedRoles,
         ),
-        dailySummaryRoles: TenantDailyMetricsRepository.allowedRoles,
-        receiptLookupRoute: (reader) => TenantReceiptLookupScreen(
+        dailySummaryRoles: TenantSalesTotalsGateway.allowedRoles,
+        receiptLookupRoute: (reader) => TenantSalesReportScreen(
           reader: reader,
+          reportReader: tenantDataReader,
+          totalsCallable: salesTotalsCallable,
           returnActions: returnActions,
         ),
-        receiptLookupRoles: TenantReceiptLookupRepository.allowedRoles,
+        receiptLookupRoles: TenantSaleHistoryRepository.reportRoles,
+        returnFeedRoute: (reader) =>
+            TenantReturnFeedScreen(reader: reader, actions: returnActions),
+        returnFeedRoles: TenantReturnHistoryRepository.allowedRoles,
         productStockRoute: (reader, product) => TenantProductStockScreen(
           reader: reader,
           product: product,
@@ -467,10 +534,8 @@ class SpiritPOSApp extends StatelessWidget {
           // both return the same documents in the same order to the same
           // roles, and only this one survives the product being deleted
           // without spending a composite index on the widest read in the app.
-          productLedgerRoute: (productId) => TenantProductLedgerScreen(
-            reader: reader,
-            productId: productId,
-          ),
+          productLedgerRoute: (productId) =>
+              TenantProductLedgerScreen(reader: reader, productId: productId),
         ),
         stockMovementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
         // The whole business's event trail: who was invited, deactivated, or
@@ -478,24 +543,6 @@ class SpiritPOSApp extends StatelessWidget {
         // deliberately narrower than the stock surfaces above.
         auditLogRoute: (reader) => TenantAuditLogScreen(reader: reader),
         auditLogRoles: TenantAuditLogRepository.allowedRoles,
-        shiftPanel: TenantShiftPanel(
-          historyReader: tenantDataReader,
-          returnActions: returnActions,
-          controllerFactory: (sessions) => TenantShiftController(
-            sessionController: sessions,
-            localState: tenantShiftState,
-            reader: tenantDataReader,
-            writer: FirebaseTenantShiftWriter(
-              firestore: FirebaseFirestore.instance,
-              isOnline: isOnline,
-            ),
-            // The outbox is the only local record of what this device sold, so
-            // it is also the only evidence a closing summary may be built from.
-            salesLedger: CheckoutOutboxShiftSalesLedger(checkoutOutbox),
-            deviceId: deviceId,
-            isOnline: isOnline,
-          ),
-        ),
         // The till, reachable for the first time. Everything below it already
         // existed: the draft service refuses a checkout with no proven open
         // shift, the submission worker and recovery coordinator above pick a
@@ -505,25 +552,46 @@ class SpiritPOSApp extends StatelessWidget {
         // session controller. That is safe: receipt allocation and every outbox
         // mutation serialize on locks held by the boxes themselves, not by this
         // object, so two instances can never issue the same receipt number.
-        checkoutRoute: (sessions) => TenantCheckoutScreen(
-          cache: checkoutCatalogCache,
-          // The decorator is what makes a saved sale reach the server while the
-          // till stays open. It is wrapped here rather than inside the screen so
-          // the screen still knows only how to save.
-          drafts: CheckoutSyncOnSaveDraftSink(
-            signals: checkoutSyncSignals,
-            delegate: CheckoutDraftService(
-              sessionController: sessions,
-              cache: checkoutCatalogCache,
-              outbox: checkoutOutbox,
-              receipts: checkoutReceiptCounters,
-              // The frozen restriction that a cashier cannot open checkout in a
-              // second business while another still holds an open shift on this
-              // device is enforced here, not by the screen.
-              shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
-              // The seam that was built and never connected: without it a sale
-              // commits and no bytes are ever generated.
-              onSaved: printReceipt,
+        // **The shift is opened and closed at the till, not on the home.**
+        // Restored 2026-08-25 to where the pre-multitenancy app had it: the
+        // old `pos.dart` gated itself on entry and offered *stepping away* or
+        // *end my shift* on the way out. The gate wraps the till rather than
+        // living inside it, so the checkout screen still knows only how to
+        // sell.
+        checkoutRoute: (sessions) => TenantShiftGate(
+          controllerFactory: shiftControllerFactory,
+          // What *End shift* opens: the same panel the home used to carry,
+          // built here now that the till is its only host.
+          shiftManagerBuilder: (context) => AppScaffold(
+            title: 'Close shift',
+            contentWidth: AppContentWidth.records,
+            body: TenantShiftPanel(
+              currency: TenantReportingCurrency.unknown,
+              historyReader: tenantDataReader,
+              returnActions: returnActions,
+              controllerFactory: shiftControllerFactory,
+            ),
+          ),
+          child: TenantCheckoutScreen(
+            cache: checkoutCatalogCache,
+            // The decorator is what makes a saved sale reach the server while the
+            // till stays open. It is wrapped here rather than inside the screen so
+            // the screen still knows only how to save.
+            drafts: CheckoutSyncOnSaveDraftSink(
+              signals: checkoutSyncSignals,
+              delegate: CheckoutDraftService(
+                sessionController: sessions,
+                cache: checkoutCatalogCache,
+                outbox: checkoutOutbox,
+                receipts: checkoutReceiptCounters,
+                // The frozen restriction that a cashier cannot open checkout in a
+                // second business while another still holds an open shift on this
+                // device is enforced here, not by the screen.
+                shiftBinder: TenantShiftCheckoutBinder(tenantShiftState),
+                // The seam that was built and never connected: without it a sale
+                // commits and no bytes are ever generated.
+                onSaved: printReceipt,
+              ),
             ),
           ),
         ),
@@ -602,6 +670,17 @@ class SpiritPOSApp extends StatelessWidget {
         // a figure that has just been corrected.
         catalogManagementRoute: (reader) => TenantCatalogManagementScreen(
           reader: reader,
+          productSearchReader: tenantDataReader,
+          imageStore: FirebaseTenantProductImageStore(),
+          // *Remove background*, restored from the old catalog form. The key
+          // lives in the deployment's secret manager and the call is made by
+          // `removeProductBackground`; a deployment that never set the secret
+          // gets a callable that refuses with `failed-precondition`, which the
+          // form words as "not set up for this business" rather than as a
+          // fault. See `product_background_removal.dart`.
+          backgroundRemover: CallableTenantProductBackgroundRemover(
+            callable: FirebaseRemoveProductBackgroundCallable(),
+          ),
           writer: FirebaseTenantCatalogWriter(
             firestore: FirebaseFirestore.instance,
             isOnline: isOnline,
@@ -622,6 +701,33 @@ class SpiritPOSApp extends StatelessWidget {
             onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
           ),
           onChanged: checkoutSyncSignals.requestSyncAfterCatalogChange,
+          productStockRoute: (product) => TenantProductStockScreen(
+            reader: reader,
+            product: product,
+            actions: stockActions,
+          ),
+          // The correcting half, which is a sheet over the catalog rather than
+          // a route since 2026-08-26. The composition root still owns the
+          // callable; what changed is that it hands over the errand instead of
+          // a screen for the catalog to push.
+          adjustStockSheet: (context, product) =>
+              openTenantProductStockAdjustmentSheet(
+                context,
+                reader: reader,
+                product: product,
+                actions: stockActions,
+              ),
+          productStockRoles: TenantProductStockRepository.allowedRoles,
+          adjustmentFeedRoute: () =>
+              TenantStockAdjustmentFeedScreen(reader: reader),
+          adjustmentFeedRoles: TenantStockAdjustmentFeedRepository.allowedRoles,
+          movementFeedRoute: () => TenantStockMovementFeedScreen(
+            reader: reader,
+            groupReader: tenantDataReader,
+            productLedgerRoute: (productId) =>
+                TenantProductLedgerScreen(reader: reader, productId: productId),
+          ),
+          movementFeedRoles: TenantStockMovementFeedRepository.allowedRoles,
         ),
         catalogManagementRoles: TenantCatalogManagementRepository.allowedRoles,
         pendingCheckoutPanel: CheckoutPendingEvidencePanel(

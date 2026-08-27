@@ -10,6 +10,7 @@ import {
   assertProductUpdateAuthorized,
   planProductUpdate,
   productPriceMinorUnits,
+  productSearchFields,
   readProductUpdateInput,
   readSellableProduct,
 } from "./productUpdate";
@@ -144,7 +145,9 @@ test("a plan never names quantity, however the request is spelled", () => {
       .documentUpdate
   );
   assert.equal(keys.includes("quantity"), false);
-  assert.deepEqual(keys.sort(), ["SKU", "categoryId", "name", "price"]);
+  assert.deepEqual(keys.sort(), [
+    "SKU", "categoryId", "name", "price", "searchName", "searchPrefixes",
+  ]);
 });
 
 test("a request naming nothing editable is refused", () => {
@@ -158,7 +161,10 @@ test("a request naming nothing editable is refused", () => {
 test("a name is normalized into the shape the strict read model demands", () => {
   const result = plan(storedProduct(), {name: "  Cola\t\t500 ml  "});
 
-  assert.deepEqual(result.documentUpdate, {name: "Cola 500 ml"});
+  assert.deepEqual(result.documentUpdate, {
+    name: "Cola 500 ml",
+    ...productSearchFields("Cola 500 ml", "CL500"),
+  });
   assert.equal(result.product.name, "Cola 500 ml");
 });
 
@@ -187,7 +193,10 @@ test("a SKU with a space in it is refused, because a scanner cannot emit one", (
   assert.equal(refusalCode(() => input({sku: "CL 500"})), "invalid-argument");
   // Surrounding whitespace is a typo rather than an unscannable code, so it is
   // trimmed the way the create surface trims it.
-  assert.deepEqual(plan(storedProduct(), {sku: "  CL501  "}).documentUpdate, {SKU: "CL501"});
+  assert.deepEqual(plan(storedProduct(), {sku: "  CL501  "}).documentUpdate, {
+    SKU: "CL501",
+    ...productSearchFields("Cola 500ml", "CL501"),
+  });
 });
 
 test("a request that changes nothing is refused rather than audited", () => {
@@ -203,7 +212,10 @@ test("only the fields that moved are written", () => {
   const result = plan(storedProduct(), {name: "Cola 500ml", sku: "CL501"});
 
   assert.deepEqual(result.changedFields, ["sku"]);
-  assert.deepEqual(result.documentUpdate, {SKU: "CL501"});
+  assert.deepEqual(result.documentUpdate, {
+    SKU: "CL501",
+    ...productSearchFields("Cola 500ml", "CL501"),
+  });
   assert.deepEqual(result.changes, [
     {field: "sku", previous: "CL500", next: "CL501"},
   ]);
@@ -263,6 +275,25 @@ test("a stored image that is not an HTTPS URL is named as an operator's problem"
     plan(storedProduct({image: "https://cdn.example/x.png"}), {name: "Cola"}).changedFields,
     ["name"]
   );
+});
+
+test("an HTTPS image can be added, replaced, and removed without touching money", () => {
+  const added = plan(storedProduct(), {image: "https://cdn.example/new.webp"});
+  assert.deepEqual(added.changedFields, ["image"]);
+  assert.deepEqual(added.documentUpdate, {image: "https://cdn.example/new.webp"});
+  assert.deepEqual(added.changes, [{
+    field: "image",
+    previous: null,
+    next: "replacement image",
+  }]);
+
+  const removed = plan(
+    storedProduct({image: "https://cdn.example/old.png"}),
+    {image: null}
+  );
+  assert.deepEqual(removed.changedFields, ["image"]);
+  assert.deepEqual(removed.documentUpdate, {image: null});
+  assert.equal(removed.product.image, null);
 });
 
 test("a legacy category alias moves with the field it aliases", () => {
@@ -499,6 +530,7 @@ test("cost travels with the other editable fields in one request", () => {
     name: "Cola 1L",
     price: 24.5,
     cost: 11,
+    ...productSearchFields("Cola 1L", "CL500"),
   });
 });
 

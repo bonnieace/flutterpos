@@ -167,9 +167,12 @@ final class _Page extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final inset = AppScaffold.horizontalInset(tokens.spacing);
-    // Both hosts, exactly as the landing route wires them: the frame draws the
-    // menu at `expanded` and the body draws the cards below it, so one capture
-    // per band photographs whichever of the two that band uses.
+    // **The drawer's own rendering, drawn in the page.** Both hosts show the
+    // same rows and the frame decides which one a band gets - the persistent
+    // column at `expanded`, the drawer below it - so photographing the rows
+    // directly is what shows them at every band without a capture having to
+    // open a panel first. The frame's column is photographed by the same
+    // `navigation` argument at `expanded`, where it draws beside this.
     return AppScaffold(
       title: 'Dev Corner Shop',
       contentWidth: AppContentWidth.records,
@@ -177,7 +180,7 @@ final class _Page extends StatelessWidget {
       body: SingleChildScrollView(
         child: Padding(
           padding: EdgeInsets.fromLTRB(inset, 0, inset, tokens.spacing.s24),
-          child: HomeNavigation.cards(destinations: destinations),
+          child: HomeNavigation.drawer(destinations: destinations),
         ),
       ),
     );

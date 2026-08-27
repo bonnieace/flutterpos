@@ -8,6 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// the space it is given, so these tests state the space.
 const Size _phone = Size(411, 731);
 
+/// Brings a destination on screen.
+///
+/// **The destinations came back into the body on 2026-08-25**, as the old
+/// hub's grid of module cards, and the frame's drawer was withdrawn from this
+/// route with them — so reaching one is scrolling to it rather than opening a
+/// menu first. Kept as a named step because six call sites do it and what
+/// "reaching a destination" means should be decided in one place.
+Future<void> _reveal(WidgetTester tester, Finder destination) async {
+  await tester.ensureVisible(destination);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('a landing screen that fits says nothing about scrolling', (
     tester,
@@ -71,33 +83,37 @@ void main() {
     expect(tester.getTopLeft(panel).dy, lessThan(before));
   });
 
-  testWidgets('the routes this screen offers scroll with it', (tester) async {
-    // They used to be pinned below the scrollable, and on a phone that was
-    // measured rather than argued about: an owner is offered eight of them, they
-    // do not pair up at 411 logical pixels wide, and the row took 288 of the 631
-    // the body has - leaving a 339-pixel viewport with "Open shift" below the
-    // fold. Nothing was pinned in their place.
+  testWidgets('the routes this screen offers are in the body, and scroll', (
+    tester,
+  ) async {
+    // **They were pinned below the body, then in it, then behind the
+    // hamburger, and are in it again.** Each move was measured rather than
+    // argued about; the 2026-08-25 move is the product decision to give
+    // existing customers the old hub's card grid back. The property that has
+    // held throughout every one of them is the one asserted here: no
+    // destination is unreachable, and the column they sit in scrolls.
     await _pumpLanding(tester, panelHeight: 900);
+
+    final account = find.byKey(const ValueKey('make-default-tenant'));
+    await _reveal(tester, account);
 
     expect(
       find.descendant(
         of: find.byType(SingleChildScrollView),
-        matching: find.byKey(const ValueKey('make-default-tenant')),
+        matching: account,
       ),
       findsOne,
     );
   });
 
-  testWidgets('a desktop draws the destinations beside the page, not in it', (
+  testWidgets('a desktop draws the destinations in the page, above it', (
     tester,
   ) async {
-    // §11 step 5b's second half. §4.4 gives the menu to `AppScaffold`, so at
-    // `expanded` the destinations are chrome in a column of their own and the
-    // page keeps only what was never navigation - here, the shift panel.
-    //
-    // Asserted by position rather than by structure: a menu that had merely
-    // been moved to the top of the body would still be "not in the grid", and
-    // the thing that makes it the frame's is that it sits beside the page.
+    // **The reverse of what this asserted until 2026-08-25**, and deliberately
+    // so: the destinations are the old hub's grid now, they are content rather
+    // than chrome, and they sit above the rest of the page instead of beside
+    // it. Asserted by position for the same reason the old test did — a grid
+    // that had merely been renamed would still pass a structural check.
     await _pumpLanding(
       tester,
       panelHeight: 120,
@@ -112,11 +128,12 @@ void main() {
       find.byKey(const ValueKey('landing-test-panel')),
     );
 
-    expect(destination.right, lessThanOrEqualTo(panel.left));
-    // Drawn once rather than twice: §4.4 says the home "keeps its content and
-    // loses its cards" at this band, and a page that built both hosts would
-    // put the same destinations on screen in two places.
-    expect(find.byType(HomeNavigation), findsOneWidget);
+    expect(destination.bottom, lessThanOrEqualTo(panel.top));
+    // **Drawn once, and by the grid.** The frame's menu was withdrawn from
+    // this route when the grid returned: building both hosts put every
+    // destination on screen twice, and two widgets under one key.
+    expect(find.byType(HomeModuleGrid), findsOneWidget);
+    expect(find.byType(HomeNavigation), findsNothing);
   });
 
   testWidgets('the account controls come last - design.md §4.4', (
@@ -138,9 +155,8 @@ void main() {
     );
 
     final account = find.byKey(const ValueKey('make-default-tenant'));
-    final catalog = find.byKey(const ValueKey('manage-catalog'));
-    await tester.ensureVisible(account);
-    await tester.pumpAndSettle();
+    final catalog = find.byKey(const ValueKey('inventory'));
+    await _reveal(tester, account);
 
     expect(
       tester.getRect(account).top,
@@ -152,48 +168,31 @@ void main() {
     // The measurement, as an assertion. 731 high, less a 56-pixel app bar,
     // leaves 675 of body.
     //
-    // **§11 step 5b spends 72 of it on the page header and this test is where
-    // that figure lands.** `AppScaffold` pads 20 above a `PageHeader` and then
-    // a section gap below it, which `PLAN.md` recorded as "the frame costs a
-    // route 72 logical pixels of body" when step 5a built it - measured on
-    // every other route and, until this step, never on this one. 675 less 72
-    // less the route's own 24-pixel bottom padding is 579, and all of it is the
-    // scrollable's.
+    // **643 since 2026-08-26, and the 32 is the whole of what the frame still
+    // spends.** The header block is gone: it cost 20 above the title, a title
+    // line, a subtitle line and a section gap - about 128 pixels of every
+    // route - and what replaced it is `space.8` under the bar. 675 less that
+    // 8, less the route's own 24-pixel bottom padding, is 643, and all of it
+    // is the scrollable's.
     //
-    // **§11 step 7 spends 28 more of it on the header's subtitle**, which is
-    // `design.md` v0.7's top bar arriving in the slot the frame already had:
-    // `Signed in as {role}` at the density's body role, plus `space.4` above
-    // it. 579 less 28 is 551. The queue counts left the body in the same change
-    // - they are a badged button in the toolbar now - so the body lost a
-    // section and gained a line, and this figure was the net.
-    //
-    // **548 since 2026-08-22, and the three pixels are the type repoint.**
-    // Profound Verdant's `section-title` states a 1.4 line height where §2.2
-    // gave 28/22, so the header's title line grew from 28 to 30.8 and the body
-    // lost the difference. Nothing in the frame's arithmetic changed; one of
-    // its inputs did. This is the assertion that will move again if `title.lg`
-    // does, which is the reason it is written as a measurement.
+    // This is the assertion that moves whenever the frame's arithmetic does,
+    // which is why it is written as a measurement rather than a number.
     await _pumpLanding(tester, panelHeight: 900);
 
-    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 548);
+    expect(tester.getSize(find.byType(SingleChildScrollView)).height, 643);
   });
 
-  testWidgets('the title leaves the toolbar and the action stays in it', (
+  testWidgets('the title is in the toolbar and fits beside its controls', (
     tester,
   ) async {
-    // Recorded because a previous handover in PLAN.md claimed the action was
-    // clipped and it never was. Every rendering made while looking at this route
-    // showed "Sign o" with the rest of the word missing - which is the **debug
-    // banner** painted over the top-right corner, not the app bar clipping
-    // anything. The banner is paint, so it does not appear in these
-    // measurements and does not appear in a release build either.
+    // **The opposite of what this asserted until 2026-08-23, and for the same
+    // reason it asserted it.** §7 moved the title out of the bar because §2.2
+    // gives a screen title 32 and no bar holds one; the design this app is
+    // built to writes its own header as `section-title` 22 inside the bar, and
+    // the header block it replaced cost about 128 pixels of every route.
     //
-    // **§11 step 5b removed the collision this test was written about.** A
-    // title and an action shared the toolbar, and a long business name was the
-    // case that would have broken it. The title is `PageHeader`'s now - §7's
-    // "title appears once", and §2.2's `display` role does not fit a 56-high
-    // toolbar at all - so what is asserted is that it left, and that the one
-    // thing still in the toolbar is inside it.
+    // What is still asserted is what the original was about: a long business
+    // name does not push the bar's own controls off the end of it.
     for (final name in <String>[
       'Chilltent Lounge',
       'Chilltent Lounge Nairobi Westlands Branch',
@@ -201,25 +200,17 @@ void main() {
       await _pumpLanding(tester, panelHeight: 120, tenantName: name);
 
       final bar = tester.getRect(find.byType(AppBar));
-      final label = tester.getRect(
-        find.descendant(
-          of: find.byType(AppBar),
-          matching: find.text('Sign out'),
-        ),
+      final title = tester.getRect(
+        find.descendant(of: find.byType(AppBar), matching: find.text(name)),
       );
 
-      expect(label.right, lessThanOrEqualTo(bar.right), reason: name);
-      expect(label.left, greaterThanOrEqualTo(bar.left), reason: name);
-      expect(
-        find.descendant(of: find.byType(AppBar), matching: find.text(name)),
-        findsNothing,
-        reason: name,
-      );
-      expect(
-        find.descendant(of: find.byType(PageHeader), matching: find.text(name)),
-        findsOne,
-        reason: name,
-      );
+      expect(title.left, greaterThanOrEqualTo(bar.left), reason: name);
+      expect(title.right, lessThanOrEqualTo(bar.right), reason: name);
+      // The way out is a glyph at the trailing edge and stays inside the bar
+      // whatever the business is called.
+      final signOut = tester.getRect(find.byKey(const ValueKey('sign-out')));
+      expect(signOut.right, lessThanOrEqualTo(bar.right), reason: name);
+      expect(signOut.left, greaterThan(title.left), reason: name);
     }
   });
 
@@ -245,7 +236,7 @@ void main() {
     // not the role.
     await _pumpLanding(tester, panelHeight: 120, role: TenantRole.owner);
 
-    expect(find.byKey(const ValueKey('manage-catalog')), findsNothing);
+    expect(find.byKey(const ValueKey('inventory')), findsNothing);
   });
 
   testWidgets('catalog management opens under the same session scope', (
@@ -263,11 +254,11 @@ void main() {
       ],
     );
 
-    // **The destination is a card now, and a card is taller than the pill it
-    // replaced**, so on a 120-pixel panel this one sits below the fold where the
-    // pill did not. Scrolling to it is what a person does; the assertion is
-    // still that opening it keeps the session scope.
-    final destination = find.byKey(const ValueKey('manage-catalog'));
+    // **The destination is in the drawer now.** Opening it is what a person
+    // does; the assertion is still that opening the route keeps the session
+    // scope, and that the drawer shuts behind it rather than sitting open
+    // underneath the route that just arrived.
+    final destination = find.byKey(const ValueKey('inventory'));
     await tester.ensureVisible(destination);
     await tester.pumpAndSettle();
     await tester.tap(destination);
@@ -276,11 +267,11 @@ void main() {
     expect(find.text('Catalog open'), findsOne);
   });
 
-  testWidgets('a cashier is not offered catalog management at all', (
+  testWidgets('a cashier is offered the same read-only inventory destination', (
     tester,
   ) async {
-    // The route guards itself, but a control a cashier can never use should not
-    // be on the screen a cashier lands on.
+    // The unified route derives its write actions from the live session, while
+    // the destination itself remains useful to every active member.
     await _pumpLanding(
       tester,
       panelHeight: 120,
@@ -293,17 +284,215 @@ void main() {
       ],
     );
 
-    expect(find.byKey(const ValueKey('manage-catalog')), findsNothing);
+    final inventory = find.byKey(const ValueKey('inventory'));
+    expect(inventory, findsOneWidget);
+    await tester.tap(inventory);
+    await tester.pumpAndSettle();
+    expect(find.text('Catalog open'), findsOneWidget);
+  });
+
+  testWidgets('home exposes the business-wide returns destination', (
+    tester,
+  ) async {
+    await _pumpLanding(
+      tester,
+      panelHeight: 120,
+      role: TenantRole.cashier,
+      returnFeedRoute: (_) => const Scaffold(body: Text('Returns open')),
+      returnFeedRoles: const <TenantRole>[
+        TenantRole.owner,
+        TenantRole.admin,
+        TenantRole.manager,
+        TenantRole.cashier,
+      ],
+    );
+
+    final returns = find.byKey(const ValueKey('returns'));
+    expect(returns, findsOneWidget);
+    await _reveal(tester, returns);
+    await tester.tap(returns);
+    await tester.pumpAndSettle();
+    expect(find.text('Returns open'), findsOneWidget);
+  });
+
+  // `docs/stitch/OPEN_QUESTIONS.md` decision 36.
+  group('the home header is one line, and trickles down', () {
+    testWidgets('a short greeting is left exactly as it is', (tester) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        memberName: 'Amina',
+        size: _phone,
+      );
+
+      expect(_greeting(tester).data, 'Good morning, Amina');
+      expect(_greeting(tester).maxLines, 1);
+    });
+
+    testWidgets('a long name falls back to the first name', (tester) async {
+      // The product owner's *"first name only if suitable"*: suitable means the
+      // full one did not fit, measured rather than guessed.
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        memberName: 'Amina Wanjiru Njoroge Kamau',
+        size: _phone,
+      );
+
+      expect(_greeting(tester).data, 'Good morning, Amina');
+    });
+
+    testWidgets('a screen reader still hears the whole greeting', (
+      tester,
+    ) async {
+      // Shortening for width must not shorten what a blind person is told.
+      final handle = tester.ensureSemantics();
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        memberName: 'Amina Wanjiru Njoroge Kamau',
+        size: _phone,
+      );
+
+      expect(
+        find.bySemanticsLabel('Good morning, Amina Wanjiru Njoroge Kamau'),
+        findsOne,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a business name shrinks rather than losing its end', (
+      tester,
+    ) async {
+      // *Good morning, Dev Corner…* for a shop called Dev Corner Shop names
+      // nothing a shopkeeper would recognise, so a business name is never cut
+      // to its first word - the type steps down instead.
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        tenantName: 'Chilltent Lounge and Provisions',
+        size: _phone,
+      );
+
+      expect(
+        _greeting(tester).data,
+        'Good morning, Chilltent Lounge and Provisions',
+      );
+      expect(_greeting(tester).maxLines, 1);
+    });
+
+    testWidgets('the three lines narrow, in order', (tester) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        memberName: 'Amina',
+        size: _phone,
+      );
+
+      final greeting = tester.getSize(find.byKey(_greetingKey)).width;
+      final prompt = tester
+          .getSize(find.text('Select a module to begin.'))
+          .width;
+      // The trend line is absent here - `_EmptyReader` publishes no totals, so
+      // there is no comparison to state - which is itself the case worth
+      // asserting: the funnel must not depend on a line that is often missing.
+      expect(prompt, lessThan(greeting));
+    });
+
+    testWidgets('the prompt is one row too', (tester) async {
+      await _pumpLanding(
+        tester,
+        panelHeight: 120,
+        memberName: 'Amina',
+        size: _phone,
+      );
+
+      expect(
+        tester.widget<Text>(find.text('Select a module to begin.')).maxLines,
+        1,
+      );
+    });
+  });
+
+  // The ladder all three header lines share. Asserted directly because the
+  // interesting cases - a string that fits nothing, a reservation for the trend
+  // arrow - are awkward to stage through a whole screen and trivial here.
+  group('fitting a line to one row', () {
+    const ambient = TextStyle();
+    const large = TextStyle(fontSize: 40);
+    const medium = TextStyle(fontSize: 20);
+    const small = TextStyle(fontSize: 10);
+
+    ({String text, TextStyle style}) fit({
+      required List<String> texts,
+      required double maxWidth,
+      double reserved = 0,
+    }) => fitToOneLine(
+      texts: texts,
+      styles: const <TextStyle>[large, medium, small],
+      maxWidth: maxWidth,
+      scaler: TextScaler.noScaling,
+      ambient: ambient,
+      reserved: reserved,
+    );
+
+    test('keeps the largest role that fits', () {
+      expect(fit(texts: <String>['ab'], maxWidth: 10000).style, large);
+    });
+
+    test('steps down the roles rather than scaling one', () {
+      // Every rung is a role this app already sets text in. A `FittedBox` would
+      // answer with an invented size that nothing else on the page shares.
+      final fitted = fit(texts: <String>['a long enough line'], maxWidth: 120);
+
+      expect(<TextStyle>[large, medium, small], contains(fitted.style));
+    });
+
+    test('prefers a shorter wording to a smaller size', () {
+      // The product owner's ordering: *first name only if suitable* comes
+      // before making the whole line smaller.
+      final fitted = fit(texts: <String>['a very long line', 'ab'], maxWidth: 90);
+
+      expect(fitted.style, large);
+      expect(fitted.text, 'ab');
+    });
+
+    test('reserved room is taken out of what the text may use', () {
+      // The trend line's arrow sits in the same row and is invisible to a
+      // measurement of text.
+      final roomy = fit(texts: <String>['abcd'], maxWidth: 200);
+      final crowded = fit(texts: <String>['abcd'], maxWidth: 200, reserved: 190);
+
+      expect(roomy.style, large);
+      expect(crowded.style.fontSize, lessThan(roomy.style.fontSize!));
+    });
+
+    test('falls to the smallest role and the shortest wording', () {
+      // Nothing fits, so the caller's `overflow: ellipsis` takes over - on the
+      // least it can lose.
+      final fitted = fit(texts: <String>['first', 'second'], maxWidth: 1);
+
+      expect(fitted.style, small);
+      expect(fitted.text, 'second');
+    });
   });
 }
+
+const ValueKey<String> _greetingKey = ValueKey<String>('home-greeting');
+
+Text _greeting(WidgetTester tester) =>
+    tester.widget<Text>(find.byKey(_greetingKey));
 
 Future<void> _pumpLanding(
   WidgetTester tester, {
   required double panelHeight,
   String tenantName = 'Chilltent Lounge',
+  String? memberName,
   TenantRole role = TenantRole.cashier,
   Widget Function(TenantDataReader reader)? catalogManagementRoute,
   List<TenantRole> catalogManagementRoles = const <TenantRole>[],
+  Widget Function(TenantDataReader reader)? returnFeedRoute,
+  List<TenantRole> returnFeedRoles = const <TenantRole>[],
   Size size = _phone,
 }) async {
   tester.view.physicalSize = size;
@@ -322,13 +511,16 @@ Future<void> _pumpLanding(
         controller: controller,
         child: TenantSafeLandingScreen(
           membership: membership,
+          memberName: memberName,
           reader: _EmptyReader(),
           onSignOut: () async {},
           catalogManagementRoute: catalogManagementRoute,
           catalogManagementRoles: catalogManagementRoles,
+          returnFeedRoute: returnFeedRoute,
+          returnFeedRoles: returnFeedRoles,
           // The slot the shift panel occupies on a real device. What the fold
           // depends on is the height of what is in it.
-          shiftPanel: SizedBox(
+          shiftPanel: (_) => SizedBox(
             key: const ValueKey('landing-test-panel'),
             height: panelHeight,
             child: const Card(child: Center(child: Text('Shift'))),
@@ -355,6 +547,7 @@ final class _EmptyReader implements TenantDataReader {
 
 TenantMembership _membership({
   String tenantName = 'Chilltent Lounge',
+  String? memberName,
   TenantRole role = TenantRole.cashier,
 }) => TenantMembership(
   tenantId: 'tenant-a',

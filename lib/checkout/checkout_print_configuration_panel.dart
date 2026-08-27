@@ -31,6 +31,7 @@ import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'checkout_configuration_writer.dart';
@@ -189,7 +190,7 @@ final class _TenantPrinterConfigurationPanelState
       if (parsedPort == null) throw ArgumentError('port');
       endpoint = PrinterEndpoint(host: values.host.trim(), port: parsedPort);
     } on ArgumentError {
-      setState(() => _notice = _refusalNotice('invalid_address'));
+      _report(_refusalNotice('invalid_address'));
       return;
     }
     setState(() {
@@ -199,20 +200,32 @@ final class _TenantPrinterConfigurationPanelState
     try {
       await probe(endpoint);
       if (!mounted) return;
-      setState(
-        () => _notice = const AppNotice.confirmed(
-          'The printer answered. Nothing was printed.',
-        ),
+      _report(
+        const AppNotice.confirmed('The printer answered. Nothing was printed.'),
       );
     } on PrinterTransportException catch (error) {
       if (!mounted) return;
       // The transport's own vocabulary, mapped once at the UI edge exactly as
       // a failed receipt is. This screen invents no sentence of its own.
-      setState(() => _notice = PrinterFailureNotice.of(error.code));
+      _report(PrinterFailureNotice.of(error.code));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// Announces a probe's answer over the screen rather than inside the form.
+  ///
+  /// **A snack bar rather than the `Callout` this used until 2026-08-26, and
+  /// the split is between what a sentence is *about*.** A save outcome is the
+  /// state of this page - the printer either changed or it did not - and it is
+  /// still a `Callout`, because it stays true until something else is saved. A
+  /// probe changes nothing at all: it is a momentary answer to *is that address
+  /// reachable*, and it was sitting in the same block under the form,
+  /// indistinguishable from the record of a write.
+  ///
+  /// It also sat below the buttons, so on a phone the answer to the control a
+  /// person had just pressed appeared off the bottom of the screen.
+  void _report(AppNotice notice) => showAppSnackBar(context, notice);
 
   Future<bool> _confirmed(TenantPrinterUpdateIntent intent) async {
     final moving = intent.movesAWorkingPrinter;
@@ -424,32 +437,12 @@ class _PrinterContentsState extends State<_PrinterContents> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          'Where receipts print',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.s4),
-        Text(
-          key: const ValueKey('printer-configuration-current'),
-          switch (configured.state) {
-            TenantPrinterConfigurationState.configured =>
-              'Receipts go to ${configured.configuration!.endpoint} on '
-                  '${configured.configuration!.paperWidth.columns}-column '
-                  'paper.',
-            TenantPrinterConfigurationState.absent =>
-              'No printer is set up, so receipts are not sent anywhere. Sales '
-                  'are recorded as normal.',
-            TenantPrinterConfigurationState.malformed =>
-              'The saved printer settings cannot be read, so receipts are not '
-                  'sent anywhere. Saving a printer here replaces them.',
-          },
-          style: tokens.density
-              .body(tokens.typography)
-              .copyWith(color: tokens.colors.text.secondary),
-        ),
-        SizedBox(height: tokens.spacing.s12),
+        // **This screen opens on the fold since 2026-08-26.** It used to begin
+        // with `SectionHeading('Where receipts print')` under an app bar and a
+        // page header both already reading *Printer* - §7's "title appears
+        // once", stated three times - and then a loose grey paragraph before
+        // anything a person could act on.
+        //
         // §7's *Long copy*: policy rather than current state, so it folds.
         const Disclosure(
           key: ValueKey('printer-configuration-scope'),
@@ -462,6 +455,36 @@ class _PrinterContentsState extends State<_PrinterContents> {
             'somebody sends it again. Nothing here proves paper came out - the '
             'app can only say the receipt reached the printer.',
           ),
+        ),
+        SizedBox(height: tokens.spacing.s12),
+        // **The paragraph that was the subtitle, as the status it always
+        // was.** Whether receipts are going anywhere at all is not prose about
+        // the screen, it is the screen's standing - and §2.1 wants a container,
+        // a glyph and a word for that, which a grey sentence is not. §9's rule
+        // that a status is never carried by text alone is the same point.
+        //
+        // `problem` for settings that cannot be read is §2.1's own
+        // *"unreadable"*; `attention` for none set up is its *"awaiting"*,
+        // because that is a setup step nobody has taken yet.
+        Callout(
+          key: const ValueKey('printer-configuration-current'),
+          status: switch (configured.state) {
+            TenantPrinterConfigurationState.configured => AppStatus.info,
+            TenantPrinterConfigurationState.absent => AppStatus.attention,
+            TenantPrinterConfigurationState.malformed => AppStatus.problem,
+          },
+          message: switch (configured.state) {
+            TenantPrinterConfigurationState.configured =>
+              'Receipts go to ${configured.configuration!.endpoint} on '
+                  '${configured.configuration!.paperWidth.columns}-column '
+                  'paper.',
+            TenantPrinterConfigurationState.absent =>
+              'No printer is set up, so receipts are not sent anywhere. Sales '
+                  'are recorded as normal.',
+            TenantPrinterConfigurationState.malformed =>
+              'The saved printer settings cannot be read, so receipts are not '
+                  'sent anywhere. Saving a printer here replaces them.',
+          },
         ),
         if (!widget.canPublish) ...<Widget>[
           SizedBox(height: tokens.spacing.s12),
@@ -527,10 +550,12 @@ class _PrinterContentsState extends State<_PrinterContents> {
                 : (value) => setState(() => _hasCutter = value ?? false),
           ),
           SizedBox(height: tokens.spacing.s12),
-          Wrap(
-            spacing: tokens.spacing.s12,
-            runSpacing: tokens.spacing.s8,
-            children: <Widget>[
+          // Right-aligned since 2026-08-26, with the two sheets and for the
+          // same reason: the control a right-handed thumb reaches should be
+          // the one it presses. `AppActionRow` defaults to `end`, so this
+          // stopped needing to say anything.
+          AppActionRow(
+            actions: <Widget>[
               AppButton(
                 key: const ValueKey('printer-configuration-submit'),
                 label: configured.canPrint ? 'Change printer' : 'Save printer',

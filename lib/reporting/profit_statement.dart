@@ -56,6 +56,7 @@ final class TenantProfitStatement extends StatelessWidget {
         if (report.isShowable) ...[
           StatLine(
             label: 'Profit',
+            money: true,
             value: currency.format(report.profit),
             valueKey: ValueKey('$keyPrefix-profit'),
           ),

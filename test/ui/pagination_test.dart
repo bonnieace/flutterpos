@@ -50,10 +50,7 @@ void main() {
 
       for (final label in const <String>['Previous page', 'Next page']) {
         final size = tester.getSize(
-          find.ancestor(
-            of: find.text(label),
-            matching: find.byType(AppButton),
-          ),
+          find.ancestor(of: find.text(label), matching: find.byType(AppButton)),
         );
         expect(size.height, greaterThanOrEqualTo(48), reason: label);
       }
@@ -66,10 +63,7 @@ void main() {
       // the page statement takes `label.md` at `text.secondary` instead.
       final tokens = spiritTheme.extension<AppTokens>()!;
       expect(
-        contrastRatio(
-          tokens.colors.text.secondary,
-          tokens.colors.surface.base,
-        ),
+        contrastRatio(tokens.colors.text.secondary, tokens.colors.surface.base),
         greaterThanOrEqualTo(4.5),
       );
 
@@ -79,10 +73,14 @@ void main() {
       expect(label.style?.fontSize, tokens.typography.labelMedium.fontSize);
     });
 
-    testWidgets('wraps rather than overflowing on a phone', (tester) async {
-      // Two 48-high pills with two-word labels plus a statement do not fit 411
-      // logical pixels beside each other, and a `Row` answers that by
-      // overflowing - the defect `ConfirmDialog` and `ErrorState` both record.
+    testWidgets('keeps to one row on a phone by shortening its labels', (
+      tester,
+    ) async {
+      // **The 2026-08-25 change, at the product owner's direction.** The two
+      // long labels plus the page statement do not fit 411 logical pixels, and
+      // this bar used to answer that by wrapping - which made it two rows tall
+      // on exactly the surfaces with the least room. It shortens the labels
+      // instead, and the row survives.
       tester.view.physicalSize = const Size(411, 891);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -90,14 +88,51 @@ void main() {
       await _pump(tester, pageNumber: 3);
 
       expect(tester.takeException(), isNull);
-      expect(find.byType(Wrap), findsOne);
+      expect(find.text('Previous'), findsOne);
+      expect(find.text('Next'), findsOne);
+      // The page statement never shortens - it is what §5.1 put in the middle
+      // of this row.
+      expect(find.text('Page 3'), findsOne);
+      // One row is asserted by measuring the controls themselves rather than
+      // relying only on the current implementation widget.
+      expect(_sameRow(tester, 'Previous', 'Next'), isTrue);
+    });
+
+    testWidgets('keeps the long labels where there is room for them', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await _pump(tester, pageNumber: 3);
+
+      expect(find.text('Previous page'), findsOne);
+      expect(find.text('Next page'), findsOne);
+      expect(_sameRow(tester, 'Previous page', 'Next page'), isTrue);
+    });
+
+    testWidgets('keeps one row even where the short labels are constrained', (
+      tester,
+    ) async {
+      // Buttons flex at this artificial floor and shorten their painted labels;
+      // neither action moves away from the page statement.
+      tester.view.physicalSize = const Size(240, 891);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await _pump(tester, pageNumber: 3);
+
+      expect(tester.takeException(), isNull);
+      expect(_sameRow(tester, 'Previous', 'Next'), isTrue);
     });
   });
 }
 
-AppButton _button(WidgetTester tester, String label) => tester.widget<AppButton>(
-  find.ancestor(of: find.text(label), matching: find.byType(AppButton)),
-);
+AppButton _button(WidgetTester tester, String label) =>
+    tester.widget<AppButton>(
+      find.ancestor(of: find.text(label), matching: find.byType(AppButton)),
+    );
 
 Future<void> _pump(
   WidgetTester tester, {
@@ -121,3 +156,11 @@ Future<void> _pump(
 }
 
 void _noop() {}
+
+/// Whether the two labelled controls share a vertical centre - which is what
+/// "the bar is one row" means to a person looking at it.
+bool _sameRow(WidgetTester tester, String first, String second) =>
+    (tester.getCenter(find.text(first)).dy -
+            tester.getCenter(find.text(second)).dy)
+        .abs() <
+    1.0;

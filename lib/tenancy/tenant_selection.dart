@@ -30,7 +30,24 @@ final class TenantSelectionDecision {
 }
 
 /// Local selection is device-specific and deliberately names the Auth UID.
-String lastSelectedTenantStorageKey(String uid) {
+String lastSelectedTenantStorageKey(String uid) =>
+    '${_deviceLocalUid(uid)}:lastSelectedTenantId';
+
+/// Where this device keeps the memberships `listMyTenants` last returned.
+///
+/// **Beside the selection key, in the same box, on purpose.** The two are one
+/// fact split in half: the id of the business to open, and the projection
+/// needed to open it. Keeping them apart is what made an offline start
+/// impossible - the device remembered *which* business it was in and nothing
+/// at all about it. See `TenantDirectoryCache`.
+String tenantDirectoryStorageKey(String uid) =>
+    '${_deviceLocalUid(uid)}:tenantDirectory';
+
+/// The shared shape of every device-local key: a UID that cannot forge one.
+///
+/// The colon is the separator, so a UID containing one could address another
+/// UID's entry.
+String _deviceLocalUid(String uid) {
   final normalized = uid.trim();
   if (normalized.isEmpty || normalized.contains(':')) {
     throw ArgumentError.value(
@@ -39,7 +56,7 @@ String lastSelectedTenantStorageKey(String uid) {
       'Must be non-empty and contain no colon.',
     );
   }
-  return '$normalized:lastSelectedTenantId';
+  return normalized;
 }
 
 /// Applies the frozen login precedence without treating a routing mirror as

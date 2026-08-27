@@ -18,3 +18,7 @@ export 'sales_totals_session_context.dart';
 export 'shift_amendment.dart';
 export 'shift_amendment_feed.dart';
 export 'shift_amendment_feed_panel.dart';
+export 'weekly_report.dart';
+export 'weekly_report_panel.dart';
+export 'weekly_report_sections.dart';
+export 'weekly_report_charts.dart';

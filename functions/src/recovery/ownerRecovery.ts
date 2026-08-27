@@ -4,6 +4,7 @@ import {
   RootUserRecord,
   TenantStatus,
 } from "../core/model";
+import {staffSearchFields} from "../staff/search";
 
 const DOCUMENT_ID_PATTERN = /^[^/]{1,128}$/;
 const RECOVERABLE_CASE_STATUSES = new Set(["open", "approved"]);
@@ -640,6 +641,10 @@ export function buildOwnerRecoveryPlan(
         role: "owner",
         status: "active",
         invitationStatus: "accepted",
+        ...staffSearchFields(
+          state.replacementAuth.displayName?.trim() ?? replacementRoot.displayName ?? "",
+          state.replacementAuth.email?.trim().toLowerCase() ?? ""
+        ),
         createdAt: timestamp,
         joinedAt: timestamp,
         updatedAt: timestamp,

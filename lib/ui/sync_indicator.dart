@@ -28,11 +28,7 @@ import 'tokens.dart';
 /// One row of the queue panel: what a count is, and how many.
 @immutable
 final class SyncQueueEntry {
-  const SyncQueueEntry({
-    required this.label,
-    required this.count,
-    this.status,
-  });
+  const SyncQueueEntry({required this.label, required this.count, this.status});
 
   /// What this count is, in the shopkeeper's words. §8 rule 1.
   final String label;
@@ -77,8 +73,9 @@ final class SyncIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final role = (needsAttention ? AppStatus.problem : AppStatus.info)
-        .role(tokens);
+    final role = (needsAttention ? AppStatus.problem : AppStatus.info).role(
+      tokens,
+    );
     final radius = BorderRadius.circular(tokens.radius.md);
     return Semantics(
       button: true,
@@ -92,35 +89,36 @@ final class SyncIndicator extends StatelessWidget {
         excludeSemantics: true,
         hoverOverlay: tokens.colors.action.secondary.hoverFill(),
         pressedOverlay: tokens.colors.action.secondary.pressedFill(),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: waiting == 0 ? null : role.bg,
-            border: Border.all(
-              color: waiting == 0
-                  ? tokens.colors.surface.borderStrong
-                  : role.border,
-            ),
-            borderRadius: radius,
-          ),
-          child: SizedBox.square(
-            dimension: size,
-            child: Stack(
-              alignment: Alignment.center,
-              clipBehavior: Clip.none,
-              children: <Widget>[
-                Icon(
-                  icon,
-                  size: Callout.glyphSize,
-                  color: waiting == 0 ? tokens.colors.text.secondary : role.fg,
+        // **A glyph, not a box, since 2026-08-23.** The export's top-bar
+        // status control is `p-2 rounded-full text-on-surface-variant` with a
+        // small dot over it - no container and no outline. This drew a
+        // bordered 48-square in the toolbar beside a bordered 48-square
+        // hamburger, which is two buttons' worth of chrome for one glyph, and
+        // the product owner called it big.
+        //
+        // **The badge stays a count rather than becoming the design's plain
+        // dot**, and it moves inside the square: *two waiting* and *nine
+        // waiting* are different enough to act on differently, and a dot says
+        // neither. It is inside now because there is no border for it to hang
+        // off, and a badge overhanging a bare glyph clips against the toolbar.
+        child: SizedBox.square(
+          dimension: size,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Icon(
+                icon,
+                size: Callout.glyphSize,
+                color: waiting == 0 ? tokens.colors.text.secondary : role.fg,
+              ),
+              if (waiting > 0)
+                Positioned(
+                  top: tokens.spacing.s4,
+                  right: 0,
+                  child: _Badge(count: waiting, role: role),
                 ),
-                if (waiting > 0)
-                  Positioned(
-                    top: -tokens.spacing.s8,
-                    right: -tokens.spacing.s8,
-                    child: _Badge(count: waiting, role: role),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -235,9 +233,9 @@ final class SyncQueuePanel extends StatelessWidget {
               )
             else
               for (final entry in entries) ...<Widget>[
-              _Row(entry: entry),
-              SizedBox(height: tokens.spacing.s8),
-            ],
+                _Row(entry: entry),
+                SizedBox(height: tokens.spacing.s8),
+              ],
             if (explanation case final prose?) ...<Widget>[
               SizedBox(height: tokens.spacing.s4),
               prose,
@@ -294,12 +292,11 @@ final class _Row extends StatelessWidget {
     final role = standing?.role(tokens);
     final label = Text(
       entry.label,
-      style: (standing == null
-              ? tokens.density.body(tokens.typography)
-              : tokens.typography.labelLarge)
-          .copyWith(
-            color: role?.fg ?? tokens.colors.text.secondary,
-          ),
+      style:
+          (standing == null
+                  ? tokens.density.body(tokens.typography)
+                  : tokens.typography.labelLarge)
+              .copyWith(color: role?.fg ?? tokens.colors.text.secondary),
     );
     final count = Text(
       '${entry.count}',
@@ -310,7 +307,11 @@ final class _Row extends StatelessWidget {
     final row = Row(
       children: <Widget>[
         if (standing != null) ...<Widget>[
-          Icon(standing.defaultIcon, size: StatusBadge.iconSize, color: role!.fg),
+          Icon(
+            standing.defaultIcon,
+            size: StatusBadge.iconSize,
+            color: role!.fg,
+          ),
           SizedBox(width: tokens.spacing.s8),
         ],
         Expanded(child: label),

@@ -35,9 +35,8 @@ void main() {
     // The longest sentence any call site passes today, so the picture shows
     // what a wrapping message does to the column rather than only the happy
     // one-liner.
-    build: () => const _LoadingHost(
-      message: 'Reading active and suspended businesses.',
-    ),
+    build: () =>
+        const _LoadingHost(message: 'Reading active and suspended businesses.'),
     settle: false,
     fullPage: false,
   );

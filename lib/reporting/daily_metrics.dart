@@ -169,10 +169,7 @@ final class TenantDailyMetricsRepository extends TenantReadRepository {
     } on ArgumentError {
       throw const TenantDailyMetricsException('invalid_business_date');
     }
-    final data = await readDocument(
-      TenantCollection.dailyMetrics,
-      safeDate,
-    );
+    final data = await readDocument(TenantCollection.dailyMetrics, safeDate);
     if (data == null) return null;
     final metrics = TenantDailyMetrics.fromDocument(
       path: paths.dailyMetric(safeDate),

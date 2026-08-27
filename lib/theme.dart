@@ -126,7 +126,7 @@ final AppTypeRoles _type = _palette.typography;
 /// left in the app.
 OutlineInputBorder _fieldBorder(Color colour, {double width = 1}) =>
     OutlineInputBorder(
-      borderRadius: BorderRadius.circular(_palette.radius.pill),
+      borderRadius: BorderRadius.circular(_palette.radius.md),
       borderSide: BorderSide(color: colour, width: width),
     );
 
@@ -352,8 +352,8 @@ final ThemeData spiritTheme = ThemeData(
       side: BorderSide(color: _surface.borderSubtle),
     ),
   ),
-  // Stadium buttons throughout, because the login screen's are stadium and it
-  // is the one screen nobody has asked to change.
+  // 8-corner buttons throughout, matching `.btn-primary`'s own
+  // `borderRadius.xl` in the design's component CSS.
   //
   // Each of the four carries the colours of the §2.1 tier it stands for:
   // filled and elevated are `action.primary`, the outlined button is
@@ -380,7 +380,7 @@ final ThemeData spiritTheme = ThemeData(
       minimumSize: const Size(0, 48),
       padding: EdgeInsets.symmetric(horizontal: _spacing.s24),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_palette.radius.pill),
+        borderRadius: BorderRadius.circular(_palette.radius.md),
       ),
     ).copyWith(overlayColor: _pressOverlay(_action.primary)),
   ),
@@ -392,18 +392,19 @@ final ThemeData spiritTheme = ThemeData(
       minimumSize: const Size(0, 48),
       padding: EdgeInsets.symmetric(horizontal: _spacing.s24),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_palette.radius.pill),
+        borderRadius: BorderRadius.circular(_palette.radius.md),
       ),
     ).copyWith(overlayColor: _pressOverlay(_action.primary)),
   ),
   outlinedButtonTheme: OutlinedButtonThemeData(
     style: OutlinedButton.styleFrom(
+      backgroundColor: _action.secondary.container,
       foregroundColor: _action.secondary.label,
       minimumSize: const Size(0, 48),
       padding: EdgeInsets.symmetric(horizontal: _spacing.s20),
       side: BorderSide(color: _action.secondary.border!),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_palette.radius.pill),
+        borderRadius: BorderRadius.circular(_palette.radius.md),
       ),
     ).copyWith(overlayColor: _pressOverlay(_action.secondary)),
   ),
@@ -436,6 +437,53 @@ final ThemeData spiritTheme = ThemeData(
     ),
     errorBorder: _fieldBorder(_status.problem.fg),
   ),
+  // **The three `SegmentedButton`s in this app, which were stadium-shaped
+  // because nothing had ever themed them.** Material's default shape is a
+  // `StadiumBorder`, so a scope switcher on the shift history, the stock
+  // adjustment and the reconciliation route drew the one pill left in the app
+  // after the corners moved.
+  //
+  // The colours are the design's own tab row: the selected segment is
+  // `bg-surface-elevated border border-primary text-primary` and an unselected
+  // one is `bg-transparent border border-outline-variant
+  // text-on-surface-variant`. The height is §9's target, which the design's own
+  // markup also states as `h-12`.
+  segmentedButtonTheme: SegmentedButtonThemeData(
+    style: ButtonStyle(
+      backgroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? _surface.field
+            : Colors.transparent,
+      ),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? _action.primary.container
+            : _text.secondary,
+      ),
+      iconColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? _action.primary.container
+            : _text.secondary,
+      ),
+      side: WidgetStateProperty.resolveWith(
+        (states) => BorderSide(
+          color: states.contains(WidgetState.selected)
+              ? _action.primary.container
+              : _surface.borderStrong,
+        ),
+      ),
+      textStyle: WidgetStatePropertyAll(_type.labelLarge),
+      minimumSize: WidgetStatePropertyAll(
+        Size(0, AppDensity.comfortable.minimumTapTarget.height),
+      ),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_palette.radius.md),
+        ),
+      ),
+      overlayColor: _pressOverlay(_action.secondary),
+    ),
+  ),
   chipTheme: ChipThemeData(
     backgroundColor: _surface.raised,
     selectedColor: _surface.field,
@@ -458,7 +506,7 @@ final ThemeData spiritTheme = ThemeData(
     ),
     checkmarkColor: _action.primary.container,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(_palette.radius.pill),
+      borderRadius: BorderRadius.circular(_palette.radius.lg),
     ),
   ),
   dialogTheme: DialogThemeData(
@@ -530,13 +578,20 @@ final ThemeData spiritTheme = ThemeData(
   // meaning and owes 3:1. No §2.1 border role clears that, and `claude.md`
   // forbids inventing one. It is an open decision in `PLAN.md`.
   checkboxTheme: CheckboxThemeData(
+    // The design's `.checkbox`: 20 square, `1px` `outline-variant`,
+    // `borderRadius.DEFAULT`, `surface-elevated` behind it, and `primary` once
+    // it is ticked. The unticked fill used to be null - Material's
+    // transparent - so the box was an outline over whatever it sat on.
     fillColor: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.selected)
           ? _action.primary.container
-          : null,
+          : _surface.field,
     ),
     checkColor: WidgetStatePropertyAll(_action.primary.label),
-    side: BorderSide(color: _action.secondary.border!, width: 2),
+    side: BorderSide(color: _surface.borderStrong, width: 1),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(_palette.radius.sm),
+    ),
   ),
   switchTheme: SwitchThemeData(
     thumbColor: WidgetStateProperty.resolveWith(

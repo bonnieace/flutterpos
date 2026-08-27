@@ -42,6 +42,7 @@ library;
 import 'package:flutter/widgets.dart';
 
 import 'buttons.dart';
+import 'measure.dart';
 import 'tokens.dart';
 
 /// The bar that moves a record list between pages.
@@ -79,24 +80,90 @@ final class Pagination extends StatelessWidget {
   final Key? nextKey;
   final Key? pageKey;
 
+  /// The labels at their full length, and the short forms a narrow bar takes.
+  ///
+  /// **Two words become one, and the page statement never shortens**: which
+  /// page a person is on is the thing §5.1 put in the middle of this row, and
+  /// dropping it to fit two buttons would be fitting the row by removing what
+  /// it is for.
+  static const String _previousLong = 'Previous page';
+  static const String _nextLong = 'Next page';
+  static const String _previousShort = 'Previous';
+  static const String _nextShort = 'Next';
+
+  /// Whether [width] can hold the long labels, the page statement and the gaps
+  /// between them on one line.
+  ///
+  /// **Measured rather than looked up in §4.1's bands**, which is the move
+  /// `PosKeyboard.minimumWidth` makes and for the same reason: how much room
+  /// two buttons and a sentence need is arithmetic this component can do,
+  /// where a breakpoint is a guess about a page. Exposed so a test can ask the
+  /// question the widget asks instead of asserting a pixel width.
+  static bool fitsOneRow(
+    double width,
+    AppTokens tokens, {
+    int pageNumber = 1,
+    TextScaler textScaler = TextScaler.noScaling,
+  }) => width >= _rowWidth(tokens, pageNumber, textScaler, long: true);
+
+  static double _rowWidth(
+    AppTokens tokens,
+    int pageNumber,
+    TextScaler textScaler, {
+    required bool long,
+  }) =>
+      AppButton.measureWidth(
+        tokens,
+        long ? _previousLong : _previousShort,
+        textScaler: textScaler,
+      ) +
+      AppButton.measureWidth(
+        tokens,
+        long ? _nextLong : _nextShort,
+        textScaler: textScaler,
+      ) +
+      measureTextWidth(
+        'Page $pageNumber',
+        tokens.typography.labelMedium,
+        textScaler: textScaler,
+      ) +
+      tokens.spacing.s12 * 2;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    return Wrap(
-      // **A `Wrap`, not a `Row`, and `spaceBetween` inside it.** Two 48-high
-      // pills with two-word labels plus a page statement do not fit 411 logical
-      // pixels beside each other; a `Row` answers that by overflowing, which is
-      // the defect `ConfirmDialog`'s actions and `ErrorState`'s already record.
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: tokens.spacing.s12,
-      runSpacing: tokens.spacing.s8,
+    final textScaler =
+        MediaQuery.maybeTextScalerOf(context) ?? TextScaler.noScaling;
+    // **The screen's width, not the bar's own constraint.** A `LayoutBuilder`
+    // would measure the box this bar was actually given, which is the better
+    // question - and it cannot be asked here: `AlertDialog` sizes its content
+    // by intrinsic height, `LayoutBuilder` refuses to answer an intrinsic
+    // query, and every paginated list inside a dialog threw
+    // *"LayoutBuilder does not support returning intrinsic dimensions"*. The
+    // category dialogs are three of them.
+    final width = MediaQuery.sizeOf(context).width;
+    final long = fitsOneRow(
+      width,
+      tokens,
+      pageNumber: pageNumber,
+      textScaler: textScaler,
+    );
+    // The controls always remain on one row. Each button owns one flexible side
+    // of the bar, so its existing ellipsis is the final narrow-width fallback
+    // instead of moving either action below the page number.
+    return Row(
       children: <Widget>[
-        AppButton(
-          key: previousKey,
-          label: 'Previous page',
-          onPressed: onPrevious,
+        Expanded(
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: AppButton(
+              key: previousKey,
+              label: long ? _previousLong : _previousShort,
+              onPressed: onPrevious,
+            ),
+          ),
         ),
+        SizedBox(width: tokens.spacing.s12),
         Text(
           'Page $pageNumber',
           key: pageKey,
@@ -107,7 +174,17 @@ final class Pagination extends StatelessWidget {
             color: tokens.colors.text.secondary,
           ),
         ),
-        AppButton(key: nextKey, label: 'Next page', onPressed: onNext),
+        SizedBox(width: tokens.spacing.s12),
+        Expanded(
+          child: Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: AppButton(
+              key: nextKey,
+              label: long ? _nextLong : _nextShort,
+              onPressed: onNext,
+            ),
+          ),
+        ),
       ],
     );
   }

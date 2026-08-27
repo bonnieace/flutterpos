@@ -118,6 +118,21 @@ const Map<String, String> captions = <String, String>{
       'The same correction form as a manager: three of the five fields, and '
       'an info notice standing where the price, the cost and the clear-cost '
       'act were.',
+  '19c-correct-a-product-image':
+      'The correction form with its image well: the bordered panel the old '
+      'catalog form drew, restored 2026-08-25. Nothing chosen yet, so the '
+      'cut-out is drawn disabled rather than removed.',
+  '19d-correct-a-product-image-chosen':
+      'A photograph chosen, at the size the old form drew it. Two columns on a '
+      'desktop and the picture above the fields on a phone, which is the '
+      'arrangement the old form used.',
+  '19e-cutting-out-a-background':
+      'A cut-out in flight. The button holds its own container and swaps its '
+      'label for a spinner; everything else in the well is held.',
+  '19f-cut-out-refused':
+      'A refused cut-out. Every refusal states the same thing, which is the '
+      'thing an operator needs after one: the photograph they chose is still '
+      'there.',
   '20-bulk-changes-and-import':
       'One field across many products, or a whole catalog from pasted rows. '
       'Both preview before they write.',

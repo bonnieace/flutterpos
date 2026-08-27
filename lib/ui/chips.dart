@@ -188,15 +188,13 @@ final class _Chip<T> extends StatelessWidget {
       borderColor = tokens.colors.surface.borderStrong;
       containerColor = Colors.transparent;
     }
-    // §2.3's row for a control, as amended in v0.7.
-    // **`radius.pill` since 2026-08-23, and it is the product owner's
-    // direction rather than a reading of the design.** Stated plainly
-    // because the evidence below is real and points the other way: the
-    // Profound Verdant export renders square-cornered controls throughout,
-    // and the note it replaces was right about that. The owner asked for
-    // the pill back; a shape is theirs to choose, and `OPEN_QUESTIONS.md`
-    // decision 26 records the override with the evidence it overrides.
-    final radius = BorderRadius.circular(tokens.radius.pill);
+    // **`radius.lg`, which is the design's `rounded-full` and is 12 rather
+    // than a pill.** A selectable chip in the export is
+    // `px-3 py-1.5 rounded-full`, and the served config resolves `full` to
+    // `0.75rem` - so 12 on a ~30-high chip is a soft rectangle, not a capsule.
+    // `StatusBadge` keeps `radius.sm`, which is the bare `rounded` the export
+    // gives a badge in 78 of the 82 places one appears.
+    final radius = BorderRadius.circular(tokens.radius.lg);
 
     return Semantics(
       container: true,

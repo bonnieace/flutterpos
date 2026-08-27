@@ -6,6 +6,7 @@ import 'package:flutter_application_1/theme.dart';
 import 'package:flutter_application_1/ui/buttons.dart';
 import 'package:flutter_application_1/ui/states.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -189,11 +190,11 @@ void main() {
 
       expect(asked.single, _receipt);
       expect(
-        noticeMessage(tester, 'print-queue-notice'),
+        snackNotice(tester).message,
         PrinterFailureNotice.sent.message,
       );
       expect(
-        noticeMessage(tester, 'print-queue-notice').toLowerCase(),
+        snackNotice(tester).message.toLowerCase(),
         isNot(contains('printed')),
       );
     });

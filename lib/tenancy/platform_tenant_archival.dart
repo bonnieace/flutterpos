@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
 import '../ui/states.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -508,12 +509,7 @@ final class _PlatformTenantArchivalFormState
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Archive ${widget.tenant.name} (${widget.tenant.slug})?',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Archive ${widget.tenant.name} (${widget.tenant.slug})?'),
         SizedBox(height: tokens.spacing.s8),
         const Text(
           'This permanently removes the business from active ownership counts. '

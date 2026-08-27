@@ -269,14 +269,14 @@ void main() {
 
     expect(
       find.descendant(
-        of: find.byType(PageHeader),
+        of: find.byType(AppBar),
         matching: find.text('Shift corrections'),
       ),
       findsOne,
     );
     expect(
       find.descendant(
-        of: find.byType(PageHeader),
+        of: find.byType(AppBar),
         matching: find.text('shift-1'),
       ),
       findsOne,
@@ -299,7 +299,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(tester.widget<PageHeader>(find.byType(PageHeader)).subtitle, isNull);
+    expect(tester.widget<AppScaffold>(find.byType(AppScaffold)).subtitle, isNull);
   });
 
   testWidgets('an empty scoped trail says it is about one shift', (

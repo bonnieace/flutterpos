@@ -62,21 +62,46 @@ void main() {
       expect(figure.fontFeatures, _tokens.typography.numericHero.fontFeatures);
       expect(figure.color, _tokens.colors.text.primary);
 
-      final caption = _styleOf(tester, 'Recorded stock');
-      expect(caption.fontSize, _tokens.typography.labelMedium.fontSize);
+      // **`label.eyebrow`, uppercased, since 2026-08-23.** The export's KPI
+      // caption is `text-label-caps font-label-caps text-on-surface-variant`
+      // with the word in upper case and the glyph leading it.
+      final caption = _styleOf(tester, 'RECORDED STOCK');
+      expect(caption.fontSize, _tokens.typography.labelEyebrow.fontSize);
+      expect(caption.fontWeight, _tokens.typography.labelEyebrow.fontWeight);
       expect(caption.color, _tokens.colors.text.secondary);
     });
 
-    testWidgets('the caption is drawn in the case the caller wrote', (
+    testWidgets('a money figure takes the currency role, a count does not', (
       tester,
     ) async {
-      // `TenantStatCard` uppercased it. §2.2 permits uppercase on
-      // `label.eyebrow` only, and permits `label.eyebrow` on field group labels
-      // only, so both halves of that rule point away from a stat caption.
+      // The design gives currency its own colour - `currency-kes`, 182 uses
+      // across the export - and every KPI holding an amount is
+      // `text-currency-kes` where a count beside it is `text-primary`. The
+      // face is the same either way.
+      await _pump(
+        tester,
+        const StatTile(label: 'Sales', value: 'KES 1250.50', money: true),
+      );
+      expect(_styleOf(tester, 'KES 1250.50').color, _tokens.colors.text.money);
+
+      await _pump(tester, const StatTile(label: 'Sales', value: '48'));
+      expect(_styleOf(tester, '48').color, _tokens.colors.text.primary);
+    });
+
+    testWidgets('the caption is uppercased by the component, not the caller', (
+      tester,
+    ) async {
+      // **The opposite of what this asserted until 2026-08-23**, and the
+      // reason is evidence rather than a change of mind. §2.2 permits
+      // uppercase on `label.eyebrow` and the old reading restricted that role
+      // to field group labels - but the export uses it for exactly this, a
+      // figure's caption inside a card, and uppercases it there. So the
+      // component cases it and a caller writes sentence case, which keeps §8
+      // rule 7 true of the string a caller holds.
       await _pump(tester, _tile('Owners & admins', '2'));
 
-      expect(find.text('Owners & admins'), findsOne);
-      expect(find.text('OWNERS & ADMINS'), findsNothing);
+      expect(find.text('OWNERS & ADMINS'), findsOne);
+      expect(find.text('Owners & admins'), findsNothing);
     });
 
     testWidgets('a figure with something to say wears a badge, not a colour', (
@@ -208,8 +233,17 @@ void main() {
         width: 411,
       );
 
+      // **The painted box, not the `Text`'s own.** The figure is inside a
+      // `FittedBox` that scales it down rather than letting it ellipsise - a
+      // truncated amount is a wrong amount - so the `Text` keeps its unscaled
+      // width and the box around it is what lands on the screen.
       final figure = tester.renderObject<RenderBox>(
-        find.text('KES 4820.75'),
+        find
+            .ancestor(
+              of: find.text('KES 4820.75'),
+              matching: find.byType(FittedBox),
+            )
+            .first,
       );
       final tile = tester.renderObject<RenderBox>(
         find.byKey(const ValueKey('Sales')),

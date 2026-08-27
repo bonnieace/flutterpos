@@ -5,9 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_application_1/login_screen.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/theme.dart';
-import 'package:flutter_application_1/ui/fields.dart';
+import 'package:flutter_application_1/ui/card.dart';
 import 'package:flutter_application_1/ui/press.dart';
-import 'package:flutter_application_1/ui/scaffold.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_application_1/ui/tokens.dart';
 import 'package:flutter_application_1/widgets/pos_keyboard.dart';
@@ -370,63 +369,96 @@ void main() {
     expect(_notice(tester), isNull);
   });
 
-  testWidgets('the title appears once, in the header built for it', (
+  testWidgets('the title appears once, in the largest type role', (
     tester,
   ) async {
-    // §7's page pattern. The screen drew "Welcome Back" as a hand-sized
-    // `TextStyle` and its subtitle as a loose `Text`; both are `PageHeader`'s
-    // slots now, so §2.2 decides the roles rather than a `fontSize` literal.
+    // **Reverted to the old front door on 2026-08-25.** The old screen set
+    // "Welcome Back" at one size at every width rather than swapping to a
+    // compact role below a band, so the title reads `display` here even at
+    // 411. What is still asserted is what mattered either way: the title
+    // appears once and its shape comes from a type role rather than a
+    // `fontSize` literal.
     await _pump(tester, _SignIn());
 
-    final header = tester.widget<PageHeader>(find.byType(PageHeader));
-    expect(header.title, 'Welcome back');
-    expect(header.subtitle, 'Sign in to your account.');
+    // The fallback set, not `spiritTheme`'s: `_pump` builds a bare
+    // `MaterialApp` with no theme, which is the case `componentOf` exists for.
+    final tokens = AppTokens.componentOf(
+      tester.element(find.text('Welcome back')),
+    );
     expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Sign in to your account.'), findsOneWidget);
+
+    final title = tester.widget<Text>(find.text('Welcome back')).style!;
+    expect(title.fontSize, tokens.typography.display.fontSize);
+    expect(title.fontWeight, tokens.typography.display.fontWeight);
+    expect(title.color, tokens.colors.text.primary);
   });
 
-  testWidgets('the fields are one pattern with the rest of the app', (
+  testWidgets('the form sits on the page rather than in a container', (
     tester,
   ) async {
-    // The clearest duplication `DESIGN-AUDIT.md` §2.3 found, closed: sign-in's
-    // fields were the third field implementation in `lib/`.
+    // The owner's preference, and the old front door's shape too: the credential
+    // column stands on the page, and the only container on this screen is the
+    // glass pane behind the keypad.
     await _pump(tester, _SignIn());
+    expect(find.byType(AppCard), findsNothing);
+  });
 
-    expect(find.byType(AppTextField), findsNWidgets(2));
+  testWidgets('the fields are the old front door\'s pills, from tokens', (
+    tester,
+  ) async {
+    // **The 1:1 revert, asserted.** The fields are pill-shaped with uppercase
+    // eyebrow labels again, which is what existing customers know — but every
+    // value behind them is an `AppTokens` role rather than the old screen's
+    // hardcoded `mutedGreen`/`accentGreen`/white literals, so a later theme
+    // change still reaches them.
+    await _pump(tester, _SignIn(), theme: spiritTheme);
+
+    expect(find.text('EMAIL / USER ID'), findsOneWidget);
+    expect(find.text('PASSWORD'), findsOneWidget);
+
+    final tokens = AppTokens.componentOf(
+      tester.element(find.text('PASSWORD')),
+    );
+
+    // The well is a pill in `surface.field`, which is the old shape drawn from
+    // the token layer.
+    final well = tester.widget<Container>(
+      find
+          .ancestor(
+            of: _field('login-password'),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final decoration = well.decoration! as BoxDecoration;
+    expect(decoration.color, tokens.colors.surface.field);
     expect(
-      tester
-          .widget<AppTextField>(find.byKey(const ValueKey('login-email')))
-          .label,
-      'Email address',
+      decoration.borderRadius,
+      BorderRadius.circular(tokens.radius.pill),
     );
-    // §5.2: a placeholder is an example, never a restatement of the label.
-    // The password field's said "Enter Password", which is the restatement,
-    // and it carried nothing at all from then until 2026-08-23. It shows
-    // asterisks now at the product owner's direction, and asterisks are the
-    // permitted kind: they are what the box will look like once somebody
-    // types in it rather than a second copy of its label.
-    final password = tester.widget<AppTextField>(
-      find.byKey(const ValueKey('login-password')),
-    );
-    expect(password.placeholder, '********');
-    expect(password.placeholder, isNot(contains('assword')));
-    // The placeholder and the obscuring glyph have to agree, or the box
-    // appears to change character set the moment it is touched.
-    expect(password.obscuringCharacter, '*');
+
+    // The label is `label.eyebrow`, the one role §2.2 permits uppercase on.
+    final label = tester.widget<Text>(find.text('PASSWORD')).style!;
+    expect(label.fontSize, tokens.typography.labelEyebrow.fontSize);
   });
 
   testWidgets('a field draws one border, not two', (tester) async {
-    // The defect commit `1b2b13b` introduced on 2026-08-10 and this screen has
-    // carried ever since: `InputDecorator` prefers `enabledBorder` and
-    // `focusedBorder` over `border`, both were null on the widget, and both
-    // therefore came from the theme - so a 14-radius filled outline was painted
-    // inside the pill's own well. `AppFieldWell` strips all six slots; this
-    // asserts it against the real theme rather than against a bare one.
+    // The defect commit `1b2b13b` introduced on 2026-08-10: `InputDecorator`
+    // prefers `enabledBorder` and `focusedBorder` over `border`, so a theme
+    // border was painted inside the pill's own well. The pill field strips the
+    // inner decoration to nothing and draws the well itself; this asserts it
+    // against the real theme rather than a bare one.
     await _pump(tester, _SignIn(), theme: spiritTheme);
 
     final decoration = tester
         .widget<TextField>(_field('login-password'))
         .decoration!;
     expect(decoration.filled, isFalse);
+    expect(decoration.isCollapsed, isTrue);
+    // All six, because `InputDecorator` prefers `enabledBorder` and
+    // `focusedBorder` over `border` — setting only `border` is what let the
+    // theme paint a second outline inside the pill.
     for (final border in <InputBorder?>[
       decoration.border,
       decoration.enabledBorder,
@@ -615,11 +647,16 @@ void main() {
     });
 
     testWidgets('and it is not signalled by hue alone', (tester) async {
-      // §9: never hue alone. A locked Caps changes tier - §2.1's `primary` is
-      // the one tier that fills its container - so the key is filled as well as
-      // mint, and its announcement carries the state in words.
+      // §9: never hue alone. A locked Caps changes tier, so the key's
+      // container changes with it and its announcement carries the state in
+      // words. **Unlocked is `secondary`'s own container rather than
+      // transparent since 2026-08-23**, when that tier was repointed onto the
+      // design's `bg-surface-elevated`; what the test holds is that the two
+      // states are different containers, not that one of them is nothing.
       await _pumpAt(tester, _keypadFloor);
-      expect(_capsFill(tester), Colors.transparent);
+      final tokens = spiritTheme.extension<AppTokens>()!;
+      expect(_capsFill(tester), tokens.colors.action.secondary.container);
+      expect(_capsFill(tester), isNot(tokens.colors.action.primary.container));
 
       await tester.tap(_capsKey());
       await tester.pumpAndSettle();
@@ -723,8 +760,11 @@ AppNotice? _notice(WidgetTester tester) {
 
 /// The error line under one field, which is where a defect this screen found
 /// itself is reported.
-String? _fieldError(WidgetTester tester, String key) =>
-    tester.widget<AppTextField>(find.byKey(ValueKey(key))).error;
+String? _fieldError(WidgetTester tester, String key) {
+  final finder = find.byKey(ValueKey('$key-error'));
+  if (finder.evaluate().isEmpty) return null;
+  return tester.widget<Text>(finder).data;
+}
 
 Iterable<String> _renderedText(WidgetTester tester) => tester
     .widgetList<Text>(find.byType(Text))

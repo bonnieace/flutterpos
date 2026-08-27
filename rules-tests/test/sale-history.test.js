@@ -138,7 +138,9 @@ test("a cashier pages the sales of one shift, newest first", async () => {
   await seedSaleHistory();
   const firestore = authenticatedFirestore(testEnvironment, "cashier-a");
 
-  const page = await assertSucceeds(salePage(firestore, { shiftId: "shift-a" }));
+  const page = await assertSucceeds(
+    salePage(firestore, { shiftId: "shift-a", soldById: "cashier-a" }),
+  );
   const ids = page.docs.map((entry) => entry.id);
   if (ids.join(",") !== "co-2,co-1") {
     throw new Error(`Unexpected shift sale page: ${ids.join(",")}`);
@@ -157,16 +159,20 @@ test("a cashier pages its own sales across shifts", async () => {
   }
 });
 
-test("a sale stays a shared business record for every active member", async () => {
+test("direct sale reads stay shared while cashier list queries stay personal", async () => {
   await seedSaleHistory();
   const colleague = authenticatedFirestore(testEnvironment, "cashier-b");
 
-  // This is the deliberate decision, not an oversight: a receipt lookup, a
-  // return against a colleague's sale, and fail-closed confirmation of a
-  // deterministic sale path all need the sale to be readable business-wide.
-  // Narrowing it to soldById would have to change these three assertions.
+  // Deterministic checkout confirmation and existing return workflows still
+  // use direct reads. Search/list queries do not inherit that wider boundary.
   await assertSucceeds(getDoc(doc(colleague, "tenants/tenant-a/sales/co-1")));
-  await assertSucceeds(salePage(colleague, { shiftId: "shift-a" }));
+  await assertFails(salePage(colleague, { shiftId: "shift-a" }));
+  await assertFails(
+    salePage(colleague, { shiftId: "shift-a", soldById: "cashier-a" }),
+  );
+  await assertSucceeds(
+    salePage(colleague, { shiftId: "shift-b", soldById: "cashier-b" }),
+  );
   // Every page carries at least one equality filter: Firestore refuses a
   // descending scan of a whole collection by key, so the repository boundary
   // refuses to build one.

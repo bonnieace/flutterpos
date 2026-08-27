@@ -51,6 +51,8 @@ export interface CanonicalStaffRecord {
   role?: TenantRole;
   status?: MembershipStatus;
   invitationStatus?: string;
+  searchName?: string;
+  searchPrefixes?: string[];
 }
 
 export interface TenantMembershipMirror {

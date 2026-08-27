@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function rootUserPath() {
+      return /databases/(default)/documents/users/$(request.auth.uid);
+    }
+
+    function tenantPath(tenantId) {
+      return /databases/(default)/documents/tenants/$(tenantId);
+    }
+
+    function staffPath(tenantId) {
+      return /databases/(default)/documents/tenants/$(tenantId)/staff/$(request.auth.uid);
+    }
+
+    function activeMember(tenantId) {
+      return request.auth != null
+        && firestore.exists(rootUserPath())
+        && firestore.get(rootUserPath()).data.globalStatus == 'active'
+        && firestore.get(rootUserPath()).data.accountType == 'tenant_user'
+        && firestore.exists(tenantPath(tenantId))
+        && firestore.get(tenantPath(tenantId)).data.status == 'active'
+        && firestore.exists(staffPath(tenantId))
+        && firestore.get(staffPath(tenantId)).data.uid == request.auth.uid
+        && firestore.get(staffPath(tenantId)).data.status == 'active'
+        && firestore.get(staffPath(tenantId)).data.role
+          in ['owner', 'admin', 'manager', 'cashier']
+        && (
+          firestore.get(staffPath(tenantId)).data.role != 'owner'
+          || firestore.get(tenantPath(tenantId)).data.ownerUid == request.auth.uid
+        );
+    }
+
+    function inventoryManager(tenantId) {
+      return activeMember(tenantId)
+        && firestore.get(staffPath(tenantId)).data.role
+          in ['owner', 'admin', 'manager'];
+    }
+
+    match /tenantProductImages/{tenantId}/{productId}/{imageId} {
+      allow read: if activeMember(tenantId);
+      allow create, update: if inventoryManager(tenantId)
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType
+          in ['image/jpeg', 'image/png', 'image/webp']
+        && request.resource.metadata.tenantId == tenantId
+        && request.resource.metadata.productId == productId;
+      allow delete: if inventoryManager(tenantId);
+    }
+  }
+}

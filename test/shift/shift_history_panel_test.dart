@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -44,10 +44,10 @@ void main() {
     _expectText(tester, 'shift-history-variance-shift-a', '87.50');
     // Only management may look beyond its own shifts.
     expect(find.byKey(const ValueKey('shift-history-scope')), findsNothing);
-    expect(
-      reader.queries.single.equalityFilters,
-      <String, Object?>{'status': 'closed', 'staffId': 'user-a'},
-    );
+    expect(reader.queries.single.equalityFilters, <String, Object?>{
+      'status': 'closed',
+      'staffId': 'user-a',
+    });
   });
 
   testWidgets('a count is a figure under a heading and never has to agree', (
@@ -195,10 +195,10 @@ void main() {
       ]);
 
     await _pumpPanel(tester, controller, reader);
-    expect(
-      reader.queries.single.equalityFilters,
-      <String, Object?>{'status': 'closed', 'staffId': 'user-a'},
-    );
+    expect(reader.queries.single.equalityFilters, <String, Object?>{
+      'status': 'closed',
+      'staffId': 'user-a',
+    });
 
     await tester.tap(find.text('Every cashier'));
     await tester.pump();
@@ -241,7 +241,10 @@ void main() {
       ]);
 
     await _pumpPanel(tester, controller, reader, pageSize: 2);
-    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('shift-history-entry-shift-a')),
+      findsNothing,
+    );
     // Present and disabled rather than absent, since `Pagination` - see the
     // ledger panel's test for the reasoning.
     expect(
@@ -307,12 +310,18 @@ void main() {
     // The first business answers after the switch; its page must be discarded.
     reader.completeFirst();
     await tester.pump();
-    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('shift-history-entry-shift-a')),
+      findsNothing,
+    );
 
     reader.completeFirst();
     await tester.pump();
     expect(find.byKey(const ValueKey('shift-history-entry-shift-b')), findsOne);
-    expect(find.byKey(const ValueKey('shift-history-entry-shift-a')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('shift-history-entry-shift-a')),
+      findsNothing,
+    );
   });
 
   testWidgets('a closed shift links to the sales it recorded', (tester) async {
@@ -406,10 +415,7 @@ void main() {
     // The trail opens narrowed to this exact shift, and says which one it is
     // showing rather than implying it is the whole business's record.
     expect(
-      find.descendant(
-        of: find.byType(PageHeader),
-        matching: find.text('shift-a'),
-      ),
+      find.descendant(of: find.byType(AppBar), matching: find.text('shift-a')),
       findsOne,
     );
     expect(
@@ -542,7 +548,6 @@ void main() {
     expect(find.byKey(const ValueKey('shift-history-failure')), findsOne);
     expect(find.textContaining('tenant-b'), findsNothing);
   });
-
 }
 
 Future<void> _pumpPanel(
@@ -578,25 +583,29 @@ Future<void> _pumpPanel(
 }
 
 TenantSessionController _controller(TenantRole role) =>
-    TenantSessionController()
-      ..open(uid: 'user-a', membership: _membership('tenant-a', role: role));
-
-TenantMembership _membership(String tenantId, {TenantRole role = TenantRole.cashier}) =>
-    TenantMembership(
-      tenantId: tenantId,
-      tenantName: tenantId,
-      tenantSlug: tenantId,
-      role: role,
-      membershipStatus: MembershipStatus.active,
-      tenantStatus: TenantStatus.active,
-      isOwner: false,
-      mirrorVersion: 1,
-      createdAt: DateTime.utc(2026, 7, 31),
-      updatedAt: DateTime.utc(2026, 7, 31),
-      serverCanAccess: true,
-      canonicalTenantExists: true,
-      canonicalMembershipExists: true,
+    TenantSessionController()..open(
+      uid: 'user-a',
+      membership: _membership('tenant-a', role: role),
     );
+
+TenantMembership _membership(
+  String tenantId, {
+  TenantRole role = TenantRole.cashier,
+}) => TenantMembership(
+  tenantId: tenantId,
+  tenantName: tenantId,
+  tenantSlug: tenantId,
+  role: role,
+  membershipStatus: MembershipStatus.active,
+  tenantStatus: TenantStatus.active,
+  isOwner: false,
+  mirrorVersion: 1,
+  createdAt: DateTime.utc(2026, 7, 31),
+  updatedAt: DateTime.utc(2026, 7, 31),
+  serverCanAccess: true,
+  canonicalTenantExists: true,
+  canonicalMembershipExists: true,
+);
 
 void _expectText(WidgetTester tester, String key, String value) {
   expect(tester.widget<Text>(find.byKey(ValueKey(key))).data, value);

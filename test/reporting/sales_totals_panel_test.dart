@@ -147,8 +147,17 @@ void main() {
         width: 411,
       );
 
+      // **The painted box, not the `Text`'s own.** The figure is inside a
+      // `FittedBox` that scales it down rather than letting it ellipsise - a
+      // truncated amount is a wrong amount - so the `Text` keeps its unscaled
+      // width and the box around it is what lands on the screen.
       final figure = tester.renderObject<RenderBox>(
-        find.byKey(const ValueKey('sales-totals-amount')),
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('sales-totals-amount')),
+              matching: find.byType(FittedBox),
+            )
+            .first,
       );
       final tile = tester.renderObject<RenderBox>(
         find.ancestor(

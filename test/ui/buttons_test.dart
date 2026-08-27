@@ -41,6 +41,40 @@ TextStyle _labelStyle(WidgetTester tester, String label) =>
     tester.widget<Text>(find.text(label)).style!;
 
 void main() {
+  group('AppActionRow', () {
+    testWidgets('keeps safe and destructive actions on one row', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          SizedBox(
+            width: 250,
+            child: AppActionRow(
+              expandActions: true,
+              actions: <Widget>[
+                AppButton(label: 'Cancel', onPressed: () {}),
+                AppButton(
+                  label: 'Remove image',
+                  tier: AppButtonTier.destructive,
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final cancel = tester.getRect(find.text('Cancel'));
+      final remove = tester.getRect(find.text('Remove image'));
+      expect(cancel.center.dy, remove.center.dy);
+      expect(cancel.left, lessThan(remove.left));
+      expect(
+        _labelStyle(tester, 'Remove image').color,
+        _actions.destructive.label,
+      );
+    });
+  });
+
   group('the four tiers are §2.1\'s action table', () {
     testWidgets('enabled, each carries its own container, label and border', (
       tester,
@@ -131,8 +165,23 @@ void main() {
       expect(_container(tester).color, _actions.disabledContainer);
       expect(_labelStyle(tester, 'Off').color, _actions.disabledLabel);
 
+      // **Secondary is filled too, since 2026-08-23.** The design's secondary
+      // control is `bg-surface-elevated border border-outline-variant`, so it
+      // takes the disabled *container* the way the primary does; only the two
+      // tiers that paint nothing stay transparent.
+      await tester.pumpWidget(
+        _app(
+          const AppButton(
+            label: 'Off',
+            tier: AppButtonTier.secondary,
+            onPressed: null,
+          ),
+        ),
+      );
+      expect(_container(tester).color, _actions.disabledContainer);
+      expect(_container(tester).border?.top.color, _actions.disabledBorder);
+
       for (final tier in <AppButtonTier>[
-        AppButtonTier.secondary,
         AppButtonTier.tertiary,
         AppButtonTier.destructive,
       ]) {
@@ -371,17 +420,16 @@ void main() {
     });
 
     testWidgets('the corner the design measures for a button', (tester) async {
-      // **`radius.pill` since 2026-08-23, at the product owner's
-      // direction.** The evidence this replaces was real and points the
-      // other way - Profound Verdant's CSS, its status chips and its
-      // rendered screens are all square-cornered - and the override is
-      // recorded as an override in `OPEN_QUESTIONS.md` decision 26. A shape
-      // is the owner's to choose; what this test holds is that the choice
-      // reaches the widget from the token layer rather than from a literal.
+      // **`radius.md`, which the design measures directly.** Its
+      // `.btn-primary` rule is `border-radius: theme('borderRadius.xl')` and
+      // the served config resolves `xl` to `0.5rem`. The 2026-08-23 pill
+      // override was withdrawn on 2026-08-23 when the instruction became
+      // "match the Stitch render"; what this test holds either way is that
+      // the choice reaches the widget from the token layer, never a literal.
       await tester.pumpWidget(_app(AppButton(label: 'Go', onPressed: () {})));
       final radius = _container(tester).borderRadius! as BorderRadius;
-      expect(radius.topLeft.x, _tokens.radius.pill);
-      expect(radius.topLeft.x, isNot(_tokens.radius.md));
+      expect(radius.topLeft.x, _tokens.radius.md);
+      expect(radius.topLeft.x, isNot(_tokens.radius.pill));
     });
   });
 

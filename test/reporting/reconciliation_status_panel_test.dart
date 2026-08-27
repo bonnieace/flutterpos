@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/reporting/reporting.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -696,14 +697,14 @@ void main() {
         'requestId': 'reconcile-fixed-1',
       });
       expect(
-        noticeMessage(tester, 'reconciliation-request-notice'),
+        snackNotice(tester).message,
         startsWith('Queued as rj_abc.'),
       );
       // **The notice says which kind of answer it is**, which a bare sentence in
       // this position never did: "Queued as rj_abc" and "Only an owner can ask
       // for a check" were the same black paragraph until read.
       expect(
-        noticeStatus(tester, 'reconciliation-request-notice'),
+        snackNotice(tester).status,
         AppStatus.ok,
       );
       // The page is re-read so what is shown is the server's own record.

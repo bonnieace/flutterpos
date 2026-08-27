@@ -343,9 +343,9 @@ void main() {
       });
 
       expect(
-        () => _repository(reader).findOpenShifts(
-          collectionReader: _UnfilteredReader(reader),
-        ),
+        () => _repository(
+          reader,
+        ).findOpenShifts(collectionReader: _UnfilteredReader(reader)),
         throwsA(_code('foreign_shift')),
       );
     });
@@ -507,11 +507,8 @@ Map<String, Object?> _document({Map<String, Object?>? overrides}) {
   return data;
 }
 
-Matcher _code(String code) => isA<TenantShiftException>().having(
-  (error) => error.code,
-  'code',
-  code,
-);
+Matcher _code(String code) =>
+    isA<TenantShiftException>().having((error) => error.code, 'code', code);
 
 final class _Reader implements TenantDataReader {
   _Reader(this._documents, {this.responsePath, this.collectionResponsePath});

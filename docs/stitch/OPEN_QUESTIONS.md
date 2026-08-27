@@ -3,6 +3,39 @@
 Do not answer these by drawing a plausible control. Record the product decision, then update the
 relevant phase and coverage ledger.
 
+> **Retirement notice, 2026-08-25.** For Login, Home/Main Hub, and Sales Report/Book Keeping,
+> product direction reversed to the pre-multitenancy app's screens/flows/visuals (see
+> `README.md`'s banner and the plan it links). IA/layout decisions below for those screens —
+> notably Phase 01 (auth entry) and Phase 02 (home navigation, including the drawer-over-grid
+> call) — are superseded for them, not deleted: they stay as the historical record of why the
+> Stitch IA looked the way it did. Decisions below that are RBAC, accessibility, or
+> product-truthfulness (not visual-IA) still apply everywhere.
+
+## Open, raised by the 2026-08-25 reversal
+
+These are gaps the restored old-app flows exposed. Each is recorded rather than answered by
+drawing a plausible control, per the rule at the top of this file.
+
+1. **The shift gate collects no opening float.** The old till's start-shift dialog
+   (`lib/pos/pos.dart`, `_showStartShiftDialog`) asked for opening cash.
+   `TenantShiftController.openShift` takes no argument and `TenantShift` carries no such field,
+   so a float box on the restored gate would be a control writing to nothing. Decide whether an
+   opening float is part of a shift in this system; if it is, it is a model and callable change
+   before it is a form change. See `lib/shift/shift_gate.dart`.
+2. **A cut-out can only be taken of a photograph chosen in the form, not of one already saved.**
+   The old dialog downloaded the saved image and sent its bytes; the restored action sends only
+   what the file picker just produced, and a saved photograph is a Storage URL this form never
+   fetches. Choosing the file again is the workaround, and the well says so. Decide whether the
+   callable should accept an owned image URL — which means it must prove the URL is inside that
+   tenant's own path before fetching it — or whether re-choosing is acceptable.
+   See `lib/inventory/product_background_removal.dart`.
+3. **Which background-removal account the deployments use.** The old key
+   (`lib/pos/goods.dart:1927`) is compromised, is recorded as such in
+   `CLIENT_CONFIGURATION_AUDIT.md` §10, and is not carried forward anywhere. The restored action
+   reads `REMOVE_BG_API_KEY` from the deployment's secret manager and refuses cleanly when it is
+   unset. Rotating that key and deciding which businesses have the service are operational
+   decisions, not design ones.
+
 ## Resolved for Phase 00
 
 1. Working visual references are surface `#071610` and primary `#4BE277`. These are semantic design
@@ -716,6 +749,175 @@ bullets is a box that appears to change character set the moment it is touched. 
 `obscuringCharacter` for this, defaulting to `*` for every obscured field in the app rather than only
 this one.
 
+## Decision 27 — two consequential forms are sheets, and the answer follows them out, 2026-08-26
+
+**Owner direction, recorded the way Decision 26 is: the evidence it overrides, so nobody
+re-derives the old answer and calls it a regression.** Nothing in the export, `DESIGN_RULES.md` or
+the phase briefs asked for this; the owner did, on contact with the running app.
+
+### 27a. Adjusting stock and recording a return are sheets, not routes
+
+Both were pushed screens. Correcting a stock figure and reversing a sale are each one short errand
+against a record a person is already looking at, and a pushed route took that record off the display
+at the moment they needed it — then made them navigate back to carry on down the list.
+
+**Decision: `openTenantProductStockAdjustmentSheet` and `openTenantSaleReturnSheet`, both at
+`AppSheetDetent.full`, both dismissible, both drawing an explicit `Cancel`.** Full rather than half
+because each form is taller than 70% of a phone: at `half` the submit control sits under the fold,
+which is the trap `AppSheetDetent.half`'s own doc already records against the till's cart. The
+`Cancel` is not a duplicate of the drag handle — dragging a sheet down is a gesture, and §9's target
+rules are about things a person can aim at, which is what a switch or a keyboard needs.
+
+**What this cost, and it is a real cost.** `TenantProductStockMode` is gone and with it the seam
+that let one builder open either half of the stock route; the composition root now supplies a route
+builder *and* an opener, because a sheet owns its own presentation and a route builder cannot
+describe one. `TenantSaleReturnsScreen` is gone entirely.
+
+### 27b. The correction sheet reads the quantity and nothing else
+
+While the correction was the second half of the ledger route it shared that route's load: a page of
+twenty stock movements and a reconciliation query, both drawn above the form. The sheet draws
+neither, so it reads neither — `TenantProductStockRepository.readProduct` is the same guarded,
+tenant-checked read `loadStock` begins with, without the ledger page hanging off it.
+
+**What was removed from that surface**, and it is listed because every item was a second copy of
+what *View stock* is for: the product photograph, the SKU line, the ledger-entry count tile, the
+*Why stock can be negative* fold, and the whole reconciliation exception report. **The recorded
+quantity stays** — it is not context about the product, it is the operand the confirmation does
+arithmetic on.
+
+### 27c. `AppSnackBar` — the transient half of `AppNotice`
+
+`Callout` is §5.1's row for a notice that *stays*: it is part of a page and read where it sits. A
+sheet that closes on success has nowhere to put one, because the widget carrying it is being torn
+down at the moment there is finally something to say.
+
+**Decision: a new `lib/ui/snackbar.dart`, taking the same `AppNotice` and the same §2.1 status
+triple, at `radius.md`.** Decision 26a lists "the snack bar" among the components that deliberately
+do not take `radius.pill` and names no replacement; `md` is §2.3's row for "cards, rows, sheets" and
+is what `Callout` already reads, so two notices carrying the same sentence are one shape rather than
+two. It replaces rather than queues — Material's messenger queues, and on a till that means reading
+a stale sentence about money.
+
+**Only a commit leaves the sheet.** A refusal or an unknown outcome stays inside it as a `Callout`,
+because closing on those would throw away a half-typed reason at the exact moment a person needs it
+to fix what was wrong.
+
+### 27d. The printer's probe answers in a snack bar; its save still does not
+
+Same split, stated once so it is not re-litigated per screen. A save outcome is the state of the
+page — the printer either changed or it did not — and stays a `Callout`. A probe changes nothing:
+it is a momentary answer to *is that address reachable*, and it had been sitting in the same block
+underneath the form, indistinguishable from the record of a write and below the buttons that caused
+it.
+
+**The printer screen also opens on its fold now.** It began with `SectionHeading('Where receipts
+print')` under an app bar and a page header both already reading *Printer* — §7's "title appears
+once", stated three times — then a loose grey paragraph. The heading is gone; the paragraph is a
+`Callout`, because whether receipts are going anywhere is the screen's standing rather than prose
+about it, and §2.1 wants a container, a glyph and a word for that.
+
+## Decision 28 — two corners the product owner rounded, 2026-08-26
+
+The same kind of direction as Decision 26 and recorded the same way.
+
+- **`StatusBadge` is `radius.md`, where §5.2 and Decision 26a both say `sm`.** At 2 a badge was a
+  hard rectangle inside a card drawn at 8, so the smallest element on a row was also the sharpest.
+  26a's argument for keeping badges off `pill` is untouched: this is not a capsule, it is the same
+  corner the container around it has. App-wide — every status in the app moves.
+- **The staff directory's cards are `radius.lg`, where §2.3 gives a card `md`.** Taken as a set —
+  the card, the container holding the list, and the avatar square on each row — because a card
+  rounder than the box around it reads as a mistake rather than a choice.
+
+## Decision 29 — a receipt line sits beside its price, 2026-08-26
+
+`checkout_receipt_body.dart` printed every sale line over two rows: the description on one, the
+amount right-aligned on the next. The totals below have always used one row, so a receipt showed
+`Subtotal` and `KES 271.00` aligned and then the items that made them up as a ragged column with
+prices floating underneath.
+
+**The comment defending the two-row form had its arithmetic wrong**, which is why it stood. It
+claimed a 32-column line would cut a product name "to about twelve characters". The real budget is
+the column count minus the amount minus one space: `KES 271.00` is ten characters, so a 58mm roll
+gives the description 21, and `2 x Maize flour 2kg` is nineteen. The common case always fitted.
+
+**Decision: one row where the description fits beside its amount, two where it does not.** A product
+name is still never truncated — that was the real point of the two-row form and it is kept exactly.
+The shape is now roll-dependent for long names, which the old note explicitly did not want; that is
+the price of the alignment and it is accepted.
+
+**No screenshot proves any of this.** There is no picture of paper and never will be, so the column
+arithmetic in `checkout_receipt_body_test.dart` is the whole of the review — and a physical print is
+still owed.
+
+## Decision 30 — a product form is a sheet, and the picture is its top, 2026-08-26
+
+Owner direction, recorded the way Decisions 26 and 27 are.
+
+**Add product and Correct product were pushed routes** whose first screenful was a
+`SectionHeading('Product image')` and a bordered square card, so on a phone one field was visible
+above the fold and everything else was below it.
+
+**Decision: both open as sheets, with two arrangements decided by §4.1's `medium` floor.**
+
+- **Below 768** the picture is the sheet's *masthead*: it fills the sheet's own top corners with no
+  card and no border of its own, at a fixed **0.3** of the sheet's height, and the fields scroll
+  underneath it. The drag handle moves *on top of* the picture, on a scrim — the strip it used to
+  sit in was a band of surface colour between the sheet's edge and the image, which is the second
+  card this arrangement exists to remove.
+- **At and above 768** the existing two-column form survives unchanged inside the sheet, because a
+  wide sheet has room to put the picture beside its fields rather than above them.
+
+**A fraction of the sheet rather than an aspect ratio of its width**, and the reason is what it must
+not do: an aspect ratio grows with the sheet, so on a wide surface the picture pushes the fields it
+belongs to off the bottom. A fraction cannot — the form starts in the same place on every screen.
+
+**`SectionHeading('Product image')` is gone from both.** It named what the reader could already see.
+
+**Two things this surfaced that were not the subject:**
+
+- **A sheet had no `Material` in it.** Nothing had noticed, because the sheets this component was
+  written for hold buttons and text and `AppButton` paints its own press states. `ListTile` paints
+  its background and splash on the nearest `Material` ancestor and asserts when there is none, which
+  is what moving a form in produced. `_Surface` now supplies `MaterialType.transparency` — an ink
+  target and not a second surface.
+- **The masthead is outside the form's own subtree**, so the picture has to be published somewhere
+  both reach. `_ProductImagePreviewModel` carries only what is *painted*; the form stays
+  authoritative and writes to it alongside its own `setState` rather than instead of it.
+
+## Decision 31 — the app's three notice surfaces, 2026-08-26
+
+The sweep that followed Decision 27, stated once so it is not re-litigated per screen. **Nine raw
+Material `SnackBar`s** were also found in reachable tenancy code, predating `lib/ui/snackbar.dart`
+and bypassing the token layer completely — the theme's grey lozenge, no §2.1 container, no glyph, so
+a confirmation and a refusal looked identical. All nine now go through `showAppSnackBar`; their
+sentences are unchanged.
+
+| Surface | For | Rule |
+| --- | --- | --- |
+| `Callout` | A sentence about the state of a page, true while the page is up | Stays where it is drawn |
+| `AppSnackBar` | A momentary answer nobody must act on | Withdraws itself; **replaces** rather than queues |
+| `NoticeDialog` | An outcome that must be dealt with before carrying on | Modal, no barrier dismiss |
+
+`noticeIsTransient` is the predicate: `AppStatus.ok` goes to the snack bar, everything else stays
+inline. **A sheet takes the opposite default** — it has no "where it was drawn" to stay in, so a
+sheet reports out on success and stays open on a refusal.
+
+**Two deliberate exceptions**, both because a control is attached to the sentence:
+
+- The **reconciliation amend** confirmation keeps its `Callout`, because it carries *View this
+  shift's corrections* and the row it names has just been deleted from the list. A snack bar can
+  hold an action but withdraws after four seconds, and a control worth attaching is one worth being
+  able to find.
+- The **till's** two degraded outcomes are `NoticeDialog`s rather than snack bars: a sale saved
+  without a receipt number, and a receipt that did not print. In the second there is no paper, so
+  the on-screen number is the only copy.
+
+**A defect the change introduced and the till's own test caught:** a floating snack bar spans the
+window and sat on top of the cart's `Save` control, and later the catalog's `Review`. It is bounded
+to §4.2's `layout.reading` — which is also the right measure for a line of prose — but on a phone
+that is the whole width, so **this still needs a device check**.
+
 ## Non-blocking audit limitations
 
 - The built-in Stitch connector in this chat retained an unauthenticated transport. Read-only audit
@@ -797,3 +999,298 @@ this one.
   no longer a rework item. Mobile ST-070 remains confirmed.
 - Local screenshots are deterministic widget renders, not physical-device proof. Native keyboard,
   focus, printing, scroll performance, and motion need later device review.
+
+
+## Decision 32 — the app opens without a network, 2026-08-27
+
+**The problem.** The product is specified offline-first and the machinery was all there —
+`HiveCheckoutOutbox`, `HiveCheckoutCatalogCache`, `HiveCheckoutReceiptCounters`,
+`HiveTenantShiftState`, `HivePrintJobQueue`, Firestore persistence — but it was gated behind
+two network calls **on the way in**, so none of it could be reached. Hence the exact shape of
+the report: *"if I lose connection while in the register it won't block the sale"* — once
+inside, nothing re-reads.
+
+1. `listMyTenants` is a Cloud Functions **callable**, and a callable has no cache, no queue
+   and no offline mode. Startup called it twice (`load`, then `openTenant → revalidateTenant`),
+   and nothing cached the membership: `HiveTenantSelectionStore` kept only the tenantId
+   *string*, so a session could not be opened offline **even in principle**.
+2. `TenantShiftController.restore` answered `TenantShiftPhase.unknown` offline, which the gate
+   drew as `LoadingState('Checking your shift.')` — discarding its own `errorCode: 'offline'`.
+   The till was a permanent spinner, and the same downgrade was the *"checking shift" jitter*
+   on every entry.
+
+**Not an emulator artifact.** Emulator wiring is gated on a compile-time `bool.fromEnvironment`;
+without the `--dart-define` the connect call returns `null`.
+
+**The decisions, taken by the product owner on 2026-08-26.**
+
+| # | Decision |
+|---|---|
+| a | A shift **may be opened offline**. Never two on one device. |
+| b | **Closing requires a connection** — it settles totals on the server — and must say so. |
+| c | Opening offline must have **no negative trickle-down**. |
+| d | A shift **may not run past 24 hours**; past that, close it. This deliberately bounds offline trading. |
+| e | The membership cache takes **no separate expiry** — (d) already bounds how long a device can work offline, so a second TTL would only strand a till. |
+
+**What (c) turned out to mean, and it is the whole safety property.** `_settle` cleared the
+local record whenever the server had no open shift — correct for a shift the server *closed*,
+catastrophic for one it had **never heard of**, which is exactly what opening offline produces.
+Every sale in the outbox is stamped with that `shiftId` and the closing summary is built by
+matching it, so clearing would have deleted a trading day and orphaned its sales.
+`serverConfirmedOpen` is the field that separates the two cases, and only the first may clear;
+the second replays its open under the **same `shiftId`**.
+
+**`shiftExpired` is a flag as well as a phase**, because starting a cash count moves an expired
+shift to `closing`, and `closing` draws the till — without the flag a cashier could reopen the
+sheet, cancel, and sell past the cap indefinitely.
+
+**Consequence stated rather than buried:** a shift that reaches 24 hours *offline* can neither
+sell nor close until the device reconnects. That is (d)'s intent, and the copy says so.
+
+**Two defects found on the way and fixed here.** A version bump on `TenantShiftLocalRecord`
+would have raised `malformed_shift_state` — which the controller turns into a till that refuses
+to open — for **every cashier holding an open shift at the moment they updated**; the read now
+accepts both versions. And all four of the gate's own states drew with no `Material` ancestor
+(yellow-underlined glyphs on a bare surface), unnoticed because the only state anybody looked
+at was `none`, which the *Start your shift* modal covers.
+
+**Still needs a device**, which the harness cannot prove: cold start in airplane mode, a sale
+rung up against an offline-opened shift, and the reconnect that must attach it to the same
+shift id.
+
+
+## Decision 33 — the home stops showing what Sales already shows, 2026-08-27
+
+**Recent sales came off the home.** The same sales are the whole subject of the
+Sales route, and a three-row copy of its first page cost a Firestore query on
+every home load to repeat, badly, what one tap away said in full. The read went
+with the section; `loadOwnRecentSales` itself stays, because the Sales route
+uses it.
+
+**A defect found while checking the profit tile: the home was showing the margin
+to managers.** `daily_metrics` is readable by owner, administrator *and*
+manager, so a manager's overview arrives carrying `profitReport` — and the grid
+printed it. But `TenantProfitReport.allowedRoles` is owner and administrator,
+and its own doc says in as many words that what the cost tier buys is that no
+manager is shown the margin. `daily_metrics_panel.dart` and
+`sales_totals_panel.dart` both gate on `canSeeInSession`; the home was the one
+surface that never asked. It does now.
+
+## Decision 34 — the weekly report returns, 2026-08-27
+
+**The home's *View daily summary* is now *Reports*, and opens the old app's
+weekly page.** The daily figures it used to open are the Sales route's subject,
+so that destination said the same thing twice. `lib/pos/reports.dart` is
+migrated composition for composition: five metric cards over a filter bar, a
+seven-bar week chart beside a top-sellers list, recent transactions under both,
+the week stepper, the two dropdowns, the percentage chips and the payment pills.
+
+**`AppChartRoles` is new, and is the reason the page needed no hardcoding.**
+The old screen reached for `Colors.white10` gridlines and `Colors.white38` axis
+labels. Neither is a border and neither is body text, so mapping them onto
+existing roles would have tied a chart to a role that moves for other reasons.
+`bar`, `barEmphasis`, `gridLine` and `axisLabel` are the four the page draws
+with, and the first two are the same hexes the old `mutedGreen` and
+`accentGreen` were.
+
+**Three honest departures, all recorded rather than papered over:**
+
+| Old | Now | Why |
+|---|---|---|
+| *Low stock — N items* | **Average sale** | No reorder level exists in reachable `lib/`; `test/dev/reachable_lib_test.dart` records the model as unreachable and `DESIGN_RULES.md` forbids drawing a control the code does not support. |
+| *Shifts today* | **Items sold** | A different question from the week this page is about, and answering it needs a second query whose "today" would be filtered on the device. Both replacements are free from data the week already holds. |
+| A category under each top item | *N sold* | A sale line records no category; filling it would be a read per row for a subtitle. |
+
+**The chart's axis is compact and carries no currency code** — `39.1k`, not
+`KES 39120.00`, which truncated to `KES 391...` inside the 60 pixels the old
+screen reserved. The `Total:` line above the chart names the currency once,
+which is where a reader looks for it.
+
+**Eight requests per week, and the shape is deliberate.** Seven single-day
+totals — which the chart needs anyway — are summed into the week's own figures,
+so the header can never contradict the bars behind it; the eighth is one range
+query for the week before. `TenantSalesTotalsGateway.createRangeQuery` is new
+and sends the inclusive start and end the wire has always accepted. The old page
+did all of this by downloading every sale.
+
+**The top-items roll-up is capped and says when the cap bites.** A busy week can
+hold thousands of sales, and paging all of them to name five products would cost
+more reads than the rest of the screen together. A truncated list that presented
+itself as the whole week is the plausible-but-wrong figure `DESIGN_RULES.md` is
+about, so `scanWasTruncated` reaches the surface.
+
+**Profit is role-gated here too**, read from the guarded session rather than
+from the caller — the same rule Decision 33 restored on the home.
+
+## Decision 35 — a skeleton is for the data, never for the page, 2026-08-27
+
+**The till stopped flashing, and the fix was not a nicer spinner.** Opening the
+register drew one centred sentence — *Reading the product list on this device…*
+— and then replaced the whole subtree with a search field, a category bar and a
+grid of products in a single frame. That is a layout jolt rather than a slow
+load: `checkout_catalog_cache.dart`'s `read()` is a synchronous `_box.get()`
+plus a parse, and nothing was being waited for. A screen that has nothing to
+wait for should not be drawing a waiting state.
+
+**The rule the product owner set, and it is the whole decision.** Buttons,
+labels, field frames, headings, pagination — anything that does not change when
+the read returns — render for real and immediately. Only the regions the read
+actually fills become placeholders. A person looking at a screen where
+everything shimmers knows nothing about it and is waiting for all of it; a
+person looking at a real date picker over three shimmering rows knows exactly
+what the screen is, can start using the half that works, and is waiting for one
+thing.
+
+**It is structural rather than promised.** Each screen's `*Contents` widget now
+takes its data as nullable and is built once, so the chrome in the loading state
+cannot drift from the chrome in the loaded one — it is the same widget.
+`weekly_report_panel.dart` already used this shape for its *failure* state,
+keeping the week stepper and both filters alive; all that changed is that the
+loading state takes it too.
+
+**Nothing is drawn for the first `motion.skeletonDelay` (100ms).** A warm Hive
+read resolves inside that and the content appears with no flash at all, which is
+what actually removes the jitter; a cold or large read shows the skeleton. The
+block holds its space transparently in the meantime, because a scroll extent
+that grows when the placeholder appears is the same jolt in miniature.
+
+**Two new fields on `AppMotion`, deliberately outside `durations`.** That map is
+`design.md` §2.4's four pairs and `test/ui/tokens_test.dart` asserts its length
+against the specification; folding a fifth in would make an assertion about the
+specification quietly start meaning something else. `skeletonSweep` is 1200ms —
+an order of magnitude slower than `motion.long`, because the four above are
+transitions where a third of a second reads as lag, and this is a loop on a
+surface a person is waiting at, where transition speed strobes. `skeletonDelay`
+is a threshold rather than an animation and nothing reads its curve.
+
+**The blocks are `surface.raised`, not `surface.sunken`.** This app draws depth
+as a surface step rather than a shadow, and the steps run sunken → base →
+raised. The first implementation used `sunken` and the first capture showed
+exactly what that means on a near-black ground: a grid of slightly darker gaps,
+reading as holes in the screen rather than as the cards that were coming.
+
+**Where a skeleton is wrong, and this is the limit of the decision:**
+
+| Surface | Treatment | Why |
+|---|---|---|
+| Till catalog | skeleton | Hive on the device. No network in the path at all. |
+| Sale history | skeleton | Firestore, persisted with an unlimited cache, so a page already read serves from disk. |
+| Sales report — rows | skeleton | The same Firestore read. |
+| Sales report — totals band | skeleton | A `listSalesTotals` callable, which has **no** cache and throws offline. Its failure is already caught into `_SalesTotalsOutcome`, so the page renders and only this band carries it. It is the one region on that screen genuinely waiting on a server, and it is the one that looks like it. |
+| Shift gate, phase `unknown` | **`LoadingState`, unchanged** | Decision 32 made the controller publish its durable record *before* it reads the server, so `unknown` means the device knows nothing and is waiting on the network. What comes next is either a till or a *Start your shift* prompt, and a skeleton of either would be a picture that is wrong half the time. |
+| Every other guarded route | `LoadingState`, unchanged | Server-dependent. A skeleton there would be a picture claiming the screen works offline when it does not — `DESIGN_RULES.md`'s truthfulness rule in a new costume. |
+
+**Empty states outrank all of it.** A read that answered with nothing has
+*answered*: the skeleton is strictly the guard's loading phase, and
+`checkout-catalog-empty`, `sales-report-empty` and `sale-history-empty` take
+over the moment it lands. Three tests assert exactly that, because it is the one
+way this change could make a screen worse than it was.
+
+**Accessibility.** A shimmer says *this is loading* with movement and colour and
+nothing else, which is precisely what §9 forbids leaving to colour alone. Every
+`SkeletonGroup` carries a required `semanticLabel` for the region and excludes
+its blocks from semantics, so a screen reader hears one sentence rather than
+forty announcements of "placeholder". Under `MediaQuery.disableAnimations` the
+blocks render flat, which is §2.4's rule for every animated thing here — and is
+also what keeps `pumpAndSettle` working, since a loop that never ends is a test
+that never finishes.
+
+**Still to do, in its own branch:** the progressive `LoadingState` for the reads
+that genuinely need a server — the caller's sentence, then *this is taking
+longer than usual* at about four seconds, then *check your connection* at about
+twelve. Elapsed-time wording rather than invented phase names: the app knows how
+long it has waited and does not know what a server is doing, so it says the
+first and never the second.
+
+## Decision 36 — the home greeting is one line, and the header trickles down, 2026-08-27
+
+**Three centred lines at the page's full content width read as a ragged stack.**
+The greeting, the performance line and *Select a module to begin.* now narrow at
+each step — `funnelStep` (0.8) applied cumulatively, so the block holds its
+proportions at every width instead of only at the one it was tuned on. One
+constant rather than three chosen widths, for the reason `EmptyState.markSize`
+gives: no source this app has states a heading funnel, and inventing
+`layout.funnelStep` would be inventing a token.
+
+**All three lines sit on one row each**, which is the product owner's follow-up
+of the same day, and it is why they share one function. `fitToOneLine` measures
+a line against the width the funnel gives it and steps down the type roles until
+it fits: `display` → `displayCompact` → `titleLarge` for the greeting, and
+`body.lg` → `body.md` → `caption` for the two below it. Every rung is a role
+this app already sets text in - a `FittedBox` would fit any string by inventing
+a font size, which is hard rule 2's own complaint, since 26.4 is not on §2.2'''s
+scale and nothing else on the page would share it.
+
+**The trend line reserves room for its arrow.** It is not text, so a measurement
+of the sentence cannot see it; without the reservation the line fitted on paper
+and wrapped on screen, stranding the arrow and the percentage on the first
+line'''s right edge. The prose gives way to an ellipsis if the ladder ever runs
+out; the figure never does, because a truncated percentage is a wrong number
+rather than a shortened sentence.
+
+**The greeting never wraps.** A ladder, measured rather than guessed: the full
+sentence, then the first name only, then the smaller display role, and an
+ellipsis only when a single name will not fit a phone. That is the product
+owner's *"first name only if suitable"* — suitable means the full one did not
+fit. `measureTextWidth` is passed the ambient style, which `measure.dart` is
+emphatic about: this app's `ThemeData` carries Material's `letterSpacing` on
+roles the token layer does not set one for, and a string measured without it
+comes out a quarter of a pixel per character too narrow.
+
+**A business name is never cut down this way.** *Good morning, Chill* for *Chill
+Tent Supplies* names nothing a shopkeeper would recognise, so the first-name
+step applies only to a person's name.
+
+**The screen reader still hears the whole greeting.** The `Semantics` wrapper
+carries the full sentence as its label even when the painted text is shortened.
+Shortening for width must not shorten what a blind person is told.
+
+## Decision 37 — a press tints a card, it does not cover it, 2026-08-27
+
+**Reported as "the home grid's click response is a green rectangle on top of
+it", and the second half of the report is the interesting half: *it isn't
+visible online, but offline you can see it*.** Nothing about the press was
+network-dependent. A tap normally pushes a route within a frame or two, so the
+pressed state was gone before anyone read it; a device with no network holds on
+the tap long enough to see what had been there all along.
+
+**The cause is one method returning the wrong kind of colour for the surface
+asking.** `AppActionRole.pressedFill()` prefers `pressedContainer`, which for
+the primary tier is an opaque green — correct for a *button*, whose whole body
+**is** its container, so pressing it swaps that container. A module card is not
+that: it is a glyph in a tinted well, a name and a sentence, and `PressSurface`
+paints its overlay as a `Positioned.fill` **on top**. An opaque overlay there
+hides the entire card.
+
+**The fix names the distinction instead of relying on an absent value.**
+`hoverWash()` and `pressedWash()` always return the translucent form and can
+never return a container; `pressedFill()` is unchanged and stays what a button
+asks for. The home's module cards and menu rows take the wash.
+
+**A test had to be amended, and it is worth saying why.** `tokens_test.dart`
+asserted that the primary tier carried *no* overlay opacities — *"a tier
+carrying both would let a widget pick the wrong one and still render something
+plausible"*. That separation caused the defect it was written to prevent: with
+no wash available, the card had only the container to reach for, and rendering
+something plausible is exactly what it did. §2.1's two rules turn out to be
+about two kinds of **surface**, not two tiers, so the primary tier now carries
+both — at the same 0.08 / 0.12 the other three already state — and what
+disambiguates is the method a widget names, which is a choice with a word on it
+rather than a silent one.
+
+**Every other caller was already correct**, which is why this showed up in one
+place: `secondary` and `tertiary` state no container at all, so their fill and
+their wash are the same colour. Only the primary tier could express the bug.
+
+### The placeholder corner
+
+**A skeleton block is `radius.lg`, rounder than the `radius.md` a real card
+takes**, at the product owner's direction the same day. The mismatch is
+deliberate: a placeholder is not pretending to be a card, it is standing where
+one will be, and a softer corner reads as *unresolved* rather than as a card
+that came out wrong. A radius moves no layout, so nothing shifts when the real
+content replaces it — the corner is the one property of a block that can differ
+from its content for free.
+
+**The till's placeholder tile is the exception and passes `radius.md`**, because
+the frame it draws *is* the tile's card rather than a stand-in for it.

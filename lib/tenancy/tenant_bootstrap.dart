@@ -64,11 +64,25 @@ final class TenantBootstrapResult {
     required this.kind,
     required this.profile,
     required this.selection,
+    this.fromCache = false,
+    this.cachedAt,
   });
 
   final TenantBootstrapKind kind;
   final RootRoutingProfile profile;
   final TenantSelectionDecision selection;
+
+  /// True where the businesses were read from this device rather than from the
+  /// server, because the server could not be reached.
+  ///
+  /// **Carried so the app can say so.** Routing from a cache is the difference
+  /// between a till that opens in a basement and one that does not, but a
+  /// screen presenting remembered state as live state is the untruthfulness
+  /// `DESIGN_RULES.md` rules out. The shell owes the person a sentence.
+  final bool fromCache;
+
+  /// When that copy was written, or null where this came from the server.
+  final DateTime? cachedAt;
 }
 
 final class TenantBootstrapService {
@@ -102,10 +116,11 @@ final class TenantBootstrapService {
     }
 
     final results = await Future.wait<Object?>([
-      _directory.loadAll(),
+      _directory.load(uid: normalizedUid),
       _selectionStore.readLastSelectedTenant(normalizedUid),
     ]);
-    final memberships = results[0]! as List<TenantMembership>;
+    final directory = results[0]! as TenantDirectoryLoad;
+    final memberships = directory.memberships;
     final lastSelectedTenantId = results[1] as String?;
     final selection = resolveTenantSelection(
       memberships: memberships,
@@ -123,6 +138,8 @@ final class TenantBootstrapService {
       kind: kind,
       profile: profile,
       selection: selection,
+      fromCache: directory.fromCache,
+      cachedAt: directory.cachedAt,
     );
   }
 
@@ -138,7 +155,10 @@ final class TenantBootstrapService {
       throw ArgumentError.value(uid, 'uid', 'Cannot be empty.');
     }
     final normalizedTenantId = validateTenantId(tenantId);
-    final membership = await revalidateTenant(normalizedTenantId);
+    final membership = await revalidateTenant(
+      normalizedTenantId,
+      uid: normalizedUid,
+    );
     await _selectionStore.writeLastSelectedTenant(
       normalizedUid,
       normalizedTenantId,
@@ -146,8 +166,11 @@ final class TenantBootstrapService {
     return membership;
   }
 
-  Future<TenantMembership> revalidateTenant(String tenantId) async {
-    final membership = await findAccessibleTenant(tenantId);
+  Future<TenantMembership> revalidateTenant(
+    String tenantId, {
+    String? uid,
+  }) async {
+    final membership = await findAccessibleTenant(tenantId, uid: uid);
     if (membership == null) {
       throw StateError('The selected tenant is no longer accessible.');
     }
@@ -156,9 +179,12 @@ final class TenantBootstrapService {
 
   /// Returns the exact accessible canonical projection, while allowing
   /// directory transport/format failures to remain distinguishable.
-  Future<TenantMembership?> findAccessibleTenant(String tenantId) async {
+  Future<TenantMembership?> findAccessibleTenant(
+    String tenantId, {
+    String? uid,
+  }) async {
     final normalizedTenantId = validateTenantId(tenantId);
-    final memberships = await _directory.loadAll();
+    final memberships = (await _directory.load(uid: uid)).memberships;
     final matches = memberships.where(
       (membership) => membership.tenantId == normalizedTenantId,
     );

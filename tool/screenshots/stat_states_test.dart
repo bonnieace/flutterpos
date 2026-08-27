@@ -83,7 +83,11 @@ class _LineMatrix extends StatelessWidget {
               detail: '10 sales',
               value: 'KES 1800.50',
             ),
-            const StatLine(label: 'Card', detail: '5 sales', value: 'KES 900.00'),
+            const StatLine(
+              label: 'Card',
+              detail: '5 sales',
+              value: 'KES 900.00',
+            ),
             const StatLine(
               label: 'Not recorded',
               detail: '1 sale',

@@ -290,6 +290,7 @@ final class _AmendmentContents extends StatelessWidget {
       // change. The unmoved case says so rather than going silent, because an
       // empty cell here would read as a figure nobody recorded.
       RecordAttribute(
+        kind: RecordValueKind.money,
         label: 'Recorded sales',
         value: record.changedSales
             ? '${_money(record.previousTotalSalesMinor)} to '
@@ -302,6 +303,7 @@ final class _AmendmentContents extends StatelessWidget {
       // word "Transactions" is wider than "1 to 3", and at an equal share the
       // first render ran it into the column beside it.
       RecordAttribute(
+        kind: RecordValueKind.code,
         label: 'Transactions',
         value: record.changedTransactionCount
             ? '${record.previousTransactionCount} to ${record.transactionCount}'
@@ -310,6 +312,7 @@ final class _AmendmentContents extends StatelessWidget {
         flex: 2,
       ),
       RecordAttribute(
+        kind: RecordValueKind.money,
         label: 'Difference',
         value: _difference(record),
         valueKey: ValueKey('shift-amendment-difference-${record.id}'),

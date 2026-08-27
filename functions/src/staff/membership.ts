@@ -34,6 +34,7 @@ import {
   requireSettableMembershipStatus,
   requireStaffRole,
 } from "./validation";
+import {staffSearchFields} from "./search";
 
 interface UpdateStaffUserRequest {
   tenantId?: unknown;
@@ -132,6 +133,7 @@ export const updateStaffUser = onCall<
       name,
       phone,
       role,
+      ...staffSearchFields(name, currentStaff.email ?? ""),
       updatedAt: FieldValue.serverTimestamp(),
     });
     transaction.set(targetMirrorRef, membershipMirrorData(

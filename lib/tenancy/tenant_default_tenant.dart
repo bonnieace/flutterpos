@@ -5,6 +5,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
@@ -238,9 +240,10 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
     }
     if (!mounted || !_isCurrent(controller, submittedSession)) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${widget.membership.tenantName} is now default.'),
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed(
+        '${widget.membership.tenantName} is now default.',
       ),
     );
     widget.onSuccess();
@@ -264,12 +267,7 @@ final class _TenantDefaultFormState extends State<TenantDefaultForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Make ${widget.membership.tenantName} your default business?',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Make ${widget.membership.tenantName} your default business?'),
         SizedBox(height: tokens.spacing.s8),
         const Text(
           'This business will be preferred when no valid device selection exists.',

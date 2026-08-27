@@ -201,14 +201,17 @@ final class AppButton extends StatelessWidget {
     final disabled = onPressed == null;
 
     // §2.1's disabled row states two different things for two kinds of tier:
-    // the primary tier takes a container, and the three overlay tiers keep a
-    // transparent one and change only their label and border. `container` is
-    // already transparent on those three, so reading the tier's own container
-    // is what keeps the rule in one place.
-    final container = disabled
-        ? (tier == AppButtonTier.primary
-              ? actions.disabledContainer
-              : role.container)
+    // a **filled** tier takes the disabled container, and a tier that paints
+    // no container keeps its transparent one and changes only its label and
+    // border.
+    //
+    // **The test is the tier's own container, not its name**, and that is the
+    // 2026-08-23 change: the secondary tier became filled when it was
+    // repointed onto the design's `bg-surface-elevated border
+    // border-outline-variant`, and a rule written as `tier == primary` would
+    // have left one disabled button painted in its enabled surface.
+    final container = disabled && role.container != Colors.transparent
+        ? actions.disabledContainer
         : role.container;
     final labelColor = disabled ? actions.disabledLabel : role.label;
     final borderColor = role.border == null
@@ -217,14 +220,12 @@ final class AppButton extends StatelessWidget {
 
     final hasIcon = icon != null;
     final padding = size.horizontalPadding(tokens.spacing, hasIcon: hasIcon);
-    // **`radius.pill` since 2026-08-23, and it is the product owner's
-    // direction rather than a reading of the design.** Stated plainly
-    // because the evidence below is real and points the other way: the
-    // Profound Verdant export renders square-cornered controls throughout,
-    // and the note it replaces was right about that. The owner asked for
-    // the pill back; a shape is theirs to choose, and `OPEN_QUESTIONS.md`
-    // decision 26 records the override with the evidence it overrides.
-    final radius = BorderRadius.circular(tokens.radius.pill);
+    // **`radius.md`, which is the design's own `.btn-primary` rule.** That
+    // class reads `border-radius: theme('borderRadius.xl')`, and `xl` is
+    // `0.5rem` in the served Tailwind config of every exported screen - 8, not
+    // a pill. The 2026-08-23 pill override is withdrawn at the product owner's
+    // direction: the instruction is now that the Stitch render is the target.
+    final radius = BorderRadius.circular(tokens.radius.md);
 
     final labelStyle = tokens.typography.labelLarge.copyWith(color: labelColor);
 
@@ -323,6 +324,160 @@ final class AppButton extends StatelessWidget {
         excludeSemantics: true,
         fillWidth: expand,
         child: surface,
+      ),
+    );
+  }
+}
+
+/// A horizontal group of actions that never changes into a vertical stack.
+///
+/// Action order and tier are part of the meaning of a form. Moving the second
+/// action underneath the first on a narrow surface makes the same decision
+/// read differently by device, and is especially misleading when one of the
+/// two actions is destructive. This group keeps one visual sentence: safe
+/// action first, committing or destructive action last.
+final class AppActionRow extends StatelessWidget {
+  const AppActionRow({
+    super.key,
+    required this.actions,
+    this.alignment = MainAxisAlignment.end,
+    this.expandActions = false,
+  });
+
+  final List<Widget> actions;
+  final MainAxisAlignment alignment;
+
+  /// Gives every action an equal share of the available width.
+  ///
+  /// Use this for compact toolbars and page footers. Dialogs and inline forms
+  /// normally leave it false so short actions retain their natural width, but
+  /// can still contract and ellipsize rather than wrap onto another row.
+  final bool expandActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Row(
+      mainAxisSize: MainAxisSize.max,
+      mainAxisAlignment: alignment,
+      children: <Widget>[
+        for (final (index, action) in actions.indexed) ...<Widget>[
+          if (index > 0) SizedBox(width: tokens.spacing.s12),
+          if (expandActions)
+            Expanded(child: action)
+          else
+            Flexible(fit: FlexFit.loose, child: action),
+        ],
+      ],
+    );
+  }
+}
+
+/// A control that is a glyph and a name nobody sees.
+///
+/// **§9 asks an icon-only control for a semantic label, not a visible word**,
+/// and that distinction is the whole reason this exists. A cart line's removal
+/// was a labelled `destructive` `AppButton` on the argument that a glyph alone
+/// needs a word - which is true of the *announcement* and was applied to the
+/// paint. The result was a red bordered box the width of the product name
+/// beside it, on every line of the cart, which is the loudest thing on the
+/// busiest screen in the app.
+///
+/// The design draws it the other way: `w-11 h-11 ... text-error rounded-full
+/// border border-error border-opacity-30`, a square the size of a thumb with
+/// the tier's colour on the glyph and its 30% tint on the edge. [semanticLabel]
+/// is required, so the control is never unnamed to a screen reader.
+///
+/// Every state is [PressSurface]'s, exactly as [AppButton]'s are, and the
+/// square is [AppButtonSize.lg] - §9's target.
+final class AppIconButton extends StatelessWidget {
+  const AppIconButton({
+    super.key,
+    required this.icon,
+    required this.semanticLabel,
+    required this.onPressed,
+    this.tier = AppButtonTier.secondary,
+    this.bordered = true,
+    this.loading = false,
+  });
+
+  final IconData icon;
+
+  /// §9: "icon-only controls - required semantic label". Not a tooltip: a
+  /// tooltip is a hover, and a thumb does not hover.
+  final String semanticLabel;
+
+  final VoidCallback? onPressed;
+
+  final AppButtonTier tier;
+
+  /// Whether the tier's edge is painted. Off for a glyph sitting inside
+  /// another bordered surface, where a second edge reads as a seam.
+  final bool bordered;
+
+  /// Holds the control's tier while replacing its glyph with a spinner.
+  final bool loading;
+
+  /// The painted square, which is also the tap target.
+  static double get size => AppButtonSize.lg.height;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final actions = tokens.colors.action;
+    final role = tier.of(actions);
+    final disabled = onPressed == null;
+    final enabled = onPressed != null && !loading;
+    final radius = BorderRadius.circular(tokens.radius.md);
+
+    // The tier's own edge at the 30% the design uses on a destructive glyph,
+    // rather than the full-strength border a labelled button carries: the word
+    // is gone, so the box should not be shouting in its place.
+    final Color? edge = !bordered
+        ? null
+        : disabled
+        ? actions.disabledBorder
+        : tier == AppButtonTier.destructive
+        ? tokens.colors.status.problem.border
+        : tokens.colors.surface.borderStrong;
+
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: enabled,
+      label: loading ? '$semanticLabel, working' : semanticLabel,
+      onTap: enabled ? onPressed : null,
+      excludeSemantics: true,
+      child: PressSurface(
+        borderRadius: radius,
+        onPressed: enabled ? onPressed : null,
+        hoverOverlay: role.hoverFill(),
+        pressedOverlay: role.pressedFill(),
+        excludeSemantics: true,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            border: edge == null ? null : Border.all(color: edge),
+          ),
+          child: SizedBox.square(
+            dimension: size,
+            child: Center(
+              child: loading
+                  ? SizedBox.square(
+                      dimension: actions.loadingIndicatorSize,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(role.label),
+                      ),
+                    )
+                  : Icon(
+                      icon,
+                      size: AppButton.iconSize,
+                      color: disabled ? actions.disabledLabel : role.label,
+                    ),
+            ),
+          ),
+        ),
       ),
     );
   }

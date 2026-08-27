@@ -158,9 +158,14 @@ final class PageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     final screenWidth = MediaQuery.sizeOf(context).width;
+    // **`display.compact` below the boundary, not `title.lg`, since
+    // 2026-08-23.** The design names two screen-title sizes and they are
+    // `headline-lg` 32 and `headline-lg-mobile` 28 - it has no 22 for a page
+    // title, and every mobile composition in the export draws the screen's
+    // name at 28. `title.lg` is the *section* role and stays one.
     final titleStyle = showsDisplayTitle(screenWidth)
         ? tokens.typography.display
-        : tokens.typography.titleLarge;
+        : tokens.typography.displayCompact;
     final words = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -249,6 +254,7 @@ final class AppScaffold extends StatelessWidget {
     this.subtitle,
     this.primaryAction,
     this.actions = const <Widget>[],
+    this.toolbarTitle,
     this.automaticallyImplyLeading = true,
     this.navigation = const <HomeDestination>[],
   });
@@ -290,6 +296,16 @@ final class AppScaffold extends StatelessWidget {
   /// it is beside the title today only because the toolbar is where a Material
   /// app puts everything. Moving it into the header would promote it.
   final List<Widget> actions;
+
+  /// A brand lockup in the toolbar, for a route that has no way back.
+  ///
+  /// **Not the screen's title, and it is the one thing that may sit here.**
+  /// §7's "title appears once" moved the page title into [PageHeader] and this
+  /// does not undo that: the export's top bar carries the *product* name, in
+  /// the accent, beside its mark - on the landing route, which is the only
+  /// route with no back arrow to fill the slot. Every other call site leaves
+  /// it null and gets the bare toolbar §7 describes.
+  final Widget? toolbarTitle;
 
   /// Forwarded to [AppBar.automaticallyImplyLeading] unchanged.
   final bool automaticallyImplyLeading;
@@ -338,31 +354,66 @@ final class AppScaffold extends StatelessWidget {
   /// reach it - the figure is still 20 and every other body already used it.
   static double horizontalInset(AppSpacing spacing) => spacing.s20;
 
+  /// The page column §4.2's maximum is applied to.
+  ///
+  /// **A testing seam, and it is one because the thing it names stopped being
+  /// findable.** A test measured `PageHeader` to learn how wide the page came
+  /// out; the header block is gone and the column it sat in has no type of its
+  /// own, so the frame names it rather than a test guessing at a `Column`.
+  static const Key pageKey = ValueKey('app-scaffold-page');
+
+  /// How tall the bar is when a route names what it is scoped to.
+  ///
+  /// The two lines the bar actually draws, plus `space.8` above and below.
+  ///
+  /// **Measured, not budgeted.** The title renders 31 high and the subtitle 21
+  /// with no gap between them - 52 - and the 80 this used to be centred them
+  /// with 14 of empty bar underneath the subtitle, on top of the gap the page
+  /// column already spends and the 20 every body pads itself with. Exposed so
+  /// a test can ask the question rather than asserting a pixel height and
+  /// hoping the two agree.
+  static const double toolbarHeightWithSubtitle = 68;
+
   @override
   Widget build(BuildContext context) {
     // `componentOf`, not `of`: a route is pumped by widget tests that build
     // their own bare `ThemeData`, and crashing in all of them buys nothing. See
     // the accessor's own note for why the fallback cannot shrink a tap target.
     final tokens = AppTokens.componentOf(context);
-    final inset = horizontalInset(tokens.spacing);
     // The surface a person is looking at, not this frame's box - §4.1's ranges
     // and `PageHeader.showsDisplayTitle`'s note say the same thing, and the
     // menu is resolved against the same width the header's role is.
     final screenWidth = MediaQuery.sizeOf(context).width;
+    // **The screen's name is in the toolbar as of 2026-08-23, and the header
+    // block is gone.**
+    //
+    // §7 moved the title *out* of the toolbar on the grounds that §2.2 gives a
+    // screen title `display` 32 and no 56-high bar can hold one. That was a
+    // faithful reading of a document, and the design it was written for is not
+    // the design this app is built to: the export's own mobile header is
+    // `<h1 class="text-section-title text-on-surface">This sale</h1>` inside a
+    // 64-high bar, beside the back arrow. 22 fits, and §2.2's 32 is what the
+    // *desktop* compositions use for a page that has room for it.
+    //
+    // **What it bought is the whole reason it moved back.** The frame spent 20
+    // above the title, a 33-pixel line, a subtitle, and a section gap - about
+    // 130 logical pixels of every route, before a single record. On a 360
+    // handset that is a fifth of the screen saying which screen you are
+    // already on. The product owner asked for it back on 2026-08-23; the
+    // toolbar was already drawing a bar of chrome and now it says something.
+    //
+    // §7's "title appears once" is unchanged and still asserted: it appears in
+    // the toolbar, and nowhere else.
     final page = Column(
+      key: pageKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Padding(
-          padding: EdgeInsets.fromLTRB(inset, tokens.spacing.s20, inset, 0),
-          child: PageHeader(
-            title: title,
-            subtitle: subtitle,
-            primaryAction: primaryAction,
-          ),
-        ),
-        // §3's own row for the gap between one section of a page and the
-        // next. The header and the content are two sections.
-        SizedBox(height: tokens.density.sectionGap),
+        // **`space.8`, and it is the only gap this column spends.** Every body
+        // in the tree pads itself - `horizontalInset`'s note names the 20 the
+        // list screens use on all four sides - so a `space.16` here was a
+        // second opinion stacked on a first, and the two of them put 36 pixels
+        // of nothing between the toolbar and the first row of a page.
+        SizedBox(height: tokens.spacing.s8),
         Expanded(child: body),
       ],
     );
@@ -388,13 +439,79 @@ final class AppScaffold extends StatelessWidget {
               child: page,
             ),
           );
+    // **The destinations are a drawer below `expanded` and a column above
+    // it**, which is the design's own arrangement: its mobile top bar carries
+    // a `menu` button and its desktop draws the sidebar permanently. Building
+    // the drawer is what puts the hamburger in the toolbar - `Scaffold` adds
+    // it as the leading control whenever there is a drawer and no way back -
+    // so a route with no destinations gets neither, unchanged.
+    final drawn = navigation.isEmpty
+        ? null
+        : HomeNavigation.showsMenu(screenWidth)
+        ? _NavigationColumn(destinations: navigation, tokens: tokens)
+        : null;
     return Scaffold(
       backgroundColor: tokens.colors.surface.base,
+      drawer: navigation.isEmpty || HomeNavigation.showsMenu(screenWidth)
+          ? null
+          : _NavigationDrawer(destinations: navigation, tokens: tokens),
       appBar: AppBar(
         automaticallyImplyLeading: automaticallyImplyLeading,
-        actions: actions.isEmpty ? null : actions,
+        // **Taller when there is a subtitle**, which is the export's own
+        // header: a title and a small second line naming what the page is
+        // scoped to. Six routes carry one - which reconciliation run, which
+        // shift, which receipt - and it is the kind of fact a person needs
+        // before they read a single row.
+        toolbarHeight: subtitle == null ? null : toolbarHeightWithSubtitle,
+        // **No middle spacing, which is 32 logical pixels of a 360 bar.**
+        // `NavigationToolbar` reserves 16 on each side of the title by
+        // default; between a hamburger, a sync glyph and a way out there are
+        // 144 pixels of control on this route already, and the 32 was the
+        // difference between `Dev Corner Shop` and `Dev Corner S…` on a real
+        // handset. The leading control's own 48 square is the gap.
+        titleSpacing: 0,
+        // `section-title`, which is the role the export's own header uses and
+        // the largest §2.2 has that fits a toolbar. Never wrapped: a title on
+        // two lines in a 56-high bar pushes the page down for a word, so a
+        // long one ellipsises.
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Semantics(
+              header: true,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: tokens.typography.titleLarge.copyWith(
+                  color: tokens.colors.text.primary,
+                ),
+              ),
+            ),
+            if (subtitle case final line?)
+              Text(
+                line,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: tokens.typography.bodyMedium.copyWith(
+                  color: tokens.colors.text.secondary,
+                ),
+              ),
+          ],
+        ),
+        // **The one action a page exists for goes at the trailing edge.** It
+        // sat beside the title in the header block; the block is gone, and the
+        // trailing edge of the bar is where the export puts a page's own
+        // control.
+        actions: actions.isEmpty && primaryAction == null
+            ? null
+            : <Widget>[
+                ...actions,
+                if (primaryAction case final action?) action,
+              ],
       ),
-      body: navigation.isEmpty || !HomeNavigation.showsMenu(screenWidth)
+      body: drawn == null
           ? content
           : Row(
               // Both columns run the full height of the body. A menu that
@@ -402,7 +519,7 @@ final class AppScaffold extends StatelessWidget {
               // background showing through a column of chrome.
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                _NavigationColumn(destinations: navigation, tokens: tokens),
+                drawn,
                 // **The maximum is measured against the page, and the page is
                 // what is left after the menu.** §4.2 caps content, the menu is
                 // not content, and centring 1200 in the whole window would push
@@ -445,6 +562,167 @@ final class _NavigationColumn extends StatelessWidget {
       width: HomeNavigation.menuWidth,
       child: SingleChildScrollView(
         child: HomeNavigation.menu(destinations: destinations),
+      ),
+    ),
+  );
+}
+
+/// The product's mark and name, for [AppScaffold.toolbarTitle].
+///
+/// The export's top-bar lockup: a bordered 32-square tile carrying the mark,
+/// then `Chilltent POS` at `body.lg` weight 700 in the accent. Every value is
+/// a role - `surface.field` behind the tile, `border.strong` around it,
+/// `radius.sm` on its corner, and `action.primary.container` for both the
+/// glyph and the name.
+///
+/// **The name is a constant and not a token**, which is the one thing here
+/// that could be argued with: it is the product's name rather than a business
+/// name, so it is not read from a tenant document and there is nothing for it
+/// to vary with.
+final class AppBrandLockup extends StatelessWidget {
+  const AppBrandLockup({super.key});
+
+  /// The export's `w-8 h-8` mark tile.
+  static const double markSize = 32;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    final accent = tokens.colors.action.primary.container;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: markSize,
+          height: markSize,
+          decoration: BoxDecoration(
+            color: tokens.colors.surface.field,
+            borderRadius: BorderRadius.circular(tokens.radius.sm),
+            border: Border.all(color: tokens.colors.surface.borderStrong),
+          ),
+          child: Icon(Icons.storefront, size: 18, color: accent),
+        ),
+        SizedBox(width: tokens.spacing.s8),
+        // **Flexible, because the toolbar shares its middle slot.** A title
+        // box is offered whatever the leading and trailing slots leave, and on
+        // a phone with two actions beside it that is under 210 - narrower than
+        // this lockup measures in the test face. It never wraps: a product
+        // name on two lines in a 56-high toolbar is worse than an ellipsis.
+        Flexible(
+          child: Text(
+            'Chilltent POS',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.typography.bodyLarge.copyWith(
+              color: accent,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A section's name inside a page. The export's `h2`.
+///
+/// **`title.lg`, which is the design's `section-title`, and it replaced 35
+/// inline copies of `title.md`.** Every exported composition names a section
+/// with `font-section-title text-section-title text-on-surface` - 22 / 600 -
+/// and the app was drawing them at 18 / 500, which put a section's name a
+/// half-step above the body it introduced instead of a full one. The copies
+/// were identical, so this is one value rather than thirty-five.
+///
+/// **Not [PageHeader], and the two are not interchangeable.** A page has one
+/// title, at `display` or `display.compact`, and §7 says it appears once. A
+/// section is a division *inside* that page, and a screen may have several.
+final class SectionHeading extends StatelessWidget {
+  const SectionHeading(this.text, {super.key});
+
+  /// The section's name, in the shopkeeper's words. Sentence case, §8 rule 7.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppTokens.componentOf(context);
+    return Semantics(
+      header: true,
+      child: Text(
+        text,
+        style: tokens.typography.titleLarge.copyWith(
+          color: tokens.colors.text.primary,
+        ),
+      ),
+    );
+  }
+}
+
+/// The destinations as a drawer, below `expanded`.
+///
+/// **A `Drawer` rather than a panel of this app's own**, for the reason
+/// `AppScaffold` wraps `AppBar` rather than redrawing one: the framework owns
+/// the scrim, the edge drag, the focus trap, the escape handling and the
+/// route that closes it. What this file owns is what the panel is made of.
+///
+/// **It closes itself before it pushes.** A destination's own callback is a
+/// `Navigator.push`, so without this the drawer would still be open underneath
+/// the route that just arrived and would be there again on the way back.
+/// `Navigator.pop` on the drawer's own route is not a routing *condition* -
+/// nothing decides differently, the panel simply shuts - which is what keeps
+/// it inside `claude.md` hard rule 1.
+final class _NavigationDrawer extends StatelessWidget {
+  const _NavigationDrawer({required this.destinations, required this.tokens});
+
+  final List<HomeDestination> destinations;
+  final AppTokens tokens;
+
+  @override
+  Widget build(BuildContext context) => Drawer(
+    backgroundColor: tokens.colors.surface.base,
+    shape: const RoundedRectangleBorder(),
+    width: HomeNavigation.menuWidth,
+    child: SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              tokens.spacing.s16,
+              tokens.spacing.s24,
+              tokens.spacing.s16,
+              tokens.spacing.s24,
+            ),
+            child: const AppBrandLockup(),
+          ),
+          Divider(height: 1, color: tokens.colors.surface.borderSubtle),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: tokens.spacing.s8,
+                vertical: tokens.spacing.s16,
+              ),
+              child: HomeNavigation.drawer(
+                destinations: <HomeDestination>[
+                  for (final destination in destinations)
+                    HomeDestination(
+                      destinationKey: destination.destinationKey,
+                      label: destination.label,
+                      icon: destination.icon,
+                      status: destination.status,
+                      isPrimary: destination.isPrimary,
+                      group: destination.group,
+                      onPressed: destination.onPressed == null
+                          ? null
+                          : () {
+                              Navigator.of(context).pop();
+                              destination.onPressed!();
+                            },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     ),
   );

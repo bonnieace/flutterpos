@@ -12,9 +12,7 @@ void main() {
       final callable = _Callable(_response());
       final gateway = _gateway(callable);
 
-      final query = gateway.createQuery(
-        period: TenantSalesPeriod.today,
-      );
+      final query = gateway.createQuery(period: TenantSalesPeriod.today);
       await gateway.load(query);
 
       // The Africa/Nairobi business day is the same one the checkout stamps on
@@ -36,12 +34,49 @@ void main() {
         TenantSalesPeriod.last30Days: '2026-07-02',
         TenantSalesPeriod.last90Days: '2026-05-03',
       }.entries) {
-        final query = gateway.createQuery(
-          period: entry.key,
-        );
+        final query = gateway.createQuery(period: entry.key);
         expect(query.startDate, entry.value, reason: entry.key.name);
         expect(query.endDate, '2026-07-31', reason: entry.key.name);
       }
+    });
+
+    test(
+      'an explicitly selected business date is an exact daily request',
+      () async {
+        final callable = _Callable(_response());
+        final gateway = _gateway(callable);
+
+        final query = gateway.createBusinessDateQuery(
+          businessDate: '2026-07-15',
+          soldById: 'cashier-b',
+        );
+        await gateway.load(query);
+
+        expect(query.period, TenantSalesPeriod.today);
+        expect(query.startDate, '2026-07-15');
+        expect(query.endDate, '2026-07-15');
+        expect(query.scope, TenantSalesScope.oneMember);
+        expect(callable.payloads.single, <String, Object?>{
+          'tenantId': 'tenant-a',
+          'previousStartDate': '2026-07-15',
+          'previousEndDate': '2026-07-15',
+          'soldById': 'cashier-b',
+        });
+      },
+    );
+
+    test('malformed and future explicit dates are refused locally', () {
+      final callable = _Callable(_response());
+      final gateway = _gateway(callable);
+
+      for (final date in <String>['2026-02-31', '2026-08-01']) {
+        expect(
+          () => gateway.createBusinessDateQuery(businessDate: date),
+          _failure(TenantSalesTotalsFailure.invalidRequest),
+          reason: date,
+        );
+      }
+      expect(callable.payloads, isEmpty);
     });
 
     test('naming the signed-in member is recognised as my own sales', () async {
@@ -117,9 +152,7 @@ void main() {
       final gateway = _gateway(_Callable(_response()));
 
       final payload = gateway
-          .createQuery(
-            period: TenantSalesPeriod.today,
-          )
+          .createQuery(period: TenantSalesPeriod.today)
           .toPayload();
 
       expect(payload.containsKey('categoryId'), isFalse);
@@ -193,9 +226,7 @@ void main() {
     test('a query from another business is never sent', () async {
       final callable = _Callable(_response());
       final other = _gateway(callable, tenantId: 'tenant-b');
-      final query = other.createQuery(
-        period: TenantSalesPeriod.today,
-      );
+      final query = other.createQuery(period: TenantSalesPeriod.today);
 
       await expectLater(_gateway(callable).load(query), throwsStateError);
       expect(callable.payloads, isEmpty);
@@ -213,10 +244,8 @@ void main() {
       );
     }
 
-    Future<void> expectRefused(Object? response) => expectLater(
-      load(response),
-      throwsA(isA<FormatException>()),
-    );
+    Future<void> expectRefused(Object? response) =>
+        expectLater(load(response), throwsA(isA<FormatException>()));
 
     test('totals are reported exactly as the server added them', () async {
       final totals = await load(_response());
@@ -303,27 +332,30 @@ void main() {
       expect(totals.profit, -12.5);
     });
 
-    test('the period judges its own profit, and the decoder does not', () async {
-      final complete = await load(
-        _response(
-          overrides: {
-            'sales': 4820.0,
-            'profit': 1205.0,
-            'incompleteCostLineCount': 0,
-          },
-        ),
-      );
-      expect(complete.profitReport.basis, TenantProfitBasis.complete);
-      expect(complete.profitReport.marginPercent, closeTo(25, 0.0001));
+    test(
+      'the period judges its own profit, and the decoder does not',
+      () async {
+        final complete = await load(
+          _response(
+            overrides: {
+              'sales': 4820.0,
+              'profit': 1205.0,
+              'incompleteCostLineCount': 0,
+            },
+          ),
+        );
+        expect(complete.profitReport.basis, TenantProfitBasis.complete);
+        expect(complete.profitReport.marginPercent, closeTo(25, 0.0001));
 
-      // The default answer is the shape every period before products carried
-      // costs produces: nothing was subtracted, so profit equals the takings.
-      // It is decoded, then refused as a figure - never as a response.
-      final incomplete = await load(_response());
-      expect(incomplete.profit, incomplete.sales);
-      expect(incomplete.profitReport.basis, TenantProfitBasis.incomplete);
-      expect(incomplete.profitReport.marginPercent, isNull);
-    });
+        // The default answer is the shape every period before products carried
+        // costs produces: nothing was subtracted, so profit equals the takings.
+        // It is decoded, then refused as a figure - never as a response.
+        final incomplete = await load(_response());
+        expect(incomplete.profit, incomplete.sales);
+        expect(incomplete.profitReport.basis, TenantProfitBasis.incomplete);
+        expect(incomplete.profitReport.marginPercent, isNull);
+      },
+    );
 
     test('an empty period is a real answer, not a failure', () async {
       final totals = await load(
@@ -431,8 +463,10 @@ void main() {
         _response(byTender: _byTender(cashSales: 2000.24, cardSales: 900.01)),
       );
 
-      expect(totals.tenderBreakdown!.recorded[CheckoutTender.cash]!.sales,
-          2000.24);
+      expect(
+        totals.tenderBreakdown!.recorded[CheckoutTender.cash]!.sales,
+        2000.24,
+      );
     });
 
     test('a bucket set that is not the expected five is refused', () async {
@@ -451,10 +485,7 @@ void main() {
       );
       await expectRefused(
         _byTender()
-          ..['cash'] = <String, Object?>{
-            'sales': -1,
-            'transactions': 20,
-          },
+          ..['cash'] = <String, Object?>{'sales': -1, 'transactions': 20},
       );
       await expectRefused(
         _byTender()
@@ -497,34 +528,39 @@ void main() {
       expect(breakdown.unrecognised.isEmpty, isTrue);
     });
 
-    test('a category answer is checked against its own narrower total',
-        () async {
-      // With a category the server counts fewer sales than it read, and the
-      // split must add up to what it counted rather than to what it scanned.
-      final totals = await load(
-        _response(
-          scanned: 37,
-          overrides: {'transactions': 12, 'sales': 300},
-          byTender: _byTender(
-            cashSales: 200,
-            cashTransactions: 8,
-            mpesaSales: 100,
-            mpesaTransactions: 4,
-            cardSales: 0,
-            cardTransactions: 0,
-            unrecordedSales: 0,
-            unrecordedTransactions: 0,
-            otherSales: 0,
-            otherTransactions: 0,
+    test(
+      'a category answer is checked against its own narrower total',
+      () async {
+        // With a category the server counts fewer sales than it read, and the
+        // split must add up to what it counted rather than to what it scanned.
+        final totals = await load(
+          _response(
+            scanned: 37,
+            overrides: {'transactions': 12, 'sales': 300},
+            byTender: _byTender(
+              cashSales: 200,
+              cashTransactions: 8,
+              mpesaSales: 100,
+              mpesaTransactions: 4,
+              cardSales: 0,
+              cardTransactions: 0,
+              unrecordedSales: 0,
+              unrecordedTransactions: 0,
+              otherSales: 0,
+              otherTransactions: 0,
+            ),
           ),
-        ),
-        categoryId: 'drinks',
-      );
+          categoryId: 'drinks',
+        );
 
-      expect(totals.tenderBreakdown!.recorded[CheckoutTender.cash]!.sales, 200);
-      expect(totals.scannedTransactions, 37);
-      expect(totals.transactions, 12);
-    });
+        expect(
+          totals.tenderBreakdown!.recorded[CheckoutTender.cash]!.sales,
+          200,
+        );
+        expect(totals.scannedTransactions, 37);
+        expect(totals.transactions, 12);
+      },
+    );
   });
 
   group('classifying a refusal', () {
@@ -553,11 +589,7 @@ void main() {
         );
 
         await expectLater(
-          gateway.load(
-            gateway.createQuery(
-              period: TenantSalesPeriod.today,
-            ),
-          ),
+          gateway.load(gateway.createQuery(period: TenantSalesPeriod.today)),
           _failure(entry.value),
         );
       });
@@ -567,11 +599,7 @@ void main() {
       for (final error in <Object>[TimeoutException('slow'), StateError('x')]) {
         final gateway = _gateway(_Callable.failing(error));
         await expectLater(
-          gateway.load(
-            gateway.createQuery(
-              period: TenantSalesPeriod.today,
-            ),
-          ),
+          gateway.load(gateway.createQuery(period: TenantSalesPeriod.today)),
           _failure(TenantSalesTotalsFailure.unavailable),
         );
       }

@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import '../ui/record_list.dart';
 import '../ui/scaffold.dart';
 import '../ui/states.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'checkout_print_failures.dart';
@@ -64,6 +65,19 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
   String? _sending;
   AppNotice? _notice;
 
+  /// Reports one write outcome, on the surface its kind belongs to.
+  ///
+  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
+  /// that names a next step stays where it was drawn.
+  void _report(AppNotice notice) {
+    if (noticeIsTransient(notice)) {
+      showAppSnackBar(context, notice);
+      return;
+    }
+    setState(() => _notice = notice);
+  }
+
+
   /// **Read on every build rather than held in a field.** The queue is a
   /// durable box that the sale path and the recovery pass both write to, so a
   /// cached list would go stale the moment a sale was rung up behind this
@@ -80,11 +94,9 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
     try {
       final failure = await onRetry(job.receiptNumber);
       if (!mounted) return;
-      setState(
-        () => _notice = failure == null
+      _report(failure == null
             ? PrinterFailureNotice.sent
-            : PrinterFailureNotice.of(failure),
-      );
+            : PrinterFailureNotice.of(failure));
     } finally {
       if (mounted) setState(() => _sending = null);
     }
@@ -193,6 +205,7 @@ class _TenantPrintQueuePanelState extends State<TenantPrintQueuePanel> {
           valueKey: ValueKey('print-queue-endpoint-${job.receiptNumber}'),
         ),
         RecordAttribute(
+          kind: RecordValueKind.code,
           label: 'Tries',
           value: '${job.attemptCount}',
           // Dropped from the narrow form: a phone has room for the receipt,

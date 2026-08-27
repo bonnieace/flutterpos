@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
@@ -353,9 +355,10 @@ final class _TenantStaffInvitationCancellationFormState
       return;
     }
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Invitation for ${widget.target.email} cancelled.'),
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed(
+        'Invitation for ${widget.target.email} cancelled.',
       ),
     );
     widget.onSuccess();
@@ -386,12 +389,7 @@ final class _TenantStaffInvitationCancellationFormState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Cancel invitation for ${widget.target.displayName}?',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Cancel invitation for ${widget.target.displayName}?'),
         SizedBox(height: tokens.spacing.s8),
         const Text(
           'This removes the pending membership and invalidates its invitation.',
@@ -421,14 +419,9 @@ final class _TenantStaffInvitationCancellationFormState
           ),
         ],
         SizedBox(height: tokens.spacing.s12),
-        // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
-        // form is laid out inside a record now, and a record at §4.1's `medium`
-        // band is half a page wide.
-        Wrap(
-          alignment: WrapAlignment.end,
-          spacing: AppTokens.componentOf(context).spacing.s8,
-          runSpacing: AppTokens.componentOf(context).spacing.s8,
-          children: [
+        // The destructive choice stays beside its safe alternative.
+        AppActionRow(
+          actions: <Widget>[
             AppButton(
               key: const ValueKey('cancel-staff-invitation-dismiss'),
               label: 'Keep invitation',

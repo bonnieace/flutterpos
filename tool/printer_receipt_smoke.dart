@@ -22,6 +22,8 @@
 ///   PRINTER_COLUMNS  32 (58mm) or 48 (80mm); default 32
 ///   PRINTER_CUTTER   true|false; default false, which feeds instead of cutting
 ///   PRINTER_BUSINESS default 'Mũgumo Stores', whose macron is the point
+///   PRINTER_LONG_NAME the third line's product name; default is long enough to
+///                     wrap on both rolls. Set it to try a width by hand.
 library;
 
 import 'dart:io';
@@ -45,6 +47,13 @@ void main() {
   final hasCutter = Platform.environment['PRINTER_CUTTER'] == 'true';
   final businessName =
       Platform.environment['PRINTER_BUSINESS'] ?? 'Mũgumo Stores';
+  // **Long enough to wrap on the wider roll, not just the narrow one.** The
+  // name column is the roll less `KES 899.00` less a space: 21 characters at 32
+  // columns and 37 at 48. A name that only exceeds 21 proves nothing on an
+  // 80mm printer, which is how the first two of these went out.
+  final longName =
+      Platform.environment['PRINTER_LONG_NAME'] ??
+      'Sunflower cooking oil 5 litre refined and bottled for household use';
 
   test('sends one real receipt to a real printer', () async {
     if (host == null || host.isEmpty) {
@@ -63,7 +72,7 @@ void main() {
       configuration: configuration,
     );
     final bytes = body.build(
-      _sale(),
+      _sale(longName: longName),
       businessName: businessName,
       servedBy: 'Wanjiku',
     );
@@ -93,7 +102,7 @@ void main() {
 
 /// The same fixture `checkout_receipt_body_test.dart` formats against, so what
 /// prints here is comparable to what that suite asserts on.
-CheckoutSalePayload _sale() {
+CheckoutSalePayload _sale({required String longName}) {
   const deviceId = 'dev-0123456789abcdef0123456789abcdef';
   final lines = <Object?>[
     <String, Object?>{
@@ -108,8 +117,19 @@ CheckoutSalePayload _sale() {
       'quantity': 1,
       'unitPriceMinor': 13500,
     },
+    // **A name too long for the name column on either roll**, so one sheet of
+    // paper shows both cases. The name column is the roll less `KES 899.00`
+    // less a space: 21 characters at 32 columns and 37 at 48. The description
+    // is 40, so it wraps on both - inside its own column, with the amount on
+    // the row the wrap ends on, and the name never truncated.
+    <String, Object?>{
+      'productId': 'product-c',
+      'name': longName,
+      'quantity': 1,
+      'unitPriceMinor': 89900,
+    },
   ];
-  const subtotalMinor = 2 * 13550 + 13500;
+  const subtotalMinor = 2 * 13550 + 13500 + 89900;
   const discountMinor = 2000;
   final payload = <String, Object?>{
     'schemaVersion': checkoutSalePayloadSchemaVersion,

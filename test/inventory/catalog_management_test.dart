@@ -74,6 +74,11 @@ void main() {
         'price': 19.99,
         'quantity': 0,
         'categoryId': 'cat-bakery',
+        'searchName': 'white bread loaf',
+        'searchPrefixes': tenantProductSearchPrefixes(
+          name: 'White bread loaf',
+          sku: '6161100000019',
+        ),
         'createdBy': 'user-a',
       });
     });
@@ -509,7 +514,13 @@ void main() {
       // A refusal can name a field this correction did not touch, because the
       // callable validates the resulting document. Offering all five at once is
       // what makes "name every broken field in one request" possible at all.
-      expect(intent.fields, TenantProductField.values);
+      expect(intent.fields, <TenantProductField>[
+        TenantProductField.name,
+        TenantProductField.sku,
+        TenantProductField.price,
+        TenantProductField.cost,
+        TenantProductField.categoryId,
+      ]);
       expect(intent.changesMoney, isTrue);
       expect(intent.categoryName, 'Drinks');
     });
@@ -944,6 +955,8 @@ void main() {
         'price',
         'quantity',
         'categoryId',
+        'searchName',
+        'searchPrefixes',
         'createdBy',
         'createdAt',
       ]);

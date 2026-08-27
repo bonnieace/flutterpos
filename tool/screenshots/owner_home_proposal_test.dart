@@ -72,10 +72,7 @@ class _Card extends StatelessWidget {
         border: Border.all(color: tokens.colors.surface.borderSubtle),
         borderRadius: BorderRadius.circular(tokens.radius.md),
       ),
-      child: Padding(
-        padding: EdgeInsets.all(tokens.spacing.s16),
-        child: child,
-      ),
+      child: Padding(padding: EdgeInsets.all(tokens.spacing.s16), child: child),
     );
   }
 }
@@ -218,7 +215,8 @@ class _DeviceSection extends StatelessWidget {
       children: <Widget>[
         const Callout(
           status: AppStatus.info,
-          message: '2 sales are saved on this device and have not reached the '
+          message:
+              '2 sales are saved on this device and have not reached the '
               'server yet. They are sent automatically.',
         ),
         SizedBox(height: tokens.spacing.s12),
@@ -356,13 +354,14 @@ class _OwnerHomeProposal extends StatelessWidget {
               SizedBox(height: gap),
               const _ShiftSection(),
               SizedBox(height: gap),
-              if (!HomeNavigation.showsMenu(MediaQuery.sizeOf(context).width))
-                ...<Widget>[
-                  const _SectionLabel('Go to'),
-                  SizedBox(height: tokens.spacing.s8),
-                  HomeNavigation.cards(destinations: destinations),
-                  SizedBox(height: gap),
-                ],
+              if (!HomeNavigation.showsMenu(
+                MediaQuery.sizeOf(context).width,
+              )) ...<Widget>[
+                const _SectionLabel('Go to'),
+                SizedBox(height: tokens.spacing.s8),
+                HomeNavigation.drawer(destinations: destinations),
+                SizedBox(height: gap),
+              ],
               const _DeviceSection(),
             ],
           ),

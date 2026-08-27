@@ -306,6 +306,7 @@ final class _DailySummaryContents extends StatelessWidget {
                     // right-aligned, line up and need none.
                     StatLine(
                       label: 'Sales',
+                      money: true,
                       value: currency.format(metrics.sales),
                       valueKey: ValueKey(
                         'daily-summary-sales-${day.businessDate}',
@@ -333,6 +334,7 @@ final class _DailySummaryContents extends StatelessWidget {
                     if (_previousSales(days, index) case final previous?)
                       StatLine(
                         label: 'Change on the day before',
+                        money: true,
                         value: _signedCurrency(
                           currency,
                           metrics.sales - previous,

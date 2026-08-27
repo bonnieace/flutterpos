@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 /// The compile-time switch that redirects Firebase traffic at the emulators.
@@ -10,6 +11,14 @@ import 'package:flutter/foundation.dart';
 /// safety argument for this file is that it cannot be.
 const String useFirebaseEmulatorsDefine = 'USE_FIREBASE_EMULATORS';
 
+/// Whether this binary was explicitly compiled for the local Firebase suite.
+///
+/// Other development integrations use this same signal to avoid sending
+/// emulator-session diagnostics outside the machine.
+const bool firebaseEmulatorsRequested = bool.fromEnvironment(
+  useFirebaseEmulatorsDefine,
+);
+
 /// Overrides the derived host, for a physical device on the same network.
 const String firebaseEmulatorHostDefine = 'FIREBASE_EMULATOR_HOST';
 
@@ -18,6 +27,8 @@ const String firebaseEmulatorFirestorePortDefine =
     'FIREBASE_EMULATOR_FIRESTORE_PORT';
 const String firebaseEmulatorFunctionsPortDefine =
     'FIREBASE_EMULATOR_FUNCTIONS_PORT';
+const String firebaseEmulatorStoragePortDefine =
+    'FIREBASE_EMULATOR_STORAGE_PORT';
 
 /// These must stay identical to the `emulators` block in `firebase.json`.
 ///
@@ -28,6 +39,7 @@ const String firebaseEmulatorFunctionsPortDefine =
 const int defaultAuthEmulatorPort = 9099;
 const int defaultFirestoreEmulatorPort = 8080;
 const int defaultFunctionsEmulatorPort = 5001;
+const int defaultStorageEmulatorPort = 9199;
 
 /// The address an Android emulator reaches its host machine on. `localhost`
 /// inside that virtual machine is the virtual machine itself.
@@ -64,12 +76,14 @@ final class FirebaseEmulatorTarget {
     required this.authPort,
     required this.firestorePort,
     required this.functionsPort,
+    required this.storagePort,
   });
 
   final String host;
   final int authPort;
   final int firestorePort;
   final int functionsPort;
+  final int storagePort;
 
   @override
   bool operator ==(Object other) =>
@@ -78,15 +92,17 @@ final class FirebaseEmulatorTarget {
           host == other.host &&
           authPort == other.authPort &&
           firestorePort == other.firestorePort &&
-          functionsPort == other.functionsPort;
+          functionsPort == other.functionsPort &&
+          storagePort == other.storagePort;
 
   @override
-  int get hashCode => Object.hash(host, authPort, firestorePort, functionsPort);
+  int get hashCode =>
+      Object.hash(host, authPort, firestorePort, functionsPort, storagePort);
 
   @override
   String toString() =>
       'FirebaseEmulatorTarget($host, auth $authPort, firestore $firestorePort, '
-      'functions $functionsPort)';
+      'functions $functionsPort, storage $storagePort)';
 }
 
 /// Decides where Firebase traffic should go, or that it should not be moved.
@@ -102,6 +118,7 @@ FirebaseEmulatorTarget? resolveFirebaseEmulatorTarget({
   int authPort = defaultAuthEmulatorPort,
   int firestorePort = defaultFirestoreEmulatorPort,
   int functionsPort = defaultFunctionsEmulatorPort,
+  int storagePort = defaultStorageEmulatorPort,
 }) {
   if (!requested) return null;
   if (!debugBuild) {
@@ -118,6 +135,7 @@ FirebaseEmulatorTarget? resolveFirebaseEmulatorTarget({
     authPort: _validatedPort(authPort, 'auth'),
     firestorePort: _validatedPort(firestorePort, 'firestore'),
     functionsPort: _validatedPort(functionsPort, 'functions'),
+    storagePort: _validatedPort(storagePort, 'storage'),
   );
 }
 
@@ -136,7 +154,7 @@ String derivedEmulatorHost({
 /// Reads the compile-time switch, returning `null` when it was never asked for.
 FirebaseEmulatorTarget? firebaseEmulatorTargetFromEnvironment() =>
     resolveFirebaseEmulatorTarget(
-      requested: const bool.fromEnvironment(useFirebaseEmulatorsDefine),
+      requested: firebaseEmulatorsRequested,
       debugBuild: kDebugMode,
       isWeb: kIsWeb,
       platform: defaultTargetPlatform,
@@ -153,6 +171,10 @@ FirebaseEmulatorTarget? firebaseEmulatorTargetFromEnvironment() =>
         firebaseEmulatorFunctionsPortDefine,
         defaultValue: defaultFunctionsEmulatorPort,
       ),
+      storagePort: const int.fromEnvironment(
+        firebaseEmulatorStoragePortDefine,
+        defaultValue: defaultStorageEmulatorPort,
+      ),
     );
 
 bool _connected = false;
@@ -161,7 +183,7 @@ bool _connected = false;
 @visibleForTesting
 bool get firebaseEmulatorsConnected => _connected;
 
-/// Redirects Auth, Firestore, and Functions at [target], exactly once.
+/// Redirects Auth, Firestore, Functions, and Storage at [target], exactly once.
 ///
 /// The flag is raised before the first call rather than after the last, so a
 /// partially applied redirect can never be retried into a mixed state where
@@ -191,6 +213,11 @@ Future<void> connectFirebaseEmulators(FirebaseEmulatorTarget target) async {
     target.functionsPort,
     automaticHostMapping: false,
   );
+  await FirebaseStorage.instance.useStorageEmulator(
+    target.host,
+    target.storagePort,
+    automaticHostMapping: false,
+  );
 }
 
 /// Connects when the switch asks for it. Returns the target, or `null`.
@@ -199,7 +226,8 @@ Future<void> connectFirebaseEmulators(FirebaseEmulatorTarget target) async {
 /// `FirebaseFirestore.instance.settings`: `useFirestoreEmulator` records the
 /// host inside those same settings, so a later whole-object assignment would
 /// discard it and send writes to the real project.
-Future<FirebaseEmulatorTarget?> connectFirebaseEmulatorsFromEnvironment() async {
+Future<FirebaseEmulatorTarget?>
+connectFirebaseEmulatorsFromEnvironment() async {
   final target = firebaseEmulatorTargetFromEnvironment();
   if (target == null) return null;
   await connectFirebaseEmulators(target);

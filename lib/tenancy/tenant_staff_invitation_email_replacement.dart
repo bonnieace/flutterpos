@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
@@ -395,8 +397,9 @@ final class _TenantStaffInvitationEmailReplacementFormState
       return;
     }
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invitation email replacement queued.')),
+    showAppSnackBar(
+      context,
+      const AppNotice.confirmed('Invitation email replacement queued.'),
     );
     widget.onSuccess();
   }
@@ -431,11 +434,8 @@ final class _TenantStaffInvitationEmailReplacementFormState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          SectionHeading(
             'Replace invitation email for ${widget.target.displayName}?',
-            style: tokens.typography.titleMedium.copyWith(
-              color: tokens.colors.text.primary,
-            ),
           ),
           SizedBox(height: tokens.spacing.s8),
           Text(
@@ -475,14 +475,9 @@ final class _TenantStaffInvitationEmailReplacementFormState
             ),
           ],
           SizedBox(height: tokens.spacing.s16),
-          // A `Wrap`, for the reason recorded in `tenant_staff_status.dart`: this
-          // form is laid out inside a record now, and a record at §4.1's `medium`
-          // band is half a page wide.
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: AppTokens.componentOf(context).spacing.s8,
-            runSpacing: AppTokens.componentOf(context).spacing.s8,
-            children: [
+          // The pair remains horizontal on every record width.
+          AppActionRow(
+            actions: <Widget>[
               AppButton(
                 key: const ValueKey('replace-staff-email-cancel'),
                 label: 'Cancel',

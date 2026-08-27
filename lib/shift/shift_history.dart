@@ -143,9 +143,11 @@ final class TenantShiftHistoryEntry {
     final totalSalesMinor = data['totalSalesMinor'];
     final totalSales = data['totalSales'];
     final transactionCount = data['transactionCount'];
-    final present = <Object?>[totalSalesMinor, totalSales, transactionCount]
-        .where((value) => value != null)
-        .length;
+    final present = <Object?>[
+      totalSalesMinor,
+      totalSales,
+      transactionCount,
+    ].where((value) => value != null).length;
     if (present == 0) return null;
     if (present != 3) {
       throw const TenantShiftException('incomplete_shift_summary');
@@ -187,9 +189,11 @@ final class TenantShiftHistoryEntry {
     final latestId = data['summaryAmendmentId'];
     final generation = data['summaryAmendedGeneration'];
     final count = data['summaryAmendmentCount'];
-    final present = <Object?>[latestId, generation, count]
-        .where((value) => value != null)
-        .length;
+    final present = <Object?>[
+      latestId,
+      generation,
+      count,
+    ].where((value) => value != null).length;
     if (present == 0) {
       // An instant on its own records a correction that nothing else accounts
       // for, which is exactly the shape this check exists to catch.

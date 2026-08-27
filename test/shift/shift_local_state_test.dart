@@ -78,6 +78,33 @@ void main() {
       expect(await state.recordsForUid('user-a'), isEmpty);
     });
 
+    test('reads a record written before openedAt existed', () async {
+      // **The upgrade this file had to survive.** A version mismatch raises
+      // `malformed_shift_state`, which the controller turns into a till that
+      // refuses to open - so rejecting the old shape would have shut every
+      // register holding an open shift at the moment it updated.
+      await box.put('user-a:tenant-a', <String, Object?>{
+        'schemaVersion': HiveTenantShiftState.legacySchemaVersion,
+        'uid': 'user-a',
+        'tenantId': 'tenant-a',
+        'shiftId': 'shift-a',
+        'businessDate': _businessDate,
+        'deviceId': _deviceA,
+        'serverConfirmedOpen': true,
+        'closeInProgress': false,
+        'updatedAtMs': 100,
+      });
+
+      final restored = await state.read(uid: 'user-a', tenantId: 'tenant-a');
+
+      expect(restored, isNotNull);
+      // Dated to its last touch, which can only ever under-state its age.
+      expect(
+        restored!.openedAt,
+        DateTime.fromMillisecondsSinceEpoch(100, isUtc: true),
+      );
+    });
+
     test('raises on malformed durable state instead of failing open', () async {
       final valid = <String, Object?>{
         'schemaVersion': HiveTenantShiftState.schemaVersion,
@@ -89,11 +116,15 @@ void main() {
         'serverConfirmedOpen': true,
         'closeInProgress': false,
         'updatedAtMs': 100,
+        'openedAtMs': 100,
       };
       Future<Object?> store(
         Map<String, Object?> Function(Map<String, Object?>) mutate,
       ) async {
-        await box.put('user-a:tenant-a', mutate(Map<String, Object?>.from(valid)));
+        await box.put(
+          'user-a:tenant-a',
+          mutate(Map<String, Object?>.from(valid)),
+        );
         try {
           return await state.read(uid: 'user-a', tenantId: 'tenant-a');
         } on TenantShiftStateException catch (error) {
@@ -114,6 +145,9 @@ void main() {
             (record) => record..['closeInProgress'] = 1,
             (record) => record..['countedCashMinor'] = -5,
             (record) => record..remove('updatedAtMs'),
+            // A record claiming the current version must carry the field the
+            // current version added.
+            (record) => record..remove('openedAtMs'),
           ]) {
         expect(await store(mutation), 'malformed_shift_state');
       }
@@ -161,15 +195,18 @@ void main() {
       expect(inspection.hasServerConfirmedOpenShift, isFalse);
     });
 
-    test('another business\'s state never leaks into this inspection', () async {
-      await state.save(_record(tenantId: 'tenant-b', closeInProgress: true));
+    test(
+      'another business\'s state never leaks into this inspection',
+      () async {
+        await state.save(_record(tenantId: 'tenant-b', closeInProgress: true));
 
-      final inspection = await TenantShiftSwitchStateSource(
-        state,
-      ).inspect(_session());
+        final inspection = await TenantShiftSwitchStateSource(
+          state,
+        ).inspect(_session());
 
-      expect(inspection!.blocker, isNull);
-    });
+        expect(inspection!.blocker, isNull);
+      },
+    );
 
     test('unreadable local state makes the coordinator fail closed', () async {
       await box.put('user-a:tenant-a', <String, Object?>{'schemaVersion': 99});
@@ -206,6 +243,7 @@ TenantShiftLocalRecord _record({
   bool serverConfirmedOpen = true,
   bool closeInProgress = false,
   int? countedCashMinor,
+  DateTime? openedAt,
 }) => TenantShiftLocalRecord(
   uid: uid,
   tenantId: tenantId,
@@ -216,4 +254,5 @@ TenantShiftLocalRecord _record({
   closeInProgress: closeInProgress,
   countedCashMinor: countedCashMinor,
   updatedAt: DateTime.utc(2026, 7, 31, 9),
+  openedAt: openedAt ?? DateTime.utc(2026, 7, 31, 9),
 );

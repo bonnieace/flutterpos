@@ -174,8 +174,11 @@ void main() {
         findsNothing,
       );
 
-      await tester.tap(find.byKey(const ValueKey('set-staff-status-staff-a')));
-      await tester.pump();
+      await _chooseDirectoryAction(
+        tester,
+        targetUid: 'staff-a',
+        actionKey: 'set-staff-status-staff-a',
+      );
       expect(find.text('Deactivate Staff Person?'), findsOneWidget);
       expect(callable.payloads, isEmpty);
 
@@ -578,5 +581,15 @@ Future<void> _tapVisible(WidgetTester tester, String key) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseDirectoryAction(
+  WidgetTester tester, {
+  required String targetUid,
+  required String actionKey,
+}) async {
+  await _tapVisible(tester, 'staff-actions-$targetUid');
+  await tester.tap(find.byKey(ValueKey(actionKey)));
   await tester.pumpAndSettle();
 }

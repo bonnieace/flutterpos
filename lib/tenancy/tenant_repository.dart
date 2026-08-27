@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import 'tenant_id.dart';
 import 'tenant_paths.dart';
@@ -85,6 +86,236 @@ abstract interface class TenantCollectionReader {
 abstract interface class TenantDataReader
     implements TenantDocumentReader, TenantCollectionReader {}
 
+/// The stock range supported by the inventory product query.
+///
+/// This deliberately models only facts present on every product. There is no
+/// client-side "low" or "overstocked" threshold to guess.
+enum TenantProductStockFilter { all, aboveZero, atOrBelowZero }
+
+/// The ordered values required to resume one product search page.
+@immutable
+final class TenantProductSearchPosition {
+  const TenantProductSearchPosition({
+    required this.searchName,
+    required this.documentId,
+    this.quantity,
+  });
+
+  final String searchName;
+  final String documentId;
+  final int? quantity;
+}
+
+/// A tenant product query that cannot be expressed through the generic reader.
+///
+/// Product search needs an array membership predicate, optional numeric range,
+/// and a multi-field cursor. Keeping those here prevents the generic collection
+/// boundary from becoming an arbitrary Firestore query escape hatch.
+final class TenantProductSearchQuery {
+  const TenantProductSearchQuery._({
+    required this.collectionPath,
+    required this.limit,
+    required this.stock,
+    this.searchPrefix,
+    this.categoryId,
+    this.startAfter,
+  });
+
+  factory TenantProductSearchQuery.forTesting({
+    required String collectionPath,
+    required int limit,
+    TenantProductStockFilter stock = TenantProductStockFilter.all,
+    String? searchPrefix,
+    String? categoryId,
+    TenantProductSearchPosition? startAfter,
+  }) => TenantProductSearchQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    stock: stock,
+    searchPrefix: searchPrefix,
+    categoryId: categoryId,
+    startAfter: startAfter,
+  );
+
+  /// Constructs the query selected by a tenant-scoped product repository.
+  ///
+  /// The collection path is still checked against every returned document by
+  /// that repository; transports receive this value and cannot reinterpret it.
+  factory TenantProductSearchQuery.scoped({
+    required String collectionPath,
+    required int limit,
+    required TenantProductStockFilter stock,
+    String? searchPrefix,
+    String? categoryId,
+    TenantProductSearchPosition? startAfter,
+  }) => TenantProductSearchQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    stock: stock,
+    searchPrefix: searchPrefix,
+    categoryId: categoryId,
+    startAfter: startAfter,
+  );
+
+  final String collectionPath;
+  final int limit;
+  final TenantProductStockFilter stock;
+  final String? searchPrefix;
+  final String? categoryId;
+  final TenantProductSearchPosition? startAfter;
+}
+
+/// Dedicated transport for stable, backend-backed product search pages.
+abstract interface class TenantProductSearchReader {
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
+    TenantProductSearchQuery query,
+  );
+}
+
+/// The ordered values required to resume one canonical staff-directory page.
+@immutable
+final class TenantStaffDirectoryPosition {
+  const TenantStaffDirectoryPosition({required this.documentId});
+
+  final String documentId;
+}
+
+/// Dedicated tenant staff query selected by the staff repository.
+///
+/// Search needs array membership and the directory's role/status filters may
+/// be combined with it. Those shapes deliberately do not fit through
+/// [TenantCollectionQuery], whose small equality-only contract remains intact.
+final class TenantStaffDirectoryQuery {
+  const TenantStaffDirectoryQuery._({
+    required this.collectionPath,
+    required this.limit,
+    this.searchPrefix,
+    this.role,
+    this.status,
+    this.startAfter,
+  });
+
+  factory TenantStaffDirectoryQuery.forTesting({
+    required String collectionPath,
+    required int limit,
+    String? searchPrefix,
+    String? role,
+    String? status,
+    TenantStaffDirectoryPosition? startAfter,
+  }) => TenantStaffDirectoryQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    searchPrefix: searchPrefix,
+    role: role,
+    status: status,
+    startAfter: startAfter,
+  );
+
+  factory TenantStaffDirectoryQuery.scoped({
+    required String collectionPath,
+    required int limit,
+    String? searchPrefix,
+    String? role,
+    String? status,
+    TenantStaffDirectoryPosition? startAfter,
+  }) => TenantStaffDirectoryQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    searchPrefix: searchPrefix,
+    role: role,
+    status: status,
+    startAfter: startAfter,
+  );
+
+  final String collectionPath;
+  final int limit;
+  final String? searchPrefix;
+  final String? role;
+  final String? status;
+  final TenantStaffDirectoryPosition? startAfter;
+}
+
+/// Narrow transport for backend-backed staff search and filtering.
+abstract interface class TenantStaffDirectoryQueryReader {
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantStaff(
+    TenantStaffDirectoryQuery query,
+  );
+}
+
+/// The ordered values required to resume a newest-first sales report page.
+@immutable
+final class TenantSalesHistoryPosition {
+  const TenantSalesHistoryPosition({
+    required this.businessDate,
+    required this.documentId,
+  });
+
+  final String businessDate;
+  final String documentId;
+}
+
+/// Dedicated range-and-scope query selected by the sales repository.
+///
+/// The generic collection reader intentionally cannot express ranges or a
+/// multi-field cursor. Keeping the report shape here prevents callers from
+/// supplying arbitrary paths, orderings, or predicates.
+final class TenantSalesHistoryQuery {
+  const TenantSalesHistoryQuery._({
+    required this.collectionPath,
+    required this.limit,
+    required this.startBusinessDate,
+    required this.endBusinessDate,
+    this.soldById,
+    this.startAfter,
+  });
+
+  factory TenantSalesHistoryQuery.forTesting({
+    required String collectionPath,
+    required int limit,
+    required String startBusinessDate,
+    required String endBusinessDate,
+    String? soldById,
+    TenantSalesHistoryPosition? startAfter,
+  }) => TenantSalesHistoryQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    startBusinessDate: startBusinessDate,
+    endBusinessDate: endBusinessDate,
+    soldById: soldById,
+    startAfter: startAfter,
+  );
+
+  factory TenantSalesHistoryQuery.scoped({
+    required String collectionPath,
+    required int limit,
+    required String startBusinessDate,
+    required String endBusinessDate,
+    String? soldById,
+    TenantSalesHistoryPosition? startAfter,
+  }) => TenantSalesHistoryQuery._(
+    collectionPath: collectionPath,
+    limit: limit,
+    startBusinessDate: startBusinessDate,
+    endBusinessDate: endBusinessDate,
+    soldById: soldById,
+    startAfter: startAfter,
+  );
+
+  final String collectionPath;
+  final int limit;
+  final String startBusinessDate;
+  final String endBusinessDate;
+  final String? soldById;
+  final TenantSalesHistoryPosition? startAfter;
+}
+
+/// Narrow transport for the stable tenant sales-report query.
+abstract interface class TenantSalesHistoryQueryReader {
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  );
+}
+
 /// A collection-group query that can only be constructed by
 /// [TenantReadRepository].
 ///
@@ -142,7 +373,12 @@ abstract interface class TenantCollectionGroupReader {
 
 /// Firebase implementation of the tenant document and collection boundaries.
 final class FirebaseTenantDocumentReader
-    implements TenantDataReader, TenantCollectionGroupReader {
+    implements
+        TenantDataReader,
+        TenantCollectionGroupReader,
+        TenantProductSearchReader,
+        TenantStaffDirectoryQueryReader,
+        TenantSalesHistoryQueryReader {
   FirebaseTenantDocumentReader([FirebaseFirestore? firestore])
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
@@ -193,6 +429,105 @@ final class FirebaseTenantDocumentReader
     if (cursor != null) request = request.startAfter(<Object>[cursor]);
     final snapshot = await request.get();
     return _snapshots(snapshot);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> searchTenantProducts(
+    TenantProductSearchQuery query,
+  ) async {
+    Query<Map<String, dynamic>> request = _firestore.collection(
+      query.collectionPath,
+    );
+    if (query.searchPrefix case final prefix?) {
+      request = request.where('searchPrefixes', arrayContains: prefix);
+    }
+    if (query.categoryId case final categoryId?) {
+      request = request.where('categoryId', isEqualTo: categoryId);
+    }
+    switch (query.stock) {
+      case TenantProductStockFilter.all:
+        break;
+      case TenantProductStockFilter.aboveZero:
+        request = request.where('quantity', isGreaterThan: 0);
+        break;
+      case TenantProductStockFilter.atOrBelowZero:
+        request = request.where('quantity', isLessThanOrEqualTo: 0);
+        break;
+    }
+
+    if (query.stock == TenantProductStockFilter.all) {
+      request = request
+          .orderBy('searchName')
+          .orderBy(FieldPath.documentId)
+          .limit(query.limit);
+      if (query.startAfter case final cursor?) {
+        request = request.startAfter(<Object>[
+          cursor.searchName,
+          cursor.documentId,
+        ]);
+      }
+    } else {
+      request = request
+          .orderBy('quantity')
+          .orderBy('searchName')
+          .orderBy(FieldPath.documentId)
+          .limit(query.limit);
+      if (query.startAfter case final cursor?) {
+        request = request.startAfter(<Object>[
+          cursor.quantity!,
+          cursor.searchName,
+          cursor.documentId,
+        ]);
+      }
+    }
+    return _snapshots(await request.get());
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantStaff(
+    TenantStaffDirectoryQuery query,
+  ) async {
+    Query<Map<String, dynamic>> request = _firestore.collection(
+      query.collectionPath,
+    );
+    if (query.searchPrefix case final prefix?) {
+      request = request.where('searchPrefixes', arrayContains: prefix);
+    }
+    if (query.role case final role?) {
+      request = request.where('role', isEqualTo: role);
+    }
+    if (query.status case final status?) {
+      request = request.where('status', isEqualTo: status);
+    }
+    request = request.orderBy(FieldPath.documentId).limit(query.limit);
+    if (query.startAfter case final cursor?) {
+      request = request.startAfter(<Object>[cursor.documentId]);
+    }
+    return _snapshots(await request.get());
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantSalesHistory(
+    TenantSalesHistoryQuery query,
+  ) async {
+    Query<Map<String, dynamic>> request = _firestore
+        .collection(query.collectionPath)
+        .where('businessDate', isGreaterThanOrEqualTo: query.startBusinessDate)
+        .where('businessDate', isLessThanOrEqualTo: query.endBusinessDate);
+    if (query.soldById case final staffId?) {
+      request = request.where('soldById', isEqualTo: staffId);
+    }
+    request = request
+        .orderBy('businessDate', descending: true)
+        .orderBy(FieldPath.documentId, descending: true)
+        .limit(query.limit);
+    if (query.startAfter case final cursor?) {
+      request = request.startAfter(<Object>[
+        cursor.businessDate,
+        cursor.documentId,
+      ]);
+    }
+    return _snapshots(await request.get());
   }
 
   static List<TenantQueryDocumentSnapshot> _snapshots(
@@ -566,7 +901,8 @@ abstract base class TenantReadRepository {
           'The collection reader returned duplicate document $documentId.',
         );
       }
-      final ordered = previousId == null ||
+      final ordered =
+          previousId == null ||
           (descending
               ? previousId.compareTo(documentId) > 0
               : previousId.compareTo(documentId) < 0);

@@ -82,6 +82,7 @@ final class StatTile extends StatelessWidget {
     this.status,
     this.statusLabel,
     this.valueKey,
+    this.money = false,
     this.rolling = false,
   }) : assert(
          (status == null) == (statusLabel == null),
@@ -119,6 +120,19 @@ final class StatTile extends StatelessWidget {
   /// rather than the tile around it.
   final Key? valueKey;
 
+  /// Whether the figure is an amount of money.
+  ///
+  /// **It changes the colour and nothing else.** The design gives currency its
+  /// own role - `currency-kes`, 182 uses across the export - and every KPI that
+  /// holds an amount is `text-currency-kes` where a count beside it is
+  /// `text-primary`. The face is the same either way; see
+  /// [AppTypeRoles.numericHero].
+  ///
+  /// **Declared, never sniffed**: a component that decided a string was money
+  /// by looking for a currency code would be deciding what a figure means, and
+  /// would be wrong the first time a shop trades in something else.
+  final bool money;
+
   /// Whether the figure **rolls** when it changes, per §6.2's "total
   /// recalculates" row.
   ///
@@ -138,9 +152,27 @@ final class StatTile extends StatelessWidget {
   /// 18 is the nearest named row rather than a third size.
   static const double glyphSize = 18;
 
+  /// Which figure role a surface of this width carries.
+  ///
+  /// **`numeric.hero` is 30 and a phone cannot fit two of them side by side.**
+  /// `KES 45,200.00` at 30 in the mono face is about 200 logical pixels, so a
+  /// 411 phone - 371 inside the page's inset - has room for one tile per row
+  /// and the design's two-by-two grid comes out as a column. The export draws
+  /// the same figure at `section-title` on a card and at `text-4xl` on a
+  /// reporting page, so the size is a property of the surface rather than of
+  /// the figure, and this is where that is resolved.
+  ///
+  /// Exposed so `StatRow` measures at the size the tile will actually paint,
+  /// and so a test can ask the question the widget asks.
+  static TextStyle figureStyle(AppTokens tokens, double screenWidth) =>
+      tokens.layout.isAtLeast(screenWidth, AppBreakpoint.medium)
+      ? tokens.typography.numericHero
+      : tokens.typography.numericCompact;
+
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
+    final figure = figureStyle(tokens, MediaQuery.sizeOf(context).width);
     return Semantics(
       container: true,
       child: DecoratedBox(
@@ -155,26 +187,34 @@ final class StatTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
+              // **The export's KPI eyebrow**: `<h3 class="text-label-caps
+              // font-label-caps text-on-surface-variant flex items-center
+              // gap-2"><icon/> TOTAL SALES</h3>`. Three things moved on
+              // 2026-08-23 - the role from `label.md` to `label.eyebrow`, the
+              // case to upper, and the glyph from the trailing edge to the
+              // leading one, which is where the design puts it and which is
+              // also where a row of tiles reads as a row rather than as three
+              // captions with three icons floating off to the right.
               Row(
                 children: <Widget>[
+                  if (icon case final glyph?) ...<Widget>[
+                    Icon(
+                      glyph,
+                      size: glyphSize,
+                      color: tokens.colors.text.secondary,
+                    ),
+                    SizedBox(width: tokens.spacing.s8),
+                  ],
                   Expanded(
                     child: Text(
-                      label,
+                      label.toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: tokens.typography.labelMedium.copyWith(
+                      style: tokens.typography.labelEyebrow.copyWith(
                         color: tokens.colors.text.secondary,
                       ),
                     ),
                   ),
-                  if (icon case final glyph?) ...<Widget>[
-                    SizedBox(width: tokens.spacing.s8),
-                    Icon(
-                      glyph,
-                      size: glyphSize,
-                      color: tokens.colors.text.tertiary,
-                    ),
-                  ],
                 ],
               ),
               SizedBox(height: tokens.spacing.s8),
@@ -182,22 +222,34 @@ final class StatTile extends StatelessWidget {
                 RollingNumber(
                   value: value,
                   textKey: valueKey,
-                  style: tokens.typography.numericHero.copyWith(
-                    color: tokens.colors.text.primary,
+                  style: figure.copyWith(
+                    color: money
+                        ? tokens.colors.text.money
+                        : tokens.colors.text.primary,
                   ),
                 )
               else
-                Text(
-                  key: valueKey,
-                  value,
-                  maxLines: 1,
-                  // A figure that does not fit is a layout this component could
-                  // not honour, and [StatRow] exists so that it does not happen:
-                  // it measures the widest figure it holds and gives every tile
-                  // room for it. This is the floor under that, not the plan.
-                  overflow: TextOverflow.ellipsis,
-                  style: tokens.typography.numericHero.copyWith(
-                    color: tokens.colors.text.primary,
+                // **It scales down rather than ellipsising, and the two are
+                // not equivalent.** A truncated figure is a *wrong* figure -
+                // `KES 1,52…` is not an amount - where a figure two points
+                // smaller is the same amount. [StatRow] still gives every tile
+                // room for the widest figure it holds at every band it
+                // measures; this is the floor under a phone's forced pair,
+                // where the grid shape is the design's rather than the
+                // measurement's.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    key: valueKey,
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: figure.copyWith(
+                      color: money
+                          ? tokens.colors.text.money
+                          : tokens.colors.text.primary,
+                    ),
                   ),
                 ),
               if (status case final standing?) ...<Widget>[
@@ -255,11 +307,18 @@ final class StatRow extends StatelessWidget {
     required Iterable<String> figures,
     required AppTokens tokens,
     required double textScaleFactor,
+    double? screenWidth,
   }) {
+    // The size the tile will actually paint at this width, not the largest
+    // size it could paint anywhere - reserving room for a 30 where a 22 is
+    // drawn is how a two-by-two grid became a column.
+    final style = screenWidth == null
+        ? tokens.typography.numericHero
+        : StatTile.figureStyle(tokens, screenWidth);
     var widest = 0.0;
     for (final figure in figures) {
       final painter = TextPainter(
-        text: TextSpan(text: figure, style: tokens.typography.numericHero),
+        text: TextSpan(text: figure, style: style),
         textDirection: TextDirection.ltr,
         textScaler: TextScaler.linear(textScaleFactor),
       )..layout();
@@ -299,15 +358,36 @@ final class StatRow extends StatelessWidget {
       // A figure at 200% text scale needs 200% of the room, and §9 requires it
       // to stay legible there.
       textScaleFactor: MediaQuery.textScalerOf(context).scale(1),
+      // The surface's width, not this row's box: `StatTile` resolves its
+      // figure role from §4.1's bands, which describe the screen a person is
+      // looking at, and measuring against anything else would reserve room for
+      // a size the tile does not draw.
+      screenWidth: MediaQuery.sizeOf(context).width,
     );
+    // **A phone gets two columns because the design draws two**, not because
+    // two happened to fit. `manager_dashboard` opens on a two-by-two grid at
+    // 360 wide, and measuring `KES 45,200.00` against a half-width tile says
+    // one column - so the measurement is the wrong authority for this band and
+    // `StatTile` scales its figure to the slot instead.
+    //
+    // **Except at a raised text scale**, where it falls back to the measured
+    // packing: shrinking a figure to keep a grid would undo the enlargement
+    // somebody asked for, which is §9's requirement pointing the other way.
+    final compact = !tokens.layout.isAtLeast(
+      MediaQuery.sizeOf(context).width,
+      AppBreakpoint.medium,
+    );
+    final enlarged = MediaQuery.textScalerOf(context).scale(1) > 1;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = columnsFor(
-          available: constraints.maxWidth,
-          minimumTileWidth: minimum,
-          gap: gap,
-          tiles: tiles.length,
-        );
+        final columns = compact && !enlarged
+            ? (tiles.length < 2 ? 1 : 2)
+            : columnsFor(
+                available: constraints.maxWidth,
+                minimumTileWidth: minimum,
+                gap: gap,
+                tiles: tiles.length,
+              );
         final width = columns == 1
             ? constraints.maxWidth
             : (constraints.maxWidth - gap * (columns - 1)) / columns;
@@ -380,6 +460,7 @@ final class StatLine extends StatelessWidget {
     required this.value,
     this.detail,
     this.valueKey,
+    this.money = false,
     this.emphasis = false,
   });
 
@@ -395,6 +476,9 @@ final class StatLine extends StatelessWidget {
 
   /// Key on the figure's own `Text`.
   final Key? valueKey;
+
+  /// Whether the figure is an amount of money. See [StatTile.money].
+  final bool money;
 
   /// Whether this line is the one the others add up to.
   ///
@@ -441,7 +525,9 @@ final class StatLine extends StatelessWidget {
             value,
             textAlign: TextAlign.right,
             style: tokens.typography.numericBody.copyWith(
-              color: tokens.colors.text.primary,
+              color: money
+                  ? tokens.colors.text.money
+                  : tokens.colors.text.primary,
             ),
           ),
         ],

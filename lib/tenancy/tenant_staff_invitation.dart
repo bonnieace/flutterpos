@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
@@ -294,9 +295,10 @@ final class _TenantStaffInvitationFormState
     }
     if (!mounted || !_isCurrent(controller)) return;
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(
+    showAppSnackBar(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Staff invitation queued.')));
+      const AppNotice.confirmed('Staff invitation queued.'),
+    );
     widget.onSuccess();
   }
 

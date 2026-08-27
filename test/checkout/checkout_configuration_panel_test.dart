@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/checkout/checkout.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
+import 'package:flutter_application_1/ui/snackbar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/notices.dart';
@@ -108,14 +109,14 @@ void main() {
     // already holds, which carries no currency at all yet.
     expect(syncs, 1);
     expect(
-      noticeMessage(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).message,
       'Published. This device re-reads it on its next sync, and every other '
       'device picks it up when it syncs.',
     );
     // The notice carries what kind of answer it is, which is what a bare
     // sentence in this position never did.
     expect(
-      noticeStatus(tester, 'checkout-configuration-notice'),
+      snackNotice(tester).status,
       AppStatus.ok,
     );
     // The document is what a till prices with, so the page re-reads rather than

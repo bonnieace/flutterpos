@@ -50,20 +50,15 @@ TextStyle _styleOf(WidgetTester tester, String text) =>
 
 void main() {
   group('the well is §5.2\'s well', () {
-    testWidgets('surface.field, border.strong at 1px, radius.pill', (
+    testWidgets('surface.field, border.strong at 1px, radius.md', (
       tester,
     ) async {
-      // **The corner has moved three times, and this is the owner's shape
-      // twice over.** It was `surface.sunken` at `radius.sm` - a near-black
-      // rectangle - then the raised pill the owner asked for in `design.md`
-      // v0.4 on 2026-08-15, then `radius.md` on 2026-08-22 because Profound
-      // Verdant styles its inputs with the same `borderRadius.xl` as its
-      // buttons, and since 2026-08-23 the pill again at the owner's
-      // direction - `OPEN_QUESTIONS.md` decision 26, recorded as an override
-      // of that evidence rather than a rereading of it.
-      // The border did not move in any of that, and that is not
-      // inertia: §5.2 switches it to `status.problem.border` on error, so a well
-      // with no border has no error state to switch.
+      // **The design's own input rule, which it writes as CSS rather than
+      // leaving to be inferred**: `background-color: surface-elevated;
+      // border: 1px solid outline-variant; border-radius: borderRadius.xl`.
+      // `surface.field`, `surface.borderStrong` and `radius.md` are those
+      // three values. The 2026-08-23 pill override was withdrawn the same day
+      // the instruction became "match the Stitch render".
       await _pump(tester, const AppTextField(label: 'Product name'));
       final decoration = _wellDecoration(tester);
       expect(decoration.color, _tokens.colors.surface.field);
@@ -74,7 +69,7 @@ void main() {
       expect((decoration.border! as Border).top.width, 1);
       expect(
         (decoration.borderRadius! as BorderRadius).topLeft.x,
-        _tokens.radius.pill,
+        _tokens.radius.md,
       );
     });
 
@@ -216,9 +211,13 @@ void main() {
         _styleOf(tester, 'Enter a whole number.').color,
         _tokens.colors.status.problem.fg,
       );
+      // `status.problem.fg`, which is the same value the theme's own
+      // `errorBorder` paints. The 30%-alpha `border` is a status *chip's*
+      // edge; on a dark well it is nearly invisible, and an outline nobody
+      // can see is not the second signal §9 asks an error to carry.
       expect(
         (_wellDecoration(tester).border! as Border).top.color,
-        _tokens.colors.status.problem.border,
+        _tokens.colors.status.problem.fg,
       );
     });
 
@@ -430,11 +429,17 @@ void main() {
       expect(rings(), isEmpty);
       await tester.tap(find.byType(TextField));
       await tester.pumpAndSettle();
+      // **One outline, not an outline and a ring, since 2026-08-23.** The
+      // design writes focus as `border-color: primary` plus
+      // `box-shadow: 0 0 0 1px primary` - two adjacent pixels that composite
+      // into a single edge. Drawing §9's ring 2px clear of an already-accent
+      // border spanned ten device pixels on a 2x phone. §9's 2px perimeter is
+      // met by this outline; it is painted outside the stroke so the field
+      // does not reflow.
       expect(rings(), hasLength(1));
-      expect(
-        rings().first.border!.top.width,
-        _tokens.colors.action.focusRing.width,
-      );
+      final outline = rings().single.border!.top;
+      expect(outline.width, _tokens.colors.action.focusRing.width);
+      expect(outline.strokeAlign, BorderSide.strokeAlignOutside);
     });
 
     testWidgets('and focusing it does not move the field', (tester) async {
@@ -449,30 +454,32 @@ void main() {
       expect(tester.getRect(find.byType(TextField)), before);
     });
 
-    testWidgets('focus-visible: the glow is behind the ring, never instead', (
+    testWidgets('focus-visible: no glow - the outline takes the accent', (
       tester,
     ) async {
-      // **v0.4's one shadow.** §2.1 says depth is a surface step and never a
-      // drop shadow; a focus glow is an interaction state rather than depth,
-      // and §2.1 names it as the single exception. The assertion that matters
-      // is the second one: the glow arrives *with* §9's ring and cannot replace
-      // it, which is what the original sign-in's glow-only focus got wrong.
+      // **The blurred halo is gone as of 2026-08-23.** The design draws focus
+      // as two crisp lines - `border-color: primary` and
+      // `box-shadow: 0 0 0 1px primary` - and a blur beside §9's ring read as
+      // a lit field rather than a focused one. §2.1's "depth is a surface
+      // step, never a drop shadow" now has no exception in this component.
       await _pump(tester, const AppTextField(label: 'Product name'));
       expect(_wellDecoration(tester).boxShadow, anyOf(isNull, isEmpty));
+      expect(
+        (_wellDecoration(tester).border! as Border).top.color,
+        _tokens.colors.surface.borderStrong,
+      );
 
       await tester.tap(find.byType(TextField));
       await tester.pumpAndSettle();
 
-      final glow = _wellDecoration(tester).boxShadow!.single;
-      expect(glow.color.r, _tokens.colors.action.focusRing.color.r);
-      expect(glow.color.g, _tokens.colors.action.focusRing.color.g);
-      expect(glow.color.b, _tokens.colors.action.focusRing.color.b);
-      expect(glow.color.a, closeTo(0.3, 0.005));
-      expect(glow.blurRadius, 8);
-      expect(glow.spreadRadius, 1);
+      expect(_wellDecoration(tester).boxShadow, anyOf(isNull, isEmpty));
+      expect(
+        (_wellDecoration(tester).border! as Border).top.color,
+        _tokens.colors.action.focusRing.color,
+      );
     });
 
-    testWidgets('a disabled field is not focusable, so it never glows', (
+    testWidgets('a disabled field is not focusable, so it never lights up', (
       tester,
     ) async {
       await _pump(
@@ -480,6 +487,10 @@ void main() {
         const AppTextField(label: 'Unit cost', enabled: false),
       );
       expect(_wellDecoration(tester).boxShadow, anyOf(isNull, isEmpty));
+      expect(
+        (_wellDecoration(tester).border! as Border).top.color,
+        _tokens.colors.action.disabledBorder,
+      );
     });
   });
 
@@ -580,7 +591,7 @@ void main() {
       );
       expect(
         (decoration.borderRadius! as BorderRadius).topLeft.x,
-        _tokens.radius.pill,
+        _tokens.radius.md,
       );
       expect(_styleOf(tester, 'Role').color, _tokens.colors.text.secondary);
     });

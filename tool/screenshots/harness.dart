@@ -329,6 +329,7 @@ Future<void> captureScreen(
   bool settle = true,
   bool fullPage = true,
   Future<void> Function(WidgetTester tester)? afterPump,
+  Future<void> Function()? beforePump,
 }) async {
   // Reading font files and handing them to the engine is real I/O, and a
   // widget test body runs in a fake-async zone where a real future never
@@ -351,6 +352,12 @@ Future<void> captureScreen(
     tester.view.devicePixelRatio = viewport.devicePixelRatio;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    // **Durable state a screen reads on its way up.** `afterPump` is too late
+    // for anything a widget consults in `initState` or
+    // `didChangeDependencies` - the shift gate reads its record there, so a
+    // record written afterwards is a record the gate has already missed.
+    await beforePump?.call();
 
     await tester.pumpWidget(
       RepaintBoundary(
@@ -492,6 +499,7 @@ void screenshotCase(
   bool settle = true,
   bool fullPage = true,
   Future<void> Function(WidgetTester tester)? afterPump,
+  Future<void> Function()? beforePump,
   List<ScreenshotViewport> viewports = screenshotViewports,
 }) {
   for (final viewport in viewports) {
@@ -504,6 +512,7 @@ void screenshotCase(
         settle: settle,
         fullPage: fullPage,
         afterPump: afterPump,
+        beforePump: beforePump,
       );
     });
   }

@@ -5,6 +5,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
+import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'tenant_id.dart';
@@ -270,8 +272,9 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
       return;
     }
     setState(() => _submitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Staff member ${_targetStatus.wireValue}.')),
+    showAppSnackBar(
+      context,
+      AppNotice.confirmed('Staff member ${_targetStatus.wireValue}.'),
     );
     widget.onSuccess();
   }
@@ -300,12 +303,7 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          '$action ${widget.target.displayName}?',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('$action ${widget.target.displayName}?'),
         SizedBox(height: tokens.spacing.s8),
         Text(
           _targetStatus == MembershipStatus.active
@@ -324,17 +322,11 @@ final class _TenantStaffStatusFormState extends State<TenantStaffStatusForm> {
           ),
         ],
         SizedBox(height: tokens.spacing.s16),
-        // A `Wrap` rather than a `Row`, because this form is now laid out
-        // inside a record - and a record at §4.1's `medium` band is half a
-        // page wide. Two 48-high pills with verb phrases on them do not fit
-        // 342 logical pixels, and a `Row` answers that by overflowing. It
-        // answered the same way on a phone before this form was ever in a
-        // `RecordList`; nothing had opened it there.
-        Wrap(
-          alignment: WrapAlignment.end,
-          spacing: AppTokens.componentOf(context).spacing.s8,
-          runSpacing: AppTokens.componentOf(context).spacing.s8,
-          children: [
+        // Keep the safe and committing actions in one horizontal decision.
+        // The controls may contract on a narrow record, but never reorder by
+        // wrapping one underneath the other.
+        AppActionRow(
+          actions: <Widget>[
             AppButton(
               key: const ValueKey('set-staff-status-cancel'),
               label: 'Cancel',

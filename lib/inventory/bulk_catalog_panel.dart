@@ -11,6 +11,7 @@ import '../ui/dialogs.dart';
 import '../ui/fields.dart';
 import '../ui/pagination.dart';
 import '../ui/scaffold.dart';
+import '../ui/snackbar.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
 import 'bulk_catalog.dart';
@@ -148,6 +149,24 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
   bool _busy = false;
   AppNotice? _notice;
 
+  /// Reports one write outcome, on the surface its kind belongs to.
+  ///
+  /// See `noticeIsTransient`: a confirmation withdraws itself, and everything
+  /// that names a next step stays where it was drawn.
+  ///
+  /// **`_reportNotice` rather than `_report`, which every sibling surface
+  /// calls it**: `_report` is already this screen's *bulk report* - the
+  /// previewed pages - and one name for two unrelated things on the busiest
+  /// state in the file is how a rename goes wrong later.
+  void _reportNotice(AppNotice notice) {
+    if (noticeIsTransient(notice)) {
+      showAppSnackBar(context, notice);
+      return;
+    }
+    setState(() => _notice = notice);
+  }
+
+
   @override
   void dispose() {
     _value.dispose();
@@ -247,7 +266,8 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
     // Unreachable: neither is offered, because a name and a code belong to one
     // product each.
     TenantProductField.name ||
-    TenantProductField.sku => TenantBulkCatalogEdit.cost(_value.text),
+    TenantProductField.sku ||
+    TenantProductField.image => TenantBulkCatalogEdit.cost(_value.text),
   };
 
   /// Builds the plan, then asks the server what it would do, writing nothing.
@@ -296,9 +316,7 @@ final class _TenantBulkCatalogPanelState extends State<TenantBulkCatalogPanel> {
       setState(() => _report = report);
     } on TenantBulkCatalogException catch (error) {
       if (!_stillCurrent(capturedKey)) return;
-      setState(
-        () => _notice = AppNotice.refused(bulkCatalogRefusalMessage(error)),
-      );
+      _reportNotice(AppNotice.refused(bulkCatalogRefusalMessage(error)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -682,12 +700,7 @@ final class _BulkCatalogContents extends StatelessWidget {
     return ListView(
       padding: EdgeInsets.all(tokens.spacing.s20),
       children: [
-        Text(
-          'Many products at once',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Many products at once'),
         SizedBox(height: tokens.spacing.s4),
         // A helper rather than a notice, and the call is worth stating because
         // it could have gone the other way. §5.2 names this route's prose by
@@ -759,18 +772,18 @@ final class _BulkCatalogContents extends StatelessWidget {
         else
           ..._importForm(context),
         SizedBox(height: tokens.spacing.s20),
-        // **A `Wrap` because this route had never been laid out narrow.** It was
+        // Keep the two decisions in one horizontal action row at every width.
         // a `Row`, and the first test to drive it at §4.1's `compact` band
         // overflowed by 73 pixels on a single button: "Preview, writing
         // nothing" carries a leading icon and §5.2's `space.16` padding, and
-        // the discard beside it is another 48dp of control. A `Wrap` is
+        // the discard beside it is another 48dp of control. The row is
         // identical wherever there is room and is the shape the difference list
         // and every paginated surface in this app already uses for a row of
         // controls.
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
+        // Right-aligned since 2026-08-26, with every other action row in the
+        // app: the control under a right-handed thumb is the one it presses.
+        AppActionRow(
+          actions: <Widget>[
             // Preview is the primary here and commit is the primary further
             // down: they are different screen regions, and §2.1 permits one
             // each. Nothing is written by either until the other has been.
@@ -801,12 +814,7 @@ final class _BulkCatalogContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     final categoryNames = tenantCategoryNames(view.categories.items);
     return <Widget>[
-      Text(
-        'What to change',
-        style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        ),
-      ),
+      SectionHeading('What to change'),
       SizedBox(height: tokens.spacing.s8),
       // **The one bar whose selection is a pair rather than a value.** Which
       // field moves and whether a cost is being *removed* are two variables in
@@ -970,12 +978,7 @@ final class _BulkCatalogContents extends StatelessWidget {
   List<Widget> _importForm(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
     return <Widget>[
-      Text(
-        'Paste the rows',
-        style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        ),
-      ),
+      SectionHeading('Paste the rows'),
       SizedBox(height: tokens.spacing.s8),
       // Three paragraphs of permanent helper prose behind one fold - §5.1's own
       // description of what `Disclosure` replaces, and the tallest single block
@@ -1033,12 +1036,7 @@ final class _BulkCatalogContents extends StatelessWidget {
     final tokens = AppTokens.componentOf(context);
     return <Widget>[
       SizedBox(height: tokens.spacing.s24),
-      Text(
-        'What this does',
-        style: tokens.typography.titleMedium.copyWith(
-          color: tokens.colors.text.primary,
-        ),
-      ),
+      SectionHeading('What this does'),
       SizedBox(height: tokens.spacing.s8),
       Text(key: const ValueKey('bulk-catalog-summary'), _summary(report, task)),
       if (report.failure case final failure?) ...[
@@ -1376,6 +1374,7 @@ String _batchConfirmation(
       );
     case TenantProductField.name:
     case TenantProductField.sku:
+    case TenantProductField.image:
       break;
   }
   if (plan.pages.length > 1) {

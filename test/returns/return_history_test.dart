@@ -189,6 +189,29 @@ void main() {
   });
 
   group('return history repository', () {
+    test('pages every business return without a sale filter', () async {
+      final reader = _Reader(<String, Map<String, Object?>>{
+        'tenants/tenant-a/returns/ret-1': _pending(),
+        'tenants/tenant-a/returns/ret-2': _verified(returnId: 'ret-2'),
+        'tenants/tenant-a/returns/ret-3': _pending(
+          returnId: 'ret-3',
+          overrides: <String, Object?>{'saleId': 'co-2'},
+        ),
+      });
+
+      final page = await _repository(reader).loadReturns();
+
+      expect(page.items.map((record) => record.id), <String>[
+        'ret-3',
+        'ret-2',
+        'ret-1',
+      ]);
+      expect(reader.queries.single.equalityFilters, <String, Object?>{
+        'tenantId': 'tenant-a',
+      });
+      expect(reader.queries.single.descending, isTrue);
+    });
+
     test('pages one sale returns newest first from the tenant path', () async {
       final reader = _Reader(<String, Map<String, Object?>>{
         'tenants/tenant-a/returns/ret-1': _pending(),
@@ -361,9 +384,7 @@ final class _Reader implements TenantDataReader {
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
     final data = _documents[path];
-    return data == null
-        ? null
-        : TenantDocumentSnapshot(path: path, data: data);
+    return data == null ? null : TenantDocumentSnapshot(path: path, data: data);
   }
 
   @override

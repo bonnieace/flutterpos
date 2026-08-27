@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/tenancy/tenancy.dart';
 import 'package:flutter_application_1/ui/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/landing_drawer.dart';
 
 void main() {
   group('strict staff summaries', () {
@@ -149,6 +150,42 @@ void main() {
         throwsA(isA<TenantScopeViolation>()),
       );
     });
+
+    test(
+      'search and filters use the dedicated typed query and opaque cursor',
+      () async {
+        late TenantStaffDirectoryQuery captured;
+        final reader = _StaffReader(
+          queryHandler: (_) async => const [],
+          staffQueryHandler: (query) async {
+            captured = query;
+            return <TenantQueryDocumentSnapshot>[
+              _staffSnapshot('tenant-a', 'staff-a'),
+              _staffSnapshot('tenant-a', 'staff-b'),
+            ];
+          },
+        );
+        final page =
+            await TenantStaffDirectoryRepository(
+              session: _session('tenant-a'),
+              reader: reader,
+              queryReader: reader,
+            ).queryPage(
+              pageSize: 1,
+              search: 'Staff',
+              role: TenantRole.cashier,
+              status: MembershipStatus.active,
+            );
+
+        expect(captured.collectionPath, 'tenants/tenant-a/staff');
+        expect(captured.searchPrefix, 'staff');
+        expect(captured.role, 'cashier');
+        expect(captured.status, 'active');
+        expect(captured.limit, 2);
+        expect(page.items.single.uid, 'staff-a');
+        expect(page.nextCursor, isNot(anyOf(isNull, 'staff-a')));
+      },
+    );
   });
 
   group('guarded staff directory', () {
@@ -184,10 +221,11 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('View staff directory'));
+      await openLandingDrawer(tester);
+      await tester.tap(find.text('Staff'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Staff directory'), findsOneWidget);
+      expect(find.text('User Management'), findsOneWidget);
       expect(find.text('Owner Person'), findsOneWidget);
       // Role and standing used to be one hyphenated string, `owner - active`,
       // then a chip each. Step 6's sweep makes standing the record's one
@@ -204,6 +242,10 @@ void main() {
       // Role is a labelled key-value line rather than a badge, because it is
       // not one of §2.1's five statuses and a list where two things wear a
       // badge has neither of them meaning anything.
+      //
+      // **Uppercased since 2026-08-23**: a record's attribute key is
+      // `label.eyebrow` now, which is the export's own treatment and §2.2's
+      // one permitted uppercase role. The word is unchanged.
       expect(find.text('Role'), findsWidgets);
 
       // Step 4: standing is one of design.md §2.1's five statuses rather than a
@@ -256,7 +298,7 @@ void main() {
         find.byKey(const ValueKey('staff-invitation-staff-a')),
         findsOneWidget,
       );
-      expect(find.text('Sent'), findsOneWidget);
+      expect(find.text('Invitation: Sent'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('staff-invitation-owner-a')),
         findsNothing,
@@ -390,21 +432,30 @@ void main() {
       ]);
       await tester.pump();
       await tester.pump();
-      expect(find.text('Business: tenant-b'), findsOneWidget);
       expect(find.text('Current Staff'), findsOneWidget);
       expect(find.text('Stale Staff'), findsNothing);
     });
   });
 }
 
-final class _StaffReader implements TenantDataReader {
-  _StaffReader({required this.queryHandler, this.rootPathOverride});
+final class _StaffReader
+    implements TenantDataReader, TenantStaffDirectoryQueryReader {
+  _StaffReader({
+    required this.queryHandler,
+    this.staffQueryHandler,
+    this.rootPathOverride,
+  });
 
   Future<List<TenantQueryDocumentSnapshot>> Function(TenantCollectionQuery)
   queryHandler;
+  final Future<List<TenantQueryDocumentSnapshot>> Function(
+    TenantStaffDirectoryQuery,
+  )?
+  staffQueryHandler;
   final String? rootPathOverride;
   final List<String> documentPaths = [];
   final List<TenantCollectionQuery> queries = [];
+  final List<TenantStaffDirectoryQuery> staffQueries = [];
 
   @override
   Future<TenantDocumentSnapshot?> getDocument(String path) async {
@@ -438,6 +489,26 @@ final class _StaffReader implements TenantDataReader {
   ) {
     queries.add(query);
     return queryHandler(query);
+  }
+
+  @override
+  Future<List<TenantQueryDocumentSnapshot>> queryTenantStaff(
+    TenantStaffDirectoryQuery query,
+  ) {
+    staffQueries.add(query);
+    final handler = staffQueryHandler;
+    if (handler != null) return handler(query);
+    return queryHandler(
+      TenantCollectionQuery.forTesting(
+        collectionPath: query.collectionPath,
+        limit: query.limit,
+        startAfterDocumentId: query.startAfter?.documentId,
+        equalityFilters: <String, Object?>{
+          if (query.role != null) 'role': query.role,
+          if (query.status != null) 'status': query.status,
+        },
+      ),
+    );
   }
 }
 
@@ -485,6 +556,8 @@ Map<String, Object?> _staffData(String uid) => <String, Object?>{
   'role': 'cashier',
   'status': 'active',
   'invitationStatus': 'accepted',
+  'searchName': 'staff person',
+  'searchPrefixes': <String>['st', 'sta', 'staf', 'staff'],
 };
 
 TenantMembership _membership(

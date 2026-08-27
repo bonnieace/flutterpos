@@ -466,11 +466,13 @@ final class FirebaseTenantShiftWriter implements TenantShiftWriter {
 
   static TenantShiftDocumentCreator _firestoreCreator(
     FirebaseFirestore firestore,
-  ) => (path, data) => firestore.doc(path).set(data);
+  ) =>
+      (path, data) => firestore.doc(path).set(data);
 
   static TenantShiftDocumentUpdater _firestoreUpdater(
     FirebaseFirestore firestore,
-  ) => (path, data) => firestore.doc(path).update(data);
+  ) =>
+      (path, data) => firestore.doc(path).update(data);
 }
 
 String _requiredDocumentId(Map<String, Object?> data, String field) {

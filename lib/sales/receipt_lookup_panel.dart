@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
-import '../ui/routes.dart';
 import '../ui/scaffold.dart';
 import '../ui/tokens.dart';
 import '../checkout/checkout_tender.dart';
@@ -10,7 +11,6 @@ import '../returns/return_actions.dart';
 import '../returns/return_history_panel.dart';
 import '../tenancy/tenant_repository.dart';
 import '../tenancy/tenant_route_guard.dart';
-import '../tenancy/tenant_session_controller.dart';
 import 'receipt_lookup.dart';
 import 'sale_history.dart';
 
@@ -106,18 +106,18 @@ final class _TenantReceiptLookupPanelState
   String? _loaderKey;
   TenantGuardedLoader<TenantReceiptLookupResult>? _loader;
 
+  /// Opens the return sheet over this list.
+  ///
+  /// **A sheet rather than a pushed route since 2026-08-26.** It captures its
+  /// own session scope and reports its own answer, so there is nothing left to
+  /// do here but name the sale.
   void _openReturns(BuildContext context, TenantSale sale) {
-    final sessions = TenantSessionScope.read(context);
-    Navigator.of(context).push(
-      AppPageRoute<void>(
-        builder: (_) => TenantSessionScope(
-          controller: sessions,
-          child: TenantSaleReturnsScreen(
-            reader: widget.reader,
-            request: TenantSaleReturnsRequest(sale: sale),
-            actions: widget.returnActions,
-          ),
-        ),
+    unawaited(
+      openTenantSaleReturnSheet(
+        context,
+        reader: widget.reader,
+        request: TenantSaleReturnsRequest(sale: sale),
+        actions: widget.returnActions,
       ),
     );
   }

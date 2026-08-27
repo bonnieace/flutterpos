@@ -108,8 +108,7 @@ final class TenantReconciliationRequestException implements Exception {
       failure == TenantReconciliationRequestFailure.ambiguous;
 
   @override
-  String toString() =>
-      'TenantReconciliationRequestException(${failure.name})';
+  String toString() => 'TenantReconciliationRequestException(${failure.name})';
 }
 
 /// One validated request intent and its stable idempotency key.

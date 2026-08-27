@@ -34,6 +34,7 @@ final class TenantShiftLocalRecord {
     required this.serverConfirmedOpen,
     required this.closeInProgress,
     required this.updatedAt,
+    required this.openedAt,
     this.countedCashMinor,
   });
 
@@ -52,6 +53,16 @@ final class TenantShiftLocalRecord {
   final int? countedCashMinor;
   final DateTime updatedAt;
 
+  /// When this shift was opened on this device.
+  ///
+  /// **Separate from [updatedAt], which cannot stand in for it.** `updatedAt`
+  /// moves on every save - a cash count started, a count abandoned, a server
+  /// confirmation arriving - so a long shift that anybody touched would keep
+  /// looking new. The product rule is that a shift may not run past
+  /// `TenantShiftController.maximumShiftDuration`, and that is a question about
+  /// when it *started*.
+  final DateTime openedAt;
+
   TenantShiftLocalRecord copyWith({
     bool? serverConfirmedOpen,
     bool? closeInProgress,
@@ -66,6 +77,7 @@ final class TenantShiftLocalRecord {
     deviceId: deviceId,
     serverConfirmedOpen: serverConfirmedOpen ?? this.serverConfirmedOpen,
     closeInProgress: closeInProgress ?? this.closeInProgress,
+    openedAt: openedAt,
     countedCashMinor: clearCountedCash
         ? null
         : countedCashMinor ?? this.countedCashMinor,
@@ -83,6 +95,7 @@ final class TenantShiftLocalRecord {
     'closeInProgress': closeInProgress,
     if (countedCashMinor != null) 'countedCashMinor': countedCashMinor,
     'updatedAtMs': updatedAt.toUtc().millisecondsSinceEpoch,
+    'openedAtMs': openedAt.toUtc().millisecondsSinceEpoch,
   };
 }
 
@@ -111,7 +124,18 @@ final class HiveTenantShiftState {
   HiveTenantShiftState._(this._box, this._clock);
 
   static const boxName = 'tenant-shift-state-v1';
-  static const schemaVersion = 1;
+
+  /// The shape this writes.
+  ///
+  /// **Reading still accepts [legacySchemaVersion], and must.** A version
+  /// mismatch raises `malformed_shift_state`, which `TenantShiftController`
+  /// turns into a till that refuses to open - so a bare bump would have shut
+  /// every register that happened to hold an open shift at the moment it
+  /// updated. See [_parse].
+  static const schemaVersion = 2;
+
+  /// The shape before `openedAtMs` existed.
+  static const legacySchemaVersion = 1;
   static const encryptionKeyBytes = HiveCheckoutOutbox.encryptionKeyBytes;
 
   static final Map<String, Future<void>> _operationTails =
@@ -158,10 +182,7 @@ final class HiveTenantShiftState {
 
   /// Replaces the durable record for one exact identity and business.
   Future<TenantShiftLocalRecord> save(TenantShiftLocalRecord record) {
-    final key = tenantShiftStateKey(
-      uid: record.uid,
-      tenantId: record.tenantId,
-    );
+    final key = tenantShiftStateKey(uid: record.uid, tenantId: record.tenantId);
     return _serialized(key, () async {
       await _box.put(key, record.toStorage());
       return record;
@@ -207,7 +228,14 @@ final class HiveTenantShiftState {
     final closeInProgress = map['closeInProgress'];
     final countedCashMinor = map['countedCashMinor'];
     final updatedAtMs = map['updatedAtMs'];
-    if (map['schemaVersion'] != schemaVersion ||
+    final openedAtMs = map['openedAtMs'];
+    final version = map['schemaVersion'];
+    // **Both versions are read; only the current one is written.** A record
+    // saved before `openedAtMs` existed is still a real open shift, and
+    // refusing it would close a till in the middle of a trading day purely
+    // because the app updated. Such a record is migrated on its next save.
+    if ((version != schemaVersion && version != legacySchemaVersion) ||
+        (version == schemaVersion && openedAtMs is! int) ||
         uid is! String ||
         tenantId is! String ||
         shiftId is! String ||
@@ -240,6 +268,14 @@ final class HiveTenantShiftState {
       closeInProgress: closeInProgress,
       countedCashMinor: countedCashMinor as int?,
       updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAtMs, isUtc: true),
+      // **A legacy record dates its opening to its last touch.** That is the
+      // conservative reading: `updatedAt` is never earlier than the true
+      // opening, so the age this yields is never an over-estimate and the
+      // 24-hour rule can only ever be lenient towards a shift already running.
+      openedAt: DateTime.fromMillisecondsSinceEpoch(
+        openedAtMs is int ? openedAtMs : updatedAtMs,
+        isUtc: true,
+      ),
     );
   }
 

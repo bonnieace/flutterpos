@@ -71,7 +71,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final header = tester.widget<PageHeader>(find.byType(PageHeader));
+    final header = tester.widget<AppScaffold>(find.byType(AppScaffold));
     expect(header.title, 'Reconciliation run');
     expect(header.subtitle, 'rj_abc');
     expect(find.text('Run rj_abc'), findsNothing);

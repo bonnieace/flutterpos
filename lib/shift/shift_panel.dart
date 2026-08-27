@@ -1,15 +1,19 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../checkout/checkout_tender.dart';
+import '../inventory/catalog_management.dart';
+import '../reporting/reporting_currency.dart';
 import '../returns/return_actions.dart';
 import '../tenancy/tenant_repository.dart';
+import '../tenancy/tenant_session.dart';
 import '../tenancy/tenant_route_guard.dart';
 import '../tenancy/tenant_session_controller.dart';
 import '../ui/banner.dart';
 import '../ui/buttons.dart';
 import '../ui/fields.dart';
 import '../ui/routes.dart';
+import '../ui/scaffold.dart';
 import '../ui/sheet.dart';
 import '../ui/status.dart';
 import '../ui/tokens.dart';
@@ -30,10 +34,15 @@ typedef TenantShiftControllerFactory =
 final class TenantShiftPanel extends StatefulWidget {
   const TenantShiftPanel({
     super.key,
+    required this.currency,
     required this.controllerFactory,
     this.historyReader,
     this.returnActions,
   });
+
+  /// What this business calls its money, so the shift states amounts the way
+  /// every other surface in this app does rather than in raw minor units.
+  final TenantReportingCurrency currency;
 
   final TenantShiftControllerFactory controllerFactory;
 
@@ -92,6 +101,84 @@ final class _TenantShiftPanelState extends State<TenantShiftPanel> {
     );
   }
 
+  /// Opens the shift sheet, and owns the cash count for as long as it is up.
+  ///
+  /// **Opening is what starts the count**, which is the whole of the product
+  /// owner's 2026-08-23 change: the cashier's journey is one tap to the sheet
+  /// and one tap to finish, rather than a tap to start a count, a card state
+  /// nobody asked for, and a tap to open the sheet after it.
+  ///
+  /// The sheet refuses the scrim while a count is running, so the count cannot
+  /// be lost to a stray swipe. A system back gesture can still pop it, so a
+  /// dismissal that reports nothing cancels the count on the way out - which
+  /// leaves the till in service rather than silently out of it.
+  Future<void> _openShiftSheet(TenantSession session) async {
+    final shifts = _shifts;
+    if (shifts == null || _busy) return;
+    // An expired shift needs the count started exactly as an open one does -
+    // closing is the only thing left to do with it, and without this the sheet
+    // would open on a shift with no count running and refuse the close.
+    if (shifts.state.phase == TenantShiftPhase.open ||
+        shifts.state.phase == TenantShiftPhase.expired) {
+      await _dispatch((s) => s.startCashCount());
+      if (!mounted) return;
+    }
+    final handled = await showAppSheet<bool>(
+      // The `State`'s own context, so the `mounted` check above is the guard
+      // that actually covers it across the await that starts the count.
+      context,
+      dismissible: shifts.state.phase != TenantShiftPhase.closing,
+      builder: (sheetContext, controller) => ListenableBuilder(
+        listenable: shifts,
+        builder: (context, _) => ListView(
+          controller: controller,
+          padding: EdgeInsets.all(
+            AppTokens.componentOf(sheetContext).spacing.s20,
+          ),
+          children: <Widget>[
+            _ShiftSheet(
+              state: shifts.state,
+              busy: _busy,
+              countedCash: _countedCash,
+              currency: widget.currency,
+              onClose: () {
+                // **Typed as money, stored as minor units.** The field takes
+                // what the drawer holds - `1250.50` - and this converts it
+                // through the same function the till and the catalog use, so
+                // an amount this surface accepts is one the close can record
+                // exactly. A spelling that is not money at all becomes -1,
+                // which the controller refuses as `invalid_closing_cash`
+                // rather than closing a shift on a guess.
+                _dispatch(
+                  (s) => s.closeShift(countedCashMinor: _countedCashMinor()),
+                );
+              },
+              onCancelCashCount: () => _dispatch((s) => s.cancelCashCount()),
+              onRefresh: () => _dispatch((s) => s.restore(session)),
+              onViewHistory: widget.historyReader == null
+                  ? null
+                  : () => _openHistory(context),
+              sheetContext: sheetContext,
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (handled != true && shifts.state.phase == TenantShiftPhase.closing) {
+      await _dispatch((s) => s.cancelCashCount());
+    }
+  }
+
+  /// The counted drawer in minor units, or -1 where it is not an amount.
+  int _countedCashMinor() {
+    try {
+      return tenantCatalogPriceMinorUnits(_countedCash.text);
+    } on TenantCatalogManagementException {
+      return -1;
+    }
+  }
+
   Future<void> _dispatch(
     Future<TenantShiftState> Function(TenantShiftController shifts) action,
   ) async {
@@ -121,22 +208,9 @@ final class _TenantShiftPanelState extends State<TenantShiftPanel> {
               ? initial
               : shifts.state,
           busy: _busy,
-          countedCash: _countedCash,
-          onViewHistory: widget.historyReader == null
-              ? null
-              : () => _openHistory(context),
-          onRefresh: () => _dispatch((shifts) => shifts.restore(session)),
-          onOpen: () => _dispatch((shifts) => shifts.openShift()),
-          onStartCashCount: () =>
-              _dispatch((shifts) => shifts.startCashCount()),
-          onCancelCashCount: () =>
-              _dispatch((shifts) => shifts.cancelCashCount()),
-          onClose: () {
-            // A non-numeric or empty count is refused by the controller rather
-            // than silently closing a shift with a guessed amount.
-            final counted = int.tryParse(_countedCash.text.trim()) ?? -1;
-            _dispatch((shifts) => shifts.closeShift(countedCashMinor: counted));
-          },
+          currency: widget.currency,
+          onOpenShift: () => _dispatch((shifts) => shifts.openShift()),
+          onOpenSheet: () => _openShiftSheet(session),
         ),
       ),
     );
@@ -147,24 +221,20 @@ final class _ShiftContents extends StatelessWidget {
   const _ShiftContents({
     required this.state,
     required this.busy,
-    required this.countedCash,
-    required this.onViewHistory,
-    required this.onRefresh,
-    required this.onOpen,
-    required this.onStartCashCount,
-    required this.onCancelCashCount,
-    required this.onClose,
+    required this.currency,
+    required this.onOpenShift,
+    required this.onOpenSheet,
   });
 
   final TenantShiftState state;
   final bool busy;
-  final TextEditingController countedCash;
-  final VoidCallback? onViewHistory;
-  final VoidCallback onRefresh;
-  final VoidCallback onOpen;
-  final VoidCallback onStartCashCount;
-  final VoidCallback onCancelCashCount;
-  final VoidCallback onClose;
+  final TenantReportingCurrency currency;
+
+  /// Opens the shift outright. Nothing is collected to open one.
+  final VoidCallback onOpenShift;
+
+  /// Opens the shift sheet, which is also what starts the cash count.
+  final VoidCallback onOpenSheet;
 
   /// Which of design.md 2.1's five this shift's standing is.
   ///
@@ -177,6 +247,9 @@ final class _ShiftContents extends StatelessWidget {
     TenantShiftPhase.open =>
       _warning == null ? AppStatus.ok : AppStatus.attention,
     TenantShiftPhase.closing => AppStatus.attention,
+    // `attention` rather than `problem`: a shift that ran long is owed a
+    // close, which is something to do rather than something broken.
+    TenantShiftPhase.expired => AppStatus.attention,
     TenantShiftPhase.unknown ||
     TenantShiftPhase.unavailable => AppStatus.attention,
   };
@@ -186,6 +259,7 @@ final class _ShiftContents extends StatelessWidget {
     TenantShiftPhase.none => 'No shift open',
     TenantShiftPhase.open => 'Shift open',
     TenantShiftPhase.closing => 'Cash count unfinished',
+    TenantShiftPhase.expired => 'Shift open too long',
     TenantShiftPhase.unknown => 'Shift not confirmed',
     TenantShiftPhase.unavailable => 'Shift unavailable',
   };
@@ -207,14 +281,13 @@ final class _ShiftContents extends StatelessWidget {
       return 'Your shift in this business is open on another device. Close it '
           'there before opening a shift here.';
     }
+    // **Louder than the takings, and readable mid-shift.** A shift holding
+    // sales this device has not settled cannot be closed, and a cashier who
+    // learns that only after pressing `Close shift` has already counted the
+    // drawer. The sheet states it too, beside the control it blocks.
     final sales = state.sales;
     if (sales != null && !sales.isComplete) {
-      return '${sales.unsettledCount} '
-          '${sales.unsettledCount == 1 ? 'sale' : 'sales'} on this device '
-          '${sales.unsettledCount == 1 ? 'is' : 'are'} not synchronized yet '
-          'and none of the figures here include '
-          '${sales.unsettledCount == 1 ? 'it' : 'them'}. The shift cannot be '
-          'closed until they are.';
+      return _unsynchronizedSalesLabel(sales);
     }
     return null;
   }
@@ -223,97 +296,142 @@ final class _ShiftContents extends StatelessWidget {
   String get _detail {
     final loud = _warning;
     if (loud != null) return loud;
+    // **The running shift's takings, readable without starting a count.**
+    // This briefly said nothing, back when the summary was only computed
+    // during a count and there was genuinely nothing to draw. The controller
+    // summarizes any open shift now, so the figure a cashier wants mid-shift
+    // is on the home rather than behind a count they have to cancel out of.
     final sales = state.sales;
-    if (sales != null) {
-      return 'Confirmed sales: ${sales.transactionCount} '
-          '${sales.transactionCount == 1 ? 'transaction' : 'transactions'}, '
-          '${sales.totalMinor} minor '
-          '${sales.totalMinor == 1 ? 'unit' : 'units'}.';
-    }
+    if (sales != null) return _confirmedSalesLabel(sales, currency);
     return _statusLabel();
   }
 
-  /// The next step in the shift's lifecycle, and only that.
+  /// The shift's one control, and only that.
   ///
-  /// **Exactly one action, chosen by the product owner on 2026-08-16**: the
-  /// banner always offers the step forward - *Open shift*, *Start cash count*,
-  /// *Close shift* - and the reversal, *Cancel cash count*, lives in the sheet.
-  /// 1 argues for that separation: a reversal beside the thing it reverses is
-  /// one mis-tap from undoing work somebody has just done.
+  /// **Two states, chosen by the product owner on 2026-08-23**: *Open shift*
+  /// when there is none and *Close shift* when there is one. The third state
+  /// this used to have - *Start cash count*, then a separate *Cash count
+  /// unfinished* card offering *Close shift* - is gone: starting a count is
+  /// not a step a cashier takes, it is what opening the sheet does.
   ///
-  /// **In `closing` the action opens the sheet rather than closing outright**,
-  /// which is the consequence of the counted-cash field living there. 8 rule 4
-  /// makes it read correctly - the verb persists, so the banner says *Close
-  /// shift* and so does the control inside the sheet that finishes it.
-  Widget? _action(BuildContext context) => switch (state.phase) {
+  /// **Only closing opens the sheet.** Both did briefly, and opening a shift
+  /// through a sheet that collected nothing was two taps for a one-tap action
+  /// - the product owner called it on 2026-08-23 and was right. Closing keeps
+  /// the sheet because the counted cash has to be typed somewhere.
+  ///
+  /// `closing` maps to the same control as `open`. It is unreachable from the
+  /// card now, because the only thing that sets it is the sheet that covers
+  /// the card, and a restart discards it - but a phase this file cannot draw
+  /// is worse than one it draws the same as its neighbour.
+  Widget? _action(BuildContext? context) => switch (state.phase) {
     TenantShiftPhase.none => AppButton(
       key: const ValueKey('open-shift'),
       label: 'Open shift',
-      tier: AppButtonTier.primary,
-      onPressed: busy ? null : onOpen,
+      icon: Icons.lock_open,
+      tier: AppButtonTier.secondary,
+      expand: true,
+      onPressed: busy ? null : onOpenShift,
     ),
-    TenantShiftPhase.open => AppButton(
-      key: const ValueKey('start-cash-count'),
-      label: 'Start cash count',
-      tier: AppButtonTier.primary,
-      onPressed: busy ? null : onStartCashCount,
-    ),
-    TenantShiftPhase.closing => AppButton(
+    // An expired shift offers the same control, and it is the only one it
+    // offers: closing is the single thing left to do with it.
+    TenantShiftPhase.open ||
+    TenantShiftPhase.closing ||
+    TenantShiftPhase.expired => AppButton(
       key: const ValueKey('close-shift'),
       label: 'Close shift',
-      tier: AppButtonTier.primary,
-      onPressed: busy ? null : () => _openSheet(context),
+      icon: Icons.lock_outline,
+      tier: AppButtonTier.secondary,
+      expand: true,
+      onPressed: busy ? null : onOpenSheet,
     ),
     TenantShiftPhase.unknown || TenantShiftPhase.unavailable => null,
   };
 
-  Future<void> _openSheet(BuildContext context) => showAppSheet<void>(
-    context,
-    builder: (sheetContext, controller) => ListView(
-      controller: controller,
-      padding: EdgeInsets.all(AppTokens.componentOf(sheetContext).spacing.s20),
-      children: <Widget>[_ShiftSheet(panel: this, sheetContext: sheetContext)],
-    ),
-  );
+  /// Whether this shift has something to say beyond its own standing.
+  ///
+  /// **A card, or a button.** The design's dashboard draws the shift as one
+  /// full-width control under the till - `[ Start New Sale ] [ Open Shift ]` -
+  /// and says nothing else about it, because the *count* of open shifts is one
+  /// of the figures in the grid above. That is right for the ordinary case and
+  /// wrong for the ones this panel exists for: money unaccounted for, a shift
+  /// open on another device, a cash count half done. Those are the [_warning]
+  /// cases, and they keep the card.
+  bool get _speaks =>
+      _warning != null ||
+      _status == AppStatus.attention ||
+      _action(null) == null ||
+      // **Takings are a reason to speak.** The rule this list encodes is that
+      // a banner must not restate its own button - *SHIFT OPEN* over *Close
+      // shift* is one fact twice. A figure is not that: what this shift has
+      // taken so far is the thing a cashier opens the home to read, and it is
+      // not derivable from the control beside it. A shift that has sold
+      // nothing yet still has nothing to say, and keeps the bare button.
+      (state.sales?.transactionCount ?? 0) > 0;
 
   @override
-  Widget build(BuildContext context) => KeyedSubtree(
-    key: const ValueKey('tenant-shift-panel'),
-    child: ShiftBanner(
-      status: _status,
-      heading: _heading,
-      detail: _detail,
-      action: _action(context),
-      onOpenDetails: busy ? null : () => _openSheet(context),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final action = _action(context);
+    return KeyedSubtree(
+      key: const ValueKey('tenant-shift-panel'),
+      // **A bare button when there is nothing to report**, which is the
+      // product owner's direction of 2026-08-23 and the design's own shape. A
+      // banner announcing *SHIFT OPEN — a shift is open in this business* over
+      // a button that says `Start cash count` is the same fact three times.
+      child: !_speaks && action != null
+          // **The `Shift details` link is gone, on the product owner's call
+          // of 2026-08-23.** It existed because the card's control did
+          // something other than open the sheet, so the sheet needed a way in
+          // of its own. Both controls open the sheet now, and a second link
+          // to the surface the button beside it already opens is a choice
+          // between two spellings of one thing.
+          ? action
+          : ShiftBanner(
+              status: _status,
+              heading: _heading,
+              detail: _detail,
+              action: action,
+            ),
+    );
+  }
 
-  String _statusLabel() => switch (state.phase) {
-    TenantShiftPhase.unknown => 'Shift state has not been confirmed yet.',
-    TenantShiftPhase.none => 'No shift is open in this business.',
-    TenantShiftPhase.open => 'A shift is open in this business.',
-    TenantShiftPhase.closing =>
-      'A cash count is unfinished. Finish it before switching business.',
-    TenantShiftPhase.unavailable => 'Shift state is unavailable.',
-  };
+  String _statusLabel() => _shiftStatusLabel(state.phase);
 
-  String _errorLabel() => switch (state.errorCode) {
-    'offline' => 'This device is offline, so shift state was not confirmed.',
-    'other_tenant_shift_open' =>
-      'Close the open shift in the other business first.',
-    'shift_open_on_other_device' =>
-      'This shift is open on another device. Close it there first.',
-    'unsynchronized_shift_sales' =>
-      'Some sales in this shift are not synchronized yet. Wait for them '
-          'before closing.',
-    'shift_already_open' => 'A shift is already open on this device.',
-    'no_open_shift' => 'No shift is open to count or close.',
-    'cash_count_not_started' => 'Start the cash count before closing.',
-    'invalid_closing_cash' => 'Enter the counted cash before closing.',
-    'session_changed' => 'The selected business changed.',
-    _ => 'The last shift action could not be confirmed.',
-  };
+  String _errorLabel() => shiftErrorMessage(state.errorCode);
 }
+
+/// What a shift refusal says to the person who caused it.
+///
+/// **Public and shared since 2026-08-25**, when the till's shift gate began
+/// reporting the same refusals this card does. A second copy would be a second
+/// set of words for one server answer, and the two would drift the first time
+/// either was reworded.
+String shiftErrorMessage(String? code) => switch (code) {
+  'offline' =>
+    'This device is offline, so this shift has not been re-confirmed with the '
+        'server. You can keep selling.',
+  'close_needs_connection' =>
+    'Closing a shift needs a connection, because its totals are settled on the '
+        'server.',
+  'shift_expired_offline' =>
+    'This shift has been open more than a day and must be closed, which needs '
+        'a connection.',
+  'shift_open_unconfirmed' =>
+    'This shift has not reached the server yet. It and its sales are saved '
+        'here and will be sent.',
+  'other_tenant_shift_open' =>
+    'Close the open shift in the other business first.',
+  'shift_open_on_other_device' =>
+    'This shift is open on another device. Close it there first.',
+  'unsynchronized_shift_sales' =>
+    'Some sales in this shift are not synchronized yet. Wait for them '
+        'before closing.',
+  'shift_already_open' => 'A shift is already open on this device.',
+  'no_open_shift' => 'No shift is open to count or close.',
+  'cash_count_not_started' => 'Start the cash count before closing.',
+  'invalid_closing_cash' => 'Enter the counted cash before closing.',
+  'session_changed' => 'The selected business changed.',
+  _ => 'The last shift action could not be confirmed.',
+};
 
 /// What the drawer should hold, beside the count the cashier is entering.
 ///
@@ -326,9 +444,10 @@ final class _ShiftContents extends StatelessWidget {
 /// cashier counting a drawer needs to be told to expect nothing just as much as
 /// to expect something, and an absent line reads as an unanswered question.
 final class _ExpectedCash extends StatelessWidget {
-  const _ExpectedCash({required this.split});
+  const _ExpectedCash({required this.split, required this.currency});
 
   final ShiftTenderSplit split;
+  final TenantReportingCurrency currency;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -337,8 +456,7 @@ final class _ExpectedCash extends StatelessWidget {
     children: [
       Text(
         key: const ValueKey('shift-expected-cash'),
-        'Expected cash: ${split.cash.totalMinor} minor '
-        '${split.cash.totalMinor == 1 ? 'unit' : 'units'} over '
+        'Expected cash: ${currency.format(split.cash.totalMinor / 100)} over '
         '${split.cash.transactionCount} '
         '${split.cash.transactionCount == 1 ? 'sale' : 'sales'}.',
       ),
@@ -351,8 +469,7 @@ final class _ExpectedCash extends StatelessWidget {
           '${split.unattributed.transactionCount} '
           '${split.unattributed.transactionCount == 1 ? 'sale names' : 'sales name'} '
           'no recognised payment method, worth '
-          '${split.unattributed.totalMinor} minor '
-          '${split.unattributed.totalMinor == 1 ? 'unit' : 'units'}. '
+          '${currency.format(split.unattributed.totalMinor / 100)}. '
           '${split.unattributed.transactionCount == 1 ? 'It is' : 'They are'} '
           'inside the confirmed sales above but not in the expected cash.',
         ),
@@ -372,36 +489,122 @@ final class _ExpectedCash extends StatelessWidget {
 /// on 2026-08-16 against the alternative of growing the banner a field in
 /// `closing`. It makes closing a two-surface operation, which is the stated
 /// cost; what it buys is a banner that is one row in every state.
-final class _ShiftSheet extends StatelessWidget {
-  const _ShiftSheet({required this.panel, required this.sheetContext});
+/// What this device can prove the shift took, worded once for both surfaces.
+///
+/// **Money, not minor units.** Every figure this panel drew was an integer
+/// count of the smallest coin - `98750 minor units` where the rest of the app
+/// writes `KES 987.50` - which is the app's own arithmetic leaking onto a
+/// surface a cashier reads against a drawer.
+String _confirmedSalesLabel(
+  ShiftSalesSummary sales,
+  TenantReportingCurrency currency,
+) =>
+    'Confirmed sales: ${sales.transactionCount} '
+    '${sales.transactionCount == 1 ? 'transaction' : 'transactions'}, '
+    '${currency.format(sales.totalMinor / 100)}.';
 
-  final _ShiftContents panel;
+/// The sales this device holds but has not yet settled with the server.
+String _unsynchronizedSalesLabel(ShiftSalesSummary sales) =>
+    '${sales.unsettledCount} '
+    '${sales.unsettledCount == 1 ? 'sale' : 'sales'} on this device '
+    '${sales.unsettledCount == 1 ? 'is' : 'are'} not synchronized yet '
+    'and none of the figures here include '
+    '${sales.unsettledCount == 1 ? 'it' : 'them'}. The shift cannot be '
+    'closed until they are.';
+
+/// The one sentence describing where a shift stands.
+String _shiftStatusLabel(TenantShiftPhase phase) => switch (phase) {
+  TenantShiftPhase.unknown => 'Shift state has not been confirmed yet.',
+  TenantShiftPhase.none => 'No shift is open in this business.',
+  TenantShiftPhase.open => 'A shift is open in this business.',
+  TenantShiftPhase.closing =>
+    'A cash count is unfinished. Finish it before switching business.',
+  TenantShiftPhase.expired =>
+    'A shift has been open more than a day. Close it before switching '
+        'business.',
+  TenantShiftPhase.unavailable => 'Shift state is unavailable.',
+};
+
+/// Everything about a shift that is not its standing.
+///
+/// **The sheet owns the cash count for exactly as long as it is open.** It is
+/// opened with the count already started, and whoever opened it ends the count
+/// on the way out - see `_TenantShiftPanelState._openShiftSheet`. That is why
+/// there is no `Start cash count` here or on the card: the count is not a step
+/// a cashier takes, it is the state of having this surface open.
+///
+/// It takes its state directly rather than through the card, because the card
+/// is a different element on a different route and does not rebuild this one.
+final class _ShiftSheet extends StatelessWidget {
+  const _ShiftSheet({
+    required this.state,
+    required this.busy,
+    required this.countedCash,
+    required this.currency,
+    required this.onClose,
+    required this.onCancelCashCount,
+    required this.onRefresh,
+    required this.onViewHistory,
+    required this.sheetContext,
+  });
+
+  final TenantShiftState state;
+  final bool busy;
+  final TextEditingController countedCash;
+  final TenantReportingCurrency currency;
+  final VoidCallback onClose;
+  final VoidCallback onCancelCashCount;
+  final VoidCallback onRefresh;
+  final VoidCallback? onViewHistory;
   final BuildContext sheetContext;
 
   @override
   Widget build(BuildContext context) {
     final tokens = AppTokens.componentOf(context);
-    final state = panel.state;
     final sales = state.sales;
+    final counting = state.phase == TenantShiftPhase.closing;
     return Column(
       key: const ValueKey('tenant-shift-sheet'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Shift',
-          style: tokens.typography.titleMedium.copyWith(
-            color: tokens.colors.text.primary,
-          ),
-        ),
+        SectionHeading('Shift'),
         SizedBox(height: tokens.spacing.s4),
         Text(
           key: const ValueKey('shift-status'),
-          panel._statusLabel(),
+          _shiftStatusLabel(state.phase),
           style: tokens.density
               .body(tokens.typography)
               .copyWith(color: tokens.colors.text.secondary),
         ),
+        // **The confirmed-sales line moved here on 2026-08-23**, with the
+        // count itself. It used to be the card's detail while `closing`, and
+        // the card no longer has that phase: the only time this is known is
+        // while the sheet that asked for it is open.
+        if (sales != null) ...[
+          SizedBox(height: tokens.spacing.s4),
+          Text(
+            key: const ValueKey('shift-confirmed-sales'),
+            _confirmedSalesLabel(sales, currency),
+            style: tokens.density
+                .body(tokens.typography)
+                .copyWith(color: tokens.colors.text.secondary),
+          ),
+        ],
+        // **The blocker on closing, beside the control it blocks.** A real
+        // device run found this surface silent about unsynchronized sales
+        // until `Close shift` failed; it was the card's warning, and the card
+        // is behind this sheet for the whole of a count.
+        if (sales != null && !sales.isComplete) ...[
+          SizedBox(height: tokens.spacing.s4),
+          Text(
+            key: const ValueKey('shift-unsynchronized-sales'),
+            _unsynchronizedSalesLabel(sales),
+            style: tokens.density
+                .body(tokens.typography)
+                .copyWith(color: tokens.colors.status.attention.fg),
+          ),
+        ],
         // The expected cash waits for a complete shift. Until every sale is
         // accounted for the figure is not a smaller truth, it is a number the
         // drawer will not match.
@@ -409,16 +612,18 @@ final class _ShiftSheet extends StatelessWidget {
             sales.isComplete &&
             sales.tendersDescribeTakings) ...[
           SizedBox(height: tokens.spacing.s12),
-          _ExpectedCash(split: sales.tenders),
+          _ExpectedCash(split: sales.tenders, currency: currency),
         ],
-        if (state.phase == TenantShiftPhase.closing) ...[
+        if (counting) ...[
           SizedBox(height: tokens.spacing.s16),
           AppTextField(
             key: const ValueKey('counted-cash'),
-            controller: panel.countedCash,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            label: 'Counted cash (minor units)',
+            controller: countedCash,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            label: 'Counted cash',
             leading: Icons.payments_outlined,
           ),
         ],
@@ -427,30 +632,35 @@ final class _ShiftSheet extends StatelessWidget {
           spacing: tokens.spacing.s8,
           runSpacing: tokens.spacing.s8,
           children: [
-            if (state.phase == TenantShiftPhase.closing) ...[
-              // 8 rule 4: the verb persists from the banner to here.
+            if (counting) ...[
+              // 8 rule 4: the verb persists from the card to here.
               AppButton(
                 key: const ValueKey('close-shift-confirm'),
                 label: 'Close shift',
                 tier: AppButtonTier.primary,
-                onPressed: panel.busy ? null : _close,
+                onPressed: busy ? null : _closeShift,
               ),
+              // **The only way out while a count is running, and deliberately
+              // so.** The sheet is not dismissible in this phase, because a
+              // swipe that discarded a half-counted drawer and quietly put the
+              // till back into service is exactly the mis-tap this panel has
+              // always refused to allow.
               AppButton(
                 key: const ValueKey('cancel-cash-count'),
                 label: 'Cancel cash count',
-                onPressed: panel.busy ? null : _cancel,
+                onPressed: busy ? null : _cancel,
               ),
             ],
             AppButton(
               key: const ValueKey('refresh-shift'),
               label: 'Refresh shift',
-              onPressed: panel.busy ? null : panel.onRefresh,
+              onPressed: busy ? null : onRefresh,
             ),
-            if (panel.onViewHistory != null)
+            if (onViewHistory != null)
               AppButton(
                 key: const ValueKey('view-shift-history'),
                 label: 'View shift history',
-                onPressed: panel.busy ? null : _history,
+                onPressed: busy ? null : _history,
               ),
           ],
         ),
@@ -458,20 +668,24 @@ final class _ShiftSheet extends StatelessWidget {
     );
   }
 
-  /// Closes the sheet before acting, so the answer lands on the banner rather
+  /// Closes the sheet before acting, so the answer lands on the card rather
   /// than behind the surface a person opened to get here.
-  void _close() {
-    panel.onClose();
-    Navigator.of(sheetContext).pop();
+  /// Every deliberate exit pops `true`, which tells the opener that the count
+  /// has been dealt with. A `null` result is a dismissal - a back gesture can
+  /// still pop a sheet that refuses the scrim - and is what the opener cancels
+  /// the count on.
+  void _closeShift() {
+    Navigator.of(sheetContext).pop(true);
+    onClose();
   }
 
   void _cancel() {
-    panel.onCancelCashCount();
-    Navigator.of(sheetContext).pop();
+    Navigator.of(sheetContext).pop(true);
+    onCancelCashCount();
   }
 
   void _history() {
-    Navigator.of(sheetContext).pop();
-    panel.onViewHistory!();
+    Navigator.of(sheetContext).pop(true);
+    onViewHistory!();
   }
 }
